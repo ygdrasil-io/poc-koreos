@@ -13,10 +13,15 @@
  */
 plugins {
     kotlin("jvm")
+    application
 }
 
 kotlin {
     jvmToolchain(25)
+}
+
+application {
+    mainClass.set("io.ygdrasil.koreos.samples.hellometal.MainKt")
 }
 
 dependencies {
