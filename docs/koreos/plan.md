@@ -160,7 +160,7 @@ Une lib KMP qui :
 |-------|--------------------|
 | M1 | NSWindow ouverte avec contentView layer-backed visible. Fermeture propre. |
 | M2 | wgpu4k rend une scène basique à 60fps. Resize ne crash pas. |
-| M3 | Lib publiée Maven Central. Samples runables sur 3 plateformes. CI verte. |
+| M3 | Lib publiée Maven Central. Samples runnables sur 3 plateformes. CI verte. |
 
 ---
 

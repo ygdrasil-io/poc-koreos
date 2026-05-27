@@ -373,8 +373,7 @@ sealed interface RawDisplayHandle {
 Sur AppKit, le `contentView` retourné doit avoir :
 
 - `wantsLayer = true`
-- `wantsBestResolutionOpenGLSurface = true` (HiDPI)
-- Optionnel : override de `+ (Class)layerClass` retournant `CAMetalLayer` (généré par kextract subclass)
+- `layer = CAMetalLayer()` (ou override de `makeBackingLayer()` retournant `CAMetalLayer`)
 
 Côté wgpu4k / Metal natif, le renderer fera :
 
@@ -397,7 +396,7 @@ ANativeWindow* win = ANativeWindow_fromSurface(env, surface);
 // puis VK_KHR_android_surface ou EGL
 ```
 
-**Aucune lib native côté Koreos** — c'est intentionnel ([décision M6 / Strategy A](./plan.md#11-décisions-darchitecture-déjà-actées)).
+**Aucune lib native côté Koreos** — c'est intentionnel ([Strategy A](./plan.md#11-décisions-darchitecture-déjà-actées)).
 
 ---
 

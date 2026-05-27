@@ -19,4 +19,4 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 
 ## Statut
 
-**Draft pour relecture** — voir la MR de validation des specs.
+**Draft pour relecture** — voir la PR de validation des specs.
