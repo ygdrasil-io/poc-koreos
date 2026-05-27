@@ -1,0 +1,22 @@
+# Koreos
+
+POC de fenêtrage cross-platform en **Kotlin pur**, inspiré de [winit](https://github.com/rust-windowing/winit).
+
+Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface`) consommables par un renderer 3D (Metal, Vulkan, [wgpu4k](https://github.com/wgpu4k/wgpu4k)) **sans dépendance AWT/Swing**.
+
+## Documents
+
+- [Plan projet](./plan.md) — vision, jalons, risques, timeline
+- [Spécifications techniques](./specs.md) — architecture, API, diagrammes
+
+## Jalons
+
+| Jalon | Livrable |
+|-------|----------|
+| **M1 — POC** | NSWindow macOS avec contentView layer-backed prêt pour Metal |
+| **M2 — Démo wgpu4k** | Scène 3D simple rendue via wgpu4k consommant le raw handle |
+| **M3 — Lib cible** | Lib KMP publiable, backends AppKit + UIKit + Android complets |
+
+## Statut
+
+**Draft pour relecture** — voir la PR de validation des specs.
