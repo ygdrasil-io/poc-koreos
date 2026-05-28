@@ -46,6 +46,7 @@ import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.WGPULowLevelApi
+import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -163,7 +164,15 @@ class HelloTriangleApp : ApplicationHandler {
         println("[hello-triangle] RawWindowHandle.AppKit — nsView=0x%x  nsWindow=0x%x"
             .format(handle.nsView, handle.nsWindow))
 
-        val metalLayerAddr = getMetalLayerFromNsView(handle.nsView)
+        // Utiliser nsLayer directement (exposé par AppKitWindow) plutôt que [nsView layer],
+        // qui peut retourner la CALayer générique d'AppKit si l'ordre setLayer/setWantsLayer
+        // était incorrect. nsLayer = metalLayerPtr.address() depuis AppKitWindow.
+        val metalLayerAddr = if (handle.nsLayer != 0L) {
+            handle.nsLayer
+        } else {
+            // Fallback : obtenir via [nsView layer] (chemin legacy)
+            getMetalLayerFromNsView(handle.nsView)
+        }
         if (metalLayerAddr == 0L) {
             println("[hello-triangle] Impossible d'obtenir le CAMetalLayer depuis le NSView")
             return
@@ -171,6 +180,9 @@ class HelloTriangleApp : ApplicationHandler {
         println("[hello-triangle] CAMetalLayer = 0x%x".format(metalLayerAddr))
 
         // 3. WGPU Instance (Metal backend)
+        // libWGPU.dylib is bundled inside the wgpu4k-native JAR and must be explicitly
+        // extracted + loaded before calling any wgpu function.
+        ffi.LibraryLoader.load()
         val wgpuInstance = WGPU.createInstance(WGPUInstanceBackend.Metal)
             ?: run {
                 println("[hello-triangle] Échec création WGPU Instance")
@@ -356,19 +368,51 @@ class HelloTriangleApp : ApplicationHandler {
         val pipe = pipeline ?: return
 
         // 1. Texture de présentation
+        //
+        // NOTE — Compatibilité wgpu-native 0.25+ / wgpu4k 0.1.1 :
+        //   Ancien API :  Success(0) Timeout(1)     Outdated(2) Lost(3) OutOfMemory(4) DeviceLost(5)
+        //   Nouveau API : SuccessOptimal(0) SuccessSuboptimal(1) Timeout(2) Outdated(3) ...
+        //
+        //   wgpu4k 0.1.1 mappe les valeurs brutes de l'ancien API :
+        //     rawStatus=0 → success    (SuccessOptimal   → rendu OK)
+        //     rawStatus=1 → timeout    (SuccessSuboptimal→ texture VALIDE, mais suboptimale)
+        //     rawStatus=2 → outdated   (vrai Timeout     → aucun drawable)
+        //     rawStatus=3 → lost       (Outdated         → reconfigurer)
+        //
+        //   ⇒ Traiter `timeout` (=successSuboptimal) comme `success` : la texture est valide.
         val surfaceTexture = surf.getCurrentTexture()
-        if (surfaceTexture.status == SurfaceTextureStatus.outdated) {
-            // Le swap chain est périmé (resize en cours) — reconfigure depuis la taille courante
-            val win = window
-            if (win != null) {
-                val inner = win.innerSize
-                handleResize(inner.width, inner.height)
+        when (surfaceTexture.status) {
+            // lost (3) dans wgpu4k = Outdated (3) dans nouveau API → reconfigurer la surface
+            SurfaceTextureStatus.lost -> {
+                surfaceTexture.texture.close()
+                val win = window
+                if (win != null) {
+                    val inner = win.innerSize
+                    handleResize(inner.width, inner.height)
+                }
+                return
             }
-            return
-        }
-        if (surfaceTexture.status != SurfaceTextureStatus.success) {
-            println("[hello-triangle] getCurrentTexture status=${surfaceTexture.status} — frame ignorée")
-            return
+            // outdated (2) dans wgpu4k = Timeout (2) dans nouveau API → aucun drawable, skip
+            // (compatible avec ancien API où outdated=2 → reconfigure)
+            SurfaceTextureStatus.outdated -> {
+                surfaceTexture.texture.close()
+                val win = window
+                if (win != null) {
+                    val inner = win.innerSize
+                    handleResize(inner.width, inner.height)
+                }
+                return
+            }
+            // Erreurs terminales
+            SurfaceTextureStatus.outOfMemory,
+            SurfaceTextureStatus.deviceLost -> {
+                println("[hello-triangle] getCurrentTexture status=${surfaceTexture.status} — erreur terminale")
+                surfaceTexture.texture.close()
+                return
+            }
+            // success (0) = SuccessOptimal, timeout (1) = SuccessSuboptimal → texture VALIDE
+            SurfaceTextureStatus.success,
+            SurfaceTextureStatus.timeout -> { /* continuer le rendu */ }
         }
         val texture = surfaceTexture.texture
 
@@ -453,36 +497,11 @@ class HelloTriangleApp : ApplicationHandler {
      * @return Adresse du CAMetalLayer, ou 0 en cas d'échec.
      */
     private fun getMetalLayerFromNsView(nsViewPtr: Long): Long {
-        val linker = Linker.nativeLinker()
-        val lib = SymbolLookup.loaderLookup()
-
-        // sel_registerName("layer") → SEL
-        val selRegisterNameSym = lib.find("sel_registerName")
-            .orElseThrow { UnsatisfiedLinkError("sel_registerName non trouvé") }
-        val selRegisterNameHandle = linker.downcallHandle(
-            selRegisterNameSym,
-            FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
-        )
-        val arena = Arena.ofAuto()
-        val layerCStr = arena.allocateFrom("layer")
-        val sel = selRegisterNameHandle.invokeExact(layerCStr) as MemorySegment
-
-        // objc_msgSend(nsView, sel_layer) → CAMetalLayer*
-        val msgSendSym = lib.find("objc_msgSend")
-            .orElseThrow { UnsatisfiedLinkError("objc_msgSend non trouvé") }
-        val msgSendHandle = linker.downcallHandle(
-            msgSendSym,
-            FunctionDescriptor.of(
-                ValueLayout.ADDRESS, // return: CAMetalLayer*
-                ValueLayout.ADDRESS, // self (NSView*)
-                ValueLayout.ADDRESS, // SEL
-            ),
-        )
-        val layer = msgSendHandle.invokeExact(
-            MemorySegment.ofAddress(nsViewPtr),
-            sel,
-        ) as MemorySegment
-        return layer.address()
+        // Reuse ObjCRuntime infrastructure — avoids duplicating sel_registerName / objc_msgSend lookup
+        // which is unreliable via SymbolLookup.loaderLookup() on some JDK configurations.
+        val sel = ObjCRuntime.sel("layer")
+        val nsViewSeg = MemorySegment.ofAddress(nsViewPtr)
+        return (ObjCRuntime.msgSend(ValueLayout.ADDRESS, nsViewSeg, sel) as MemorySegment).address()
     }
 }
 

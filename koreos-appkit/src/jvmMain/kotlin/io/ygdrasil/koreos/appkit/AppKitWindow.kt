@@ -14,6 +14,7 @@ import io.ygdrasil.koreos.appkit.bindings.NSView
 import io.ygdrasil.koreos.appkit.bindings.NSWindow
 import io.ygdrasil.koreos.appkit.bindings.NSWindowStyleMask
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
+import io.ygdrasil.koreos.appkit.bindings.ObjCStructArg
 import io.ygdrasil.koreos.core.ActiveEventLoop
 import io.ygdrasil.koreos.core.ApplicationHandler
 import io.ygdrasil.koreos.core.PhysicalSize
@@ -76,13 +77,19 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
         val backing = NSBackingStoreType.NSBackingStoreBuffered
 
-        val allocatedWindow = NSWindow(allocated)
-        val initializedPtr = allocatedWindow.initWithContentRect_styleMask_backing_defer(
-            contentRect,
-            styleMask,
-            backing,
-            0.toByte(), // defer: NO
-        )
+        // NSRect must be passed BY VALUE (HFA: 4 doubles → d0-d3 on ARM64).
+        // The generated wrapper passes it as ADDRESS (pointer), which is wrong.
+        // Bypass the generated wrapper and call msgSend directly with ObjCStructArg.
+        val initSel = ObjCRuntime.sel("initWithContentRect:styleMask:backing:defer:")
+        val initializedPtr = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            allocated,
+            initSel,
+            ObjCStructArg(contentRect, ObjCRuntime.nsRectLayout), // NSRect by value
+            styleMask,               // NSWindowStyleMask (unwrapped to Long)
+            backing,                 // NSBackingStoreType (unwrapped to Long)
+            0.toByte(),              // BOOL defer: NO
+        ) as MemorySegment
         nsWindowPtr = initializedPtr
         id = WindowId(nsWindowPtr.address())
 
@@ -90,10 +97,11 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         val nsWindow = NSWindow(nsWindowPtr)
         contentViewPtr = nsWindow.contentView()
 
-        // 5. Pattern AppKit Metal : wantsLayer = YES PUIS layer = CAMetalLayer()
-        //    (JAMAIS +layerClass — voir review PR #1)
+        // 5. Pattern AppKit Metal correct : layer = CAMetalLayer() PUIS wantsLayer = YES
+        //    Apple docs: "If you want to use a custom layer, you must call setLayer: BEFORE
+        //    calling setWantsLayer:YES". L'ordre inverse fait qu'AppKit crée d'abord une
+        //    CALayer générique, rendant [nsView layer] non fiable et nextDrawable impossible.
         val contentView = NSView(contentViewPtr)
-        contentView.setWantsLayer(1.toByte()) // BOOL YES = 1
 
         val metalLayerClass = ObjCRuntime.getClass("CAMetalLayer")
         metalLayerPtr = ObjCRuntime.msgSend(
@@ -101,10 +109,11 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             metalLayerClass,
             ObjCRuntime.sel("new"),
         ) as MemorySegment
-        contentView.setLayer(metalLayerPtr)
+        contentView.setLayer(metalLayerPtr)   // ← setLayer AVANT setWantsLayer
+        contentView.setWantsLayer(1.toByte()) // ← setWantsLayer EN DERNIER (BOOL YES = 1)
 
         // 6. contentsScale = backingScaleFactor pour support HiDPI / Retina
-        val scale = nsWindow.backingScaleFactor()
+        val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
         ObjCRuntime.msgSend(
             null,
             metalLayerPtr,
@@ -125,6 +134,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         get() = RawWindowHandle.AppKit(
             nsView = contentViewPtr.address(),
             nsWindow = nsWindowPtr.address(),
+            nsLayer = metalLayerPtr.address(),
         )
 
     override val rawDisplayHandle: Any
@@ -157,8 +167,10 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     override val innerSize: PhysicalSize<Int>
         get() {
-            val scale = NSWindow(nsWindowPtr).backingScaleFactor()
-            val frame = NSView(contentViewPtr).frame().reinterpret(32)
+            val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
+            // NSRect returned by value (HFA: d0-d3 on ARM64) — use msgSendReturningStruct.
+            val frame = ObjCRuntime.msgSendReturningStruct(
+                ObjCRuntime.nsRectLayout, contentViewPtr, ObjCRuntime.sel("frame"))
             val w = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
             val h = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
             return PhysicalSize((w * scale).toInt(), (h * scale).toInt())
@@ -172,15 +184,17 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     override val outerSize: PhysicalSize<Int>
         get() {
-            val scale = NSWindow(nsWindowPtr).backingScaleFactor()
-            val frame = NSWindow(nsWindowPtr).frame().reinterpret(32)
+            val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
+            // NSRect returned by value (HFA: d0-d3 on ARM64) — use msgSendReturningStruct.
+            val frame = ObjCRuntime.msgSendReturningStruct(
+                ObjCRuntime.nsRectLayout, nsWindowPtr, ObjCRuntime.sel("frame"))
             val w = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
             val h = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
             return PhysicalSize((w * scale).toInt(), (h * scale).toInt())
         }
 
     override val scaleFactor: Double
-        get() = NSWindow(nsWindowPtr).backingScaleFactor()
+        get() = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
 
     override fun setVisible(visible: Boolean) {
         if (visible) {

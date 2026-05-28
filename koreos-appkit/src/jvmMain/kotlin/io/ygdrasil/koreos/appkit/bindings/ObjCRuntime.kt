@@ -2,12 +2,26 @@ package io.ygdrasil.koreos.appkit.bindings
 
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.GroupLayout
 import java.lang.foreign.Linker
 import java.lang.foreign.MemoryLayout
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SegmentAllocator
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Wraps a struct [MemorySegment] with its [MemoryLayout] for by-value struct passing
+ * via Panama FFM [ObjCRuntime.msgSend]. Use this for ObjC methods that take a C struct
+ * argument by value (e.g. NSRect, CGPoint, NSSize).
+ *
+ * Example:
+ * ```kotlin
+ * ObjCRuntime.msgSend(returnLayout, ptr, sel, ObjCStructArg(nsRectSegment, ObjCRuntime.nsRectLayout))
+ * ```
+ */
+data class ObjCStructArg(val segment: MemorySegment, val layout: MemoryLayout)
 
 /**
  * Low-level Objective-C runtime bridge via Panama FFI.
@@ -95,17 +109,20 @@ object ObjCRuntime {
      * - [returnLayout] = ValueLayout.ADDRESS for id/pointer-returning methods
      * - [returnLayout] = ValueLayout.JAVA_LONG / JAVA_INT / JAVA_DOUBLE etc. for primitives
      *
-     * Each arg must be a Panama-compatible type: MemorySegment, Long, Int, Double, Float, Byte, Short, Boolean.
+     * Each arg must be a Panama-compatible type: MemorySegment, Long, Int, Double, Float, Byte, Short, Boolean,
+     * or a @JvmInline value class with a `rawValue` field of a supported primitive type.
      */
     fun msgSend(returnLayout: MemoryLayout?, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Any? {
+        // Layouts must be computed BEFORE unwrapping so ObjCStructArg carries its GroupLayout.
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
         val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
         val desc = if (returnLayout == null)
             FunctionDescriptor.ofVoid(*baseLayouts, *argLayouts)
         else
             FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(objcMsgSendAddr, desc)
-        val allArgs: Array<Any> = arrayOf(receiver, selector, *args)
+        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
         return handle.invokeWithArguments(*allArgs)
     }
 
@@ -115,11 +132,13 @@ object ObjCRuntime {
      */
     fun msgSendStret(returnLayout: MemoryLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Any? {
         val addr = objcMsgSendStretAddr ?: objcMsgSendAddr
+        // Layouts must be computed BEFORE unwrapping so ObjCStructArg carries its GroupLayout.
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
         val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
         val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(addr, desc)
-        val allArgs: Array<Any> = arrayOf(receiver, selector, *args)
+        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
         return handle.invokeWithArguments(*allArgs)
     }
 
@@ -192,9 +211,70 @@ object ObjCRuntime {
         return utf8Ptr.getString(0)
     }
 
+    // ── Struct layouts ────────────────────────────────────────────────────────
+
+    /**
+     * Memory layout for NSRect / CGRect: struct { CGFloat x, y, width, height }
+     * = 4 × Double (32 bytes, 8-byte aligned).
+     * On ARM64, NSRect is a Homogeneous Floating-point Aggregate (HFA) → passed / returned in d0-d3.
+     */
+    val nsRectLayout: GroupLayout = MemoryLayout.structLayout(
+        ValueLayout.JAVA_DOUBLE.withName("x"),
+        ValueLayout.JAVA_DOUBLE.withName("y"),
+        ValueLayout.JAVA_DOUBLE.withName("width"),
+        ValueLayout.JAVA_DOUBLE.withName("height"),
+    )
+
+    // ── msgSend returning scalar ──────────────────────────────────────────────
+
+    /**
+     * Sends an ObjC message that returns a `double` / CGFloat.
+     * The generated bindings incorrectly use [ValueLayout.ADDRESS] for scalar returns;
+     * use this helper for any property or method returning CGFloat/Double.
+     */
+    fun msgSendDouble(receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Double {
+        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
+        val desc = FunctionDescriptor.of(
+            ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, *argLayouts)
+        val handle = linker.downcallHandle(objcMsgSendAddr, desc)
+        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
+        return handle.invokeWithArguments(*allArgs) as Double
+    }
+
+    // ── msgSend returning struct ───────────────────────────────────────────────
+
+    /**
+     * Sends an ObjC message that returns a C struct by value (e.g. NSRect).
+     * [returnLayout] must be a [GroupLayout] matching the struct's memory layout.
+     * Returns a [MemorySegment] containing the struct data.
+     */
+    fun msgSendReturningStruct(
+        returnLayout: GroupLayout,
+        receiver: MemorySegment,
+        selector: MemorySegment,
+        vararg args: Any,
+    ): MemorySegment {
+        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
+        val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
+        val handle = linker.downcallHandle(objcMsgSendAddr, desc)
+        // Panama FFM inserts a SegmentAllocator as the hidden first argument for struct-returning
+        // method handles. The allocator provides memory for the returned struct on the JVM side.
+        // Use DoubleArray to guarantee 8-byte alignment (required for structs containing doubles).
+        val byteSize = returnLayout.byteSize().toInt()
+        val heapDoubles = DoubleArray((byteSize + 7) / Double.SIZE_BYTES)
+        val heapSeg = MemorySegment.ofArray(heapDoubles).asSlice(0, byteSize.toLong())
+        val allocator = SegmentAllocator.prefixAllocator(heapSeg)
+        val allArgs: Array<Any> = arrayOf(allocator, receiver, selector, *unwrapped)
+        return handle.invokeWithArguments(*allArgs) as MemorySegment
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun layoutFor(arg: Any): MemoryLayout = when (arg) {
+        is ObjCStructArg -> arg.layout
         is MemorySegment -> ValueLayout.ADDRESS
         is Long          -> ValueLayout.JAVA_LONG
         is Int           -> ValueLayout.JAVA_INT
@@ -203,6 +283,50 @@ object ObjCRuntime {
         is Byte          -> ValueLayout.JAVA_BYTE
         is Short         -> ValueLayout.JAVA_SHORT
         is Boolean       -> ValueLayout.JAVA_BOOLEAN
-        else             -> throw IllegalArgumentException("Unsupported ObjC argument type: ${arg::class.qualifiedName}")
+        // @JvmInline value classes and NS_ENUM classes (rawValue / value field)
+        else             -> layoutForWrapped(arg)
+    }
+
+    private fun layoutForWrapped(arg: Any): MemoryLayout {
+        val cls = arg::class.java
+        val field = runCatching { cls.getDeclaredField("rawValue") }.getOrNull()
+            ?: runCatching { cls.getDeclaredField("value") }.getOrNull()
+            ?: throw IllegalArgumentException("Unsupported ObjC argument type: ${arg::class.qualifiedName}")
+        field.isAccessible = true
+        return when (field.type) {
+            java.lang.Long.TYPE    -> ValueLayout.JAVA_LONG
+            java.lang.Integer.TYPE -> ValueLayout.JAVA_INT
+            java.lang.Double.TYPE  -> ValueLayout.JAVA_DOUBLE
+            java.lang.Float.TYPE   -> ValueLayout.JAVA_FLOAT
+            java.lang.Byte.TYPE    -> ValueLayout.JAVA_BYTE
+            java.lang.Short.TYPE   -> ValueLayout.JAVA_SHORT
+            else -> throw IllegalArgumentException(
+                "Unsupported rawValue/value type (${field.type}) in: ${arg::class.qualifiedName}")
+        }
+    }
+
+    /**
+     * Unwraps Koreos binding types to their underlying JVM primitive so they can be
+     * passed to Panama MethodHandle.invokeWithArguments.
+     *
+     * Three patterns exist in the generated bindings:
+     * - [ObjCStructArg]: by-value C struct → unwrap to [MemorySegment]
+     * - @JvmInline value classes: expose their primitive via `rawValue`
+     * - Kotlin enum classes (NS_ENUM): expose their ObjC integer via `value`
+     *
+     * Already-primitive types (MemorySegment, Long, Int, …) are returned as-is.
+     */
+    private fun unwrap(arg: Any): Any = when (arg) {
+        is ObjCStructArg -> arg.segment
+        is MemorySegment, is Long, is Int, is Double,
+        is Float, is Byte, is Short, is Boolean -> arg
+        else -> {
+            val cls = arg::class.java
+            val field = runCatching { cls.getDeclaredField("rawValue") }.getOrNull()
+                ?: runCatching { cls.getDeclaredField("value") }.getOrNull()
+                ?: throw IllegalArgumentException("Cannot unwrap ObjC argument type: ${arg::class.qualifiedName}")
+            field.isAccessible = true
+            field.get(arg) ?: throw IllegalArgumentException("Field is null for: ${arg::class.qualifiedName}")
+        }
     }
 }
