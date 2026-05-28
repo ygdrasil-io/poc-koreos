@@ -225,6 +225,16 @@ object ObjCRuntime {
         ValueLayout.JAVA_DOUBLE.withName("height"),
     )
 
+    /**
+     * Memory layout for NSPoint / CGPoint: struct { CGFloat x, y }
+     * = 2 × Double (16 bytes, 8-byte aligned).
+     * On ARM64, NSPoint is an HFA (Homogeneous Floating-point Aggregate) → passed/returned in d0-d1.
+     */
+    val nsPointLayout: GroupLayout = MemoryLayout.structLayout(
+        ValueLayout.JAVA_DOUBLE.withName("x"),
+        ValueLayout.JAVA_DOUBLE.withName("y"),
+    )
+
     // ── msgSend returning scalar ──────────────────────────────────────────────
 
     /**
