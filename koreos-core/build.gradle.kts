@@ -13,3 +13,11 @@ plugins {
 android {
     namespace = "io.ygdrasil.koreos.core"
 }
+
+kotlin {
+    sourceSets {
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+    }
+}
