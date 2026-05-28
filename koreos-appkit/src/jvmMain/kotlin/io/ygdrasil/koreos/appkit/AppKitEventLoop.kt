@@ -79,6 +79,10 @@ internal class AppKitEventLoop(
      */
     override fun exit() {
         _isExiting = true
+        // Close all open windows before terminating
+        windows.values.toList().forEach { window ->
+            try { window.close() } catch (_: Exception) { /* ignore */ }
+        }
         val nsAppClass = ObjCRuntime.getClass("NSApplication")
         val nsApp = ObjCRuntime.msgSend(
             ValueLayout.ADDRESS,
