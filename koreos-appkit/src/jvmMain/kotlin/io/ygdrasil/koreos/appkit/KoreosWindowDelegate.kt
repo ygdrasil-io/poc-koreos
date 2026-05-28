@@ -55,6 +55,7 @@ class KoreosWindowDelegate(
     private val windowId: WindowId,
     private val nsWindowPtr: MemorySegment,
     private val metalLayerPtr: MemorySegment,
+    private val windows: ConcurrentHashMap<Long, AppKitWindow>,
 ) {
     /** Pointeur vers l'objet Objective-C wrappé par ce délégué. */
     val ptr: MemorySegment
@@ -97,6 +98,17 @@ class KoreosWindowDelegate(
             ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
         }
         return 0 // NO — l'application contrôle la fermeture via exit()
+    }
+
+    /**
+     * Callback Kotlin pour `windowWillClose:`.
+     *
+     * Supprime cette fenêtre de la map [windows] lorsque la NSWindow est sur le
+     * point d'être fermée, garantissant qu'aucun événement ultérieur (redraw,
+     * aboutToWait) ne cible une fenêtre déjà détruite.
+     */
+    fun onWindowWillClose() {
+        windows.remove(windowId.value)
     }
 
     /**
@@ -300,6 +312,33 @@ class KoreosWindowDelegate(
                 "v@:@",
             )
 
+            // void windowWillClose:(NSNotification *) — encoding "v@:@"
+            val windowWillCloseHandle = lookup.findStatic(
+                Callbacks::class.java,
+                "windowWillClose",
+                MethodType.methodType(
+                    Void.TYPE,
+                    MemorySegment::class.java, // self
+                    MemorySegment::class.java, // cmd
+                    MemorySegment::class.java, // notification
+                ),
+            )
+            val windowWillCloseStub = linker.upcallStub(
+                windowWillCloseHandle,
+                FunctionDescriptor.ofVoid(
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                ),
+                arena,
+            )
+            ObjCSubclassing.addMethod(
+                cls,
+                "windowWillClose:",
+                windowWillCloseStub,
+                "v@:@",
+            )
+
             ObjCSubclassing.registerClass(cls)
             classRegistered = true
         }
@@ -340,6 +379,15 @@ class KoreosWindowDelegate(
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
             delegateTable[self.address()]?.onWindowDidChangeBackingProperties()
+        }
+
+        @JvmStatic
+        fun windowWillClose(
+            self: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
+        ) {
+            delegateTable[self.address()]?.onWindowWillClose()
         }
     }
 }
