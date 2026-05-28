@@ -9,6 +9,7 @@
  */
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("ygdrasil.conventions.kmp-publish")
 }
 
 kotlin {
