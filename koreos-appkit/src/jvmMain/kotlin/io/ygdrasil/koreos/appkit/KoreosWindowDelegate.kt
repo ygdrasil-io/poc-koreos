@@ -12,17 +12,21 @@
  * cible lors d'un callback natif.
  *
  * GRA-127 : dispatch de WindowEvent.CloseRequested vers ApplicationHandler.
+ * GRA-132 : dispatch de WindowEvent.Resized + mise à jour CAMetalLayer.drawableSize.
  */
 package io.ygdrasil.koreos.appkit
 
+import io.ygdrasil.koreos.appkit.bindings.NSWindow
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
 import io.ygdrasil.koreos.core.ActiveEventLoop
 import io.ygdrasil.koreos.core.ApplicationHandler
+import io.ygdrasil.koreos.core.PhysicalSize
 import io.ygdrasil.koreos.core.WindowEvent
 import io.ygdrasil.koreos.core.WindowId
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
+import java.lang.foreign.MemoryLayout
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandles
@@ -33,17 +37,22 @@ import java.util.concurrent.ConcurrentHashMap
  * Delegate de fenêtre macOS implémentant `NSWindowDelegate` via FFM.
  *
  * Intercepte `windowShouldClose:` pour dispatcher [WindowEvent.CloseRequested]
- * vers l'[ApplicationHandler]. Retourne `false` (BOOL = 0) afin que l'application
- * contrôle la fermeture via [ActiveEventLoop.exit].
+ * et `windowDidResize:` pour dispatcher [WindowEvent.Resized] vers
+ * l'[ApplicationHandler]. Met également à jour le `drawableSize` du CAMetalLayer
+ * lors de chaque redimensionnement.
  *
- * @param handler    Gestionnaire d'application recevant les événements.
- * @param eventLoop  Boucle d'événements active au moment de la création du delegate.
- * @param windowId   Identifiant de la fenêtre surveillée.
+ * @param handler        Gestionnaire d'application recevant les événements.
+ * @param eventLoop      Boucle d'événements active au moment de la création du delegate.
+ * @param windowId       Identifiant de la fenêtre surveillée.
+ * @param nsWindowPtr    Pointeur natif vers la NSWindow associée.
+ * @param metalLayerPtr  Pointeur natif vers le CAMetalLayer de la fenêtre.
  */
 class KoreosWindowDelegate(
     private val handler: ApplicationHandler,
     private val eventLoop: ActiveEventLoop,
     private val windowId: WindowId,
+    private val nsWindowPtr: MemorySegment,
+    private val metalLayerPtr: MemorySegment,
 ) {
     /** Pointeur vers l'objet Objective-C wrappé par ce délégué. */
     val ptr: MemorySegment
@@ -86,6 +95,69 @@ class KoreosWindowDelegate(
             ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
         }
         return 0 // NO — l'application contrôle la fermeture via exit()
+    }
+
+    /**
+     * Callback Kotlin pour `windowDidResize:`.
+     *
+     * Calcule la nouvelle taille physique en pixels :
+     *   physW = contentLayoutRect.width × backingScaleFactor
+     *   physH = contentLayoutRect.height × backingScaleFactor
+     *
+     * Dispatche [WindowEvent.Resized] vers le gestionnaire puis met à jour
+     * `CAMetalLayer.drawableSize` pour que la surface Metal suive le resize.
+     *
+     * Note : contentLayoutRect est lu via l'introspection ADDRESS layout (MemorySegment
+     * traité comme pointer-or-sret selon la plateforme) puis reinterpret(32) pour
+     * accéder aux quatre CGFloat {x, y, width, height}.
+     */
+    fun onWindowDidResize() {
+        val nsWindow = NSWindow(nsWindowPtr)
+        val scale = nsWindow.backingScaleFactor()
+
+        // contentLayoutRect → NSRect (MemorySegment) → {x, y, width, height}
+        // reinterpret(32) = 4 × 8 bytes pour lire les doubles
+        val rect = nsWindow.contentLayoutRect().reinterpret(32)
+        val w = rect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
+        val h = rect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
+
+        val physW = (w * scale).toInt()
+        val physH = (h * scale).toInt()
+
+        val newSize = PhysicalSize(physW, physH)
+        handler.windowEvent(eventLoop, windowId, WindowEvent.Resized(newSize))
+
+        // Mise à jour du drawableSize du CAMetalLayer pour suivre la nouvelle taille
+        // CGSize = {width: Double, height: Double} passé par valeur (HFA ARM64)
+        setMetalLayerDrawableSize(physW.toDouble(), physH.toDouble())
+    }
+
+    /**
+     * Met à jour `CAMetalLayer.drawableSize` via un appel ObjC typé struct.
+     *
+     * CGSize (= {CGFloat, CGFloat}) est un HFA de 2 doubles sur ARM64 — il doit être
+     * passé par valeur via un [MemoryLayout.structLayout] pour que Panama utilise les
+     * registres SIMD v0/v1 conformément à l'ABI AArch64.
+     */
+    private fun setMetalLayerDrawableSize(width: Double, height: Double) {
+        val cgSizeLayout = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("width"),
+            ValueLayout.JAVA_DOUBLE.withName("height"),
+        )
+        val arena = Arena.ofAuto()
+        val cgSize = arena.allocate(cgSizeLayout)
+        cgSize.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, width)
+        cgSize.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, height)
+
+        val linker = Linker.nativeLinker()
+        val sel = ObjCRuntime.sel("setDrawableSize:")
+        val desc = FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,  // self (CAMetalLayer *)
+            ValueLayout.ADDRESS,  // SEL
+            cgSizeLayout,         // CGSize by value
+        )
+        val handle = linker.downcallHandle(ObjCRuntime.objcMsgSendAddr, desc)
+        handle.invokeWithArguments(metalLayerPtr, sel, cgSize)
     }
 
     companion object {
@@ -136,6 +208,33 @@ class KoreosWindowDelegate(
                 "c@:@",
             )
 
+            // void windowDidResize:(NSNotification *) — encoding "v@:@"
+            val windowDidResizeHandle = lookup.findStatic(
+                Callbacks::class.java,
+                "windowDidResize",
+                MethodType.methodType(
+                    Void.TYPE,
+                    MemorySegment::class.java, // self
+                    MemorySegment::class.java, // cmd
+                    MemorySegment::class.java, // notification
+                ),
+            )
+            val windowDidResizeStub = linker.upcallStub(
+                windowDidResizeHandle,
+                FunctionDescriptor.ofVoid(
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                ),
+                arena,
+            )
+            ObjCSubclassing.addMethod(
+                cls,
+                "windowDidResize:",
+                windowDidResizeStub,
+                "v@:@",
+            )
+
             ObjCSubclassing.registerClass(cls)
             classRegistered = true
         }
@@ -158,6 +257,15 @@ class KoreosWindowDelegate(
             // Si aucun delegate Kotlin n'est enregistré pour ce self, retourner YES (1)
             // pour permettre la fermeture par défaut.
             return delegateTable[self.address()]?.onWindowShouldClose() ?: 1
+        }
+
+        @JvmStatic
+        fun windowDidResize(
+            self: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
+        ) {
+            delegateTable[self.address()]?.onWindowDidResize()
         }
     }
 }
