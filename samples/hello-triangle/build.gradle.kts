@@ -32,6 +32,9 @@ application {
 dependencies {
     implementation(project(":koreos"))
     implementation(libs.wgpu4k)
+    // Data classes descripteurs wgpu4k (VertexState, FragmentState, RenderPipelineDescriptor, etc.)
+    // synchronisées avec la version de webgpu-ktypes embarquée dans wgpu4k:0.1.1
+    implementation(libs.webgpu.ktypes.descriptors)
     // runBlocking — transitif via wgpu4k mais déclaré explicitement pour la clarté
     implementation(libs.kotlinx.coroutines.core)
 }

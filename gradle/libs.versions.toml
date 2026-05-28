@@ -14,6 +14,9 @@ dokka = "2.2.0"
 # Maven Central: io.ygdrasil:wgpu4k:0.1.1
 # Repo : https://github.com/wgpu4k/wgpu4k
 wgpu4k = "0.1.1"
+# webgpu-ktypes — version synchronisée avec wgpu4k:0.1.1
+# Les data classes descripteurs (VertexState, FragmentState, etc.) sont dans webgpu-ktypes-descriptors
+webgpu-ktypes = "0.0.7"
 
 # Libraries
 coroutines = "1.10.1"
@@ -41,6 +44,8 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 
 # wgpu4k
 wgpu4k = { module = "io.ygdrasil:wgpu4k", version.ref = "wgpu4k" }
+# Descripteurs wgpu4k (data classes : VertexState, FragmentState, RenderPipelineDescriptor, etc.)
+webgpu-ktypes-descriptors = { module = "io.ygdrasil:webgpu-ktypes-descriptors", version.ref = "webgpu-ktypes" }
 
 # AndroidX
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
