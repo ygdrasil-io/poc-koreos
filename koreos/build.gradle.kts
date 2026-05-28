@@ -12,6 +12,7 @@
 plugins {
     id("ygdrasil.conventions.kmp-library")
     id("ygdrasil.conventions.kmp-dokka")
+    id("ygdrasil.conventions.kmp-publish")
 }
 
 android {
