@@ -41,8 +41,11 @@ class AndroidWindow internal constructor(
     override val rawDisplayHandle: Any
         get() = RawDisplayHandle.Android
 
+    @Volatile
+    internal var needsRedraw: Boolean = false
+
     override fun requestRedraw() {
-        surfaceView.postInvalidate()
+        needsRedraw = true
     }
 
     override fun setTitle(title: String) {
