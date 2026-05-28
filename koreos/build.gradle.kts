@@ -35,5 +35,23 @@ kotlin {
                 api(project(":koreos-appkit"))
             }
         }
+
+        iosArm64Main {
+            dependencies {
+                api(project(":koreos-uikit"))
+            }
+        }
+
+        iosSimulatorArm64Main {
+            dependencies {
+                api(project(":koreos-uikit"))
+            }
+        }
+
+        iosX64Main {
+            dependencies {
+                api(project(":koreos-uikit"))
+            }
+        }
     }
 }
