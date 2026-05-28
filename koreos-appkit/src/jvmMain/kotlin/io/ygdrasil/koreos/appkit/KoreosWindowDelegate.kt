@@ -13,6 +13,7 @@
  *
  * GRA-127 : dispatch de WindowEvent.CloseRequested vers ApplicationHandler.
  * GRA-132 : dispatch de WindowEvent.Resized + mise à jour CAMetalLayer.drawableSize.
+ * GRA-133 : dispatch de WindowEvent.ScaleFactorChanged + mise à jour CAMetalLayer.contentsScale.
  */
 package io.ygdrasil.koreos.appkit
 
@@ -36,10 +37,11 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Delegate de fenêtre macOS implémentant `NSWindowDelegate` via FFM.
  *
- * Intercepte `windowShouldClose:` pour dispatcher [WindowEvent.CloseRequested]
- * et `windowDidResize:` pour dispatcher [WindowEvent.Resized] vers
- * l'[ApplicationHandler]. Met également à jour le `drawableSize` du CAMetalLayer
- * lors de chaque redimensionnement.
+ * Intercepte `windowShouldClose:` pour dispatcher [WindowEvent.CloseRequested],
+ * `windowDidResize:` pour dispatcher [WindowEvent.Resized], et
+ * `windowDidChangeBackingProperties:` pour dispatcher [WindowEvent.ScaleFactorChanged]
+ * vers l'[ApplicationHandler]. Met également à jour les propriétés CAMetalLayer
+ * (`drawableSize`, `contentsScale`) lors de chaque changement.
  *
  * @param handler        Gestionnaire d'application recevant les événements.
  * @param eventLoop      Boucle d'événements active au moment de la création du delegate.
@@ -160,6 +162,42 @@ class KoreosWindowDelegate(
         handle.invokeWithArguments(metalLayerPtr, sel, cgSize)
     }
 
+    /**
+     * Callback Kotlin pour `windowDidChangeBackingProperties:`.
+     *
+     * Déclenché quand la fenêtre est déplacée entre un écran Retina et un écran standard.
+     *
+     * 1. Lit le nouveau `backingScaleFactor`
+     * 2. Met à jour `CAMetalLayer.contentsScale`
+     * 3. Dispatche [WindowEvent.ScaleFactorChanged]
+     * 4. Dispatche ensuite [WindowEvent.Resized] car la drawableSize change en pixels
+     */
+    fun onWindowDidChangeBackingProperties() {
+        val nsWindow = NSWindow(nsWindowPtr)
+        val newScale = nsWindow.backingScaleFactor()
+
+        // 1. Mettre à jour contentsScale du CAMetalLayer
+        ObjCRuntime.msgSend(
+            null,
+            metalLayerPtr,
+            ObjCRuntime.sel("setContentsScale:"),
+            newScale,
+        )
+
+        // 2. Dispatcher ScaleFactorChanged
+        handler.windowEvent(eventLoop, windowId, WindowEvent.ScaleFactorChanged(newScale))
+
+        // 3. Dispatcher Resized consécutif : le drawableSize en pixels change avec le scale
+        val rect = nsWindow.contentLayoutRect().reinterpret(32)
+        val w = rect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
+        val h = rect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
+        val physW = (w * newScale).toInt()
+        val physH = (h * newScale).toInt()
+        val newSize = PhysicalSize(physW, physH)
+        handler.windowEvent(eventLoop, windowId, WindowEvent.Resized(newSize))
+        setMetalLayerDrawableSize(physW.toDouble(), physH.toDouble())
+    }
+
     companion object {
         /** Table globale : adresse mémoire ObjC → delegate Kotlin associé. */
         private val delegateTable = ConcurrentHashMap<Long, KoreosWindowDelegate>()
@@ -235,6 +273,33 @@ class KoreosWindowDelegate(
                 "v@:@",
             )
 
+            // void windowDidChangeBackingProperties:(NSNotification *) — encoding "v@:@"
+            val windowDidChangeBackingPropertiesHandle = lookup.findStatic(
+                Callbacks::class.java,
+                "windowDidChangeBackingProperties",
+                MethodType.methodType(
+                    Void.TYPE,
+                    MemorySegment::class.java, // self
+                    MemorySegment::class.java, // cmd
+                    MemorySegment::class.java, // notification
+                ),
+            )
+            val windowDidChangeBackingPropertiesStub = linker.upcallStub(
+                windowDidChangeBackingPropertiesHandle,
+                FunctionDescriptor.ofVoid(
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                    ValueLayout.ADDRESS,
+                ),
+                arena,
+            )
+            ObjCSubclassing.addMethod(
+                cls,
+                "windowDidChangeBackingProperties:",
+                windowDidChangeBackingPropertiesStub,
+                "v@:@",
+            )
+
             ObjCSubclassing.registerClass(cls)
             classRegistered = true
         }
@@ -266,6 +331,15 @@ class KoreosWindowDelegate(
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
             delegateTable[self.address()]?.onWindowDidResize()
+        }
+
+        @JvmStatic
+        fun windowDidChangeBackingProperties(
+            self: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
+        ) {
+            delegateTable[self.address()]?.onWindowDidChangeBackingProperties()
         }
     }
 }

@@ -113,6 +113,22 @@ class KoreosWindowDelegateTest {
     }
 
     @Test
+    fun `Callbacks windowDidChangeBackingProperties existe avec la bonne signature`() {
+        val callbacksClass = Class.forName("io.ygdrasil.koreos.appkit.KoreosWindowDelegate\$Callbacks")
+        val method = callbacksClass.methods.firstOrNull { it.name == "windowDidChangeBackingProperties" }
+        assertNotNull(method, "Callbacks.windowDidChangeBackingProperties doit exister")
+        assertEquals(Void.TYPE, method.returnType)
+        assertEquals(3, method.parameterCount)
+    }
+
+    @Test
+    fun `WindowEvent ScaleFactorChanged est reconnu comme WindowEvent`() {
+        val event: WindowEvent = WindowEvent.ScaleFactorChanged(2.0)
+        assertTrue(event is WindowEvent.ScaleFactorChanged)
+        assertEquals(2.0, (event as WindowEvent.ScaleFactorChanged).factor)
+    }
+
+    @Test
     fun `WindowEvent Resized est reconnu comme WindowEvent`() {
         val event: WindowEvent = WindowEvent.Resized(io.ygdrasil.koreos.core.PhysicalSize(800, 600))
         assertTrue(event is WindowEvent.Resized)
