@@ -289,6 +289,40 @@ Total v0.2.0 : **~13 semaines** depuis T0. Plus court que le plan initial (M1→
 | D10 | **Communauté** : Discord wgpu4k (rebrand futur), pas de Discord ygdrasil dédié |
 | D11 | **Stratégie hybride JS/WASM** : JS first (1 sem MVP), WASM ensuite (1.5 sem) avec couche commune `koreos-web-common` |
 | D12 | **Détection Linux X11/Wayland** : auto-détection runtime + override par variable d'env `KOREOS_LINUX_BACKEND` |
+| D13 | **JDK cible = 25 (LTS)**. Trade-off conscient adoption vs modernité — voir §13. |
+
+---
+
+## 13. Décision JDK 25 — justification
+
+Le reviewer v0.2 a soulevé la question (legitimement) du choix JDK 25 vs JDK 22/21 pour élargir l'adoption (FFM est stable depuis JDK 22, JDK 21 est LTS). La décision **JDK 25** est maintenue, avec les arguments suivants :
+
+| Critère | JDK 21 LTS | JDK 22 | **JDK 25 LTS** |
+|---|---|---|---|
+| FFM stable | preview | ✅ stable | ✅ stable |
+| Statut LTS | LTS (jusqu'à 2031) | non-LTS | **LTS (jusqu'à 2033)** |
+| Pattern matching switch | preview | ✅ stable | ✅ stable + amélioré |
+| Virtual threads | ✅ stable | ✅ stable | ✅ stable + tuned |
+| `Linker.upcallStub` API | preview | ✅ stable | ✅ stable + perf améliorée |
+| Adoption Q3 2026 | très large | déclinant | en croissance |
+
+**Pourquoi JDK 25** :
+
+1. **LTS du moment** — JDK 25 est la LTS la plus récente, supportée jusqu'à 2033 (Oracle/Eclipse Temurin). JDK 21 sort de "premium support" avant 2030. Cibler la LTS la plus fraîche garantit que les utilisateurs Koreos auront une version supportée longtemps.
+
+2. **Aucune dépendance Koreos ne nécessite < JDK 25** — Pas de partenaire imposant une version inférieure (à confirmer si un consommateur le demande).
+
+3. **L'écosystème ygdrasil est récent** — Koreos cible des utilisateurs qui construisent des projets neufs (jeux/outils 3D/Pong-like), pas des migrations legacy. Ces utilisateurs sont en général sur la JDK la plus récente.
+
+4. **kextract génère du code FFM moderne** — les API `Linker`, `Arena.ofShared`, `MemorySegment.reinterpret` ont été polies post-JDK 22. Travailler sur la LTS la plus récente évite des workarounds.
+
+**Conditions de révision** :
+
+- Si un consommateur stratégique de Koreos (ex : intégration upstream Compose) impose JDK 21 → ré-évaluer.
+- Si Kotlin/JVM perd la cible bytecode JDK 25 avant Koreos v1.0 → fallback JDK 22 (compromise FFM stable + adoption plus large).
+- Si > 30% des bugs reportés mentionnent "JDK trop récent" → fallback JDK 22 (mesure d'adoption réelle).
+
+**Fallback prêt** : le projet utilise déjà des `toolchain` Gradle ; descendre la cible de JDK 25 à JDK 22 est un changement minime (1 ligne dans le convention plugin `kmp-library`). À documenter dans `release-process.md`.
 
 ---
 
