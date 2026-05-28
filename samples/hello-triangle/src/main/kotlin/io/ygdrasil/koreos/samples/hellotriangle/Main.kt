@@ -1,11 +1,14 @@
 /**
- * Sample hello-triangle — rendu d'un triangle coloré via wgpu4k (GRA-138).
+ * Sample hello-triangle — rendu d'un triangle coloré via wgpu4k (GRA-138 + GRA-139).
  *
  * Ouvre une fenêtre Koreos et affiche un triangle RGB animé en continu :
  *   Instance → Surface → Adapter → Device → Pipeline → render loop.
  *
  * Chaque [WindowEvent.RedrawRequested] déclenche une frame :
  *   getCurrentTexture → createView → commandEncoder → renderPass (draw 3 vertices) → submit → present.
+ *
+ * [WindowEvent.Resized] et [WindowEvent.ScaleFactorChanged] déclenchent une reconfiguration
+ * de la surface (nouveau swap chain) via [HelloTriangleApp.handleResize] (GRA-139).
  *
  * Usage : ./gradlew :samples:hello-triangle:run
  */
@@ -90,7 +93,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 // ---------------------------------------------------------------------------
 
 /**
- * Gestionnaire du sample hello-triangle (GRA-138).
+ * Gestionnaire du sample hello-triangle (GRA-138 + GRA-139).
  *
  * Maintient les ressources wgpu4k entre les frames :
  * - [surface] : surface de rendu liée au CAMetalLayer
@@ -98,9 +101,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
  * - [pipeline] : pipeline de rendu (vertex + fragment shaders)
  * - [window] : fenêtre Koreos pour `requestRedraw()`
  * - [surfaceFormat] : format de texture négocié à la configuration
+ * - [surfaceAlphaMode] : mode alpha utilisé pour la reconfiguration sur resize
  *
  * Le rendu est déclenché à chaque [WindowEvent.RedrawRequested].
  * [aboutToWait] appelle [Window.requestRedraw] pour un rendu continu (~60 fps).
+ * [WindowEvent.Resized] et [WindowEvent.ScaleFactorChanged] déclenchent [handleResize].
  */
 @OptIn(WGPULowLevelApi::class)
 class HelloTriangleApp : ApplicationHandler {
@@ -112,6 +117,7 @@ class HelloTriangleApp : ApplicationHandler {
     private var pipeline: GPURenderPipeline? = null
     private var window: io.ygdrasil.koreos.core.Window? = null
     private var surfaceFormat: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
+    private var surfaceAlphaMode: CompositeAlphaMode = CompositeAlphaMode.Auto
 
     // Compteur FPS
     private var frameCount = 0
@@ -220,6 +226,7 @@ class HelloTriangleApp : ApplicationHandler {
         val alphaMode = surf.supportedAlphaMode
             .firstOrNull { it == CompositeAlphaMode.Opaque }
             ?: CompositeAlphaMode.Auto
+        surfaceAlphaMode = alphaMode
 
         surf.configure(
             SurfaceConfiguration(
@@ -276,11 +283,24 @@ class HelloTriangleApp : ApplicationHandler {
      * Événements fenêtre.
      *
      * - [WindowEvent.RedrawRequested] : rend une frame triangle RGB
+     * - [WindowEvent.Resized] : reconfigure la surface avec la nouvelle taille physique (GRA-139)
+     * - [WindowEvent.ScaleFactorChanged] : reconfigure la surface depuis innerSize (GRA-139)
      * - [WindowEvent.CloseRequested] : libère les ressources et quitte
      */
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
         when (event) {
             is WindowEvent.RedrawRequested -> renderFrame()
+            is WindowEvent.Resized -> {
+                println("[hello-triangle] Resized → ${event.size.width}×${event.size.height}")
+                handleResize(event.size.width, event.size.height)
+            }
+            is WindowEvent.ScaleFactorChanged -> {
+                // Reconfigure à partir de la taille physique actuelle de la fenêtre
+                val win = window ?: return
+                val inner = win.innerSize
+                println("[hello-triangle] ScaleFactorChanged scaleFactor=${event.factor} → reconfigure ${inner.width}×${inner.height}")
+                handleResize(inner.width, inner.height)
+            }
             is WindowEvent.CloseRequested -> {
                 println("[hello-triangle] CloseRequested — libération des ressources")
                 releaseResources()
@@ -288,6 +308,33 @@ class HelloTriangleApp : ApplicationHandler {
             }
             else -> { /* ignorer */ }
         }
+    }
+
+    /**
+     * Reconfigure la surface WebGPU avec la nouvelle taille en pixels physiques.
+     *
+     * Appelé sur [WindowEvent.Resized] et [WindowEvent.ScaleFactorChanged].
+     * Gère silencieusement les cas où les ressources wgpu ne sont pas encore initialisées.
+     *
+     * @param width  Nouvelle largeur en pixels physiques.
+     * @param height Nouvelle hauteur en pixels physiques.
+     */
+    private fun handleResize(width: Int, height: Int) {
+        val surf = surface ?: return
+        val device = gpuDevice ?: return
+        if (width <= 0 || height <= 0) return
+
+        surf.configure(
+            SurfaceConfiguration(
+                device = device,
+                format = surfaceFormat,
+                usage = setOf(GPUTextureUsage.RenderAttachment),
+                alphaMode = surfaceAlphaMode,
+            ),
+            width.toUInt(),
+            height.toUInt(),
+        )
+        println("[hello-triangle] Surface reconfigurée — ${width}×${height}")
     }
 
     /**
@@ -310,6 +357,15 @@ class HelloTriangleApp : ApplicationHandler {
 
         // 1. Texture de présentation
         val surfaceTexture = surf.getCurrentTexture()
+        if (surfaceTexture.status == SurfaceTextureStatus.outdated) {
+            // Le swap chain est périmé (resize en cours) — reconfigure depuis la taille courante
+            val win = window
+            if (win != null) {
+                val inner = win.innerSize
+                handleResize(inner.width, inner.height)
+            }
+            return
+        }
         if (surfaceTexture.status != SurfaceTextureStatus.success) {
             println("[hello-triangle] getCurrentTexture status=${surfaceTexture.status} — frame ignorée")
             return
