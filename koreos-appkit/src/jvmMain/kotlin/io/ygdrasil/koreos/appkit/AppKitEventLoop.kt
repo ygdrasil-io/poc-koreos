@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - [createProxy] : implémenté via [AppKitEventLoopProxy] (GRA-136) — wakeUp thread-safe.
  */
 internal class AppKitEventLoop(
-    private val handler: ApplicationHandler,
+    internal val handler: ApplicationHandler,
 ) : ActiveEventLoop {
 
     /** Fenêtres vivantes : windowId → AppKitWindow. */
@@ -114,6 +114,9 @@ fun runApp(handler: ApplicationHandler) {
     MainThreadCheck.require()
 
     val eventLoop = AppKitEventLoop(handler)
+
+    // 0. Wire eventLoop into KoreosApplication BEFORE klass is initialized (sendEvent: needs it)
+    KoreosApplication.eventLoop = eventLoop
 
     // 1. Sous-classe KoreosApplication + sharedApplication
     val app = KoreosApplication.initialize()

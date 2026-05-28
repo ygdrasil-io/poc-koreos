@@ -307,6 +307,7 @@ sealed interface WindowEvent {
         val key: Key,
         val state: KeyState,
         val modifiers: Modifiers,
+        val isRepeat: Boolean = false,
     ) : WindowEvent
 
     /**
