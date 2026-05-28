@@ -128,6 +128,42 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         if (attrs.visible) {
             nsWindow.makeKeyAndOrderFront(MemorySegment.NULL)
         }
+
+        // 9. Install NSTrackingArea for mouseEntered/mouseExited/mouseMoved events
+        val trackingAreaClass = ObjCRuntime.getClass("NSTrackingArea")
+        val trackingAreaAlloc = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            trackingAreaClass,
+            ObjCRuntime.sel("alloc"),
+        ) as MemorySegment
+
+        // NSZeroRect (all zeros) since NSTrackingInVisibleRect handles the rect automatically
+        val zeroRect = allocNSRect(arena, 0.0, 0.0, 0.0, 0.0)
+
+        // Options bitmask:
+        // NSTrackingMouseEnteredAndExited = 0x01
+        // NSTrackingMouseMoved            = 0x02
+        // NSTrackingActiveInKeyWindow     = 0x20
+        // NSTrackingInVisibleRect         = 0x100
+        // Combined = 0x123
+        val trackingOptions = 0x123L
+
+        val trackingArea = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            trackingAreaAlloc,
+            ObjCRuntime.sel("initWithRect:options:owner:userInfo:"),
+            ObjCStructArg(zeroRect, ObjCRuntime.nsRectLayout),  // NSRect by value
+            trackingOptions,           // NSTrackingAreaOptions (Long)
+            contentViewPtr,            // owner = contentView
+            MemorySegment.NULL,        // userInfo = nil
+        ) as MemorySegment
+
+        ObjCRuntime.msgSend(
+            null,
+            contentViewPtr,
+            ObjCRuntime.sel("addTrackingArea:"),
+            trackingArea,
+        )
     }
 
     override val rawWindowHandle: Any
