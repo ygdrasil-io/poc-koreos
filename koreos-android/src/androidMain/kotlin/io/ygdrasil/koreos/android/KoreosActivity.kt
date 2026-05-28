@@ -1,13 +1,16 @@
 package io.ygdrasil.koreos.android
 
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import io.ygdrasil.koreos.core.ApplicationHandler
+import io.ygdrasil.koreos.core.PhysicalPosition
 import io.ygdrasil.koreos.core.PhysicalSize
+import io.ygdrasil.koreos.core.TouchPhase
 import io.ygdrasil.koreos.core.WindowEvent
 
 /**
@@ -138,6 +141,41 @@ abstract class KoreosActivity : ComponentActivity() {
         super.onPause()
         if (destroyed) return
         handler.suspended(eventLoop)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (destroyed || !::koreosWindow.isInitialized) return super.onTouchEvent(event)
+        dispatchMotionEvent(event)
+        return true
+    }
+
+    private fun dispatchMotionEvent(event: MotionEvent) {
+        val phase = when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> TouchPhase.Started
+            MotionEvent.ACTION_MOVE -> TouchPhase.Moved
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> TouchPhase.Ended
+            MotionEvent.ACTION_CANCEL -> TouchPhase.Cancelled
+            else -> return
+        }
+
+        if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+            for (pointerIndex in 0 until event.pointerCount) {
+                val location = PhysicalPosition(
+                    event.getX(pointerIndex).toDouble(),
+                    event.getY(pointerIndex).toDouble(),
+                )
+                val id = event.getPointerId(pointerIndex).toLong()
+                handler.windowEvent(eventLoop, koreosWindow.id, WindowEvent.Touch(phase, location, id))
+            }
+        } else {
+            val pointerIndex = event.actionIndex
+            val location = PhysicalPosition(
+                event.getX(pointerIndex).toDouble(),
+                event.getY(pointerIndex).toDouble(),
+            )
+            val id = event.getPointerId(pointerIndex).toLong()
+            handler.windowEvent(eventLoop, koreosWindow.id, WindowEvent.Touch(phase, location, id))
+        }
     }
 
     override fun onDestroy() {
