@@ -12,18 +12,6 @@ import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Wraps a struct [MemorySegment] with its [MemoryLayout] for by-value struct passing
- * via Panama FFM [ObjCRuntime.msgSend]. Use this for ObjC methods that take a C struct
- * argument by value (e.g. NSRect, CGPoint, NSSize).
- *
- * Example:
- * ```kotlin
- * ObjCRuntime.msgSend(returnLayout, ptr, sel, ObjCStructArg(nsRectSegment, ObjCRuntime.nsRectLayout))
- * ```
- */
-data class ObjCStructArg(val segment: MemorySegment, val layout: MemoryLayout)
-
-/**
  * Low-level Objective-C runtime bridge via Panama FFI.
  *
  * Use [sel], [getClass] and [msgSend] to call Objective-C methods from Kotlin/JVM.
@@ -103,43 +91,70 @@ object ObjCRuntime {
     }
 
     /**
+     * Wraps a struct-by-value argument together with its [GroupLayout].
+     *
+     * When an ObjC method accepts a struct parameter by value (e.g. `NSRect`, `NSPoint`),
+     * the argument must be passed as a raw [MemorySegment] containing the struct bytes, but
+     * the [FunctionDescriptor] must use the matching [GroupLayout] (not [ValueLayout.ADDRESS]).
+     * Wrap the segment in [ObjCStructArg] so [msgSend] can apply the correct layout.
+     */
+    data class ObjCStructArg(val segment: MemorySegment, val layout: GroupLayout)
+
+    /**
      * Sends an ObjC message to [receiver] with selector [selector] and [args].
      *
      * - [returnLayout] = null for void-returning methods
-     * - [returnLayout] = ValueLayout.ADDRESS for id/pointer-returning methods
-     * - [returnLayout] = ValueLayout.JAVA_LONG / JAVA_INT / JAVA_DOUBLE etc. for primitives
+     * - [returnLayout] = [ValueLayout.ADDRESS] for id/pointer-returning methods
+     * - [returnLayout] = [ValueLayout.JAVA_LONG] / [ValueLayout.JAVA_DOUBLE] etc. for primitives
      *
-     * Each arg must be a Panama-compatible type: MemorySegment, Long, Int, Double, Float, Byte, Short, Boolean,
-     * or a @JvmInline value class with a `rawValue` field of a supported primitive type.
+     * Each arg must be: [MemorySegment], [Long], [Int], [Double], [Float], [Byte], [Short],
+     * [Boolean], or [ObjCStructArg] for struct-by-value arguments.
+     *
+     * Layouts are computed from the *original* args (before unwrapping) so that [ObjCStructArg]
+     * contributes its [GroupLayout] rather than [ValueLayout.ADDRESS] — this is the correct order
+     * described in issue #22 Bug 5.
      */
     fun msgSend(returnLayout: MemoryLayout?, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Any? {
-        // Layouts must be computed BEFORE unwrapping so ObjCStructArg carries its GroupLayout.
-        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
-        val unwrapped = args.map { unwrap(it) }.toTypedArray()
+        val argLayouts = args.map { layoutFor(it) }.toTypedArray()   // (Bug 5) layouts before unwrap
         val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
         val desc = if (returnLayout == null)
             FunctionDescriptor.ofVoid(*baseLayouts, *argLayouts)
         else
             FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(objcMsgSendAddr, desc)
-        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
-        return handle.invokeWithArguments(*allArgs)
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
+        return handle.invokeWithArguments(receiver, selector, *unwrapped)
     }
 
     /**
-     * Like [msgSend] but uses objc_msgSend_stret on x86-64 for methods returning large structs.
-     * On ARM64, delegates to [msgSend] (stret variant doesn't exist).
+     * Like [msgSend] but for methods returning a struct by value.
+     *
+     * Panama requires a [GroupLayout] in the [FunctionDescriptor] for struct-returning calls and
+     * inserts a [SegmentAllocator] as the first argument to the downcall handle.  The struct bytes
+     * are written into heap-backed storage allocated here and returned as a [MemorySegment].
+     *
+     * On x86-64 [objc_msgSend_stret] is used; on ARM64 the regular [objc_msgSend] entry point
+     * handles struct returns in registers (the stret variant does not exist there).
+     *
+     * Important: the allocator must be backed by a [DoubleArray] (8-byte aligned) rather than a
+     * [ByteArray] to satisfy Panama's alignment constraints for `double`-containing structs such
+     * as [NSRect].
      */
-    fun msgSendStret(returnLayout: MemoryLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Any? {
+    fun msgSendStret(returnLayout: GroupLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): MemorySegment {
         val addr = objcMsgSendStretAddr ?: objcMsgSendAddr
-        // Layouts must be computed BEFORE unwrapping so ObjCStructArg carries its GroupLayout.
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
-        val unwrapped = args.map { unwrap(it) }.toTypedArray()
-        val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+        val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
         val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(addr, desc)
-        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
-        return handle.invokeWithArguments(*allArgs)
+        // Allocate struct-return storage. DoubleArray guarantees 8-byte alignment so that
+        // structs containing `double` fields (NSRect, NSPoint, …) pass Panama's alignment check.
+        val byteSize = returnLayout.byteSize().toInt()
+        val heapDoubles = DoubleArray((byteSize + 7) / Double.SIZE_BYTES)
+        val heapSeg = MemorySegment.ofArray(heapDoubles).asSlice(0, byteSize.toLong())
+        val allocator = SegmentAllocator.prefixAllocator(heapSeg)
+        val unwrapped = args.map { unwrap(it) }.toTypedArray()
+        // Panama inserts the allocator as the implicit first argument for GroupLayout returns.
+        return handle.invokeWithArguments(allocator, receiver, selector, *unwrapped) as MemorySegment
     }
 
     // ── Autorelease pool ──────────────────────────────────────────────────────
@@ -211,80 +226,10 @@ object ObjCRuntime {
         return utf8Ptr.getString(0)
     }
 
-    // ── Struct layouts ────────────────────────────────────────────────────────
-
-    /**
-     * Memory layout for NSRect / CGRect: struct { CGFloat x, y, width, height }
-     * = 4 × Double (32 bytes, 8-byte aligned).
-     * On ARM64, NSRect is a Homogeneous Floating-point Aggregate (HFA) → passed / returned in d0-d3.
-     */
-    val nsRectLayout: GroupLayout = MemoryLayout.structLayout(
-        ValueLayout.JAVA_DOUBLE.withName("x"),
-        ValueLayout.JAVA_DOUBLE.withName("y"),
-        ValueLayout.JAVA_DOUBLE.withName("width"),
-        ValueLayout.JAVA_DOUBLE.withName("height"),
-    )
-
-    /**
-     * Memory layout for NSPoint / CGPoint: struct { CGFloat x, y }
-     * = 2 × Double (16 bytes, 8-byte aligned).
-     * On ARM64, NSPoint is an HFA (Homogeneous Floating-point Aggregate) → passed/returned in d0-d1.
-     */
-    val nsPointLayout: GroupLayout = MemoryLayout.structLayout(
-        ValueLayout.JAVA_DOUBLE.withName("x"),
-        ValueLayout.JAVA_DOUBLE.withName("y"),
-    )
-
-    // ── msgSend returning scalar ──────────────────────────────────────────────
-
-    /**
-     * Sends an ObjC message that returns a `double` / CGFloat.
-     * The generated bindings incorrectly use [ValueLayout.ADDRESS] for scalar returns;
-     * use this helper for any property or method returning CGFloat/Double.
-     */
-    fun msgSendDouble(receiver: MemorySegment, selector: MemorySegment, vararg args: Any): Double {
-        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
-        val unwrapped = args.map { unwrap(it) }.toTypedArray()
-        val desc = FunctionDescriptor.of(
-            ValueLayout.JAVA_DOUBLE, ValueLayout.ADDRESS, ValueLayout.ADDRESS, *argLayouts)
-        val handle = linker.downcallHandle(objcMsgSendAddr, desc)
-        val allArgs: Array<Any> = arrayOf(receiver, selector, *unwrapped)
-        return handle.invokeWithArguments(*allArgs) as Double
-    }
-
-    // ── msgSend returning struct ───────────────────────────────────────────────
-
-    /**
-     * Sends an ObjC message that returns a C struct by value (e.g. NSRect).
-     * [returnLayout] must be a [GroupLayout] matching the struct's memory layout.
-     * Returns a [MemorySegment] containing the struct data.
-     */
-    fun msgSendReturningStruct(
-        returnLayout: GroupLayout,
-        receiver: MemorySegment,
-        selector: MemorySegment,
-        vararg args: Any,
-    ): MemorySegment {
-        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
-        val unwrapped = args.map { unwrap(it) }.toTypedArray()
-        val baseLayouts = arrayOf(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-        val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
-        val handle = linker.downcallHandle(objcMsgSendAddr, desc)
-        // Panama FFM inserts a SegmentAllocator as the hidden first argument for struct-returning
-        // method handles. The allocator provides memory for the returned struct on the JVM side.
-        // Use DoubleArray to guarantee 8-byte alignment (required for structs containing doubles).
-        val byteSize = returnLayout.byteSize().toInt()
-        val heapDoubles = DoubleArray((byteSize + 7) / Double.SIZE_BYTES)
-        val heapSeg = MemorySegment.ofArray(heapDoubles).asSlice(0, byteSize.toLong())
-        val allocator = SegmentAllocator.prefixAllocator(heapSeg)
-        val allArgs: Array<Any> = arrayOf(allocator, receiver, selector, *unwrapped)
-        return handle.invokeWithArguments(*allArgs) as MemorySegment
-    }
-
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun layoutFor(arg: Any): MemoryLayout = when (arg) {
-        is ObjCStructArg -> arg.layout
+        is ObjCStructArg -> arg.layout              // struct-by-value: use the GroupLayout
         is MemorySegment -> ValueLayout.ADDRESS
         is Long          -> ValueLayout.JAVA_LONG
         is Int           -> ValueLayout.JAVA_INT
@@ -292,9 +237,22 @@ object ObjCRuntime {
         is Float         -> ValueLayout.JAVA_FLOAT
         is Byte          -> ValueLayout.JAVA_BYTE
         is Short         -> ValueLayout.JAVA_SHORT
-        is Boolean       -> ValueLayout.JAVA_BOOLEAN
-        // @JvmInline value classes and NS_ENUM classes (rawValue / value field)
+        // ObjC BOOL = signed char (1 byte) on Apple platforms. Panama's JAVA_BOOLEAN
+        // doesn't match the variadic-arg ABI used by objc_msgSend on macOS — passing
+        // a Boolean carrier to objc_msgSend raises `Cannot cast Boolean to Byte` in the
+        // method-handle adapter. Encode Boolean as JAVA_BYTE and convert in [unwrap].
+        // Upstream tracking: https://github.com/klang-toolkit/kextract/issues/30
+        is Boolean       -> ValueLayout.JAVA_BYTE
+        // @JvmInline value classes (rawValue) and NS_ENUM classes (value) — Bug 4 from
+        // klang-toolkit/kextract#22 isn't fully fixed in v0.0.2: the generator only
+        // unboxes when the underlying C declaration is ENUM, but NS_OPTIONS that boil
+        // down to `typedef NSUInteger Foo` reach us as boxed wrappers. Reflection
+        // covers the gap until klang-toolkit/kextract#25 lands.
         else             -> layoutForWrapped(arg)
+    }
+
+    private fun boolToByte(b: Boolean): Byte {
+        return if (b) 1.toByte() else 0.toByte()
     }
 
     private fun layoutForWrapped(arg: Any): MemoryLayout {
@@ -316,20 +274,20 @@ object ObjCRuntime {
     }
 
     /**
-     * Unwraps Koreos binding types to their underlying JVM primitive so they can be
-     * passed to Panama MethodHandle.invokeWithArguments.
+     * Extracts the raw Panama-compatible value from [arg].
      *
-     * Three patterns exist in the generated bindings:
-     * - [ObjCStructArg]: by-value C struct → unwrap to [MemorySegment]
-     * - @JvmInline value classes: expose their primitive via `rawValue`
-     * - Kotlin enum classes (NS_ENUM): expose their ObjC integer via `value`
-     *
-     * Already-primitive types (MemorySegment, Long, Int, …) are returned as-is.
+     * - [ObjCStructArg] → its [MemorySegment]
+     * - Primitives / [MemorySegment] → returned as-is
+     * - `@JvmInline value class` / NS_ENUM wrapper → unboxed via reflection on
+     *   `rawValue` (NS_OPTIONS) or `value` (NS_ENUM). Same rationale as
+     *   [layoutForWrapped] — bridges the gap left by klang-toolkit/kextract#25.
      */
     private fun unwrap(arg: Any): Any = when (arg) {
         is ObjCStructArg -> arg.segment
+        // BOOL must be encoded as Byte (see comment in [layoutFor]). Convert here.
+        is Boolean -> boolToByte(arg as Boolean)
         is MemorySegment, is Long, is Int, is Double,
-        is Float, is Byte, is Short, is Boolean -> arg
+        is Float, is Byte, is Short -> arg
         else -> {
             val cls = arg::class.java
             val field = runCatching { cls.getDeclaredField("rawValue") }.getOrNull()
