@@ -1,37 +1,71 @@
 package io.ygdrasil.koreos.uikit
 
+import io.ygdrasil.koreos.core.PhysicalPosition
 import io.ygdrasil.koreos.core.PhysicalSize
 import io.ygdrasil.koreos.core.RawDisplayHandle
 import io.ygdrasil.koreos.core.RawWindowHandle
+import io.ygdrasil.koreos.core.TouchPhase
 import io.ygdrasil.koreos.core.Window
 import io.ygdrasil.koreos.core.WindowAttributes
+import io.ygdrasil.koreos.core.WindowEvent
 import io.ygdrasil.koreos.core.WindowId
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCClass
+import kotlinx.cinterop.objcPtr
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGRect
 import platform.QuartzCore.CAMetalLayer
+import platform.UIKit.UIEvent
 import platform.UIKit.UIScreen
+import platform.UIKit.UITouch
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 import platform.UIKit.UIViewMeta
 import platform.UIKit.UIWindow
-import kotlinx.cinterop.objcPtr
 
 /**
  * KoreosMetalView : UIView backed by CAMetalLayer.
  *
  * +layerClass override ensures UIKit uses CAMetalLayer as the backing store
  * from the very first layout pass — no sublayer attachment needed.
+ *
+ * UIResponder touch callbacks forward all contacts to [onTouchEvent].
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-class KoreosMetalView(frame: CValue<CGRect>) : UIView(frame = frame) {
+class KoreosMetalView(
+    frame: CValue<CGRect>,
+    private val onTouchEvent: (WindowEvent) -> Unit = {},
+) : UIView(frame = frame) {
     companion object : UIViewMeta() {
         override fun layerClass(): ObjCClass = CAMetalLayer.`class`()!!
     }
 
     val metalLayer: CAMetalLayer get() = layer as CAMetalLayer
+
+    override fun touchesBegan(touches: Set<*>, withEvent: UIEvent?) =
+        dispatchTouches(touches, TouchPhase.Started)
+
+    override fun touchesMoved(touches: Set<*>, withEvent: UIEvent?) =
+        dispatchTouches(touches, TouchPhase.Moved)
+
+    override fun touchesEnded(touches: Set<*>, withEvent: UIEvent?) =
+        dispatchTouches(touches, TouchPhase.Ended)
+
+    override fun touchesCancelled(touches: Set<*>, withEvent: UIEvent?) =
+        dispatchTouches(touches, TouchPhase.Cancelled)
+
+    private fun dispatchTouches(touches: Set<*>, phase: TouchPhase) {
+        val scale = UIScreen.mainScreen.scale
+        touches.forEach { touch ->
+            val uiTouch = touch as? UITouch ?: return@forEach
+            val loc = uiTouch.locationInView(this)
+            val x = loc.useContents { x * scale }
+            val y = loc.useContents { y * scale }
+            val id = uiTouch.objcPtr().toLong()
+            onTouchEvent(WindowEvent.Touch(phase, PhysicalPosition(x, y), id))
+        }
+    }
 }
 
 /**
@@ -39,9 +73,10 @@ class KoreosMetalView(frame: CValue<CGRect>) : UIView(frame = frame) {
  *
  * Crée UIWindow → UIViewController → KoreosMetalView (plein écran).
  * CAMetalLayer est le backing layer de la vue (via +layerClass).
+ * Les événements tactiles sont dispatchés vers [eventLoop].handler.
  */
 @OptIn(ExperimentalForeignApi::class)
-class UiKitWindow(attrs: WindowAttributes) : Window {
+internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKitActiveEventLoop) : Window {
 
     private val uiWindow: UIWindow
     private val viewController: UIViewController
@@ -53,8 +88,18 @@ class UiKitWindow(attrs: WindowAttributes) : Window {
         val screen = UIScreen.mainScreen
         val screenBounds = screen.bounds
 
-        // 1. KoreosMetalView plein écran
-        metalView = KoreosMetalView(frame = screenBounds)
+        // 4. UIWindow first — needed to derive the WindowId
+        uiWindow = UIWindow(frame = screenBounds)
+        id = WindowId(uiWindow.objcPtr().toLong())
+
+        // Capture id in a local val so the lambda does not close over a val
+        // that the compiler might consider uninitialized at lambda-definition time.
+        val windowId = id
+
+        // 1. KoreosMetalView plein écran (dispatch lambda uses windowId)
+        metalView = KoreosMetalView(frame = screenBounds) { event ->
+            eventLoop.handler.windowEvent(eventLoop, windowId, event)
+        }
 
         // 2. contentsScale pour HiDPI / Retina
         metalView.metalLayer.setContentsScale(screen.scale)
@@ -63,15 +108,11 @@ class UiKitWindow(attrs: WindowAttributes) : Window {
         viewController = UIViewController(nibName = null, bundle = null)
         viewController.setView(metalView)
 
-        // 4. UIWindow
-        uiWindow = UIWindow(frame = screenBounds)
+        // 5. Wire root VC and show
         uiWindow.rootViewController = viewController
         if (attrs.visible) {
             uiWindow.makeKeyAndVisible()
         }
-
-        // Window ID depuis le pointeur UIWindow
-        id = WindowId(uiWindow.objcPtr().toLong())
     }
 
     override val rawWindowHandle: Any
