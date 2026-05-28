@@ -13,3 +13,17 @@ plugins {
 android {
     namespace = "io.ygdrasil.koreos.core"
 }
+
+kotlin {
+    // Active les classes expect/actual (Beta) sans avertissement.
+    // Nécessaire pour EventLoop (expect class avec actual par plateforme).
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
+    sourceSets {
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+    }
+}
