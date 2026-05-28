@@ -14,7 +14,6 @@ import io.ygdrasil.koreos.appkit.bindings.NSView
 import io.ygdrasil.koreos.appkit.bindings.NSWindow
 import io.ygdrasil.koreos.appkit.bindings.NSWindowStyleMask
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
-import io.ygdrasil.koreos.appkit.bindings.ObjCStructArg
 import io.ygdrasil.koreos.core.ActiveEventLoop
 import io.ygdrasil.koreos.core.ApplicationHandler
 import io.ygdrasil.koreos.core.PhysicalSize
@@ -77,19 +76,14 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
         val backing = NSBackingStoreType.NSBackingStoreBuffered
 
-        // NSRect must be passed BY VALUE (HFA: 4 doubles → d0-d3 on ARM64).
-        // The generated wrapper passes it as ADDRESS (pointer), which is wrong.
-        // Bypass the generated wrapper and call msgSend directly with ObjCStructArg.
-        val initSel = ObjCRuntime.sel("initWithContentRect:styleMask:backing:defer:")
-        val initializedPtr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            allocated,
-            initSel,
-            ObjCStructArg(contentRect, ObjCRuntime.nsRectLayout), // NSRect by value
-            styleMask,               // NSWindowStyleMask (unwrapped to Long)
-            backing,                 // NSBackingStoreType (unwrapped to Long)
-            0.toByte(),              // BOOL defer: NO
-        ) as MemorySegment
+        // kextract v0.0.2 émet maintenant correctement initWithContentRect:styleMask:backing:defer:
+        // avec NSRect by-value via ObjCStructArg + le GroupLayout du CGRect.
+        val initializedPtr = NSWindow(allocated).initWithContentRect_styleMask_backing_defer(
+            contentRect,
+            styleMask,
+            backing,
+            false, // BOOL defer = NO (BOOL est maintenant Boolean depuis v0.0.2)
+        )
         nsWindowPtr = initializedPtr
         id = WindowId(nsWindowPtr.address())
 
@@ -109,11 +103,11 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             metalLayerClass,
             ObjCRuntime.sel("new"),
         ) as MemorySegment
-        contentView.setLayer(metalLayerPtr)   // ← setLayer AVANT setWantsLayer
-        contentView.setWantsLayer(1.toByte()) // ← setWantsLayer EN DERNIER (BOOL YES = 1)
+        contentView.setLayer(metalLayerPtr) // ← setLayer AVANT setWantsLayer
+        contentView.setWantsLayer(true)     // ← setWantsLayer EN DERNIER (BOOL = Boolean depuis v0.0.2)
 
         // 6. contentsScale = backingScaleFactor pour support HiDPI / Retina
-        val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
+        val scale = NSWindow(nsWindowPtr).backingScaleFactor()
         ObjCRuntime.msgSend(
             null,
             metalLayerPtr,
@@ -148,11 +142,13 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         // Combined = 0x123
         val trackingOptions = 0x123L
 
+        // NSTrackingArea isn't in --include-objc-class, so we hand-roll the init call.
+        // CGRect layout for the by-value NSRect argument.
         val trackingArea = ObjCRuntime.msgSend(
             ValueLayout.ADDRESS,
             trackingAreaAlloc,
             ObjCRuntime.sel("initWithRect:options:owner:userInfo:"),
-            ObjCStructArg(zeroRect, ObjCRuntime.nsRectLayout),  // NSRect by value
+            ObjCRuntime.ObjCStructArg(zeroRect, NS_RECT_LAYOUT),  // NSRect by value
             trackingOptions,           // NSTrackingAreaOptions (Long)
             contentViewPtr,            // owner = contentView
             MemorySegment.NULL,        // userInfo = nil
@@ -203,10 +199,8 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     override val innerSize: PhysicalSize<Int>
         get() {
-            val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
-            // NSRect returned by value (HFA: d0-d3 on ARM64) — use msgSendReturningStruct.
-            val frame = ObjCRuntime.msgSendReturningStruct(
-                ObjCRuntime.nsRectLayout, contentViewPtr, ObjCRuntime.sel("frame"))
+            val scale = NSWindow(nsWindowPtr).backingScaleFactor()
+            val frame = NSView(contentViewPtr).frame()
             val w = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
             val h = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
             return PhysicalSize((w * scale).toInt(), (h * scale).toInt())
@@ -220,17 +214,16 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     override val outerSize: PhysicalSize<Int>
         get() {
-            val scale = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
-            // NSRect returned by value (HFA: d0-d3 on ARM64) — use msgSendReturningStruct.
-            val frame = ObjCRuntime.msgSendReturningStruct(
-                ObjCRuntime.nsRectLayout, nsWindowPtr, ObjCRuntime.sel("frame"))
+            val nsWindow = NSWindow(nsWindowPtr)
+            val scale = nsWindow.backingScaleFactor()
+            val frame = nsWindow.frame()
             val w = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 2)
             val h = frame.getAtIndex(ValueLayout.JAVA_DOUBLE, 3)
             return PhysicalSize((w * scale).toInt(), (h * scale).toInt())
         }
 
     override val scaleFactor: Double
-        get() = ObjCRuntime.msgSendDouble(nsWindowPtr, ObjCRuntime.sel("backingScaleFactor"))
+        get() = NSWindow(nsWindowPtr).backingScaleFactor()
 
     override fun setVisible(visible: Boolean) {
         if (visible) {
@@ -280,3 +273,21 @@ private fun allocNSRect(arena: Arena, x: Double, y: Double, width: Double, heigh
     seg.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, height)
     return seg
 }
+
+/**
+ * GroupLayout pour NSRect / CGRect — nested struct {origin: CGPoint, size: CGSize}.
+ *
+ * Utilisé manuellement pour les classes ObjC NON incluses dans `--include-objc-class`
+ * (ex. NSTrackingArea). Les classes incluses bénéficient des layouts inlinés par
+ * kextract v0.0.2 dans leurs wrappers.
+ */
+private val NS_RECT_LAYOUT: java.lang.foreign.GroupLayout = java.lang.foreign.MemoryLayout.structLayout(
+    java.lang.foreign.MemoryLayout.structLayout(
+        ValueLayout.JAVA_DOUBLE.withName("x"),
+        ValueLayout.JAVA_DOUBLE.withName("y"),
+    ).withName("origin"),
+    java.lang.foreign.MemoryLayout.structLayout(
+        ValueLayout.JAVA_DOUBLE.withName("width"),
+        ValueLayout.JAVA_DOUBLE.withName("height"),
+    ).withName("size"),
+).withName("CGRect")

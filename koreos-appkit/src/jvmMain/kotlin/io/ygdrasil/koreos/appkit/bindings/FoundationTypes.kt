@@ -4,7 +4,18 @@
  * Ces types sont des alias standard de l'API Objective-C qui ne sont pas inclus
  * dans le fichier généré lorsque le filtrage par --include-objc-class est utilisé.
  *
- * Généré pour kextract v0.0.0-test6 — remplacer par des types complets si nécessaire.
+ * Généré pour kextract v0.0.2 — réduit par rapport à v0.0.0-test6 grâce au bonus
+ * de https://github.com/klang-toolkit/kextract/pull/23 qui émet désormais les
+ * typealiases primitifs fondamentaux (BOOL, CGFloat, NSInteger, NSTimeInterval).
+ *
+ * Reste à fournir manuellement :
+ *  - Les typedefs « pointer/struct » (NSPoint, NSSize, NSRect, NSWindowFrameAutosaveName, …)
+ *    qui sont écartés par le filtre --include-objc-class (cf. include filter behaviour
+ *    documenté dans le commentaire du `isFoundationalTypealias` côté kextract).
+ *  - L'override de [NSUInteger] : la v0.0.2 émet `typealias NSUInteger = Any` car
+ *    Kotlin n'a pas de type `unsigned long` natif. On le remplace par [Long] —
+ *    valable tant que le bit de signe n'est pas significatif. Tracé upstream
+ *    https://github.com/klang-toolkit/kextract/issues/29.
  *
  * TODO: Quand kextract génèrera ces types automatiquement, supprimer ce fichier.
  */
@@ -14,20 +25,17 @@ import java.lang.foreign.MemorySegment
 
 // ── Primitives C / CoreFoundation ────────────────────────────────────────────
 
-/** ObjC BOOL (signed char, 0=NO 1=YES) */
-typealias BOOL = Byte
-
-/** NSInteger (64-bit signed integer on 64-bit platforms) */
-typealias NSInteger = Long
-
-/** NSUInteger (64-bit unsigned integer on 64-bit platforms) */
+/**
+ * NSUInteger (64-bit unsigned integer on 64-bit platforms).
+ *
+ * kextract v0.0.2 emits `typealias NSUInteger = Any` because Kotlin has no native
+ * `unsigned long`. We strip that line from `AppKit_h.kt` and override here with
+ * [Long] so consumers can do arithmetic. The high bit is rarely meaningful in
+ * AppKit (sizes, indices, counts).
+ *
+ * Upstream tracking: https://github.com/klang-toolkit/kextract/issues/29
+ */
 typealias NSUInteger = Long
-
-/** CGFloat (Double on 64-bit platforms) */
-typealias CGFloat = Double
-
-/** NSTimeInterval (time in seconds, Double precision) */
-typealias NSTimeInterval = Double
 
 // ── Structs passés comme MemorySegment via FFM ────────────────────────────────
 
@@ -54,16 +62,7 @@ typealias NSWindowTabbingIdentifier = MemorySegment
 /** NSPasteboardType (NSString *) */
 typealias NSPasteboardType = MemorySegment
 
-// ── Integer typealiases ───────────────────────────────────────────────────────
-
-/** NSWindowLevel (NSInteger) */
-typealias NSWindowLevel = NSInteger
-
-/** NSModalResponse (NSInteger) */
-typealias NSModalResponse = NSInteger
-
-/** NSToolTipTag (NSInteger) */
-typealias NSToolTipTag = NSInteger
+// NSWindowLevel, NSModalResponse, NSToolTipTag — désormais émis par kextract v0.0.2.
 
 // ── NSObject protocol ────────────────────────────────────────────────────────
 

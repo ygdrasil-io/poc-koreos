@@ -11,6 +11,7 @@ package io.ygdrasil.koreos.appkit
 
 import io.ygdrasil.koreos.appkit.bindings.NSApplication
 import io.ygdrasil.koreos.appkit.bindings.NSApplicationActivationPolicy
+import io.ygdrasil.koreos.appkit.bindings.NSEvent
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
 import io.ygdrasil.koreos.core.DeviceEvent
 import io.ygdrasil.koreos.core.DeviceId
@@ -180,8 +181,9 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
             // GRA-156: dispatch raw DeviceEvent.PointerMotion BEFORE any window-scoped dispatch.
             // Raw device events don't require a focused window — only `loop` is needed.
             if (isMouseMoved || isLeftDragged || isRightDragged || isOtherDragged) {
-                val rawDx = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("deltaX"))
-                val rawDy = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("deltaY"))
+                val nsEvent = NSEvent(event)
+                val rawDx = nsEvent.deltaX()
+                val rawDy = nsEvent.deltaY()
                 loop.handler.deviceEvent(
                     loop,
                     DeviceId(0L),
@@ -207,16 +209,16 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
 
             // ── Scroll wheel ──────────────────────────────────────────────────────────
             if (isScrollWheel) {
-                val deltaX = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("scrollingDeltaX"))
-                val deltaY = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("scrollingDeltaY"))
+                val nsEvent = NSEvent(event)
+                val deltaX = nsEvent.scrollingDeltaX()
+                val deltaY = nsEvent.scrollingDeltaY()
                 loop.handler.windowEvent(loop, appKitWindow.id, WindowEvent.MouseWheel(deltaX, deltaY))
                 return
             }
 
             // ── Pointer position (shared for move and click) ───────────────────────────
             // locationInWindow returns NSPoint (struct { CGFloat x, y })
-            val locPt = ObjCRuntime.msgSendReturningStruct(
-                ObjCRuntime.nsPointLayout, event, ObjCRuntime.sel("locationInWindow"))
+            val locPt = NSEvent(event).locationInWindow()
             val locX = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 0)
             val locY = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 1)
 
@@ -274,7 +276,9 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
                     ValueLayout.ADDRESS, // id event
                 )
                 val handle = Linker.nativeLinker().downcallHandle(msgSendSuperAddr, desc)
-                handle.invokeExact(superStruct, sel, event)
+                // Kotlin's polymorphic-signature handling: invokeExact defaults to Object
+                // return; we must cast to Unit so the void descriptor matches.
+                handle.invokeExact(superStruct, sel, event) as Unit
             }
         }
     }
