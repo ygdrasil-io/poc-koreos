@@ -12,6 +12,8 @@ package io.ygdrasil.koreos.appkit
 import io.ygdrasil.koreos.appkit.bindings.NSApplication
 import io.ygdrasil.koreos.appkit.bindings.NSApplicationActivationPolicy
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
+import io.ygdrasil.koreos.core.DeviceEvent
+import io.ygdrasil.koreos.core.DeviceId
 import io.ygdrasil.koreos.core.KeyState
 import io.ygdrasil.koreos.core.MouseButton
 import io.ygdrasil.koreos.core.PhysicalPosition
@@ -138,6 +140,13 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
                 val modifiers = AppKitKeyMapper.modifierFlags(modFlags)
                 val state = if (isKeyDown) KeyState.Pressed else KeyState.Released
 
+                // GRA-156: dispatch raw DeviceEvent.Key BEFORE window-scoped WindowEvent
+                loop.handler.deviceEvent(
+                    loop,
+                    DeviceId(0L),
+                    DeviceEvent.Key(keyCode.toInt(), state),
+                )
+
                 loop.handler.windowEvent(
                     loop,
                     appKitWindow.id,
@@ -167,6 +176,18 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
                 isOtherDown || isOtherUp || isOtherDragged
 
             if (!isAnyMouse) return
+
+            // GRA-156: dispatch raw DeviceEvent.PointerMotion BEFORE any window-scoped dispatch.
+            // Raw device events don't require a focused window — only `loop` is needed.
+            if (isMouseMoved || isLeftDragged || isRightDragged || isOtherDragged) {
+                val rawDx = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("deltaX"))
+                val rawDy = ObjCRuntime.msgSendDouble(event, ObjCRuntime.sel("deltaY"))
+                loop.handler.deviceEvent(
+                    loop,
+                    DeviceId(0L),
+                    DeviceEvent.PointerMotion(rawDx, rawDy),
+                )
+            }
 
             // Get the window for this event
             val eventWindow = ObjCRuntime.msgSend(ValueLayout.ADDRESS, event, ObjCRuntime.sel("window")) as MemorySegment
@@ -224,6 +245,15 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
                 else -> return
             }
             val state = if (isLeftDown || isRightDown || isOtherDown) KeyState.Pressed else KeyState.Released
+
+            // GRA-156: dispatch raw DeviceEvent.Button BEFORE window-scoped WindowEvent.MouseInput
+            val rawButton = when {
+                isLeftDown || isLeftUp   -> 0
+                isRightDown || isRightUp -> 1
+                else -> (ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("buttonNumber")) as Long).toInt()
+            }
+            loop.handler.deviceEvent(loop, DeviceId(0L), DeviceEvent.Button(rawButton, state))
+
             loop.handler.windowEvent(loop, appKitWindow.id, WindowEvent.MouseInput(button, state))
         }
 
