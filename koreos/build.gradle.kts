@@ -30,6 +30,12 @@ kotlin {
             }
         }
 
+        androidMain {
+            dependencies {
+                api(project(":koreos-android"))
+            }
+        }
+
         jvmMain {
             dependencies {
                 api(project(":koreos-appkit"))
