@@ -21,7 +21,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "poc-koreos"
-include(":shared")
 
 // Modules Koreos
 include(":koreos-core")

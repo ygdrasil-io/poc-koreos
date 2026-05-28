@@ -67,51 +67,32 @@
 
 ---
 
-Ce projet est un **Starter Pack de pointe pour Kotlin Multiplatform (KMP)** ciblant **Android**, **iOS** et **Desktop (JVM)**. Il intègre les dernières technologies de l'écosystème (Kotlin 2.3.21, Gradle 9.5.0, AGP 9.0, Java 25) et applique rigoureusement les principes de la **Clean Architecture** et du **Domain-Driven Design (DDD)**.
+---
+
+## ⚡ CI/CD
+
+Le pipeline GitHub Actions (`.github/workflows/ci.yml`) utilise une stratégie à deux niveaux :
+
+| Job | Runner | Déclencheur | Tâches |
+|-----|--------|-------------|--------|
+| `build-and-test` | macos-15 | toutes branches | Fast-Track: JVM tests ; Deep: + iosSimulatorArm64 |
+| `macos-build` | macos-latest | toutes branches | AppKit + samples macOS |
+| `ios-build` | macos-15 | master / PR→master | Compilation + tests iOS simulator |
+| `android-build` | ubuntu-latest | master / PR→master | Modules Android + APK samples |
 
 ---
 
-## 🏗️ Architecture du Projet
+## 🛠️ Commandes utiles
 
-Le module partagé `:shared` est organisé en couches distinctes pour maximiser la testabilité, la maintenabilité et le découplage :
-
-```mermaid
-graph TD
-    UI[Couche Présentation: Compose Multiplatform / ViewModel] --> Domain[Couche Domaine: Use Cases / Models / Repository Interfaces]
-    Data[Couche Données: Repository Impls / Ktor / Local SQL] --> Domain
-    Data --> Platform[Code Spécifique Plateforme: expect/actual]
-```
-
-### Couches de Conception (`shared/src/commonMain`)
-*   **Domaine (Domain)** : Contient les règles métiers pures sans dépendances de framework (Cas d'utilisation avec opérateur `invoke`, modèles auto-validés, interfaces de dépôt).
-*   **Données (Data)** : Implémentations concrètes des dépôts, communication réseau et base de données.
-*   **Présentation (Presentation)** : Modélisation d'état d'UI (`UiState`) immuable et ViewModels utilisant des `StateFlow` asynchrones.
-*   **Injection de Dépendances (DI)** : Configuration centralisée multiplateforme via **Koin**.
-
----
-
-## ⚡ Workflow CI/CD (Intégration Continue)
-
-Le pipeline GitHub Actions ([ci.yml](file:///.github/workflows/ci.yml)) implémente un système de double-vitesse optimisé pour la bande passante et le temps de calcul :
-
-- **Fast-Track (Branches secondaires)** : Ne compile et ne teste que la cible JVM locale (`./gradlew :shared:jvmTest`). Exécution instantanée en moins de 10 secondes.
-- **Deep-Testing (Branches / Pull Requests vers `master`)** : Exécute l'ensemble des tests (`./gradlew allTests`) sur tous les simulateurs et plateformes cibles pour valider la qualité du code avant la mise en production.
-
----
-
-## 🛠️ Commandes Utiles de Développement
-
-### Exécuter les tests locaux (Fast-Track JVM)
 ```bash
-./gradlew :shared:jvmTest
-```
+# Tests rapides (JVM, ~3 min)
+./gradlew :koreos-core:jvmTest :koreos-appkit:jvmTest :koreos:jvmTest
 
-### Exécuter tous les tests (Toutes cibles)
-```bash
-./gradlew allTests
-```
+# Tous les tests (JVM + iOS simulator, ~10 min)
+./gradlew :koreos-core:jvmTest :koreos-core:iosSimulatorArm64Test \
+          :koreos-appkit:jvmTest :koreos:jvmTest :koreos:iosSimulatorArm64Test
 
-### Générer le Gradle Wrapper
-```bash
-gradle wrapper
+# Démo macOS
+./gradlew :samples:hello-triangle:run
+./gradlew :samples:hello-window:run
 ```
