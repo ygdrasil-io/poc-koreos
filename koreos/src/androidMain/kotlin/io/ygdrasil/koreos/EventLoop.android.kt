@@ -1,15 +1,19 @@
 /**
- * Stub Android de la boucle d'événements — non implémenté en M1.
+ * Implémentation Android de la boucle d'événements — délègue à koreos-android.
  *
- * L'implémentation réelle est prévue pour M3 (koreos-android).
+ * Sur Android, le point d'entrée est l'Activity. [runApp] enregistre le
+ * [ApplicationHandler] dans [io.ygdrasil.koreos.android.AndroidKoreosRuntime]
+ * pour qu'il soit récupéré par [io.ygdrasil.koreos.android.KoreosActivity].
  */
 package io.ygdrasil.koreos
+
+import io.ygdrasil.koreos.android.AndroidKoreosRuntime
 
 actual class EventLoop actual constructor() {
 
     actual fun runApp(handler: ApplicationHandler) {
-        throw UnsupportedOperationException(
-            "EventLoop Android non implémenté — prévu M3."
-        )
+        AndroidKoreosRuntime.currentHandler = handler
+        // On Android the Activity lifecycle is the entry point.
+        // The handler is retrieved by KoreosActivity.createHandler() via AndroidKoreosRuntime.
     }
 }
