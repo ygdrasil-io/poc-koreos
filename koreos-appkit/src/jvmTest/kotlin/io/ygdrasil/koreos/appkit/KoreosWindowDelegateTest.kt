@@ -56,22 +56,17 @@ class KoreosWindowDelegateTest {
 
     @Test
     fun `KoreosWindowDelegate a un constructeur acceptant handler eventLoop windowId`() {
-        val ctor = KoreosWindowDelegate::class.java.constructors.firstOrNull { it.parameterCount == 3 }
-        assertNotNull(ctor, "KoreosWindowDelegate doit avoir un ctor(ApplicationHandler, ActiveEventLoop, WindowId)")
-        val paramTypes = ctor.parameterTypes
-        assertTrue(
-            ApplicationHandler::class.java.isAssignableFrom(paramTypes[0]),
-            "Premier param doit être ApplicationHandler",
-        )
-        assertTrue(
-            ActiveEventLoop::class.java.isAssignableFrom(paramTypes[1]),
-            "Deuxième param doit être ActiveEventLoop",
-        )
-        assertEquals(
-            WindowId::class.java,
-            paramTypes[2],
-            "Troisième param doit être WindowId",
-        )
+        // Le constructeur public généré pour un param value class (WindowId) a un DefaultConstructorMarker
+        // supplémentaire → paramCount >= 3, les 3 premiers params sont ApplicationHandler, ActiveEventLoop, long
+        val ctor = KoreosWindowDelegate::class.java.constructors
+            .filter { it.parameterCount >= 3 }
+            .firstOrNull { c ->
+                val p = c.parameterTypes
+                ApplicationHandler::class.java.isAssignableFrom(p[0]) &&
+                        ActiveEventLoop::class.java.isAssignableFrom(p[1]) &&
+                        (p[2] == WindowId::class.java || p[2] == Long::class.java || p[2] == java.lang.Long.TYPE)
+            }
+        assertNotNull(ctor, "KoreosWindowDelegate doit avoir un ctor(ApplicationHandler, ActiveEventLoop, WindowId/long)")
     }
 
     @Test
