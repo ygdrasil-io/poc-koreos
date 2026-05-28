@@ -1,0 +1,125 @@
+/**
+ * Implémentation AppKit de [ActiveEventLoop] et point d'entrée [runApp].
+ *
+ * [AppKitEventLoop] implémente [ActiveEventLoop] et est passé à chaque
+ * callback de [ApplicationHandler]. La fonction top-level [runApp] orchestre
+ * l'initialisation AppKit (KoreosApplication + KoreosAppDelegate + NSApp.run).
+ *
+ * GRA-128 : premier câblage complet — M1 sans ControlFlow avancé ni proxy.
+ */
+package io.ygdrasil.koreos.appkit
+
+import io.ygdrasil.koreos.appkit.bindings.NSApplicationActivationPolicy
+import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
+import io.ygdrasil.koreos.core.ActiveEventLoop
+import io.ygdrasil.koreos.core.ApplicationHandler
+import io.ygdrasil.koreos.core.ControlFlow
+import io.ygdrasil.koreos.core.EventLoopProxy
+import io.ygdrasil.koreos.core.Window
+import io.ygdrasil.koreos.core.WindowAttributes
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Implémentation interne de [ActiveEventLoop] pour la plateforme AppKit (macOS).
+ *
+ * Une instance est créée par appel à [runApp] et passée comme récepteur
+ * à tous les callbacks [ApplicationHandler].
+ *
+ * Périmètre M1 :
+ * - [createWindow] : crée une [AppKitWindow] et lui installe un
+ *   [KoreosWindowDelegate] pour la gestion de la fermeture.
+ * - [exit] : lève le drapeau [isExiting] puis déclenche
+ *   `[NSApp terminate:nil]` pour quitter la boucle AppKit.
+ * - [controlFlow] / [setControlFlow] : stub (NSRunLoop gère lui-même l'attente).
+ * - [createProxy] : non supporté en M1.
+ */
+internal class AppKitEventLoop(
+    private val handler: ApplicationHandler,
+) : ActiveEventLoop {
+
+    /** Fenêtres vivantes : windowId → AppKitWindow. */
+    private val windows = ConcurrentHashMap<Long, AppKitWindow>()
+
+    @Volatile
+    private var _isExiting = false
+
+    override val isExiting: Boolean
+        get() = _isExiting
+
+    @Volatile
+    private var _controlFlow: ControlFlow = ControlFlow.Wait
+
+    override val controlFlow: ControlFlow
+        get() = _controlFlow
+
+    override fun setControlFlow(controlFlow: ControlFlow) {
+        _controlFlow = controlFlow
+    }
+
+    /**
+     * Crée une nouvelle fenêtre AppKit et installe le delegate de fermeture.
+     *
+     * Doit être appelé depuis le thread principal (validé par [AppKitWindow.init]).
+     */
+    override fun createWindow(attributes: WindowAttributes): Window {
+        val window = AppKitWindow(attributes)
+        window.setWindowDelegate(handler, this)
+        windows[window.id.value] = window
+        return window
+    }
+
+    /**
+     * Demande l'arrêt de la boucle d'événements AppKit.
+     *
+     * Lève [isExiting] puis appelle `[NSApp terminate:nil]`, ce qui déclenche
+     * `applicationShouldTerminate:` dans [KoreosAppDelegate] — qui retourne
+     * `NSTerminateNow` car [isExiting] vaut déjà true.
+     */
+    override fun exit() {
+        _isExiting = true
+        val nsAppClass = ObjCRuntime.getClass("NSApplication")
+        val nsApp = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            nsAppClass,
+            ObjCRuntime.sel("sharedApplication"),
+        ) as MemorySegment
+        ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
+    }
+
+    /**
+     * Non supporté en M1 — sera implémenté avec le support des threads secondaires.
+     */
+    override fun createProxy(): EventLoopProxy =
+        throw UnsupportedOperationException("EventLoopProxy non supporté en M1.")
+}
+
+/**
+ * Point d'entrée de la boucle d'événements koreos sur macOS.
+ *
+ * Initialise AppKit, installe les delegates et lance la boucle bloquante
+ * `NSApp.run()`. Ne retourne qu'à la fermeture de l'application.
+ *
+ * Doit être appelé depuis le thread principal macOS.
+ *
+ * @param handler Gestionnaire du cycle de vie et des événements.
+ */
+fun runApp(handler: ApplicationHandler) {
+    MainThreadCheck.require()
+
+    val eventLoop = AppKitEventLoop(handler)
+
+    // 1. Sous-classe KoreosApplication + sharedApplication
+    val app = KoreosApplication.initialize()
+
+    // 2. Politique d'activation : application régulière (icône dans le Dock)
+    app.setActivationPolicyRegular()
+
+    // 3. Délégué d'application — câble canCreateSurfaces / shouldTerminate
+    val appDelegate = KoreosAppDelegate(handler, eventLoop)
+    app.setDelegate(appDelegate.ptr)
+
+    // 4. Lance la boucle bloquante AppKit — retourne à la fermeture
+    app.run()
+}
