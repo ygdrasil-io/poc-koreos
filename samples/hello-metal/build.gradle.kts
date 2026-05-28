@@ -22,6 +22,15 @@ kotlin {
 
 application {
     mainClass.set("io.ygdrasil.koreos.samples.hellometal.MainKt")
+
+    // macOS exige que NSApplication tourne sur le thread principal (AppKit).
+    // -XstartOnFirstThread garantit que le thread JVM principal = thread macOS principal.
+    //
+    // --enable-native-access supprime les avertissements Panama FFM (JDK 22+).
+    applicationDefaultJvmArgs = listOf(
+        "-XstartOnFirstThread",
+        "--enable-native-access=ALL-UNNAMED",
+    )
 }
 
 dependencies {
