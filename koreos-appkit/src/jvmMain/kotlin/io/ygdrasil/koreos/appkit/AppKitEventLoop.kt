@@ -40,7 +40,7 @@ internal class AppKitEventLoop(
 ) : ActiveEventLoop {
 
     /** Fenêtres vivantes : windowId → AppKitWindow. */
-    private val windows = ConcurrentHashMap<Long, AppKitWindow>()
+    internal val windows = ConcurrentHashMap<Long, AppKitWindow>()
 
     @Volatile
     private var _isExiting = false
@@ -119,6 +119,9 @@ fun runApp(handler: ApplicationHandler) {
     // 3. Délégué d'application — câble canCreateSurfaces / shouldTerminate
     val appDelegate = KoreosAppDelegate(handler, eventLoop)
     app.setDelegate(appDelegate.ptr)
+
+    // 3.5 Installer l'observer CFRunLoop pour le coalescing RedrawRequested (GRA-134)
+    CFRunLoopRedrawObserver.install(handler, eventLoop, eventLoop.windows)
 
     // 4. Lance la boucle bloquante AppKit — retourne à la fermeture
     app.run()

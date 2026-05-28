@@ -130,8 +130,20 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     override val rawDisplayHandle: Any
         get() = RawDisplayHandle.AppKit
 
-    /** Stub M1 : le redraw est géré par le run-loop AppKit. */
-    override fun requestRedraw() = Unit
+    /**
+     * Flag de redraw demandé — lu et reset par [CFRunLoopRedrawObserver]
+     * sur kCFRunLoopBeforeWaiting (GRA-134).
+     */
+    @Volatile
+    internal var needsRedraw: Boolean = false
+
+    /**
+     * Demande un redraw : positionne le flag [needsRedraw], qui sera consommé
+     * par l'observer CFRunLoop avant la prochaine mise en veille (coalescing natif).
+     */
+    override fun requestRedraw() {
+        needsRedraw = true
+    }
 
     override fun setTitle(title: String) {
         NSWindow(nsWindowPtr).setTitle(title)
