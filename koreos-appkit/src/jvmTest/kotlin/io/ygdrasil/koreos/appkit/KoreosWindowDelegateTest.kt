@@ -55,18 +55,18 @@ class KoreosWindowDelegateTest {
     // ── Tests ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `KoreosWindowDelegate a un constructeur acceptant handler eventLoop windowId`() {
+    fun `KoreosWindowDelegate a un constructeur acceptant handler eventLoop windowId nsWindowPtr metalLayerPtr`() {
         // Le constructeur public généré pour un param value class (WindowId) a un DefaultConstructorMarker
-        // supplémentaire → paramCount >= 3, les 3 premiers params sont ApplicationHandler, ActiveEventLoop, long
+        // supplémentaire → paramCount >= 5, les premiers params sont ApplicationHandler, ActiveEventLoop, long/WindowId
         val ctor = KoreosWindowDelegate::class.java.constructors
-            .filter { it.parameterCount >= 3 }
+            .filter { it.parameterCount >= 5 }
             .firstOrNull { c ->
                 val p = c.parameterTypes
                 ApplicationHandler::class.java.isAssignableFrom(p[0]) &&
                         ActiveEventLoop::class.java.isAssignableFrom(p[1]) &&
                         (p[2] == WindowId::class.java || p[2] == Long::class.java || p[2] == java.lang.Long.TYPE)
             }
-        assertNotNull(ctor, "KoreosWindowDelegate doit avoir un ctor(ApplicationHandler, ActiveEventLoop, WindowId/long)")
+        assertNotNull(ctor, "KoreosWindowDelegate doit avoir un ctor(ApplicationHandler, ActiveEventLoop, WindowId/long, MemorySegment, MemorySegment)")
     }
 
     @Test
@@ -97,6 +97,25 @@ class KoreosWindowDelegateTest {
             "windowShouldClose doit retourner Byte (BOOL)",
         )
         assertEquals(3, method.parameterCount, "windowShouldClose doit prendre 3 params (self, cmd, sender)")
+    }
+
+    @Test
+    fun `Callbacks windowDidResize existe avec la bonne signature`() {
+        val callbacksClass = Class.forName("io.ygdrasil.koreos.appkit.KoreosWindowDelegate\$Callbacks")
+        val method = callbacksClass.methods.firstOrNull { it.name == "windowDidResize" }
+        assertNotNull(method, "Callbacks.windowDidResize doit exister")
+        assertEquals(
+            Void.TYPE,
+            method.returnType,
+            "windowDidResize doit retourner void",
+        )
+        assertEquals(3, method.parameterCount, "windowDidResize doit prendre 3 params (self, cmd, notification)")
+    }
+
+    @Test
+    fun `WindowEvent Resized est reconnu comme WindowEvent`() {
+        val event: WindowEvent = WindowEvent.Resized(io.ygdrasil.koreos.core.PhysicalSize(800, 600))
+        assertTrue(event is WindowEvent.Resized)
     }
 
     @Test

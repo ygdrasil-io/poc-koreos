@@ -197,7 +197,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     fun setWindowDelegate(handler: ApplicationHandler, eventLoop: ActiveEventLoop) {
         MainThreadCheck.require()
-        val del = KoreosWindowDelegate(handler, eventLoop, id)
+        val del = KoreosWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr)
         NSWindow(nsWindowPtr).setDelegate(del.ptr)
         delegate = del
     }
