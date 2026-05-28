@@ -215,7 +215,7 @@ jobs:
         run: |
           ./gradlew \
             :koreos-android:build \
-            :koreos:compileKotlinAndroid \
+            :koreos:compileDebugKotlinAndroid \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
             --no-daemon \
