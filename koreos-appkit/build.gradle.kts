@@ -23,5 +23,10 @@ kotlin {
                 api(project(":koreos-core"))
             }
         }
+        jvmTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
