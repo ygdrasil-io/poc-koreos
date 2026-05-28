@@ -55,16 +55,17 @@ abstract class KoreosActivity : ComponentActivity() {
         private set
 
     /** Boucle d'événements Android. */
-    private lateinit var eventLoop: AndroidEventLoop
+    internal lateinit var eventLoop: AndroidEventLoop
 
     private lateinit var surfaceView: SurfaceView
 
     /**
      * Guard contre tout dispatch de callback après [onDestroy].
      * Mis à `true` au début de [onDestroy], avant tout nettoyage.
+     * Exposé en `internal` pour que [AndroidEventLoop.onFrame] puisse le lire.
      */
     @Volatile
-    private var destroyed = false
+    internal var destroyed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,6 +107,7 @@ abstract class KoreosActivity : ComponentActivity() {
                 koreosWindow = AndroidWindow(surfaceView)
                 koreosWindow.onSurfaceAvailable(holder.surface)
                 handler.canCreateSurfaces(eventLoop)
+                eventLoop.scheduleFrameIfNeeded(koreosWindow)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -135,6 +137,9 @@ abstract class KoreosActivity : ComponentActivity() {
         super.onResume()
         if (destroyed) return
         handler.resumed(eventLoop)
+        if (::koreosWindow.isInitialized) {
+            eventLoop.scheduleFrameIfNeeded(koreosWindow)
+        }
     }
 
     override fun onPause() {
