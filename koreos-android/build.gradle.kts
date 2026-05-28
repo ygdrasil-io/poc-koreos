@@ -21,7 +21,7 @@ afterEvaluate {
     // have no source, so their klibrary files are never generated and Maven
     // publication would fail. Disable those publication/metadata tasks.
     tasks.withType<AbstractPublishToMaven>().configureEach {
-        val pubName = publication.name
+        val pubName = publication?.name ?: ""
         if (pubName.startsWith("ios") || pubName == "jvm") {
             enabled = false
         }
