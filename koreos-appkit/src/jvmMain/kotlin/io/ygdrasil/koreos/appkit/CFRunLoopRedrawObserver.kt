@@ -1,8 +1,10 @@
 /**
- * CFRunLoopObserver pour le dispatch de WindowEvent.RedrawRequested (GRA-134).
+ * CFRunLoopObserver pour le dispatch de WindowEvent.RedrawRequested (GRA-134)
+ * et l'appel à ApplicationHandler.aboutToWait (GRA-135).
  *
  * Installé sur kCFRunLoopBeforeWaiting : pour chaque AppKitWindow ayant
  * needsRedraw=true, dispatch WindowEvent.RedrawRequested et reset le flag.
+ * Puis appelle aboutToWait(eventLoop) — après tous les RedrawRequested.
  * Coalescing natif : plusieurs requestRedraw() → un seul event par itération.
  */
 package io.ygdrasil.koreos.appkit
@@ -21,8 +23,9 @@ import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Installe un CFRunLoopObserver sur le run loop courant pour dispatcher
- * WindowEvent.RedrawRequested avant chaque mise en veille (kCFRunLoopBeforeWaiting).
+ * Installe un CFRunLoopObserver sur le run loop courant pour :
+ * 1. Dispatcher WindowEvent.RedrawRequested (GRA-134) pour les fenêtres en attente
+ * 2. Appeler ApplicationHandler.aboutToWait(eventLoop) (GRA-135) — après les redraws
  *
  * Doit être créé et installé depuis le thread principal, avant app.run().
  */
@@ -36,14 +39,28 @@ internal class CFRunLoopRedrawObserver(
         instance = this
     }
 
-    /** Dispatche RedrawRequested pour chaque fenêtre avec needsRedraw=true, reset flag. */
+    /**
+     * Appelé par le CFRunLoopObserver avant chaque mise en veille du run loop.
+     *
+     * Ordre garanti par la spec :
+     * 1. Dispatch [WindowEvent.RedrawRequested] pour chaque fenêtre avec needsRedraw=true (GRA-134)
+     * 2. Appel [ApplicationHandler.aboutToWait] après tous les redraws (GRA-135)
+     *
+     * Ne dispatch pas si [ActiveEventLoop.isExiting] — évite des callbacks parasites
+     * entre [ActiveEventLoop.exit] et la sortie effective du run loop.
+     */
     fun onBeforeWaiting() {
+        if (eventLoop.isExiting) return
+
         windows.values.forEach { window ->
             if (window.needsRedraw) {
                 window.needsRedraw = false
                 handler.windowEvent(eventLoop, window.id, WindowEvent.RedrawRequested)
             }
         }
+
+        // aboutToWait dispatché après tous les RedrawRequested (GRA-135)
+        handler.aboutToWait(eventLoop)
     }
 
     companion object {
