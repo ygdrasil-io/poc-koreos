@@ -7,6 +7,8 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import io.ygdrasil.koreos.core.ApplicationHandler
+import io.ygdrasil.koreos.core.PhysicalSize
+import io.ygdrasil.koreos.core.WindowEvent
 
 /**
  * Activity racine Koreos pour Android.
@@ -22,9 +24,13 @@ import io.ygdrasil.koreos.core.ApplicationHandler
  * }
  * ```
  *
- * ## Lifecycle → callbacks Koreos (GRA-149)
- * Le dispatch des événements de lifecycle ([ApplicationHandler.canCreateSurfaces],
- * [ApplicationHandler.resumed], etc.) sera ajouté dans un ticket dédié.
+ * ## Lifecycle → callbacks Koreos
+ * - [onResume]  → [ApplicationHandler.resumed]
+ * - [onPause]   → [ApplicationHandler.suspended]
+ * - Surface créée   → [ApplicationHandler.canCreateSurfaces]
+ * - Surface changée → [ApplicationHandler.windowEvent] ([WindowEvent.Resized])
+ * - Surface détruite → [ApplicationHandler.destroySurfaces]
+ * - [onDestroy] → guard `destroyed` activé, puis nettoyage
  *
  * ## Plein écran
  * Status bar et navigation bar masquées via `FLAG_FULLSCREEN` et layout cutout-aware.
@@ -41,11 +47,21 @@ abstract class KoreosActivity : ComponentActivity() {
     lateinit var handler: ApplicationHandler
         private set
 
-    /** Fenêtre Android Koreos créée lors de [onCreate]. */
+    /** Fenêtre Android Koreos créée lors de [surfaceCreated]. */
     lateinit var koreosWindow: AndroidWindow
         private set
 
+    /** Boucle d'événements Android. */
+    private lateinit var eventLoop: AndroidEventLoop
+
     private lateinit var surfaceView: SurfaceView
+
+    /**
+     * Guard contre tout dispatch de callback après [onDestroy].
+     * Mis à `true` au début de [onDestroy], avant tout nettoyage.
+     */
+    @Volatile
+    private var destroyed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,30 +91,60 @@ abstract class KoreosActivity : ComponentActivity() {
         }
         setContentView(surfaceView)
 
-        // ── AndroidWindow ──────────────────────────────────────────────────────
+        // ── Handler + EventLoop ────────────────────────────────────────────────
         handler = createHandler()
-        koreosWindow = AndroidWindow(surfaceView)
+        eventLoop = AndroidEventLoop(this)
 
         // ── SurfaceHolder callbacks (surface lifecycle) ────────────────────────
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
+                if (destroyed) return
                 println("[KoreosActivity] surfaceCreated → surface available")
+                koreosWindow = AndroidWindow(surfaceView)
                 koreosWindow.onSurfaceAvailable(holder.surface)
+                handler.canCreateSurfaces(eventLoop)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                if (destroyed) return
                 println("[KoreosActivity] surfaceChanged ${width}×${height}")
+                if (::koreosWindow.isInitialized) {
+                    handler.windowEvent(
+                        eventLoop,
+                        koreosWindow.id,
+                        WindowEvent.Resized(PhysicalSize(width, height)),
+                    )
+                }
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
+                if (destroyed) return
                 println("[KoreosActivity] surfaceDestroyed → surface released")
-                koreosWindow.onSurfaceReleased()
+                handler.destroySurfaces(eventLoop)
+                if (::koreosWindow.isInitialized) {
+                    koreosWindow.onSurfaceReleased()
+                }
             }
         })
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (destroyed) return
+        handler.resumed(eventLoop)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (destroyed) return
+        handler.suspended(eventLoop)
+    }
+
     override fun onDestroy() {
-        koreosWindow.onSurfaceReleased()
+        destroyed = true
+        if (::koreosWindow.isInitialized) {
+            koreosWindow.onSurfaceReleased()
+        }
         super.onDestroy()
     }
 }
