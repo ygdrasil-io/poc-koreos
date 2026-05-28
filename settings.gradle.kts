@@ -20,5 +20,11 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "kmp-starter-pack"
+rootProject.name = "poc-koreos"
 include(":shared")
+
+// Modules Koreos
+include(":koreos-core")
+include(":koreos-appkit")
+include(":koreos")
+include(":samples:hello-metal")
