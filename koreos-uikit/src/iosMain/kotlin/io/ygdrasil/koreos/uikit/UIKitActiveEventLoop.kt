@@ -14,8 +14,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     private var _controlFlow: ControlFlow = ControlFlow.Wait
     private var _isExiting = false
 
-    override fun createWindow(attributes: WindowAttributes): Window =
-        throw UnsupportedOperationException("UIKitWindow pas encore implémenté — GRA-143")
+    override fun createWindow(attributes: WindowAttributes): Window = UiKitWindow(attributes)
 
     override fun setControlFlow(controlFlow: ControlFlow) { _controlFlow = controlFlow }
     override val controlFlow: ControlFlow get() = _controlFlow
