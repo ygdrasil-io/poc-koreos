@@ -14,6 +14,8 @@ import io.ygdrasil.koreos.appkit.bindings.NSView
 import io.ygdrasil.koreos.appkit.bindings.NSWindow
 import io.ygdrasil.koreos.appkit.bindings.NSWindowStyleMask
 import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
+import io.ygdrasil.koreos.core.ActiveEventLoop
+import io.ygdrasil.koreos.core.ApplicationHandler
 import io.ygdrasil.koreos.core.PhysicalSize
 import io.ygdrasil.koreos.core.RawDisplayHandle
 import io.ygdrasil.koreos.core.RawWindowHandle
@@ -39,6 +41,13 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     private val metalLayerPtr: MemorySegment
 
     override val id: WindowId
+
+    /**
+     * Delegate NSWindowDelegate installé sur cette fenêtre.
+     * Null tant que [setWindowDelegate] n'a pas été appelé.
+     */
+    var delegate: KoreosWindowDelegate? = null
+        private set
 
     init {
         MainThreadCheck.require()
@@ -171,6 +180,26 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
     override fun close() {
         NSWindow(nsWindowPtr).close()
+    }
+
+    /**
+     * Installe un [KoreosWindowDelegate] sur cette fenêtre.
+     *
+     * Doit être appelé depuis le main thread après que la fenêtre a été créée.
+     * Le delegate intercepte `windowShouldClose:` et dispatch
+     * [io.ygdrasil.koreos.core.WindowEvent.CloseRequested] vers [handler].
+     *
+     * GRA-128 appellera cette méthode depuis l'event loop lors de la création
+     * de chaque fenêtre.
+     *
+     * @param handler   Gestionnaire recevant les événements de fenêtre.
+     * @param eventLoop Boucle d'événements active.
+     */
+    fun setWindowDelegate(handler: ApplicationHandler, eventLoop: ActiveEventLoop) {
+        MainThreadCheck.require()
+        val del = KoreosWindowDelegate(handler, eventLoop, id)
+        NSWindow(nsWindowPtr).setDelegate(del.ptr)
+        delegate = del
     }
 }
 
