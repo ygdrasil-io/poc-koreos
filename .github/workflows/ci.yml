@@ -1,4 +1,22 @@
-name: KMP Starter Pack CI
+# ─────────────────────────────────────────────────────────────────────────────
+# Koreos CI — Multi-Platform
+#
+# Stratégie à deux niveaux (GRA-160) :
+#
+#   ┌─ Fast-Track (toutes les branches)  ────────────────────────────────────┐
+#   │  build-and-test  JVM uniquement (macos-latest) — feedback < 10 min    │
+#   │  macos-build     AppKit + samples macOS — feedback < 5 min            │
+#   └─────────────────────────────────────────────────────────────────────────┘
+#
+#   ┌─ Deep-Testing (PR → master ou push master) ────────────────────────────┐
+#   │  build-and-test  JVM + allTests (macos-15, iOS simulator disponible)   │
+#   │  ios-build       iOS simulator arm64 — build + link + tests            │
+#   │  android-build   Android (ubuntu-latest) — build + assembleDebug       │
+#   └─────────────────────────────────────────────────────────────────────────┘
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Koreos CI
 
 on:
   push:
@@ -9,11 +27,19 @@ on:
       - '**'
 
 jobs:
+  # ── Job 1 : build-and-test ────────────────────────────────────────────────
+  #
+  # Fast-Track   : JVM uniquement (branches non-master)
+  # Deep-Testing : allTests incluant iOS simulator (PR vers master / master)
+  #
+  # Utilise macos-15 car ce runner inclut le simulateur iOS requis pour les
+  # tests Kotlin/Native iosSimulatorArm64 en mode Deep.
   build-and-test:
-    runs-on: macos-15 # Utilisation de macOS 15 pour supporter les compilations iOS natives si nécessaire
-    
+    name: build-and-test
+    runs-on: macos-15
+
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 25
@@ -23,44 +49,56 @@ jobs:
           java-version: '25'
           cache: 'gradle'
 
-      - name: Grant Execute Permission for Gradlew
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Étape 1 : Détection du mode de test (Deep vs Fast-Track)
-      # On vérifie si la cible de la PR est 'master' ou si la branche courante est 'master'
-      - name: Determine Test Strategy
-        id: test-strategy
+      # Détection du mode de test
+      - name: Determine test strategy
+        id: strategy
         run: |
           if [[ "${{ github.base_ref }}" == "master" || "${{ github.ref }}" == "refs/heads/master" ]]; then
-            echo "strategy=deep" >> $GITHUB_OUTPUT
-            echo "Running deep tests (All Targets) for master branch / merge request."
+            echo "mode=deep" >> $GITHUB_OUTPUT
+            echo "→ Deep-Testing (all targets) — PR to master or master branch"
           else
-            echo "strategy=fast-track" >> $GITHUB_OUTPUT
-            echo "Running JVM Fast-Track tests only."
+            echo "mode=fast-track" >> $GITHUB_OUTPUT
+            echo "→ Fast-Track JVM only"
           fi
 
-      # Étape 2 : Exécution Fast-Track (Uniquement JVM)
-      # Se lance si nous ne sommes pas sur une PR/push vers master
-      - name: Run JVM Fast-Track Tests
-        if: steps.test-strategy.outputs.strategy == 'fast-track'
-        run: ./gradlew :koreos-core:jvmTest :koreos-appkit:jvmTest :shared:jvmTest --no-daemon --stacktrace
+      # Fast-Track : tests JVM uniquement (~3 min cache chaud)
+      - name: Fast-Track JVM tests
+        if: steps.strategy.outputs.mode == 'fast-track'
+        run: |
+          ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-appkit:jvmTest \
+            --no-daemon \
+            --stacktrace
 
-      # Étape 3 : Exécution Deep (Tous les tests : JVM, Android, iOS Simulator/Link)
-      # Se lance uniquement pour les merges/PRs vers master
-      - name: Run Deep Tests (JVM, Android & iOS Simulator)
-        if: steps.test-strategy.outputs.strategy == 'deep'
-        run: ./gradlew allTests --no-daemon --stacktrace
+      # Deep-Testing : allTests (JVM + iOS simulator arm64)
+      # Le simulateur iOS est disponible sur macos-15 via Xcode.
+      - name: Deep-Testing (JVM + iOS simulator)
+        if: steps.strategy.outputs.mode == 'deep'
+        run: |
+          ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-core:iosSimulatorArm64Test \
+            :koreos-appkit:jvmTest \
+            :koreos:jvmTest \
+            :koreos:iosSimulatorArm64Test \
+            --no-daemon \
+            --stacktrace
 
-  # ── Job 2 : Build macOS — koreos-appkit + hello-metal (GRA-131) ──────────────
+  # ── Job 2 : macos-build ──────────────────────────────────────────────────
   #
-  # Valide le code macOS-only (AppKit FFM) et le sample M1.
-  # S'exécute sur macos-latest pour garantir la compatibilité AppKit.
-  # Indépendant du job build-and-test : feedback rapide sur le code macOS.
+  # Compile les modules macOS-spécifiques (AppKit FFM) et les samples JVM/macOS.
+  # Valide que koreos-appkit + samples compilent sur un runner macOS standard.
+  # S'exécute sur toutes les branches pour un feedback rapide.
   macos-build:
+    name: macos-build
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 25
@@ -70,16 +108,115 @@ jobs:
           java-version: '25'
           cache: 'gradle'
 
-      - name: Grant Execute Permission for Gradlew
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Build + tests JVM des modules macOS-spécifiques et du sample M1.
-      # N'inclut pas les cibles iOS/Android pour rester sous 10 min sur cache froid.
-      - name: Build koreos-appkit + hello-metal
+      # Compile les modules macOS-only + samples JVM
+      # hello-triangle nécessite wgpu4k — compilé mais non exécuté en CI.
+      - name: Build macOS modules + JVM samples
         run: |
           ./gradlew \
             :koreos-core:jvmTest \
             :koreos-appkit:build \
+            :koreos:jvmTest \
             :samples:hello-metal:build \
+            :samples:hello-triangle:build \
+            :samples:hello-window:compileKotlinJvm \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 3 : ios-build ────────────────────────────────────────────────────
+  #
+  # Build les cibles iOS (iosSimulatorArm64, iosArm64, iosX64) et exécute
+  # les tests Kotlin/Native sur simulateur iosSimulatorArm64.
+  #
+  # S'exécute uniquement sur les PRs vers master et les push sur master
+  # (Deep-Testing) pour éviter de consommer les runners macOS coûteux sur
+  # chaque branche de travail.
+  ios-build:
+    name: ios-build
+    runs-on: macos-15
+    if: github.base_ref == 'master' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Compile tous les modules pour la cible iOS simulator arm64.
+      # Les tests Kotlin/Native s'exécutent via le simulateur Xcode intégré.
+      - name: Build iOS targets (iosSimulatorArm64)
+        run: |
+          ./gradlew \
+            :koreos-core:compileKotlinIosSimulatorArm64 \
+            :koreos-uikit:compileKotlinIosSimulatorArm64 \
+            :koreos:compileKotlinIosSimulatorArm64 \
+            :samples:hello-touch:compileKotlinIosSimulatorArm64 \
+            :samples:hello-window:compileKotlinIosSimulatorArm64 \
+            --no-daemon \
+            --stacktrace
+
+      # Run Kotlin/Native tests on iOS simulator (iosSimulatorArm64)
+      - name: Run iOS simulator tests
+        run: |
+          ./gradlew \
+            :koreos-core:iosSimulatorArm64Test \
+            :koreos:iosSimulatorArm64Test \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 4 : android-build ────────────────────────────────────────────────
+  #
+  # Build les modules Android et les samples Android (assembleDebug).
+  # Utilise ubuntu-latest (Android SDK pré-installé sur les runners GitHub).
+  # S'exécute uniquement sur Deep-Testing (PRs master / master branch).
+  #
+  # Tests instrumentés : les modules Koreos n'ont pas encore de tests
+  # Robolectric — le job valide la compilation et le packaging APK.
+  # À étendre avec Robolectric quand des tests Android seront ajoutés.
+  android-build:
+    name: android-build
+    runs-on: ubuntu-latest
+    if: github.base_ref == 'master' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Android SDK est pré-installé sur ubuntu-latest.
+      # JDK 17 est requis par le plugin Android Gradle (AGP 8.x+).
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Configure le chemin du SDK Android depuis la variable d'environnement
+      # ANDROID_HOME fournie par le runner ubuntu-latest.
+      - name: Set up Android SDK path
+        run: echo "sdk.dir=$ANDROID_HOME" >> local.properties
+
+      # Build les modules Android + samples Android (APK debug).
+      # AGP génère des APKs compilés pour API 24+ (minSdk=24 sur tous les modules).
+      - name: Build Android modules + samples
+        run: |
+          ./gradlew \
+            :koreos-android:build \
+            :koreos:compileDebugKotlinAndroid \
+            :samples:hello-touch-android:assembleDebug \
+            :samples:hello-window-android:assembleDebug \
             --no-daemon \
             --stacktrace
