@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - [exit] : lève le drapeau [isExiting] puis déclenche
  *   `[NSApp terminate:nil]` pour quitter la boucle AppKit.
  * - [controlFlow] / [setControlFlow] : stub (NSRunLoop gère lui-même l'attente).
- * - [createProxy] : non supporté en M1.
+ * - [createProxy] : implémenté via [AppKitEventLoopProxy] (GRA-136) — wakeUp thread-safe.
  */
 internal class AppKitEventLoop(
     private val handler: ApplicationHandler,
@@ -89,10 +89,11 @@ internal class AppKitEventLoop(
     }
 
     /**
-     * Non supporté en M1 — sera implémenté avec le support des threads secondaires.
+     * Crée un [EventLoopProxy] dont [EventLoopProxy.wakeUp] est thread-safe
+     * (GRA-136). Implémenté via `CFRunLoopWakeUp(CFRunLoopGetMain())` — voir
+     * [AppKitEventLoopProxy].
      */
-    override fun createProxy(): EventLoopProxy =
-        throw UnsupportedOperationException("EventLoopProxy non supporté en M1.")
+    override fun createProxy(): EventLoopProxy = AppKitEventLoopProxy.create()
 }
 
 /**
