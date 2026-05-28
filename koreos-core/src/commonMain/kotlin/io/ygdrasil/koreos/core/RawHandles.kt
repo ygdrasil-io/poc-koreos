@@ -1,0 +1,81 @@
+/**
+ * Handles bruts de fenêtre et d'affichage, indépendants de toute plateforme.
+ *
+ * Ces types sont utilisés pour passer les pointeurs natifs entre le code commun
+ * et les modules platform-spécifiques sans importer de types natifs dans commonMain.
+ * Les pointeurs sont représentés en [Long] ; le consommateur effectue le cast
+ * vers le type natif approprié au point d'usage.
+ *
+ * Spécification de référence : Specs §6.1
+ */
+package io.ygdrasil.koreos.core
+
+/**
+ * Handle brut d'une fenêtre native.
+ *
+ * Chaque variant correspond à une plateforme cible. Les pointeurs sont exposés
+ * en [Long] afin que commonMain reste 100 % Kotlin pur (pas d'import natif).
+ */
+sealed interface RawWindowHandle {
+
+    /**
+     * Handle de fenêtre AppKit (macOS).
+     *
+     * @property nsView   Pointeur vers l'instance `NSView` (cast vers `NSView*` au point d'usage).
+     * @property nsWindow Pointeur vers l'instance `NSWindow` (cast vers `NSWindow*` au point d'usage).
+     */
+    data class AppKit(val nsView: Long, val nsWindow: Long) : RawWindowHandle
+
+    /**
+     * Handle de fenêtre UIKit (iOS / tvOS).
+     *
+     * @property uiView           Pointeur vers l'instance `UIView` (cast vers `UIView*` au point d'usage).
+     * @property uiViewController Pointeur optionnel vers l'instance `UIViewController`
+     *                            (cast vers `UIViewController*` au point d'usage), ou `null`
+     *                            si aucun contrôleur n'est associé.
+     */
+    data class UiKit(val uiView: Long, val uiViewController: Long?) : RawWindowHandle
+
+    /**
+     * Handle de fenêtre Android.
+     *
+     * @property surface Instance de la surface native. Au runtime, ce paramètre est
+     *                   obligatoirement une instance de `android.view.Surface` ; le type
+     *                   est déclaré [Any] afin de ne pas introduire d'import Android dans
+     *                   commonMain — le consommateur effectue le cast explicite.
+     */
+    data class Android(val surface: Any) : RawWindowHandle
+}
+
+/**
+ * Handle brut d'un écran (display) natif.
+ *
+ * Chaque variant est un singleton correspondant à une plateforme cible.
+ * Sur ces plateformes, l'écran n'a pas de handle pointer distinct de la fenêtre.
+ */
+sealed interface RawDisplayHandle {
+
+    /**
+     * Handle d'affichage AppKit (macOS).
+     *
+     * Sur macOS, le display est implicitement géré par AppKit ; aucun pointeur
+     * supplémentaire n'est nécessaire.
+     */
+    data object AppKit : RawDisplayHandle
+
+    /**
+     * Handle d'affichage UIKit (iOS / tvOS).
+     *
+     * Sur iOS, le display est implicitement géré par UIKit ; aucun pointeur
+     * supplémentaire n'est nécessaire.
+     */
+    data object UiKit : RawDisplayHandle
+
+    /**
+     * Handle d'affichage Android.
+     *
+     * Sur Android, le display est géré par le système ; aucun pointeur
+     * supplémentaire n'est nécessaire à ce niveau d'abstraction.
+     */
+    data object Android : RawDisplayHandle
+}
