@@ -21,5 +21,10 @@ kotlin {
                 api(project(":koreos-core"))
             }
         }
+        androidMain {
+            dependencies {
+                implementation("androidx.activity:activity:1.10.1")
+            }
+        }
     }
 }
