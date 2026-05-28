@@ -23,8 +23,12 @@ sealed interface RawWindowHandle {
      *
      * @property nsView   Pointeur vers l'instance `NSView` (cast vers `NSView*` au point d'usage).
      * @property nsWindow Pointeur vers l'instance `NSWindow` (cast vers `NSWindow*` au point d'usage).
+     * @property nsLayer  Pointeur vers l'instance `CAMetalLayer` attachée au `NSView`.
+     *                    Exposé directement pour éviter de passer par `[nsView layer]`
+     *                    qui peut retourner la couche générique créée par AppKit si
+     *                    l'ordre `setLayer`/`setWantsLayer` n'est pas respecté.
      */
-    data class AppKit(val nsView: Long, val nsWindow: Long) : RawWindowHandle
+    data class AppKit(val nsView: Long, val nsWindow: Long, val nsLayer: Long = 0L) : RawWindowHandle
 
     /**
      * Handle de fenêtre UIKit (iOS / tvOS).
