@@ -26,6 +26,7 @@ include(":shared")
 // Modules Koreos
 include(":koreos-core")
 include(":koreos-appkit")
+include(":koreos-uikit")
 include(":koreos")
 include(":samples:hello-metal")
 include(":samples:hello-triangle")
