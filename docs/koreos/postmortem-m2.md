@@ -17,12 +17,14 @@ NSWindow + CAMetalLayer (Panama FFM)
   ↓ rawWindowHandle
 wgpu4k Instance → Surface → Adapter → Device
   ↓ createRenderPipeline
-WGSL shader → triangle RGB @ ~60 fps
+WGSL shader → triangle RGB @ ~120 fps
   ↓ WindowEvent.Resized
 surface.configure(newWidth, newHeight)
 ```
 
-**Résultat** : un triangle RGB tourne à ~60 fps dans une fenêtre Koreos redimensionnable, sans JNA ni Rococoa — uniquement Panama FFM (JDK 25).
+**Résultat** : un triangle RGB tourne à ~120 fps dans une fenêtre Koreos redimensionnable, sans JNA ni Rococoa — uniquement Panama FFM (JDK 25).
+
+> **Correction post-review (PR #25)** : le rendu initial tournait à ~60 fps (puis 0 fps après mise à jour wgpu-native 0.25+). Trois correctifs Metal ont été appliqués via PR #25 (wgpu-native 0.25+ — format framebuffer BGRA8Unorm, mode de présentation FIFO, signatures API 0.25.x). Résultat final : ~120 fps en ProMotion sur Apple M2 Max.
 
 ---
 
@@ -127,9 +129,9 @@ Le sample appelle directement `getMetalLayerFromNsView()` via Panama FFM plutôt
 
 | Métrique | Valeur |
 |----------|--------|
-| FPS moyen (Apple M2, Release) | ~60 fps (vsync) |
+| FPS moyen (Apple M2 Max, Release) | ~120 fps (ProMotion, post-correctif PR #25) |
 | Tickets livrés | 8 |
-| PRs mergées | 6 (#18 → #23) |
+| PRs mergées | 7 (#18 → #25) |
 | Fichiers Kotlin créés | 7 |
 | Lignes de code ajoutées (net) | ~1 200 |
 | Dépendances natives (JNA/Rococoa) | 0 |
