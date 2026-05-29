@@ -22,6 +22,16 @@ import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * Verrou global garantissant qu'une seule boucle d'événements AppKit est active
+ * à la fois dans le processus. Redmine #41 — DoD #3.
+ *
+ * Utilisation de [java.util.concurrent.atomic.AtomicBoolean] pour la thread-safety :
+ * [runApp] fait un CAS atomique false→true au démarrage et lève
+ * [IllegalStateException] si la valeur était déjà true.
+ */
+internal val appKitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+/**
  * Implémentation interne de [ActiveEventLoop] pour la plateforme AppKit (macOS).
  *
  * Une instance est créée par appel à [runApp] et passée comme récepteur
@@ -111,26 +121,39 @@ internal class AppKitEventLoop(
  * @param handler Gestionnaire du cycle de vie et des événements.
  */
 fun runApp(handler: ApplicationHandler) {
+    check(appKitRunning.compareAndSet(false, true)) {
+        "AppKitEventLoop.runApp() ne peut être appelé qu'une seule fois par processus. Une boucle d'événements AppKit est déjà active."
+    }
+
     MainThreadCheck.require()
 
     val eventLoop = AppKitEventLoop(handler)
 
-    // 0. Wire eventLoop into KoreosApplication BEFORE klass is initialized (sendEvent: needs it)
-    KoreosApplication.eventLoop = eventLoop
-
-    // 1. Sous-classe KoreosApplication + sharedApplication
+    // 1. Sous-classe KoreosApplication + sharedApplication (mémorisé dans sharedApp)
     val app = KoreosApplication.initialize()
 
-    // 2. Politique d'activation : application régulière (icône dans le Dock)
-    app.setActivationPolicyRegular()
+    try {
+        // 2. Câble la boucle sur l'instance — récupérée via sharedApp (NSApp as? KoreosApplication)
+        //    dans sendEvent:. Aucune variable statique mutable dédiée (Redmine #41).
+        app.eventLoop = eventLoop
 
-    // 3. Délégué d'application — câble canCreateSurfaces / shouldTerminate
-    val appDelegate = KoreosAppDelegate(handler, eventLoop)
-    app.setDelegate(appDelegate.ptr)
+        // 3. Politique d'activation : application régulière (icône dans le Dock)
+        app.setActivationPolicyRegular()
 
-    // 3.5 Installer l'observer CFRunLoop pour le coalescing RedrawRequested (GRA-134)
-    CFRunLoopRedrawObserver.install(handler, eventLoop, eventLoop.windows)
+        // 4. Délégué d'application — câble canCreateSurfaces / shouldTerminate
+        val appDelegate = KoreosAppDelegate(handler, eventLoop)
+        app.setDelegate(appDelegate.ptr)
 
-    // 4. Lance la boucle bloquante AppKit — retourne à la fermeture
-    app.run()
+        // 5. Installer l'observer CFRunLoop pour le coalescing RedrawRequested (GRA-134)
+        CFRunLoopRedrawObserver.install(handler, eventLoop, eventLoop.windows)
+
+        // 6. Lance la boucle bloquante AppKit — retourne à la fermeture
+        app.run()
+    } finally {
+        // Nettoyage : libère les références et remet le verrou à false
+        // pour permettre un éventuel re-démarrage (tests ou processus réentrants).
+        app.eventLoop = null
+        KoreosApplication.sharedApp = null
+        appKitRunning.set(false)
+    }
 }
