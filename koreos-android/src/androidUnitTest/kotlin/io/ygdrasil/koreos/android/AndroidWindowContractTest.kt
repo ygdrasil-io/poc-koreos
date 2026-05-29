@@ -69,9 +69,13 @@ class AndroidWindowContractTest {
 
     @Test
     fun `AndroidEventLoop expose pendingWindow de type AndroidWindow nullable`() {
-        val method = AndroidEventLoop::class.java.methods
-            .firstOrNull { it.name == "getPendingWindow" }
-        assertNotNull(method, "AndroidEventLoop doit exposer pendingWindow via getPendingWindow()")
+        // Les membres `internal` Kotlin sont manglés en JVM : le getter généré pour
+        // `internal var pendingWindow` s'appelle `getPendingWindow$<module>` et
+        // n'est pas accessible via `Class.methods` (public uniquement).
+        // On passe donc sur `declaredMethods` avec un match par préfixe.
+        val method = AndroidEventLoop::class.java.declaredMethods
+            .firstOrNull { it.name.startsWith("getPendingWindow") }
+        assertNotNull(method, "AndroidEventLoop doit exposer pendingWindow (getter interne manglé)")
         assertEquals(
             AndroidWindow::class.java,
             method.returnType,
@@ -83,8 +87,10 @@ class AndroidWindowContractTest {
 
     @Test
     fun `AndroidEventLoop expose onSurfaceCreated avec parametre Surface`() {
+        // `internal fun` est manglé en JVM : onSurfaceCreated → onSurfaceCreated$<module>.
+        // On utilise startsWith pour être insensible au suffixe de module.
         val method = AndroidEventLoop::class.java.declaredMethods
-            .firstOrNull { it.name == "onSurfaceCreated" }
+            .firstOrNull { it.name.startsWith("onSurfaceCreated") }
         assertNotNull(method, "AndroidEventLoop.onSurfaceCreated(Surface) doit exister")
         assertEquals(1, method.parameterCount, "onSurfaceCreated doit accepter un seul paramètre")
         assertEquals(
@@ -96,16 +102,18 @@ class AndroidWindowContractTest {
 
     @Test
     fun `AndroidEventLoop expose onSurfaceDestroyed sans parametre`() {
+        // Même raison : suffixe de mangling Kotlin `internal`.
         val method = AndroidEventLoop::class.java.declaredMethods
-            .firstOrNull { it.name == "onSurfaceDestroyed" }
+            .firstOrNull { it.name.startsWith("onSurfaceDestroyed") }
         assertNotNull(method, "AndroidEventLoop.onSurfaceDestroyed() doit exister")
         assertEquals(0, method.parameterCount, "onSurfaceDestroyed ne doit pas avoir de paramètre")
     }
 
     @Test
     fun `AndroidWindow expose onSurfaceAvailable avec parametre Surface`() {
+        // `internal fun` dans AndroidWindow → nom manglé, on recherche par préfixe.
         val method = AndroidWindow::class.java.declaredMethods
-            .firstOrNull { it.name == "onSurfaceAvailable" }
+            .firstOrNull { it.name.startsWith("onSurfaceAvailable") }
         assertNotNull(method, "AndroidWindow.onSurfaceAvailable(Surface) doit exister")
         assertEquals(1, method.parameterCount)
         assertEquals(
@@ -116,8 +124,9 @@ class AndroidWindowContractTest {
 
     @Test
     fun `AndroidWindow expose onSurfaceReleased sans parametre`() {
+        // `internal fun` dans AndroidWindow → nom manglé, on recherche par préfixe.
         val method = AndroidWindow::class.java.declaredMethods
-            .firstOrNull { it.name == "onSurfaceReleased" }
+            .firstOrNull { it.name.startsWith("onSurfaceReleased") }
         assertNotNull(method, "AndroidWindow.onSurfaceReleased() doit exister")
         assertEquals(0, method.parameterCount)
     }
