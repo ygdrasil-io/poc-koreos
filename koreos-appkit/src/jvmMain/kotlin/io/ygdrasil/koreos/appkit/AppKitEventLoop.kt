@@ -22,6 +22,16 @@ import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * Verrou global garantissant qu'une seule boucle d'événements AppKit est active
+ * à la fois dans le processus. Redmine #41 — DoD #3.
+ *
+ * Utilisation de [java.util.concurrent.atomic.AtomicBoolean] pour la thread-safety :
+ * [runApp] fait un CAS atomique false→true au démarrage et lève
+ * [IllegalStateException] si la valeur était déjà true.
+ */
+internal val appKitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+/**
  * Implémentation interne de [ActiveEventLoop] pour la plateforme AppKit (macOS).
  *
  * Une instance est créée par appel à [runApp] et passée comme récepteur
@@ -111,6 +121,10 @@ internal class AppKitEventLoop(
  * @param handler Gestionnaire du cycle de vie et des événements.
  */
 fun runApp(handler: ApplicationHandler) {
+    check(appKitRunning.compareAndSet(false, true)) {
+        "AppKitEventLoop.runApp() ne peut être appelé qu'une seule fois par processus. Une boucle d'événements AppKit est déjà active."
+    }
+
     MainThreadCheck.require()
 
     val eventLoop = AppKitEventLoop(handler)
