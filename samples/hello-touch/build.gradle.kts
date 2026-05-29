@@ -1,16 +1,19 @@
 /**
- * Sample hello-touch — démontre le pipeline touch events sur iOS.
+ * Sample hello-touch — démontre le pipeline touch events Koreos.
  *
- * Cibles iOS uniquement (pas de JVM — wgpu4k K/N hors scope).
+ * Cibles KMP : androidTarget + iOS (iosArm64, iosSimulatorArm64).
+ * Le handler [HelloTouchHandler] est défini en commonMain et partagé
+ * entre la cible Android (consommée par hello-touch-android) et iOS.
  */
 plugins {
-    id("org.jetbrains.kotlin.multiplatform")
+    id("ygdrasil.conventions.kmp-library")
+}
+
+android {
+    namespace = "io.ygdrasil.koreos.samples.hellotouch"
 }
 
 kotlin {
-    iosArm64()
-    iosSimulatorArm64()
-
     sourceSets {
         commonMain {
             dependencies {
