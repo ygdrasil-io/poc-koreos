@@ -181,4 +181,121 @@ class DomEventMapperTest {
         assertEquals(WebMouseButton.Other(4), domButtonToMouseButton(4))
         assertEquals(WebMouseButton.Other(10), domButtonToMouseButton(10))
     }
+
+    // -----------------------------------------------------------------------
+    // domKeyStateFromEventType
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `domKeyStateFromEventType retourne Pressed pour keydown`() {
+        assertEquals(WebKeyState.Pressed, domKeyStateFromEventType("keydown"))
+    }
+
+    @Test
+    fun `domKeyStateFromEventType retourne Released pour keyup`() {
+        assertEquals(WebKeyState.Released, domKeyStateFromEventType("keyup"))
+    }
+
+    @Test
+    fun `domKeyStateFromEventType retourne Pressed pour pointerdown`() {
+        assertEquals(WebKeyState.Pressed, domKeyStateFromEventType("pointerdown"))
+    }
+
+    @Test
+    fun `domKeyStateFromEventType retourne Released pour pointerup`() {
+        assertEquals(WebKeyState.Released, domKeyStateFromEventType("pointerup"))
+    }
+
+    @Test
+    fun `domKeyStateFromEventType retourne Released pour toute autre valeur`() {
+        assertEquals(WebKeyState.Released, domKeyStateFromEventType(""))
+        assertEquals(WebKeyState.Released, domKeyStateFromEventType("click"))
+    }
+
+    // -----------------------------------------------------------------------
+    // normalizeWheelDelta
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `normalizeWheelDelta ne modifie pas le delta en mode pixel (0)`() {
+        assertEquals(42.0, normalizeWheelDelta(42.0, deltaMode = 0))
+        assertEquals(-10.5, normalizeWheelDelta(-10.5, deltaMode = 0))
+    }
+
+    @Test
+    fun `normalizeWheelDelta multiplie par 16 en mode ligne (1)`() {
+        assertEquals(48.0, normalizeWheelDelta(3.0, deltaMode = 1))
+        assertEquals(-16.0, normalizeWheelDelta(-1.0, deltaMode = 1))
+    }
+
+    @Test
+    fun `normalizeWheelDelta multiplie par 600 en mode page (2)`() {
+        assertEquals(600.0, normalizeWheelDelta(1.0, deltaMode = 2))
+        assertEquals(-1200.0, normalizeWheelDelta(-2.0, deltaMode = 2))
+    }
+
+    @Test
+    fun `normalizeWheelDelta traite un mode inconnu comme pixel`() {
+        assertEquals(5.0, normalizeWheelDelta(5.0, deltaMode = 99))
+    }
+
+    @Test
+    fun `normalizeWheelDelta gere un delta zero`() {
+        assertEquals(0.0, normalizeWheelDelta(0.0, deltaMode = 0))
+        assertEquals(0.0, normalizeWheelDelta(0.0, deltaMode = 1))
+        assertEquals(0.0, normalizeWheelDelta(0.0, deltaMode = 2))
+    }
+
+    // -----------------------------------------------------------------------
+    // WebWindowEvent — vérification des data class equals
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `WebWindowEvent KeyboardInput egalite structurelle`() {
+        val e1 = WebWindowEvent.KeyboardInput(
+            key = WebKey.A,
+            state = WebKeyState.Pressed,
+            modifiers = WebModifiers.NONE,
+            isRepeat = false,
+        )
+        val e2 = WebWindowEvent.KeyboardInput(
+            key = WebKey.A,
+            state = WebKeyState.Pressed,
+            modifiers = WebModifiers.NONE,
+            isRepeat = false,
+        )
+        assertEquals(e1, e2)
+    }
+
+    @Test
+    fun `WebWindowEvent PointerMoved egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.PointerMoved(x = 10.0, y = 20.0),
+            WebWindowEvent.PointerMoved(x = 10.0, y = 20.0),
+        )
+    }
+
+    @Test
+    fun `WebWindowEvent MouseInput egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.MouseInput(WebMouseButton.Left, WebKeyState.Pressed),
+            WebWindowEvent.MouseInput(WebMouseButton.Left, WebKeyState.Pressed),
+        )
+    }
+
+    @Test
+    fun `WebWindowEvent MouseWheel egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.MouseWheel(deltaX = 1.0, deltaY = -2.0),
+            WebWindowEvent.MouseWheel(deltaX = 1.0, deltaY = -2.0),
+        )
+    }
+
+    @Test
+    fun `WebWindowEvent Resized egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.Resized(width = 800, height = 600),
+            WebWindowEvent.Resized(width = 800, height = 600),
+        )
+    }
 }
