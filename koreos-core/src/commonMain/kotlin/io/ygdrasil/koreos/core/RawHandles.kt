@@ -57,6 +57,35 @@ sealed interface RawWindowHandle {
      * @property hinstance Instance handle Win32 (HINSTANCE), représenté comme Long pour compatibilité FFM.
      */
     data class Win32(val hwnd: Long, val hinstance: Long) : RawWindowHandle
+
+    /**
+     * Handle de fenêtre Web (navigateur / Wasm).
+     *
+     * Deux modes d'identification du canvas cible sont supportés :
+     * - [canvasElementId] : identifiant CSS du `<canvas>` dans le DOM
+     *   (ex. `"my-canvas"`). Pratique pour une configuration déclarative.
+     * - [canvasElement] : référence directe à l'élément `HTMLCanvasElement`.
+     *   Déclaré [Any] en commonMain pour éviter tout import DOM ; côté JS/Wasm,
+     *   effectuer le cast explicite : `canvasElement as HTMLCanvasElement`.
+     *
+     * Au moins l'un des deux paramètres doit être non-null. Si les deux sont
+     * fournis, [canvasElement] est prioritaire sur [canvasElementId].
+     *
+     * @property canvasElementId Identifiant CSS du canvas dans le DOM, ou `null`.
+     * @property canvasElement   Référence directe à l'`HTMLCanvasElement`, ou `null`.
+     *                           Côté JS/Wasm, caster avec `canvasElement as HTMLCanvasElement`.
+     * @throws IllegalArgumentException si [canvasElementId] et [canvasElement] sont tous les deux `null`.
+     */
+    data class Web(
+        val canvasElementId: String? = null,
+        val canvasElement: Any? = null
+    ) : RawWindowHandle {
+        init {
+            require(canvasElementId != null || canvasElement != null) {
+                "RawWindowHandle.Web : au moins canvasElementId ou canvasElement doit être non-null"
+            }
+        }
+    }
 }
 
 /**
@@ -97,4 +126,13 @@ sealed interface RawDisplayHandle {
      * @property hinstance Instance handle Win32 (HINSTANCE), représenté comme Long pour compatibilité FFM.
      */
     data class Win32(val hinstance: Long) : RawDisplayHandle
+
+    /**
+     * Handle d'affichage Web (navigateur / Wasm).
+     *
+     * Dans le contexte Web, l'écran est géré implicitement par le navigateur ;
+     * aucun pointeur supplémentaire n'est nécessaire à ce niveau d'abstraction.
+     * Ce singleton marque simplement la cible d'affichage comme étant le contexte Web.
+     */
+    data object Web : RawDisplayHandle
 }
