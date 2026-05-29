@@ -2,6 +2,7 @@ title: Koreos
 nav:
   - index.md
   - plan.md
-  - specs.md
+  - sprint-review-v0.1.md
   - postmortem-m2.md
+  - specs.md
   - api
