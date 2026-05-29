@@ -29,6 +29,14 @@ kotlin {
         // webMain et webTest sont créés automatiquement par applyDefaultHierarchyTemplate()
         // quand js + wasmJs sont déclarés ensemble. On les récupère avec `by getting`.
 
+        // Depuis le ticket #28, koreos-core expose les cibles js(IR) et wasmJs.
+        // On peut donc en dépendre depuis commonMain (hérité par webMain, jsMain, wasmJsMain).
+        commonMain {
+            dependencies {
+                api(project(":koreos-core"))
+            }
+        }
+
         jsTest {
             dependencies {
                 implementation(kotlin("test-js"))
