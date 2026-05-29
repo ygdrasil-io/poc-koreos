@@ -17,8 +17,8 @@ Koreos v0.1.0 est livré en une session intensive d'environ 24 heures effectives
 
 | Métrique | Valeur |
 |----------|--------|
-| Tickets Linear livrés | 27 (GRA-133 → GRA-160) |
-| Pull Requests mergées | ~25 PRs (branches feature → master) |
+| Tickets Linear livrés | 28 (GRA-133 → GRA-160) |
+| Pull Requests mergées | ~29 PRs (branches feature → master) |
 | Plateformes supportées | 3 (macOS, iOS, Android) |
 | Artefacts publiés Maven Central | 5 modules (`koreos-core`, `koreos-appkit`, `koreos-uikit`, `koreos-android`, `koreos`) |
 | Version publiée | `0.1.0` |
@@ -118,7 +118,7 @@ Koreos v0.1.0 est livré en une session intensive d'environ 24 heures effectives
 
 ## 4. Écarts identifiés (9 points de remédiation → v0.1.1)
 
-Ces écarts ont été identifiés en sortie de sprint review et sont planifiés pour correction dans [Sprint 0 — v0.1.1](./plan-v0.2.md#sprint-0--rémédiation-v011-2-semaines).
+Ces écarts ont été identifiés en sortie de sprint review et sont planifiés pour correction dans [Sprint 0 — v0.1.1](./plan-v0.2.md#sprint-0-remediation-v011-2-semaines).
 
 | # | Domaine | Écart |
 |---|---------|-------|
@@ -157,7 +157,7 @@ Ces écarts ont été identifiés en sortie de sprint review et sont planifiés 
 - **Architecture `ApplicationHandler`** : interface callback-driven (`canCreateSurfaces`, `aboutToWait`, `windowEvent`) extensible sans couplage aux détails AppKit/UIKit/Android.
 - **CFRunLoop comme scheduler** : `kCFRunLoopBeforeWaiting` + `CFRunLoopTimer` pour `ControlFlow.WaitUntil` — élégant, précis, sans thread supplémentaire.
 - **API wgpu4k stable et portable** : la séquence `Instance → Surface → Adapter → Device → Pipeline → render loop` est idiomatique WebGPU et reproductible sur d'autres plateformes.
-- **Velocity élevée** : 27 tickets, ~25 PRs, 3 plateformes, publication Maven Central — tout livré en ~24h effectives.
+- **Velocity élevée** : 28 tickets, ~29 PRs, 3 plateformes, publication Maven Central — tout livré en ~24h effectives.
 
 ### Points à améliorer
 
