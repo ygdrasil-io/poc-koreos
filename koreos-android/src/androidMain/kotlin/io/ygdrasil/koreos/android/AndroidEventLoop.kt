@@ -12,16 +12,38 @@ import io.ygdrasil.koreos.core.WindowEvent
 /**
  * Implémentation Android de [ActiveEventLoop].
  *
- * La création de fenêtres est gérée directement par [KoreosActivity] via la
- * [android.view.Surface] du [android.view.SurfaceView] ; elle n'est donc pas
- * supportée via [createWindow].
+ * ## Cycle de vie de la fenêtre — pattern "pending window"
  *
- * [exit] termine l'Activity parente via [ComponentActivity.finish].
+ * Sur Android, la [android.view.Surface] n'est disponible qu'après le callback
+ * [android.view.SurfaceHolder.Callback.surfaceCreated] ; elle peut être libérée
+ * et recréée (ex. : rotation, onPause/onResume). Le pattern "pending window"
+ * dissocie la création de l'objet [AndroidWindow] de la disponibilité de la surface :
+ *
+ * 1. **[createWindow]** — appelé depuis [io.ygdrasil.koreos.core.ApplicationHandler.canCreateSurfaces] :
+ *    crée immédiatement un [AndroidWindow] lié au [SurfaceView] de l'Activity **avant**
+ *    que la surface soit disponible. La fenêtre est stockée dans [pendingWindow].
+ *
+ * 2. **[onSurfaceCreated]** — appelé par [KoreosActivity] lors de `surfaceCreated` :
+ *    transfère la surface vers le [AndroidWindow] via [AndroidWindow.onSurfaceAvailable].
+ *    À partir de cet instant, [AndroidWindow.rawWindowHandle] est valide.
+ *
+ * 3. **[onSurfaceDestroyed]** — appelé par [KoreosActivity] lors de `surfaceDestroyed` :
+ *    invalide la surface via [AndroidWindow.onSurfaceReleased].
+ *
+ * ## Contrat de timing pour [AndroidWindow.rawWindowHandle]
+ *
+ * [AndroidWindow.rawWindowHandle] lance [IllegalStateException] si la surface n'est pas
+ * encore disponible (entre [createWindow] et [onSurfaceCreated]). Les renderers doivent
+ * n'accéder au handle que dans ou après [ApplicationHandler.canCreateSurfaces].
+ *
+ * ## Scheduling des frames
  *
  * Le timing des frames est géré par [Choreographer] : [scheduleFrameIfNeeded]
  * programme un callback vsync qui dispatche [WindowEvent.RedrawRequested]
- * si [AndroidWindow.needsRedraw] est positionné, puis [ApplicationHandler.aboutToWait].
+ * si [AndroidWindow.needsRedraw] est positionné, puis [io.ygdrasil.koreos.core.ApplicationHandler.aboutToWait].
  * En mode [ControlFlow.Poll], le callback se reprogramme automatiquement.
+ *
+ * [exit] termine l'Activity parente via [ComponentActivity.finish].
  */
 internal class AndroidEventLoop(
     private val activity: ComponentActivity,
@@ -36,11 +58,60 @@ internal class AndroidEventLoop(
     @Volatile
     private var frameCallbackScheduled = false
 
+    /**
+     * Fenêtre créée via [createWindow] et en attente de surface.
+     *
+     * Nulle avant le premier appel à [createWindow], non nulle ensuite.
+     * La surface elle-même est disponible uniquement après [onSurfaceCreated].
+     */
+    @Volatile
+    internal var pendingWindow: AndroidWindow? = null
+        private set
+
+    /**
+     * Crée un [AndroidWindow] lié au [SurfaceView] de l'Activity.
+     *
+     * Retourne immédiatement un [AndroidWindow] valide **avant** que la
+     * [android.view.Surface] ne soit disponible (pattern "pending window").
+     * [AndroidWindow.rawWindowHandle] n'est accessible qu'après [onSurfaceCreated].
+     *
+     * Peut être appelé plusieurs fois : chaque appel remplace la référence
+     * [pendingWindow] (cas rare — une seule fenêtre par Activity est la norme).
+     *
+     * @param attributes Attributs de fenêtre (titre, taille, etc.).
+     *                   Sur Android, titre et redimensionnement sont ignorés.
+     * @return Un [AndroidWindow] dont la surface sera disponible après [onSurfaceCreated].
+     */
     override fun createWindow(attributes: WindowAttributes): Window {
-        throw UnsupportedOperationException(
-            "La création de fenêtre via l'EventLoop n'est pas supportée sur Android. " +
-            "La surface est gérée automatiquement par KoreosActivity."
-        )
+        val koreosActivity = activity as KoreosActivity
+        val window = AndroidWindow(koreosActivity.surfaceView)
+        pendingWindow = window
+        return window
+    }
+
+    /**
+     * Transfère la [android.view.Surface] vers la fenêtre en attente.
+     *
+     * Appelé par [KoreosActivity] lors de `surfaceCreated`. Après cet appel,
+     * [AndroidWindow.rawWindowHandle] retourne un [io.ygdrasil.koreos.core.RawWindowHandle.Android]
+     * valide. Si aucune fenêtre n'a encore été créée via [createWindow], le
+     * [holder] est ignoré (la surface sera fournie lors du prochain [createWindow]).
+     *
+     * @param surface La surface Android fraîchement créée par le SurfaceHolder.
+     */
+    internal fun onSurfaceCreated(surface: android.view.Surface) {
+        pendingWindow?.onSurfaceAvailable(surface)
+    }
+
+    /**
+     * Invalide la surface de la fenêtre active.
+     *
+     * Appelé par [KoreosActivity] lors de `surfaceDestroyed`. Après cet appel,
+     * [AndroidWindow.rawWindowHandle] lance [IllegalStateException] jusqu'à la
+     * prochaine invocation de [onSurfaceCreated].
+     */
+    internal fun onSurfaceDestroyed() {
+        pendingWindow?.onSurfaceReleased()
     }
 
     override fun setControlFlow(controlFlow: ControlFlow) {
