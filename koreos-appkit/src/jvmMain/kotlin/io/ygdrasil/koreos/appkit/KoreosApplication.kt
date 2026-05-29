@@ -55,6 +55,7 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
      * cycle de vie de l'application. Deux appels simultanés à [runApp] dans le même
      * processus ne sont pas supportés.
      */
+    @Volatile
     internal var eventLoop: AppKitEventLoop? = null
 
     /**
@@ -78,6 +79,7 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
          * Kotlin qui porte la propriété [eventLoop]. Initialisé par [initialize] et
          * utilisé par [Callbacks.sendEvent] pour récupérer la boucle active.
          */
+        @Volatile
         internal var sharedApp: KoreosApplication? = null
 
         /** Initialise la sous-classe ObjC une seule fois. */
