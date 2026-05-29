@@ -1,18 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Koreos CI — Multi-Platform
 #
-# Stratégie à deux niveaux (GRA-160) :
+# Stratégie à deux niveaux (GRA-160 + GRA-39) :
 #
 #   ┌─ Fast-Track (toutes les branches)  ────────────────────────────────────┐
 #   │  build-and-test  JVM uniquement (macos-latest) — feedback < 10 min    │
 #   │  macos-build     AppKit + samples macOS — feedback < 5 min            │
 #   └─────────────────────────────────────────────────────────────────────────┘
 #
-#   ┌─ Deep-Testing (PR → master ou push master) ────────────────────────────┐
+#   ┌─ Deep-Testing (PR → master, push master, ou branches claude/**) ───────┐
 #   │  build-and-test  JVM + allTests (macos-15, iOS simulator disponible)   │
 #   │  ios-build       iOS simulator arm64 — build + link + tests            │
 #   │  android-build   Android (ubuntu-latest) — build + assembleDebug       │
 #   └─────────────────────────────────────────────────────────────────────────┘
+#
+#   Note : ios-build et android-build sont des jobs coûteux (runners macOS /
+#   Ubuntu + compilation native). Ils se déclenchent sur :
+#     • push / PR vers master (Deep-Testing historique)
+#     • push / PR sur les branches claude/** (feature branches CI)
+#   Sur les autres branches, seul le Fast-Track JVM tourne (<10 s).
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -130,13 +136,18 @@ jobs:
   # Build les cibles iOS (iosSimulatorArm64, iosArm64, iosX64) et exécute
   # les tests Kotlin/Native sur simulateur iosSimulatorArm64.
   #
-  # S'exécute uniquement sur les PRs vers master et les push sur master
-  # (Deep-Testing) pour éviter de consommer les runners macOS coûteux sur
-  # chaque branche de travail.
+  # S'exécute sur Deep-Testing :
+  #   • PRs vers master / push sur master
+  #   • push ou PR sur les branches claude/** (feature branches CI)
+  # Évite de consommer les runners macOS coûteux sur toutes les autres branches.
   ios-build:
     name: ios-build
     runs-on: macos-15
-    if: github.base_ref == 'master' || github.ref == 'refs/heads/master'
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
 
     steps:
       - name: Checkout
@@ -178,7 +189,10 @@ jobs:
   #
   # Build les modules Android et les samples Android (assembleDebug).
   # Utilise ubuntu-latest (Android SDK pré-installé sur les runners GitHub).
-  # S'exécute uniquement sur Deep-Testing (PRs master / master branch).
+  #
+  # S'exécute sur Deep-Testing :
+  #   • PRs vers master / push sur master
+  #   • push ou PR sur les branches claude/** (feature branches CI)
   #
   # Tests instrumentés : les modules Koreos n'ont pas encore de tests
   # Robolectric — le job valide la compilation et le packaging APK.
@@ -186,7 +200,11 @@ jobs:
   android-build:
     name: android-build
     runs-on: ubuntu-latest
-    if: github.base_ref == 'master' || github.ref == 'refs/heads/master'
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
 
     steps:
       - name: Checkout
