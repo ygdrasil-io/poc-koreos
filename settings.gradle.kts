@@ -26,6 +26,7 @@ rootProject.name = "poc-koreos"
 include(":koreos-core")
 include(":koreos-appkit")
 include(":koreos-uikit")
+include(":koreos-win32")
 include(":koreos")
 include(":koreos-android")
 include(":samples:hello-metal")
