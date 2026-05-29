@@ -3,9 +3,23 @@
  *
  * Override de `sendEvent:` pour intercepter les événements clavier (NSEventTypeKeyDown /
  * NSEventTypeKeyUp) et les dispatcher comme [WindowEvent.KeyboardInput] vers
- * l'[AppKitEventLoop] actif.
+ * l'[AppKitEventLoop] actif, et les événements souris comme [WindowEvent] correspondants.
+ *
+ * La référence à [AppKitEventLoop] est stockée dans l'instance [KoreosApplication]
+ * (propriété [eventLoop]) et récupérée dans le bridge `sendEvent:` via
+ * `NSApp as? KoreosApplication` — concrètement : [Companion.sharedApp] qui mémorise
+ * l'unique instance Kotlin retournée par [initialize].
+ *
+ * Ce design évite la variable statique mutable globale qui rendait le code
+ * non-réentrant et corruptible par des tests parallèles.
+ *
+ * **Contrainte non-réentrante** : une seule instance de [AppKitEventLoop] doit être
+ * attachée à la fois. Créer deux boucles dans le même processus ou appeler [runApp]
+ * depuis plusieurs threads simultanément n'est pas supporté — AppKit impose que
+ * `NSApp.run()` s'exécute sur le thread principal et ne retourne qu'à la fermeture.
  *
  * GRA-154 : ajout du support clavier via sendEvent: NSEvent interception.
+ * Redmine #41 : refactor eventLoop static → instance scopée.
  */
 package io.ygdrasil.koreos.appkit
 
@@ -31,6 +45,19 @@ import java.lang.invoke.MethodType
 class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(ptr) {
 
     /**
+     * Référence à la boucle d'événements active, scopée à cette instance.
+     *
+     * Assignée par [runApp] immédiatement après [initialize] et avant le lancement
+     * de `NSApp.run()`. Récupérée dans [Callbacks.sendEvent] via [Companion.sharedApp]
+     * (équivalent de `NSApp as? KoreosApplication`).
+     *
+     * **Contrainte non-réentrante** : ne doit être assignée qu'une seule fois par
+     * cycle de vie de l'application. Deux appels simultanés à [runApp] dans le même
+     * processus ne sont pas supportés.
+     */
+    internal var eventLoop: AppKitEventLoop? = null
+
+    /**
      * Définit la politique d'activation de l'application
      * (par défaut : `NSApplicationActivationPolicyRegular`).
      */
@@ -44,8 +71,14 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
     }
 
     companion object {
-        /** Boucle d'événements active — initialisée par [runApp] avant [initialize]. */
-        internal var eventLoop: AppKitEventLoop? = null
+        /**
+         * Instance unique de [KoreosApplication] créée par [initialize].
+         *
+         * Joue le rôle de `NSApp as? KoreosApplication` : point d'accès à l'instance
+         * Kotlin qui porte la propriété [eventLoop]. Initialisé par [initialize] et
+         * utilisé par [Callbacks.sendEvent] pour récupérer la boucle active.
+         */
+        internal var sharedApp: KoreosApplication? = null
 
         /** Initialise la sous-classe ObjC une seule fois. */
         private val klass: MemorySegment by lazy {
@@ -81,6 +114,11 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
         /**
          * Crée (ou récupère) l'instance unique partagée de `KoreosApplication`.
          *
+         * Mémorise l'instance dans [sharedApp] — équivalent du pattern
+         * `NSApp as? KoreosApplication` : toute autre partie du code peut
+         * récupérer l'instance et sa propriété [eventLoop] sans variable statique
+         * mutable dédiée.
+         *
          * Doit être appelé depuis le thread principal — l'invariant est validé
          * via [MainThreadCheck].
          */
@@ -89,12 +127,12 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
             // Force la registration de la sous-classe avant le sharedApplication.
             klass
             val appClass = ObjCRuntime.getClass("KoreosApplication")
-            val sharedApp = ObjCRuntime.msgSend(
+            val sharedAppPtr = ObjCRuntime.msgSend(
                 ValueLayout.ADDRESS,
                 appClass,
                 ObjCRuntime.sel("sharedApplication"),
             ) as MemorySegment
-            return KoreosApplication(sharedApp)
+            return KoreosApplication(sharedAppPtr).also { sharedApp = it }
         }
     }
 
@@ -103,6 +141,13 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
      *
      * `sendEvent:` est overridé pour intercepter keyDown/keyUp et les dispatcher
      * vers [AppKitEventLoop] comme [WindowEvent.KeyboardInput].
+     *
+     * La boucle d'événements est récupérée via [Companion.sharedApp] (équivalent
+     * de `NSApp as? KoreosApplication`) — aucune variable statique mutable dédiée
+     * à la boucle (Redmine #41).
+     *
+     * @throws IllegalStateException si [Companion.sharedApp] est null (initialize()
+     * non appelé) ou si [eventLoop] est null (runApp() n'a pas câblé la boucle).
      */
     private object Callbacks {
         @JvmStatic
@@ -110,8 +155,17 @@ class KoreosApplication private constructor(ptr: MemorySegment) : NSApplication(
             // 1. FIRST call super (objc_msgSendSuper) so AppKit processes normally
             callSuperSendEvent(self, sel, event)
 
-            // 2. Then dispatch keyboard events to Koreos
-            val loop = eventLoop ?: return
+            // 2. Récupère la boucle d'événements via sharedApp (NSApp as? KoreosApplication).
+            val koreosApp = sharedApp
+                ?: throw IllegalStateException(
+                    "KoreosApplication.sharedApp est null dans sendEvent: — " +
+                        "initialize() doit être appelé avant NSApp.run()"
+                )
+            val loop = koreosApp.eventLoop
+                ?: throw IllegalStateException(
+                    "KoreosApplication.eventLoop est null dans sendEvent: — " +
+                        "runApp() doit assigner eventLoop avant NSApp.run()"
+                )
 
             // Get event type: [event type] → Long
             val eventType = ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("type")) as Long

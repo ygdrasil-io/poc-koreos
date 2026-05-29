@@ -11,6 +11,7 @@ import io.ygdrasil.koreos.core.WindowAttributes
 import io.ygdrasil.koreos.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -28,6 +29,59 @@ class KoreosApplicationTest {
         // de NSApplication (cf. binding kextract).
         val nsAppClass = NSApplication::class.java
         assertTrue(nsAppClass.isAssignableFrom(KoreosApplication::class.java))
+    }
+
+    /**
+     * Redmine #41 : eventLoop doit être une propriété d'instance (non statique).
+     *
+     * Vérifie que :
+     * - `KoreosApplication` possède un champ `eventLoop` non-statique (backing field JVM).
+     * - `KoreosApplication` possède un champ `sharedApp` statique (équivalent de
+     *   `NSApp as? KoreosApplication`) — backing field du companion property.
+     * - Aucun champ `eventLoop` statique n'existe (la variable statique globale a été supprimée).
+     */
+    @Test
+    fun `eventLoop est une propriete d instance et non une variable statique`() {
+        val allFields = KoreosApplication::class.java.declaredFields
+
+        // eventLoop doit exister comme champ d'instance (non statique)
+        val eventLoopField = allFields.firstOrNull { it.name == "eventLoop" }
+        assertNotNull(
+            eventLoopField,
+            "eventLoop doit être un champ de KoreosApplication, champs trouvés : ${allFields.map { it.name }}"
+        )
+        assertTrue(
+            !java.lang.reflect.Modifier.isStatic(eventLoopField!!.modifiers),
+            "eventLoop doit être non-statique (propriété d'instance)"
+        )
+
+        // sharedApp doit être un champ statique (backing field du companion property)
+        val sharedAppField = allFields.firstOrNull { it.name == "sharedApp" }
+        assertNotNull(
+            sharedAppField,
+            "sharedApp doit exister dans KoreosApplication pour remplacer NSApp as? KoreosApplication"
+        )
+        assertTrue(
+            java.lang.reflect.Modifier.isStatic(sharedAppField!!.modifiers),
+            "sharedApp doit être statique (companion object property)"
+        )
+    }
+
+    /**
+     * Redmine #41 : sharedApp est initialement null avant tout appel à initialize().
+     *
+     * Garantit qu'il n'y a pas d'initialisation eagerly et que le pattern
+     * "NSApp as? KoreosApplication" ne retourne null que si initialize() n'a pas
+     * encore été appelé.
+     */
+    @Test
+    fun `sharedApp est null avant initialize`() {
+        // Note : ce test suppose que initialize() n'a pas été appelé dans ce processus
+        // de test, ce qui est le cas car les tests ne touchent pas au runtime macOS.
+        assertNull(
+            KoreosApplication.sharedApp,
+            "sharedApp doit être null si initialize() n'a jamais été appelé"
+        )
     }
 
     @Test

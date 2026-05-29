@@ -115,22 +115,23 @@ fun runApp(handler: ApplicationHandler) {
 
     val eventLoop = AppKitEventLoop(handler)
 
-    // 0. Wire eventLoop into KoreosApplication BEFORE klass is initialized (sendEvent: needs it)
-    KoreosApplication.eventLoop = eventLoop
-
-    // 1. Sous-classe KoreosApplication + sharedApplication
+    // 1. Sous-classe KoreosApplication + sharedApplication (mémorisé dans sharedApp)
     val app = KoreosApplication.initialize()
 
-    // 2. Politique d'activation : application régulière (icône dans le Dock)
+    // 2. Câble la boucle sur l'instance — récupérée via sharedApp (NSApp as? KoreosApplication)
+    //    dans sendEvent:. Aucune variable statique mutable dédiée (Redmine #41).
+    app.eventLoop = eventLoop
+
+    // 3. Politique d'activation : application régulière (icône dans le Dock)
     app.setActivationPolicyRegular()
 
-    // 3. Délégué d'application — câble canCreateSurfaces / shouldTerminate
+    // 4. Délégué d'application — câble canCreateSurfaces / shouldTerminate
     val appDelegate = KoreosAppDelegate(handler, eventLoop)
     app.setDelegate(appDelegate.ptr)
 
-    // 3.5 Installer l'observer CFRunLoop pour le coalescing RedrawRequested (GRA-134)
+    // 5. Installer l'observer CFRunLoop pour le coalescing RedrawRequested (GRA-134)
     CFRunLoopRedrawObserver.install(handler, eventLoop, eventLoop.windows)
 
-    // 4. Lance la boucle bloquante AppKit — retourne à la fermeture
+    // 6. Lance la boucle bloquante AppKit — retourne à la fermeture
     app.run()
 }
