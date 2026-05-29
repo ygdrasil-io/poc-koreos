@@ -7,6 +7,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.1] — 2026-05-29
+
+Patch de corrections Sprint 0 — 10 PRs de stabilisation post-release v0.1.0.
+
+### Fixed
+
+- **Docs** — Rebrand MkDocs Koreos + navigation API reference (PR #50, fixes #49)
+- **`koreos-appkit`** — `KoreosApplication.eventLoop` statique → instance scopée (PR #51, fixes #41)
+- **`koreos-appkit`** — Suppression commentaire stub trompeur dans `AppKitEventLoop` (PR #52, fixes #42)
+- **Docs** — README racine actualisé pour Koreos v0.1.0 (PR #53, fixes #45)
+- **Docs** — Documentation `sprint-review-v0.1.md` ajoutée (PR #54, fixes #38)
+- **CI** — Jobs `ios-build` / `android-build` déclenchés sur branches `claude/**` (PR #55, fixes #39)
+- **Docs** — Post-mortem M2 : FPS 60→120 + note PR #25 (PR #56, fixes #46)
+- **`koreos-android`** — `AndroidEventLoop.createWindow` retourne une `AndroidWindow` réelle (PR #57, fixes #47)
+- **Samples** — Refactor samples Android — `HelloApp` partagé en `commonMain` (PR #58, fixes #44)
+- **`koreos-core`** — `RawWindowHandle.Win32` + `RawDisplayHandle.Win32` (PR #59, fixes #16)
+
+### Artifacts
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.ygdrasil.koreos:koreos:0.1.1")
+}
+```
+
+[0.1.1]: https://github.com/ygdrasil-io/poc-koreos/releases/tag/v0.1.1
+
+---
+
 ## [0.1.0] — 2026-05-28
 
 First public release of Koreos — Kotlin Multiplatform windowing and event-loop library.
