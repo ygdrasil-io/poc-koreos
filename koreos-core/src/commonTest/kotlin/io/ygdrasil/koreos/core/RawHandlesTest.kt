@@ -9,6 +9,7 @@ package io.ygdrasil.koreos.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -30,6 +31,7 @@ class RawHandlesTest {
             RawWindowHandle.UiKit(uiView = 5L, uiViewController = null),
             RawWindowHandle.Android(surface = Any()),
             RawWindowHandle.Win32(hwnd = 6L, hinstance = 7L),
+            RawWindowHandle.Web(canvasElementId = "my-canvas"),
         )
 
         for (handle in handles) {
@@ -39,6 +41,7 @@ class RawHandlesTest {
                 is RawWindowHandle.UiKit    -> "UiKit"
                 is RawWindowHandle.Android  -> "Android"
                 is RawWindowHandle.Win32    -> "Win32"
+                is RawWindowHandle.Web      -> "Web"
             }
             assertNotNull(nom)
         }
@@ -83,6 +86,7 @@ class RawHandlesTest {
             RawDisplayHandle.UiKit,
             RawDisplayHandle.Android,
             RawDisplayHandle.Win32(hinstance = 8L),
+            RawDisplayHandle.Web,
         )
 
         for (handle in handles) {
@@ -92,6 +96,7 @@ class RawHandlesTest {
                 RawDisplayHandle.UiKit       -> "UiKit"
                 RawDisplayHandle.Android     -> "Android"
                 is RawDisplayHandle.Win32    -> "Win32"
+                RawDisplayHandle.Web         -> "Web"
             }
             assertNotNull(nom)
         }
@@ -127,5 +132,44 @@ class RawHandlesTest {
     fun `RawDisplayHandle Win32 expose hinstance`() {
         val handle = RawDisplayHandle.Win32(hinstance = 0xCAFEBABEL)
         assertEquals(0xCAFEBABEL, handle.hinstance)
+    }
+
+    // -------------------------------------------------------------------------
+    // Web — tests spécifiques
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `RawWindowHandle Web id only est valide`() {
+        val handle = RawWindowHandle.Web(canvasElementId = "my-canvas")
+        assertEquals("my-canvas", handle.canvasElementId)
+        assertNull(handle.canvasElement)
+    }
+
+    @Test
+    fun `RawWindowHandle Web element only est valide`() {
+        val element = object {}
+        val handle = RawWindowHandle.Web(canvasElement = element)
+        assertNull(handle.canvasElementId)
+        assertTrue(handle.canvasElement === element)
+    }
+
+    @Test
+    fun `RawWindowHandle Web les deux fournis est valide`() {
+        val element = object {}
+        val handle = RawWindowHandle.Web(canvasElementId = "my-canvas", canvasElement = element)
+        assertEquals("my-canvas", handle.canvasElementId)
+        assertTrue(handle.canvasElement === element)
+    }
+
+    @Test
+    fun `RawWindowHandle Web les deux null leve IllegalArgumentException`() {
+        assertFailsWith<IllegalArgumentException> {
+            RawWindowHandle.Web(canvasElementId = null, canvasElement = null)
+        }
+    }
+
+    @Test
+    fun `RawDisplayHandle Web est un singleton`() {
+        assertTrue(RawDisplayHandle.Web === RawDisplayHandle.Web)
     }
 }
