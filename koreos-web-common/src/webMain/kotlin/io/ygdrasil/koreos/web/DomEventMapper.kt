@@ -143,3 +143,36 @@ internal fun domButtonToMouseButton(button: Short): WebMouseButton = when (butto
     2    -> WebMouseButton.Right
     else -> WebMouseButton.Other(button.toInt())
 }
+
+/**
+ * Déduit le [WebKeyState] à partir du type d'événement DOM (`"keydown"` ou `"keyup"`).
+ *
+ * @param eventType Valeur de `event.type` (`"keydown"` ou `"keyup"`).
+ * @return [WebKeyState.Pressed] pour `"keydown"`, [WebKeyState.Released] sinon.
+ */
+internal fun domKeyStateFromEventType(eventType: String): WebKeyState = when (eventType) {
+    "keydown"     -> WebKeyState.Pressed
+    "pointerdown" -> WebKeyState.Pressed
+    else          -> WebKeyState.Released
+}
+
+/**
+ * Normalise un delta de molette DOM en pixels logiques.
+ *
+ * Le DOM expose trois modes de défilement :
+ * - `0` (DOM_DELTA_PIXEL) : le delta est déjà en pixels — pas de transformation.
+ * - `1` (DOM_DELTA_LINE)  : le delta est en lignes — multiplie par 16 px.
+ * - `2` (DOM_DELTA_PAGE)  : le delta est en pages — multiplie par 600 px.
+ *
+ * @param delta     Valeur brute de `WheelEvent.deltaX` ou `deltaY`.
+ * @param deltaMode Valeur de `WheelEvent.deltaMode` (0, 1 ou 2).
+ * @return Delta normalisé en pixels logiques.
+ */
+internal fun normalizeWheelDelta(delta: Double, deltaMode: Int): Double {
+    val scale = when (deltaMode) {
+        1 -> 16.0
+        2 -> 600.0
+        else -> 1.0
+    }
+    return delta * scale
+}
