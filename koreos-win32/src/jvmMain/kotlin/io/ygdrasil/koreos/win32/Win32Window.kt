@@ -196,28 +196,16 @@ class Win32Window private constructor(
          * Procédure de fenêtre Win32 (WndProc).
          *
          * Appelée par le système Windows pour chaque message envoyé à une fenêtre
-         * de la classe KoreosWin32Window. Les messages non gérés sont délégués
-         * à [defWindowProcW].
+         * de la classe KoreosWin32Window. Délègue l'intégralité du dispatch à
+         * [KoreosWndProc.dispatch] qui traduit les messages Win32 en [WindowEvent]
+         * koreos et les transmet au handler installé.
          *
          * ⚠️ Cette méthode est appelée depuis le thread de messages Win32 —
          * elle doit être @JvmStatic pour que MethodHandles.lookup() la trouve.
          */
         @JvmStatic
         fun wndProc(hwnd: MemorySegment, msg: Int, wParam: Long, lParam: Long): Long {
-            return when (msg) {
-                WM_DESTROY -> {
-                    // PostQuitMessage(0) serait ici dans une vraie boucle de messages
-                    0L
-                }
-                else -> {
-                    val handle = defWindowProcW
-                    if (handle != null) {
-                        handle.invokeExact(hwnd, msg, wParam, lParam) as Long
-                    } else {
-                        0L
-                    }
-                }
-            }
+            return KoreosWndProc.dispatch(hwnd.address(), msg, wParam, lParam)
         }
 
         /**
