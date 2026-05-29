@@ -5,7 +5,8 @@
  * callback de [ApplicationHandler]. La fonction top-level [runApp] orchestre
  * l'initialisation AppKit (KoreosApplication + KoreosAppDelegate + NSApp.run).
  *
- * GRA-128 : premier câblage complet — M1 sans ControlFlow avancé ni proxy.
+ * GRA-128 : premier câblage complet — M1.
+ * GRA-136 : ControlFlow effectif + CFRunLoopObserver + proxy thread-safe.
  */
 package io.ygdrasil.koreos.appkit
 
@@ -32,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap
  *   [KoreosWindowDelegate] pour la gestion de la fermeture.
  * - [exit] : lève le drapeau [isExiting] puis déclenche
  *   `[NSApp terminate:nil]` pour quitter la boucle AppKit.
- * - [controlFlow] / [setControlFlow] : stub (NSRunLoop gère lui-même l'attente).
+ * - [controlFlow] / [setControlFlow] : état piloté par [CFRunLoopRedrawObserver] (GRA-136).
  * - [createProxy] : implémenté via [AppKitEventLoopProxy] (GRA-136) — wakeUp thread-safe.
  */
 internal class AppKitEventLoop(
