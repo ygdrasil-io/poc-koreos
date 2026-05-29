@@ -259,3 +259,62 @@ internal const val WHEEL_DELTA: Int = 120
  * wParam = MAKEWPARAM(dpiX, dpiY) → bits bas = dpiX, bits hauts = dpiY.
  */
 internal const val DPI_WPARAM_MASK: Long = 0xFFFFL
+
+// ── Constantes de la boucle de messages ──────────────────────────────────────
+
+/**
+ * PM_REMOVE — flag pour PeekMessageW : retire le message de la file après lecture.
+ *
+ * Référence : https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-peekmessagew
+ */
+internal const val PM_REMOVE: Int = 0x0001
+
+/**
+ * PM_NOREMOVE — flag pour PeekMessageW : ne retire pas le message de la file.
+ *
+ * Utilisé pour inspecter la file sans consommer le message.
+ */
+internal const val PM_NOREMOVE: Int = 0x0000
+
+/**
+ * QS_ALLINPUT — masque de réveil MsgWaitForMultipleObjectsEx couvrant tous les types
+ * de messages d'entrée (clavier, souris, horloge, peinture, envoi, file).
+ *
+ * QS_ALLINPUT = QS_INPUT | QS_POSTMESSAGE | QS_TIMER | QS_PAINT | QS_HOTKEY | QS_SENDMESSAGE
+ *
+ * Référence : https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-msgwaitformultipleobjectsex
+ */
+internal const val QS_ALLINPUT: Int = 0x04FF
+
+/**
+ * MWMO_INPUTAVAILABLE — flag MsgWaitForMultipleObjectsEx : réveille la boucle
+ * si des messages d'entrée sont disponibles (même s'ils ont déjà été vus).
+ *
+ * Sans ce flag, la fonction peut ne pas se réveiller si les messages sont dans
+ * la file mais n'ont pas encore été traités.
+ *
+ * Référence : https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-msgwaitformultipleobjectsex
+ */
+internal const val MWMO_INPUTAVAILABLE: Int = 0x0004
+
+/**
+ * WAIT_OBJECT_0 — code de retour de MsgWaitForMultipleObjectsEx indiquant
+ * que le premier objet attendu est signalé (ou que des messages sont disponibles
+ * quand nCount = 0, auquel cas la valeur retournée est WAIT_OBJECT_0).
+ *
+ * Référence : https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitformultipleobjects
+ */
+internal const val WAIT_OBJECT_0: Int = 0x00000000
+
+/**
+ * WAIT_TIMEOUT — code de retour de MsgWaitForMultipleObjectsEx indiquant
+ * que le timeout a expiré sans qu'un objet soit signalé.
+ */
+internal const val WAIT_TIMEOUT: Int = 0x00000102
+
+/**
+ * INFINITE — valeur de timeout pour MsgWaitForMultipleObjectsEx indiquant
+ * une attente sans limite de temps (équivalent à 0xFFFFFFFF).
+ */
+@Suppress("INTEGER_OVERFLOW")
+internal const val INFINITE: Int = -1  // 0xFFFFFFFF en unsigned
