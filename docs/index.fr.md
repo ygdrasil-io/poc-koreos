@@ -28,5 +28,5 @@ mkdocs build
 
 ### Lancer l'exemple hello-triangle
 ```bash
-./gradlew :samples:hello-triangle:runDebugExecutableMacosArm64
+./gradlew :samples:hello-triangle:run
 ```
