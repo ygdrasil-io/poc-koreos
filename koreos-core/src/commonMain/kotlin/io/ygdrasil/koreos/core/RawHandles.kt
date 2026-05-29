@@ -49,6 +49,14 @@ sealed interface RawWindowHandle {
      *                   commonMain — le consommateur effectue le cast explicite.
      */
     data class Android(val surface: Any) : RawWindowHandle
+
+    /**
+     * Handle de fenêtre Win32 (Windows).
+     *
+     * @property hwnd      Window handle Win32 (HWND), représenté comme Long pour compatibilité FFM.
+     * @property hinstance Instance handle Win32 (HINSTANCE), représenté comme Long pour compatibilité FFM.
+     */
+    data class Win32(val hwnd: Long, val hinstance: Long) : RawWindowHandle
 }
 
 /**
@@ -82,4 +90,11 @@ sealed interface RawDisplayHandle {
      * supplémentaire n'est nécessaire à ce niveau d'abstraction.
      */
     data object Android : RawDisplayHandle
+
+    /**
+     * Handle d'affichage Win32 (Windows).
+     *
+     * @property hinstance Instance handle Win32 (HINSTANCE), représenté comme Long pour compatibilité FFM.
+     */
+    data class Win32(val hinstance: Long) : RawDisplayHandle
 }
