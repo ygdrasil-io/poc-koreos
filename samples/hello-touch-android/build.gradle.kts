@@ -1,7 +1,9 @@
 /**
- * Sample hello-touch-android — démontre le pipeline touch events sur Android.
+ * Sample hello-touch-android — application Android de démonstration touch events.
  *
- * Miroir du sample hello-touch iOS, démontre la convergence d'API Koreos.
+ * Consomme [io.ygdrasil.koreos.samples.hellotouch.HelloTouchHandler] depuis
+ * `:samples:hello-touch` (commonMain KMP), démontrant que le handler est
+ * 100 % Kotlin commun entre iOS et Android.
  */
 plugins {
     id("com.android.application")
@@ -29,5 +31,6 @@ android {
 
 dependencies {
     implementation(project(":koreos"))
+    implementation(project(":samples:hello-touch"))
     implementation("androidx.activity:activity:1.10.1")
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Manifest minimal pour la cible androidTarget de la library hello-touch.
+    Aucune Activity déclarée ici — la library expose uniquement HelloTouchHandler.
+-->
+<manifest />
