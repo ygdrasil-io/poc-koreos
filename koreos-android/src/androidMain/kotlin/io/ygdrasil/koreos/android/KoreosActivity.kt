@@ -50,14 +50,26 @@ abstract class KoreosActivity : ComponentActivity() {
     lateinit var handler: ApplicationHandler
         private set
 
-    /** Fenêtre Android Koreos créée lors de [surfaceCreated]. */
-    lateinit var koreosWindow: AndroidWindow
-        private set
+    /**
+     * Fenêtre Android Koreos.
+     *
+     * Initialisée lors du premier appel à [AndroidEventLoop.createWindow] (typiquement
+     * dans [ApplicationHandler.canCreateSurfaces] via [surfaceCreated]).
+     * Délègue la gestion de la surface à [AndroidEventLoop].
+     */
+    val koreosWindow: AndroidWindow?
+        get() = eventLoop.pendingWindow
 
     /** Boucle d'événements Android. */
     internal lateinit var eventLoop: AndroidEventLoop
 
-    private lateinit var surfaceView: SurfaceView
+    /**
+     * SurfaceView plein écran hébergeant la surface de rendu.
+     *
+     * Exposé en `internal` pour que [AndroidEventLoop.createWindow] puisse
+     * instancier [AndroidWindow] avec le SurfaceView de cette Activity.
+     */
+    internal lateinit var surfaceView: SurfaceView
 
     /**
      * Guard contre tout dispatch de callback après [onDestroy].
@@ -104,19 +116,21 @@ abstract class KoreosActivity : ComponentActivity() {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 if (destroyed) return
                 println("[KoreosActivity] surfaceCreated → surface available")
-                koreosWindow = AndroidWindow(surfaceView)
-                koreosWindow.onSurfaceAvailable(holder.surface)
+                // canCreateSurfaces déclenche createWindow dans le handler,
+                // ce qui crée l'AndroidWindow via AndroidEventLoop.createWindow.
+                // Ensuite on transfère la surface vers la fenêtre créée.
                 handler.canCreateSurfaces(eventLoop)
-                eventLoop.scheduleFrameIfNeeded(koreosWindow)
+                eventLoop.onSurfaceCreated(holder.surface)
+                eventLoop.pendingWindow?.let { eventLoop.scheduleFrameIfNeeded(it) }
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                 if (destroyed) return
                 println("[KoreosActivity] surfaceChanged ${width}×${height}")
-                if (::koreosWindow.isInitialized) {
+                eventLoop.pendingWindow?.let { window ->
                     handler.windowEvent(
                         eventLoop,
-                        koreosWindow.id,
+                        window.id,
                         WindowEvent.Resized(PhysicalSize(width, height)),
                     )
                 }
@@ -126,9 +140,7 @@ abstract class KoreosActivity : ComponentActivity() {
                 if (destroyed) return
                 println("[KoreosActivity] surfaceDestroyed → surface released")
                 handler.destroySurfaces(eventLoop)
-                if (::koreosWindow.isInitialized) {
-                    koreosWindow.onSurfaceReleased()
-                }
+                eventLoop.onSurfaceDestroyed()
             }
         })
     }
@@ -137,9 +149,7 @@ abstract class KoreosActivity : ComponentActivity() {
         super.onResume()
         if (destroyed) return
         handler.resumed(eventLoop)
-        if (::koreosWindow.isInitialized) {
-            eventLoop.scheduleFrameIfNeeded(koreosWindow)
-        }
+        eventLoop.pendingWindow?.let { eventLoop.scheduleFrameIfNeeded(it) }
     }
 
     override fun onPause() {
@@ -149,12 +159,13 @@ abstract class KoreosActivity : ComponentActivity() {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (destroyed || !::koreosWindow.isInitialized) return super.onTouchEvent(event)
-        dispatchMotionEvent(event)
+        val window = eventLoop.pendingWindow
+        if (destroyed || window == null) return super.onTouchEvent(event)
+        dispatchMotionEvent(event, window)
         return true
     }
 
-    private fun dispatchMotionEvent(event: MotionEvent) {
+    private fun dispatchMotionEvent(event: MotionEvent, window: AndroidWindow) {
         val phase = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> TouchPhase.Started
             MotionEvent.ACTION_MOVE -> TouchPhase.Moved
@@ -170,7 +181,7 @@ abstract class KoreosActivity : ComponentActivity() {
                     event.getY(pointerIndex).toDouble(),
                 )
                 val id = event.getPointerId(pointerIndex).toLong()
-                handler.windowEvent(eventLoop, koreosWindow.id, WindowEvent.Touch(phase, location, id))
+                handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
             }
         } else {
             val pointerIndex = event.actionIndex
@@ -179,15 +190,13 @@ abstract class KoreosActivity : ComponentActivity() {
                 event.getY(pointerIndex).toDouble(),
             )
             val id = event.getPointerId(pointerIndex).toLong()
-            handler.windowEvent(eventLoop, koreosWindow.id, WindowEvent.Touch(phase, location, id))
+            handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
         }
     }
 
     override fun onDestroy() {
         destroyed = true
-        if (::koreosWindow.isInitialized) {
-            koreosWindow.onSurfaceReleased()
-        }
+        eventLoop.onSurfaceDestroyed()
         super.onDestroy()
     }
 }

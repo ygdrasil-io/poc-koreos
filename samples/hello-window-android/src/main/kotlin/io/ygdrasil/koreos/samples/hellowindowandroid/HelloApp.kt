@@ -1,8 +1,11 @@
 /**
  * Handler partagé cross-platform — identique à samples/hello-window/commonMain.
  *
- * Sur Android, la fenêtre est gérée par KoreosActivity (pas de createWindow()).
- * Tous les événements restent identiques à iOS et JVM.
+ * Sur toutes les plateformes (Android inclus), [createWindow] est appelé depuis
+ * [canCreateSurfaces]. Sur Android, la surface n'est pas encore disponible au
+ * moment de [createWindow] ; elle le devient quelques instants plus tard via
+ * [AndroidWindow.onSurfaceAvailable]. Les renderers doivent accéder à
+ * [rawWindowHandle] uniquement dans ou après ce callback.
  */
 package io.ygdrasil.koreos.samples.hellowindowandroid
 
@@ -16,8 +19,8 @@ import io.ygdrasil.koreos.core.WindowEvent
 /**
  * Handler de démonstration Hello Window.
  *
- * Crée une fenêtre au démarrage (JVM/iOS) et logue tous les événements reçus.
- * Sur Android, KoreosActivity gère la surface — aucun appel à createWindow() nécessaire.
+ * Crée une fenêtre via [ActiveEventLoop.createWindow] dans [canCreateSurfaces]
+ * et logue tous les événements reçus. Identique sur Android, iOS et JVM.
  */
 class HelloApp : ApplicationHandler {
 
@@ -25,7 +28,10 @@ class HelloApp : ApplicationHandler {
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         println("[HelloWindow] canCreateSurfaces")
-        // On Android the window is managed by KoreosActivity — no createWindow() needed.
+        window = eventLoop.createWindow(
+            WindowAttributes(title = "Hello Window — Koreos Android")
+        )
+        println("[HelloWindow] window created id=${window?.id?.value}")
     }
 
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {

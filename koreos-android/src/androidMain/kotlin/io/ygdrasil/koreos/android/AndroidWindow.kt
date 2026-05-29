@@ -9,7 +9,21 @@ import io.ygdrasil.koreos.core.*
  * Encapsule un [SurfaceView] plein écran et expose la [android.view.Surface]
  * brute via [rawWindowHandle] (Strategy A — zéro JNI).
  *
- * La surface est disponible uniquement après le callback [onSurfaceAvailable].
+ * ## Cycle de vie de la surface
+ *
+ * Un [AndroidWindow] peut être créé **avant** que la surface Android ne soit
+ * disponible (pattern "pending window" — voir [AndroidEventLoop.createWindow]).
+ * Le cycle de disponibilité est :
+ *
+ * | Événement | État surface | [rawWindowHandle] |
+ * |-----------|--------------|-------------------|
+ * | Après [AndroidEventLoop.createWindow] | Non disponible | Lance [IllegalStateException] |
+ * | Après [onSurfaceAvailable] | Disponible | Retourne [RawWindowHandle.Android] valide |
+ * | Après [onSurfaceReleased] | Non disponible | Lance [IllegalStateException] |
+ *
+ * Les renderers (wgpu4k, etc.) ne doivent accéder à [rawWindowHandle] que dans
+ * ou après le callback [io.ygdrasil.koreos.core.ApplicationHandler.canCreateSurfaces],
+ * et doivent relâcher le handle avant [io.ygdrasil.koreos.core.ApplicationHandler.destroySurfaces].
  */
 class AndroidWindow internal constructor(
     internal val surfaceView: SurfaceView,
@@ -17,25 +31,49 @@ class AndroidWindow internal constructor(
 
     override val id: WindowId = WindowId(surfaceView.hashCode().toLong())
 
+    @Volatile
     private var _surface: android.view.Surface? = null
 
     /**
-     * Appelé par [KoreosActivity] quand la surface est créée/disponible.
+     * Rend la surface disponible pour le rendu.
+     *
+     * Appelé par [AndroidEventLoop.onSurfaceCreated] (qui est lui-même déclenché
+     * par [KoreosActivity]) lors de `surfaceCreated`. Après cet appel,
+     * [rawWindowHandle] retourne un [RawWindowHandle.Android] valide.
+     *
+     * @param surface La surface Android fraîchement allouée par le SurfaceHolder.
      */
     internal fun onSurfaceAvailable(surface: android.view.Surface) {
         _surface = surface
     }
 
     /**
-     * Appelé par [KoreosActivity] quand la surface est détruite.
+     * Invalide la surface de rendu.
+     *
+     * Appelé par [AndroidEventLoop.onSurfaceDestroyed] (qui est lui-même déclenché
+     * par [KoreosActivity]) lors de `surfaceDestroyed`. Après cet appel,
+     * [rawWindowHandle] lance [IllegalStateException] jusqu'à la prochaine
+     * invocation de [onSurfaceAvailable].
      */
     internal fun onSurfaceReleased() {
         _surface = null
     }
 
+    /**
+     * Retourne le handle natif de la surface Android.
+     *
+     * @return [RawWindowHandle.Android] encapsulant la [android.view.Surface] active.
+     * @throws IllegalStateException si la surface n'est pas encore disponible
+     *   (avant [onSurfaceAvailable]) ou a été libérée (après [onSurfaceReleased]).
+     */
     override val rawWindowHandle: Any
         get() = RawWindowHandle.Android(
-            surface = _surface ?: error("Surface Android non disponible (surfaceCreated pas encore appelé)")
+            surface = _surface
+                ?: throw IllegalStateException(
+                    "Surface Android non disponible : rawWindowHandle ne peut être " +
+                    "appelé qu'après surfaceCreated et avant surfaceDestroyed. " +
+                    "Attendez le callback ApplicationHandler.canCreateSurfaces."
+                )
         )
 
     override val rawDisplayHandle: Any
