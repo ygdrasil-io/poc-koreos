@@ -12,6 +12,8 @@
  *  - DestroyWindow     (user32)
  *  - DefWindowProcW    (user32)
  *  - SetWindowTextW    (user32)
+ *  - PostQuitMessage   (user32)
+ *  - GetKeyState       (user32)
  *  - GetModuleHandleW  (kernel32)
  *
  * Référence : https://learn.microsoft.com/en-us/windows/win32/learnwin32/
@@ -200,6 +202,41 @@ internal val setWindowTextW: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,   // BOOL
             ValueLayout.ADDRESS,    // HWND
             ValueLayout.ADDRESS,    // LPCWSTR
+        )
+    )
+}
+
+// ── PostQuitMessage ───────────────────────────────────────────────────────────
+
+/**
+ * void PostQuitMessage(int nExitCode);
+ *
+ * Place un message WM_QUIT dans la file de messages du thread courant, ce qui
+ * provoque la sortie de la boucle GetMessage.
+ */
+internal val postQuitMessage: MethodHandle? by lazy {
+    user32.downcall(
+        "PostQuitMessage",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.JAVA_INT,   // nExitCode
+        )
+    )
+}
+
+// ── GetKeyState ───────────────────────────────────────────────────────────────
+
+/**
+ * SHORT GetKeyState(int nVirtKey);
+ *
+ * Retourne l'état d'une touche virtuelle au moment du traitement du dernier
+ * message extrait par GetMessage. Bit 15 = touche enfoncée, bit 0 = toggle.
+ */
+internal val getKeyState: MethodHandle? by lazy {
+    user32.downcall(
+        "GetKeyState",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_SHORT, // SHORT
+            ValueLayout.JAVA_INT,   // nVirtKey
         )
     )
 }
