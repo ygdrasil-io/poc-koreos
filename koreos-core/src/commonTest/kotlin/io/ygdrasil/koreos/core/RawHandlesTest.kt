@@ -29,6 +29,7 @@ class RawHandlesTest {
             RawWindowHandle.UiKit(uiView = 3L, uiViewController = 4L),
             RawWindowHandle.UiKit(uiView = 5L, uiViewController = null),
             RawWindowHandle.Android(surface = Any()),
+            RawWindowHandle.Win32(hwnd = 6L, hinstance = 7L),
         )
 
         for (handle in handles) {
@@ -37,6 +38,7 @@ class RawHandlesTest {
                 is RawWindowHandle.AppKit   -> "AppKit"
                 is RawWindowHandle.UiKit    -> "UiKit"
                 is RawWindowHandle.Android  -> "Android"
+                is RawWindowHandle.Win32    -> "Win32"
             }
             assertNotNull(nom)
         }
@@ -80,14 +82,16 @@ class RawHandlesTest {
             RawDisplayHandle.AppKit,
             RawDisplayHandle.UiKit,
             RawDisplayHandle.Android,
+            RawDisplayHandle.Win32(hinstance = 8L),
         )
 
         for (handle in handles) {
             // Sans clause `else` — le compilateur garantit l'exhaustivité.
             val nom: String = when (handle) {
-                RawDisplayHandle.AppKit   -> "AppKit"
-                RawDisplayHandle.UiKit    -> "UiKit"
-                RawDisplayHandle.Android  -> "Android"
+                RawDisplayHandle.AppKit      -> "AppKit"
+                RawDisplayHandle.UiKit       -> "UiKit"
+                RawDisplayHandle.Android     -> "Android"
+                is RawDisplayHandle.Win32    -> "Win32"
             }
             assertNotNull(nom)
         }
@@ -106,5 +110,22 @@ class RawHandlesTest {
     @Test
     fun `RawDisplayHandle Android est un singleton`() {
         assertTrue(RawDisplayHandle.Android === RawDisplayHandle.Android)
+    }
+
+    // -------------------------------------------------------------------------
+    // Win32 — tests spécifiques
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `RawWindowHandle Win32 expose hwnd et hinstance`() {
+        val handle = RawWindowHandle.Win32(hwnd = 0xDEADBEEFL, hinstance = 0xCAFEBABEL)
+        assertEquals(0xDEADBEEFL, handle.hwnd)
+        assertEquals(0xCAFEBABEL, handle.hinstance)
+    }
+
+    @Test
+    fun `RawDisplayHandle Win32 expose hinstance`() {
+        val handle = RawDisplayHandle.Win32(hinstance = 0xCAFEBABEL)
+        assertEquals(0xCAFEBABEL, handle.hinstance)
     }
 }
