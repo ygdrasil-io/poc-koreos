@@ -1,10 +1,15 @@
 /**
  * Module koreos-core — interfaces et types Kotlin pur, aucune référence native.
  *
- * Cibles KMP : jvm, androidTarget, iosX64, iosArm64, iosSimulatorArm64.
+ * Cibles KMP : jvm, androidTarget, iosX64, iosArm64, iosSimulatorArm64, js(IR), wasmJs.
  * Ce module ne doit contenir aucun code dépendant d'une plateforme (pas de
  * java.*, platform.*, android.*) afin de rester 100 % commonMain.
+ *
+ * Les cibles web (js, wasmJs) ont été ajoutées dans le ticket #28 pour permettre
+ * à la façade `koreos` d'exposer EventLoop aux cibles navigateur.
  */
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
 plugins {
     id("ygdrasil.conventions.kmp-library")
     id("ygdrasil.conventions.kmp-dokka")
@@ -16,6 +21,11 @@ android {
 }
 
 kotlin {
+    // Cibles web — en plus des cibles iOS/JVM/Android du plugin de convention
+    js(IR) { browser() }
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
+
     // Active les classes expect/actual (Beta) sans avertissement.
     // Nécessaire pour EventLoop (expect class avec actual par plateforme).
     compilerOptions {
@@ -25,6 +35,12 @@ kotlin {
     sourceSets {
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        jsTest.dependencies {
+            implementation(kotlin("test-js"))
+        }
+        wasmJsTest.dependencies {
+            implementation(kotlin("test-wasm-js"))
         }
     }
 }
