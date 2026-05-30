@@ -52,11 +52,12 @@ jobs:
       - name: Start Xvfb
         run: |
           Xvfb :99 -screen 0 800x600x24 > /tmp/xvfb.log 2>&1 &
+          # Vérifie la socket X (pas de dépendance à xdpyinfo / x11-utils).
           for i in $(seq 1 40); do
-            if xdpyinfo -display :99 >/dev/null 2>&1; then break; fi
+            [ -S /tmp/.X11-unix/X99 ] && break
             sleep 0.5
           done
-          if xdpyinfo -display :99 >/dev/null 2>&1; then
+          if [ -S /tmp/.X11-unix/X99 ]; then
             echo "✅ serveur X :99 prêt"
             echo "DISPLAY=:99" >> "$GITHUB_ENV"
           else
