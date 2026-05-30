@@ -240,7 +240,48 @@ jobs:
             --no-daemon \
             --stacktrace
 
-  # ── Job 5 : windows-build ────────────────────────────────────────────────
+  # ── Job 5 : web-build ────────────────────────────────────────────────────
+  #
+  # Compile les modules web (JS/IR + wasmJs).
+  # S'exécute sur Deep-Testing.
+  web-build:
+    name: web-build
+    runs-on: ubuntu-latest
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build web modules (JS + Wasm)
+        run: |
+          ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-js:compileKotlinJs \
+            :koreos-wasm:compileKotlinWasmJs \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 6 : windows-build ────────────────────────────────────────────────
   #
   # Build les modules Win32 (koreos-win32 FFM) et exécute les tests JVM Windows.
   # Valide la compilation Win32-specific et le sample hello-triangle sur Windows.
