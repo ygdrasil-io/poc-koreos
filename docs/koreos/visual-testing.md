@@ -27,7 +27,7 @@ l'encodage PNG diffère par plateforme.
 |------------|---------|------------------|
 | **Web** (JS) | Playwright `page.screenshot()` | ✅ oui (informatif, non bloquant) |
 | **macOS** | **readback GPU** (`hello-triangle --capture`) | ✅ oui — job `macos-visual` (informatif, non bloquant) |
-| iOS sim | readback GPU (même code wgpu, PNG via UIKit) | 🟡 à brancher — simulateur requis |
+| **iOS** | readback GPU (Kotlin/Native, wgpu4k Metal) | ⚠️ implémenté — **simulateur headless sans Metal** |
 | Android emu | readback GPU (PNG via `Bitmap`) | 🟡 à brancher — émulateur requis |
 | Windows | readback GPU (même code wgpu, PNG via ImageIO) | 🟡 à brancher — runner Windows GPU |
 | Linux X11/Wayland | readback GPU (même code wgpu) | 🟡 à brancher |
@@ -88,3 +88,17 @@ git add baselines/*.png           # commiter la nouvelle baseline
 1. Réutiliser `assertScreenshotMatches(actualPng, baselinePath, { tolerance, diffPath })`.
 2. Fournir un provider de capture pour la plateforme (cf. tableau).
 3. Stocker la baseline sous `baselines/<plateforme>/<sample>.png` (git-lfs si > 5 Mo cumulés).
+
+## iOS — readback GPU (`samples/hello-triangle-ios`, best-effort)
+
+Capture **Kotlin/Native** : `captureTriangle()` (iosMain) crée une `CAMetalLayer`
+offscreen, obtient une surface wgpu4k Metal, rend le triangle dans une texture, relit
+le framebuffer (`copyTextureToBuffer` + `mapAsync` + lecture via `CPointer`) et retourne
+les octets RGBA. Exécuté par `iosSimulatorArm64Test` (job CI `ios-visual`, non bloquant).
+
+**Limitation** : le **simulateur iOS headless** (CI et harnais de test K/N) n'expose
+**pas de device Metal** (`MTLCreateSystemDefaultDevice() == null`) — contrairement à
+Linux, il n'existe pas de Metal logiciel. Le test se saute alors proprement. Le rendu
+réel du triangle nécessite un **device iOS physique** (`iosArm64`) ou un simulateur avec
+Metal (Simulator.app GUI). Le job CI garantit néanmoins que le code de capture iOS
+**compile et link**.

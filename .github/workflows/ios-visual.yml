@@ -1,0 +1,46 @@
+name: ios-visual
+
+# Capture GPU offscreen iOS (Redmine #88) — best-effort, NON BLOQUANT.
+# Lance le test Kotlin/Native sur le simulateur iOS. Le simulateur headless n'expose
+# pas de device Metal (MTLCreateSystemDefaultDevice == null) → le test se saute alors
+# proprement. Le rendu réel du triangle nécessite un device iOS (ou un simulateur avec
+# Metal). Le job sert surtout à garantir que le code de capture iOS compile et link.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle-ios/**'
+      - '.github/workflows/ios-visual.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle-ios/**'
+      - '.github/workflows/ios-visual.yml'
+  workflow_dispatch:
+
+jobs:
+  ios-visual:
+    name: ios-visual
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Compile + link + run sur le simulateur. Non bloquant : le test se saute si pas
+      # de Metal (cas du simulateur headless), donc il PASSE ; on garde continue-on-error
+      # par prudence (toolchain/simulateur).
+      - name: Capture GPU iOS (simulateur, best-effort)
+        continue-on-error: true
+        run: |
+          ./gradlew :samples:hello-triangle-ios:iosSimulatorArm64Test --no-daemon --stacktrace
