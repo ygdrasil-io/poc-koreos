@@ -4,15 +4,39 @@
 // activée par #91) via http-server, puis lance **Chrome stable** (canal `chrome`,
 // installé par Playwright sur les runners macOS/Windows) avec WebGPU activé.
 //
-// Pourquoi Chrome stable plutôt que Chromium + SwiftShader ?
-// - WebGPU est encore expérimental sur Linux/SwiftShader (pas forcément exposé,
-//   rendu logiciel pouvant différer de l'impl GPU réelle Metal/D3D12).
-// - Chrome stable sur macOS (Metal) et Windows (D3D12) reflète mieux l'usage
-//   réel des end-users et a WebGPU stable depuis Chrome 113.
-// - Les baselines de diff visuel sont alignées sur du rendu GPU réel.
-const { defineConfig } = require('@playwright/test');
+// ## GPU réel vs SwiftShader — choix par OS
+//
+// Les runners GitHub Actions n'exposent pas tous le même backend graphique :
+// - `macos-latest` : Mac mini physique avec **Metal** (GPU hardware) → WebGPU réel
+// - `windows-latest` : VM Hyper-V **sans GPU passthrough** → SwiftShader requis
+//
+// Sur macOS on cible le GPU réel pour valider la chaîne Metal/wgpu4k bout-en-bout.
+// Sur Windows on bascule sur SwiftShader (rendu CPU) car aucun adapter WebGPU réel
+// n'est disponible — sinon `requestAdapter()` retourne null et le test timeout.
+// Les flags SwiftShader sont safe à ignorer sur macOS (Chrome préfère le GPU réel
+// quand il est dispo), mais on reste explicite pour la lisibilité.
+const { defineConfig, devices } = require('@playwright/test');
 
 const DIST = '../build/dist/js/productionExecutable';
+
+// Détection plateforme — process.platform reflète l'OS du runner CI.
+const isWindows = process.platform === 'win32';
+
+const launchArgs = [
+  // Requis pour exposer un adapter WebGPU en mode headless (policy Chrome).
+  '--enable-unsafe-webgpu',
+];
+
+if (isWindows) {
+  // Fallback SwiftShader (rendu logiciel) — les runners Windows GitHub Actions
+  // n'ont pas de GPU accessible. Sans ces flags, Chrome stable ne trouve aucun
+  // adapter WebGPU exploitable et `requestAdapter()` renvoie null.
+  launchArgs.push(
+    '--enable-unsafe-swiftshader',
+    '--use-angle=swiftshader',
+    '--enable-features=Vulkan,WebGPU',
+  );
+}
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -26,12 +50,7 @@ module.exports = defineConfig({
     // runners macos-latest et windows-latest.
     channel: 'chrome',
     launchOptions: {
-      // Requis pour exposer un adapter WebGPU en mode headless (policy Chrome).
-      // Pas de flag SwiftShader/ANGLE : on utilise le GPU réel du runner
-      // (Metal sur macOS, D3D12 sur Windows).
-      args: [
-        '--enable-unsafe-webgpu',
-      ],
+      args: launchArgs,
     },
   },
   webServer: {
