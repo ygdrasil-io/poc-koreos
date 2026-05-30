@@ -21,6 +21,7 @@
  *  - wl_proxy_destroy
  *  - wl_proxy_add_listener
  *  - wl_proxy_marshal_flags (variante xdg_wm_base_get_xdg_surface)
+ *  - wl_proxy_marshal_flags (variante wl_compositor_create_surface)
  *
  * Référence : https://wayland.freedesktop.org/docs/html/
  */
@@ -329,5 +330,50 @@ internal val wlProxyMarshalFlagsGetXdgSurface: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,  // flags
             ValueLayout.ADDRESS,   // arg: new_id
             ValueLayout.ADDRESS,   // arg: surface
+        ))
+}
+
+// ── wl_compositor_create_surface ──────────────────────────────────────────────
+
+/**
+ * wl_compositor_create_surface: crée une wl_surface depuis un wl_compositor.
+ *
+ * Appelle wl_proxy_marshal_flags(compositor, 0, &wl_surface_interface, version, 0)
+ * où l'opcode 0 correspond à wl_compositor.create_surface dans le protocole Wayland.
+ *
+ * La variante à 5 arguments fixe (sans new_id supplémentaire) correspond
+ * à la forme variadique de wl_proxy_marshal_flags pour un opcode new_id simple :
+ * le proxy retourné est la nouvelle wl_surface*.
+ *
+ * @see XdgShellConstants — opcodes du protocole xdg_shell associés.
+ */
+internal val wlCompositorCreateSurface: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // wl_proxy* (compositor)
+            ValueLayout.JAVA_INT,  // opcode (0 = create_surface)
+            ValueLayout.ADDRESS,   // wl_interface* (NULL = laisser la bibliothèque gérer)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags (0)
+        ))
+}
+
+// ── wl_proxy_marshal_flags (variante wl_surface_commit) ───────────────────────
+
+/**
+ * Variante sans argument supplémentaire de wl_proxy_marshal_flags utilisée pour
+ * wl_surface.commit (opcode 6) et d'autres opcodes sans paramètre de retour.
+ *
+ * Signature : void wl_proxy_marshal_flags(proxy, opcode, NULL, version, 0)
+ * avec NULL comme wl_interface* pour les appels sans new_id.
+ */
+internal val wlProxyMarshalFlagsVoid: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy* (surface / proxy cible)
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags (0)
         ))
 }
