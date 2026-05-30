@@ -58,10 +58,24 @@ jobs:
         working-directory: samples/hello-triangle-web/e2e
         run: npx playwright test
 
-      - name: Upload screenshot artifact
+      # Résumé visuel directement sur la page du run (Redmine #88).
+      - name: Publier le résumé visuel
+        if: always()
+        run: |
+          SUMMARY=samples/hello-triangle-web/e2e/test-results/visual-summary.md
+          if [ -f "$SUMMARY" ]; then
+            cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Captures (smoke + régression visuelle) — visibles via les artefacts du run.
+      - name: Upload captures (screenshots + diff)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hello-triangle-web-screenshot
-          path: samples/hello-triangle-web/e2e/triangle.png
+          name: hello-triangle-web-captures
+          path: |
+            samples/hello-triangle-web/e2e/triangle.png
+            samples/hello-triangle-web/e2e/baselines/hello-triangle-web.png
+            samples/hello-triangle-web/e2e/test-results/hello-triangle-web.actual.png
+            samples/hello-triangle-web/e2e/test-results/hello-triangle-web.diff.png
           if-no-files-found: ignore

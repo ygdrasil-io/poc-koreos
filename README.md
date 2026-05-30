@@ -121,4 +121,4 @@ Le pipeline GitHub Actions (`.github/workflows/ci.yml`) utilise une stratégie �
 - [Post-mortem M2](docs/koreos/postmortem-m2.md) — bilan technique, apprentissages, metriques
 - [Release process](docs/koreos/release-process.md) — publication Maven Central
 - [Roadmap progress](docs/koreos/roadmap-progress.md) — avancement auto-généré (Redmine + git)
-- [Stabilité de l'API](docs/koreos/api-stability.md) · [Performance](docs/koreos/performance.md) · [Tests](docs/koreos/testing.md)
+- [Stabilité de l'API](docs/koreos/api-stability.md) · [Performance](docs/koreos/performance.md) · [Tests](docs/koreos/testing.md) · [Tests visuels](docs/koreos/visual-testing.md)
