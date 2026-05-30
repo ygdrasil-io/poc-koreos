@@ -17,8 +17,7 @@
  *  - XInternAtom       — obtient un atome par nom
  *  - XSetWMProtocols   — définit les protocoles WM (ex. WM_DELETE_WINDOW)
  *  - XMapWindow        — rend une fenêtre visible
- *  - XkbSetDetectableAutoRepeat — désactive la répétition automatique X11 (KeyPress factice)
- *  - XResourceManagerString — retourne la base de données de ressources X (Xft.dpi, etc.)
+ *  - XSendEvent        — envoie un événement synthétique (wakeUp ClientMessage)
  *
  * Référence : https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
  */
@@ -302,46 +301,33 @@ internal val xMapWindow: MethodHandle? by lazy {
     )
 }
 
-// ── XkbSetDetectableAutoRepeat ────────────────────────────────────────────────
+// ── XSendEvent ────────────────────────────────────────────────────────────────
 
 /**
- * Bool XkbSetDetectableAutoRepeat(Display *display, Bool detectable, Bool *supported_rtrn);
+ * Status XSendEvent(
+ *     Display *display,
+ *     Window w,
+ *     Bool propagate,
+ *     long event_mask,
+ *     XEvent *event_send
+ * );
  *
- * Active le mode "detectable auto-repeat" : en mode normal, X11 génère une paire
- * KeyRelease/KeyPress pour chaque répétition automatique. Avec cette fonction,
- * seul un KeyPress est généré (sans KeyRelease intermédiaire) pour les répétitions.
- * Cela permet à l'application de distinguer les vraies répétitions des vraies
- * frappes et relâchements de touches.
+ * Envoie un événement synthétique à une fenêtre.
+ * Utilisé par X11EventLoopProxy.wakeUp() pour débloquer XNextEvent via
+ * un ClientMessage envoyé à la fenêtre principale.
  *
- * supported_rtrn peut être NULL si l'on ne souhaite pas tester le support.
+ * Retourne Status (int) : 0 en cas d'échec, non-nul en cas de succès.
  */
-internal val xkbSetDetectableAutoRepeat: MethodHandle? by lazy {
+internal val xSendEvent: MethodHandle? by lazy {
     libX11.downcall(
-        "XkbSetDetectableAutoRepeat",
+        "XSendEvent",
         FunctionDescriptor.of(
-            ValueLayout.JAVA_INT,   // Bool retour
+            ValueLayout.JAVA_INT,   // Status (int)
             ValueLayout.ADDRESS,    // Display*
-            ValueLayout.JAVA_INT,   // Bool detectable
-            ValueLayout.ADDRESS,    // Bool* supported_rtrn (peut être NULL)
-        )
-    )
-}
-
-// ── XResourceManagerString ────────────────────────────────────────────────────
-
-/**
- * char *XResourceManagerString(Display *display);
- *
- * Retourne la chaîne de la base de données de ressources X11 (RESOURCE_MANAGER).
- * Utilisée pour lire les préférences DPI (Xft.dpi), la police, etc.
- * La chaîne est valide tant que le Display est ouvert — ne pas la libérer.
- */
-internal val xResourceManagerString: MethodHandle? by lazy {
-    libX11.downcall(
-        "XResourceManagerString",
-        FunctionDescriptor.of(
-            ValueLayout.ADDRESS,    // char* retour (pointeur interne, ne pas libérer)
-            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window w (XID)
+            ValueLayout.JAVA_INT,   // Bool propagate
+            ValueLayout.JAVA_LONG,  // long event_mask
+            ValueLayout.ADDRESS,    // XEvent* event_send
         )
     )
 }
