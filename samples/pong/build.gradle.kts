@@ -31,5 +31,10 @@ kotlin {
                 api(project(":koreos"))
             }
         }
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
