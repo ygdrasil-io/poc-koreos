@@ -43,4 +43,16 @@ interface WebDomBridge {
      * Peut être null si aucun écouteur n'est enregistré.
      */
     var onWindowEvent: ((WebWindowEvent) -> Unit)?
+
+    /**
+     * Garantit qu'un canvas DOM correspondant à [attrs] est présent et l'ajoute
+     * au DOM si nécessaire (mode `appendToBody`).
+     *
+     * Implémentation par défaut : no-op (retourne l'id sans toucher au DOM).
+     * Les implémentations concrètes ([JsWebDomBridge], [WasmJsWebDomBridge])
+     * surchargent pour créer un `<canvas>` réel quand demandé.
+     *
+     * @return l'identifiant CSS final du canvas (à passer ensuite à [attach]).
+     */
+    fun ensureCanvas(attrs: WebWindowAttributes): String = attrs.effectiveCanvasId
 }

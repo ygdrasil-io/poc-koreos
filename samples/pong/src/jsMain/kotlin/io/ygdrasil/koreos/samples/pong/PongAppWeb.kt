@@ -19,13 +19,14 @@ package io.ygdrasil.koreos.samples.pong
 
 import io.ygdrasil.koreos.ActiveEventLoop
 import io.ygdrasil.koreos.ApplicationHandler
-import io.ygdrasil.koreos.WindowAttributes
 import io.ygdrasil.koreos.WindowId
 import io.ygdrasil.koreos.core.ControlFlow
 import io.ygdrasil.koreos.core.RawWindowHandle
 import io.ygdrasil.koreos.core.Window
+import io.ygdrasil.koreos.web.WebEventLoop
 import io.ygdrasil.koreos.web.WebKey
 import io.ygdrasil.koreos.web.WebKeyState
+import io.ygdrasil.koreos.web.WebWindowAttributes
 import io.ygdrasil.koreos.web.WebWindowEvent
 import kotlin.js.unsafeCast
 import kotlin.math.min
@@ -40,12 +41,18 @@ class PongAppWeb : ApplicationHandler {
     private var lastFrameMs: Long = 0L
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
-        // Le backend Web utilise actuellement `title` comme `canvasElementId`.
-        // On force "koreos-canvas" pour matcher l'index.html du sample.
-        val win = eventLoop.createWindow(
-            WindowAttributes(
-                title = "koreos-canvas",
-                resizable = true,
+        // Pattern winit (WindowAttributesExtWebSys) : on cible explicitement le
+        // canvas du sample par son id CSS, sans détourner `WindowAttributes.title`.
+        // Si le canvas n'existe pas dans le DOM (cas d'une page sans <canvas>
+        // pré-déclaré), `appendToBody = true` demande à Koreos de le créer.
+        val webLoop = eventLoop as? WebEventLoop
+            ?: error("[pong-web] PongAppWeb requires a WebEventLoop")
+        val win = webLoop.createWindow(
+            WebWindowAttributes(
+                canvasId = "koreos-canvas",
+                appendToBody = true,
+                width = 800,
+                height = 600,
             )
         )
         window = win
