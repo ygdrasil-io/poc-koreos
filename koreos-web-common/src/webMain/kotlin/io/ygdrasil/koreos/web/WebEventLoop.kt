@@ -122,14 +122,19 @@ open class WebEventLoop : ActiveEventLoop {
     /**
      * Démarre la boucle d'événements et notifie le gestionnaire.
      *
-     * Appelle [ApplicationHandler.resumed], puis [ApplicationHandler.newEvents]
-     * avec [StartCause.Init], puis [ApplicationHandler.aboutToWait], et enfin
-     * planifie la première frame via [scheduleNextFrame].
+     * Appelle [ApplicationHandler.resumed], puis [ApplicationHandler.canCreateSurfaces]
+     * (le navigateur autorise la création de surfaces dès le démarrage), puis
+     * [ApplicationHandler.newEvents] avec [StartCause.Init], puis
+     * [ApplicationHandler.aboutToWait], et enfin planifie la première frame via
+     * [scheduleNextFrame].
      *
      * @param handler Gestionnaire du cycle de vie de l'application.
      */
     open fun runApp(handler: ApplicationHandler) {
         handler.resumed(this)
+        // Sur le web, le canvas est disponible immédiatement : on autorise tout de
+        // suite la création de surfaces (parité avec les boucles desktop AppKit/Win32).
+        handler.canCreateSurfaces(this)
         handler.newEvents(this, StartCause.Init)
         handler.aboutToWait(this)
         if (!_isExiting) {
