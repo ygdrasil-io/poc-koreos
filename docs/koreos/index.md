@@ -19,6 +19,7 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 - [Plan projet](./plan.md) — vision, jalons, risques, timeline
 - [Sprint Review v0.1](./sprint-review-v0.1.md) — métriques, livrables, écarts, rétro v0.1.0
 - [Spécifications techniques](./specs.md) — architecture, API, diagrammes
+- [Roadmap progress](./roadmap-progress.md) — avancement auto-généré (Redmine + git, Redmine #87)
 
 ## Jalons
 
