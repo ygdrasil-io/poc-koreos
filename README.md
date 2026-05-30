@@ -109,6 +109,12 @@ Le pipeline GitHub Actions (`.github/workflows/ci.yml`) utilise une stratégie �
 
 ## Documentation
 
+### Tutoriels
+
+- [Intégrer Koreos dans une application Windows](docs/koreos/tutorials/windows-app.md) — fenêtre Win32, DPI PerMonitorV2, événements souris/clavier, packaging
+
+### Références
+
 - [Specs](docs/koreos/specs.md) — contrats d'interface
 - [Plan de développement](docs/koreos/plan.md) — jalons M1→M3
 - [Post-mortem M2](docs/koreos/postmortem-m2.md) — bilan technique, apprentissages, metriques

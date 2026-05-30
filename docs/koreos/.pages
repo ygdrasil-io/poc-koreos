@@ -1,6 +1,7 @@
 title: Koreos
 nav:
   - index.md
+  - tutorials
   - plan.md
   - sprint-review-v0.1.md
   - postmortem-m2.md

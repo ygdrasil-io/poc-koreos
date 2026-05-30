@@ -4,6 +4,10 @@ POC de fenêtrage cross-platform en **Kotlin pur**, inspiré de [winit](https://
 
 Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface`) consommables par un renderer 3D (Metal, Vulkan, [wgpu4k](https://github.com/wgpu4k/wgpu4k)) **sans dépendance AWT/Swing**.
 
+## Tutoriels
+
+- [Intégrer Koreos dans une application Windows](./tutorials/windows-app.md) — fenêtre Win32, événements, DPI PerMonitorV2
+
 ## Documents
 
 - [Plan projet](./plan.md) — vision, jalons, risques, timeline
