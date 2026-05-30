@@ -1,0 +1,89 @@
+name: pong-e2e
+
+# Test E2E scénarisé Pong (Web) — entrées clavier scriptées + assertions
+# multi-frame + vidéo. Suivi du smoke `web-e2e` (Redmine #22) sur hello-triangle ;
+# ici on prouve qu'une démo interactive complète tourne bout-en-bout :
+#   1. Boot wgpu4k Web
+#   2. Animation continue (balle + IA en mouvement sans input)
+#   3. Inputs clavier scriptés (ArrowDown / ArrowUp) qui remontent au handler
+#   4. Effet visible des inputs (raquette droite déplacée)
+#
+# La vidéo .webm + la trace Playwright sont systématiquement archivées en
+# artefact — utilisable pour la com, le debugging, et la review visuelle des PR.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/pong/**'
+      - 'koreos-js/**'
+      - 'koreos-web-common/**'
+      - 'koreos-core/**'
+      - '.github/workflows/pong-e2e.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/pong/**'
+      - 'koreos-js/**'
+      - 'koreos-web-common/**'
+      - 'koreos-core/**'
+      - '.github/workflows/pong-e2e.yml'
+  workflow_dispatch:
+
+jobs:
+  pong-e2e:
+    name: pong-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build samples/pong (production JS bundle)
+        run: ./gradlew :samples:pong:jsBrowserDistribution --no-daemon --stacktrace
+
+      - name: Install E2E deps + Chromium
+        working-directory: samples/pong/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright scenario
+        working-directory: samples/pong/e2e
+        run: npx playwright test
+
+      # Résumé du scénario dans le Job Summary (visible directement sur la page du run).
+      - name: Publier le résumé du scénario
+        if: always()
+        run: |
+          SUMMARY=samples/pong/e2e/test-results/scenario-summary.md
+          if [ -f "$SUMMARY" ]; then
+            cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Vidéo, trace, frames-clés — tous récupérables depuis l'onglet artefacts du run.
+      - name: Upload artefacts (vidéo, trace, frames)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pong-e2e-${{ github.run_number }}
+          path: |
+            samples/pong/e2e/test-results/**/*.webm
+            samples/pong/e2e/test-results/**/trace.zip
+            samples/pong/e2e/test-results/frame*.png
+            samples/pong/e2e/test-results/scenario-summary.md
+          if-no-files-found: warn

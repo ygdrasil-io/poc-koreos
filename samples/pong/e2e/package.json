@@ -1,0 +1,15 @@
+{
+  "name": "pong-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test E2E scénarisé Playwright pour samples/pong (Web) — entrées scriptées + vidéo + assertions multi-frame",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "http-server": "^14.1.1",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0"
+  }
+}
