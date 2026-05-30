@@ -4,10 +4,13 @@
   "private": true,
   "description": "Test E2E smoke Playwright pour samples/hello-triangle-web (Redmine #22)",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "update-baselines": "rm -f baselines/*.png && playwright test tests/visual.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0"
   }
 }

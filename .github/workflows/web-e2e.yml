@@ -65,3 +65,12 @@ jobs:
           name: hello-triangle-web-screenshot
           path: samples/hello-triangle-web/e2e/triangle.png
           if-no-files-found: ignore
+
+      # Diff de régression visuelle (Redmine #88) — informatif, archivé pour revue.
+      - name: Upload visual diff artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-triangle-web-visual-diff
+          path: samples/hello-triangle-web/e2e/test-results/hello-triangle-web.diff.png
+          if-no-files-found: ignore
