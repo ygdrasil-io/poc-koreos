@@ -110,6 +110,24 @@ internal val xCloseDisplay: MethodHandle? by lazy {
  *
  * Crée une fenêtre enfant simple. Window est un XID = unsigned long (64 bits).
  */
+/**
+ * Window XRootWindow(Display *display, int screen_number);
+ *
+ * Retourne l'XID de la fenêtre racine de l'écran (équivalent macro DefaultRootWindow).
+ * Indispensable comme parent de XCreateSimpleWindow : une valeur conventionnelle erronée
+ * provoque `BadWindow`.
+ */
+internal val xRootWindow: MethodHandle? by lazy {
+    libX11.downcall(
+        "XRootWindow",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // Window (XID)
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_INT,   // int screen_number
+        )
+    )
+}
+
 internal val xCreateSimpleWindow: MethodHandle? by lazy {
     libX11.downcall(
         "XCreateSimpleWindow",
