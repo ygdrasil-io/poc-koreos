@@ -102,6 +102,31 @@ private external fun disconnectResizeObserver(ro: JsAny)
 @JsFun("(fn) => fn")
 private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
 
+/**
+ * Crée un canvas (id + dimensions) et l'append au parent (parentId ou body).
+ * Si un canvas portant cet id existe déjà, le retourne tel quel sans recréer.
+ * Retourne `true` si le canvas existe désormais dans le DOM (créé ou préexistant).
+ */
+@JsFun("""(id, width, height, parentId) => {
+    let canvas = document.getElementById(id);
+    if (canvas) return true;
+    canvas = document.createElement('canvas');
+    canvas.id = id;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.tabIndex = 0;
+    const parent = parentId ? document.getElementById(parentId) : document.body;
+    if (!parent) return false;
+    parent.appendChild(canvas);
+    return true;
+}""")
+private external fun ensureCanvasInDom(
+    id: JsString,
+    width: Int,
+    height: Int,
+    parentId: JsString?,
+): JsBoolean
+
 // ---------------------------------------------------------------------------
 // Implémentation
 // ---------------------------------------------------------------------------
@@ -115,6 +140,28 @@ private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
 class WasmJsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
+
+    override fun ensureCanvas(attrs: WebWindowAttributes): String {
+        val id = attrs.effectiveCanvasId
+        val existing = getElementById(id.toJsString())
+        if (existing != null) return id
+        if (!attrs.appendToBody) {
+            println("[WasmJsWebDomBridge] Canvas '$id' introuvable (appendToBody=false → pas de création)")
+            return id
+        }
+        val ok = ensureCanvasInDom(
+            id.toJsString(),
+            attrs.width,
+            attrs.height,
+            attrs.parentElementId?.toJsString(),
+        ).toBoolean()
+        if (!ok) {
+            println("[WasmJsWebDomBridge] Aucun parent disponible (parentElementId='${attrs.parentElementId}', body absent)")
+        } else {
+            println("[WasmJsWebDomBridge] Canvas '$id' (${attrs.width}×${attrs.height}) créé et ajouté")
+        }
+        return id
+    }
 
     private var targetElement: JsEventTarget? = null
     private val listenerRefs = mutableListOf<Triple<JsEventTarget, String, JsAny>>()

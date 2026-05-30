@@ -20,10 +20,26 @@ android {
 }
 
 kotlin {
-    // Cibles web — en plus des cibles iOS/JVM/Android du plugin de convention
-    js(IR) { browser() }
+    // Cibles web — en plus des cibles iOS/JVM/Android du plugin de convention.
+    // binaries.executable() : génère un bundle exécutable (webpack) pour servir
+    // le sample en navigateur via jsBrowserDevelopmentRun / wasmJsBrowserDevelopmentRun.
+    js(IR) {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "pong-web.js"
+            }
+        }
+        binaries.executable()
+    }
     @OptIn(ExperimentalWasmDsl::class)
-    wasmJs { browser() }
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "pong-wasm.js"
+            }
+        }
+        binaries.executable()
+    }
 
     sourceSets {
         commonMain {
@@ -44,6 +60,23 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 // koreos-appkit — ObjCRuntime (macOS CAMetalLayer)
                 implementation(project(":koreos-appkit"))
+            }
+        }
+        jsMain {
+            dependencies {
+                // wgpu4k Web (CanvasSurface, requestAdapter suspend) + facade koreos JS
+                implementation(libs.wgpu4k)
+                implementation(libs.webgpu.ktypes.descriptors)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":koreos-js"))
+            }
+        }
+        wasmJsMain {
+            dependencies {
+                implementation(libs.wgpu4k)
+                implementation(libs.webgpu.ktypes.descriptors)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":koreos-wasm"))
             }
         }
     }

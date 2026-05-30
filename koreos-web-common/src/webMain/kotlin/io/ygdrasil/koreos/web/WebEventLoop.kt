@@ -82,18 +82,41 @@ open class WebEventLoop : ActiveEventLoop {
     }
 
     /**
-     * Crée une fenêtre web et l'attache au DOM via [JsWebDomBridge] ou [WasmJsWebDomBridge].
+     * Crée une fenêtre web depuis le contrat core [WindowAttributes].
      *
-     * Le pont DOM est instancié par [createDomBridge] (override dans les sous-classes
-     * concrètes pour injecter l'implémentation JS ou wasmJs appropriée).
-     *
-     * @param attributes Paramètres de configuration de la fenêtre.
-     * @return La [WebWindow] créée et attachée.
+     * **Legacy** : utilise `attributes.title` comme `id` CSS du canvas (convention
+     * non-idiomatique, conservée pour rétro-compatibilité). Préférer la surcharge
+     * `createWindow(WebWindowAttributes)` qui expose explicitement l'id canvas
+     * et le mode de création auto (équivalent du trait `WindowAttributesExtWebSys`
+     * de winit).
      */
     override fun createWindow(attributes: WindowAttributes): Window {
+        return createWindow(
+            WebWindowAttributes(
+                canvasId = attributes.title.ifEmpty { null },
+                core = attributes,
+            )
+        )
+    }
+
+    /**
+     * Crée une fenêtre web depuis l'extension web-only [WebWindowAttributes].
+     *
+     * Inspiré du trait `WindowAttributesExtWebSys` de winit :
+     *
+     *  - Cible un `<canvas>` DOM existant via [WebWindowAttributes.canvasId], OU
+     *  - Laisse Koreos créer un `<canvas>` ([WebWindowAttributes.appendToBody] = true).
+     *
+     * Le pont DOM est instancié par [createDomBridge] puis :
+     *  1. [WebDomBridge.ensureCanvas] résout (ou crée) le canvas.
+     *  2. [WebDomBridge.attach] branche les listeners DOM (keydown, pointer, resize…).
+     *
+     * @param attrs Configuration Web-specific de la fenêtre.
+     * @return La [WebWindow] créée et attachée.
+     */
+    fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
         bridge.onWindowEvent = { event ->
-            val win = windows.firstOrNull { it.rawWindowHandle.let { true } }
             // On enfile l'événement pour dispatch lors de la prochaine frame
             pendingEvents.add(Pair(windows.firstOrNull()?.id ?: WindowId(0L), event))
             // En mode Wait, on réveille la boucle immédiatement
@@ -101,8 +124,10 @@ open class WebEventLoop : ActiveEventLoop {
                 scheduleWakeUp()
             }
         }
-        val window = WebWindow(attributes, bridge)
+        val canvasId = bridge.ensureCanvas(attrs)
+        val window = WebWindow(canvasId, bridge)
         windows.add(window)
+        bridge.attach(canvasId)
         return window
     }
 

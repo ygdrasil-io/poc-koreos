@@ -33,6 +33,31 @@ class JsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
 
+    override fun ensureCanvas(attrs: WebWindowAttributes): String {
+        val id = attrs.effectiveCanvasId
+        val existing = document.getElementById(id)
+        if (existing != null) return id
+        if (!attrs.appendToBody) {
+            println("[JsWebDomBridge] Canvas '$id' introuvable (appendToBody=false → pas de création)")
+            return id
+        }
+        val canvas = document.createElement("canvas").asDynamic()
+        canvas.id = id
+        canvas.width = attrs.width
+        canvas.height = attrs.height
+        // tabIndex pour rendre le canvas focusable (sans cela, keydown/keyup ne remontent pas).
+        canvas.tabIndex = 0
+        val parent = attrs.parentElementId?.let { document.getElementById(it) }
+            ?: document.body
+        if (parent == null) {
+            println("[JsWebDomBridge] Aucun parent disponible (parentElementId='${attrs.parentElementId}', body absent)")
+            return id
+        }
+        parent.appendChild(canvas)
+        println("[JsWebDomBridge] Canvas '$id' (${attrs.width}×${attrs.height}) créé et ajouté")
+        return id
+    }
+
     private var targetElement: Element? = null
     private val canvasListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private val documentListeners = mutableListOf<Pair<String, (Event) -> Unit>>()

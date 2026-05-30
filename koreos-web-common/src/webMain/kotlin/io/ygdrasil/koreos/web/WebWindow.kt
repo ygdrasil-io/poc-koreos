@@ -40,17 +40,32 @@ import io.ygdrasil.koreos.core.WindowId
  * au sens fenêtre native).
  */
 class WebWindow(
-    attrs: WindowAttributes,
+    /**
+     * Identifiant CSS de l'élément canvas cible.
+     *
+     * Doit correspondre à un `<canvas>` déjà présent dans le DOM. Utiliser
+     * [WebDomBridge.ensureCanvas] (ou [WebEventLoop.createWindow] avec un
+     * [WebWindowAttributes]) pour la création auto.
+     */
+    private val canvasElementId: String,
     private val bridge: WebDomBridge,
 ) : Window {
 
     /**
-     * Identifiant CSS de l'élément canvas cible.
+     * Construit une fenêtre Web depuis le contrat core [WindowAttributes].
      *
-     * Dérivé du titre fourni dans [attrs]. Si le titre est vide,
-     * `"koreos-canvas"` est utilisé comme valeur par défaut.
+     * **Legacy** : utilise `attrs.title` comme `id` CSS du canvas, ou
+     * `"koreos-canvas"` à défaut — convention non-idiomatique (le titre n'a
+     * sémantiquement rien à voir avec un `id` DOM). Préférer
+     * `WebEventLoop.createWindow(WebWindowAttributes)`.
      */
-    private val canvasElementId: String = attrs.title.ifEmpty { "koreos-canvas" }
+    @Deprecated(
+        "Convention title-as-canvasId. Utiliser WebEventLoop.createWindow(WebWindowAttributes) " +
+                "pour cibler explicitement un canvas DOM par son id.",
+    )
+    constructor(attrs: WindowAttributes, bridge: WebDomBridge)
+            : this(attrs.title.ifEmpty { WebWindowAttributes.DEFAULT_CANVAS_ID }, bridge)
+
 
     /**
      * Identifiant unique de cette fenêtre web.
