@@ -43,11 +43,12 @@ jobs:
         with:
           node-version: 'lts/*'
 
+      # La tâche `run` s'exécute dans le dossier du sample → le PNG (chemin relatif)
+      # est écrit sous samples/hello-triangle/build/visual/.
       - name: Capture GPU offscreen (hello-triangle)
         id: capture
         continue-on-error: true
         run: |
-          mkdir -p build/visual
           ./gradlew :samples:hello-triangle:run \
             --args="--capture build/visual/hello-triangle.actual.png" \
             --no-daemon --stacktrace
@@ -56,14 +57,16 @@ jobs:
         if: always()
         run: |
           cd tests/visual && npm install && cd -
+          DIR=samples/hello-triangle/build/visual
           node tests/visual/diff-cli.js \
-            build/visual/hello-triangle.actual.png \
+            "$DIR/hello-triangle.actual.png" \
             tests/visual/baselines/windows/hello-triangle.png \
-            build/visual/hello-triangle.diff.png \
+            "$DIR/hello-triangle.diff.png" \
             0.02 \
-            build/visual/summary.md || true
-          if [ -f build/visual/summary.md ]; then
-            cat build/visual/summary.md >> "$GITHUB_STEP_SUMMARY"
+            "$DIR/summary.md" \
+            Windows || true
+          if [ -f "$DIR/summary.md" ]; then
+            cat "$DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload captures
@@ -72,7 +75,7 @@ jobs:
         with:
           name: hello-triangle-windows-visual
           path: |
-            build/visual/hello-triangle.actual.png
-            build/visual/hello-triangle.diff.png
+            samples/hello-triangle/build/visual/hello-triangle.actual.png
+            samples/hello-triangle/build/visual/hello-triangle.diff.png
             tests/visual/baselines/windows/hello-triangle.png
           if-no-files-found: ignore
