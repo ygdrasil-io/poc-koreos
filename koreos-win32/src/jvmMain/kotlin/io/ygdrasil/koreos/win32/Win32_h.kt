@@ -387,6 +387,29 @@ internal val setProcessDpiAwarenessContext: MethodHandle? by lazy {
 /** DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 — valeur pseudo-handle Win32. */
 internal const val DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: Long = -4L
 
+/**
+ * Active le mode Per-Monitor-V2 DPI awareness pour le processus.
+ *
+ * À appeler une seule fois au démarrage de l'EventLoop, avant toute création
+ * de fenêtre. Idempotent en pratique : si la conscience DPI est déjà fixée
+ * (par le manifest ou un appel précédent), Windows retourne FALSE et positionne
+ * `ERROR_ACCESS_DENIED` — on l'ignore silencieusement.
+ *
+ * Sans effet (no-op) si le binding n'est pas disponible (Windows < 10 RS1) ou
+ * sur une plateforme non-Windows où le lookup échoue.
+ *
+ * @return `true` si l'appel a réussi, `false` sinon (déjà fixé, indisponible…).
+ */
+internal fun enablePerMonitorV2DpiAwareness(): Boolean {
+    val handle = setProcessDpiAwarenessContext ?: return false
+    return try {
+        val context = MemorySegment.ofAddress(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+        (handle.invokeExact(context) as Int) != 0
+    } catch (_: Throwable) {
+        false
+    }
+}
+
 // ── GetDpiForWindow ───────────────────────────────────────────────────────────
 
 /**
