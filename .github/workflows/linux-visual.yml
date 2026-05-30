@@ -82,23 +82,27 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Diagnostic : capacités WSI du Vulkan logiciel (lavapipe) sur ce runner.
+      # Diagnostic : où est l'ICD lavapipe + le Vulkan logiciel est-il chargé ?
       - name: Vulkan/WSI diagnostic
         continue-on-error: true
-        env:
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
         run: |
-          echo "----- vulkaninfo --summary -----"
-          vulkaninfo --summary 2>&1 | grep -iE "deviceName|driverName|apiVersion|GPU id" | head
+          echo "----- ICDs installés -----"
+          ls -la /usr/share/vulkan/icd.d/ 2>&1 || true
+          echo "----- fichiers de mesa-vulkan-drivers -----"
+          dpkg -L mesa-vulkan-drivers 2>/dev/null | grep -iE 'icd|json|lvp' || true
+          echo "----- vulkaninfo --summary (auto-découverte ICD) -----"
+          vulkaninfo --summary 2>&1 | head -40 || true
           echo "----- extensions surface/wayland -----"
-          vulkaninfo 2>&1 | grep -iE "VK_KHR_surface|VK_KHR_wayland_surface|VK_KHR_xcb_surface|VK_KHR_swapchain" | sort -u | head
+          vulkaninfo 2>&1 | grep -iE "VK_KHR_(surface|wayland_surface|xcb_surface|swapchain)" | sort -u || true
 
       - name: Capture GPU offscreen (hello-triangle)
         id: capture
         continue-on-error: true
         env:
-          # Force Vulkan logiciel (lavapipe) — pas de GPU sur les runners.
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          # Laisser le loader Vulkan auto-découvrir les ICD installés (lavapipe inclus),
+          # plutôt que forcer un chemin qui peut être faux. Fallback GL en logiciel.
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
         run: |
           # Ne lance la capture que si un compositor Wayland est disponible
           # (évite un abort natif de la pile Wayland sans display).
