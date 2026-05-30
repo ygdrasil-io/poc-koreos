@@ -10,6 +10,10 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 - [Intégrer Koreos dans une application Linux](./tutorials/linux-app.md) — X11 et Wayland, auto-détection backend, DPI, CI headless
 - [Intégrer Koreos dans une page web](./tutorials/web-embed.md) — canvas HTML, Kotlin/JS + Kotlin/Wasm, boucle RAF
 
+## Blog
+
+- [Koreos v0.2.0 — 6 plateformes, Pong cross-platform, Demo en direct](./blog/v0.2.0-release.md) — récap des 5 sprints : Win32, Web (JS+Wasm), Linux (X11+Wayland), Pong
+
 ## Documents
 
 - [Plan projet](./plan.md) — vision, jalons, risques, timeline
