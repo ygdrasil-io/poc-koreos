@@ -1,0 +1,110 @@
+name: linux-visual
+
+# Régression visuelle Linux via readback GPU (Redmine #88).
+# La capture réutilise l'EventLoop koreos pour obtenir une fenêtre Wayland, d'où la
+# surface wgpu, puis rend offscreen + readback. NON BLOQUANT.
+#
+# Headless : compositor Wayland Weston (backend headless) + Vulkan logiciel (Mesa
+# lavapipe), les runners n'ayant pas de GPU.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/linux-visual.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/linux-visual.yml'
+  workflow_dispatch:
+
+jobs:
+  linux-visual:
+    name: linux-visual
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Wayland compositor + software Vulkan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            weston \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            mesa-vulkan-drivers vulkan-tools
+
+      - name: Start headless Weston
+        run: |
+          export XDG_RUNTIME_DIR=/tmp/wl-runtime
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          # weston >=13 : --backend=headless ; fallback ancien nom de module.
+          ( weston --backend=headless --width=800 --height=600 --socket=wayland-ci \
+              || weston --backend=headless-backend.so --width=800 --height=600 --socket=wayland-ci ) \
+              > /tmp/weston.log 2>&1 &
+          for i in $(seq 1 40); do
+            [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break
+            sleep 0.5
+          done
+          if [ ! -S "$XDG_RUNTIME_DIR/wayland-ci" ]; then
+            echo "::warning::socket Wayland absent — Weston n'a pas démarré"; cat /tmp/weston.log || true
+          fi
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          echo "WAYLAND_DISPLAY=wayland-ci" >> "$GITHUB_ENV"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Capture GPU offscreen (hello-triangle)
+        id: capture
+        continue-on-error: true
+        env:
+          # Force Vulkan logiciel (lavapipe) — pas de GPU sur les runners.
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          ./gradlew :samples:hello-triangle:run \
+            --args="--capture build/visual/hello-triangle.actual.png" \
+            --no-daemon --stacktrace
+
+      - name: Diff visuel vs baseline (non bloquant)
+        if: always()
+        run: |
+          cd tests/visual && npm install && cd -
+          DIR=samples/hello-triangle/build/visual
+          node tests/visual/diff-cli.js \
+            "$DIR/hello-triangle.actual.png" \
+            tests/visual/baselines/linux/hello-triangle.png \
+            "$DIR/hello-triangle.diff.png" \
+            0.02 \
+            "$DIR/summary.md" \
+            Linux || true
+          if [ -f "$DIR/summary.md" ]; then
+            cat "$DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-triangle-linux-visual
+          path: |
+            samples/hello-triangle/build/visual/hello-triangle.actual.png
+            samples/hello-triangle/build/visual/hello-triangle.diff.png
+            tests/visual/baselines/linux/hello-triangle.png
+          if-no-files-found: ignore

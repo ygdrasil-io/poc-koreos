@@ -95,9 +95,10 @@ fun captureFrame(path: String) {
     ffi.LibraryLoader.load()
     val os = System.getProperty("os.name", "").lowercase()
     when {
-        os.contains("mac") -> captureMacOs(path)
-        os.contains("win") -> captureWindows(path)
-        else -> error("Mode capture non supporté sur cet OS : '$os' (macOS et Windows uniquement).")
+        os.contains("mac")   -> captureMacOs(path)
+        os.contains("win")   -> captureWindows(path)
+        os.contains("nux")   -> captureLinux(path)
+        else -> error("Mode capture non supporté sur cet OS : '$os' (macOS, Windows, Linux).")
     }
 }
 
