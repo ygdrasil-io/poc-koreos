@@ -36,5 +36,15 @@ kotlin {
                 implementation(kotlin("test"))
             }
         }
+        jvmMain {
+            dependencies {
+                // wgpu4k — rendu WebGPU JVM (PongRenderer)
+                implementation(libs.wgpu4k)
+                implementation(libs.webgpu.ktypes.descriptors)
+                implementation(libs.kotlinx.coroutines.core)
+                // koreos-appkit — ObjCRuntime (macOS CAMetalLayer)
+                implementation(project(":koreos-appkit"))
+            }
+        }
     }
 }
