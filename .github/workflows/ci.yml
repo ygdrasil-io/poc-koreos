@@ -337,7 +337,45 @@ jobs:
             --no-daemon \
             --stacktrace
 
-  # ── Job 7 : linux-wayland-build ─────────────────────────────────────────
+  # ── Job 7 : web-build ────────────────────────────────────────────────────
+  #
+  # Compile le sample hello-window-web pour les cibles JS/IR et wasmJs.
+  # Valide que les modules koreos-js et koreos-wasm compilent correctement.
+  #
+  # S'exécute sur toutes les branches pour un feedback rapide.
+  web-build:
+    name: web-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Compile les cibles JS/IR et wasmJs du sample hello-window-web.
+      - name: Build hello-window-web (JS + Wasm)
+        run: |
+          ./gradlew \
+            :samples:hello-window-web:compileKotlinJs \
+            :samples:hello-window-web:compileKotlinWasmJs \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 8 : linux-wayland-build ─────────────────────────────────────────
   #
   # Build le module koreos-wayland et exécute les tests JVM Wayland.
   # Utilise ubuntu-latest avec les paquets Wayland dev.
@@ -386,3 +424,52 @@ jobs:
             :koreos-wayland:build \
             --no-daemon \
             --stacktrace
+
+  # ── Job 9 : web-deploy ───────────────────────────────────────────────────
+  #
+  # Déploie le sample hello-window-web sur GitHub Pages.
+  # Publie le bundle JS/IR compilé dans le dossier samples/hello-window-web
+  # de la branche gh-pages.
+  #
+  # S'exécute uniquement sur push vers master (pas sur PR ni sur les autres branches).
+  # Dépend de build-and-test et web-build pour garantir que la compilation a réussi.
+  web-deploy:
+    name: web-deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [build-and-test, web-build]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Produit le bundle JS/IR optimisé pour la production.
+      - name: Build web sample (hello-window-web)
+        run: |
+          ./gradlew \
+            :samples:hello-window-web:jsBrowserDistribution \
+            --no-daemon \
+            --stacktrace
+
+      # Déploie le dossier dist JS/IR vers GitHub Pages (sous-dossier samples/hello-window-web).
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: samples/hello-window-web/build/dist/js/productionExecutable
+          destination_dir: samples/hello-window-web

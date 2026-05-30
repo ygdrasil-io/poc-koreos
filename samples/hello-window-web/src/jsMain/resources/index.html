@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koreos — Hello Window Web</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: monospace;
+            color: #a0c4ff;
+        }
+        h1 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            letter-spacing: 0.1em;
+        }
+        canvas {
+            border: 2px solid #4a90d9;
+            background: #16213e;
+        }
+        #log {
+            margin-top: 1rem;
+            width: 800px;
+            height: 120px;
+            overflow-y: auto;
+            background: #0f0f1a;
+            border: 1px solid #4a90d9;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            color: #7ecfff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Koreos — Hello Window Web (JS/IR)</h1>
+    <canvas id="koreos-canvas" width="800" height="600"></canvas>
+    <div id="log"></div>
+    <script>
+        // Redirect console.log to the on-page log div
+        const logDiv = document.getElementById('log');
+        const origLog = console.log.bind(console);
+        console.log = (...args) => {
+            origLog(...args);
+            const line = document.createElement('div');
+            line.textContent = args.join(' ');
+            logDiv.appendChild(line);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+    </script>
+    <script src="hello-window-web.js"></script>
+</body>
+</html>
