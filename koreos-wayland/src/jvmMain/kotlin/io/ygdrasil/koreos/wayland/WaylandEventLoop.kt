@@ -166,12 +166,10 @@ private fun runAppInternal(handler: ApplicationHandler) {
         throw t
     }
 
-    // ── 4. Découverte des globaux Wayland (compositor, xdg_wm_base) ───────────
-    // Simplifié : on passe 0 pour compositor/xdgWmBase si le registre n'est pas négocié.
-    // Une implémentation complète ferait wl_display_get_registry + wl_registry_add_listener.
-    // Pour le scope de ce ticket (#66), on crée la boucle avec les valeurs découvertes
-    // ultérieurement ; WaylandWindow.create retournera null si compositor = 0.
-    val compositorPtr = 0L
+    // ── 4. Découverte des globaux Wayland (compositor) ────────────────────────
+    // get_registry + listener(global) + roundtrip + bind(wl_compositor) (Redmine #88).
+    // xdg_wm_base reste à négocier (non requis pour créer une wl_surface / surface wgpu).
+    val compositorPtr = discoverCompositor(displayPtr)
     val xdgWmBasePtr = 0L
 
     val eventLoop = WaylandEventLoop(displayPtr, compositorPtr, xdgWmBasePtr, eventFd)
