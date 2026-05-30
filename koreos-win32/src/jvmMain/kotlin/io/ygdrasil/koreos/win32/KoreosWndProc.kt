@@ -44,6 +44,7 @@ import io.ygdrasil.koreos.core.PhysicalPosition
 import io.ygdrasil.koreos.core.PhysicalSize
 import io.ygdrasil.koreos.core.WindowEvent
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
 
 // ── Interface handler ─────────────────────────────────────────────────────────
 
@@ -180,6 +181,16 @@ object KoreosWndProc {
                 val x = (lParam and 0xFFFF).toDouble()
                 val y = ((lParam ushr 16) and 0xFFFF).toDouble()
                 emit(hwnd, WindowEvent.PointerMoved(PhysicalPosition(x, y)))
+                // Armer TrackMouseEvent pour détecter WM_MOUSELEAVE
+                armMouseLeaveTracking(hwnd)
+                0L
+            }
+
+            // ── Sortie du curseur ─────────────────────────────────────────────
+            WM_MOUSELEAVE.toUInt() -> {
+                // Le tracking WM_MOUSELEAVE est automatiquement désarmé après réception.
+                // Il sera ré-armé au prochain WM_MOUSEMOVE si le curseur revient.
+                emit(hwnd, WindowEvent.PointerLeft)
                 0L
             }
 
@@ -207,6 +218,23 @@ object KoreosWndProc {
             WM_MBUTTONUP.toUInt() -> {
                 emit(hwnd, WindowEvent.MouseInput(MouseButton.Middle, KeyState.Released))
                 0L
+            }
+
+            // ── Boutons supplémentaires (X1 / X2) ────────────────────────────
+            WM_XBUTTONDOWN.toUInt() -> {
+                // HIWORD(wParam) = numéro du bouton X (XBUTTON1 = 1, XBUTTON2 = 2)
+                val xButton = ((wParam ushr 16) and 0xFFFF).toInt()
+                val button = MouseButton.Other(xButton)
+                emit(hwnd, WindowEvent.MouseInput(button, KeyState.Pressed))
+                // WM_XBUTTONDOWN doit retourner TRUE (non-zéro) selon la doc Win32
+                1L
+            }
+            WM_XBUTTONUP.toUInt() -> {
+                val xButton = ((wParam ushr 16) and 0xFFFF).toInt()
+                val button = MouseButton.Other(xButton)
+                emit(hwnd, WindowEvent.MouseInput(button, KeyState.Released))
+                // WM_XBUTTONUP doit retourner TRUE (non-zéro) selon la doc Win32
+                1L
             }
 
             // ── Molette ───────────────────────────────────────────────────────
@@ -300,5 +328,34 @@ object KoreosWndProc {
         if ((getKeyState!!.invokeExact(VK_LWIN)    as Short).toInt() and 0x8000 != 0 ||
             (getKeyState!!.invokeExact(VK_RWIN)    as Short).toInt() and 0x8000 != 0) bits = bits or 0x8
         return Modifiers(bits)
+    }
+
+    /**
+     * Arme le tracking WM_MOUSELEAVE pour la fenêtre [hwnd] via TrackMouseEvent.
+     *
+     * Doit être appelé à chaque WM_MOUSEMOVE pour maintenir le tracking actif,
+     * car Windows désarme automatiquement TrackMouseEvent après l'envoi de
+     * WM_MOUSELEAVE. Les appels redondants (tracking déjà actif) sont ignorés
+     * gracieusement par Windows.
+     *
+     * Sur macOS/Linux (trackMouseEvent null), cette méthode est un no-op.
+     *
+     * @param hwndAddr Adresse entière du HWND (MemorySegment.address()).
+     */
+    private fun armMouseLeaveTracking(hwndAddr: Long) {
+        val handle = trackMouseEvent ?: return
+        try {
+            val hwndSeg = MemorySegment.ofAddress(hwndAddr)
+            // Allouer TRACKMOUSEEVENT sur le stack (arène confinée auto-libérée)
+            // Layout : DWORD cbSize (4) + DWORD dwFlags (4) + HWND hwndTrack (8) + DWORD dwHoverTime (4) + pad(4) = 24 bytes
+            val tme = MemorySegment.ofArray(LongArray(3)) // 24 bytes, aligné 8
+            tme.set(ValueLayout.JAVA_INT,  0L, TRACKMOUSEEVENT_SIZE)  // cbSize
+            tme.set(ValueLayout.JAVA_INT,  4L, TME_LEAVE)             // dwFlags
+            tme.set(ValueLayout.ADDRESS,   8L, hwndSeg)               // hwndTrack
+            tme.set(ValueLayout.JAVA_INT, 16L, 0)                     // dwHoverTime (HOVER_DEFAULT)
+            handle.invokeExact(tme) as Int
+        } catch (_: Throwable) {
+            // Dégradation gracieuse : WM_MOUSELEAVE ne sera pas reçu
+        }
     }
 }

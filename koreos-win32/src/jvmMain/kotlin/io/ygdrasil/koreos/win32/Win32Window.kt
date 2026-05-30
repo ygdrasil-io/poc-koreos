@@ -92,11 +92,21 @@ class Win32Window private constructor(
         get() = attrs.size ?: PhysicalSize(800, 600)
 
     /**
-     * Facteur d'échelle DPI.
+     * Facteur d'échelle DPI de cette fenêtre.
      *
-     * TODO GRA-142 : utiliser GetDpiForWindow / GetDeviceCaps pour le DPI réel.
+     * Appelle GetDpiForWindow(hwnd) et divise par 96 (DPI logique de référence
+     * Windows). Retourne 1.0 en cas d'indisponibilité (non-Windows ou fenêtre
+     * invalide) pour un comportement gracieux cross-plateforme.
+     *
+     * GRA-12 : DPI awareness PerMonitorV2.
      */
-    override val scaleFactor: Double get() = 1.0
+    override val scaleFactor: Double
+        get() = try {
+            val dpi = getDpiForWindow?.invokeExact(hwnd) as? Int ?: 0
+            if (dpi > 0) dpi.toDouble() / 96.0 else 1.0
+        } catch (_: Throwable) {
+            1.0
+        }
 
     override fun setVisible(visible: Boolean) {
         val handle = showWindow ?: return

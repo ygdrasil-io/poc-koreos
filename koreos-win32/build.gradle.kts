@@ -1,20 +1,18 @@
 /**
- * Module koreos-win32 — backend Windows Desktop via FFM JVM 25 + kextract.
+ * Module koreos-win32 — backend Windows Desktop via FFM JVM 25.
  *
  * Cible : jvm uniquement.
  * Ce module implémente les interfaces de koreos-core pour Win32 (HWND,
  * CreateWindowEx, MSG loop, etc.) en utilisant la Foreign Function &
- * Memory API (JEP 454) générée par kextract.
+ * Memory API (JEP 454).
  *
- * Note : Les bindings kextract générés (Win32_h.kt) seront ajoutés en Sprint 3
- * une fois le Windows SDK configuré dans le pipeline CI. Ce module fournit
- * pour l'instant les type aliases et le stub Win32Runtime.
+ * GRA-12 : DPI awareness PerMonitorV2 + bindings Win32 lazy FFM.
+ * GRA-5  : événements souris complets (WM_XBUTTON, WM_MOUSELEAVE, etc.)
  *
  * Dépendance amont : koreos-core (uniquement la sourceSet jvm via jvmMain).
  */
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
-    id("ygdrasil.conventions.kmp-publish")
 }
 
 kotlin {

@@ -65,6 +65,20 @@ internal const val WM_MBUTTONUP: Int = 0x0208
 /** WM_MOUSEWHEEL — la molette de la souris a tourné (défilement vertical). */
 internal const val WM_MOUSEWHEEL: Int = 0x020A
 
+/** WM_XBUTTONDOWN — bouton supplémentaire de la souris enfoncé (bouton 4 ou 5). */
+internal const val WM_XBUTTONDOWN: Int = 0x020B
+
+/** WM_XBUTTONUP — bouton supplémentaire de la souris relâché (bouton 4 ou 5). */
+internal const val WM_XBUTTONUP: Int = 0x020C
+
+/**
+ * WM_MOUSELEAVE — le curseur a quitté la zone cliente de la fenêtre.
+ *
+ * Envoyé une seule fois après un appel à TrackMouseEvent avec TME_LEAVE.
+ * Doit être ré-armé par un nouvel appel à TrackMouseEvent après réception.
+ */
+internal const val WM_MOUSELEAVE: Int = 0x02A3
+
 // ── Bit de répétition dans lParam (clavier) ───────────────────────────────────
 
 /**
@@ -250,6 +264,23 @@ internal const val VK_Z: Int = 0x5A
  * La valeur haute de wParam contient le delta de défilement en multiples de WHEEL_DELTA.
  */
 internal const val WHEEL_DELTA: Int = 120
+
+// ── Constantes WM_XBUTTONDOWN/UP ─────────────────────────────────────────────
+
+/**
+ * Masque pour extraire le numéro de bouton X depuis le HIWORD de wParam.
+ *
+ * wParam de WM_XBUTTONDOWN/UP :
+ *   LOWORD = état des touches et boutons de souris (MK_*)
+ *   HIWORD = bouton X concerné (XBUTTON1 ou XBUTTON2)
+ */
+internal const val XBUTTON_HIWORD_MASK: Long = 0xFFFF_0000L
+
+/** XBUTTON1 — premier bouton supplémentaire (bouton 4 = Back). */
+internal const val XBUTTON1: Int = 0x0001
+
+/** XBUTTON2 — second bouton supplémentaire (bouton 5 = Forward). */
+internal const val XBUTTON2: Int = 0x0002
 
 // ── Constantes WM_DPICHANGED ──────────────────────────────────────────────────
 
