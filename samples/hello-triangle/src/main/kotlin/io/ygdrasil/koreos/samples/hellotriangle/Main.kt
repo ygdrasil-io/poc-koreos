@@ -59,7 +59,7 @@ import kotlinx.coroutines.runBlocking
 // WGSL shaders — triangle RGB à positions codées en dur
 // ---------------------------------------------------------------------------
 
-private val TRIANGLE_WGSL = """
+internal val TRIANGLE_WGSL = """
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) color: vec3<f32>,
@@ -515,7 +515,17 @@ class HelloTriangleApp : ApplicationHandler {
  * Doit être exécuté depuis le thread principal macOS (garanti par Gradle via
  * `-XstartOnFirstThread` dans [build.gradle.kts]).
  */
-fun main() {
+fun main(args: Array<String>) {
+    // Mode capture offscreen GPU (Redmine #88) : `--capture <path>` rend le triangle dans
+    // une texture, relit le framebuffer, écrit un PNG, puis quitte — sans ouvrir de fenêtre.
+    val captureIndex = args.indexOf("--capture")
+    if (captureIndex >= 0) {
+        val path = args.getOrNull(captureIndex + 1)
+            ?: error("--capture requiert un chemin de fichier : --capture <path>")
+        captureFrame(path)
+        return
+    }
+
     println("[hello-triangle] Démarrage — Koreos + wgpu4k triangle RGB (GRA-138)")
     EventLoop().runApp(HelloTriangleApp())
     println("[hello-triangle] Terminé")
