@@ -1,0 +1,79 @@
+name: macos-visual
+
+# Régression visuelle macOS via readback GPU (Redmine #88).
+# hello-triangle rend une frame offscreen (sans fenêtre), écrit un PNG par readback
+# wgpu, puis on le compare à une baseline committée. NON BLOQUANT : le rendu GPU
+# n'est pas déterministe au pixel près entre machines → on archive le diff et on
+# publie le verdict dans le Job Summary, sans échouer le build.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/macos-visual.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/macos-visual.yml'
+  workflow_dispatch:
+
+jobs:
+  macos-visual:
+    name: macos-visual
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Capture GPU offscreen (hello-triangle)
+        id: capture
+        continue-on-error: true
+        run: |
+          mkdir -p build/visual
+          ./gradlew :samples:hello-triangle:run \
+            --args="--capture $PWD/build/visual/hello-triangle.actual.png" \
+            --no-daemon --stacktrace
+
+      - name: Diff visuel vs baseline (non bloquant)
+        if: always()
+        run: |
+          cd tests/visual && npm install && cd -
+          node tests/visual/diff-cli.js \
+            build/visual/hello-triangle.actual.png \
+            tests/visual/baselines/macos/hello-triangle.png \
+            build/visual/hello-triangle.diff.png \
+            0.02 \
+            build/visual/summary.md || true
+          if [ -f build/visual/summary.md ]; then
+            cat build/visual/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-triangle-macos-visual
+          path: |
+            build/visual/hello-triangle.actual.png
+            build/visual/hello-triangle.diff.png
+            tests/visual/baselines/macos/hello-triangle.png
+          if-no-files-found: ignore
