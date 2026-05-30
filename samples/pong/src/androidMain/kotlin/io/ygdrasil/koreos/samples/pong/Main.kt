@@ -1,2 +1,14 @@
 package io.ygdrasil.koreos.samples.pong
-// Ticket #80: Android entry point — à implémenter
+
+import io.ygdrasil.koreos.EventLoop
+
+fun main() {
+    // Android: renderer stub (support Android à implémenter)
+    EventLoop().runApp(PongGame { _ ->
+        object : PongRendererInterface {
+            override fun draw(state: GameState) {}
+            override fun resize(width: Int, height: Int) {}
+            override fun release() {}
+        }
+    })
+}
