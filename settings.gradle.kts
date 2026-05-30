@@ -13,7 +13,14 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // PREFER_SETTINGS : les repos déclarés ici priment pour la résolution, mais on
+    // tolère qu'un plugin (typiquement Kotlin/Wasm via `BinaryenSetupTask`) ajoute
+    // SON propre repo au niveau projet sans faire crasher le build. La sécurité
+    // est préservée — un repo projet ne peut pas override un repo settings — et
+    // le build wasm de production (Binaryen / wasm-opt) débloque.
+    // Avant : FAIL_ON_PROJECT_REPOS rejetait tout repo projet, y compris celui
+    // ajouté par le plugin Wasm lui-même → `wasmJsBrowserProductionWebpack` échouait.
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
         mavenCentral()
@@ -35,6 +42,19 @@ dependencyResolutionManagement {
             patternLayout { artifact("v[revision]/[artifact](-v[revision]).[ext]") }
             metadataSources { artifact() }
             content { includeModule("com.yarnpkg", "yarn") }
+        }
+        // Binaryen (wasm-opt) — utilisé par le plugin Kotlin/Wasm pour optimiser le
+        // bundle `.wasm` du build de production (`wasmJsBrowserProductionWebpack`).
+        // Déclaré ici (en plus du repo que le plugin ajoute au niveau projet via
+        // `BinaryenSetupTask`) pour garantir la résolution hermétique en `PREFER_SETTINGS`
+        // et documenter la dépendance externe au même titre que Node / Yarn.
+        // URL réelle :
+        //   https://github.com/WebAssembly/binaryen/releases/download/version_<v>/binaryen-version_<v>-<classifier>.tar.gz
+        ivy("https://github.com/WebAssembly/binaryen/releases/download") {
+            name = "Binaryen Distributions"
+            patternLayout { artifact("version_[revision]/[artifact]-version_[revision]-[classifier].[ext]") }
+            metadataSources { artifact() }
+            content { includeModule("com.github.webassembly", "binaryen") }
         }
     }
 }
