@@ -33,7 +33,12 @@ on:
 jobs:
   pong-e2e:
     name: pong-e2e
-    runs-on: ubuntu-latest
+    # macOS runner avec Chrome stable (canal release) : GPU accéléré + WebGPU
+    # mature. Le scénario Pong (animation multi-seconde + assertions de diff
+    # pixel) est plus exigeant que le smoke single-frame de hello-triangle ;
+    # SwiftShader sur Linux donne des frames plus lentes et moins déterministes.
+    # Même choix que `web-e2e` (cf. branche `feat/web-e2e-chrome-mac-win`).
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,11 +61,13 @@ jobs:
       - name: Build samples/pong (production JS bundle)
         run: ./gradlew :samples:pong:jsBrowserDistribution --no-daemon --stacktrace
 
-      - name: Install E2E deps + Chromium
+      - name: Install E2E deps + Chrome stable
         working-directory: samples/pong/e2e
         run: |
           npm install
-          npx playwright install --with-deps chromium
+          # Chrome stable (canal release) — pas Chromium ; pas de --with-deps
+          # (macOS n'a pas besoin d'apt-get install pour les libs natives).
+          npx playwright install chrome
 
       - name: Run Playwright scenario
         working-directory: samples/pong/e2e
