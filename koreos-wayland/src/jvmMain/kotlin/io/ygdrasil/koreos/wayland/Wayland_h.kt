@@ -30,6 +30,7 @@ package io.ygdrasil.koreos.wayland
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
+import java.lang.foreign.MemorySegment
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
@@ -82,6 +83,79 @@ private val linker: Linker = Linker.nativeLinker()
 private fun SymbolLookup?.downcall(name: String, desc: FunctionDescriptor): MethodHandle? {
     this ?: return null
     return this.find(name).map { linker.downcallHandle(it, desc) }.orElse(null)
+}
+
+/** Adresse d'un symbole *donnée* (ex. struct wl_interface) exporté par la lib, ou null. */
+private fun SymbolLookup?.symbol(name: String): MemorySegment? =
+    this?.find(name)?.orElse(null)
+
+/**
+ * Crée un stub d'upcall natif (pointeur de fonction C → MethodHandle Kotlin).
+ * Utilisé pour les listeners Wayland (wl_registry.global, etc.).
+ */
+internal fun upcallStub(
+    handle: MethodHandle,
+    descriptor: FunctionDescriptor,
+    arena: java.lang.foreign.Arena,
+): MemorySegment = linker.upcallStub(handle, descriptor, arena)
+
+// ── Découverte des globaux (Redmine #88) : registry / bind via wl_proxy_marshal_flags ──
+//
+// wl_display_get_registry et wl_registry_bind sont des `static inline` du header (PAS
+// des symboles exportés) : on doit donc passer par wl_proxy_marshal_flags. Les structures
+// d'interface, elles, SONT exportées par libwayland-client.so.0.
+
+/** &wl_registry_interface — requis par get_registry (requête new_id). */
+internal val wlRegistryInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_registry_interface") }
+
+/** &wl_compositor_interface — requis par bind(wl_compositor). */
+internal val wlCompositorInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_compositor_interface") }
+
+/** uint32_t wl_proxy_get_version(struct wl_proxy *proxy). */
+internal val wlProxyGetVersion: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_get_version",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+/** int wl_display_roundtrip(struct wl_display *display) — bloque jusqu'au traitement des requêtes. */
+internal val wlDisplayRoundtrip: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_display_roundtrip",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+/**
+ * wl_proxy_marshal_flags pour une requête new_id simple (proxy, opcode, interface, version,
+ * flags, new_id=NULL) — sert à wl_display.get_registry (opcode 1).
+ */
+internal val wlProxyMarshalNewId: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // proxy
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // interface
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.ADDRESS,   // new_id = NULL
+        ))
+}
+
+/**
+ * wl_proxy_marshal_flags pour wl_registry.bind (opcode 0), signature variadique étendue :
+ * (registry, 0, interface, version, flags, name(u), interface->name(s), version(u), new_id=NULL).
+ */
+internal val wlProxyMarshalBind: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // proxy (registry)
+            ValueLayout.JAVA_INT,  // opcode (0 = bind)
+            ValueLayout.ADDRESS,   // interface (&wl_compositor_interface)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // arg: name (uint)
+            ValueLayout.ADDRESS,   // arg: interface->name (const char*)
+            ValueLayout.JAVA_INT,  // arg: version (uint)
+            ValueLayout.ADDRESS,   // arg: new_id = NULL
+        ))
 }
 
 // ── wl_display_connect ────────────────────────────────────────────────────────
@@ -345,6 +419,17 @@ internal val wlProxyMarshalFlagsGetXdgSurface: MethodHandle? by lazy {
 // ── wl_compositor_create_surface ──────────────────────────────────────────────
 
 /**
+ * Adresse de la structure `wl_surface_interface` exportée par libwayland-client.so.0.
+ *
+ * `wl_proxy_marshal_flags` exige un `wl_interface*` NON-NULL pour les requêtes new_id
+ * (comme create_surface) afin de typer le proxy retourné : il déréférence cette
+ * structure. Passer NULL provoque un SIGSEGV. On récupère donc le vrai symbole exporté.
+ */
+internal val wlSurfaceInterface: MemorySegment? by lazy {
+    libWaylandClient?.find("wl_surface_interface")?.orElse(null)
+}
+
+/**
  * wl_compositor_create_surface: crée une wl_surface depuis un wl_compositor.
  *
  * Appelle wl_proxy_marshal_flags(compositor, 0, &wl_surface_interface, version, 0)
@@ -361,9 +446,10 @@ internal val wlCompositorCreateSurface: MethodHandle? by lazy {
         FunctionDescriptor.of(ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,   // wl_proxy* (compositor)
             ValueLayout.JAVA_INT,  // opcode (0 = create_surface)
-            ValueLayout.ADDRESS,   // wl_interface* (NULL = laisser la bibliothèque gérer)
+            ValueLayout.ADDRESS,   // wl_interface* (&wl_surface_interface — DOIT être non-NULL)
             ValueLayout.JAVA_INT,  // version
             ValueLayout.JAVA_INT,  // flags (0)
+            ValueLayout.ADDRESS,   // arg new_id : NULL (placeholder, généré par libwayland)
         ))
 }
 
