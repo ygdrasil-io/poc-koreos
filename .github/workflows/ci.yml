@@ -80,6 +80,11 @@ jobs:
           ./gradlew \
             :koreos-core:jvmTest \
             :koreos-appkit:jvmTest \
+            :koreos-core:checkKotlinAbi \
+            :koreos-appkit:checkKotlinAbi \
+            :koreos-uikit:checkKotlinAbi \
+            :koreos-android:checkKotlinAbi \
+            :koreos:checkKotlinAbi \
             --no-daemon \
             --stacktrace
 
@@ -94,6 +99,11 @@ jobs:
             :koreos-appkit:jvmTest \
             :koreos:jvmTest \
             :koreos:iosSimulatorArm64Test \
+            :koreos-core:checkKotlinAbi \
+            :koreos-appkit:checkKotlinAbi \
+            :koreos-uikit:checkKotlinAbi \
+            :koreos-android:checkKotlinAbi \
+            :koreos:checkKotlinAbi \
             --no-daemon \
             --stacktrace
 

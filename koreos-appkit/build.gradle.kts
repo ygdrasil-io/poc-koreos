@@ -16,6 +16,10 @@ plugins {
 kotlin {
     jvmToolchain(25)
 
+    // Validation de compatibilité ABI (Redmine #86) — intégrée au plugin Kotlin.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation { enabled.set(true) }
+
     jvm()
 
     sourceSets {

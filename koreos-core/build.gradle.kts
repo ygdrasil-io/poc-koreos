@@ -26,6 +26,12 @@ kotlin {
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs { browser() }
 
+    // Validation de compatibilité ABI (Redmine #86) — intégrée au plugin Kotlin,
+    // s'appuie sur le compilateur (pas d'ASM externe) → compatible JDK 25.
+    // Tâches : updateKotlinAbi (régénère api/) et checkKotlinAbi (câblée dans check).
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation { enabled.set(true) }
+
     // Active les classes expect/actual (Beta) sans avertissement.
     // Nécessaire pour EventLoop (expect class avec actual par plateforme).
     compilerOptions {
