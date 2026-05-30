@@ -52,6 +52,15 @@ internal val libWaylandClient: SymbolLookup? by lazy {
 }
 
 /**
+ * Lookup libc.so.6 — null sur les plateformes non-Linux ou si absent.
+ *
+ * Utilisé pour poll(), eventfd(), read(), write(), close() dans WaylandEventLoop.
+ */
+internal val libC: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("libc.so.6", Arena.global()) } catch (_: Throwable) { null }
+}
+
+/**
  * Lookup libxkbcommon.so.0 — null sur les plateformes non-Wayland.
  */
 internal val libXkbCommon: SymbolLookup? by lazy {
@@ -361,22 +370,6 @@ internal val wlCompositorCreateSurface: MethodHandle? by lazy {
 // ── wl_proxy_marshal_flags (variante wl_surface_commit) ───────────────────────
 
 /**
- * Variante sans argument supplémentaire de wl_proxy_marshal_flags utilisée pour
- * wl_surface.commit (opcode 6) et d'autres opcodes sans paramètre de retour.
- *
- * Signature : void wl_proxy_marshal_flags(proxy, opcode, NULL, version, 0)
- * avec NULL comme wl_interface* pour les appels sans new_id.
- */
-internal val wlProxyMarshalFlagsVoid: MethodHandle? by lazy {
-    libWaylandClient.downcall("wl_proxy_marshal_flags",
-        FunctionDescriptor.ofVoid(
-            ValueLayout.ADDRESS,   // wl_proxy* (surface / proxy cible)
-            ValueLayout.JAVA_INT,  // opcode
-            ValueLayout.ADDRESS,   // wl_interface* (NULL)
-            ValueLayout.JAVA_INT,  // version
-            ValueLayout.JAVA_INT,  // flags (0)
-        ))
-}
  * Variante sans argument supplémentaire de wl_proxy_marshal_flags utilisée pour
  * wl_surface.commit (opcode 6) et d'autres opcodes sans paramètre de retour.
  *
