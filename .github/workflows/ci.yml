@@ -322,7 +322,7 @@ jobs:
       # Installe les dépendances X11 requises par koreos-x11 (FFM + JNI).
       # libX11-dev fournit le .so runtime ; xvfb fournit un serveur X virtuel.
       - name: Install X11 dependencies
-        run: apt-get install -y xvfb libx11-dev libxi-dev libxkbcommon-dev
+        run: sudo apt-get install -y xvfb libx11-dev libxi-dev libxkbcommon-dev
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -372,7 +372,7 @@ jobs:
 
       # Installe les dépendances Wayland requises par koreos-wayland (FFM + JNI).
       - name: Install Wayland dependencies
-        run: apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev
+        run: sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
