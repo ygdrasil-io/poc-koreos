@@ -1,0 +1,119 @@
+name: linux-x11-visual
+
+# Régression visuelle Linux X11 via readback GPU (Redmine #88).
+# Variante X11 de linux-visual : la capture réutilise l'EventLoop koreos forcé en X11
+# (KOREOS_LINUX_BACKEND=x11) pour créer une fenêtre X11 (koreos-x11), d'où la surface
+# wgpu, puis rend offscreen + readback. NON BLOQUANT.
+#
+# Headless : serveur X virtuel Xvfb + Vulkan logiciel (Mesa lavapipe, auto-découvert).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/linux-x11-visual.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle/**'
+      - 'tests/visual/**'
+      - '.github/workflows/linux-x11-visual.yml'
+  workflow_dispatch:
+
+jobs:
+  linux-x11-visual:
+    name: linux-x11-visual
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Xvfb + software Vulkan + X11 libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb libx11-6 libxext6 \
+            mesa-vulkan-drivers vulkan-tools
+
+      - name: Start Xvfb
+        run: |
+          Xvfb :99 -screen 0 800x600x24 > /tmp/xvfb.log 2>&1 &
+          # Vérifie la socket X (pas de dépendance à xdpyinfo / x11-utils).
+          for i in $(seq 1 40); do
+            [ -S /tmp/.X11-unix/X99 ] && break
+            sleep 0.5
+          done
+          if [ -S /tmp/.X11-unix/X99 ]; then
+            echo "✅ serveur X :99 prêt"
+            echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Xvfb non démarré"; cat /tmp/xvfb.log || true
+          fi
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Capture GPU offscreen (hello-triangle, X11)
+        id: capture
+        continue-on-error: true
+        env:
+          KOREOS_LINUX_BACKEND: x11
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          if [ -z "$DISPLAY" ]; then
+            echo "::warning::pas de serveur X — capture X11 sautée"; exit 0
+          fi
+          ./gradlew :samples:hello-triangle:run \
+            --args="--capture build/visual/hello-triangle.actual.png" \
+            --no-daemon --stacktrace
+
+      - name: Dump crash report (hs_err)
+        if: always()
+        run: |
+          f=$(ls -t samples/hello-triangle/hs_err_pid*.log 2>/dev/null | head -1)
+          if [ -n "$f" ]; then
+            echo "===== $f (extrait) ====="; sed -n '1,40p' "$f"
+            awk '/Native frames|Java frames/{f=1} f{print} /^$/{if(f)n++} n>2{exit}' "$f" | head -40
+          fi
+
+      - name: Diff visuel vs baseline (non bloquant)
+        if: always()
+        run: |
+          cd tests/visual && npm install && cd -
+          DIR=samples/hello-triangle/build/visual
+          node tests/visual/diff-cli.js \
+            "$DIR/hello-triangle.actual.png" \
+            tests/visual/baselines/linux-x11/hello-triangle.png \
+            "$DIR/hello-triangle.diff.png" \
+            0.02 \
+            "$DIR/summary.md" \
+            "Linux X11" || true
+          if [ -f "$DIR/summary.md" ]; then
+            cat "$DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-triangle-linux-x11-visual
+          path: |
+            samples/hello-triangle/build/visual/hello-triangle.actual.png
+            samples/hello-triangle/build/visual/hello-triangle.diff.png
+            tests/visual/baselines/linux-x11/hello-triangle.png
+          if-no-files-found: ignore

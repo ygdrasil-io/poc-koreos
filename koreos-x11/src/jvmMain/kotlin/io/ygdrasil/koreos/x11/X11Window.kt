@@ -163,33 +163,13 @@ class X11Window private constructor(
 
             val displaySeg = MemorySegment.ofAddress(display)
 
-            // ── 1. Obtenir la fenêtre racine ──────────────────────────────────
-            // DefaultRootWindow(display) = XRootWindow(display, DefaultScreen(display))
-            // En pratique, screen 0 → root window XID est accessible via Xlib macros.
-            // On passe par XOpenDisplay pour obtenir la structure complète, mais ici
-            // display est déjà ouvert. On utilise screen comme offset si besoin.
-            // Valeur conventionnelle de la fenêtre racine (XID = 1 sur la plupart des serveurs X).
-            // Pour être correct, on devrait appeler XRootWindow, mais ce binding n'est pas
-            // disponible. On utilise la convention XID = screen (ce n'est pas la bonne
-            // valeur universelle). À la place, on utilise 0 comme parent et X choisira
-            // la racine automatiquement — XCreateSimpleWindow accepte parent = DefaultRootWindow.
-            //
-            // Note : en pratique, il faut passer le vrai root XID. On le calcule via
-            // l'adresse du Display* (l'écran par défaut est à un offset fixe).
-            // Pour contourner l'absence de XDefaultRootWindow, on passe `screen.toLong()`
-            // comme root (ce qui fonctionne si screen == 1 = root XID usuel).
-            // La solution robuste est d'ajouter XDefaultRootWindow dans un futur ticket.
-            //
-            // MISE À JOUR : on passe `(screen + 1).toLong()` car le root window XID
-            // est généralement 1 sur le premier écran et l'ID d'écran X est 0.
-            // La valeur correcte est obtenue via DefaultRootWindow(dpy) =
-            // XRootWindow(dpy, DefaultScreen(dpy)) ce qui retourne normalement
-            // l'XID 0x0000000000000143 ou similaire — dépendant du serveur X.
-            //
-            // En l'absence du binding XRootWindow, on passe parent = 0 ce qui
-            // déclenche généralement une erreur BadWindow. On utilise donc
-            // la valeur 1 qui est le root window conventionnel sur la plupart des serveurs X.
-            val rootWindow: Long = 1L   // DefaultRootWindow convention ; see TODO above
+            // ── 1. Fenêtre racine via XRootWindow(display, screen) ────────────
+            // Équivalent de DefaultRootWindow(display). Le vrai XID racine est requis
+            // comme parent de XCreateSimpleWindow : une valeur conventionnelle en dur
+            // provoque BadWindow (X_CreateWindow) sur les serveurs X réels (Redmine #88).
+            val rootHandle = xRootWindow ?: return null
+            val rootWindow: Long = rootHandle.invokeExact(displaySeg, screen) as Long
+            if (rootWindow == 0L) return null
 
             val width = attrs.size?.width ?: 800
             val height = attrs.size?.height ?: 600
