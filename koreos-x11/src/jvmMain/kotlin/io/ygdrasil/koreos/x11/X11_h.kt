@@ -17,6 +17,7 @@
  *  - XInternAtom       — obtient un atome par nom
  *  - XSetWMProtocols   — définit les protocoles WM (ex. WM_DELETE_WINDOW)
  *  - XMapWindow        — rend une fenêtre visible
+ *  - XSendEvent        — envoie un événement synthétique (wakeUp ClientMessage)
  *
  * Référence : https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
  */
@@ -296,6 +297,37 @@ internal val xMapWindow: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,   // int retour
             ValueLayout.ADDRESS,    // Display*
             ValueLayout.JAVA_LONG,  // Window (XID)
+        )
+    )
+}
+
+// ── XSendEvent ────────────────────────────────────────────────────────────────
+
+/**
+ * Status XSendEvent(
+ *     Display *display,
+ *     Window w,
+ *     Bool propagate,
+ *     long event_mask,
+ *     XEvent *event_send
+ * );
+ *
+ * Envoie un événement synthétique à une fenêtre.
+ * Utilisé par X11EventLoopProxy.wakeUp() pour débloquer XNextEvent via
+ * un ClientMessage envoyé à la fenêtre principale.
+ *
+ * Retourne Status (int) : 0 en cas d'échec, non-nul en cas de succès.
+ */
+internal val xSendEvent: MethodHandle? by lazy {
+    libX11.downcall(
+        "XSendEvent",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // Status (int)
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window w (XID)
+            ValueLayout.JAVA_INT,   // Bool propagate
+            ValueLayout.JAVA_LONG,  // long event_mask
+            ValueLayout.ADDRESS,    // XEvent* event_send
         )
     )
 }
