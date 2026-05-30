@@ -1,0 +1,13 @@
+{
+  "name": "hello-triangle-web-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test E2E smoke Playwright pour samples/hello-triangle-web (Redmine #22)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "http-server": "^14.1.1"
+  }
+}

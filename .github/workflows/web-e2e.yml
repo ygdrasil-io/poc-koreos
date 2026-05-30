@@ -1,0 +1,67 @@
+name: web-e2e
+
+# Test E2E smoke Web (Redmine #22) : « au moins une frame présentée » sur
+# hello-triangle-web. Build le bundle JS de production (toolchain Node/webpack
+# activée par #91), le sert, puis lance Playwright + Chromium headless (WebGPU
+# SwiftShader, sans GPU physique).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle-web/**'
+      - 'koreos-js/**'
+      - 'koreos-web-common/**'
+      - '.github/workflows/web-e2e.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'samples/hello-triangle-web/**'
+      - 'koreos-js/**'
+      - 'koreos-web-common/**'
+      - '.github/workflows/web-e2e.yml'
+  workflow_dispatch:
+
+jobs:
+  web-e2e:
+    name: web-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build hello-triangle-web (production JS bundle)
+        run: ./gradlew :samples:hello-triangle-web:jsBrowserDistribution --no-daemon --stacktrace
+
+      - name: Install E2E deps + Chromium
+        working-directory: samples/hello-triangle-web/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright smoke test
+        working-directory: samples/hello-triangle-web/e2e
+        run: npx playwright test
+
+      - name: Upload screenshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-triangle-web-screenshot
+          path: samples/hello-triangle-web/e2e/triangle.png
+          if-no-files-found: ignore

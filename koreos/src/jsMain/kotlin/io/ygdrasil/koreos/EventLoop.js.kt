@@ -1,30 +1,25 @@
 /**
- * Implémentation JS de la boucle d'événements koreos — stub initial.
+ * Implémentation JS de la boucle d'événements koreos.
  *
- * Délègue vers koreos-web-common (WebDomBridge). L'implémentation complète,
- * incluant la boucle requestAnimationFrame et la gestion des événements DOM,
- * sera réalisée dans le ticket #24 (WebEventLoop).
+ * Délègue à [io.ygdrasil.koreos.web.JsWebEventLoop] (koreos-web-common), qui
+ * orchestre la boucle `requestAnimationFrame` et le dispatch des événements DOM.
  *
  * Redmine #28 : façade koreos — cibles jsMain + wasmJsMain.
+ * Redmine #22/#24 : câblage de la façade vers le WebEventLoop réel.
  */
 package io.ygdrasil.koreos
 
 /**
- * Implémentation JS de [EventLoop].
- *
- * Stub minimal : lève [NotImplementedError] à l'exécution.
- * L'implémentation complète est prévue dans le ticket #24.
+ * Implémentation JS de [EventLoop] — délègue à [io.ygdrasil.koreos.web.JsWebEventLoop].
  */
 actual class EventLoop actual constructor() {
 
     /**
      * Démarre la boucle d'événements côté navigateur (JS/IR).
      *
-     * @throws NotImplementedError Toujours — implémentation complète dans #24.
+     * @param handler Gestionnaire du cycle de vie et des événements de l'application.
      */
     actual fun runApp(handler: ApplicationHandler) {
-        // Stub minimal : délègue au DOM bridge via koreos-web-common
-        // Implémentation complète dans ticket #24 (WebEventLoop)
-        throw NotImplementedError("WebEventLoop sera implémenté dans le ticket #24")
+        io.ygdrasil.koreos.web.JsWebEventLoop().runApp(handler)
     }
 }
