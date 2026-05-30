@@ -322,6 +322,10 @@ fun runApp(handler: ApplicationHandler) {
         "Une boucle d'événements Win32 est déjà active."
     }
 
+    // Activer Per-Monitor-V2 avant toute création de fenêtre, sinon Windows
+    // virtualise le DPI et rend le contenu flou sur les écrans haute densité.
+    enablePerMonitorV2DpiAwareness()
+
     val eventLoop = Win32EventLoop()
 
     // Installer le handler KoreosWndProc pour router les messages vers les fenêtres
