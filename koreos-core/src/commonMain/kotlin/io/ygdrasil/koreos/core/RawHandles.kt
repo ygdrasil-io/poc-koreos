@@ -59,6 +59,22 @@ sealed interface RawWindowHandle {
     data class Win32(val hwnd: Long, val hinstance: Long) : RawWindowHandle
 
     /**
+     * Handle de fenêtre X11/Xlib (Linux).
+     *
+     * @property window  XID de la fenêtre X11 (retourné par XCreateWindow).
+     * @property display Pointeur vers le Display X11 (retourné par XOpenDisplay), représenté en Long.
+     */
+    data class Xlib(val window: Long, val display: Long) : RawWindowHandle
+
+    /**
+     * Handle de fenêtre Wayland (Linux).
+     *
+     * @property surface Pointeur vers la surface Wayland (wl_surface*), représenté en Long.
+     * @property display Pointeur vers le display Wayland (wl_display*), représenté en Long.
+     */
+    data class Wayland(val surface: Long, val display: Long) : RawWindowHandle
+
+    /**
      * Handle de fenêtre Web (navigateur / Wasm).
      *
      * Deux modes d'identification du canvas cible sont supportés :
@@ -135,4 +151,18 @@ sealed interface RawDisplayHandle {
      * Ce singleton marque simplement la cible d'affichage comme étant le contexte Web.
      */
     data object Web : RawDisplayHandle
+
+    /**
+     * Handle d'affichage X11/Xlib (Linux).
+     *
+     * @property display Pointeur vers le Display X11 (retourné par XOpenDisplay), représenté en Long.
+     */
+    data class Xlib(val display: Long) : RawDisplayHandle
+
+    /**
+     * Handle d'affichage Wayland (Linux).
+     *
+     * @property display Pointeur vers le display Wayland (wl_display*), représenté en Long.
+     */
+    data class Wayland(val display: Long) : RawDisplayHandle
 }

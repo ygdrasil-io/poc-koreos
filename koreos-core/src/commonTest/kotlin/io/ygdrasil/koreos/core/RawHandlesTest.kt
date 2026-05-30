@@ -32,6 +32,8 @@ class RawHandlesTest {
             RawWindowHandle.Android(surface = Any()),
             RawWindowHandle.Win32(hwnd = 6L, hinstance = 7L),
             RawWindowHandle.Web(canvasElementId = "my-canvas"),
+            RawWindowHandle.Xlib(window = 8L, display = 9L),
+            RawWindowHandle.Wayland(surface = 10L, display = 11L),
         )
 
         for (handle in handles) {
@@ -42,6 +44,8 @@ class RawHandlesTest {
                 is RawWindowHandle.Android  -> "Android"
                 is RawWindowHandle.Win32    -> "Win32"
                 is RawWindowHandle.Web      -> "Web"
+                is RawWindowHandle.Xlib     -> "Xlib"
+                is RawWindowHandle.Wayland  -> "Wayland"
             }
             assertNotNull(nom)
         }
@@ -87,6 +91,8 @@ class RawHandlesTest {
             RawDisplayHandle.Android,
             RawDisplayHandle.Win32(hinstance = 8L),
             RawDisplayHandle.Web,
+            RawDisplayHandle.Xlib(display = 12L),
+            RawDisplayHandle.Wayland(display = 13L),
         )
 
         for (handle in handles) {
@@ -97,6 +103,8 @@ class RawHandlesTest {
                 RawDisplayHandle.Android     -> "Android"
                 is RawDisplayHandle.Win32    -> "Win32"
                 RawDisplayHandle.Web         -> "Web"
+                is RawDisplayHandle.Xlib     -> "Xlib"
+                is RawDisplayHandle.Wayland  -> "Wayland"
             }
             assertNotNull(nom)
         }
