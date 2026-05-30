@@ -59,6 +59,14 @@ sealed interface RawWindowHandle {
     data class Win32(val hwnd: Long, val hinstance: Long) : RawWindowHandle
 
     /**
+     * Handle de fenêtre Xlib (Linux / X11).
+     *
+     * @property window  Identifiant de la fenêtre X (XID = unsigned long), représenté en [Long].
+     * @property display Pointeur vers la structure Display X11, représenté en [Long].
+     */
+    data class Xlib(val window: Long, val display: Long) : RawWindowHandle
+
+    /**
      * Handle de fenêtre Web (navigateur / Wasm).
      *
      * Deux modes d'identification du canvas cible sont supportés :
@@ -126,6 +134,13 @@ sealed interface RawDisplayHandle {
      * @property hinstance Instance handle Win32 (HINSTANCE), représenté comme Long pour compatibilité FFM.
      */
     data class Win32(val hinstance: Long) : RawDisplayHandle
+
+    /**
+     * Handle d'affichage Xlib (Linux / X11).
+     *
+     * @property display Pointeur vers la structure Display X11, représenté en [Long].
+     */
+    data class Xlib(val display: Long) : RawDisplayHandle
 
     /**
      * Handle d'affichage Web (navigateur / Wasm).
