@@ -41,11 +41,17 @@ module.exports = defineConfig({
     launchOptions: {
       args: isWindows
         ? [
-            // Fallback CPU complet pour le runner Windows sans GPU.
+            // WebGPU passe par **Dawn** (pas par ANGLE), donc `--use-angle=...`
+            // n'a aucun effet sur l'adapter WebGPU. Pour exploiter SwiftShader
+            // côté Dawn sur runner Windows sans GPU, il faut explicitement le
+            // backend Vulkan + SwiftShader Vulkan ICD bundlé avec Chromium.
+            // Combo validée pour WebGPU headless software :
             '--enable-unsafe-webgpu',
+            '--enable-features=Vulkan',
+            '--use-vulkan=swiftshader',
             '--enable-unsafe-swiftshader',
-            '--use-angle=swiftshader',
-            '--enable-features=Vulkan,WebGPU',
+            '--ignore-gpu-blocklist',
+            '--no-sandbox', // requis sur certains runners Windows headless
           ]
         : [
             // macOS : GPU réel Metal, juste le flag d'autorisation headless.
