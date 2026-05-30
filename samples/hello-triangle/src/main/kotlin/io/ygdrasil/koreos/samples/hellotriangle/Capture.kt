@@ -59,8 +59,8 @@ import javax.imageio.ImageIO
 import kotlin.math.ceil
 
 /** Dimensions fixes de la capture offscreen. */
-private const val CAPTURE_WIDTH = 800
-private const val CAPTURE_HEIGHT = 600
+internal const val CAPTURE_WIDTH = 800
+internal const val CAPTURE_HEIGHT = 600
 
 /** Alignement WebGPU : `bytesPerRow` doit être un multiple de 256 octets. */
 private const val BYTES_PER_ROW_ALIGNMENT = 256
@@ -92,12 +92,24 @@ private fun createOffscreenMetalLayer(): Long {
 fun captureFrame(path: String) {
     println("[hello-triangle] Mode capture offscreen — cible=$path (${CAPTURE_WIDTH}×${CAPTURE_HEIGHT})")
 
-    // 1. Chargement de la lib native + Instance WGPU (Metal)
     ffi.LibraryLoader.load()
-    val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
-        ?: error("Échec création WGPU Instance")
+    val os = System.getProperty("os.name", "").lowercase()
+    when {
+        os.contains("mac") -> captureMacOs(path)
+        os.contains("win") -> captureWindows(path)
+        else -> error("Mode capture non supporté sur cet OS : '$os' (macOS et Windows uniquement).")
+    }
+}
 
-    // 2. CAMetalLayer offscreen + Surface (requis par requestAdapter, cf. KDoc d'en-tête)
+/**
+ * Capture macOS : Instance Metal + CAMetalLayer offscreen (sans fenêtre, cf. KDoc d'en-tête),
+ * puis pipeline commun [renderSurfaceToPng].
+ */
+@OptIn(WGPULowLevelApi::class)
+private fun captureMacOs(path: String) {
+    val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
+        ?: error("Échec création WGPU Instance (Metal)")
+
     val metalLayerAddr = createOffscreenMetalLayer()
     if (metalLayerAddr == 0L) {
         instance.close()
@@ -108,7 +120,20 @@ fun captureFrame(path: String) {
             instance.close()
             error("Échec création Surface depuis CAMetalLayer offscreen")
         }
+    renderSurfaceToPng(instance, surface, path)
+}
 
+/**
+ * Pipeline commun de capture : depuis une [instance] et une [surface] déjà créées par le
+ * code spécifique à l'OS, acquiert adapter+device, rend le triangle dans une texture
+ * offscreen RGBA8, relit le framebuffer et écrit le PNG. Libère toutes les ressources.
+ */
+@OptIn(WGPULowLevelApi::class)
+internal fun renderSurfaceToPng(
+    instance: WGPU,
+    surface: io.ygdrasil.webgpu.NativeSurface,
+    path: String,
+) {
     // 3. Adapter + Device
     val adapter = instance.requestAdapter(surface)
         ?: run {

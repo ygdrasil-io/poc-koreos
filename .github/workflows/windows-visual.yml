@@ -1,10 +1,9 @@
-name: macos-visual
+name: windows-visual
 
-# Régression visuelle macOS via readback GPU (Redmine #88).
-# hello-triangle rend une frame offscreen (sans fenêtre), écrit un PNG par readback
-# wgpu, puis on le compare à une baseline committée. NON BLOQUANT : le rendu GPU
-# n'est pas déterministe au pixel près entre machines → on archive le diff et on
-# publie le verdict dans le Job Summary, sans échouer le build.
+# Régression visuelle Windows via readback GPU (Redmine #88).
+# hello-triangle rend une frame offscreen (fenêtre Win32 cachée → surface → texture
+# offscreen), écrit un PNG par readback wgpu, comparé à une baseline committée.
+# NON BLOQUANT (rendu GPU non déterministe / dispo GPU runner incertaine).
 
 on:
   push:
@@ -12,19 +11,22 @@ on:
     paths:
       - 'samples/hello-triangle/**'
       - 'tests/visual/**'
-      - '.github/workflows/macos-visual.yml'
+      - '.github/workflows/windows-visual.yml'
   pull_request:
     branches: [master]
     paths:
       - 'samples/hello-triangle/**'
       - 'tests/visual/**'
-      - '.github/workflows/macos-visual.yml'
+      - '.github/workflows/windows-visual.yml'
   workflow_dispatch:
 
 jobs:
-  macos-visual:
-    name: macos-visual
-    runs-on: macos-15
+  windows-visual:
+    name: windows-visual
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,9 +42,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
 
       # La tâche `run` s'exécute dans le dossier du sample → le PNG (chemin relatif)
       # est écrit sous samples/hello-triangle/build/visual/.
@@ -61,11 +60,11 @@ jobs:
           DIR=samples/hello-triangle/build/visual
           node tests/visual/diff-cli.js \
             "$DIR/hello-triangle.actual.png" \
-            tests/visual/baselines/macos/hello-triangle.png \
+            tests/visual/baselines/windows/hello-triangle.png \
             "$DIR/hello-triangle.diff.png" \
             0.02 \
             "$DIR/summary.md" \
-            macOS || true
+            Windows || true
           if [ -f "$DIR/summary.md" ]; then
             cat "$DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -74,9 +73,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hello-triangle-macos-visual
+          name: hello-triangle-windows-visual
           path: |
             samples/hello-triangle/build/visual/hello-triangle.actual.png
             samples/hello-triangle/build/visual/hello-triangle.diff.png
-            tests/visual/baselines/macos/hello-triangle.png
+            tests/visual/baselines/windows/hello-triangle.png
           if-no-files-found: ignore
