@@ -60,8 +60,11 @@ tasks.register<JavaExec>("run") {
         kotlin.targets.getByName("jvm").compilations.getByName("main").output.allOutputs,
         configurations.getByName("jvmRuntimeClasspath"),
     )
-    jvmArgs(
-        "-XstartOnFirstThread",
-        "--enable-native-access=ALL-UNNAMED",
-    )
+    // -XstartOnFirstThread est un flag JVM macOS-only — la JVM Windows/Linux le rejette.
+    jvmArgs(buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    })
 }

@@ -22,11 +22,14 @@ application {
     mainClass.set("io.ygdrasil.koreos.samples.hellotriangle.MainKt")
 
     // macOS : NSApplication doit tourner sur le thread principal JVM.
+    // -XstartOnFirstThread est un flag JVM macOS-only — la JVM Windows/Linux le rejette.
     // Panama FFM : --enable-native-access supprime les warnings JDK 22+.
-    applicationDefaultJvmArgs = listOf(
-        "-XstartOnFirstThread",
-        "--enable-native-access=ALL-UNNAMED",
-    )
+    applicationDefaultJvmArgs = buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    }
 }
 
 dependencies {
