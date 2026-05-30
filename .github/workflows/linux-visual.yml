@@ -99,6 +99,21 @@ jobs:
             --args="--capture build/visual/hello-triangle.actual.png" \
             --no-daemon --stacktrace
 
+      # Diagnostic : si la JVM a crashé (FFM natif), remonter le hs_err (frames Java
+      # appelantes + frames natives) directement dans le log CI.
+      - name: Dump crash report (hs_err)
+        if: always()
+        run: |
+          f=$(ls -t samples/hello-triangle/hs_err_pid*.log 2>/dev/null | head -1)
+          if [ -n "$f" ]; then
+            echo "===== $f (extrait) ====="
+            sed -n '1,40p' "$f"
+            echo "----- Native frames / Java frames -----"
+            awk '/Native frames|Java frames|Stack:/{f=1} f{print} /^$/{if(f)n++} n>3{exit}' "$f" | head -60
+          else
+            echo "Aucun hs_err trouvé."
+          fi
+
       - name: Diff visuel vs baseline (non bloquant)
         if: always()
         run: |
