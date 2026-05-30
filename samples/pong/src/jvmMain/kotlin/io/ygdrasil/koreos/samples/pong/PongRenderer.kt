@@ -128,6 +128,10 @@ private const val SCORE_Y        = 0.04
 // Taille du uniform buffer : 8 floats × 4 bytes
 private const val UNIFORM_BYTES  = 32uL
 
+// Nombre max de quads par frame (pool d'uniform buffers + bind groups).
+// Décompte : 12 dashes + 2 paddles + 1 ball + 2 × (max 3 digits × ~25 pixels chiffre) = ~165
+private const val MAX_QUADS_PER_FRAME = 256
+
 // ---------------------------------------------------------------------------
 // PongRenderer
 // ---------------------------------------------------------------------------
@@ -144,8 +148,9 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
     private var surface: NativeSurface? = null
     private var gpuDevice: GPUDevice? = null
     private var pipeline: GPURenderPipeline? = null
-    private var uniformBuffer: GPUBuffer? = null
-    private var bindGroup: GPUBindGroup? = null
+    // Pool d'uniform buffers + bind groups (1 par quad pour ne pas écraser entre draw calls)
+    private val uniformBuffers = mutableListOf<GPUBuffer>()
+    private val bindGroups = mutableListOf<GPUBindGroup>()
 
     private var surfaceFormat: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
     private var surfaceAlphaMode: CompositeAlphaMode = CompositeAlphaMode.Auto
@@ -188,15 +193,6 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
 
         configureSurface(device, surf, surfaceWidth, surfaceHeight)
 
-        // Uniform buffer : 8 floats × 4 bytes = 32 bytes
-        val uBuf = device.createBuffer(
-            BufferDescriptor(
-                size = UNIFORM_BYTES,
-                usage = setOf(GPUBufferUsage.Uniform, GPUBufferUsage.CopyDst),
-            )
-        )
-        uniformBuffer = uBuf
-
         val shaderModule = device.createShaderModule(ShaderModuleDescriptor(code = PONG_WGSL))
 
         // Bind group layout
@@ -216,21 +212,35 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
             )
         )
 
-        bindGroup = device.createBindGroup(
-            BindGroupDescriptor(
-                layout = bgl,
-                entries = listOf(
-                    BindGroupEntry(
-                        binding = 0u,
-                        resource = BufferBinding(
-                            buffer = uBuf,
-                            offset = 0uL,
-                            size = UNIFORM_BYTES,
-                        ),
+        // Pool : un uniform buffer + un bind group par draw call.
+        // Sans pool, tous les draw calls partagent le même buffer et seul le dernier
+        // writeBuffer est visible côté GPU (bug : seul le dernier quad s'affiche).
+        repeat(MAX_QUADS_PER_FRAME) {
+            val buf = device.createBuffer(
+                BufferDescriptor(
+                    size = UNIFORM_BYTES,
+                    usage = setOf(GPUBufferUsage.Uniform, GPUBufferUsage.CopyDst),
+                )
+            )
+            uniformBuffers.add(buf)
+            bindGroups.add(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = bgl,
+                        entries = listOf(
+                            BindGroupEntry(
+                                binding = 0u,
+                                resource = BufferBinding(
+                                    buffer = buf,
+                                    offset = 0uL,
+                                    size = UNIFORM_BYTES,
+                                ),
+                            )
+                        )
                     )
                 )
             )
-        )
+        }
 
         val pipelineLayout = device.createPipelineLayout(
             PipelineLayoutDescriptor(bindGroupLayouts = listOf(bgl))
@@ -313,8 +323,7 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
         val surf = surface ?: return
         val device = gpuDevice ?: return
         val pipe = pipeline ?: return
-        val bg = bindGroup ?: return
-        val uBuf = uniformBuffer ?: return
+        if (uniformBuffers.isEmpty()) return
 
         val surfaceTexture = surf.getCurrentTexture()
         when (surfaceTexture.status) {
@@ -331,22 +340,6 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
         }
         val texture = surfaceTexture.texture
         val textureView = texture.createView(null)
-        val encoder = device.createCommandEncoder()
-
-        val renderPass = encoder.beginRenderPass(
-            RenderPassDescriptor(
-                colorAttachments = listOf(
-                    RenderPassColorAttachment(
-                        view = textureView,
-                        loadOp = GPULoadOp.Clear,
-                        storeOp = GPUStoreOp.Store,
-                        clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 1.0),
-                    )
-                )
-            )
-        )
-        renderPass.setPipeline(pipe)
-        renderPass.setBindGroup(0u, bg, emptyList())
 
         // Build list of quads
         val quads = buildList {
@@ -389,9 +382,39 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
                 }
         }
 
-        // Draw each quad: upload uniforms then draw 6 vertices
-        for (data in quads) {
-            device.queue.writeBuffer(uBuf, 0uL, data, 0uL, data.size.toULong())
+        // Garde-fou : on dépasse le pool ? Skip les derniers (mieux que de crasher).
+        val drawCount = minOf(quads.size, uniformBuffers.size)
+        if (quads.size > uniformBuffers.size) {
+            System.err.println(
+                "[PongRenderer] Pool insuffisant : ${quads.size} quads > $MAX_QUADS_PER_FRAME"
+            )
+        }
+
+        // CRITIQUE : tous les writeBuffer DOIVENT être faits AVANT beginRenderPass
+        // (sinon spec WebGPU violée, et avec un seul buffer les writes s'écrasent).
+        for (i in 0 until drawCount) {
+            val data = quads[i]
+            device.queue.writeBuffer(uniformBuffers[i], 0uL, data, 0uL, data.size.toULong())
+        }
+
+        val encoder = device.createCommandEncoder()
+        val renderPass = encoder.beginRenderPass(
+            RenderPassDescriptor(
+                colorAttachments = listOf(
+                    RenderPassColorAttachment(
+                        view = textureView,
+                        loadOp = GPULoadOp.Clear,
+                        storeOp = GPUStoreOp.Store,
+                        clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 1.0),
+                    )
+                )
+            )
+        )
+        renderPass.setPipeline(pipe)
+
+        // Un bindGroup différent par quad (chaque bindGroup pointe sur son propre uniform buffer)
+        for (i in 0 until drawCount) {
+            renderPass.setBindGroup(0u, bindGroups[i], emptyList())
             renderPass.draw(6u, 1u, 0u, 0u)
         }
 
@@ -407,14 +430,14 @@ class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
 
     override fun release() {
         runCatching { pipeline?.close() }
-        runCatching { bindGroup?.close() }
-        runCatching { uniformBuffer?.close() }
+        bindGroups.forEach { runCatching { it.close() } }
+        uniformBuffers.forEach { runCatching { it.close() } }
         runCatching { gpuDevice?.close() }
         runCatching { surface?.close() }
         runCatching { wgpu?.close() }
         pipeline = null
-        bindGroup = null
-        uniformBuffer = null
+        bindGroups.clear()
+        uniformBuffers.clear()
         gpuDevice = null
         surface = null
         wgpu = null
