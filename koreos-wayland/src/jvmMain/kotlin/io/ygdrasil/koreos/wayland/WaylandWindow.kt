@@ -204,6 +204,9 @@ class WaylandWindow private constructor(
         ): WaylandWindow? {
             // Les bindings sont null sur les plateformes non-Wayland — retourner null.
             val createSurface = wlCompositorCreateSurface ?: return null
+            // wl_proxy_marshal_flags déréférence le wl_interface* pour une requête new_id :
+            // il DOIT être non-NULL, sinon SIGSEGV natif (non rattrapable par try/catch).
+            val surfaceInterface = wlSurfaceInterface ?: return null
 
             // ── 1. wl_compositor_create_surface ──────────────────────────────
             val surface: Long = try {
@@ -211,9 +214,10 @@ class WaylandWindow private constructor(
                 (createSurface.invokeExact(
                     compositorSeg,
                     WL_COMPOSITOR_CREATE_SURFACE_OPCODE,
-                    MemorySegment.NULL,  // wl_interface* = NULL (bibliothèque gère)
+                    surfaceInterface,    // &wl_surface_interface (symbole libwayland)
                     WL_COMPOSITOR_VERSION,
                     0,                   // flags = 0
+                    MemorySegment.NULL,  // new_id placeholder (libwayland crée le proxy)
                 ) as MemorySegment).address()
             } catch (_: Throwable) {
                 0L

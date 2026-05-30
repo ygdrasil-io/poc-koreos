@@ -30,6 +30,7 @@ package io.ygdrasil.koreos.wayland
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
+import java.lang.foreign.MemorySegment
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
@@ -345,6 +346,17 @@ internal val wlProxyMarshalFlagsGetXdgSurface: MethodHandle? by lazy {
 // ── wl_compositor_create_surface ──────────────────────────────────────────────
 
 /**
+ * Adresse de la structure `wl_surface_interface` exportée par libwayland-client.so.0.
+ *
+ * `wl_proxy_marshal_flags` exige un `wl_interface*` NON-NULL pour les requêtes new_id
+ * (comme create_surface) afin de typer le proxy retourné : il déréférence cette
+ * structure. Passer NULL provoque un SIGSEGV. On récupère donc le vrai symbole exporté.
+ */
+internal val wlSurfaceInterface: MemorySegment? by lazy {
+    libWaylandClient?.find("wl_surface_interface")?.orElse(null)
+}
+
+/**
  * wl_compositor_create_surface: crée une wl_surface depuis un wl_compositor.
  *
  * Appelle wl_proxy_marshal_flags(compositor, 0, &wl_surface_interface, version, 0)
@@ -361,9 +373,10 @@ internal val wlCompositorCreateSurface: MethodHandle? by lazy {
         FunctionDescriptor.of(ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,   // wl_proxy* (compositor)
             ValueLayout.JAVA_INT,  // opcode (0 = create_surface)
-            ValueLayout.ADDRESS,   // wl_interface* (NULL = laisser la bibliothèque gérer)
+            ValueLayout.ADDRESS,   // wl_interface* (&wl_surface_interface — DOIT être non-NULL)
             ValueLayout.JAVA_INT,  // version
             ValueLayout.JAVA_INT,  // flags (0)
+            ValueLayout.ADDRESS,   // arg new_id : NULL (placeholder, généré par libwayland)
         ))
 }
 
