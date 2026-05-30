@@ -81,5 +81,11 @@ kotlin {
                 api(project(":koreos-web-common"))
             }
         }
+
+        jvmTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
