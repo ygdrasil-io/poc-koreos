@@ -1,0 +1,45 @@
+name: bench-perf
+
+# Suite de benchmarks JMH (Redmine #90). Tourne sur push master et à la demande.
+# Mesure les composants purs (tick physique, IA, BitmapFont, InputAdapter) et publie
+# le JSON de résultats en artefact. La comparaison automatique à une baseline avec
+# seuil de régression reste un point ouvert (voir docs/koreos/performance.md).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'benchmarks/**'
+      - 'samples/pong/**'
+      - 'koreos-core/**'
+      - '.github/workflows/bench-perf.yml'
+  workflow_dispatch:
+
+jobs:
+  bench-perf:
+    name: bench-perf
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run JMH suite
+        run: ./gradlew :benchmarks:jmh-core:jmh --no-daemon --stacktrace
+
+      - name: Upload JMH results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmh-results
+          path: benchmarks/jmh-core/build/results/jmh/results.json
+          if-no-files-found: warn

@@ -45,6 +45,7 @@ rootProject.name = "poc-koreos"
 include(":koreos-web-common")
 include(":koreos-core")
 include(":koreos-test")
+include(":benchmarks:jmh-core")
 include(":koreos-appkit")
 include(":koreos-uikit")
 include(":koreos-win32")
