@@ -15,6 +15,12 @@
  *  - wl_display_read_events
  *  - wl_display_cancel_read
  *  - wl_display_flush
+ *  - wl_display_get_registry
+ *  - wl_registry_add_listener
+ *  - wl_registry_bind
+ *  - wl_proxy_destroy
+ *  - wl_proxy_add_listener
+ *  - wl_proxy_marshal_flags (variante xdg_wm_base_get_xdg_surface)
  *
  * Référence : https://wayland.freedesktop.org/docs/html/
  */
@@ -228,4 +234,100 @@ internal val wlDisplayFlush: MethodHandle? by lazy {
             ValueLayout.ADDRESS,  // wl_display*
         )
     )
+}
+
+// ── wl_display_get_registry ───────────────────────────────────────────────────
+
+/**
+ * struct wl_registry *wl_display_get_registry(struct wl_display *display);
+ *
+ * Retourne le registre global Wayland, point d'entrée pour lier des interfaces
+ * globales (wl_compositor, xdg_wm_base, etc.) via wl_registry_bind.
+ */
+internal val wlDisplayGetRegistry: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_display_get_registry",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+// ── wl_registry_add_listener ──────────────────────────────────────────────────
+
+/**
+ * int wl_registry_add_listener(struct wl_registry *registry,
+ *     const struct wl_registry_listener *listener, void *data);
+ *
+ * Enregistre un listener pour les événements du registre (global/global_remove).
+ * Retourne 0 en cas de succès, -1 en cas d'erreur.
+ */
+internal val wlRegistryAddListener: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_registry_add_listener",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+// ── wl_registry_bind ──────────────────────────────────────────────────────────
+
+/**
+ * void *wl_registry_bind(struct wl_registry *registry, uint32_t name,
+ *     const struct wl_interface *interface, uint32_t version);
+ *
+ * Lie une interface globale par son nom numérique (annoncé via wl_registry.global).
+ * Retourne un proxy Wayland opaque (wl_compositor*, xdg_wm_base*, etc.).
+ */
+internal val wlRegistryBind: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_registry_bind",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+// ── wl_proxy_destroy ──────────────────────────────────────────────────────────
+
+/**
+ * void wl_proxy_destroy(struct wl_proxy *proxy);
+ *
+ * Détruit un proxy Wayland et libère ses ressources. À appeler avant de
+ * déconnecter l'affichage pour tout proxy non détruit par une opération destroy.
+ */
+internal val wlProxyDestroy: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_destroy",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+// ── wl_proxy_add_listener ─────────────────────────────────────────────────────
+
+/**
+ * int wl_proxy_add_listener(struct wl_proxy *proxy,
+ *     void (**implementation)(void), void *data);
+ *
+ * Associe une table de fonctions (vtable) et des données utilisateur à un proxy.
+ * Utilisé pour recevoir les événements côté client (configure, ping, etc.).
+ * Retourne 0 en cas de succès, -1 en cas d'erreur.
+ */
+internal val wlProxyAddListener: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_add_listener",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+// ── wl_proxy_marshal_flags (variante xdg_wm_base_get_xdg_surface) ────────────
+
+/**
+ * struct wl_proxy *wl_proxy_marshal_flags(struct wl_proxy *proxy,
+ *     uint32_t opcode, const struct wl_interface *interface,
+ *     uint32_t version, uint32_t flags,
+ *     struct wl_proxy *new_id, struct wl_proxy *surface);
+ *
+ * Variante à 7 arguments pour wl_proxy_marshal_flags utilisée par
+ * xdg_wm_base_get_xdg_surface (opcode XDG_WM_BASE_GET_XDG_SURFACE).
+ *
+ * La fonction C est variadique ; on bind ici la forme concrète à 2 arguments
+ * supplémentaires (new_id + surface) qui correspond exactement à cet opcode.
+ */
+internal val wlProxyMarshalFlagsGetXdgSurface: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // proxy
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // interface
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.ADDRESS,   // arg: new_id
+            ValueLayout.ADDRESS,   // arg: surface
+        ))
 }
