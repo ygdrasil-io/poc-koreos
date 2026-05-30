@@ -7,6 +7,105 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.0] — 2026-05-30
+
+Sprint 3–5 — backend Win32, Web (JS + Wasm), Linux (X11 + Wayland) et sample Pong cross-platform.
+
+### Added
+
+#### Sprint 3 — Backend Win32 (Windows)
+
+- **`koreos-win32`** — Module JVM FFM Windows, pattern `tryCreate` lazy pour l'instanciation
+  - `Win32Window` — `RegisterClassExW` + `CreateWindowExW` + gestion `WM_DELETE_WINDOW`
+  - `Win32EventLoop` — boucle de messages avec trois modes : `PeekMessageW` (Poll) / `GetMessageW` (Wait) / `MsgWaitForMultipleObjectsEx` (WaitUntil) — contraintes PR #49 §1A
+  - `Win32WndProcArena` — `Arena.ofShared()` pour stub upcall permanent (durée de vie process)
+  - `KoreosWndProc` — dispatch `WM_*` → `WindowEvent`
+  - `Win32KeyMapper` — table de correspondance `VK_*` → `Key`
+  - DPI PerMonitorV2 + `WM_DPICHANGED` → `WindowEvent.ScaleFactorChanged`
+  - Événements souris complets : `WM_LBUTTONDOWN/UP`, `WM_RBUTTONDOWN/UP`, `WM_MBUTTONDOWN/UP`, `WM_MOUSEWHEEL`, `WM_MOUSELEAVE`, `WM_XBUTTONDOWN/UP`
+- **`koreos`** — Façade `EventLoop` JVM : routing Windows via réflexion
+- **CI** — Job `windows-build` (windows-latest, JDK 25)
+
+#### Sprint 2 — Backend Web (JS + Wasm)
+
+- **`koreos-web-common`** — Module partagé js(IR) + wasmJs :
+  - `RawWindowHandle.Web` + `RawDisplayHandle.Web`
+  - `WebEventLoop` — boucle non-bloquante via `requestAnimationFrame`
+  - `WebWindow` — `HTMLCanvasElement` + `devicePixelRatio`
+  - `DomEventMapper` — `PointerEvent` unifié → `WindowEvent`
+- **`koreos-js`** — Module Kotlin/JS browser (IR) :
+  - Façade `EventLoop` jsMain
+  - Sample `hello-window-web` (JS)
+- **`koreos-wasm`** — Module Kotlin/Wasm browser :
+  - Façade `EventLoop` wasmJsMain
+  - Sample `hello-window-web` (Wasm)
+- **CI** — Job `web-build` (ubuntu-latest, Node LTS)
+
+#### Sprint 4 — Backend Linux (X11 + Wayland)
+
+- **`koreos-core`** — `RawWindowHandle.Xlib` + `RawWindowHandle.Wayland` + `RawDisplayHandle.Xlib` + `RawDisplayHandle.Wayland`
+- **`koreos-x11`** — Module JVM FFM libX11.so.6 :
+  - `X11Window` — `XCreateWindow` + `XSelectInput` + atome `WM_DELETE_WINDOW`
+  - `X11EventLoop` — `XPending` (Poll) / `XNextEvent` (Wait) / polling WaitUntil — contraintes §1A
+  - `X11KeyMapper` — `KeySym` → `Key` + `XkbSetDetectableAutoRepeat`
+  - `X11MouseMapper` — `ButtonPress` / `MotionNotify` / `EnterNotify` / `FocusIn`
+  - `X11DrawMapper` — `Expose` → `RedrawRequested`, `ConfigureNotify` → `Resized`, heuristique DPI via `Xft.dpi`
+- **`koreos-wayland`** — Module JVM FFM libwayland-client.so.0 :
+  - `WaylandWindow` — `wl_compositor_create_surface` + stub `xdg_surface`
+  - `WaylandEventLoop` — `prepare_read` + poll fd + `eventfd` wakeUp — contraintes §1A
+  - `WaylandKeyMapper` — Linux evdev keycodes → `Key`
+  - `WaylandMouseMapper` — `BTN_LEFT/RIGHT/MIDDLE` + `wl_pointer.axis` → `MouseWheel`
+  - Bindings xdg_shell : `wl_proxy_marshal_flags` + `XdgShellConstants` + `WaylandInterfaces`
+- **`koreos`** — Façade jvmMain : `LinuxBackendDetector` — détection auto X11/Wayland via `XDG_SESSION_TYPE` + `WAYLAND_DISPLAY` + override `KOREOS_LINUX_BACKEND` — contraintes §1B (lazy Throwable)
+- **CI** — Jobs `linux-x11-build` (Xvfb) + `linux-wayland-build`
+
+#### Sprint 5 — Sample Pong cross-platform
+
+- **`samples/pong`** — Module KMP 6 cibles (JVM, iOS, Android, JS, Wasm, Linux) :
+  - `GameState` — `Paddle`, `Ball`, `Score` + physique 2D `tick()` (pure Kotlin commonMain)
+  - `PongAi` — intelligence artificielle avec lag de réaction configurable
+  - `InputAdapter` — `ArrowUp`/`Down` + zone tactile droite
+  - `BitmapFont` — glyphes 5×7 pixels pour chiffres 0-9
+  - `PongRenderer` (JVM) — pipeline 2D wgpu4k, 5+ quads, fond noir
+  - `PongGame` — orchestrateur `ApplicationHandler` (commonMain)
+  - Entry points : JVM, iOS, Android, JS, Wasm
+
+#### Documentation
+
+- Tutoriel "Embed Koreos in a Windows app"
+- Tutoriel "Embed Koreos in a webpage" (JS + Wasm)
+- Tutoriel "Embed Koreos in a Linux app" (X11 + Wayland)
+- Navigation MkDocs mise à jour
+
+### Artifacts
+
+Group ID: `io.ygdrasil.koreos`
+
+| Module                | Artifact ID           | Targets                                              |
+|-----------------------|-----------------------|------------------------------------------------------|
+| `koreos-core`         | `koreos-core`         | jvm, iosX64, iosArm64, iosSimulatorArm64, android    |
+| `koreos`              | `koreos`              | jvm, js, wasmJs, iosX64, iosArm64, iosSimulatorArm64, android |
+| `koreos-appkit`       | `koreos-appkit`       | jvm (macOS only)                                     |
+| `koreos-uikit`        | `koreos-uikit`        | iosX64, iosArm64, iosSimulatorArm64                  |
+| `koreos-android`      | `koreos-android`      | android                                              |
+| `koreos-win32`        | `koreos-win32`        | jvm (Windows only)                                   |
+| `koreos-web-common`   | `koreos-web-common`   | js, wasmJs                                           |
+| `koreos-js`           | `koreos-js`           | js (browser)                                         |
+| `koreos-wasm`         | `koreos-wasm`         | wasmJs (browser)                                     |
+| `koreos-x11`          | `koreos-x11`          | jvm (Linux only)                                     |
+| `koreos-wayland`      | `koreos-wayland`      | jvm (Linux only)                                     |
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.ygdrasil.koreos:koreos:0.2.0")
+}
+```
+
+[0.2.0]: https://github.com/ygdrasil-io/poc-koreos/releases/tag/v0.2.0
+
+---
+
 ## [0.1.1] — 2026-05-29
 
 Patch de corrections Sprint 0 — 10 PRs de stabilisation post-release v0.1.0.
