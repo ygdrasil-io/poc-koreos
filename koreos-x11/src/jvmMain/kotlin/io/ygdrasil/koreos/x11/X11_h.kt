@@ -17,6 +17,8 @@
  *  - XInternAtom       — obtient un atome par nom
  *  - XSetWMProtocols   — définit les protocoles WM (ex. WM_DELETE_WINDOW)
  *  - XMapWindow        — rend une fenêtre visible
+ *  - XkbSetDetectableAutoRepeat — désactive la répétition automatique X11 (KeyPress factice)
+ *  - XResourceManagerString — retourne la base de données de ressources X (Xft.dpi, etc.)
  *
  * Référence : https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
  */
@@ -296,6 +298,50 @@ internal val xMapWindow: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,   // int retour
             ValueLayout.ADDRESS,    // Display*
             ValueLayout.JAVA_LONG,  // Window (XID)
+        )
+    )
+}
+
+// ── XkbSetDetectableAutoRepeat ────────────────────────────────────────────────
+
+/**
+ * Bool XkbSetDetectableAutoRepeat(Display *display, Bool detectable, Bool *supported_rtrn);
+ *
+ * Active le mode "detectable auto-repeat" : en mode normal, X11 génère une paire
+ * KeyRelease/KeyPress pour chaque répétition automatique. Avec cette fonction,
+ * seul un KeyPress est généré (sans KeyRelease intermédiaire) pour les répétitions.
+ * Cela permet à l'application de distinguer les vraies répétitions des vraies
+ * frappes et relâchements de touches.
+ *
+ * supported_rtrn peut être NULL si l'on ne souhaite pas tester le support.
+ */
+internal val xkbSetDetectableAutoRepeat: MethodHandle? by lazy {
+    libX11.downcall(
+        "XkbSetDetectableAutoRepeat",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // Bool retour
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_INT,   // Bool detectable
+            ValueLayout.ADDRESS,    // Bool* supported_rtrn (peut être NULL)
+        )
+    )
+}
+
+// ── XResourceManagerString ────────────────────────────────────────────────────
+
+/**
+ * char *XResourceManagerString(Display *display);
+ *
+ * Retourne la chaîne de la base de données de ressources X11 (RESOURCE_MANAGER).
+ * Utilisée pour lire les préférences DPI (Xft.dpi), la police, etc.
+ * La chaîne est valide tant que le Display est ouvert — ne pas la libérer.
+ */
+internal val xResourceManagerString: MethodHandle? by lazy {
+    libX11.downcall(
+        "XResourceManagerString",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // char* retour (pointeur interne, ne pas libérer)
+            ValueLayout.ADDRESS,    // Display*
         )
     )
 }
