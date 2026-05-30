@@ -9,10 +9,12 @@
 #   └─────────────────────────────────────────────────────────────────────────┘
 #
 #   ┌─ Deep-Testing (PR → master, push master, ou branches claude/**) ───────┐
-#   │  build-and-test  JVM + allTests (macos-15, iOS simulator disponible)   │
-#   │  ios-build       iOS simulator arm64 — build + link + tests            │
-#   │  android-build   Android (ubuntu-latest) — build + assembleDebug       │
-#   │  windows-build   Win32 FFM (windows-latest) — build + jvmTest          │
+#   │  build-and-test      JVM + allTests (macos-15, iOS simulator)          │
+#   │  ios-build           iOS simulator arm64 — build + link + tests        │
+#   │  android-build       Android (ubuntu-latest) — build + assembleDebug   │
+#   │  windows-build       Win32 FFM (windows-latest) — build + jvmTest      │
+#   │  linux-x11-build     X11/Xvfb (ubuntu-latest) — jvmTest + build       │
+#   │  linux-wayland-build Wayland (ubuntu-latest) — jvmTest + build        │
 #   └─────────────────────────────────────────────────────────────────────────┘
 #
 #   Note : ios-build et android-build sont des jobs coûteux (runners macOS /
@@ -281,5 +283,106 @@ jobs:
             :koreos-win32:build \
             :koreos-win32:jvmTest \
             :samples:hello-triangle:build \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 6 : linux-x11-build ─────────────────────────────────────────────
+  #
+  # Build le module koreos-x11 et exécute les tests JVM sous Xvfb (X11 virtuel).
+  # Utilise ubuntu-latest avec les paquets X11 dev pour fournir libX11 au runtime.
+  #
+  # S'exécute sur Deep-Testing :
+  #   • PRs vers master / push sur master
+  #   • push ou PR sur les branches claude/** (feature branches CI)
+  #
+  # Note : koreos-x11:jvmTest détecte automatiquement l'absence de display et
+  # saute les tests nécessitant un serveur X — xvfb-run -a fournit un display
+  # virtuel stable pour les tests qui en ont besoin.
+  # hello-triangle (wgpu native) est exclu pour v0.2.
+  linux-x11-build:
+    name: linux-x11-build
+    runs-on: ubuntu-latest
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      # Installe les dépendances X11 requises par koreos-x11 (FFM + JNI).
+      # libX11-dev fournit le .so runtime ; xvfb fournit un serveur X virtuel.
+      - name: Install X11 dependencies
+        run: sudo apt-get install -y xvfb libx11-dev libxi-dev libxkbcommon-dev
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # xvfb-run -a démarre un display X virtuel pour les tests qui en ont besoin.
+      # Les tests sans display (compile-only) s'exécutent normalement.
+      - name: Build X11 modules + JVM tests (Xvfb)
+        run: |
+          xvfb-run -a ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-x11:build \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 7 : linux-wayland-build ─────────────────────────────────────────
+  #
+  # Build le module koreos-wayland et exécute les tests JVM Wayland.
+  # Utilise ubuntu-latest avec les paquets Wayland dev.
+  #
+  # S'exécute sur Deep-Testing :
+  #   • PRs vers master / push sur master
+  #   • push ou PR sur les branches claude/** (feature branches CI)
+  #
+  # Note : pas de serveur Wayland disponible en CI — wl_display_connect()
+  # retourne null et les tests nécessitant un compositeur Wayland sont sautés
+  # automatiquement. Le job valide la compilation et les tests indépendants
+  # du compositeur.
+  linux-wayland-build:
+    name: linux-wayland-build
+    runs-on: ubuntu-latest
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      # Installe les dépendances Wayland requises par koreos-wayland (FFM + JNI).
+      - name: Install Wayland dependencies
+        run: sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Pas de display nécessaire : les tests compilent et s'exécutent sans
+      # compositeur Wayland (wl_display_connect retourne null → tests sautés).
+      - name: Build Wayland modules + JVM tests
+        run: |
+          ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-wayland:build \
             --no-daemon \
             --stacktrace
