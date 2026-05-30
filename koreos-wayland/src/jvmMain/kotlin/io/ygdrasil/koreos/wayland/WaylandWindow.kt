@@ -30,8 +30,6 @@ private const val WL_COMPOSITOR_CREATE_SURFACE_OPCODE: Int = 0
 /** Opcode wl_surface.commit dans le protocole Wayland de base. */
 private const val WL_SURFACE_COMMIT_OPCODE: Int = 6
 
-/** Version du protocole wl_compositor utilisée pour les requêtes. */
-private const val WL_COMPOSITOR_VERSION: Int = 4
 
 /**
  * Fenêtre Wayland native implémentant [Window].
