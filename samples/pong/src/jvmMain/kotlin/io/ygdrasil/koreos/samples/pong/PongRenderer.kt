@@ -1,0 +1,423 @@
+/**
+ * PongRenderer — rendu wgpu4k 2D pour Pong (JVM uniquement).
+ *
+ * Dessine les éléments du jeu sous forme de quads rectangulaires :
+ *   - Fond noir (clear)
+ *   - Raquette joueur (gauche, blanche)
+ *   - Raquette IA (droite, blanche)
+ *   - Balle (petite, blanche)
+ *   - Ligne centrale en pointillés
+ *   - Score (police bitmap via [BitmapFont])
+ *
+ * Le shader WGSL accepte un quad décrit par [x, y, w, h] en coordonnées
+ * normalisées [0..1] et une couleur RGB. Deux triangles (6 sommets) sont
+ * générés en dur dans le vertex shader à partir du vertex_index.
+ *
+ * Redmine #78.
+ */
+package io.ygdrasil.koreos.samples.pong
+
+import ffi.JvmNativeAddress
+import io.ygdrasil.koreos.core.RawWindowHandle
+import io.ygdrasil.webgpu.BindGroupDescriptor
+import io.ygdrasil.webgpu.BindGroupEntry
+import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
+import io.ygdrasil.webgpu.BindGroupLayoutEntry
+import io.ygdrasil.webgpu.BufferBinding
+import io.ygdrasil.webgpu.BufferBindingLayout
+import io.ygdrasil.webgpu.BufferDescriptor
+import io.ygdrasil.webgpu.Color
+import io.ygdrasil.webgpu.ColorTargetState
+import io.ygdrasil.webgpu.CompositeAlphaMode
+import io.ygdrasil.webgpu.FragmentState
+import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBufferBindingType
+import io.ygdrasil.webgpu.GPUBufferUsage
+import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPULoadOp
+import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUShaderStage
+import io.ygdrasil.webgpu.GPUStoreOp
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
+import io.ygdrasil.webgpu.NativeSurface
+import io.ygdrasil.webgpu.PipelineLayoutDescriptor
+import io.ygdrasil.webgpu.PrimitiveState
+import io.ygdrasil.webgpu.RenderPassColorAttachment
+import io.ygdrasil.webgpu.RenderPassDescriptor
+import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.SurfaceConfiguration
+import io.ygdrasil.webgpu.SurfaceTextureStatus
+import io.ygdrasil.webgpu.VertexState
+import io.ygdrasil.webgpu.WGPU
+import io.ygdrasil.webgpu.WGPUInstanceBackend
+import io.ygdrasil.webgpu.WGPULowLevelApi
+import io.ygdrasil.webgpu.writeBuffer
+import io.ygdrasil.koreos.appkit.bindings.ObjCRuntime
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import kotlinx.coroutines.runBlocking
+
+// ---------------------------------------------------------------------------
+// WGSL — shader 2D quad par vertex_index (0..5, 2 triangles)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shader WGSL commun vertex + fragment.
+ *
+ * Le vertex shader génère les 6 sommets du quad (2 triangles) à partir
+ * du vertex_index builtin — aucun vertex buffer n'est requis.
+ *
+ * Uniforms (binding 0) : [x, y, w, h, r, g, b, _pad] (8 floats = 32 bytes).
+ *
+ * Coordonnées d'entrée : espace normalisé [0..1] avec Y vers le bas.
+ * Coordonnées de sortie : NDC [-1..1] avec Y vers le haut (convention WebGPU).
+ */
+private val PONG_WGSL = """
+struct Uniforms {
+    x: f32, y: f32, w: f32, h: f32,
+    r: f32, g: f32, b: f32, _pad: f32,
+}
+
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct VertexOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) color: vec3<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOut {
+    // 6 coins (2 triangles CCW) : TL TR BL  TR BR BL
+    let cx = array<f32, 6>(0.0, 1.0, 0.0, 1.0, 1.0, 0.0);
+    let cy = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
+    let nx = u.x + cx[vi] * u.w;
+    let ny = u.y + cy[vi] * u.h;
+    var out: VertexOut;
+    out.pos   = vec4<f32>(nx * 2.0 - 1.0, 1.0 - ny * 2.0, 0.0, 1.0);
+    out.color = vec3<f32>(u.r, u.g, u.b);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    return vec4<f32>(in.color, 1.0);
+}
+""".trimIndent()
+
+// ---------------------------------------------------------------------------
+// Constantes de mise en page (coordonnées normalisées [0..1])
+// ---------------------------------------------------------------------------
+
+private const val PADDLE_WIDTH_N  = 0.02
+private const val PADDLE_HEIGHT_N = 0.20
+private const val PADDLE_X_LEFT   = 0.02
+private const val PADDLE_X_RIGHT  = 1.0 - PADDLE_X_LEFT - PADDLE_WIDTH_N
+
+private const val BALL_SIZE_N = 0.018
+
+private const val DASH_WIDTH_N   = 0.008
+private const val DASH_HEIGHT_N  = 0.04
+private const val DASH_COUNT     = 12
+
+private const val SCORE_PIXEL    = 0.012
+private const val SCORE_Y        = 0.04
+
+// Taille du uniform buffer : 8 floats × 4 bytes
+private const val UNIFORM_BYTES  = 32uL
+
+// ---------------------------------------------------------------------------
+// PongRenderer
+// ---------------------------------------------------------------------------
+
+/**
+ * Rendu wgpu4k pour Pong — JVM uniquement (macOS/Metal via AppKit).
+ *
+ * @param windowHandle Handle natif de la fenêtre Koreos.
+ */
+@OptIn(WGPULowLevelApi::class)
+class PongRenderer(windowHandle: RawWindowHandle) : PongRendererInterface {
+
+    private var wgpu: WGPU? = null
+    private var surface: NativeSurface? = null
+    private var gpuDevice: GPUDevice? = null
+    private var pipeline: GPURenderPipeline? = null
+    private var uniformBuffer: GPUBuffer? = null
+    private var bindGroup: GPUBindGroup? = null
+
+    private var surfaceFormat: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
+    private var surfaceAlphaMode: CompositeAlphaMode = CompositeAlphaMode.Auto
+    private var surfaceWidth: Int = 800
+    private var surfaceHeight: Int = 600
+
+    // -------------------------------------------------------------------------
+    // Initialisation
+    // -------------------------------------------------------------------------
+
+    init {
+        ffi.LibraryLoader.load()
+
+        val wgpuInstance = WGPU.createInstance(WGPUInstanceBackend.Metal)
+            ?: error("[PongRenderer] Échec création WGPU Instance")
+        wgpu = wgpuInstance
+
+        val surf = createSurface(wgpuInstance, windowHandle)
+            ?: error("[PongRenderer] Impossible de créer la surface wgpu")
+        surface = surf
+
+        val adapter = wgpuInstance.requestAdapter(surf)
+            ?: error("[PongRenderer] Échec acquisition Adapter")
+        surf.computeSurfaceCapabilities(adapter)
+
+        val device = runBlocking { adapter.requestDevice() }
+            .getOrElse { err -> error("[PongRenderer] Échec acquisition Device : $err") }
+        gpuDevice = device
+
+        val format = surf.supportedFormats
+            .firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
+            ?: surf.supportedFormats.firstOrNull()
+            ?: GPUTextureFormat.BGRA8Unorm
+        surfaceFormat = format
+
+        val alphaMode = surf.supportedAlphaMode
+            .firstOrNull { it == CompositeAlphaMode.Opaque }
+            ?: CompositeAlphaMode.Auto
+        surfaceAlphaMode = alphaMode
+
+        configureSurface(device, surf, surfaceWidth, surfaceHeight)
+
+        // Uniform buffer : 8 floats × 4 bytes = 32 bytes
+        val uBuf = device.createBuffer(
+            BufferDescriptor(
+                size = UNIFORM_BYTES,
+                usage = setOf(GPUBufferUsage.Uniform, GPUBufferUsage.CopyDst),
+            )
+        )
+        uniformBuffer = uBuf
+
+        val shaderModule = device.createShaderModule(ShaderModuleDescriptor(code = PONG_WGSL))
+
+        // Bind group layout
+        val bgl = device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = setOf(GPUShaderStage.Vertex, GPUShaderStage.Fragment),
+                        buffer = BufferBindingLayout(
+                            type = GPUBufferBindingType.Uniform,
+                            hasDynamicOffset = false,
+                            minBindingSize = UNIFORM_BYTES,
+                        ),
+                    )
+                )
+            )
+        )
+
+        bindGroup = device.createBindGroup(
+            BindGroupDescriptor(
+                layout = bgl,
+                entries = listOf(
+                    BindGroupEntry(
+                        binding = 0u,
+                        resource = BufferBinding(
+                            buffer = uBuf,
+                            offset = 0uL,
+                            size = UNIFORM_BYTES,
+                        ),
+                    )
+                )
+            )
+        )
+
+        val pipelineLayout = device.createPipelineLayout(
+            PipelineLayoutDescriptor(bindGroupLayouts = listOf(bgl))
+        )
+
+        pipeline = device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = pipelineLayout,
+                vertex = VertexState(module = shaderModule, entryPoint = "vs_main"),
+                primitive = PrimitiveState(),
+                fragment = FragmentState(
+                    module = shaderModule,
+                    entryPoint = "fs_main",
+                    targets = listOf(ColorTargetState(format = format)),
+                ),
+            )
+        )
+
+        shaderModule.close()
+        bgl.close()
+        pipelineLayout.close()
+        adapter.close()
+
+        println("[PongRenderer] Initialisé — format=$format alpha=$alphaMode")
+    }
+
+    // -------------------------------------------------------------------------
+    // Surface helpers
+    // -------------------------------------------------------------------------
+
+    private fun createSurface(wgpuInstance: WGPU, handle: RawWindowHandle): NativeSurface? =
+        when (handle) {
+            is RawWindowHandle.AppKit -> {
+                val metalLayerAddr = if (handle.nsLayer != 0L) handle.nsLayer
+                                     else getMetalLayerFromNsView(handle.nsView)
+                if (metalLayerAddr == 0L) null
+                else wgpuInstance.getSurfaceFromMetalLayer(
+                    JvmNativeAddress(MemorySegment.ofAddress(metalLayerAddr))
+                )
+            }
+            else -> {
+                println("[PongRenderer] Handle non supporté pour wgpu4k : $handle")
+                null
+            }
+        }
+
+    private fun configureSurface(device: GPUDevice, surf: NativeSurface, w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        surf.configure(
+            SurfaceConfiguration(
+                device = device,
+                format = surfaceFormat,
+                usage = setOf(GPUTextureUsage.RenderAttachment),
+                alphaMode = surfaceAlphaMode,
+            ),
+            w.toUInt(),
+            h.toUInt(),
+        )
+    }
+
+    private fun getMetalLayerFromNsView(nsViewPtr: Long): Long {
+        val sel = ObjCRuntime.sel("layer")
+        val nsViewSeg = MemorySegment.ofAddress(nsViewPtr)
+        return (ObjCRuntime.msgSend(ValueLayout.ADDRESS, nsViewSeg, sel) as MemorySegment).address()
+    }
+
+    // -------------------------------------------------------------------------
+    // PongRendererInterface
+    // -------------------------------------------------------------------------
+
+    override fun resize(width: Int, height: Int) {
+        surfaceWidth = width
+        surfaceHeight = height
+        val surf = surface ?: return
+        val device = gpuDevice ?: return
+        configureSurface(device, surf, width, height)
+    }
+
+    override fun draw(state: GameState) {
+        val surf = surface ?: return
+        val device = gpuDevice ?: return
+        val pipe = pipeline ?: return
+        val bg = bindGroup ?: return
+        val uBuf = uniformBuffer ?: return
+
+        val surfaceTexture = surf.getCurrentTexture()
+        when (surfaceTexture.status) {
+            SurfaceTextureStatus.lost, SurfaceTextureStatus.outdated -> {
+                surfaceTexture.texture.close()
+                configureSurface(device, surf, surfaceWidth, surfaceHeight)
+                return
+            }
+            SurfaceTextureStatus.outOfMemory, SurfaceTextureStatus.deviceLost -> {
+                surfaceTexture.texture.close()
+                return
+            }
+            SurfaceTextureStatus.success, SurfaceTextureStatus.timeout -> { /* ok */ }
+        }
+        val texture = surfaceTexture.texture
+        val textureView = texture.createView(null)
+        val encoder = device.createCommandEncoder()
+
+        val renderPass = encoder.beginRenderPass(
+            RenderPassDescriptor(
+                colorAttachments = listOf(
+                    RenderPassColorAttachment(
+                        view = textureView,
+                        loadOp = GPULoadOp.Clear,
+                        storeOp = GPUStoreOp.Store,
+                        clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 1.0),
+                    )
+                )
+            )
+        )
+        renderPass.setPipeline(pipe)
+        renderPass.setBindGroup(0u, bg, emptyList())
+
+        // Build list of quads
+        val quads = buildList {
+            // Center dashes (gray)
+            repeat(DASH_COUNT) { i ->
+                val dashY = (i.toDouble() / DASH_COUNT) + (0.5 / DASH_COUNT) - DASH_HEIGHT_N / 2
+                add(floatArrayOf(
+                    (0.5 - DASH_WIDTH_N / 2).toFloat(), dashY.toFloat(),
+                    DASH_WIDTH_N.toFloat(), DASH_HEIGHT_N.toFloat(),
+                    0.4f, 0.4f, 0.4f, 0f,
+                ))
+            }
+            // Player paddle (left, white)
+            add(floatArrayOf(
+                PADDLE_X_LEFT.toFloat(), (state.player.y - state.player.height / 2).toFloat(),
+                PADDLE_WIDTH_N.toFloat(), state.player.height.toFloat(),
+                1f, 1f, 1f, 0f,
+            ))
+            // AI paddle (right, white)
+            add(floatArrayOf(
+                PADDLE_X_RIGHT.toFloat(), (state.ai.y - state.ai.height / 2).toFloat(),
+                PADDLE_WIDTH_N.toFloat(), state.ai.height.toFloat(),
+                1f, 1f, 1f, 0f,
+            ))
+            // Ball (white)
+            add(floatArrayOf(
+                (state.ball.x - BALL_SIZE_N / 2).toFloat(), (state.ball.y - BALL_SIZE_N / 2).toFloat(),
+                BALL_SIZE_N.toFloat(), BALL_SIZE_N.toFloat(),
+                1f, 1f, 1f, 0f,
+            ))
+            // Player score (left)
+            BitmapFont.renderNumber(state.score.player, x = 0.30, y = SCORE_Y, pixelSize = SCORE_PIXEL)
+                .forEach { q ->
+                    add(floatArrayOf(q.x.toFloat(), q.y.toFloat(), q.w.toFloat(), q.h.toFloat(), 1f, 1f, 1f, 0f))
+                }
+            // AI score (right)
+            BitmapFont.renderNumber(state.score.ai, x = 0.62, y = SCORE_Y, pixelSize = SCORE_PIXEL)
+                .forEach { q ->
+                    add(floatArrayOf(q.x.toFloat(), q.y.toFloat(), q.w.toFloat(), q.h.toFloat(), 1f, 1f, 1f, 0f))
+                }
+        }
+
+        // Draw each quad: upload uniforms then draw 6 vertices
+        for (data in quads) {
+            device.queue.writeBuffer(uBuf, 0uL, data, 0uL, data.size.toULong())
+            renderPass.draw(6u, 1u, 0u, 0u)
+        }
+
+        renderPass.end()
+
+        val commandBuffer = encoder.finish()
+        device.queue.submit(listOf(commandBuffer))
+        surf.present()
+
+        textureView.close()
+        encoder.close()
+    }
+
+    override fun release() {
+        runCatching { pipeline?.close() }
+        runCatching { bindGroup?.close() }
+        runCatching { uniformBuffer?.close() }
+        runCatching { gpuDevice?.close() }
+        runCatching { surface?.close() }
+        runCatching { wgpu?.close() }
+        pipeline = null
+        bindGroup = null
+        uniformBuffer = null
+        gpuDevice = null
+        surface = null
+        wgpu = null
+        println("[PongRenderer] Ressources libérées")
+    }
+}
