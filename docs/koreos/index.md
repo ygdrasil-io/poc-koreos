@@ -7,6 +7,7 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 ## Tutoriels
 
 - [Intégrer Koreos dans une application Windows](./tutorials/windows-app.md) — fenêtre Win32, événements, DPI PerMonitorV2
+- [Intégrer Koreos dans une page web](./tutorials/web-embed.md) — canvas HTML, Kotlin/JS + Kotlin/Wasm, boucle RAF
 
 ## Documents
 
