@@ -331,3 +331,41 @@ internal val xSendEvent: MethodHandle? by lazy {
         )
     )
 }
+
+// ── XkbSetDetectableAutoRepeat ────────────────────────────────────────────────
+
+/**
+ * Bool XkbSetDetectableAutoRepeat(Display *display, Bool detectable, Bool *supported_rtrn);
+ *
+ * Active le mode "detectable auto-repeat" permettant de distinguer les vraies
+ * répétitions automatiques des frappes et relâchements réels.
+ */
+internal val xkbSetDetectableAutoRepeat: MethodHandle? by lazy {
+    libX11.downcall(
+        "XkbSetDetectableAutoRepeat",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // Bool retour
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_INT,   // Bool detectable
+            ValueLayout.ADDRESS,    // Bool* supported_rtrn (peut être NULL)
+        )
+    )
+}
+
+// ── XResourceManagerString ────────────────────────────────────────────────────
+
+/**
+ * char *XResourceManagerString(Display *display);
+ *
+ * Retourne la chaîne de la base de données de ressources X11 (RESOURCE_MANAGER).
+ * Utilisée pour lire les préférences DPI (Xft.dpi), la police, etc.
+ */
+internal val xResourceManagerString: MethodHandle? by lazy {
+    libX11.downcall(
+        "XResourceManagerString",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // char* retour
+            ValueLayout.ADDRESS,    // Display*
+        )
+    )
+}
