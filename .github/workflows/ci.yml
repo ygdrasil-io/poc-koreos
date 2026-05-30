@@ -12,6 +12,7 @@
 #   │  build-and-test  JVM + allTests (macos-15, iOS simulator disponible)   │
 #   │  ios-build       iOS simulator arm64 — build + link + tests            │
 #   │  android-build   Android (ubuntu-latest) — build + assembleDebug       │
+#   │  web-build       JS + Wasm (ubuntu-latest, Node LTS) — compile + test  │
 #   └─────────────────────────────────────────────────────────────────────────┘
 #
 #   Note : ios-build et android-build sont des jobs coûteux (runners macOS /
@@ -236,5 +237,60 @@ jobs:
             :koreos:compileDebugKotlinAndroid \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+  # ── Job 5 : web-build ────────────────────────────────────────────────────
+  #
+  # Compile et teste les modules web (JS/IR + wasmJs).
+  #   • :koreos-core:jvmTest          régression JVM (référence stable)
+  #   • :koreos-web-common:jsTest     tests partagés JS+wasm (Node/karma)
+  #   • :koreos-js:compileKotlinJs    vérification compilation JS/IR
+  #   • :koreos-wasm:compileKotlinWasmJs  vérification compilation wasmJs
+  #
+  # Remarque : on utilise compileKotlin* au lieu de build pour éviter les
+  # restrictions sur les dépôts de distribution Node.js dans les settings Gradle.
+  #
+  # S'exécute sur Deep-Testing :
+  #   • PRs vers master / push sur master
+  #   • push ou PR sur les branches claude/** (feature branches CI)
+  web-build:
+    name: web-build
+    runs-on: ubuntu-latest
+    if: |
+      github.base_ref == 'master' ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/heads/claude/') ||
+      startsWith(github.head_ref, 'claude/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Régression JVM + tests partagés web + vérifications de compilation JS/Wasm.
+      # compileKotlin* évite les téléchargements Node.js bloqués par les restrictions
+      # du dépôt de distribution configurées dans les settings Gradle du projet.
+      - name: Build web modules (JS + Wasm)
+        run: |
+          ./gradlew \
+            :koreos-core:jvmTest \
+            :koreos-web-common:jsTest \
+            :koreos-js:compileKotlinJs \
+            :koreos-wasm:compileKotlinWasmJs \
             --no-daemon \
             --stacktrace
