@@ -16,7 +16,7 @@
 
 Koreos **ne dépend pas** d'AWT/Swing, JNA ni Rococoa. Les bindings natifs utilisent exclusivement **Panama FFM** (JDK 25) sur macOS/JVM.
 
-**Version publiée** : `0.1.1` — macOS, iOS, Android. Disponible sur [Maven Central](https://central.sonatype.com/artifact/io.ygdrasil.koreos/koreos).
+**Version publiée** : `0.2.0` — macOS, iOS, Android. Disponible sur [Maven Central](https://central.sonatype.com/artifact/io.ygdrasil.koreos/koreos).
 
 ---
 
@@ -32,7 +32,7 @@ Ouvre une fenêtre macOS avec un triangle RGB rendu via wgpu4k/Metal. Redimensio
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.ygdrasil.koreos:koreos:0.1.1")
+    implementation("io.ygdrasil.koreos:koreos:0.2.0")
 }
 ```
 
