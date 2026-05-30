@@ -5,22 +5,57 @@ d'un sample à une **baseline** committée, avec une tolérance en % de pixels
 différents. Complète le smoke E2E (#22, « au moins une frame présentée ») en
 détectant les régressions visuelles subtiles (couleur, position, antialiasing).
 
+## Stratégie de capture : readback GPU, pas capture d'écran
+
+La capture d'écran système (ScreenCaptureKit / `screencapture`, `CGWindowListCreateImage`,
+etc.) est **inadaptée** en CI : elle exige un display + la permission TCC « Screen
+Recording » (indisponibles sur les runners headless), et `CGWindowListCreateImage`
+est de surcroît **supprimée sur macOS 26**. Les outils d'instrumentation UI
+(Roborazzi/Paparazzi, XCUITest) snapshotent une **hiérarchie de vues**, pas une
+**surface GPU** — donc inutilisables pour un sample qui rend directement via wgpu.
+
+La méthode retenue est le **readback du framebuffer** via l'API graphique : le sample
+rend une frame dans une **texture offscreen**, la copie vers un buffer
+(`copyTextureToBuffer`), mappe et lit les octets, puis écrit un PNG. C'est
+**déterministe**, **sans fenêtre ni permission**, et **identique en CI et en local**.
+Comme wgpu4k est multiplateforme, ce chemin est commun à toutes les cibles ; seul
+l'encodage PNG diffère par plateforme.
+
 ## État par plateforme
 
 | Plateforme | Capture | Automatisé en CI |
 |------------|---------|------------------|
 | **Web** (JS) | Playwright `page.screenshot()` | ✅ oui (informatif, non bloquant) |
-| macOS | `CGWindowListCreateImage` (ou `screencapture`) | 🟡 manuel — GPU réel requis |
-| iOS sim | `xcrun simctl io booted screenshot` | 🟡 manuel — simulateur requis |
-| Android emu | `adb exec-out screencap -png` | 🟡 manuel — émulateur requis |
-| Windows | PowerShell `CopyFromScreen` | 🟡 manuel |
-| Linux X11 | ImageMagick `import -window root` | 🟡 manuel |
-| Linux Wayland | `grim` | 🟡 manuel (hors scope v1) |
+| **macOS** | **readback GPU** (`hello-triangle --capture`) | ✅ oui — job `macos-visual` (informatif, non bloquant) |
+| iOS sim | readback GPU (même code wgpu, PNG via UIKit) | 🟡 à brancher — simulateur requis |
+| Android emu | readback GPU (PNG via `Bitmap`) | 🟡 à brancher — émulateur requis |
+| Windows | readback GPU (même code wgpu, PNG via ImageIO) | 🟡 à brancher — runner Windows GPU |
+| Linux X11/Wayland | readback GPU (même code wgpu) | 🟡 à brancher |
 
-> Seule la plateforme **Web** est exécutée en CI : les autres nécessitent le rendu
-> GPU réel des samples sur chaque OS/émulateur (même contrainte que les validations
-> hardware #7/#34/#70). Les commandes de capture ci-dessus servent de base pour une
-> infra de runners dédiés ultérieure.
+> **Web** et **macOS** sont exécutés en CI. Les autres plateformes réutiliseront le
+> même readback GPU (code wgpu commun) ; seul un runner avec GPU/émulateur par cible
+> est nécessaire pour les activer.
+
+## macOS — readback GPU (`hello-triangle --capture`)
+
+```bash
+./gradlew :samples:hello-triangle:run --args="--capture out.png"
+```
+
+Rend le triangle dans une texture offscreen `RGBA8Unorm` (aucune fenêtre ouverte —
+un `CAMetalLayer` offscreen est créé uniquement pour satisfaire `requestAdapter`,
+wgpu4k 0.1.1 ne supportant pas encore l'adapter sans surface), lit le framebuffer
+par readback et écrit le PNG (`ImageIO`). Le job CI `macos-visual` compare ce PNG à
+`tests/visual/baselines/macos/hello-triangle.png` via `tests/visual/diff-cli.js`
+(pixelmatch, tolérance 2 %), **non bloquant** : verdict dans le Job Summary + diff
+archivé.
+
+### Mettre à jour la baseline macOS
+
+```bash
+./gradlew :samples:hello-triangle:run --args="--capture tests/visual/baselines/macos/hello-triangle.png"
+git add tests/visual/baselines/macos/hello-triangle.png
+```
 
 ## Tranche Web (implémentée)
 
