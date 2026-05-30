@@ -112,6 +112,8 @@ Le pipeline GitHub Actions (`.github/workflows/ci.yml`) utilise une stratégie �
 ### Tutoriels
 
 - [Intégrer Koreos dans une application Windows](docs/koreos/tutorials/windows-app.md) — fenêtre Win32, DPI PerMonitorV2, événements souris/clavier, packaging
+- [Intégrer Koreos dans une application Linux](docs/koreos/tutorials/linux-app.md) — X11 et Wayland, auto-détection backend, DPI heuristique, CI headless
+- [Intégrer Koreos dans une page web](docs/koreos/tutorials/web-embed.md) — canvas HTML, Kotlin/JS + Kotlin/Wasm, boucle requestAnimationFrame
 
 ### Références
 
