@@ -1,42 +1,31 @@
 // Configuration Playwright pour le smoke E2E de hello-triangle-web (Redmine #22).
 //
 // Sert le bundle de production JS (produit par `jsBrowserDistribution`, toolchain
-// activée par #91) via http-server, puis lance **Chrome stable** (canal `chrome`,
-// installé par Playwright sur les runners macOS/Windows) avec WebGPU activé.
+// activée par #91) via http-server, puis lance un navigateur Chromium-family
+// avec WebGPU activé.
 //
-// ## GPU réel vs SwiftShader — choix par OS
+// ## Choix du moteur par OS (runners GitHub Actions)
 //
-// Les runners GitHub Actions n'exposent pas tous le même backend graphique :
-// - `macos-latest` : Mac mini physique avec **Metal** (GPU hardware) → WebGPU réel
-// - `windows-latest` : VM Hyper-V **sans GPU passthrough** → SwiftShader requis
+// | OS                | Runner GPU              | Browser           | Backend WebGPU |
+// |-------------------|-------------------------|-------------------|----------------|
+// | `macos-latest`    | Mac mini (Metal réel)   | Chrome stable     | Metal (HW)     |
+// | `windows-latest`  | VM Hyper-V (no GPU)     | Chromium + flags  | SwiftShader    |
 //
-// Sur macOS on cible le GPU réel pour valider la chaîne Metal/wgpu4k bout-en-bout.
-// Sur Windows on bascule sur SwiftShader (rendu CPU) car aucun adapter WebGPU réel
-// n'est disponible — sinon `requestAdapter()` retourne null et le test timeout.
-// Les flags SwiftShader sont safe à ignorer sur macOS (Chrome préfère le GPU réel
-// quand il est dispo), mais on reste explicite pour la lisibilité.
-const { defineConfig, devices } = require('@playwright/test');
+// Pourquoi pas `channel: 'chrome'` partout ?
+// - Chrome stable ne bundle PAS SwiftShader, contrairement à Chromium open-source.
+//   Sur le runner Windows sans GPU, Chrome stable ne trouve aucun adapter WebGPU
+//   exploitable → `requestAdapter()` retourne null → timeout du test (cf. PR #131,
+//   premier run windows-latest).
+// - Chromium open-source embarque SwiftShader et expose WebGPU avec les flags
+//   `--enable-unsafe-webgpu --use-angle=swiftshader --enable-features=Vulkan,WebGPU`.
+//
+// Cf. PR #131 pour l'historique du débogage. Le test Windows valide essentiellement
+// que la chaîne JS + wgpu4k Web tourne ; la couverture GPU « réelle » Windows reste
+// à faire sur un runner avec GPU passthrough (ou en local).
+const { defineConfig } = require('@playwright/test');
 
 const DIST = '../build/dist/js/productionExecutable';
-
-// Détection plateforme — process.platform reflète l'OS du runner CI.
 const isWindows = process.platform === 'win32';
-
-const launchArgs = [
-  // Requis pour exposer un adapter WebGPU en mode headless (policy Chrome).
-  '--enable-unsafe-webgpu',
-];
-
-if (isWindows) {
-  // Fallback SwiftShader (rendu logiciel) — les runners Windows GitHub Actions
-  // n'ont pas de GPU accessible. Sans ces flags, Chrome stable ne trouve aucun
-  // adapter WebGPU exploitable et `requestAdapter()` renvoie null.
-  launchArgs.push(
-    '--enable-unsafe-swiftshader',
-    '--use-angle=swiftshader',
-    '--enable-features=Vulkan,WebGPU',
-  );
-}
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -45,12 +34,23 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8080',
     headless: true,
-    // Channel `chrome` = Chrome stable installé par Playwright (vs Chromium
-    // open-source qui n'a pas WebGPU activé par défaut). Fonctionne sur les
-    // runners macos-latest et windows-latest.
-    channel: 'chrome',
+    // - macOS : Chrome stable (canal release) avec GPU Metal réel.
+    // - Windows : Chromium open-source de Playwright (default, sans `channel`)
+    //   qui inclut SwiftShader pour le fallback CPU.
+    channel: isWindows ? undefined : 'chrome',
     launchOptions: {
-      args: launchArgs,
+      args: isWindows
+        ? [
+            // Fallback CPU complet pour le runner Windows sans GPU.
+            '--enable-unsafe-webgpu',
+            '--enable-unsafe-swiftshader',
+            '--use-angle=swiftshader',
+            '--enable-features=Vulkan,WebGPU',
+          ]
+        : [
+            // macOS : GPU réel Metal, juste le flag d'autorisation headless.
+            '--enable-unsafe-webgpu',
+          ],
     },
   },
   webServer: {

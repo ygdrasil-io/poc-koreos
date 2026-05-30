@@ -66,12 +66,19 @@ jobs:
         working-directory: samples/hello-triangle-web/e2e
         run: npm install
 
-      - name: Install Playwright Chrome channel
+      - name: Install browser (Chrome stable on macOS, Chromium on Windows)
         working-directory: samples/hello-triangle-web/e2e
-        # `npx playwright install chrome` télécharge le binaire Chrome stable
-        # géré par Playwright (vs `chromium` qui est le build open-source sans
-        # WebGPU activé par défaut). Pas de `--with-deps` (Linux-only).
-        run: npx playwright install chrome
+        # - macOS : Chrome stable (canal release) pour bénéficier du GPU Metal réel.
+        # - Windows : Chromium open-source de Playwright — il inclut SwiftShader,
+        #   nécessaire car les runners Windows GitHub Actions n'ont pas de GPU
+        #   passthrough et Chrome stable ne bundle pas SwiftShader.
+        # Le `playwright.config.js` sélectionne le `channel` selon `process.platform`.
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            npx playwright install chromium
+          else
+            npx playwright install chrome
+          fi
 
       - name: Run Playwright smoke + visual tests
         working-directory: samples/hello-triangle-web/e2e
@@ -87,8 +94,10 @@ jobs:
           fi
 
       # Captures (smoke + régression visuelle) — séparées par OS pour pouvoir
-      # comparer macOS Metal vs Windows D3D12.
-      - name: Upload captures (screenshots + diff)
+      # comparer macOS Metal vs Windows SwiftShader. Inclut également les
+      # `error-context.md` produits par Playwright en cas d'échec (console
+      # logs, page errors, network) pour faciliter le débogage à distance.
+      - name: Upload captures + debug context
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -98,4 +107,6 @@ jobs:
             samples/hello-triangle-web/e2e/baselines/hello-triangle-web.png
             samples/hello-triangle-web/e2e/test-results/hello-triangle-web.actual.png
             samples/hello-triangle-web/e2e/test-results/hello-triangle-web.diff.png
+            samples/hello-triangle-web/e2e/test-results/**/error-context.md
+            samples/hello-triangle-web/e2e/test-results/**/trace.zip
           if-no-files-found: ignore
