@@ -103,6 +103,19 @@ private external fun disconnectResizeObserver(ro: JsAny)
 private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
 
 /**
+ * Wrappe une lambda Kotlin `(JsAny) -> Unit` en une fonction JS appelable depuis
+ * `addEventListener`. Le `(fn) => fn` du `@JsFun` enclenche la conversion par le
+ * compilateur Kotlin/Wasm qui produit une vraie closure JS — équivalent du pattern
+ * utilisé pour le `ResizeObserver` ci-dessus.
+ *
+ * Sans ce wrapper, `handler.toJsReference()` produisait une référence opaque non
+ * directement appelable par le DOM (les listeners étaient enregistrés mais jamais
+ * invoqués → clavier/pointer/wheel inertes côté wasmJs).
+ */
+@JsFun("(fn) => fn")
+private external fun wrapEventHandler(fn: (JsAny) -> Unit): JsAny
+
+/**
  * Crée un canvas (id + dimensions) et l'append au parent (parentId ou body).
  * Si un canvas portant cet id existe déjà, le retourne tel quel sans recréer.
  * Retourne `true` si le canvas existe désormais dans le DOM (créé ou préexistant).
@@ -282,7 +295,9 @@ class WasmJsWebDomBridge : WebDomBridge {
     // -----------------------------------------------------------------------
 
     private fun addDomListener(target: JsEventTarget, type: String, handler: (JsAny) -> Unit) {
-        val ref = handler.toJsReference()
+        // `wrapEventHandler` enclenche le wrapping JS qui rend la lambda Kotlin
+        // appelable depuis `addEventListener` (cf. doc du wrapper plus haut).
+        val ref = wrapEventHandler(handler)
         jsAddEventListener(target, type.toJsString(), ref)
         listenerRefs.add(Triple(target, type, ref))
     }
