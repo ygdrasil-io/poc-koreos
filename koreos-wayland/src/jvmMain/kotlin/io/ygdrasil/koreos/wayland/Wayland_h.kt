@@ -21,6 +21,14 @@
  *  - wl_proxy_destroy
  *  - wl_proxy_add_listener
  *  - wl_proxy_marshal_flags (variante xdg_wm_base_get_xdg_surface)
+ *  - wl_proxy_marshal_flags (variante wl_compositor_create_surface)
+ *
+ * Fonctions exposées (libc.so.6) :
+ *  - poll
+ *  - eventfd
+ *  - read
+ *  - write
+ *  - close
  *
  * Référence : https://wayland.freedesktop.org/docs/html/
  */
@@ -59,6 +67,15 @@ internal val libXkbCommon: SymbolLookup? by lazy {
     } catch (e: Throwable) {
         null
     }
+}
+
+/**
+ * Lookup libc.so.6 — null sur les plateformes non-Linux ou si absent.
+ *
+ * Utilisé pour poll(), eventfd(), read(), write(), close() dans WaylandEventLoop.
+ */
+internal val libC: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("libc.so.6", Arena.global()) } catch (_: Throwable) { null }
 }
 
 private val linker: Linker = Linker.nativeLinker()
@@ -331,3 +348,182 @@ internal val wlProxyMarshalFlagsGetXdgSurface: MethodHandle? by lazy {
             ValueLayout.ADDRESS,   // arg: surface
         ))
 }
+
+// ── wl_compositor_create_surface ──────────────────────────────────────────────
+
+/**
+ * wl_compositor_create_surface: crée une wl_surface depuis un wl_compositor.
+ *
+ * Appelle wl_proxy_marshal_flags(compositor, 0, &wl_surface_interface, version, 0)
+ * où l'opcode 0 correspond à wl_compositor.create_surface dans le protocole Wayland.
+ *
+ * La variante à 5 arguments fixe (sans new_id supplémentaire) correspond
+ * à la forme variadique de wl_proxy_marshal_flags pour un opcode new_id simple :
+ * le proxy retourné est la nouvelle wl_surface*.
+ *
+ * @see XdgShellConstants — opcodes du protocole xdg_shell associés.
+ */
+internal val wlCompositorCreateSurface: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // wl_proxy* (compositor)
+            ValueLayout.JAVA_INT,  // opcode (0 = create_surface)
+            ValueLayout.ADDRESS,   // wl_interface* (NULL = laisser la bibliothèque gérer)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags (0)
+        ))
+}
+
+// ── wl_proxy_marshal_flags (variante wl_surface_commit) ───────────────────────
+
+/**
+ * Variante sans argument supplémentaire de wl_proxy_marshal_flags utilisée pour
+ * wl_surface.commit (opcode 6) et d'autres opcodes sans paramètre de retour.
+ *
+ * Signature : void wl_proxy_marshal_flags(proxy, opcode, NULL, version, 0)
+ * avec NULL comme wl_interface* pour les appels sans new_id.
+ */
+internal val wlProxyMarshalFlagsVoid: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy* (surface / proxy cible)
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags (0)
+        ))
+}
+
+// ── libc : poll ───────────────────────────────────────────────────────────────
+
+/**
+ * int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+ *
+ * Attend des événements sur plusieurs descripteurs de fichiers.
+ *  - fds     : tableau de structures pollfd (fd, events, revents)
+ *  - nfds    : nombre d'entrées dans fds
+ *  - timeout : délai en millisecondes (-1 = attente infinie, 0 = retour immédiat)
+ * Retourne le nombre de descripteurs prêts, 0 si timeout, -1 si erreur.
+ */
+internal val nativePoll: MethodHandle? by lazy {
+    libC.downcall("poll", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.ADDRESS,   // struct pollfd *fds
+        ValueLayout.JAVA_INT,  // nfds_t nfds
+        ValueLayout.JAVA_INT,  // int timeout
+    ))
+}
+
+// ── libc : eventfd ────────────────────────────────────────────────────────────
+
+/**
+ * int eventfd(unsigned int initval, int flags);
+ *
+ * Crée un descripteur de fichier de notification d'événements (Linux).
+ * En mode compteur (flags=0), write() ajoute à la valeur, read() lit et remet à 0.
+ * Utilisé pour réveiller la boucle d'événements depuis un autre thread.
+ * Retourne le descripteur de fichier, ou -1 si erreur.
+ */
+internal val nativeEventfd: MethodHandle? by lazy {
+    libC.downcall("eventfd", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.JAVA_INT,  // unsigned int initval
+        ValueLayout.JAVA_INT,  // int flags
+    ))
+}
+
+// ── libc : read ───────────────────────────────────────────────────────────────
+
+/**
+ * ssize_t read(int fd, void *buf, size_t count);
+ *
+ * Lit jusqu'à count octets depuis fd dans buf.
+ * Pour un eventfd en mode compteur, lit 8 octets (uint64_t) et remet le compteur à 0.
+ * Retourne le nombre d'octets lus, ou -1 si erreur.
+ */
+internal val nativeRead: MethodHandle? by lazy {
+    libC.downcall("read", FunctionDescriptor.of(
+        ValueLayout.JAVA_LONG,
+        ValueLayout.JAVA_INT,  // int fd
+        ValueLayout.ADDRESS,   // void *buf
+        ValueLayout.JAVA_LONG, // size_t count
+    ))
+}
+
+// ── libc : write ──────────────────────────────────────────────────────────────
+
+/**
+ * ssize_t write(int fd, const void *buf, size_t count);
+ *
+ * Écrit count octets depuis buf dans fd.
+ * Pour un eventfd en mode compteur, écrit 8 octets (uint64_t) pour incrémenter le compteur.
+ * Retourne le nombre d'octets écrits, ou -1 si erreur.
+ */
+internal val nativeWrite: MethodHandle? by lazy {
+    libC.downcall("write", FunctionDescriptor.of(
+        ValueLayout.JAVA_LONG,
+        ValueLayout.JAVA_INT,  // int fd
+        ValueLayout.ADDRESS,   // const void *buf
+        ValueLayout.JAVA_LONG, // size_t count
+    ))
+}
+
+// ── libc : close ──────────────────────────────────────────────────────────────
+
+/**
+ * int close(int fd);
+ *
+ * Ferme un descripteur de fichier et libère les ressources associées.
+ * Retourne 0 en cas de succès, -1 si erreur.
+ */
+internal val nativeClose: MethodHandle? by lazy {
+    libC.downcall("close", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.JAVA_INT,  // int fd
+    ))
+}
+
+// ── pollfd layout helpers ─────────────────────────────────────────────────────
+
+/**
+ * Valeur POLLIN : le descripteur est prêt en lecture.
+ * Positionnée dans pollfd.events pour indiquer l'intérêt en lecture.
+ */
+internal const val POLLIN: Short = 1
+
+/**
+ * Alloue un tableau de 2 structures pollfd dans l'arène fournie.
+ *
+ * Layout Linux 64-bit d'une struct pollfd :
+ *  - offset 0 : fd      (int, 4 octets)
+ *  - offset 4 : events  (short, 2 octets)
+ *  - offset 6 : revents (short, 2 octets)
+ *  - taille   : 8 octets
+ *
+ * @return MemorySegment de 16 octets aligné sur 4 octets.
+ */
+internal fun allocPollFd(arena: java.lang.foreign.Arena): java.lang.foreign.MemorySegment =
+    arena.allocate(8L * 2, 4L)
+
+/**
+ * Initialise une entrée pollfd dans le tableau.
+ *
+ * @param seg    Tableau de pollfd alloué par [allocPollFd].
+ * @param idx    Indice de l'entrée (0 ou 1).
+ * @param fd     Descripteur de fichier à surveiller.
+ * @param events Masque d'événements (ex. [POLLIN]).
+ */
+internal fun setPollFd(seg: java.lang.foreign.MemorySegment, idx: Int, fd: Int, events: Short) {
+    seg.set(ValueLayout.JAVA_INT, idx * 8L, fd)
+    seg.set(ValueLayout.JAVA_SHORT, idx * 8L + 4, events)
+}
+
+/**
+ * Lit le champ revents d'une entrée pollfd.
+ *
+ * @param seg Tableau de pollfd.
+ * @param idx Indice de l'entrée (0 ou 1).
+ * @return Masque revents positionné par le noyau après poll().
+ */
+internal fun getPollRevents(seg: java.lang.foreign.MemorySegment, idx: Int): Short =
+    seg.get(ValueLayout.JAVA_SHORT, idx * 8L + 6)
