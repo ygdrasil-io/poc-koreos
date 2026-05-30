@@ -40,6 +40,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.browser.document
 import kotlin.js.unsafeCast
+import kotlin.math.max
+import kotlin.math.roundToInt
+
+/** `window.devicePixelRatio` — non exposé sur le `Window` wasmJs, lu via interop JS. */
+private fun jsDevicePixelRatio(): Double = js("window.devicePixelRatio")
 
 // ---------------------------------------------------------------------------
 // WGSL shader — triangle RGB à positions codées en dur (identique au sample desktop)
@@ -95,6 +100,8 @@ class HelloTriangleWebApp : ApplicationHandler {
     private var pipeline: GPURenderPipeline? = null
     private var format: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
     private var window: io.ygdrasil.koreos.core.Window? = null
+    /** Référence DOM stdlib du `<canvas>` — sert à ajuster le drawing buffer sur resize (#21). */
+    private var domCanvas: org.w3c.dom.HTMLCanvasElement? = null
     private var ready = false
 
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -135,7 +142,11 @@ class HelloTriangleWebApp : ApplicationHandler {
         // `io.ygdrasil.webgpu.HTMLCanvasElement`. On caste l'élément DOM stdlib
         // (`org.w3c.dom`) vers ce type via `unsafeCast` : au runtime, c'est le même
         // objet JS `HTMLCanvasElement`.
+        this.domCanvas = domCanvas.unsafeCast<org.w3c.dom.HTMLCanvasElement>()
         val canvas = domCanvas.unsafeCast<io.ygdrasil.webgpu.HTMLCanvasElement>()
+
+        // Dimensionner le drawing buffer en pixels physiques dès le départ (#21).
+        syncCanvasBackingStore()
 
         val canvasSurface = canvas.getCanvasSurface().let { CanvasSurface(it) }
         surface = canvasSurface
@@ -177,11 +188,36 @@ class HelloTriangleWebApp : ApplicationHandler {
     }
 
     /**
+     * Ajuste le drawing buffer du `<canvas>` à la taille physique courante (#21).
+     *
+     * Le `ResizeObserver` reporte des pixels CSS ; le swap chain wgpu suit les
+     * attributs `width`/`height` du canvas, qui doivent être en pixels physiques
+     * (`taille CSS × devicePixelRatio`) pour un rendu net sur écrans haute densité.
+     *
+     * @param cssWidth  Largeur CSS (ou `null` pour lire `clientWidth`).
+     * @param cssHeight Hauteur CSS (ou `null` pour lire `clientHeight`).
+     * @return `true` si la taille du buffer a changé (reconfiguration nécessaire).
+     */
+    private fun syncCanvasBackingStore(cssWidth: Int? = null, cssHeight: Int? = null): Boolean {
+        val canvas = domCanvas ?: return false
+        val dpr = jsDevicePixelRatio()
+        val cw = cssWidth ?: canvas.clientWidth
+        val ch = cssHeight ?: canvas.clientHeight
+        val physW = max(1, (cw * dpr).roundToInt())
+        val physH = max(1, (ch * dpr).roundToInt())
+        if (canvas.width == physW && canvas.height == physH) return false
+        canvas.width = physW
+        canvas.height = physH
+        println("[hello-triangle-web] Canvas backing store → ${physW}×${physH} (dpr=$dpr)")
+        return true
+    }
+
+    /**
      * Configure (ou reconfigure) la [CanvasSurface] avec le device et le format courants.
      *
-     * Sur web, la taille de la surface suit l'attribut `width`/`height` du `<canvas>` ;
-     * la reconfiguration sert surtout à (ré)attacher le device après un changement
-     * de contexte (cf. [WebWindowEvent.Resized], préparation #21).
+     * Sur web, la taille de la surface suit l'attribut `width`/`height` du `<canvas>`
+     * (mis à jour par [syncCanvasBackingStore]) — le swap chain wgpu est ainsi
+     * reconfiguré à la nouvelle résolution physique sur resize (#21).
      */
     private fun configureSurface(canvasSurface: CanvasSurface, gpuDevice: GPUDevice) {
         canvasSurface.configure(
@@ -211,7 +247,10 @@ class HelloTriangleWebApp : ApplicationHandler {
         when (event) {
             is WebWindowEvent.RedrawRequested -> renderFrame()
             is WebWindowEvent.Resized -> {
-                println("[hello-triangle-web] Resized → ${event.width}×${event.height}")
+                println("[hello-triangle-web] Resized → ${event.width}×${event.height} (CSS px)")
+                // Met à jour le drawing buffer en pixels physiques puis reconfigure
+                // le swap chain à la nouvelle résolution (#21).
+                syncCanvasBackingStore(event.width, event.height)
                 val s = surface
                 val d = device
                 if (s != null && d != null) configureSurface(s, d)
