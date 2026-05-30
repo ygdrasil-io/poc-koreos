@@ -61,72 +61,13 @@ import java.lang.foreign.ValueLayout
 import kotlinx.coroutines.runBlocking
 
 // ---------------------------------------------------------------------------
-// WGSL — shader 2D quad par vertex_index (0..5, 2 triangles)
+// Le shader WGSL, les constantes de layout et la construction des quads sont
+// désormais en commonMain dans `PongRendererCore.kt` (factorisé entre JVM et Web).
+// On expose ici juste l'alias ULong de la taille d'uniform pour l'API wgpu4k JVM.
 // ---------------------------------------------------------------------------
 
-/**
- * Shader WGSL commun vertex + fragment.
- *
- * Le vertex shader génère les 6 sommets du quad (2 triangles) à partir
- * du vertex_index builtin — aucun vertex buffer n'est requis.
- *
- * Uniforms (binding 0) : [x, y, w, h, r, g, b, _pad] (8 floats = 32 bytes).
- *
- * Coordonnées d'entrée : espace normalisé [0..1] avec Y vers le bas.
- * Coordonnées de sortie : NDC [-1..1] avec Y vers le haut (convention WebGPU).
- */
-private val PONG_WGSL = """
-struct Uniforms {
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, _pad: f32,
-}
-
-@group(0) @binding(0) var<uniform> u: Uniforms;
-
-struct VertexOut {
-    @builtin(position) pos: vec4<f32>,
-    @location(0) color: vec3<f32>,
-}
-
-@vertex
-fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOut {
-    // 6 coins (2 triangles CCW) : TL TR BL  TR BR BL
-    let cx = array<f32, 6>(0.0, 1.0, 0.0, 1.0, 1.0, 0.0);
-    let cy = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
-    let nx = u.x + cx[vi] * u.w;
-    let ny = u.y + cy[vi] * u.h;
-    var out: VertexOut;
-    out.pos   = vec4<f32>(nx * 2.0 - 1.0, 1.0 - ny * 2.0, 0.0, 1.0);
-    out.color = vec3<f32>(u.r, u.g, u.b);
-    return out;
-}
-
-@fragment
-fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    return vec4<f32>(in.color, 1.0);
-}
-""".trimIndent()
-
-// ---------------------------------------------------------------------------
-// Constantes de mise en page (coordonnées normalisées [0..1])
-// ---------------------------------------------------------------------------
-
-private const val PADDLE_WIDTH_N  = 0.02
-private const val PADDLE_HEIGHT_N = 0.20
-private const val PADDLE_X_LEFT   = 0.02
-private const val PADDLE_X_RIGHT  = 1.0 - PADDLE_X_LEFT - PADDLE_WIDTH_N
-
-private const val BALL_SIZE_N = 0.018
-
-private const val DASH_WIDTH_N   = 0.008
-private const val DASH_HEIGHT_N  = 0.04
-private const val DASH_COUNT     = 12
-
-private const val SCORE_PIXEL    = 0.012
-private const val SCORE_Y        = 0.04
-
-// Taille du uniform buffer : 8 floats × 4 bytes
-private const val UNIFORM_BYTES  = 32uL
+// Taille du uniform buffer (cf. UNIFORM_BYTES_LONG en commonMain).
+private const val UNIFORM_BYTES: ULong = 32uL
 
 // Nombre max de quads par frame (pool d'uniform buffers + bind groups).
 // Décompte : 12 dashes + 2 paddles + 1 ball + 2 × (max 3 digits × ~25 pixels chiffre) = ~165

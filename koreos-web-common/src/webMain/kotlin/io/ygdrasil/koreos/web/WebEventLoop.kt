@@ -103,6 +103,12 @@ open class WebEventLoop : ActiveEventLoop {
         }
         val window = WebWindow(attributes, bridge)
         windows.add(window)
+        // Brancher les écouteurs DOM sur le canvas cible. Sans cet appel,
+        // le bridge est créé mais aucun event DOM n'est jamais dispatché
+        // (les listeners keydown/pointer/resize ne sont jamais attachés).
+        // Convention identique à WebWindow.canvasElementId.
+        val canvasId = attributes.title.ifEmpty { "koreos-canvas" }
+        bridge.attach(canvasId)
         return window
     }
 
