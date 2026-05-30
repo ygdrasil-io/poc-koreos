@@ -54,8 +54,10 @@ internal fun captureLinux(path: String) {
                     )
                 )
 
-                val instance = WGPU.createInstance(WGPUInstanceBackend.Vulkan)
-                    ?: error("Échec création WGPU Instance (Vulkan)")
+                // Primary = Vulkan + GL : laisse wgpu retomber sur GL/EGL (llvmpipe) si la
+                // création de surface Vulkan échoue (lavapipe a un support WSI limité).
+                val instance = WGPU.createInstance(WGPUInstanceBackend.Primary)
+                    ?: error("Échec création WGPU Instance (Primary)")
 
                 val surface = when (val handle = window.rawWindowHandle) {
                     is RawWindowHandle.Wayland ->

@@ -82,6 +82,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Diagnostic : capacités WSI du Vulkan logiciel (lavapipe) sur ce runner.
+      - name: Vulkan/WSI diagnostic
+        continue-on-error: true
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          echo "----- vulkaninfo --summary -----"
+          vulkaninfo --summary 2>&1 | grep -iE "deviceName|driverName|apiVersion|GPU id" | head
+          echo "----- extensions surface/wayland -----"
+          vulkaninfo 2>&1 | grep -iE "VK_KHR_surface|VK_KHR_wayland_surface|VK_KHR_xcb_surface|VK_KHR_swapchain" | sort -u | head
+
       - name: Capture GPU offscreen (hello-triangle)
         id: capture
         continue-on-error: true
