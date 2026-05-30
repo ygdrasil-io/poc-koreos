@@ -52,6 +52,15 @@ internal val libWaylandClient: SymbolLookup? by lazy {
 }
 
 /**
+ * Lookup libc.so.6 — null sur les plateformes non-Linux ou si absent.
+ *
+ * Utilisé pour poll(), eventfd(), read(), write(), close() dans WaylandEventLoop.
+ */
+internal val libC: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("libc.so.6", Arena.global()) } catch (_: Throwable) { null }
+}
+
+/**
  * Lookup libxkbcommon.so.0 — null sur les plateformes non-Wayland.
  */
 internal val libXkbCommon: SymbolLookup? by lazy {
