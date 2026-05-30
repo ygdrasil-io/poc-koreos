@@ -241,6 +241,108 @@ internal val getKeyState: MethodHandle? by lazy {
     )
 }
 
+// ── PeekMessageW ─────────────────────────────────────────────────────────────
+
+/**
+ * BOOL PeekMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
+ *
+ * Vérifie si un message est disponible dans la file et, si PM_REMOVE est spécifié,
+ * le retire. Retourne non-zéro si un message est disponible, 0 sinon.
+ * Non-bloquant — retourne immédiatement.
+ */
+internal val peekMessageW: MethodHandle? by lazy {
+    user32.downcall(
+        "PeekMessageW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // LPMSG lpMsg
+            ValueLayout.ADDRESS,    // HWND hWnd (NULL = tous les messages du thread)
+            ValueLayout.JAVA_INT,   // UINT wMsgFilterMin
+            ValueLayout.JAVA_INT,   // UINT wMsgFilterMax
+            ValueLayout.JAVA_INT,   // UINT wRemoveMsg
+        )
+    )
+}
+
+// ── GetMessageW ──────────────────────────────────────────────────────────────
+
+/**
+ * BOOL GetMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
+ *
+ * Extrait un message de la file de messages du thread. Bloquant — attend jusqu'à
+ * ce qu'un message soit disponible.
+ * Retourne > 0 si message, 0 si WM_QUIT, -1 en cas d'erreur.
+ */
+internal val getMessageW: MethodHandle? by lazy {
+    user32.downcall(
+        "GetMessageW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // LPMSG lpMsg
+            ValueLayout.ADDRESS,    // HWND hWnd (NULL = tous les messages du thread)
+            ValueLayout.JAVA_INT,   // UINT wMsgFilterMin
+            ValueLayout.JAVA_INT,   // UINT wMsgFilterMax
+        )
+    )
+}
+
+// ── TranslateMessage ──────────────────────────────────────────────────────────
+
+/**
+ * BOOL TranslateMessage(const MSG *lpMsg);
+ *
+ * Traduit les messages virtuels-touche en messages de caractères (WM_CHAR).
+ * Doit être appelé avant DispatchMessageW dans la boucle de messages.
+ */
+internal val translateMessage: MethodHandle? by lazy {
+    user32.downcall(
+        "TranslateMessage",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // const MSG*
+        )
+    )
+}
+
+// ── DispatchMessageW ──────────────────────────────────────────────────────────
+
+/**
+ * LRESULT DispatchMessageW(const MSG *lpMsg);
+ *
+ * Dispatche un message vers la procédure de fenêtre (WndProc).
+ */
+internal val dispatchMessageW: MethodHandle? by lazy {
+    user32.downcall(
+        "DispatchMessageW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // LRESULT
+            ValueLayout.ADDRESS,    // const MSG*
+        )
+    )
+}
+
+// ── MsgWaitForMultipleObjectsEx ───────────────────────────────────────────────
+
+/**
+ * DWORD MsgWaitForMultipleObjectsEx(DWORD nCount, const HANDLE *pHandles,
+ *     DWORD dwMilliseconds, DWORD dwWakeMask, DWORD dwFlags);
+ *
+ * Attend jusqu'à ce qu'un message arrive ou que le timeout expire.
+ */
+internal val msgWaitForMultipleObjectsEx: MethodHandle? by lazy {
+    user32.downcall(
+        "MsgWaitForMultipleObjectsEx",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // DWORD (WAIT_*)
+            ValueLayout.JAVA_INT,   // DWORD nCount
+            ValueLayout.ADDRESS,    // const HANDLE* pHandles
+            ValueLayout.JAVA_INT,   // DWORD dwMilliseconds
+            ValueLayout.JAVA_INT,   // DWORD dwWakeMask
+            ValueLayout.JAVA_INT,   // DWORD dwFlags
+        )
+    )
+}
+
 // ── GetModuleHandleW ──────────────────────────────────────────────────────────
 
 /**
