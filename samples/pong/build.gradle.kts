@@ -48,3 +48,20 @@ kotlin {
         }
     }
 }
+
+// JVM run task — uses -XstartOnFirstThread (required for AppKit on macOS)
+// Usage : ./gradlew :samples:pong:run
+tasks.register<JavaExec>("run") {
+    group = "application"
+    description = "Runs Pong on JVM (macOS AppKit + wgpu4k)"
+    dependsOn("jvmJar")
+    mainClass.set("io.ygdrasil.koreos.samples.pong.MainKt")
+    classpath = files(
+        kotlin.targets.getByName("jvm").compilations.getByName("main").output.allOutputs,
+        configurations.getByName("jvmRuntimeClasspath"),
+    )
+    jvmArgs(
+        "-XstartOnFirstThread",
+        "--enable-native-access=ALL-UNNAMED",
+    )
+}
