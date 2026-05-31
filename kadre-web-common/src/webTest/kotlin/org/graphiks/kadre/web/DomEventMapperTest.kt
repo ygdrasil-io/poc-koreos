@@ -213,6 +213,24 @@ class DomEventMapperTest {
     }
 
     // -----------------------------------------------------------------------
+    // domTouchTypeToPhase
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `domTouchTypeToPhase mappe les types DOM`() {
+        assertEquals(WebTouchPhase.Started,   domTouchTypeToPhase("touchstart"))
+        assertEquals(WebTouchPhase.Moved,     domTouchTypeToPhase("touchmove"))
+        assertEquals(WebTouchPhase.Ended,     domTouchTypeToPhase("touchend"))
+        assertEquals(WebTouchPhase.Cancelled, domTouchTypeToPhase("touchcancel"))
+    }
+
+    @Test
+    fun `domTouchTypeToPhase retourne Cancelled pour un type inconnu`() {
+        assertEquals(WebTouchPhase.Cancelled, domTouchTypeToPhase(""))
+        assertEquals(WebTouchPhase.Cancelled, domTouchTypeToPhase("click"))
+    }
+
+    // -----------------------------------------------------------------------
     // normalizeWheelDelta
     // -----------------------------------------------------------------------
 
@@ -297,5 +315,27 @@ class DomEventMapperTest {
             WebWindowEvent.Resized(width = 800, height = 600),
             WebWindowEvent.Resized(width = 800, height = 600),
         )
+    }
+
+    @Test
+    fun `WebWindowEvent Touch egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
+            WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
+        )
+    }
+
+    @Test
+    fun `WebWindowEvent ScaleFactorChanged egalite structurelle`() {
+        assertEquals(
+            WebWindowEvent.ScaleFactorChanged(factor = 2.0),
+            WebWindowEvent.ScaleFactorChanged(factor = 2.0),
+        )
+    }
+
+    @Test
+    fun `WebWindowEvent CloseRequested et Destroyed sont des singletons`() {
+        assertEquals(WebWindowEvent.CloseRequested, WebWindowEvent.CloseRequested)
+        assertEquals(WebWindowEvent.Destroyed, WebWindowEvent.Destroyed)
     }
 }
