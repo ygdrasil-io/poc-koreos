@@ -282,6 +282,11 @@ fun main(args: Array<String>) {
         return
     }
 
+    if (args.contains("--coroutines-demo")) {
+        runCoroutinesDemo()
+        return
+    }
+
     // Combined headless checks in a single JVM (keytest + raster capture) — lets CI do both
     // with one Gradle invocation instead of two. Windowed GL capture stays a separate process
     // so a native GL crash can't fail the headless checks.
