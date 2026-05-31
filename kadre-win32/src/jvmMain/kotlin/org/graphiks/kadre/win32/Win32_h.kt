@@ -172,6 +172,41 @@ internal val destroyWindow: MethodHandle? by lazy {
     )
 }
 
+// ── SetTimer / KillTimer ───────────────────────────────────────────────────────
+
+/**
+ * UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc);
+ *
+ * With lpTimerFunc = NULL, WM_TIMER messages are posted to the window's queue (and dispatched
+ * by the modal move/resize loop), which is exactly what we want to keep rendering during a drag.
+ */
+internal val setTimer: MethodHandle? by lazy {
+    user32.downcall(
+        "SetTimer",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // UINT_PTR (timer id)
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_LONG,  // UINT_PTR nIDEvent
+            ValueLayout.JAVA_INT,   // UINT uElapse (ms)
+            ValueLayout.ADDRESS,    // TIMERPROC lpTimerFunc (NULL → post WM_TIMER)
+        )
+    )
+}
+
+/**
+ * BOOL KillTimer(HWND hWnd, UINT_PTR uIDEvent);
+ */
+internal val killTimer: MethodHandle? by lazy {
+    user32.downcall(
+        "KillTimer",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_LONG,  // UINT_PTR
+        )
+    )
+}
+
 // ── DefWindowProcW ────────────────────────────────────────────────────────────
 
 /**

@@ -158,6 +158,37 @@ object KadreWndProc {
                 0L
             }
 
+            // ── Modal move/resize loop ─────────────────────────────────────────
+            // During a title-bar/border drag, DefWindowProcW runs its own modal GetMessage loop
+            // and our event loop is blocked, so continuous redraw stops and the content freezes.
+            // Start a timer on enter and drive a frame on each WM_TIMER (the modal loop dispatches
+            // it to us), so rendering stays live; stop the timer on exit.
+            WM_ENTERSIZEMOVE.toUInt() -> {
+                setTimer?.let {
+                    it.invokeExact(
+                        MemorySegment.ofAddress(hwnd),
+                        RESIZE_TIMER_ID,
+                        RESIZE_TIMER_INTERVAL_MS,
+                        MemorySegment.NULL,
+                    ) as Long
+                }
+                0L
+            }
+
+            WM_TIMER.toUInt() -> {
+                if (wParam == RESIZE_TIMER_ID) {
+                    emit(hwnd, WindowEvent.RedrawRequested)
+                    0L
+                } else {
+                    defWindowProcW(hwnd, msg, wParam, lParam)
+                }
+            }
+
+            WM_EXITSIZEMOVE.toUInt() -> {
+                killTimer?.let { it.invokeExact(MemorySegment.ofAddress(hwnd), RESIZE_TIMER_ID) as Int }
+                0L
+            }
+
             // ── Keyboard ──────────────────────────────────────────────────────
             WM_KEYDOWN.toUInt(),
             WM_SYSKEYDOWN.toUInt() -> {

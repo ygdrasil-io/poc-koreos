@@ -25,6 +25,27 @@ internal const val WM_SIZE: Int = 0x0005
 /** WM_DPICHANGED — the window DPI has changed (moved to a different monitor). */
 internal const val WM_DPICHANGED: Int = 0x02E0
 
+/** WM_TIMER — a timer created with SetTimer has elapsed. */
+internal const val WM_TIMER: Int = 0x0113
+
+/**
+ * WM_ENTERSIZEMOVE — the OS is entering the modal move/resize loop.
+ *
+ * While this loop runs, DefWindowProcW spins its own GetMessage loop and our event loop is
+ * blocked, so `aboutToWait` (and thus continuous redraw) stops firing. We start a timer here
+ * to keep driving frames; see [WM_TIMER] / [RESIZE_TIMER_ID].
+ */
+internal const val WM_ENTERSIZEMOVE: Int = 0x0231
+
+/** WM_EXITSIZEMOVE — the modal move/resize loop has ended. */
+internal const val WM_EXITSIZEMOVE: Int = 0x0232
+
+/** Timer id used to drive frames during a modal move/resize loop. */
+internal const val RESIZE_TIMER_ID: Long = 0xADE_512EL
+
+/** Timer interval (ms) during a modal move/resize loop — ~60 fps. */
+internal const val RESIZE_TIMER_INTERVAL_MS: Int = 16
+
 // ── Keyboard messages ───────────────────────────────────────────────────────
 
 /** WM_KEYDOWN — key pressed (non-system key). */
