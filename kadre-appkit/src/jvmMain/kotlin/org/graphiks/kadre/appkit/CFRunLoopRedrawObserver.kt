@@ -59,6 +59,12 @@ internal class CFRunLoopRedrawObserver(
     @Volatile
     private var currentTimer: MemorySegment? = null
 
+    // Run-loop mode detection, used to render only while in AppKit's modal move/resize tracking
+    // mode (the BeforeWaiting observer handles the default mode).
+    private var cfRunLoopCopyCurrentModeHandle: MethodHandle? = null
+    private var cfReleaseHandle: MethodHandle? = null
+    private var kCFRunLoopDefaultMode: MemorySegment = MemorySegment.NULL
+
     /**
      * Called by the CFRunLoopObserver before each sleep of the run loop.
      *
@@ -74,15 +80,7 @@ internal class CFRunLoopRedrawObserver(
     fun onBeforeWaiting() {
         if (eventLoop.isExiting) return
 
-        windows.values.forEach { window ->
-            if (window.needsRedraw) {
-                window.needsRedraw = false
-                handler.windowEvent(eventLoop, window.id, WindowEvent.RedrawRequested)
-            }
-        }
-
-        // aboutToWait dispatched after all the RedrawRequested events (GRA-135)
-        handler.aboutToWait(eventLoop)
+        dispatchFrame()
 
         // ControlFlow handling — AFTER aboutToWait (GRA-136)
         when (val cf = eventLoop.controlFlow) {
@@ -99,6 +97,42 @@ internal class CFRunLoopRedrawObserver(
                 cancelScheduledTimer()
             }
         }
+    }
+
+    /**
+     * Dispatches one frame: [WindowEvent.RedrawRequested] for each window with needsRedraw=true,
+     * then [ApplicationHandler.aboutToWait]. Called from the BeforeWaiting observer and, during
+     * AppKit's modal move/resize loop, from the repeating tracking timer (see [onTrackingTick]).
+     */
+    private fun dispatchFrame() {
+        windows.values.forEach { window ->
+            if (window.needsRedraw) {
+                window.needsRedraw = false
+                handler.windowEvent(eventLoop, window.id, WindowEvent.RedrawRequested)
+            }
+        }
+        handler.aboutToWait(eventLoop)
+    }
+
+    /**
+     * Repeating-timer callback that keeps rendering alive during AppKit's modal move/resize loop.
+     *
+     * During that loop the run loop almost never reaches `kCFRunLoopBeforeWaiting` (measured:
+     * 1–2 ticks over an ~800 ms gesture), so the BeforeWaiting observer can't drive frames — but
+     * CFRunLoopTimers are still serviced. We render here only while in a tracking mode; in the
+     * default mode the BeforeWaiting observer already handles it, so we no-op to avoid double work.
+     */
+    private fun onTrackingTick() {
+        if (eventLoop.isExiting) return
+        if (isInTrackingMode()) dispatchFrame()
+    }
+
+    private fun isInTrackingMode(): Boolean {
+        val copyMode = cfRunLoopCopyCurrentModeHandle ?: return false
+        val mode = copyMode.invokeExact(runLoopPtr) as MemorySegment
+        val tracking = mode != MemorySegment.NULL && mode.address() != kCFRunLoopDefaultMode.address()
+        if (mode != MemorySegment.NULL) cfReleaseHandle?.invokeExact(mode)
+        return tracking
     }
 
     /**
@@ -188,6 +222,18 @@ internal class CFRunLoopRedrawObserver(
             val kCFRunLoopCommonModes: MemorySegment = kCFRunLoopCommonModesPtr
                 .reinterpret(8L)
                 .get(ValueLayout.ADDRESS, 0L)
+
+            // kCFRunLoopDefaultMode + CFRunLoopCopyCurrentMode + CFRelease, to detect when the loop
+            // runs in AppKit's modal move/resize tracking mode (see the repeating timer below).
+            val kCFRunLoopDefaultMode: MemorySegment = cfLib.find("kCFRunLoopDefaultMode")
+                .map { it.reinterpret(8L).get(ValueLayout.ADDRESS, 0L) }
+                .orElse(MemorySegment.NULL)
+            val copyCurrentModeHandle: MethodHandle? = cfLib.find("CFRunLoopCopyCurrentMode")
+                .map { linker.downcallHandle(it, FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)) }
+                .orElse(null)
+            val cfReleaseHandle: MethodHandle? = cfLib.find("CFRelease")
+                .map { linker.downcallHandle(it, FunctionDescriptor.ofVoid(ValueLayout.ADDRESS)) }
+                .orElse(null)
 
             // Upcall stub: void callback(CFRunLoopObserverRef, CFRunLoopActivity, void*)
             val callbackHandle = lookup.findStatic(
@@ -324,6 +370,33 @@ internal class CFRunLoopRedrawObserver(
             observer.cfRunLoopTimerInvalidateHandle = invalidateHandle
             observer.kCFRunLoopCommonModes = kCFRunLoopCommonModes
             observer.noopTimerCallout = noopStub
+            observer.cfRunLoopCopyCurrentModeHandle = copyCurrentModeHandle
+            observer.cfReleaseHandle = cfReleaseHandle
+            observer.kCFRunLoopDefaultMode = kCFRunLoopDefaultMode
+
+            // Repeating ~60 fps timer that keeps rendering alive during AppKit's modal move/resize
+            // loop (where the BeforeWaiting observer barely fires). Added to common modes so it is
+            // serviced in the tracking mode; its callback renders only while actually tracking.
+            val trackingTickHandle = lookup.findStatic(
+                CFRunLoopRedrawObserver::class.java,
+                "trackingTickCallback",
+                MethodType.methodType(Void.TYPE, MemorySegment::class.java, MemorySegment::class.java),
+            )
+            val trackingTickStub = linker.upcallStub(
+                trackingTickHandle,
+                FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+                arena,
+            )
+            val trackingTimer = timerCreateHandle.invoke(
+                MemorySegment.NULL, // allocator
+                0.0,                // fireDate (past → fire ASAP, then repeat)
+                0.016,              // interval (~60 fps)
+                0L,                 // flags
+                0L,                 // order
+                trackingTickStub,   // callout
+                MemorySegment.NULL, // context
+            ) as MemorySegment
+            addTimerHandle.invokeExact(runLoop, trackingTimer, kCFRunLoopCommonModes)
 
             return observer
         }
@@ -349,6 +422,15 @@ internal class CFRunLoopRedrawObserver(
             @Suppress("UNUSED_PARAMETER") info: MemorySegment,
         ) {
             // intentionally empty
+        }
+
+        /** Repeating-timer trampoline that drives frames during AppKit's modal tracking loop. */
+        @JvmStatic
+        fun trackingTickCallback(
+            @Suppress("UNUSED_PARAMETER") timer: MemorySegment,
+            @Suppress("UNUSED_PARAMETER") info: MemorySegment,
+        ) {
+            instance?.onTrackingTick()
         }
     }
 }
