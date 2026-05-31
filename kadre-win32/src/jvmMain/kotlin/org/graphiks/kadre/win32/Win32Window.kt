@@ -102,7 +102,9 @@ class Win32Window private constructor(
      */
     override val scaleFactor: Double
         get() = try {
-            val dpi = getDpiForWindow?.invokeExact(hwnd) as? Int ?: 0
+            // GetDpiForWindow returns UINT; capture as Int (an `as? Int` would make invokeExact
+            // expect an Object return and throw WrongMethodTypeException, silently forcing 1.0).
+            val dpi = getDpiForWindow?.let { it.invokeExact(hwnd) as Int } ?: 0
             if (dpi > 0) dpi.toDouble() / 96.0 else 1.0
         } catch (_: Throwable) {
             1.0
@@ -271,10 +273,14 @@ class Win32Window private constructor(
 
             val window = Win32Window(hwnd, hInstance, attrs)
 
-            // Initial display
+            // Initial display.
+            // ShowWindow/UpdateWindow return BOOL (int) — invokeExact requires the exact
+            // return type, so the result must be captured (as Int) or it throws
+            // WrongMethodTypeException ("…)int but found …)void").
             if (attrs.visible) {
-                showWindow?.invokeExact(hwnd, SW_SHOW)
-                updateWindow?.invokeExact(hwnd)
+                @Suppress("UNUSED_EXPRESSION")
+                showWindow?.let { it.invokeExact(hwnd, SW_SHOW) as Int }
+                updateWindow?.let { it.invokeExact(hwnd) as Int }
             }
 
             return window
