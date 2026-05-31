@@ -75,14 +75,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 1 + 2: headless raster checks (no display, no GPU) — these MUST pass.
-      - name: Compose keyboard self-test (--keytest)
-        run: ./gradlew :samples:hello-compose:run --args="--keytest" --no-daemon --stacktrace
-
-      - name: Compose UI raster capture (--capture)
+      # 1 + 2 in a single JVM (one Gradle invocation): keyboard self-test + raster capture.
+      # No display / no GPU — these MUST pass.
+      - name: Headless checks (--ci-headless)
         run: |
           ./gradlew :samples:hello-compose:run \
-            --args="--capture samples/hello-compose/build/visual/hello-compose.raster.png" \
+            --args="--ci-headless samples/hello-compose/build/visual" \
             --no-daemon --stacktrace
 
       # 3: the real windowed GL path via EGL/Wayland + Skiko makeGL, under software Mesa GL.

@@ -283,10 +283,19 @@ private fun typedChar(key: KadreKey, shift: Boolean): Char? = when {
  */
 fun main(args: Array<String>) {
     if (args.contains("--keytest")) {
-        val typed = keyboardSelfTest("hi")
-        println("[hello-compose] keytest — text field received: '$typed' (expected 'hi')")
-        if (typed != "hi") error("keytest FAILED: '$typed' != 'hi'")
-        println("[hello-compose] keytest OK")
+        runKeytest()
+        return
+    }
+
+    // Combined headless checks in a single JVM (keytest + raster capture) — lets CI do both
+    // with one Gradle invocation instead of two. Windowed GL capture stays a separate process
+    // so a native GL crash can't fail the headless checks.
+    val ciHeadlessIndex = args.indexOf("--ci-headless")
+    if (ciHeadlessIndex >= 0) {
+        val dir = args.getOrNull(ciHeadlessIndex + 1)
+            ?: error("--ci-headless requires an output dir: --ci-headless <dir>")
+        runKeytest()
+        captureDemoUiToPng("$dir/hello-compose.raster.png")
         return
     }
 
@@ -311,4 +320,12 @@ fun main(args: Array<String>) {
     println("[hello-compose] Starting — Compose Multiplatform in a Kadre window")
     EventLoop().runApp(HelloComposeApp(windowCapturePath))
     println("[hello-compose] Done")
+}
+
+/** Runs the headless keyboard self-test, failing the process if it doesn't type "hi". */
+private fun runKeytest() {
+    val typed = keyboardSelfTest("hi")
+    println("[hello-compose] keytest — text field received: '$typed' (expected 'hi')")
+    if (typed != "hi") error("keytest FAILED: '$typed' != 'hi'")
+    println("[hello-compose] keytest OK")
 }
