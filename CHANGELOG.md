@@ -11,11 +11,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Sample `hello-compose`** — intègre une UI **Jetpack Compose (Compose Multiplatform 1.9.3)** interactive dans une fenêtre Kadre native sur macOS. Une `ComposeScene` bas-niveau est rendue via **Skiko/Skia sur Metal** directement dans le `CAMetalLayer` exposé par Kadre (`DirectContext.makeMetal` → `nextDrawable` → `BackendRenderTarget.makeMetal` → `Surface` → `render` → `presentDrawable`), sans AWT/Swing. Les événements souris **et clavier** de Kadre sont transmis à la scène ; le `KeyEvent` Compose est construit sans `java.awt.event.KeyEvent` pour rester compatible avec `-XstartOnFirstThread`. Mode `--capture <path>` pour un rendu offscreen raster (PNG) headless, utile en CI. Lancement : `./gradlew :samples:hello-compose:run`.
+- **Sample `hello-compose`** — embeds an interactive **Jetpack Compose (Compose Multiplatform 1.9.3)** UI inside a native Kadre window on macOS. A low-level `ComposeScene` is rendered via **Skiko/Skia on Metal** directly into the `CAMetalLayer` exposed by Kadre (`DirectContext.makeMetal` → `nextDrawable` → `BackendRenderTarget.makeMetal` → `Surface` → `render` → `presentDrawable`), without AWT/Swing. Kadre mouse **and keyboard** events are forwarded to the scene; the Compose `KeyEvent` is built without `java.awt.event.KeyEvent` to stay compatible with `-XstartOnFirstThread`. A `--capture <path>` mode renders the UI to an offscreen raster PNG (headless, useful for CI). Run with: `./gradlew :samples:hello-compose:run`.
 
 ### Changed
 
-- `compose-multiplatform` 1.7.3 → **1.9.3** (compatible Kotlin 2.3.21) ; ajout de la version `skiko` 0.9.22.2 et du runtime natif `skiko-awt-runtime-macos-arm64` au catalogue de versions.
+- `compose-multiplatform` 1.7.3 → **1.9.3** (compatible with Kotlin 2.3.21); added the `skiko` 0.9.22.2 version and the `skiko-awt-runtime-macos-arm64` native runtime to the version catalog.
 
 ---
 

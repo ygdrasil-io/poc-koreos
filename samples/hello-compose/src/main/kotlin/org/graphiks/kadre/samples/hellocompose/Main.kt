@@ -61,15 +61,15 @@ fun DemoUi() {
                 verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Jetpack Compose dans une fenêtre Kadre 🪟", style = MaterialTheme.typography.headlineSmall)
-                Text("Rendu via Skiko → Metal (CAMetalLayer)", style = MaterialTheme.typography.bodyMedium)
+                Text("Jetpack Compose in a Kadre window 🪟", style = MaterialTheme.typography.headlineSmall)
+                Text("Rendered via Skiko → Metal (CAMetalLayer)", style = MaterialTheme.typography.bodyMedium)
                 Button(onClick = { clicks++ }) {
-                    Text("Cliqué $clicks fois")
+                    Text("Clicked $clicks times")
                 }
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { typed = it },
-                    label = { Text("Tape au clavier") },
+                    label = { Text("Type here") },
                     singleLine = true,
                 )
             }
@@ -83,7 +83,7 @@ class HelloComposeApp : ApplicationHandler {
     private var renderer: ComposeMetalRenderer? = null
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
-        println("[hello-compose] canCreateSurfaces — création fenêtre + ComposeScene")
+        println("[hello-compose] canCreateSurfaces — creating window + ComposeScene")
 
         val win = eventLoop.createWindow(
             WindowAttributes(
@@ -97,7 +97,7 @@ class HelloComposeApp : ApplicationHandler {
 
         val handle = win.rawWindowHandle
         if (handle !is RawWindowHandle.AppKit || handle.nsLayer == 0L) {
-            println("[hello-compose] Plateforme non supportée (CAMetalLayer requis) : $handle")
+            println("[hello-compose] Unsupported platform (CAMetalLayer required): $handle")
             eventLoop.exit()
             return
         }
@@ -108,7 +108,7 @@ class HelloComposeApp : ApplicationHandler {
         r.setContent { DemoUi() }
         renderer = r
 
-        println("[hello-compose] Prêt — ${inner.width}×${inner.height} @ ${win.scaleFactor}x")
+        println("[hello-compose] Ready — ${inner.width}×${inner.height} @ ${win.scaleFactor}x")
     }
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
@@ -159,7 +159,7 @@ class HelloComposeApp : ApplicationHandler {
             }
 
             is WindowEvent.CloseRequested -> {
-                println("[hello-compose] CloseRequested — fermeture")
+                println("[hello-compose] CloseRequested — closing")
                 r?.dispose()
                 renderer = null
                 eventLoop.exit()
@@ -229,12 +229,12 @@ fun main(args: Array<String>) {
     val captureIndex = args.indexOf("--capture")
     if (captureIndex >= 0) {
         val path = args.getOrNull(captureIndex + 1)
-            ?: error("--capture requiert un chemin de fichier : --capture <path>")
+            ?: error("--capture requires a file path: --capture <path>")
         captureDemoUiToPng(path)
         return
     }
 
-    println("[hello-compose] Démarrage — Compose Multiplatform dans une fenêtre Kadre")
+    println("[hello-compose] Starting — Compose Multiplatform in a Kadre window")
     EventLoop().runApp(HelloComposeApp())
-    println("[hello-compose] Terminé")
+    println("[hello-compose] Done")
 }
