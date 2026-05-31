@@ -29,9 +29,13 @@ import java.lang.foreign.ValueLayout
 /** MTLPixelFormatBGRA8Unorm — the CAMetalLayer default, mapped to Skia BGRA_8888. */
 private const val MTL_PIXEL_FORMAT_BGRA8_UNORM = 80L
 
-class MetalComposeRenderer(metalLayerAddr: Long, scaleFactor: Double) : ComposeWindowRenderer {
+class MetalComposeRenderer(
+    metalLayerAddr: Long,
+    scaleFactor: Double,
+    dispatcher: EventLoopDispatcher,
+) : ComposeWindowRenderer {
 
-    override val host = ComposeSceneHost(scaleFactor)
+    override val host = ComposeSceneHost(scaleFactor, dispatcher)
 
     private val arena = Arena.ofShared()
     private val layer: MemorySegment = MemorySegment.ofAddress(metalLayerAddr)

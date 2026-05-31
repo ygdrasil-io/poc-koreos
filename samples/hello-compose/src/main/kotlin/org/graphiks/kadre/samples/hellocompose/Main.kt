@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -30,6 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.awt.Component
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent as AwtKeyEvent
@@ -53,7 +60,7 @@ import org.graphiks.kadre.core.WindowEvent
  * input forwarding → snapshot apply → recomposition → frame clock → Skia/Metal present.
  */
 @androidx.compose.runtime.Composable
-fun DemoUi() {
+fun DemoUi(uptimeSeconds: Int = -1) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             var clicks by remember { mutableStateOf(0) }
@@ -65,6 +72,13 @@ fun DemoUi() {
             ) {
                 Text("Jetpack Compose in a Kadre window 🪟", style = MaterialTheme.typography.headlineSmall)
                 Text("Rendered via Skiko (Metal on macOS, OpenGL on Windows/Linux)", style = MaterialTheme.typography.bodyMedium)
+                if (uptimeSeconds >= 0) {
+                    // Driven by a coroutine via EventLoopDispatcher + delay() — updates on the main thread.
+                    Text("⏱ coroutine uptime: ${uptimeSeconds}s", style = MaterialTheme.typography.titleMedium)
+                }
+                // Indeterminate spinner — animates via withFrameNanos against the loop-driven
+                // MonotonicFrameClock (Level 2). A smooth spin proves the frame clock works.
+                CircularProgressIndicator()
                 Button(onClick = { clicks++ }) {
                     Text("Clicked $clicks times")
                 }
@@ -88,6 +102,12 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
 
     private var window: Window? = null
     private var renderer: ComposeWindowRenderer? = null
+
+    // Coroutines (Level-1 prototype): a main-thread dispatcher backed by the Kadre loop.
+    // A coroutine ticks an "uptime" Compose state via delay() — proving coroutine-driven UI.
+    private val dispatcher = EventLoopDispatcher()
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val uptimeSeconds = mutableStateOf(0)
 
     // Keyboard forwarding builds real AWT KeyEvents (required for text input — see
     // ComposeSceneHost.sendKey). The source Component is created lazily and guarded:
@@ -116,17 +136,28 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
             return
         }
 
-        val r = ComposeWindowRenderer.create(handle, win.scaleFactor).getOrElse {
+        val r = ComposeWindowRenderer.create(handle, win.scaleFactor, dispatcher).getOrElse {
             println("[hello-compose] Cannot create renderer: ${it.message}")
             eventLoop.exit()
             return
         }
         val inner = win.innerSize
         r.resize(inner.width, inner.height, win.scaleFactor)
-        r.setContent { DemoUi() }
+        r.setContent { DemoUi(uptimeSeconds = uptimeSeconds.value) }
         renderer = r
 
         println("[hello-compose] Ready — ${inner.width}×${inner.height} @ ${win.scaleFactor}x (${r::class.simpleName})")
+
+        // Coroutine-driven UI: tick the uptime state every second via delay(), on the loop thread.
+        if (windowCapturePath == null) {
+            dispatcher.attach(eventLoop)
+            scope.launch {
+                while (isActive) {
+                    delay(1000)
+                    uptimeSeconds.value += 1
+                }
+            }
+        }
 
         // Headless windowed capture: render a few frames synchronously (so composition + first
         // paint settle) through the real platform present path, snapshot, and exit immediately —
@@ -142,7 +173,9 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
     }
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
-        // Continuous redraw (~vsync) keeps recomposition/animation pumped — like hello-triangle.
+        // Drain ready coroutine work (the uptime ticker) on the loop thread, then keep
+        // rendering continuously so recomposition picks up the state change.
+        dispatcher.pump()
         window?.requestRedraw()
     }
 
@@ -178,6 +211,7 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
 
             is WindowEvent.CloseRequested -> {
                 println("[hello-compose] CloseRequested — closing")
+                scope.cancel()
                 r?.dispose()
                 renderer = null
                 eventLoop.exit()
