@@ -28,9 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.unit.dp
+import java.awt.Component
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent as AwtKeyEvent
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
 import org.graphiks.kadre.EventLoop
@@ -81,6 +83,14 @@ class HelloComposeApp : ApplicationHandler {
 
     private var window: Window? = null
     private var renderer: ComposeMetalRenderer? = null
+
+    // Keyboard forwarding builds real AWT KeyEvents (required for text input — see
+    // ComposeMetalRenderer.sendKey). The source Component is created lazily and guarded:
+    // if AWT init misbehaves under -XstartOnFirstThread, keyboard is disabled, not fatal.
+    private var keyboardDisabled = false
+    private val keyEventSource: Component? by lazy {
+        runCatching { object : Component() {} }.getOrNull()
+    }
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         println("[hello-compose] canCreateSurfaces — creating window + ComposeScene")
@@ -133,19 +143,7 @@ class HelloComposeApp : ApplicationHandler {
             is WindowEvent.PointerEntered -> r?.onPointerEnter()
             is WindowEvent.PointerLeft -> r?.onPointerExit()
 
-            is WindowEvent.KeyboardInput -> {
-                val composeKey = toComposeKey(event.key) ?: return
-                val m = event.modifiers
-                r?.sendKey(
-                    key = composeKey,
-                    down = event.state == KeyState.Pressed,
-                    codePoint = codePointFor(event.key, m.shift),
-                    ctrl = m.ctrl,
-                    meta = m.meta,
-                    alt = m.alt,
-                    shift = m.shift,
-                )
-            }
+            is WindowEvent.KeyboardInput -> forwardKey(event, r)
 
             is WindowEvent.Resized -> {
                 val win = window ?: return
@@ -176,47 +174,80 @@ class HelloComposeApp : ApplicationHandler {
         MouseButton.Middle -> 4 to PointerButton.Tertiary
         is MouseButton.Other -> null
     }
+
+    /**
+     * Forwards a Kadre keyboard event to Compose as real AWT events:
+     * - KEY_PRESSED / KEY_RELEASED drive editing commands (backspace, arrows, shortcuts).
+     * - KEY_TYPED (on press, for printable keys) drives character insertion in text fields,
+     *   which Compose only performs for genuine AWT typed events.
+     */
+    private fun forwardKey(event: WindowEvent.KeyboardInput, renderer: ComposeMetalRenderer?) {
+        if (keyboardDisabled || renderer == null) return
+        val source = keyEventSource ?: run { keyboardDisabled = true; return }
+
+        val mods = awtModifiers(event.modifiers)
+        val vk = toAwtKeyCode(event.key)
+        val now = System.currentTimeMillis()
+
+        runCatching {
+            if (event.state == KeyState.Pressed) {
+                if (vk != AwtKeyEvent.VK_UNDEFINED) {
+                    renderer.sendKey(AwtKeyEvent(source, AwtKeyEvent.KEY_PRESSED, now, mods, vk, AwtKeyEvent.CHAR_UNDEFINED))
+                }
+                val ch = typedChar(event.key, event.modifiers.shift)
+                if (ch != null && !event.modifiers.ctrl && !event.modifiers.meta) {
+                    renderer.sendKey(AwtKeyEvent(source, AwtKeyEvent.KEY_TYPED, now, mods, AwtKeyEvent.VK_UNDEFINED, ch))
+                }
+            } else if (vk != AwtKeyEvent.VK_UNDEFINED) {
+                renderer.sendKey(AwtKeyEvent(source, AwtKeyEvent.KEY_RELEASED, now, mods, vk, AwtKeyEvent.CHAR_UNDEFINED))
+            }
+        }.onFailure {
+            keyboardDisabled = true
+            println("[hello-compose] keyboard forwarding disabled: ${it.message}")
+        }
+    }
 }
 
-/** Maps a Kadre logical [KadreKey] to its Compose [ComposeKey] equivalent (null if unmapped). */
-private fun toComposeKey(key: KadreKey): ComposeKey? = when (key) {
-    KadreKey.A -> ComposeKey.A; KadreKey.B -> ComposeKey.B; KadreKey.C -> ComposeKey.C
-    KadreKey.D -> ComposeKey.D; KadreKey.E -> ComposeKey.E; KadreKey.F -> ComposeKey.F
-    KadreKey.G -> ComposeKey.G; KadreKey.H -> ComposeKey.H; KadreKey.I -> ComposeKey.I
-    KadreKey.J -> ComposeKey.J; KadreKey.K -> ComposeKey.K; KadreKey.L -> ComposeKey.L
-    KadreKey.M -> ComposeKey.M; KadreKey.N -> ComposeKey.N; KadreKey.O -> ComposeKey.O
-    KadreKey.P -> ComposeKey.P; KadreKey.Q -> ComposeKey.Q; KadreKey.R -> ComposeKey.R
-    KadreKey.S -> ComposeKey.S; KadreKey.T -> ComposeKey.T; KadreKey.U -> ComposeKey.U
-    KadreKey.V -> ComposeKey.V; KadreKey.W -> ComposeKey.W; KadreKey.X -> ComposeKey.X
-    KadreKey.Y -> ComposeKey.Y; KadreKey.Z -> ComposeKey.Z
-    KadreKey.Digit0 -> ComposeKey.Zero; KadreKey.Digit1 -> ComposeKey.One
-    KadreKey.Digit2 -> ComposeKey.Two; KadreKey.Digit3 -> ComposeKey.Three
-    KadreKey.Digit4 -> ComposeKey.Four; KadreKey.Digit5 -> ComposeKey.Five
-    KadreKey.Digit6 -> ComposeKey.Six; KadreKey.Digit7 -> ComposeKey.Seven
-    KadreKey.Digit8 -> ComposeKey.Eight; KadreKey.Digit9 -> ComposeKey.Nine
-    KadreKey.F1 -> ComposeKey.F1; KadreKey.F2 -> ComposeKey.F2; KadreKey.F3 -> ComposeKey.F3
-    KadreKey.F4 -> ComposeKey.F4; KadreKey.F5 -> ComposeKey.F5; KadreKey.F6 -> ComposeKey.F6
-    KadreKey.F7 -> ComposeKey.F7; KadreKey.F8 -> ComposeKey.F8; KadreKey.F9 -> ComposeKey.F9
-    KadreKey.F10 -> ComposeKey.F10; KadreKey.F11 -> ComposeKey.F11; KadreKey.F12 -> ComposeKey.F12
-    KadreKey.Space -> ComposeKey.Spacebar; KadreKey.Enter -> ComposeKey.Enter
-    KadreKey.Escape -> ComposeKey.Escape; KadreKey.Backspace -> ComposeKey.Backspace
-    KadreKey.Tab -> ComposeKey.Tab
-    KadreKey.ArrowUp -> ComposeKey.DirectionUp; KadreKey.ArrowDown -> ComposeKey.DirectionDown
-    KadreKey.ArrowLeft -> ComposeKey.DirectionLeft; KadreKey.ArrowRight -> ComposeKey.DirectionRight
-    KadreKey.ShiftLeft -> ComposeKey.ShiftLeft; KadreKey.ShiftRight -> ComposeKey.ShiftRight
-    KadreKey.ControlLeft -> ComposeKey.CtrlLeft; KadreKey.ControlRight -> ComposeKey.CtrlRight
-    KadreKey.AltLeft -> ComposeKey.AltLeft; KadreKey.AltRight -> ComposeKey.AltRight
-    KadreKey.MetaLeft -> ComposeKey.MetaLeft; KadreKey.MetaRight -> ComposeKey.MetaRight
-    KadreKey.Unknown -> null
+/** Builds the AWT extended-modifier mask from Kadre modifiers. */
+private fun awtModifiers(m: org.graphiks.kadre.core.Modifiers): Int {
+    var mask = 0
+    if (m.shift) mask = mask or InputEvent.SHIFT_DOWN_MASK
+    if (m.ctrl) mask = mask or InputEvent.CTRL_DOWN_MASK
+    if (m.alt) mask = mask or InputEvent.ALT_DOWN_MASK
+    if (m.meta) mask = mask or InputEvent.META_DOWN_MASK
+    return mask
 }
 
-/** UTF-16 code point for text-producing keys, so Compose text fields receive typed characters. */
-private fun codePointFor(key: KadreKey, shift: Boolean): Int = when {
-    key.name.length == 1 && key.name[0] in 'A'..'Z' ->
-        (if (shift) key.name[0] else key.name[0].lowercaseChar()).code
-    key.name.startsWith("Digit") -> key.name.last().code
-    key == KadreKey.Space -> ' '.code
-    else -> 0
+/** Maps a Kadre logical [KadreKey] to its AWT virtual key code (`VK_UNDEFINED` if unmapped). */
+private fun toAwtKeyCode(key: KadreKey): Int = when (key) {
+    in KadreKey.A..KadreKey.Z -> AwtKeyEvent.VK_A + (key.ordinal - KadreKey.A.ordinal)
+    in KadreKey.Digit0..KadreKey.Digit9 -> AwtKeyEvent.VK_0 + (key.ordinal - KadreKey.Digit0.ordinal)
+    in KadreKey.F1..KadreKey.F12 -> AwtKeyEvent.VK_F1 + (key.ordinal - KadreKey.F1.ordinal)
+    KadreKey.Space -> AwtKeyEvent.VK_SPACE
+    KadreKey.Enter -> AwtKeyEvent.VK_ENTER
+    KadreKey.Escape -> AwtKeyEvent.VK_ESCAPE
+    KadreKey.Backspace -> AwtKeyEvent.VK_BACK_SPACE
+    KadreKey.Tab -> AwtKeyEvent.VK_TAB
+    KadreKey.ArrowUp -> AwtKeyEvent.VK_UP
+    KadreKey.ArrowDown -> AwtKeyEvent.VK_DOWN
+    KadreKey.ArrowLeft -> AwtKeyEvent.VK_LEFT
+    KadreKey.ArrowRight -> AwtKeyEvent.VK_RIGHT
+    KadreKey.ShiftLeft, KadreKey.ShiftRight -> AwtKeyEvent.VK_SHIFT
+    KadreKey.ControlLeft, KadreKey.ControlRight -> AwtKeyEvent.VK_CONTROL
+    KadreKey.AltLeft, KadreKey.AltRight -> AwtKeyEvent.VK_ALT
+    KadreKey.MetaLeft, KadreKey.MetaRight -> AwtKeyEvent.VK_META
+    else -> AwtKeyEvent.VK_UNDEFINED
+}
+
+/** The character a printable key produces (respecting Shift for letters), or null. */
+private fun typedChar(key: KadreKey, shift: Boolean): Char? = when {
+    key in KadreKey.A..KadreKey.Z -> {
+        val upper = 'A' + (key.ordinal - KadreKey.A.ordinal)
+        if (shift) upper else upper.lowercaseChar()
+    }
+    key in KadreKey.Digit0..KadreKey.Digit9 -> '0' + (key.ordinal - KadreKey.Digit0.ordinal)
+    key == KadreKey.Space -> ' '
+    else -> null
 }
 
 /**
@@ -226,6 +257,14 @@ private fun codePointFor(key: KadreKey, shift: Boolean): Int = when {
  * surface and writes a PNG, then exits — no window, no GPU, headless-safe (useful for CI).
  */
 fun main(args: Array<String>) {
+    if (args.contains("--keytest")) {
+        val typed = keyboardSelfTest("hi")
+        println("[hello-compose] keytest — text field received: '$typed' (expected 'hi')")
+        if (typed != "hi") error("keytest FAILED: '$typed' != 'hi'")
+        println("[hello-compose] keytest OK")
+        return
+    }
+
     val captureIndex = args.indexOf("--capture")
     if (captureIndex >= 0) {
         val path = args.getOrNull(captureIndex + 1)

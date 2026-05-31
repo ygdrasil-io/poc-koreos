@@ -21,9 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -198,30 +196,16 @@ class ComposeMetalRenderer(metalLayerAddr: Long, scaleFactor: Double) {
     }
 
     /**
-     * Forwards a keyboard event. The Compose [KeyEvent] is built directly from a [Key] +
-     * [KeyEventType] (no `java.awt.event.KeyEvent` needed), so it is safe under
-     * `-XstartOnFirstThread` where initializing AWT would conflict with Kadre's NSApp.
+     * Forwards a keyboard event to the Compose scene.
+     *
+     * Compose text fields only insert characters when the event is a real AWT `KEY_TYPED`
+     * event (see `TextFieldKeyInput.isTypedEvent`), so callers must pass genuine
+     * [java.awt.event.KeyEvent]s. The desktop `KeyEvent.toComposeEvent()` converter — which
+     * preserves the AWT event so `getAwtEventOrNull` returns it downstream — is `internal`
+     * to compose-ui, so we reach it reflectively (it is public at the bytecode level).
      */
-    fun sendKey(
-        key: Key,
-        down: Boolean,
-        codePoint: Int,
-        ctrl: Boolean,
-        meta: Boolean,
-        alt: Boolean,
-        shift: Boolean,
-    ) {
-        scene.sendKeyEvent(
-            KeyEvent(
-                key = key,
-                type = if (down) KeyEventType.KeyDown else KeyEventType.KeyUp,
-                codePoint = codePoint,
-                isCtrlPressed = ctrl,
-                isMetaPressed = meta,
-                isAltPressed = alt,
-                isShiftPressed = shift,
-            ),
-        )
+    fun sendKey(awtEvent: java.awt.event.KeyEvent) {
+        scene.sendKeyEvent(awtKeyToComposeKeyEvent(awtEvent))
     }
 
     fun onPointerEnter() =
@@ -273,5 +257,29 @@ class ComposeMetalRenderer(metalLayerAddr: Long, scaleFactor: Double) {
             ValueLayout.JAVA_DOUBLE.withName("width"),
             ValueLayout.JAVA_DOUBLE.withName("height"),
         ).withName("CGSize")
+
     }
+}
+
+/**
+ * Converts a real AWT [java.awt.event.KeyEvent] into a Compose [KeyEvent] that preserves the
+ * underlying AWT event (so `getAwtEventOrNull` returns it and text fields insert characters).
+ *
+ * The desktop `KeyEvent.toComposeEvent()` converter is `internal` to compose-ui, and it returns
+ * the value class's underlying `InternalKeyEvent`; we reach it reflectively and re-box it into a
+ * [KeyEvent] via the synthetic `box-impl`. Both are public at the bytecode level.
+ */
+internal fun awtKeyToComposeKeyEvent(awtEvent: java.awt.event.KeyEvent): KeyEvent {
+    val internal = ComposeKeyEventBridge.toComposeEvent.invoke(null, awtEvent)
+    return ComposeKeyEventBridge.box.invoke(null, internal) as KeyEvent
+}
+
+private object ComposeKeyEventBridge {
+    val toComposeEvent: java.lang.reflect.Method =
+        Class.forName("androidx.compose.ui.input.key.KeyEvent_desktopKt")
+            .getMethod("toComposeEvent", java.awt.event.KeyEvent::class.java)
+
+    /** `KeyEvent.box-impl(Object): KeyEvent` — boxes the underlying InternalKeyEvent. */
+    val box: java.lang.reflect.Method =
+        KeyEvent::class.java.getMethod("box-impl", Any::class.java)
 }
