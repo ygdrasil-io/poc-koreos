@@ -84,9 +84,9 @@ class AppKitWindowTest {
         // Verify that the binding classes used in AppKitWindow exist
         // and are instantiable via constructor(MemorySegment).
         val nsWindowCtor = NSWindow::class.java.constructors.firstOrNull { it.parameterCount == 1 }
-        assertTrue(nsWindowCtor != null, "NSWindow doit avoir un constructeur(MemorySegment)")
+        assertTrue(nsWindowCtor != null, "NSWindow must have a constructor(MemorySegment)")
 
         val nsViewCtor = NSView::class.java.constructors.firstOrNull { it.parameterCount == 1 }
-        assertTrue(nsViewCtor != null, "NSView doit avoir un constructeur(MemorySegment)")
+        assertTrue(nsViewCtor != null, "NSView must have a constructor(MemorySegment)")
     }
 }

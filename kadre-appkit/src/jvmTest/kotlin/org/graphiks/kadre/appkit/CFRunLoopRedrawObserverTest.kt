@@ -34,9 +34,9 @@ class CFRunLoopRedrawObserverTest {
     fun `CFRunLoopRedrawObserver redrawCallback exists with CFRunLoopObserverCallBack signature`() {
         val method = CFRunLoopRedrawObserver::class.java.methods
             .firstOrNull { it.name == "redrawCallback" }
-        assertNotNull(method, "CFRunLoopRedrawObserver doit exposer redrawCallback (static)")
-        assertEquals(Void.TYPE, method.returnType, "redrawCallback doit retourner void")
-        assertEquals(3, method.parameterCount, "redrawCallback prend (observer, activity, info)")
+        assertNotNull(method, "CFRunLoopRedrawObserver must expose redrawCallback (static)")
+        assertEquals(Void.TYPE, method.returnType, "redrawCallback must return void")
+        assertEquals(3, method.parameterCount, "redrawCallback takes (observer, activity, info)")
         assertEquals(MemorySegment::class.java, method.parameterTypes[0])
         assertEquals(java.lang.Long.TYPE, method.parameterTypes[1])
         assertEquals(MemorySegment::class.java, method.parameterTypes[2])
@@ -48,7 +48,7 @@ class CFRunLoopRedrawObserverTest {
             .getDeclaredField("Companion").get(null)
         val installMethod = companionInstance.javaClass.methods
             .firstOrNull { it.name == "install" }
-        assertNotNull(installMethod, "Companion doit exposer install(handler, eventLoop, windows)")
+        assertNotNull(installMethod, "Companion must expose install(handler, eventLoop, windows)")
         assertEquals(3, installMethod.parameterCount)
     }
 
@@ -57,7 +57,7 @@ class CFRunLoopRedrawObserverTest {
         // requestRedraw must mutate the needsRedraw flag (verified via generated getter/setter)
         val getter = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "getNeedsRedraw\$kadre_appkit" || it.name == "getNeedsRedraw" }
-        assertNotNull(getter, "AppKitWindow doit exposer un getter sur needsRedraw (internal)")
+        assertNotNull(getter, "AppKitWindow must expose a getter for needsRedraw (internal)")
         assertEquals(java.lang.Boolean.TYPE, getter.returnType)
     }
 
@@ -65,7 +65,7 @@ class CFRunLoopRedrawObserverTest {
     fun `AppKitWindow requestRedraw exists and returns void`() {
         val method = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "requestRedraw" }
-        assertNotNull(method, "AppKitWindow doit avoir requestRedraw()")
+        assertNotNull(method, "AppKitWindow must have requestRedraw()")
         assertEquals(Void.TYPE, method.returnType)
         assertEquals(0, method.parameterCount)
     }
@@ -74,7 +74,7 @@ class CFRunLoopRedrawObserverTest {
     fun `ApplicationHandler aboutToWait exists with correct signature (GRA-135)`() {
         val method = ApplicationHandler::class.java.methods
             .firstOrNull { it.name == "aboutToWait" }
-        assertNotNull(method, "ApplicationHandler doit avoir aboutToWait(eventLoop)")
+        assertNotNull(method, "ApplicationHandler must have aboutToWait(eventLoop)")
         assertEquals(Void.TYPE, method.returnType)
         assertEquals(1, method.parameterCount)
         assertTrue(ActiveEventLoop::class.java.isAssignableFrom(method.parameterTypes[0]))
@@ -108,7 +108,7 @@ class CFRunLoopRedrawObserverTest {
             java.util.concurrent.ConcurrentHashMap())
         observer.onBeforeWaiting()
 
-        assertTrue(aboutToWaitCalled.size == 1, "aboutToWait doit être appelé une fois")
-        assertTrue(windowEventsCalled.isEmpty(), "Pas de RedrawRequested sans fenêtre pendante")
+        assertTrue(aboutToWaitCalled.size == 1, "aboutToWait must be called once")
+        assertTrue(windowEventsCalled.isEmpty(), "No RedrawRequested without a pending window")
     }
 }

@@ -49,22 +49,22 @@ class KadreApplicationTest {
         val eventLoopField = allFields.firstOrNull { it.name == "eventLoop" }
         assertNotNull(
             eventLoopField,
-            "eventLoop doit être un champ de KadreApplication, champs trouvés : ${allFields.map { it.name }}"
+            "eventLoop must be a field of KadreApplication, fields found: ${allFields.map { it.name }}"
         )
         assertTrue(
             !java.lang.reflect.Modifier.isStatic(eventLoopField!!.modifiers),
-            "eventLoop doit être non-statique (propriété d'instance)"
+            "eventLoop must be non-static (instance property)"
         )
 
         // sharedApp must be a static field (backing field of the companion property)
         val sharedAppField = allFields.firstOrNull { it.name == "sharedApp" }
         assertNotNull(
             sharedAppField,
-            "sharedApp doit exister dans KadreApplication pour remplacer NSApp as? KadreApplication"
+            "sharedApp must exist in KadreApplication to replace NSApp as? KadreApplication"
         )
         assertTrue(
             java.lang.reflect.Modifier.isStatic(sharedAppField!!.modifiers),
-            "sharedApp doit être statique (companion object property)"
+            "sharedApp must be static (companion object property)"
         )
     }
 
@@ -81,7 +81,7 @@ class KadreApplicationTest {
         // process, which is the case since the tests do not touch the macOS runtime.
         assertNull(
             KadreApplication.sharedApp,
-            "sharedApp doit être null si initialize() n'a jamais été appelé"
+            "sharedApp must be null if initialize() has never been called"
         )
     }
 
@@ -151,7 +151,7 @@ class KadreApplicationTest {
             val handler = NoopHandler()
 
             assertFailsWith<IllegalStateException>(
-                message = "runApp() doit lever IllegalStateException si une boucle est déjà active"
+                message = "runApp() must throw IllegalStateException if a loop is already active"
             ) {
                 // The check(appKitRunning.compareAndSet(false, true)) guard fails first,
                 // before any access to the AppKit runtime or to MainThreadCheck.

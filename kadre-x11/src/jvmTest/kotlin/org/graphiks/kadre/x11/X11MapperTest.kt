@@ -58,7 +58,7 @@ class X11KeyMapperTest {
             val expected = Key.entries[i] // Key.A..Key.Z (first 26 ordinals)
             val actual = KEYSYM_TABLE[keysym]
             assertEquals(expected, actual,
-                "Keysym 0x${keysym.toString(16)} devrait mapper sur $expected")
+                "Keysym 0x${keysym.toString(16)} should map to $expected")
         }
     }
 
@@ -69,7 +69,7 @@ class X11KeyMapperTest {
             val expected = Key.entries[i]
             val actual = KEYSYM_TABLE[keysym]
             assertEquals(expected, actual,
-                "Keysym 0x${keysym.toString(16)} devrait mapper sur $expected")
+                "Keysym 0x${keysym.toString(16)} should map to $expected")
         }
     }
 
@@ -82,7 +82,7 @@ class X11KeyMapperTest {
         for (i in 0..9) {
             val keysym = 0x30 + i
             assertEquals(digits[i], KEYSYM_TABLE[keysym],
-                "Keysym 0x${keysym.toString(16)} devrait mapper sur ${digits[i]}")
+                "Keysym 0x${keysym.toString(16)} should map to ${digits[i]}")
         }
     }
 
@@ -110,7 +110,7 @@ class X11KeyMapperTest {
         for (i in 0..11) {
             val keysym = 0xFFBE + i
             assertEquals(fKeys[i], KEYSYM_TABLE[keysym],
-                "Keysym 0x${keysym.toString(16)} devrait mapper sur ${fKeys[i]}")
+                "Keysym 0x${keysym.toString(16)} should map to ${fKeys[i]}")
         }
     }
 
@@ -367,7 +367,7 @@ class X11MouseMapperTest {
                 .setInt(68L, 4)   // scroll down release
 
             val event = X11MouseMapper.fromXEvent(seg, ButtonRelease)
-            assertNull(event, "ButtonRelease de molette ne doit pas générer d'événement")
+            assertNull(event, "A wheel ButtonRelease must not generate an event")
         }
     }
 

@@ -23,6 +23,6 @@ class X11WindowTest {
             screen = 0,
             attrs = WindowAttributes(title = "Test"),
         )
-        assertNull(result, "X11Window.create doit retourner null si libX11 est absent")
+        assertNull(result, "X11Window.create must return null if libX11 is absent")
     }
 }

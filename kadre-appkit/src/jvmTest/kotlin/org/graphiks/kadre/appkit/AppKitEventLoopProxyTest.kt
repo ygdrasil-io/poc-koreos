@@ -18,7 +18,7 @@ class AppKitEventLoopProxyTest {
     fun `AppKitEventLoopProxy implements EventLoopProxy`() {
         assertTrue(
             EventLoopProxy::class.java.isAssignableFrom(AppKitEventLoopProxy::class.java),
-            "AppKitEventLoopProxy doit implémenter EventLoopProxy",
+            "AppKitEventLoopProxy must implement EventLoopProxy",
         )
     }
 
@@ -27,11 +27,11 @@ class AppKitEventLoopProxyTest {
         val companionClass = AppKitEventLoopProxy.Companion::class.java
         val method = companionClass.declaredMethods
             .firstOrNull { it.name == "create" }
-        assertNotNull(method, "AppKitEventLoopProxy.Companion doit exposer create()")
+        assertNotNull(method, "AppKitEventLoopProxy.Companion must expose create()")
         // The actual return is AppKitEventLoopProxy (a subtype of EventLoopProxy).
         assertTrue(
             EventLoopProxy::class.java.isAssignableFrom(method.returnType),
-            "create() doit retourner un EventLoopProxy",
+            "create() must return an EventLoopProxy",
         )
     }
 
@@ -39,7 +39,7 @@ class AppKitEventLoopProxyTest {
     fun `wakeUp exists and returns void`() {
         val method = AppKitEventLoopProxy::class.java.methods
             .firstOrNull { it.name == "wakeUp" }
-        assertNotNull(method, "AppKitEventLoopProxy doit avoir wakeUp()")
+        assertNotNull(method, "AppKitEventLoopProxy must have wakeUp()")
         assertEquals(Void.TYPE, method.returnType)
         assertEquals(0, method.parameterCount)
     }
@@ -48,7 +48,7 @@ class AppKitEventLoopProxyTest {
     fun `AppKitEventLoop createProxy no longer throws UnsupportedOperationException (GRA-136)`() {
         val method = AppKitEventLoop::class.java.methods
             .firstOrNull { it.name == "createProxy" }
-        assertNotNull(method, "AppKitEventLoop doit avoir createProxy()")
+        assertNotNull(method, "AppKitEventLoop must have createProxy()")
         assertEquals(EventLoopProxy::class.java, method.returnType)
     }
 

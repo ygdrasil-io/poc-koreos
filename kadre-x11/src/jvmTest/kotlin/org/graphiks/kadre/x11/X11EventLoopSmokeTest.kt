@@ -24,7 +24,7 @@ class X11EventLoopSmokeTest {
         // The global flag must be false at startup (or after a finished runApp)
         // Note: if another test left the flag at true, this test will fail —
         // but x11Running is reset to false in runApp's finally block.
-        assertFalse(x11Running.get(), "x11Running doit être false hors boucle active")
+        assertFalse(x11Running.get(), "x11Running must be false outside an active loop")
     }
 
     @Test
@@ -46,9 +46,9 @@ class X11EventLoopSmokeTest {
 
         // On non-Linux: libX11 null → we do not enter the loop
         assertFalse(canCreateSurfacesCalled,
-            "canCreateSurfaces ne doit pas être appelé si libX11 est absent")
+            "canCreateSurfaces must not be called if libX11 is absent")
         assertFalse(x11Running.get(),
-            "x11Running doit être false après runApp()")
+            "x11Running must be false after runApp()")
     }
 
     @Test
@@ -63,7 +63,7 @@ class X11EventLoopSmokeTest {
         assertFalse(x11Running.get())
         runApp(handler)
         assertFalse(x11Running.get(),
-            "x11Running doit être false après runApp() sur non-Linux")
+            "x11Running must be false after runApp() on non-Linux")
     }
 
     @Test
@@ -82,7 +82,7 @@ class X11EventLoopSmokeTest {
             } catch (e: IllegalStateException) {
                 threw = true
             }
-            assertTrue(threw, "runApp doit lever IllegalStateException si x11Running est true")
+            assertTrue(threw, "runApp must throw IllegalStateException if x11Running is true")
         } finally {
             x11Running.set(false)
         }

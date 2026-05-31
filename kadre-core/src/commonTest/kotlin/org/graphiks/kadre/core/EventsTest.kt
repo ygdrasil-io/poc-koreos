@@ -26,45 +26,45 @@ class EventsTest {
     @Test
     fun `SHIFT plus CTRL contains SHIFT`() {
         val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertTrue(mods.contains(Modifiers.SHIFT), "SHIFT+CTRL doit contenir SHIFT")
+        assertTrue(mods.contains(Modifiers.SHIFT), "SHIFT+CTRL must contain SHIFT")
     }
 
     @Test
     fun `SHIFT plus CTRL contains CTRL`() {
         val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertTrue(mods.contains(Modifiers.CTRL), "SHIFT+CTRL doit contenir CTRL")
+        assertTrue(mods.contains(Modifiers.CTRL), "SHIFT+CTRL must contain CTRL")
     }
 
     @Test
     fun `SHIFT plus CTRL does not contain ALT`() {
         val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertFalse(mods.contains(Modifiers.ALT), "SHIFT+CTRL ne doit pas contenir ALT")
+        assertFalse(mods.contains(Modifiers.ALT), "SHIFT+CTRL must not contain ALT")
     }
 
     @Test
     fun `NONE contains no modifier`() {
         val mods = Modifiers.NONE
-        assertFalse(mods.shift, "NONE.shift doit être false")
-        assertFalse(mods.ctrl,  "NONE.ctrl doit être false")
-        assertFalse(mods.alt,   "NONE.alt doit être false")
-        assertFalse(mods.meta,  "NONE.meta doit être false")
+        assertFalse(mods.shift, "NONE.shift must be false")
+        assertFalse(mods.ctrl,  "NONE.ctrl must be false")
+        assertFalse(mods.alt,   "NONE.alt must be false")
+        assertFalse(mods.meta,  "NONE.meta must be false")
     }
 
     @Test
     fun `each constant enables exactly its boolean property`() {
-        assertTrue(Modifiers.SHIFT.shift, "SHIFT.shift doit être true")
-        assertTrue(Modifiers.CTRL.ctrl,   "CTRL.ctrl doit être true")
-        assertTrue(Modifiers.ALT.alt,     "ALT.alt doit être true")
-        assertTrue(Modifiers.META.meta,   "META.meta doit être true")
+        assertTrue(Modifiers.SHIFT.shift, "SHIFT.shift must be true")
+        assertTrue(Modifiers.CTRL.ctrl,   "CTRL.ctrl must be true")
+        assertTrue(Modifiers.ALT.alt,     "ALT.alt must be true")
+        assertTrue(Modifiers.META.meta,   "META.meta must be true")
     }
 
     @Test
     fun `SHIFT plus CTRL plus ALT plus META enables all four properties`() {
         val tout = Modifiers.SHIFT + Modifiers.CTRL + Modifiers.ALT + Modifiers.META
-        assertTrue(tout.shift, "shift doit être true")
-        assertTrue(tout.ctrl,  "ctrl doit être true")
-        assertTrue(tout.alt,   "alt doit être true")
-        assertTrue(tout.meta,  "meta doit être true")
+        assertTrue(tout.shift, "shift must be true")
+        assertTrue(tout.ctrl,  "ctrl must be true")
+        assertTrue(tout.alt,   "alt must be true")
+        assertTrue(tout.meta,  "meta must be true")
     }
 
     @Test
@@ -75,7 +75,7 @@ class EventsTest {
     @Test
     fun `plus is idempotent`() {
         val mods = Modifiers.SHIFT + Modifiers.SHIFT
-        assertEquals(Modifiers.SHIFT, mods, "SHIFT+SHIFT doit égaler SHIFT")
+        assertEquals(Modifiers.SHIFT, mods, "SHIFT+SHIFT must equal SHIFT")
     }
 
     // -----------------------------------------------------------------------
@@ -87,7 +87,7 @@ class EventsTest {
         val lettres = ('A'..'Z').map { it.toString() }
         val entrees = Key.entries.map { it.name }
         for (lettre in lettres) {
-            assertTrue(lettre in entrees, "Key.$lettre manquant")
+            assertTrue(lettre in entrees, "Key.$lettre missing")
         }
     }
 
@@ -96,7 +96,7 @@ class EventsTest {
         val chiffres = (0..9).map { "Digit$it" }
         val entrees = Key.entries.map { it.name }
         for (chiffre in chiffres) {
-            assertTrue(chiffre in entrees, "Key.$chiffre manquant")
+            assertTrue(chiffre in entrees, "Key.$chiffre missing")
         }
     }
 
@@ -105,7 +105,7 @@ class EventsTest {
         val fonctions = (1..12).map { "F$it" }
         val entrees = Key.entries.map { it.name }
         for (fn in fonctions) {
-            assertTrue(fn in entrees, "Key.$fn manquant")
+            assertTrue(fn in entrees, "Key.$fn missing")
         }
     }
 
@@ -114,7 +114,7 @@ class EventsTest {
         val navigation = listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")
         val entrees = Key.entries.map { it.name }
         for (touche in navigation) {
-            assertTrue(touche in entrees, "Key.$touche manquant")
+            assertTrue(touche in entrees, "Key.$touche missing")
         }
     }
 
@@ -128,7 +128,7 @@ class EventsTest {
         )
         val entrees = Key.entries.map { it.name }
         for (touche in modificateurs) {
-            assertTrue(touche in entrees, "Key.$touche manquant")
+            assertTrue(touche in entrees, "Key.$touche missing")
         }
     }
 
@@ -137,7 +137,7 @@ class EventsTest {
         val speciales = listOf("Space", "Enter", "Escape", "Backspace", "Tab", "Unknown")
         val entrees = Key.entries.map { it.name }
         for (touche in speciales) {
-            assertTrue(touche in entrees, "Key.$touche manquant")
+            assertTrue(touche in entrees, "Key.$touche missing")
         }
     }
 

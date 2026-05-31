@@ -32,7 +32,7 @@ class FrameTimingTracerTest {
         }
         FrameTimingTracer.flush()
 
-        assertTrue(logs.isEmpty(), "Aucun log ne doit être émis quand désactivé")
+        assertTrue(logs.isEmpty(), "No log must be emitted when disabled")
     }
 
     @Test
@@ -49,7 +49,7 @@ class FrameTimingTracerTest {
         FrameTimingTracer.flush()
 
         val stats = logs.filter { it.contains("frames=") }
-        assertEquals(1, stats.size, "flush() doit publier une ligne de stats agrégées")
+        assertEquals(1, stats.size, "flush() must publish one line of aggregated stats")
         assertTrue(stats.first().contains("min=") && stats.first().contains("p99="))
     }
 
@@ -70,7 +70,7 @@ class FrameTimingTracerTest {
 
         assertTrue(
             logs.any { it.contains("slow frame") },
-            "Une frame dépassant le seuil doit être journalisée",
+            "A frame exceeding the threshold must be logged",
         )
         FrameTimingTracer.slowFrameThresholdMs = 16.7
     }

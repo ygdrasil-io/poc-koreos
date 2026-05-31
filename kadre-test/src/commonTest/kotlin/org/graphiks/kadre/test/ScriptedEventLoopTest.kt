@@ -40,7 +40,7 @@ private class RecordingHandler(
 class ScriptedEventLoopTest {
 
     @Test
-    fun ordreCycleDeVie_resumedAvantCanCreateSurfaces_suspendedEnDernier() {
+    fun lifecycleOrder_resumedBeforeCanCreateSurfaces_suspendedLast() {
         val trace = scriptedTest {
             canCreateSurfaces()
         }.run(RecordingHandler())
@@ -51,7 +51,7 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun keyPressRelease_dispatchEnOrdre() {
+    fun keyPressRelease_dispatchInOrder() {
         val handler = RecordingHandler()
         scriptedTest {
             keyPress(Key.ArrowUp)
@@ -67,7 +67,7 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun sequencePointeur_moveEtClick() {
+    fun pointerSequence_moveAndClick() {
         val handler = RecordingHandler()
         scriptedTest {
             pointerMove(10.0, 20.0)
@@ -83,7 +83,7 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun cascadeResize_etScaleFactor() {
+    fun resizeCascade_andScaleFactor() {
         val handler = RecordingHandler()
         scriptedTest {
             resized(1024, 768)
@@ -99,7 +99,7 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun fluxDeSortie_exitArreteLesEvenementsRestants() {
+    fun outputStream_exitStopsRemainingEvents() {
         val handler = RecordingHandler(exitOnClose = true)
         val trace = scriptedTest {
             keyPress(Key.Escape)
@@ -119,7 +119,7 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun tick_produitNewEventsRedrawAboutToWait() {
+    fun tick_producesNewEventsRedrawAboutToWait() {
         val handler = RecordingHandler()
         val trace = scriptedTest {
             tick(16)

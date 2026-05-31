@@ -100,7 +100,7 @@ class Win32WindowTest {
         if (isWindows()) return
         val attrs = WindowAttributes(title = "Test", visible = false)
         val window = Win32Window.create(attrs)
-        assertNull(window, "create() doit retourner null sur macOS/Linux (user32.dll absent)")
+        assertNull(window, "create() must return null on macOS/Linux (user32.dll missing)")
     }
 
     @Test
@@ -120,16 +120,16 @@ class Win32WindowTest {
             visible = false,  // do not display in CI
         )
         val window = Win32Window.create(attrs)
-        assertNotNull(window, "create() doit réussir sur Windows")
+        assertNotNull(window, "create() must succeed on Windows")
 
         // Check the handles
         val rawHandle = window.rawWindowHandle
-        assertTrue(rawHandle is RawWindowHandle.Win32, "rawWindowHandle doit être Win32")
-        assertTrue(rawHandle.hwnd != 0L, "HWND ne doit pas être nul")
-        assertTrue(rawHandle.hinstance != 0L, "HINSTANCE ne doit pas être nul")
+        assertTrue(rawHandle is RawWindowHandle.Win32, "rawWindowHandle must be Win32")
+        assertTrue(rawHandle.hwnd != 0L, "HWND must not be null")
+        assertTrue(rawHandle.hinstance != 0L, "HINSTANCE must not be null")
 
         val displayHandle = window.rawDisplayHandle
-        assertTrue(displayHandle is RawDisplayHandle.Win32, "rawDisplayHandle doit être Win32")
+        assertTrue(displayHandle is RawDisplayHandle.Win32, "rawDisplayHandle must be Win32")
         assertTrue((displayHandle).hinstance != 0L)
 
         // Check the basic properties

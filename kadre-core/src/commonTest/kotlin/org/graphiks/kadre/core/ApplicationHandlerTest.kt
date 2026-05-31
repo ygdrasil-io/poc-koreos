@@ -22,7 +22,7 @@ class ApplicationHandlerTest {
 
     private val stubEventLoop = object : ActiveEventLoop {
         override fun createWindow(attributes: WindowAttributes): Window =
-            error("Non implémenté dans le stub de test")
+            error("Not implemented in the test stub")
 
         override fun setControlFlow(controlFlow: ControlFlow) = Unit
 
@@ -129,7 +129,7 @@ class ApplicationHandlerTest {
             }
         }
         handler.deviceEvent(stubEventLoop, DeviceId(42L), Any())
-        assertTrue(appelé, "deviceEvent surchargé doit être appelé")
+        assertTrue(appelé, "overridden deviceEvent must be called")
     }
 
     @Test
@@ -308,12 +308,12 @@ class ApplicationHandlerTest {
     @Test
     fun windowAttributesCustomized() {
         val attrs = WindowAttributes(
-            title = "Ma fenêtre",
+            title = "My window",
             size = PhysicalSize(1920, 1080),
             visible = false,
             resizable = false,
         )
-        assertEquals("Ma fenêtre", attrs.title)
+        assertEquals("My window", attrs.title)
         assertEquals(PhysicalSize(1920, 1080), attrs.size)
         assertFalse(attrs.visible)
         assertFalse(attrs.resizable)

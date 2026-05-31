@@ -217,6 +217,6 @@ class Win32EventLoopTest {
     @Test
     fun `win32Running is false before runApp`() {
         // If another test forgot to reset the lock, this test will detect it
-        assertFalse(win32Running.get(), "win32Running doit être false au démarrage du test")
+        assertFalse(win32Running.get(), "win32Running must be false at test startup")
     }
 }
