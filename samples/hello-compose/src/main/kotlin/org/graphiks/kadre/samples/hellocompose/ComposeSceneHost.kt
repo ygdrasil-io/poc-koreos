@@ -29,6 +29,7 @@ import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import org.graphiks.kadre.coroutines.EventLoopDispatcher
 import org.jetbrains.skia.Canvas
 
 /**

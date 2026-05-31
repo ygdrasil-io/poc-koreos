@@ -15,6 +15,7 @@ import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
 import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.WindowId
+import org.graphiks.kadre.coroutines.EventLoopDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay

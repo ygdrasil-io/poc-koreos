@@ -1,20 +1,17 @@
 /**
- * Prototype (Level 1): a main-thread [CoroutineDispatcher] backed by a Kadre event loop.
+ * A main-thread [CoroutineDispatcher] backed by a Kadre event loop.
  *
  * `dispatch` enqueues work and wakes the loop via [EventLoopProxy]; the loop drains the queue
- * on its own (main) thread by calling [pump] once per iteration. [pump] also returns the
- * [ControlFlow] the loop should wait with, so:
- *   - pending immediate work  → Poll (run again right away)
+ * on its own (main) thread by calling [pump] once per iteration (the [kadreApplication] handler
+ * does this for you). [pump] also returns the [ControlFlow] the loop should wait with:
+ *   - pending immediate work → Poll (run again right away)
  *   - a scheduled delay        → WaitUntil(next deadline)  (sleep precisely, no busy loop)
- *   - nothing to do            → Wait                        (block until an external event)
+ *   - nothing to do            → Wait                       (block until an external event)
  *
  * Implementing [Delay] makes `kotlinx.coroutines.delay` resume on the loop thread without
  * spinning — `delay(1000)` parks the loop until the deadline instead of burning CPU.
- *
- * This is the foundation that would later live in a `kadre-coroutines` module and power a
- * `MonotonicFrameClock`, event `Flow`s and an `application { }` builder.
  */
-package org.graphiks.kadre.samples.hellocompose
+package org.graphiks.kadre.coroutines
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ControlFlow

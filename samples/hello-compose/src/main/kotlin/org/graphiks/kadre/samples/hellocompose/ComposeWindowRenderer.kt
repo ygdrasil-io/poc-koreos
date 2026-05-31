@@ -11,6 +11,7 @@ package org.graphiks.kadre.samples.hellocompose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.pointer.PointerButton
+import org.graphiks.kadre.coroutines.EventLoopDispatcher
 import org.graphiks.kadre.core.RawWindowHandle
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.EncodedImageFormat

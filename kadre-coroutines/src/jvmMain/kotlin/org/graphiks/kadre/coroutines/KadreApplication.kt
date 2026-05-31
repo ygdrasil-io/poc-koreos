@@ -1,7 +1,7 @@
 /**
- * Prototype (Level 3): a coroutine-friendly entry point over the Kadre callback loop.
+ * Coroutine-friendly entry point over the Kadre callback loop.
  *
- * Instead of implementing [ApplicationHandler], you write a suspending block:
+ * Instead of implementing `ApplicationHandler`, you write a suspending block:
  *
  * ```kotlin
  * kadreApplication {
@@ -11,14 +11,13 @@
  * }
  * ```
  *
- * The block runs in a [CoroutineScope] backed by the [EventLoopDispatcher] (main thread) and
+ * The block runs in a [CoroutineScope] backed by an [EventLoopDispatcher] (main thread) and
  * tied to the loop's lifetime — leaving the block / calling [KadreAppScope.exit] cancels it.
- * Window events are exposed as a [kotlinx.coroutines.flow.Flow] per window.
+ * Window events are exposed as a [Flow] per window.
  *
- * This is the ergonomic layer that would live in a future `kadre-coroutines` module; the
- * callback [ApplicationHandler] remains the underlying substrate.
+ * The callback `ApplicationHandler` remains the underlying substrate.
  */
-package org.graphiks.kadre.samples.hellocompose
+package org.graphiks.kadre.coroutines
 
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
@@ -32,6 +31,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -48,13 +48,13 @@ class KadreWindow internal constructor(val window: Window) {
 
 /** Scope provided to a [kadreApplication] block. */
 interface KadreAppScope : CoroutineScope {
-    /** The main-thread dispatcher (also drives Compose recomposition). */
+    /** The main-thread dispatcher (also usable as a Compose recomposition dispatcher). */
     val dispatcher: EventLoopDispatcher
 
-    /** Creates a window and exposes its events as a Flow. */
+    /** Creates a window and exposes its events as a [Flow]. */
     fun createWindow(attributes: WindowAttributes): KadreWindow
 
-    /** Requests shutdown of the loop (and cancels the scope). */
+    /** Requests shutdown of the loop and cancels the scope. */
     fun exit()
 }
 

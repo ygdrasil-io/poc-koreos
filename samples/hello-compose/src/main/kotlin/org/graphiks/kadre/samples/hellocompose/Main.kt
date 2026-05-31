@@ -35,6 +35,8 @@ import org.graphiks.kadre.WindowAttributes
 import org.graphiks.kadre.WindowId
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.coroutines.EventLoopDispatcher
+import org.graphiks.kadre.coroutines.kadreApplication
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
