@@ -88,6 +88,7 @@ jobs:
       # 3: the real windowed GL path via EGL/Wayland + Skiko makeGL, under software Mesa GL.
       - name: Windowed GL capture (--window-capture)
         id: windowcap
+        if: always()
         continue-on-error: true
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
