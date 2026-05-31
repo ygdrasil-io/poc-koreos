@@ -21,6 +21,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import java.lang.foreign.MemorySegment
 
@@ -53,6 +54,16 @@ class WaylandWindow private constructor(
 
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
+
+    /**
+     * Sink for compositor-driven window events (Resized, CloseRequested), set by
+     * [WaylandEventLoop] right after creation so the loop can enqueue and dispatch them.
+     */
+    @Volatile
+    internal var onWindowEvent: ((WindowEvent) -> Unit)? = null
+
+    /** The xdg_shell decoration (real toplevel), or null if xdg_shell is unavailable. */
+    private var xdg: XdgToplevel? = null
 
     override val rawWindowHandle: Any
         get() = RawWindowHandle.Wayland(surface = surfacePtr, display = displayPtr)
@@ -127,7 +138,7 @@ class WaylandWindow private constructor(
      * @param title New window title.
      */
     override fun setTitle(title: String) {
-        // Stub: xdg_toplevel requires full xdg_shell negotiation (ticket #66)
+        xdg?.setTitle(title)
     }
 
     /**
@@ -153,6 +164,9 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        // Tear down xdg_toplevel/xdg_surface first (reverse creation order).
+        xdg?.destroy()
+        xdg = null
         if (surfacePtr == 0L) return
         val handle = wlProxyDestroy ?: return
         try {
@@ -232,8 +246,23 @@ class WaylandWindow private constructor(
 
             val window = WaylandWindow(display, compositor, xdgWmBase, surface, attrs)
 
-            // ── 2. Initial commit (makes the surface visible to the compositor) ──
-            if (attrs.visible && surface != 0L) {
+            // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
+            if (surface != 0L && xdgWmBase != 0L && WaylandXdgLib.loaded) {
+                window.xdg = XdgToplevel.create(
+                    displayPtr = display,
+                    wmBasePtr = xdgWmBase,
+                    surfacePtr = surface,
+                    onResized = { w, h ->
+                        window._innerSize = PhysicalSize(w, h)
+                        window.onWindowEvent?.invoke(WindowEvent.Resized(PhysicalSize(w, h)))
+                    },
+                    onClose = { window.onWindowEvent?.invoke(WindowEvent.CloseRequested) },
+                )
+                window.xdg?.setTitle(attrs.title)
+            }
+
+            // ── 3. Fallback for a bare surface (no xdg_shell): legacy initial commit ──
+            if (window.xdg == null && attrs.visible && surface != 0L) {
                 window.requestRedraw()
             }
 

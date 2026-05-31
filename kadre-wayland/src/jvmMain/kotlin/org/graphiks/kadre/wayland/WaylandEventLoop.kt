@@ -23,6 +23,7 @@ import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowId
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -60,6 +61,12 @@ class WaylandEventLoop internal constructor(
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
 
+    /**
+     * Window events produced by native upcalls (xdg configure/close), queued here and drained
+     * into [ApplicationHandler.windowEvent] from the loop thread after each pump.
+     */
+    internal val eventQueue = java.util.concurrent.ConcurrentLinkedQueue<Pair<WindowId, Any>>()
+
     @Volatile private var _isExiting = false
     override val isExiting: Boolean get() = _isExiting
 
@@ -87,6 +94,8 @@ class WaylandEventLoop internal constructor(
             xdgWmBase = xdgWmBasePtr,
             attrs = attributes,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
+        // Route this window's compositor-driven events into the loop's queue for dispatch.
+        window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
         windows[window.id.value] = window
         return window
     }
@@ -169,10 +178,9 @@ private fun runAppInternal(handler: ApplicationHandler) {
     // ── 4. Discover Wayland globals (compositor) ──────────────────────────────
     // get_registry + listener(global) + roundtrip + bind(wl_compositor).
     // xdg_wm_base remains to be negotiated (not required to create a wl_surface / wgpu surface).
-    val compositorPtr = discoverCompositor(displayPtr)
-    val xdgWmBasePtr = 0L
+    val globals = discoverGlobals(displayPtr)
 
-    val eventLoop = WaylandEventLoop(displayPtr, compositorPtr, xdgWmBasePtr, eventFd)
+    val eventLoop = WaylandEventLoop(displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, eventFd)
 
     try {
         // ── 5. Lifecycle: resumed ─────────────────────────────────────────────
@@ -199,8 +207,15 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 }
             }
 
-            // Canonical Wayland prepare_read / poll / read_events sequence
+            // Canonical Wayland prepare_read / poll / read_events sequence. This dispatches the
+            // pending Wayland protocol events, whose native upcalls enqueue WindowEvents.
             val startCause = pumpOnce(displaySeg, displayFd, eventFd, timeoutMs, eventLoop)
+
+            // Drain queued window events (xdg configure/close) into the handler.
+            while (true) {
+                val (windowId, event) = eventLoop.eventQueue.poll() ?: break
+                handler.windowEvent(eventLoop, windowId, event)
+            }
 
             handler.newEvents(eventLoop, startCause)
         }

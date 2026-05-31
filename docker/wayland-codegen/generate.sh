@@ -55,10 +55,12 @@ nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "xdg_(wm_base|surface|toplevel)_in
 # Freestanding makes clang define those types itself from compiler builtins
 # (__INT32_TYPE__ &c.) — verified to drop the error count to zero. The wayland headers
 # only need the sized-int / size_t / va_list types, all available freestanding.
+# No -l: emit loaderLookup()-based accessors. The Kotlin side System.load()s the
+# bundled libkadre-xdg.so resource at init, which makes its symbols resolvable via
+# loaderLookup — avoiding a hard-coded library path baked into the generated file.
 "$KEXTRACT" \
   -t org.graphiks.kadre.wayland.generated \
   -o "$OUT_KT" \
-  -l :native/linux-$ARCH/libkadre-xdg.so \
   --include-var xdg_wm_base_interface \
   --include-var xdg_surface_interface \
   --include-var xdg_toplevel_interface \

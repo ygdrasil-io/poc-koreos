@@ -16,12 +16,6 @@ private object kextract_runtime {
     val C_POINTER: ValueLayout = ValueLayout.ADDRESS
 }
 
-private val LOOKUP: SymbolLookup = run {
-    var lu: SymbolLookup = SymbolLookup.loaderLookup()
-    lu = SymbolLookup.libraryLookup("native/linux-aarch64/libkadre-xdg.so", Arena.global()).or(lu)
-    lu
-}
-
 /**
  * {@snippet lang=c : typedef Long int64_t;}
  */
@@ -959,17 +953,17 @@ enum class wl_subsurface_error(val value: Long) {
 /**
  * {@snippet lang=c : xdg_wm_base_interface Declared(wl_interface)
  */
-val xdg_wm_base_interface: MemorySegment = LOOKUP.find("xdg_wm_base_interface").orElseThrow()
+val xdg_wm_base_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_wm_base_interface").orElseThrow()
 
 /**
  * {@snippet lang=c : xdg_surface_interface Declared(wl_interface)
  */
-val xdg_surface_interface: MemorySegment = LOOKUP.find("xdg_surface_interface").orElseThrow()
+val xdg_surface_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_surface_interface").orElseThrow()
 
 /**
  * {@snippet lang=c : xdg_toplevel_interface Declared(wl_interface)
  */
-val xdg_toplevel_interface: MemorySegment = LOOKUP.find("xdg_toplevel_interface").orElseThrow()
+val xdg_toplevel_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_toplevel_interface").orElseThrow()
 
 /**
  * NS_ENUM: {@snippet lang=c : enum xdg_wm_base_error}
