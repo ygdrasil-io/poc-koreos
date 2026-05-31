@@ -32,7 +32,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # Windows-latest exclu : les runners GitHub Actions Windows sont des VMs
+        # Hyper-V sans GPU passthrough, et ni Chrome stable ni Chromium ne
+        # parviennent à initialiser un adapter WebGPU exploitable (testé avec
+        # toutes les combinaisons --enable-unsafe-webgpu / SwiftShader ANGLE /
+        # SwiftShader Vulkan / --use-vulkan=swiftshader — `requestAdapter()`
+        # retourne `null` à chaque fois). Cf. PR #131 pour l'historique des
+        # 3 tentatives. À revisiter quand des runners Windows avec GPU
+        # passthrough seront disponibles (ou via self-hosted).
+        # La couverture compile/tests Windows reste assurée par `Koreos CI`
+        # (job `windows-build`).
+        os: [macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -55,8 +65,7 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Grant execute permission for gradlew (Unix only)
-        if: runner.os != 'Windows'
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build hello-triangle-web (production JS bundle)
@@ -66,19 +75,11 @@ jobs:
         working-directory: samples/hello-triangle-web/e2e
         run: npm install
 
-      - name: Install browser (Chrome stable on macOS, Chromium on Windows)
+      - name: Install Chrome stable
         working-directory: samples/hello-triangle-web/e2e
-        # - macOS : Chrome stable (canal release) pour bénéficier du GPU Metal réel.
-        # - Windows : Chromium open-source de Playwright — il inclut SwiftShader,
-        #   nécessaire car les runners Windows GitHub Actions n'ont pas de GPU
-        #   passthrough et Chrome stable ne bundle pas SwiftShader.
-        # Le `playwright.config.js` sélectionne le `channel` selon `process.platform`.
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            npx playwright install chromium
-          else
-            npx playwright install chrome
-          fi
+        # Chrome stable (canal release) installé par Playwright. Pas de
+        # `--with-deps` (Linux-only, on est sur macOS).
+        run: npx playwright install chrome
 
       - name: Run Playwright smoke + visual tests
         working-directory: samples/hello-triangle-web/e2e
