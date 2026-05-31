@@ -188,7 +188,12 @@ class Win32Window private constructor(
                 wndClass.cbWndExtra = 0
                 wndClass.hInstance = hInstance
                 wndClass.hIcon = MemorySegment.NULL
-                wndClass.hCursor = MemorySegment.NULL
+                // Give the class the standard arrow cursor (IDC_ARROW). Without it, Windows never
+                // resets the cursor over the client area, leaving the resize cursor "stuck" from
+                // the window border. MAKEINTRESOURCE(IDC_ARROW=32512) is encoded as a small address.
+                wndClass.hCursor = loadCursorW
+                    ?.let { it.invokeExact(MemorySegment.NULL, MemorySegment.ofAddress(IDC_ARROW)) as MemorySegment }
+                    ?: MemorySegment.NULL
                 wndClass.hbrBackground = MemorySegment.NULL
                 wndClass.lpszMenuName = MemorySegment.NULL
                 wndClass.lpszClassName = classNamePtr
