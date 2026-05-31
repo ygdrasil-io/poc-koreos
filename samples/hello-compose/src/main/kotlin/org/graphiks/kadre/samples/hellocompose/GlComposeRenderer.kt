@@ -67,6 +67,16 @@ class GlComposeRenderer(
     }
 
     override fun renderFrame() {
+        renderInto(null)
+    }
+
+    override fun captureFrameToPng(path: String): Boolean {
+        var ok = false
+        renderInto { surface -> ok = writeSurfacePng(surface, path) }
+        return ok
+    }
+
+    private fun renderInto(onRendered: ((Surface) -> Unit)?) {
         gl.makeCurrent()
 
         val size = gl.drawableSize()
@@ -102,6 +112,7 @@ class GlComposeRenderer(
         host.pumpAndRender(surface.canvas, width, height)
 
         ctx.flush()
+        onRendered?.invoke(surface)
         surface.close()
         renderTarget.close()
 

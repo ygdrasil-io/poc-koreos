@@ -64,6 +64,16 @@ class MetalComposeRenderer(metalLayerAddr: Long, scaleFactor: Double) : ComposeW
     }
 
     override fun renderFrame() {
+        renderInto(null)
+    }
+
+    override fun captureFrameToPng(path: String): Boolean {
+        var ok = false
+        renderInto { surface -> ok = writeSurfacePng(surface, path) }
+        return ok
+    }
+
+    private fun renderInto(onRendered: ((Surface) -> Unit)?) {
         ObjCRuntime.autoreleasePool {
             val drawable = ObjCRuntime.msgSend(
                 ValueLayout.ADDRESS, layer, ObjCRuntime.sel("nextDrawable"),
@@ -94,6 +104,7 @@ class MetalComposeRenderer(metalLayerAddr: Long, scaleFactor: Double) : ComposeW
 
             // Flush Skia's Metal work on our queue, then present on the same queue (ordered).
             surface.flushAndSubmit()
+            onRendered?.invoke(surface)
             val commandBuffer = ObjCRuntime.msgSend(
                 ValueLayout.ADDRESS, queue, ObjCRuntime.sel("commandBuffer"),
             ) as MemorySegment

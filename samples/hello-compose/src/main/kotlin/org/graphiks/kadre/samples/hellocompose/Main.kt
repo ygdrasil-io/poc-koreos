@@ -64,7 +64,7 @@ fun DemoUi() {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("Jetpack Compose in a Kadre window 🪟", style = MaterialTheme.typography.headlineSmall)
-                Text("Rendered via Skiko → Metal (CAMetalLayer)", style = MaterialTheme.typography.bodyMedium)
+                Text("Rendered via Skiko (Metal on macOS, OpenGL on Windows/Linux)", style = MaterialTheme.typography.bodyMedium)
                 Button(onClick = { clicks++ }) {
                     Text("Clicked $clicks times")
                 }
@@ -79,10 +79,16 @@ fun DemoUi() {
     }
 }
 
-class HelloComposeApp : ApplicationHandler {
+/**
+ * @param windowCapturePath when set, the app renders a few frames into the real Kadre window
+ *   (Metal/GL), snapshots the rendered surface to this PNG path, and exits. Used by CI to
+ *   exercise the windowed platform present path headlessly.
+ */
+class HelloComposeApp(private val windowCapturePath: String? = null) : ApplicationHandler {
 
     private var window: Window? = null
     private var renderer: ComposeWindowRenderer? = null
+    private var frameCount = 0
 
     // Keyboard forwarding builds real AWT KeyEvents (required for text input — see
     // ComposeSceneHost.sendKey). The source Component is created lazily and guarded:
@@ -132,7 +138,23 @@ class HelloComposeApp : ApplicationHandler {
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
         val r = renderer
         when (event) {
-            is WindowEvent.RedrawRequested -> r?.renderFrame()
+            is WindowEvent.RedrawRequested -> {
+                if (windowCapturePath != null) {
+                    frameCount++
+                    // Render a few frames so composition + first paint settle, then snapshot.
+                    if (frameCount >= 3) {
+                        val ok = r?.captureFrameToPng(windowCapturePath) ?: false
+                        println("[hello-compose] window-capture ${if (ok) "written" else "FAILED"}: $windowCapturePath")
+                        r?.dispose()
+                        renderer = null
+                        eventLoop.exit()
+                    } else {
+                        r?.renderFrame()
+                    }
+                } else {
+                    r?.renderFrame()
+                }
+            }
 
             is WindowEvent.PointerMoved ->
                 r?.onPointerMoved(event.position.x, event.position.y)
@@ -276,7 +298,17 @@ fun main(args: Array<String>) {
         return
     }
 
+    // Windowed capture: open the real Kadre window, render via the platform present path
+    // (Metal/WGL/GLX/EGL), snapshot to PNG and exit. Used to exercise the GL path in CI.
+    val windowCaptureIndex = args.indexOf("--window-capture")
+    val windowCapturePath = if (windowCaptureIndex >= 0) {
+        args.getOrNull(windowCaptureIndex + 1)
+            ?: error("--window-capture requires a file path: --window-capture <path>")
+    } else {
+        null
+    }
+
     println("[hello-compose] Starting — Compose Multiplatform in a Kadre window")
-    EventLoop().runApp(HelloComposeApp())
+    EventLoop().runApp(HelloComposeApp(windowCapturePath))
     println("[hello-compose] Done")
 }

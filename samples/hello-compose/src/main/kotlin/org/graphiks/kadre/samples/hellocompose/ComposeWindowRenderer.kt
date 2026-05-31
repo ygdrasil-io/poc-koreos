@@ -12,6 +12,12 @@ package org.graphiks.kadre.samples.hellocompose
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.pointer.PointerButton
 import org.graphiks.kadre.core.RawWindowHandle
+import org.jetbrains.skia.Bitmap
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.Surface
+import java.io.File
 
 interface ComposeWindowRenderer {
     val host: ComposeSceneHost
@@ -21,6 +27,13 @@ interface ComposeWindowRenderer {
 
     /** Renders and presents one frame. */
     fun renderFrame()
+
+    /**
+     * Renders one frame and writes the rendered surface to [path] as a PNG, exercising the
+     * real platform present surface (Metal texture / GL framebuffer). Used for headless CI
+     * capture. Returns true on success.
+     */
+    fun captureFrameToPng(path: String): Boolean
 
     /** Releases GPU/native resources and the scene. */
     fun dispose()
@@ -56,5 +69,24 @@ interface ComposeWindowRenderer {
                     else -> throw UnsupportedOperationException("Unsupported window handle: $handle")
                 }
             }
+    }
+}
+
+/**
+ * Snapshots a rendered Skia [surface] to a PNG file. Returns true on success.
+ *
+ * GPU (Metal/GL) surfaces can't be encoded directly ("texture backed images not supported"),
+ * so we read the pixels back into a raster bitmap first.
+ */
+internal fun writeSurfacePng(surface: Surface, path: String): Boolean {
+    val bitmap = Bitmap()
+    try {
+        if (!bitmap.allocPixels(ImageInfo.makeN32Premul(surface.width, surface.height))) return false
+        if (!surface.readPixels(bitmap, 0, 0)) return false
+        val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG) ?: return false
+        File(path).apply { parentFile?.mkdirs() }.writeBytes(data.bytes)
+        return true
+    } finally {
+        bitmap.close()
     }
 }
