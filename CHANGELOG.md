@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Sample `hello-compose`** — intègre une UI **Jetpack Compose (Compose Multiplatform 1.9.3)** interactive dans une fenêtre Kadre native sur macOS. Une `ComposeScene` bas-niveau est rendue via **Skiko/Skia sur Metal** directement dans le `CAMetalLayer` exposé par Kadre (`DirectContext.makeMetal` → `nextDrawable` → `BackendRenderTarget.makeMetal` → `Surface` → `render` → `presentDrawable`), sans AWT/Swing. Les événements souris **et clavier** de Kadre sont transmis à la scène ; le `KeyEvent` Compose est construit sans `java.awt.event.KeyEvent` pour rester compatible avec `-XstartOnFirstThread`. Mode `--capture <path>` pour un rendu offscreen raster (PNG) headless, utile en CI. Lancement : `./gradlew :samples:hello-compose:run`.
+
+### Changed
+
+- `compose-multiplatform` 1.7.3 → **1.9.3** (compatible Kotlin 2.3.21) ; ajout de la version `skiko` 0.9.22.2 et du runtime natif `skiko-awt-runtime-macos-arm64` au catalogue de versions.
+
+---
+
 ## [1.0.0] — 2026-05-31
 
 First stable release of **Kadre** — the Kotlin Multiplatform windowing and event-loop library, formerly developed under the Koreos name. The project is now published as `org.graphiks.kadre` (package `org.graphiks.kadre`).
