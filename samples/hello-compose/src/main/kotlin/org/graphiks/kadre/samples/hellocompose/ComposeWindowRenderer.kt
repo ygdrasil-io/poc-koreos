@@ -1,0 +1,60 @@
+/**
+ * Renders an interactive Compose UI into a native Kadre window, abstracting over the
+ * platform present path:
+ * - macOS  → [MetalComposeRenderer] (Skiko Metal into the CAMetalLayer)
+ * - Windows/Linux → [GlComposeRenderer] (Skiko OpenGL into the window's GL framebuffer)
+ *
+ * Input and scene handling are shared via [ComposeSceneHost]; only [resize]/[renderFrame]/
+ * [dispose] are platform-specific.
+ */
+package org.graphiks.kadre.samples.hellocompose
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.input.pointer.PointerButton
+import org.graphiks.kadre.core.RawWindowHandle
+
+interface ComposeWindowRenderer {
+    val host: ComposeSceneHost
+
+    /** Resizes the present surface and updates the scene size/density. Sizes are physical px. */
+    fun resize(widthPx: Int, heightPx: Int, scaleFactor: Double)
+
+    /** Renders and presents one frame. */
+    fun renderFrame()
+
+    /** Releases GPU/native resources and the scene. */
+    fun dispose()
+
+    // Input + content delegate to the shared host.
+    fun setContent(content: @Composable () -> Unit) = host.setContent(content)
+    fun onPointerMoved(x: Double, y: Double) = host.onPointerMoved(x, y)
+    fun onPointerButton(bit: Int, pressed: Boolean, button: PointerButton) =
+        host.onPointerButton(bit, pressed, button)
+    fun onScroll(dx: Double, dy: Double) = host.onScroll(dx, dy)
+    fun onPointerEnter() = host.onPointerEnter()
+    fun onPointerExit() = host.onPointerExit()
+    fun sendKey(awtEvent: java.awt.event.KeyEvent) = host.sendKey(awtEvent)
+
+    companion object {
+        /**
+         * Builds the renderer matching the window's native handle, or returns null with a
+         * reason if the platform/handle is unsupported.
+         */
+        fun create(handle: RawWindowHandle, scaleFactor: Double): Result<ComposeWindowRenderer> =
+            runCatching {
+                when (handle) {
+                    is RawWindowHandle.AppKit -> {
+                        require(handle.nsLayer != 0L) { "AppKit handle without a CAMetalLayer (nsLayer=0)" }
+                        MetalComposeRenderer(handle.nsLayer, scaleFactor)
+                    }
+                    is RawWindowHandle.Win32 ->
+                        GlComposeRenderer(Win32WglContext(handle.hwnd), scaleFactor)
+                    is RawWindowHandle.Xlib ->
+                        GlComposeRenderer(X11GlxContext(handle.display, handle.window), scaleFactor)
+                    is RawWindowHandle.Wayland ->
+                        GlComposeRenderer(WaylandEglContext(handle.display, handle.surface), scaleFactor)
+                    else -> throw UnsupportedOperationException("Unsupported window handle: $handle")
+                }
+            }
+    }
+}

@@ -82,10 +82,10 @@ fun DemoUi() {
 class HelloComposeApp : ApplicationHandler {
 
     private var window: Window? = null
-    private var renderer: ComposeMetalRenderer? = null
+    private var renderer: ComposeWindowRenderer? = null
 
     // Keyboard forwarding builds real AWT KeyEvents (required for text input — see
-    // ComposeMetalRenderer.sendKey). The source Component is created lazily and guarded:
+    // ComposeSceneHost.sendKey). The source Component is created lazily and guarded:
     // if AWT init misbehaves under -XstartOnFirstThread, keyboard is disabled, not fatal.
     private var keyboardDisabled = false
     private val keyEventSource: Component? by lazy {
@@ -97,7 +97,7 @@ class HelloComposeApp : ApplicationHandler {
 
         val win = eventLoop.createWindow(
             WindowAttributes(
-                title = "Hello Compose — Kadre + Skiko/Metal",
+                title = "Hello Compose — Kadre + Skiko",
                 size = PhysicalSize(width = 800, height = 600),
                 visible = true,
                 resizable = true,
@@ -105,20 +105,23 @@ class HelloComposeApp : ApplicationHandler {
         )
         window = win
 
-        val handle = win.rawWindowHandle
-        if (handle !is RawWindowHandle.AppKit || handle.nsLayer == 0L) {
-            println("[hello-compose] Unsupported platform (CAMetalLayer required): $handle")
+        val handle = win.rawWindowHandle as? RawWindowHandle ?: run {
+            println("[hello-compose] Unexpected window handle: ${win.rawWindowHandle}")
             eventLoop.exit()
             return
         }
 
-        val r = ComposeMetalRenderer(handle.nsLayer, win.scaleFactor)
+        val r = ComposeWindowRenderer.create(handle, win.scaleFactor).getOrElse {
+            println("[hello-compose] Cannot create renderer: ${it.message}")
+            eventLoop.exit()
+            return
+        }
         val inner = win.innerSize
         r.resize(inner.width, inner.height, win.scaleFactor)
         r.setContent { DemoUi() }
         renderer = r
 
-        println("[hello-compose] Ready — ${inner.width}×${inner.height} @ ${win.scaleFactor}x")
+        println("[hello-compose] Ready — ${inner.width}×${inner.height} @ ${win.scaleFactor}x (${r::class.simpleName})")
     }
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
@@ -181,7 +184,7 @@ class HelloComposeApp : ApplicationHandler {
      * - KEY_TYPED (on press, for printable keys) drives character insertion in text fields,
      *   which Compose only performs for genuine AWT typed events.
      */
-    private fun forwardKey(event: WindowEvent.KeyboardInput, renderer: ComposeMetalRenderer?) {
+    private fun forwardKey(event: WindowEvent.KeyboardInput, renderer: ComposeWindowRenderer?) {
         if (keyboardDisabled || renderer == null) return
         val source = keyEventSource ?: run { keyboardDisabled = true; return }
 
