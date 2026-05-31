@@ -14,13 +14,13 @@ class BitmapFontTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `renderDigit 0 retourne des quads non vides`() {
+    fun `renderDigit 0 returns non-empty quads`() {
         val quads = BitmapFont.renderDigit(0, 0.0, 0.0, pixelSize)
         assertTrue(quads.isNotEmpty(), "renderDigit(0) devrait retourner des quads")
     }
 
     @Test
-    fun `renderDigit 1 a moins de quads que 8`() {
+    fun `renderDigit 1 has fewer quads than 8`() {
         val quads1 = BitmapFont.renderDigit(1, 0.0, 0.0, pixelSize)
         val quads8 = BitmapFont.renderDigit(8, 0.0, 0.0, pixelSize)
         assertTrue(
@@ -30,7 +30,7 @@ class BitmapFontTest {
     }
 
     @Test
-    fun `renderDigit retourne au maximum 35 quads (5x7)`() {
+    fun `renderDigit returns at most 35 quads (5x7)`() {
         for (d in 0..9) {
             val quads = BitmapFont.renderDigit(d, 0.0, 0.0, pixelSize)
             assertTrue(quads.size <= 35, "renderDigit($d) a ${quads.size} quads, maximum attendu 35")
@@ -38,7 +38,7 @@ class BitmapFontTest {
     }
 
     @Test
-    fun `renderDigit positionne les quads correctement`() {
+    fun `renderDigit positions the quads correctly`() {
         val x0 = 0.1
         val y0 = 0.2
         val quads = BitmapFont.renderDigit(0, x0, y0, pixelSize)
@@ -54,7 +54,7 @@ class BitmapFontTest {
     }
 
     @Test
-    fun `renderDigit chiffre invalide lève IllegalArgumentException`() {
+    fun `renderDigit invalid digit throws IllegalArgumentException`() {
         assertFailsWith<IllegalArgumentException> {
             BitmapFont.renderDigit(10, 0.0, 0.0, pixelSize)
         }
@@ -64,7 +64,7 @@ class BitmapFontTest {
     }
 
     @Test
-    fun `tous les chiffres 0 à 9 rendent sans erreur`() {
+    fun `all digits 0 to 9 render without error`() {
         for (d in 0..9) {
             val quads = BitmapFont.renderDigit(d, 0.0, 0.0, pixelSize)
             assertTrue(quads.isNotEmpty(), "renderDigit($d) ne devrait pas être vide")
@@ -76,7 +76,7 @@ class BitmapFontTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `renderNumber 42 retourne des quads pour 2 chiffres`() {
+    fun `renderNumber 42 returns quads for 2 digits`() {
         val quads4 = BitmapFont.renderDigit(4, 0.0, 0.0, pixelSize)
         val quads2 = BitmapFont.renderDigit(2, 0.0, 0.0, pixelSize)
         val quads42 = BitmapFont.renderNumber(42, 0.0, 0.0, pixelSize)
@@ -85,14 +85,14 @@ class BitmapFontTest {
     }
 
     @Test
-    fun `renderNumber chiffre seul équivaut à renderDigit`() {
+    fun `renderNumber single digit equals renderDigit`() {
         val singleDigit = BitmapFont.renderDigit(7, 0.0, 0.0, pixelSize)
         val number = BitmapFont.renderNumber(7, 0.0, 0.0, pixelSize)
         assertEquals(singleDigit.size, number.size)
     }
 
     @Test
-    fun `renderNumber décale le second chiffre vers la droite`() {
+    fun `renderNumber shifts the second digit to the right`() {
         val spacing = 6 * pixelSize
         val x0 = 0.0
         val quadsFirst = BitmapFont.renderDigit(1, x0, 0.0, pixelSize)

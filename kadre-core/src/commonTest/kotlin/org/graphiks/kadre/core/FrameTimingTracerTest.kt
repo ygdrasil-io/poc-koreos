@@ -21,7 +21,7 @@ class FrameTimingTracerTest {
     }
 
     @Test
-    fun desactive_aucunLog_aucuneCollecte() {
+    fun disabled_noLog_noCollection() {
         val logs = mutableListOf<String>()
         FrameTimingTracer.sink = { logs += it }
         FrameTimingTracer.enabled = false
@@ -36,7 +36,7 @@ class FrameTimingTracerTest {
     }
 
     @Test
-    fun active_flushPublieDesStats() {
+    fun enabled_flushPublishesStats() {
         val logs = mutableListOf<String>()
         FrameTimingTracer.sink = { logs += it }
         FrameTimingTracer.enabled = true
@@ -54,7 +54,7 @@ class FrameTimingTracerTest {
     }
 
     @Test
-    fun frameLente_estJournalisee() {
+    fun slowFrame_isLogged() {
         val logs = mutableListOf<String>()
         FrameTimingTracer.sink = { logs += it }
         FrameTimingTracer.enabled = true

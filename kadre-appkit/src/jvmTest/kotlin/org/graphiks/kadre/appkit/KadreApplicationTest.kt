@@ -25,7 +25,7 @@ import kotlin.test.assertFailsWith
 class KadreApplicationTest {
 
     @Test
-    fun `KadreApplication est une sous-classe de NSApplication`() {
+    fun `KadreApplication is a subclass of NSApplication`() {
         // Type-level check: KadreApplication must inherit
         // from NSApplication (see kextract binding).
         val nsAppClass = NSApplication::class.java
@@ -42,7 +42,7 @@ class KadreApplicationTest {
      * - No static `eventLoop` field exists (the global static variable was removed).
      */
     @Test
-    fun `eventLoop est une propriete d instance et non une variable statique`() {
+    fun `eventLoop is an instance property and not a static variable`() {
         val allFields = KadreApplication::class.java.declaredFields
 
         // eventLoop must exist as an instance field (non-static)
@@ -76,7 +76,7 @@ class KadreApplicationTest {
      * not yet been called.
      */
     @Test
-    fun `sharedApp est null avant initialize`() {
+    fun `sharedApp is null before initialize`() {
         // Note: this test assumes that initialize() has not been called in this test
         // process, which is the case since the tests do not touch the macOS runtime.
         assertNull(
@@ -86,7 +86,7 @@ class KadreApplicationTest {
     }
 
     @Test
-    fun `KadreAppDelegate accepte un ApplicationHandler et un ActiveEventLoop`() {
+    fun `KadreAppDelegate accepts an ApplicationHandler and an ActiveEventLoop`() {
         // Verify the constructor signature without instantiating the underlying
         // ObjC object (which would require the macOS main thread).
         val ctor = KadreAppDelegate::class.java.constructors.first()
@@ -96,14 +96,14 @@ class KadreApplicationTest {
     }
 
     @Test
-    fun `MainThreadCheck est invocable`() {
+    fun `MainThreadCheck is invocable`() {
         // The type compiles and the singleton object is accessible.
         val check: MainThreadCheck = MainThreadCheck
         assertNotNull(check)
     }
 
     @Test
-    fun `Callbacks expose des methodes JvmStatic`() {
+    fun `Callbacks exposes JvmStatic methods`() {
         // Guarantees that the trampolines required by Linker.upcallStub
         // exist and are static at the JVM level.
         val didFinish = KadreAppDelegate.Callbacks::class.java
@@ -136,7 +136,7 @@ class KadreApplicationTest {
      * 3. The field is restored to false in finally so as not to pollute the other tests.
      */
     @Test
-    fun `runApp double appel lance IllegalStateException`() {
+    fun `runApp double call throws IllegalStateException`() {
         // Access the file-level AtomicBoolean via the generated Kotlin class
         val ktClass = Class.forName("org.graphiks.kadre.appkit.AppKitEventLoopKt")
         val runningField = ktClass.getDeclaredField("appKitRunning")

@@ -34,17 +34,17 @@ class Win32WindowTest {
     // ── Tests compiling on all platforms ───────────────────────────────────────
 
     @Test
-    fun `WndClassExW SIZEOF est 80 octets`() {
+    fun `WndClassExW SIZEOF is 80 bytes`() {
         assertEquals(80, WndClassExW.SIZEOF)
     }
 
     @Test
-    fun `WndClassExW ALIGN est 8`() {
+    fun `WndClassExW ALIGN is 8`() {
         assertEquals(8, WndClassExW.ALIGN)
     }
 
     @Test
-    fun `WndClassExW offsets corrects pour Win64 ABI`() {
+    fun `WndClassExW offsets correct for Win64 ABI`() {
         assertEquals(0,  WndClassExW.OFFSET_CB_SIZE)
         assertEquals(4,  WndClassExW.OFFSET_STYLE)
         assertEquals(8,  WndClassExW.OFFSET_WNDPROC)
@@ -60,12 +60,12 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `WndClassExW LAYOUT byte size correspond a SIZEOF`() {
+    fun `WndClassExW LAYOUT byte size matches SIZEOF`() {
         assertEquals(WndClassExW.SIZEOF.toLong(), WndClassExW.LAYOUT.byteSize())
     }
 
     @Test
-    fun `constantes Win32 ont les valeurs attendues`() {
+    fun `Win32 constants have the expected values`() {
         assertEquals(0x00CF0000, WS_OVERLAPPEDWINDOW)
         assertEquals(0x00040000, WS_EX_APPWINDOW)
         assertEquals(5, SW_SHOW)
@@ -75,7 +75,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `user32 et kernel32 sont null sur plateforme non-Windows`() {
+    fun `user32 and kernel32 are null on non-Windows platform`() {
         if (isWindows()) return  // skip on Windows (the libs exist)
         // On macOS/Linux, the lazy loaders must return null
         assertNull(user32)
@@ -83,7 +83,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `les MethodHandle FFM sont null sur plateforme non-Windows`() {
+    fun `the FFM MethodHandles are null on non-Windows platform`() {
         if (isWindows()) return
         assertNull(registerClassExW)
         assertNull(createWindowExW)
@@ -96,7 +96,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `Win32Window create retourne null sur plateforme non-Windows`() {
+    fun `Win32Window create returns null on non-Windows platform`() {
         if (isWindows()) return
         val attrs = WindowAttributes(title = "Test", visible = false)
         val window = Win32Window.create(attrs)
@@ -104,7 +104,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `Win32WndProcArena arena est accessible`() {
+    fun `Win32WndProcArena arena is accessible`() {
         // The arena itself can be created on any platform
         assertNotNull(Win32WndProcArena.arena)
     }
@@ -112,7 +112,7 @@ class Win32WindowTest {
     // ── Tests run only on Windows ─────────────────────────────────────────────
 
     @Test
-    fun `Win32Window create produit une fenetre valide sur Windows`() {
+    fun `Win32Window create produces a valid window on Windows`() {
         if (!isWindows()) return  // skip on macOS/Linux
 
         val attrs = WindowAttributes(
@@ -143,7 +143,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `Win32Window setTitle ne leve pas d exception sur Windows`() {
+    fun `Win32Window setTitle does not throw an exception on Windows`() {
         if (!isWindows()) return
 
         val attrs = WindowAttributes(title = "Initial", visible = false)
@@ -156,7 +156,7 @@ class Win32WindowTest {
     }
 
     @Test
-    fun `Win32Window setVisible ne leve pas d exception sur Windows`() {
+    fun `Win32Window setVisible does not throw an exception on Windows`() {
         if (!isWindows()) return
 
         val attrs = WindowAttributes(title = "Test setVisible", visible = false)

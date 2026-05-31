@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 class CFRunLoopRedrawObserverTest {
 
     @Test
-    fun `WindowEvent RedrawRequested est un data object`() {
+    fun `WindowEvent RedrawRequested is a data object`() {
         val event: WindowEvent = WindowEvent.RedrawRequested
         assertTrue(event is WindowEvent.RedrawRequested)
         // data object → stable toString + singleton
@@ -31,7 +31,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `CFRunLoopRedrawObserver redrawCallback existe avec signature CFRunLoopObserverCallBack`() {
+    fun `CFRunLoopRedrawObserver redrawCallback exists with CFRunLoopObserverCallBack signature`() {
         val method = CFRunLoopRedrawObserver::class.java.methods
             .firstOrNull { it.name == "redrawCallback" }
         assertNotNull(method, "CFRunLoopRedrawObserver doit exposer redrawCallback (static)")
@@ -43,7 +43,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `CFRunLoopRedrawObserver expose install dans son companion`() {
+    fun `CFRunLoopRedrawObserver exposes install in its companion`() {
         val companionInstance = CFRunLoopRedrawObserver::class.java
             .getDeclaredField("Companion").get(null)
         val installMethod = companionInstance.javaClass.methods
@@ -53,7 +53,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `AppKitWindow expose needsRedraw modifiable via requestRedraw`() {
+    fun `AppKitWindow exposes needsRedraw modifiable via requestRedraw`() {
         // requestRedraw must mutate the needsRedraw flag (verified via generated getter/setter)
         val getter = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "getNeedsRedraw\$kadre_appkit" || it.name == "getNeedsRedraw" }
@@ -62,7 +62,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `AppKitWindow requestRedraw existe et retourne void`() {
+    fun `AppKitWindow requestRedraw exists and returns void`() {
         val method = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "requestRedraw" }
         assertNotNull(method, "AppKitWindow doit avoir requestRedraw()")
@@ -71,7 +71,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `ApplicationHandler aboutToWait existe avec signature correcte (GRA-135)`() {
+    fun `ApplicationHandler aboutToWait exists with correct signature (GRA-135)`() {
         val method = ApplicationHandler::class.java.methods
             .firstOrNull { it.name == "aboutToWait" }
         assertNotNull(method, "ApplicationHandler doit avoir aboutToWait(eventLoop)")
@@ -81,7 +81,7 @@ class CFRunLoopRedrawObserverTest {
     }
 
     @Test
-    fun `onBeforeWaiting appelle aboutToWait apres RedrawRequested (GRA-135)`() {
+    fun `onBeforeWaiting calls aboutToWait after RedrawRequested (GRA-135)`() {
         // Verify that onBeforeWaiting dispatches in the right order by simulating a call
         val aboutToWaitCalled = mutableListOf<String>()
         val windowEventsCalled = mutableListOf<String>()

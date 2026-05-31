@@ -1,9 +1,9 @@
 /**
- * Tests d'exemple pour [ScriptedEventLoop].
+ * Example tests for [ScriptedEventLoop].
  *
- * Couvre : ordre du cycle de vie, key press/release, séquence pointeur, cascade de
- * resize, flux de sortie. Ces tests valident à la fois le framework et servent de
- * documentation exécutable du DSL.
+ * Covers: lifecycle order, key press/release, pointer sequence, resize cascade,
+ * output stream. These tests validate the framework and also serve as
+ * executable documentation of the DSL.
  */
 package org.graphiks.kadre.test
 
@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
 
-/** Handler d'enregistrement : capture les événements de fenêtre reçus. */
+/** Recording handler: captures the received window events. */
 private class RecordingHandler(
     private val exitOnClose: Boolean = false,
 ) : ApplicationHandler {
@@ -104,17 +104,17 @@ class ScriptedEventLoopTest {
         val trace = scriptedTest {
             keyPress(Key.Escape)
             closeRequested()
-            // Ces événements ne doivent PAS être dispatché après exit().
+            // These events must NOT be dispatched after exit().
             keyPress(Key.ArrowUp)
             tick()
         }.run(handler)
 
-        // Seuls Escape (press) et CloseRequested sont reçus.
+        // Only Escape (press) and CloseRequested are received.
         assertEquals(2, handler.received.size)
         assertTrue(handler.received.last() is WindowEvent.CloseRequested)
-        // suspended est tout de même invoqué en fin de boucle.
+        // suspended is still invoked at the end of the loop.
         assertEquals(Callback.Suspended, trace.last())
-        // Aucun RedrawRequested (le tick après exit est ignoré).
+        // No RedrawRequested (the tick after exit is ignored).
         assertFalse(handler.received.any { it is WindowEvent.RedrawRequested })
     }
 
@@ -125,7 +125,7 @@ class ScriptedEventLoopTest {
             tick(16)
         }.run(handler)
 
-        // La frame produit la sous-séquence attendue dans la trace.
+        // The frame produces the expected subsequence in the trace.
         val idx = trace.indexOfFirst { it is Callback.NewEvents }
         assertTrue(idx >= 0)
         assertTrue(trace[idx + 1] is Callback.WindowEventCb)

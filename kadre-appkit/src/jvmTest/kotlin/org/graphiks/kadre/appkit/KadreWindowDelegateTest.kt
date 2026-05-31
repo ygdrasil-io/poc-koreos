@@ -55,7 +55,7 @@ class KadreWindowDelegateTest {
     // ── Tests ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `KadreWindowDelegate a un constructeur acceptant handler eventLoop windowId nsWindowPtr metalLayerPtr`() {
+    fun `KadreWindowDelegate has a constructor accepting handler eventLoop windowId nsWindowPtr metalLayerPtr`() {
         // The public constructor generated for a value class param (WindowId) has an extra
         // DefaultConstructorMarker → paramCount >= 5, the first params are ApplicationHandler, ActiveEventLoop, long/WindowId
         val ctor = KadreWindowDelegate::class.java.constructors
@@ -70,7 +70,7 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `KadreWindowDelegate expose un champ ptr de type MemorySegment`() {
+    fun `KadreWindowDelegate exposes a ptr field of type MemorySegment`() {
         val field = KadreWindowDelegate::class.java.methods
             .firstOrNull { it.name == "getPtr" && it.parameterCount == 0 }
         assertNotNull(field, "KadreWindowDelegate doit exposer ptr: MemorySegment via getPtr()")
@@ -78,7 +78,7 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `onWindowShouldClose retourne 0 quand eventLoop nest pas en cours darret`() {
+    fun `onWindowShouldClose returns 0 when eventLoop is not exiting`() {
         val handler = RecordingHandler()
         val eventLoop = StubEventLoop()
         val windowId = WindowId(42L)
@@ -100,7 +100,7 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `Callbacks windowDidResize existe avec la bonne signature`() {
+    fun `Callbacks windowDidResize exists with the correct signature`() {
         val callbacksClass = Class.forName("org.graphiks.kadre.appkit.KadreWindowDelegate\$Callbacks")
         val method = callbacksClass.methods.firstOrNull { it.name == "windowDidResize" }
         assertNotNull(method, "Callbacks.windowDidResize doit exister")
@@ -113,7 +113,7 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `Callbacks windowDidChangeBackingProperties existe avec la bonne signature`() {
+    fun `Callbacks windowDidChangeBackingProperties exists with the correct signature`() {
         val callbacksClass = Class.forName("org.graphiks.kadre.appkit.KadreWindowDelegate\$Callbacks")
         val method = callbacksClass.methods.firstOrNull { it.name == "windowDidChangeBackingProperties" }
         assertNotNull(method, "Callbacks.windowDidChangeBackingProperties doit exister")
@@ -122,26 +122,26 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `WindowEvent ScaleFactorChanged est reconnu comme WindowEvent`() {
+    fun `WindowEvent ScaleFactorChanged is recognized as a WindowEvent`() {
         val event: WindowEvent = WindowEvent.ScaleFactorChanged(2.0)
         assertTrue(event is WindowEvent.ScaleFactorChanged)
         assertEquals(2.0, (event as WindowEvent.ScaleFactorChanged).factor)
     }
 
     @Test
-    fun `WindowEvent Resized est reconnu comme WindowEvent`() {
+    fun `WindowEvent Resized is recognized as a WindowEvent`() {
         val event: WindowEvent = WindowEvent.Resized(org.graphiks.kadre.core.PhysicalSize(800, 600))
         assertTrue(event is WindowEvent.Resized)
     }
 
     @Test
-    fun `WindowEvent CloseRequested est reconnu comme WindowEvent`() {
+    fun `WindowEvent CloseRequested is recognized as a WindowEvent`() {
         val event: WindowEvent = WindowEvent.CloseRequested
         assertTrue(event is WindowEvent.CloseRequested)
     }
 
     @Test
-    fun `AppKitWindow expose setWindowDelegate avec la bonne signature`() {
+    fun `AppKitWindow exposes setWindowDelegate with the correct signature`() {
         val method = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "setWindowDelegate" }
         assertNotNull(method, "AppKitWindow doit avoir setWindowDelegate()")
@@ -151,7 +151,7 @@ class KadreWindowDelegateTest {
     }
 
     @Test
-    fun `AppKitWindow expose delegate nullable`() {
+    fun `AppKitWindow exposes a nullable delegate`() {
         val method = AppKitWindow::class.java.methods
             .firstOrNull { it.name == "getDelegate" }
         assertNotNull(method, "AppKitWindow doit exposer getDelegate()")
