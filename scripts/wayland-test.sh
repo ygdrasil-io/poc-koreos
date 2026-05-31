@@ -13,7 +13,13 @@ IMAGE=kadre-wayland
 
 docker build -t "$IMAGE" "$REPO_ROOT/docker/wayland-test"
 
-docker run --rm -t \
+# Allocate a TTY only when attached to one (interactive use). In CI / piped runs a TTY
+# mangles Gradle output with carriage returns, so omit -t there for clean, greppable logs.
+# Plain string (not an array) so it expands safely under `set -u` on macOS bash 3.2.
+TTY_FLAG=""
+[ -t 1 ] && TTY_FLAG="-t"
+
+docker run --rm $TTY_FLAG \
   -v "$REPO_ROOT":/work \
   -v kadre-gradle-cache:/root/.gradle \
   "$IMAGE" "$@"
