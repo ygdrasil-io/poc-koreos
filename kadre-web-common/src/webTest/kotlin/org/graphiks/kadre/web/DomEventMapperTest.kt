@@ -217,7 +217,7 @@ class DomEventMapperTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun `domTouchTypeToPhase mappe les types DOM`() {
+    fun `domTouchTypeToPhase maps DOM types`() {
         assertEquals(WebTouchPhase.Started,   domTouchTypeToPhase("touchstart"))
         assertEquals(WebTouchPhase.Moved,     domTouchTypeToPhase("touchmove"))
         assertEquals(WebTouchPhase.Ended,     domTouchTypeToPhase("touchend"))
@@ -225,7 +225,7 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `domTouchTypeToPhase retourne Cancelled pour un type inconnu`() {
+    fun `domTouchTypeToPhase returns Cancelled for an unknown type`() {
         assertEquals(WebTouchPhase.Cancelled, domTouchTypeToPhase(""))
         assertEquals(WebTouchPhase.Cancelled, domTouchTypeToPhase("click"))
     }
@@ -318,7 +318,7 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `WebWindowEvent Touch egalite structurelle`() {
+    fun `WebWindowEvent Touch structural equality`() {
         assertEquals(
             WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
             WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
@@ -326,7 +326,7 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `WebWindowEvent ScaleFactorChanged egalite structurelle`() {
+    fun `WebWindowEvent ScaleFactorChanged structural equality`() {
         assertEquals(
             WebWindowEvent.ScaleFactorChanged(factor = 2.0),
             WebWindowEvent.ScaleFactorChanged(factor = 2.0),
@@ -334,7 +334,7 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `WebWindowEvent CloseRequested et Destroyed sont des singletons`() {
+    fun `WebWindowEvent CloseRequested and Destroyed are singletons`() {
         assertEquals(WebWindowEvent.CloseRequested, WebWindowEvent.CloseRequested)
         assertEquals(WebWindowEvent.Destroyed, WebWindowEvent.Destroyed)
     }
