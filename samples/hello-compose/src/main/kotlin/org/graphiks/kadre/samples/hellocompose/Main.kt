@@ -88,7 +88,6 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
 
     private var window: Window? = null
     private var renderer: ComposeWindowRenderer? = null
-    private var frameCount = 0
 
     // Keyboard forwarding builds real AWT KeyEvents (required for text input — see
     // ComposeSceneHost.sendKey). The source Component is created lazily and guarded:
@@ -128,6 +127,18 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
         renderer = r
 
         println("[hello-compose] Ready — ${inner.width}×${inner.height} @ ${win.scaleFactor}x (${r::class.simpleName})")
+
+        // Headless windowed capture: render a few frames synchronously (so composition + first
+        // paint settle) through the real platform present path, snapshot, and exit immediately —
+        // without depending on the event loop's redraw cadence (which may never fire headlessly).
+        if (windowCapturePath != null) {
+            repeat(4) { r.renderFrame() }
+            val ok = r.captureFrameToPng(windowCapturePath)
+            println("[hello-compose] window-capture ${if (ok) "written" else "FAILED"}: $windowCapturePath")
+            r.dispose()
+            renderer = null
+            eventLoop.exit()
+        }
     }
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
@@ -138,23 +149,7 @@ class HelloComposeApp(private val windowCapturePath: String? = null) : Applicati
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
         val r = renderer
         when (event) {
-            is WindowEvent.RedrawRequested -> {
-                if (windowCapturePath != null) {
-                    frameCount++
-                    // Render a few frames so composition + first paint settle, then snapshot.
-                    if (frameCount >= 3) {
-                        val ok = r?.captureFrameToPng(windowCapturePath) ?: false
-                        println("[hello-compose] window-capture ${if (ok) "written" else "FAILED"}: $windowCapturePath")
-                        r?.dispose()
-                        renderer = null
-                        eventLoop.exit()
-                    } else {
-                        r?.renderFrame()
-                    }
-                } else {
-                    r?.renderFrame()
-                }
-            }
+            is WindowEvent.RedrawRequested -> r?.renderFrame()
 
             is WindowEvent.PointerMoved ->
                 r?.onPointerMoved(event.position.x, event.position.y)
@@ -315,6 +310,16 @@ fun main(args: Array<String>) {
             ?: error("--window-capture requires a file path: --window-capture <path>")
     } else {
         null
+    }
+
+    // Capture mode must never hang CI: if the synchronous capture path is blocked (e.g. a native
+    // swapBuffers waiting on a frame callback), a watchdog force-exits the JVM.
+    if (windowCapturePath != null) {
+        Thread {
+            Thread.sleep(30_000)
+            System.err.println("[hello-compose] window-capture watchdog: not done after 30s — forcing exit")
+            Runtime.getRuntime().halt(3)
+        }.apply { isDaemon = true }.start()
     }
 
     println("[hello-compose] Starting — Compose Multiplatform in a Kadre window")

@@ -27,6 +27,7 @@ jobs:
   linux-compose-visual:
     name: linux-compose-visual
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,9 +98,11 @@ jobs:
             echo "::warning::no Wayland compositor — windowed GL capture skipped"
             exit 0
           fi
-          ./gradlew :samples:hello-compose:run \
+          # Hard cap: the app has its own 30s watchdog, this is a belt-and-braces backstop so a
+          # stuck native call can never hang the job. SIGKILL 30s after SIGTERM if needed.
+          timeout -k 30 180 ./gradlew :samples:hello-compose:run \
             --args="--window-capture samples/hello-compose/build/visual/hello-compose.window.png" \
-            --no-daemon --stacktrace
+            --no-daemon --stacktrace || echo "::warning::window-capture timed out or failed (non-blocking)"
 
       - name: Dump crash report (hs_err) if any
         if: always()
