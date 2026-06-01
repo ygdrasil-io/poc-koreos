@@ -30,5 +30,6 @@ public abstract class org/graphiks/kadre/android/KadreActivity : androidx/activi
 	protected fun onPause ()V
 	protected fun onResume ()V
 	public fun onTouchEvent (Landroid/view/MotionEvent;)Z
+	public fun onWindowFocusChanged (Z)V
 }
 

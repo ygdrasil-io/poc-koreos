@@ -36,7 +36,16 @@ import org.graphiks.kadre.core.WindowEvent
  * - Surface created   → [ApplicationHandler.canCreateSurfaces]
  * - Surface changed → [ApplicationHandler.windowEvent] ([WindowEvent.Resized])
  * - Surface destroyed → [ApplicationHandler.destroySurfaces]
- * - [onDestroy] → `destroyed` guard set, then cleanup
+ * - [onDestroy] → [WindowEvent.Destroyed], then `destroyed` guard set + cleanup
+ *
+ * ## Lifecycle vs WindowEvent (two parallel channels)
+ * [onResume] / [onPause] / surface-destroyed drive the **app-level**
+ * [ApplicationHandler] lifecycle (coarse, activity-scoped). Separately,
+ * [onWindowFocusChanged] emits the **per-window** [WindowEvent.Focused] and
+ * [onDestroy] emits [WindowEvent.Destroyed], for parity with the desktop/winit
+ * backends so that consumers switching on [WindowEvent] also observe focus and
+ * destruction. Focus (window-level) and resume/pause (activity-level) are
+ * distinct signals on Android, so they are reported independently.
  *
  * ## Full screen
  * Status bar and navigation bar hidden via `FLAG_FULLSCREEN` and cutout-aware layout.
@@ -264,7 +273,30 @@ abstract class KadreActivity : ComponentActivity() {
         }
     }
 
+    // ── Focus (window-level) ──────────────────────────────────────────────────
+
+    /**
+     * Emits [WindowEvent.Focused] when the activity window gains or loses focus
+     * (app switch, notification shade, dialog overlay).
+     *
+     * This is the per-window counterpart of the activity-level [onResume] /
+     * [onPause] lifecycle and is reported independently (a window can lose focus
+     * without the activity pausing, e.g. the notification shade).
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        val window = eventLoop.pendingWindow
+        if (destroyed || window == null) return
+        handler.windowEvent(eventLoop, window.id, WindowEvent.Focused(hasFocus))
+    }
+
     override fun onDestroy() {
+        // Per-window terminal event, emitted before the guard/cleanup while the
+        // window is still resolvable (counterpart of the surface-destroyed
+        // app-level destroySurfaces callback).
+        eventLoop.pendingWindow?.let { window ->
+            handler.windowEvent(eventLoop, window.id, WindowEvent.Destroyed)
+        }
         destroyed = true
         eventLoop.onSurfaceDestroyed()
         super.onDestroy()
