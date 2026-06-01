@@ -24,11 +24,18 @@ import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.CursorGrabMode
+import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.DeviceId
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.Key
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.Modifiers
+import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -37,10 +44,12 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowLevel
 
 // ---------------------------------------------------------------------------
 // Trace de callbacks
@@ -62,10 +71,10 @@ sealed interface Callback {
     data class NewEvents(val cause: StartCause) : Callback
 
     /** [ApplicationHandler.windowEvent] invoqué. */
-    data class WindowEventCb(val windowId: WindowId, val event: Any) : Callback
+    data class WindowEventCb(val windowId: WindowId, val event: WindowEvent) : Callback
 
     /** [ApplicationHandler.deviceEvent] invoqué. */
-    data class DeviceEventCb(val deviceId: DeviceId, val event: Any) : Callback
+    data class DeviceEventCb(val deviceId: DeviceId, val event: DeviceEvent) : Callback
 
     /** [ApplicationHandler.aboutToWait] invoqué. */
     data object AboutToWait : Callback
@@ -89,7 +98,7 @@ sealed interface ScriptedEvent {
     data class Window(val windowId: WindowId, val event: WindowEvent) : ScriptedEvent
 
     /** Dispatche un événement périphérique vers [ApplicationHandler.deviceEvent]. */
-    data class Device(val deviceId: DeviceId, val event: Any) : ScriptedEvent
+    data class Device(val deviceId: DeviceId, val event: DeviceEvent) : ScriptedEvent
 
     /**
      * Simule une frame : [ApplicationHandler.newEvents] (Poll) →
@@ -117,27 +126,70 @@ class ScriptedWindow(
     override val scaleFactor: Double = 1.0,
 ) : Window {
 
-    override val rawWindowHandle: Any = RawWindowHandle.Web(canvasElementId = "scripted-window")
-    override val rawDisplayHandle: Any = RawDisplayHandle.Web
+    override val rawWindowHandle: RawWindowHandle = RawWindowHandle.Web(canvasElementId = "scripted-window")
+    override val rawDisplayHandle: RawDisplayHandle = RawDisplayHandle.Web
 
     /** Nombre d'appels à [requestRedraw] — utile pour asserter le rendu continu. */
     var redrawRequests: Int = 0
-        private set
-
-    /** Titre courant (dernier passé à [setTitle]). */
-    var title: String = "scripted"
         private set
 
     /** Visibilité courante. */
     var visible: Boolean = true
         private set
 
+    // R1 state fields
+    private var _title: String = "scripted"
+    private var _isResizable: Boolean = true
+    private var _isMinimized: Boolean = false
+    private var _isMaximized: Boolean = false
+    private var _isDecorated: Boolean = true
+    private var _outerPosition: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+
     override fun requestRedraw() { redrawRequests++ }
-    override fun setTitle(title: String) { this.title = title }
+    override fun setTitle(title: String) { _title = title }
+    override val title: String get() = _title
     override val innerSize: PhysicalSize<Int> get() = size
     override val outerSize: PhysicalSize<Int> get() = size
     override fun setVisible(visible: Boolean) { this.visible = visible }
-    override fun close() { /* no-op en mémoire */ }
+    override val isVisible: Boolean get() = visible
+    override fun close() { /* no-op in memory */ }
+
+    // R1 implementations (in-memory)
+    override fun setResizable(resizable: Boolean) { _isResizable = resizable }
+    override val isResizable: Boolean get() = _isResizable
+    override fun setMinimized(minimized: Boolean) { _isMinimized = minimized }
+    override val isMinimized: Boolean get() = _isMinimized
+    override fun setMaximized(maximized: Boolean) { _isMaximized = maximized }
+    override val isMaximized: Boolean get() = _isMaximized
+    override fun setDecorations(decorated: Boolean) { _isDecorated = decorated }
+    override val isDecorated: Boolean get() = _isDecorated
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) { /* no-op in scripted test */ }
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) { /* no-op in scripted test */ }
+    override val outerPosition: PhysicalPosition<Int> get() = _outerPosition
+    override fun setOuterPosition(position: PhysicalPosition<Int>) { _outerPosition = position }
+    override fun prePresentNotify() { /* no-op in scripted test */ }
+
+    // R2 stubs (in-memory)
+    override fun currentMonitor(): MonitorHandle? = null
+    private var _fullscreen: Fullscreen? = null
+    override val fullscreen: Fullscreen? get() = _fullscreen
+    override fun setFullscreen(fullscreen: Fullscreen?) { _fullscreen = fullscreen }
+
+    // R3 stubs (in-memory no-ops)
+    override fun setCursor(cursor: CursorIcon) {}
+    override fun setCursorVisible(visible: Boolean) {}
+    override fun setCursorGrab(mode: CursorGrabMode) {}
+    override fun setCursorPosition(position: PhysicalPosition<Int>) {}
+    override fun setCursorHittest(hittest: Boolean) {}
+    override val theme: Theme? get() = null
+    override fun setTheme(theme: Theme?) {}
+    override fun setWindowLevel(level: WindowLevel) {}
+    override fun setTransparent(transparent: Boolean) {}
+    override fun setBlur(blur: Boolean) {}
+    override fun setWindowIcon(icon: Icon?) {}
+
+    /** No-op in scripted test: dead-key state is not simulated. */
+    override fun resetDeadKeys() { /* no-op in scripted test */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +226,16 @@ class ScriptedEventLoop(
     override fun createProxy(): EventLoopProxy = object : EventLoopProxy {
         override fun wakeUp() { /* no-op : exécution mono-thread déterministe */ }
     }
+
+    // R2 stubs
+    override fun availableMonitors(): List<MonitorHandle> = emptyList()
+    override fun primaryMonitor(): MonitorHandle? = null
+
+    // R3 stub
+    override fun systemTheme(): Theme? = null
+
+    // R4 stub — no-op, device-event filtering not simulated in scripted tests
+    override fun listenDeviceEvents(mode: DeviceEvents) { /* no-op in scripted test */ }
 
     // ── Exécution ───────────────────────────────────────────────────────────
 

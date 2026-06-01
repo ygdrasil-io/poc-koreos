@@ -12,7 +12,11 @@ import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.Modifiers
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -229,6 +233,27 @@ class WaylandKeyMapperTest {
 }
 
 // ============================================================================
+// WaylandKeyMapper — Focused tests
+// ============================================================================
+
+class WaylandFocusedMapperTest {
+
+    @Test
+    fun `mapWaylandKeyboardFocused true returns Focused gained`() {
+        val event = mapWaylandKeyboardFocused(true)
+        assertTrue(event is WindowEvent.Focused)
+        assertTrue(event.gained)
+    }
+
+    @Test
+    fun `mapWaylandKeyboardFocused false returns Focused not gained`() {
+        val event = mapWaylandKeyboardFocused(false)
+        assertTrue(event is WindowEvent.Focused)
+        assertFalse(event.gained)
+    }
+}
+
+// ============================================================================
 // WaylandMouseMapper tests
 // ============================================================================
 
@@ -393,5 +418,142 @@ class WaylandMouseMapperTest {
     fun `mapWaylandPointerAxis returns WindowEvent_MouseWheel`() {
         val event = mapWaylandPointerAxis(axis = WL_POINTER_AXIS_VERTICAL_SCROLL, valueFixed = 256)
         assertTrue(event is WindowEvent.MouseWheel)
+    }
+}
+
+// ============================================================================
+// WaylandTouchMapper tests
+// ============================================================================
+
+class WaylandTouchMapperTest {
+
+    // ── mapWaylandTouchDown ───────────────────────────────────────────────────
+
+    @Test
+    fun `mapWaylandTouchDown produces enter and press`() {
+        val events = mapWaylandTouchDown(id = 0, xFixed = 256, yFixed = 512)
+        assertIs<WindowEvent.PointerEntered>(events[0])
+        assertIs<WindowEvent.PointerButton>(events[1]).also { event ->
+            assertEquals(KeyState.Pressed, event.state)
+            assertEquals(ButtonSource.Touch(FingerId(0L)), event.button)
+        }
+    }
+
+    @Test
+    fun `mapWaylandTouchDown converts wl_fixed coordinates correctly`() {
+        // x = 10.0 → wl_fixed = 10 * 256 = 2560; y = 20.0 → 5120
+        val event = assertIs<WindowEvent.PointerButton>(mapWaylandTouchDown(id = 1, xFixed = 2560, yFixed = 5120)[1])
+        assertEquals(10.0, event.position.x)
+        assertEquals(20.0, event.position.y)
+    }
+
+    @Test
+    fun `mapWaylandTouchDown preserves finger id`() {
+        val event = assertIs<WindowEvent.PointerButton>(mapWaylandTouchDown(id = 3, xFixed = 0, yFixed = 0)[1])
+        assertEquals(ButtonSource.Touch(FingerId(3L)), event.button)
+    }
+
+    // ── mapWaylandTouchUp ─────────────────────────────────────────────────────
+
+    @Test
+    fun `mapWaylandTouchUp produces release and leave`() {
+        val events = mapWaylandTouchUp(id = 0, location = PhysicalPosition(1.0, 2.0))
+        assertIs<WindowEvent.PointerButton>(events[0]).also { event ->
+            assertEquals(KeyState.Released, event.state)
+            assertEquals(ButtonSource.Touch(FingerId(0L)), event.button)
+        }
+        assertIs<WindowEvent.PointerLeft>(events[1]).also { event ->
+            assertEquals(PointerKind.Touch, event.kind)
+        }
+    }
+
+    @Test
+    fun `mapWaylandTouchUp preserves finger id`() {
+        val event = assertIs<WindowEvent.PointerButton>(mapWaylandTouchUp(id = 5, location = PhysicalPosition(1.0, 2.0))[0])
+        assertEquals(ButtonSource.Touch(FingerId(5L)), event.button)
+    }
+
+    // ── mapWaylandTouchMotion ─────────────────────────────────────────────────
+
+    @Test
+    fun `mapWaylandTouchMotion produces PointerMoved`() {
+        val event = mapWaylandTouchMotion(id = 0, xFixed = 256, yFixed = 256)
+        assertIs<WindowEvent.PointerMoved>(event)
+        assertEquals(PointerSource.Touch(FingerId(0L)), event.source)
+    }
+
+    @Test
+    fun `mapWaylandTouchMotion converts wl_fixed coordinates correctly`() {
+        // x = 5.0 → 1280; y = 7.5 → 1920
+        val event = mapWaylandTouchMotion(id = 2, xFixed = 1280, yFixed = 1920)
+        assertEquals(5.0, event.position.x)
+        assertEquals(7.5, event.position.y)
+    }
+
+    // ── mapWaylandTouchCancel ─────────────────────────────────────────────────
+
+    @Test
+    fun `mapWaylandTouchCancel produces release and leave`() {
+        val events = mapWaylandTouchCancel(id = 0, location = PhysicalPosition(1.0, 2.0))
+        assertIs<WindowEvent.PointerButton>(events[0]).also { event ->
+            assertEquals(KeyState.Released, event.state)
+        }
+        assertIs<WindowEvent.PointerLeft>(events[1]).also { event ->
+            assertEquals(PointerKind.Touch, event.kind)
+        }
+    }
+
+    @Test
+    fun `mapWaylandTouchCancel preserves finger id`() {
+        val event = assertIs<WindowEvent.PointerButton>(mapWaylandTouchCancel(id = 7, location = PhysicalPosition(1.0, 2.0))[0])
+        assertEquals(ButtonSource.Touch(FingerId(7L)), event.button)
+    }
+}
+
+// ============================================================================
+// seatHasCapability tests (WaylandSeat)
+// ============================================================================
+
+class WaylandSeatCapabilityTest {
+
+    // Capability bit values as defined by the Wayland protocol:
+    //   POINTER  = 1
+    //   KEYBOARD = 2
+    //   TOUCH    = 4
+
+    @Test
+    fun `seatHasCapability returns true when bit is set`() {
+        // caps = KEYBOARD | TOUCH = 6
+        assertTrue(seatHasCapability(caps = 6, capBit = 2)) // KEYBOARD
+        assertTrue(seatHasCapability(caps = 6, capBit = 4)) // TOUCH
+    }
+
+    @Test
+    fun `seatHasCapability returns false when bit is absent`() {
+        // caps = KEYBOARD | TOUCH = 6, no POINTER
+        assertFalse(seatHasCapability(caps = 6, capBit = 1)) // POINTER absent
+    }
+
+    @Test
+    fun `seatHasCapability returns false for zero capabilities`() {
+        assertFalse(seatHasCapability(caps = 0, capBit = 1))
+        assertFalse(seatHasCapability(caps = 0, capBit = 2))
+        assertFalse(seatHasCapability(caps = 0, capBit = 4))
+    }
+
+    @Test
+    fun `seatHasCapability handles full bitmask`() {
+        // All three capabilities present (1 | 2 | 4 = 7)
+        assertTrue(seatHasCapability(caps = 7, capBit = 1))
+        assertTrue(seatHasCapability(caps = 7, capBit = 2))
+        assertTrue(seatHasCapability(caps = 7, capBit = 4))
+    }
+
+    @Test
+    fun `seatHasCapability pointer-only seat`() {
+        // Only pointer available (typical desktop mouse-only setup)
+        assertTrue(seatHasCapability(caps = 1, capBit = 1))  // POINTER present
+        assertFalse(seatHasCapability(caps = 1, capBit = 2)) // KEYBOARD absent
+        assertFalse(seatHasCapability(caps = 1, capBit = 4)) // TOUCH absent
     }
 }

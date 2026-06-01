@@ -188,6 +188,11 @@ class EventsTest {
     /**
      * Explicitly enumerates the variants without an `else` clause.
      * If a variant is added or removed, this `when` will no longer compile.
+     * R4 added: ModifiersChanged.
+     * R5-IME added: Ime.
+     * R5-DnD added: DragEntered, DragMoved, DragDropped, DragLeft.
+     * R5-Gestures added: PinchGesture, PanGesture, RotationGesture, DoubleTapGesture, TouchpadPressure.
+     * R5-MiscWindow added: Occluded.
      */
     private fun classerWindowEvent(event: WindowEvent): String = when (event) {
         WindowEvent.CloseRequested        -> "CloseRequested"
@@ -208,6 +213,14 @@ class EventsTest {
         is WindowEvent.TouchpadPressure   -> "TouchpadPressure"
         WindowEvent.RedrawRequested       -> "RedrawRequested"
         WindowEvent.Destroyed             -> "Destroyed"
+        is WindowEvent.ThemeChanged       -> "ThemeChanged"
+        is WindowEvent.ModifiersChanged   -> "ModifiersChanged"  // R4
+        is WindowEvent.Ime                -> "Ime"               // R5-IME
+        is WindowEvent.DragEntered        -> "DragEntered"       // R5-DnD
+        is WindowEvent.DragMoved          -> "DragMoved"         // R5-DnD
+        is WindowEvent.DragDropped        -> "DragDropped"       // R5-DnD
+        WindowEvent.DragLeft              -> "DragLeft"          // R5-DnD
+        is WindowEvent.Occluded           -> "Occluded"          // R5-MiscWindow
     }
 
     @Test
@@ -361,17 +374,168 @@ class EventsTest {
         assertEquals("Destroyed", classerWindowEvent(WindowEvent.Destroyed))
     }
 
+    @Test
+    fun `WindowEvent ThemeChanged keeps the theme`() {
+        val event = WindowEvent.ThemeChanged(Theme.Dark)
+        assertEquals("ThemeChanged", classerWindowEvent(event))
+        assertEquals(Theme.Dark, event.theme)
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowEvent.Ime — R5-IME
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `WindowEvent Ime Commit keeps the committed text`() {
+        val imeEvent = WindowEvent.Ime.ImeEvent.Commit("hello")
+        val event = WindowEvent.Ime(imeEvent)
+        assertEquals("Ime", classerWindowEvent(event))
+        val commit = event.ime as WindowEvent.Ime.ImeEvent.Commit
+        assertEquals("hello", commit.text)
+    }
+
+    @Test
+    fun `WindowEvent Ime Preedit keeps text and cursor range`() {
+        val imeEvent = WindowEvent.Ime.ImeEvent.Preedit("こん", Pair(0, 3))
+        val event = WindowEvent.Ime(imeEvent)
+        assertEquals("Ime", classerWindowEvent(event))
+        val preedit = event.ime as WindowEvent.Ime.ImeEvent.Preedit
+        assertEquals("こん", preedit.text)
+        assertEquals(Pair(0, 3), preedit.cursorRange)
+    }
+
+    @Test
+    fun `WindowEvent Ime Preedit with null cursor range`() {
+        val imeEvent = WindowEvent.Ime.ImeEvent.Preedit("abc", null)
+        val preedit = imeEvent
+        assertEquals(null, preedit.cursorRange)
+    }
+
+    @Test
+    fun `WindowEvent Ime Enabled and Disabled are singletons`() {
+        val enabled1 = WindowEvent.Ime.ImeEvent.Enabled
+        val enabled2 = WindowEvent.Ime.ImeEvent.Enabled
+        assertTrue(enabled1 === enabled2, "Enabled must be a singleton")
+        val disabled1 = WindowEvent.Ime.ImeEvent.Disabled
+        val disabled2 = WindowEvent.Ime.ImeEvent.Disabled
+        assertTrue(disabled1 === disabled2, "Disabled must be a singleton")
+    }
+
+    @Test
+    fun `WindowEvent Ime DeleteSurrounding keeps before and after bytes`() {
+        val imeEvent = WindowEvent.Ime.ImeEvent.DeleteSurrounding(3, 5)
+        val event = WindowEvent.Ime(imeEvent)
+        assertEquals("Ime", classerWindowEvent(event))
+        val del = event.ime as WindowEvent.Ime.ImeEvent.DeleteSurrounding
+        assertEquals(3, del.beforeBytes)
+        assertEquals(5, del.afterBytes)
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowEvent — R5-DnD
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `WindowEvent DragEntered keeps position and paths`() {
+        val pos = PhysicalPosition(10.0, 20.0)
+        val paths = listOf("/tmp/foo.txt", "/tmp/bar.png")
+        val event = WindowEvent.DragEntered(pos, paths)
+        assertEquals("DragEntered", classerWindowEvent(event))
+        assertEquals(pos, event.position)
+        assertEquals(paths, event.paths)
+    }
+
+    @Test
+    fun `WindowEvent DragMoved keeps position`() {
+        val pos = PhysicalPosition(50.0, 60.0)
+        val event = WindowEvent.DragMoved(pos)
+        assertEquals("DragMoved", classerWindowEvent(event))
+        assertEquals(pos, event.position)
+    }
+
+    @Test
+    fun `WindowEvent DragDropped keeps position and paths`() {
+        val pos = PhysicalPosition(30.0, 40.0)
+        val paths = listOf("/home/user/doc.pdf")
+        val event = WindowEvent.DragDropped(pos, paths)
+        assertEquals("DragDropped", classerWindowEvent(event))
+        assertEquals(pos, event.position)
+        assertEquals(paths, event.paths)
+    }
+
+    @Test
+    fun `WindowEvent DragLeft is correctly classified`() {
+        assertEquals("DragLeft", classerWindowEvent(WindowEvent.DragLeft))
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowEvent — R5-Gestures
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `WindowEvent PinchGesture keeps delta and phase`() {
+        val event = WindowEvent.PinchGesture(null, 0.5, TouchPhase.Moved)
+        assertEquals("PinchGesture", classerWindowEvent(event))
+        assertEquals(0.5, event.delta)
+        assertEquals(TouchPhase.Moved, event.phase)
+    }
+
+    @Test
+    fun `WindowEvent PanGesture keeps delta and phase`() {
+        val delta = PhysicalPosition(3.0f, -1.0f)
+        val event = WindowEvent.PanGesture(null, delta, TouchPhase.Started)
+        assertEquals("PanGesture", classerWindowEvent(event))
+        assertEquals(delta, event.delta)
+        assertEquals(TouchPhase.Started, event.phase)
+    }
+
+    @Test
+    fun `WindowEvent RotationGesture keeps delta and phase`() {
+        val event = WindowEvent.RotationGesture(null, 1.57f, TouchPhase.Ended)
+        assertEquals("RotationGesture", classerWindowEvent(event))
+        assertEquals(1.57f, event.deltaDegrees)
+        assertEquals(TouchPhase.Ended, event.phase)
+    }
+
+    @Test
+    fun `WindowEvent DoubleTapGesture is correctly classified`() {
+        assertEquals("DoubleTapGesture", classerWindowEvent(WindowEvent.DoubleTapGesture(null)))
+    }
+
+    @Test
+    fun `WindowEvent TouchpadPressure keeps pressure and stage`() {
+        val event = WindowEvent.TouchpadPressure(null, 0.8f, 2L)
+        assertEquals("TouchpadPressure", classerWindowEvent(event))
+        assertEquals(0.8f, event.pressure)
+        assertEquals(2L, event.stage)
+    }
+
+    // -----------------------------------------------------------------------
+    // WindowEvent — R5-MiscWindow
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `WindowEvent Occluded keeps the occluded flag`() {
+        val occluded = WindowEvent.Occluded(true)
+        val revealed = WindowEvent.Occluded(false)
+        assertEquals("Occluded", classerWindowEvent(occluded))
+        assertTrue(occluded.occluded)
+        assertFalse(revealed.occluded)
+    }
+
     // -----------------------------------------------------------------------
     // DeviceEvent — when exhaustiveness (without else) + variant construction
     // -----------------------------------------------------------------------
 
     /**
-     * Explicitly enumerates the 3 variants without an `else` clause.
+     * Explicitly enumerates the 4 variants without an `else` clause.
+     * R4 added: MouseWheel.
      */
     private fun classerDeviceEvent(event: DeviceEvent): String = when (event) {
         is DeviceEvent.PointerMotion -> "PointerMotion"
         is DeviceEvent.Button        -> "Button"
         is DeviceEvent.Key           -> "Key"
+        is DeviceEvent.MouseWheel    -> "MouseWheel"  // R4
     }
 
     @Test

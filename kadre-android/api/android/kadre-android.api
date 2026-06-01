@@ -6,15 +6,54 @@ public final class org/graphiks/kadre/android/AndroidKadreRuntime {
 
 public final class org/graphiks/kadre/android/AndroidWindow : org/graphiks/kadre/core/Window {
 	public fun close ()V
+	public fun currentMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public fun dragResizeWindow (Lorg/graphiks/kadre/core/ResizeDirection;)V
+	public fun dragWindow ()V
+	public fun getFullscreen ()Lorg/graphiks/kadre/core/Fullscreen;
 	public fun getId-1uDr44Y ()J
 	public fun getInnerSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public fun getOuterPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
 	public fun getOuterSize ()Lorg/graphiks/kadre/core/PhysicalSize;
-	public fun getRawDisplayHandle ()Ljava/lang/Object;
-	public fun getRawWindowHandle ()Ljava/lang/Object;
+	public fun getRawDisplayHandle ()Lorg/graphiks/kadre/core/RawDisplayHandle;
+	public fun getRawWindowHandle ()Lorg/graphiks/kadre/core/RawWindowHandle;
 	public fun getScaleFactor ()D
+	public fun getTheme ()Lorg/graphiks/kadre/core/Theme;
+	public fun getTitle ()Ljava/lang/String;
+	public fun isDecorated ()Z
+	public fun isMaximized ()Z
+	public fun isMinimized ()Z
+	public fun isResizable ()Z
+	public fun isVisible ()Z
+	public fun prePresentNotify ()V
 	public fun requestRedraw ()V
+	public fun requestUserAttention (Lorg/graphiks/kadre/core/UserAttentionType;)V
+	public fun resetDeadKeys ()V
+	public fun setBlur (Z)V
+	public fun setContentProtected (Z)V
+	public fun setCursor (Lorg/graphiks/kadre/core/CursorIcon;)V
+	public fun setCursorGrab (Lorg/graphiks/kadre/core/CursorGrabMode;)V
+	public fun setCursorHittest (Z)V
+	public fun setCursorPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+	public fun setCursorVisible (Z)V
+	public fun setCustomCursor (Lorg/graphiks/kadre/core/CustomCursor;)V
+	public fun setDecorations (Z)V
+	public fun setFullscreen (Lorg/graphiks/kadre/core/Fullscreen;)V
+	public fun setImeAllowed (Z)V
+	public fun setImeCursorArea (Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public fun setImePurpose (Lorg/graphiks/kadre/core/ImePurpose;)V
+	public fun setMaxSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public fun setMaximized (Z)V
+	public fun setMinSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public fun setMinimized (Z)V
+	public fun setOuterPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+	public fun setResizable (Z)V
+	public fun setTheme (Lorg/graphiks/kadre/core/Theme;)V
 	public fun setTitle (Ljava/lang/String;)V
+	public fun setTransparent (Z)V
 	public fun setVisible (Z)V
+	public fun setWindowIcon (Lorg/graphiks/kadre/core/Icon;)V
+	public fun setWindowLevel (Lorg/graphiks/kadre/core/WindowLevel;)V
+	public fun showWindowMenu (Lorg/graphiks/kadre/core/PhysicalPosition;)V
 }
 
 public abstract class org/graphiks/kadre/android/KadreActivity : androidx/activity/ComponentActivity {
@@ -22,6 +61,7 @@ public abstract class org/graphiks/kadre/android/KadreActivity : androidx/activi
 	public abstract fun createHandler ()Lorg/graphiks/kadre/core/ApplicationHandler;
 	public final fun getHandler ()Lorg/graphiks/kadre/core/ApplicationHandler;
 	public final fun getKadreWindow ()Lorg/graphiks/kadre/android/AndroidWindow;
+	public fun onConfigurationChanged (Landroid/content/res/Configuration;)V
 	protected fun onCreate (Landroid/os/Bundle;)V
 	protected fun onDestroy ()V
 	public fun onKeyDown (ILandroid/view/KeyEvent;)Z
@@ -29,5 +69,6 @@ public abstract class org/graphiks/kadre/android/KadreActivity : androidx/activi
 	protected fun onPause ()V
 	protected fun onResume ()V
 	public fun onTouchEvent (Landroid/view/MotionEvent;)Z
+	public fun onWindowFocusChanged (Z)V
 }
 

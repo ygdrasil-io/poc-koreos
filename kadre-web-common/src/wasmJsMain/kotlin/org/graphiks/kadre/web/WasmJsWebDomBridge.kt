@@ -38,6 +38,8 @@ external interface JsDomEvent : JsAny {
 @JsName("KeyboardEvent")
 external interface JsKeyboardEvent : JsDomEvent {
     val code: JsString
+    val key: JsString
+    val location: JsNumber
     val shiftKey: JsBoolean
     val ctrlKey: JsBoolean
     val altKey: JsBoolean
@@ -105,6 +107,15 @@ private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
 @JsFun("() => window")
 private external fun getWindow(): JsEventTarget
 
+@JsFun("() => window.devicePixelRatio || 1")
+private external fun getDevicePixelRatio(): Double
+
+@JsFun("(canvas, dpr) => Math.round(canvas.clientWidth * dpr)")
+private external fun canvasPhysicalWidth(canvas: JsEventTarget, dpr: Double): Int
+
+@JsFun("(canvas, dpr) => Math.round(canvas.clientHeight * dpr)")
+private external fun canvasPhysicalHeight(canvas: JsEventTarget, dpr: Double): Int
+
 /** Wraps a Kotlin `(Double) -> Unit` into a JS-callable closure (see [wrapCallback]). */
 @JsFun("(fn) => fn")
 private external fun wrapDoubleCallback(fn: (Double) -> Unit): JsAny
@@ -166,6 +177,14 @@ private external fun observeDevicePixelRatioJs(cb: JsAny, isAttached: JsAny)
 @JsFun("(fn) => fn")
 private external fun wrapEventHandler(fn: (JsAny) -> Unit): JsAny
 
+/** Calls requestFullscreen on the given element (handles vendor prefixes). */
+@JsFun("(el) => { if (el.requestFullscreen) el.requestFullscreen(); else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen(); }")
+private external fun jsRequestFullscreen(el: JsEventTarget)
+
+/** Calls document.exitFullscreen (handles vendor prefixes). */
+@JsFun("() => { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }")
+private external fun jsExitFullscreen()
+
 /**
  * Creates a canvas (id + dimensions) and appends it to the parent (parentId or body).
  * If a canvas with that id already exists, returns it as is without recreating.
@@ -205,6 +224,14 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
 
+    override fun readDevicePixelRatio(): Double = getDevicePixelRatio()
+
+    override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> {
+        val canvas = getElementById(canvasId.toJsString()) ?: return Pair(0, 0)
+        val dpr = getDevicePixelRatio()
+        return Pair(canvasPhysicalWidth(canvas, dpr), canvasPhysicalHeight(canvas, dpr))
+    }
+
     override fun ensureCanvas(attrs: WebWindowAttributes): String {
         val id = attrs.effectiveCanvasId
         val existing = getElementById(id.toJsString())
@@ -242,36 +269,54 @@ class WasmJsWebDomBridge : WebDomBridge {
         // --- Keyboard ---
         addDomListener(canvas, "keydown") { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
+            val mods = domModifiers(
+                shiftKey = ke.shiftKey.toBoolean(),
+                ctrlKey  = ke.ctrlKey.toBoolean(),
+                altKey   = ke.altKey.toBoolean(),
+                metaKey  = ke.metaKey.toBoolean(),
+            )
+            val keyStr = ke.key.toString()
             dispatch(
                 WebWindowEvent.KeyboardInput(
                     key = domCodeToKey(ke.code.toString()),
                     state = WebKeyState.Pressed,
-                    modifiers = domModifiers(
-                        shiftKey = ke.shiftKey.toBoolean(),
-                        ctrlKey  = ke.ctrlKey.toBoolean(),
-                        altKey   = ke.altKey.toBoolean(),
-                        metaKey  = ke.metaKey.toBoolean(),
-                    ),
+                    modifiers = mods,
                     isRepeat = ke.repeat.toBoolean(),
+                    text = domKeyToText(keyStr),
+                    location = domLocationToKeyLocation(ke.location.toDouble().toInt()),
+                    scanCode = ke.code.toString(),
                 )
             )
+            // R4: emit ModifiersChanged on modifier key press
+            if (keyStr in setOf("Shift", "Control", "Alt", "Meta")) {
+                dispatch(WebWindowEvent.ModifiersChanged(mods))
+            }
         }
 
         addDomListener(canvas, "keyup") { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
+            val mods = domModifiers(
+                shiftKey = ke.shiftKey.toBoolean(),
+                ctrlKey  = ke.ctrlKey.toBoolean(),
+                altKey   = ke.altKey.toBoolean(),
+                metaKey  = ke.metaKey.toBoolean(),
+            )
+            val keyStr = ke.key.toString()
             dispatch(
                 WebWindowEvent.KeyboardInput(
                     key = domCodeToKey(ke.code.toString()),
                     state = WebKeyState.Released,
-                    modifiers = domModifiers(
-                        shiftKey = ke.shiftKey.toBoolean(),
-                        ctrlKey  = ke.ctrlKey.toBoolean(),
-                        altKey   = ke.altKey.toBoolean(),
-                        metaKey  = ke.metaKey.toBoolean(),
-                    ),
+                    modifiers = mods,
                     isRepeat = false,
+                    text = null,
+                    location = domLocationToKeyLocation(ke.location.toDouble().toInt()),
+                    scanCode = ke.code.toString(),
                 )
             )
+            // R4: emit ModifiersChanged on modifier key release
+            if (keyStr in setOf("Shift", "Control", "Alt", "Meta")) {
+                dispatch(WebWindowEvent.ModifiersChanged(mods))
+            }
         }
 
         // --- Pointer ---
@@ -404,5 +449,20 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     private fun dispatch(event: WebWindowEvent) {
         onWindowEvent?.invoke(event)
+    }
+
+    // ── R2: Fullscreen API ────────────────────────────────────────────────────
+
+    override fun requestFullscreen(canvasId: String) {
+        try {
+            val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
+            jsRequestFullscreen(el)
+        } catch (_: Throwable) {}
+    }
+
+    override fun exitFullscreen() {
+        try {
+            jsExitFullscreen()
+        } catch (_: Throwable) {}
     }
 }

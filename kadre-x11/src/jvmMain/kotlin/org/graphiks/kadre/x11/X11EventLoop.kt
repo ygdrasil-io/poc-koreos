@@ -21,10 +21,12 @@ import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.Key
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.Modifiers
+import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -32,6 +34,7 @@ import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
@@ -198,6 +201,46 @@ class X11EventLoop internal constructor(
      */
     override fun createProxy(): EventLoopProxy =
         X11EventLoopProxy(this, displayPtr)
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns all monitors for this X11 display.
+     *
+     * Tries RANDR, then Xinerama, then a synthetic single-monitor fallback.
+     */
+    override fun availableMonitors(): List<MonitorHandle> {
+        val scale = windows.values.firstOrNull()?.scaleFactor ?: 1.0
+        return enumerateX11Monitors(displayPtr, screen, scale)
+    }
+
+    /**
+     * Returns the first monitor (primary/leftmost) or the synthetic monitor.
+     */
+    override fun primaryMonitor(): MonitorHandle? = availableMonitors().firstOrNull()
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * X11 has no standard theme API.
+     *
+     * The xsettings daemon exposes `Net/ThemeName` but there is no standardised
+     * Light/Dark distinction. Documented null.
+     *
+     * TODO(R3-x11-theme): query xsettings or GTK_THEME env variable.
+     */
+    override fun systemTheme(): Theme? = null
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on X11: device events are always dispatched.
+     *
+     * TODO(R4-x11-device-filter): use XSelectInput to selectively disable raw motion.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on X11
+    }
 }
 
 // ── Dispatch X11 events ───────────────────────────────────────────────────────

@@ -171,4 +171,15 @@ fun mapWaylandKeyEvent(
     state     = waylandKeyStateToKeyState(state),
     modifiers = modifiers,
     isRepeat  = state == WL_KEY_REPEATED,
+    text      = null,    // TODO(R4-wayland-text): wire xkb_state_key_get_utf8
+    scanCode  = keycode, // Linux evdev keycode is the scan code equivalent
 )
+
+/**
+ * Builds a [WindowEvent.Focused] from a wl_keyboard.enter or wl_keyboard.leave event.
+ *
+ * @param gained `true` for wl_keyboard.enter (focus gained), `false` for wl_keyboard.leave.
+ * @return The corresponding focus event.
+ */
+fun mapWaylandKeyboardFocused(gained: Boolean): WindowEvent.Focused =
+    WindowEvent.Focused(gained)

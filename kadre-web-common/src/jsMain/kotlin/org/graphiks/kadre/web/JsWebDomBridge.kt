@@ -17,6 +17,7 @@ import org.w3c.dom.Element
 import org.w3c.dom.events.Event
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.WheelEvent
+import kotlin.math.roundToInt
 
 /**
  * JS DOM bridge to the Kadre engine.
@@ -36,6 +37,16 @@ import org.w3c.dom.events.WheelEvent
 class JsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
+
+    override fun readDevicePixelRatio(): Double = window.devicePixelRatio
+
+    override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> {
+        val canvas = document.getElementById(canvasId) ?: return Pair(0, 0)
+        val dpr = readDevicePixelRatio()
+        val w = ((canvas.asDynamic().clientWidth as Double) * dpr).roundToInt()
+        val h = ((canvas.asDynamic().clientHeight as Double) * dpr).roundToInt()
+        return Pair(w, h)
+    }
 
     override fun ensureCanvas(attrs: WebWindowAttributes): String {
         val id = attrs.effectiveCanvasId
@@ -79,26 +90,42 @@ class JsWebDomBridge : WebDomBridge {
         // --- Keyboard ---
         addListener(canvas, "keydown") { e ->
             val ke = e as KeyboardEvent
+            val mods = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey)
             dispatch(
                 WebWindowEvent.KeyboardInput(
                     key = domCodeToKey(ke.code),
                     state = WebKeyState.Pressed,
-                    modifiers = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey),
+                    modifiers = mods,
                     isRepeat = ke.repeat,
+                    text = domKeyToText(ke.key),
+                    location = domLocationToKeyLocation(ke.location),
+                    scanCode = ke.code,
                 )
             )
+            // R4: emit ModifiersChanged when a modifier key is pressed
+            if (ke.key in setOf("Shift", "Control", "Alt", "Meta")) {
+                dispatch(WebWindowEvent.ModifiersChanged(mods))
+            }
         }
 
         addListener(canvas, "keyup") { e ->
             val ke = e as KeyboardEvent
+            val mods = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey)
             dispatch(
                 WebWindowEvent.KeyboardInput(
                     key = domCodeToKey(ke.code),
                     state = WebKeyState.Released,
-                    modifiers = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey),
+                    modifiers = mods,
                     isRepeat = false,
+                    text = null,
+                    location = domLocationToKeyLocation(ke.location),
+                    scanCode = ke.code,
                 )
             )
+            // R4: emit ModifiersChanged when a modifier key is released
+            if (ke.key in setOf("Shift", "Control", "Alt", "Meta")) {
+                dispatch(WebWindowEvent.ModifiersChanged(mods))
+            }
         }
 
         // --- Pointer (unified PointerEvent) ---
@@ -303,6 +330,38 @@ class JsWebDomBridge : WebDomBridge {
 
     private fun dispatch(event: WebWindowEvent) {
         onWindowEvent?.invoke(event)
+    }
+
+    // ── R2: Fullscreen API ────────────────────────────────────────────────────
+
+    /**
+     * Calls `element.requestFullscreen()` on the target canvas.
+     * Uses the dynamic API to handle browser prefixes gracefully.
+     */
+    override fun requestFullscreen(canvasId: String) {
+        val el = document.getElementById(canvasId) ?: targetElement ?: return
+        try {
+            val d = el.asDynamic()
+            when {
+                d.requestFullscreen != null -> d.requestFullscreen()
+                d.webkitRequestFullscreen != null -> d.webkitRequestFullscreen()
+                d.mozRequestFullScreen != null -> d.mozRequestFullScreen()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Calls `document.exitFullscreen()`.
+     */
+    override fun exitFullscreen() {
+        try {
+            val d = document.asDynamic()
+            when {
+                d.exitFullscreen != null -> d.exitFullscreen()
+                d.webkitExitFullscreen != null -> d.webkitExitFullscreen()
+                d.mozCancelFullScreen != null -> d.mozCancelFullScreen()
+            }
+        } catch (_: Throwable) {}
     }
 }
 

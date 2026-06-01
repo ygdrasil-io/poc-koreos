@@ -25,7 +25,7 @@ class HelloTouchHandler : ApplicationHandler {
         println("[HelloTouch] canCreateSurfaces — surface ready for rendering")
     }
 
-    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
         when (event) {
             is WindowEvent.PointerMoved -> if (event.source is PointerSource.Touch) {
                 println("[HelloTouch] Touch move @ (${event.position.x.toInt()}, ${event.position.y.toInt()})")
@@ -33,6 +33,7 @@ class HelloTouchHandler : ApplicationHandler {
             is WindowEvent.PointerButton -> if (event.button is ButtonSource.Touch) {
                 println("[HelloTouch] Touch ${event.state} @ (${event.position.x.toInt()}, ${event.position.y.toInt()})")
             }
+            else -> Unit
         }
     }
 

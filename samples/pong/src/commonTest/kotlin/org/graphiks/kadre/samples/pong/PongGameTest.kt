@@ -10,13 +10,23 @@ package org.graphiks.kadre.samples.pong
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.CursorGrabMode
+import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -51,16 +61,52 @@ class FakeRenderer : PongRendererInterface {
 class FakeWindow : Window {
     override val id = WindowId(1L)
     // Win32 stub — satisfies the `handle is RawWindowHandle` check in PongGame
-    override val rawWindowHandle: Any = RawWindowHandle.Win32(hwnd = 0L, hinstance = 0L)
-    override val rawDisplayHandle: Any = Unit
+    override val rawWindowHandle: RawWindowHandle = RawWindowHandle.Win32(hwnd = 0L, hinstance = 0L)
+    override val rawDisplayHandle: RawDisplayHandle = RawDisplayHandle.Win32(hinstance = 0L)
     var redrawRequested = false
     override fun requestRedraw() { redrawRequested = true }
-    override fun setTitle(title: String) {}
+    private var _title: String = ""
+    override fun setTitle(title: String) { _title = title }
+    override val title: String get() = _title
     override val innerSize = PhysicalSize(800, 600)
     override val outerSize = PhysicalSize(800, 600)
     override val scaleFactor = 1.0
     override fun setVisible(visible: Boolean) {}
+    override val isVisible: Boolean get() = true
     override fun close() {}
+    // R1 no-ops
+    override fun setResizable(resizable: Boolean) {}
+    override val isResizable: Boolean get() = true
+    override fun setMinimized(minimized: Boolean) {}
+    override val isMinimized: Boolean get() = false
+    override fun setMaximized(maximized: Boolean) {}
+    override val isMaximized: Boolean get() = false
+    override fun setDecorations(decorated: Boolean) {}
+    override val isDecorated: Boolean get() = true
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {}
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {}
+    override val outerPosition: PhysicalPosition<Int> get() = PhysicalPosition(0, 0)
+    override fun setOuterPosition(position: PhysicalPosition<Int>) {}
+    override fun prePresentNotify() {}
+    // R2 stubs
+    override fun currentMonitor(): MonitorHandle? = null
+    private var _fullscreen: Fullscreen? = null
+    override val fullscreen: Fullscreen? get() = _fullscreen
+    override fun setFullscreen(fullscreen: Fullscreen?) { _fullscreen = fullscreen }
+
+    // R3 no-ops
+    override fun setCursor(cursor: CursorIcon) {}
+    override fun setCursorVisible(visible: Boolean) {}
+    override fun setCursorGrab(mode: CursorGrabMode) {}
+    override fun setCursorPosition(position: PhysicalPosition<Int>) {}
+    override fun setCursorHittest(hittest: Boolean) {}
+    override val theme: Theme? get() = null
+    override fun setTheme(theme: Theme?) {}
+    override fun setWindowLevel(level: WindowLevel) {}
+    override fun setTransparent(transparent: Boolean) {}
+    override fun setBlur(blur: Boolean) {}
+    override fun setWindowIcon(icon: Icon?) {}
+    override fun resetDeadKeys() {}
 }
 
 /** Fake EventLoop — records the calls. */
@@ -75,8 +121,8 @@ class FakeEventLoop : ActiveEventLoop {
         return win
     }
 
-    override fun setControlFlow(newFlow: ControlFlow) {
-        _controlFlow = newFlow
+    override fun setControlFlow(controlFlow: ControlFlow) {
+        _controlFlow = controlFlow
     }
 
     override val controlFlow: ControlFlow get() = _controlFlow
@@ -90,6 +136,16 @@ class FakeEventLoop : ActiveEventLoop {
     override fun createProxy(): EventLoopProxy {
         error("not needed in tests")
     }
+
+    // R2 stubs
+    override fun availableMonitors(): List<MonitorHandle> = emptyList()
+    override fun primaryMonitor(): MonitorHandle? = null
+
+    // R3 stub
+    override fun systemTheme(): Theme? = null
+
+    // R4 stub
+    override fun listenDeviceEvents(mode: DeviceEvents) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +321,7 @@ class PongGameTest {
     @Test
     fun `unknown event is ignored`() {
         val (game, renderer, eventLoop) = makeGame()
-        game.windowEvent(eventLoop, WindowId(1L), "unknownEvent")
+        game.windowEvent(eventLoop, WindowId(1L), WindowEvent.Moved(PhysicalPosition(12, 34)))
         assertEquals(0, renderer.drawCount)
         assertFalse(eventLoop.exited)
     }
