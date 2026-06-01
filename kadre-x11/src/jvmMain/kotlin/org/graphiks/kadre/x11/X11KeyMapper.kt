@@ -225,6 +225,6 @@ object X11KeyMapper {
         val keyState = if (isPressed) KeyState.Pressed else KeyState.Released
         val modifiers = stateToModifiers(state)
 
-        return WindowEvent.KeyboardInput(key, keyState, modifiers, isRepeat)
+        return WindowEvent.KeyboardInput(null, key, keyState, modifiers, isRepeat)
     }
 }

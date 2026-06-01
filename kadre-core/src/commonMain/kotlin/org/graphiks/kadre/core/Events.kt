@@ -6,7 +6,8 @@
  * - [DeviceEvent]: raw device events (absolute motion, button, key)
  *
  * It also defines the support types used by these events:
- * [Key], [KeyState], [Modifiers], [MouseButton] and [TouchPhase].
+ * [Key], [KeyState], [Modifiers], [MouseButton], [PointerSource], [ButtonSource]
+ * and [TouchPhase].
  *
  * ## Scope
  * All declarations are 100% commonMain (no native dependency).
@@ -211,6 +212,88 @@ sealed interface MouseButton {
 }
 
 /**
+ * Identifier of a touch contact for the lifetime of the interaction.
+ */
+@JvmInline
+value class FingerId(val value: Long)
+
+/**
+ * Coarse pointer source type.
+ */
+enum class PointerKind {
+    Mouse,
+    Touch,
+    TabletTool,
+    Unknown,
+}
+
+/**
+ * Tablet/stylus tool kind.
+ */
+enum class TabletToolKind {
+    Pen,
+    Eraser,
+    Cursor,
+    Unknown,
+}
+
+/**
+ * Tablet/stylus button kind.
+ */
+enum class TabletToolButton {
+    Tip,
+    Barrel,
+    SecondaryBarrel,
+    Eraser,
+    Unknown,
+}
+
+/**
+ * Optional tablet tool data exposed by backends that support it.
+ */
+data class TabletToolData(
+    val pressure: Float? = null,
+    val tiltX: Float? = null,
+    val tiltY: Float? = null,
+    val twistDegrees: Float? = null,
+)
+
+/**
+ * Touch pressure/force value.
+ */
+sealed interface TouchForce {
+    data class Calibrated(val force: Double, val maxPossibleForce: Double) : TouchForce
+    data class Normalized(val value: Double) : TouchForce
+}
+
+/**
+ * Source of a pointer motion event.
+ */
+sealed interface PointerSource {
+    data object Mouse : PointerSource
+    data class Touch(val fingerId: FingerId, val force: TouchForce? = null) : PointerSource
+    data class TabletTool(
+        val kind: TabletToolKind,
+        val data: TabletToolData = TabletToolData(),
+    ) : PointerSource
+    data object Unknown : PointerSource
+}
+
+/**
+ * Source of a pointer button event.
+ */
+sealed interface ButtonSource {
+    data class Mouse(val button: MouseButton) : ButtonSource
+    data class Touch(val fingerId: FingerId, val force: TouchForce? = null) : ButtonSource
+    data class TabletTool(
+        val kind: TabletToolKind,
+        val button: TabletToolButton,
+        val data: TabletToolData = TabletToolData(),
+    ) : ButtonSource
+    data class Unknown(val code: Int) : ButtonSource
+}
+
+/**
  * Phase of a touch contact.
  */
 enum class TouchPhase {
@@ -247,12 +330,11 @@ enum class TouchPhase {
  *         is WindowEvent.ScaleFactorChanged -> updateDpi(event.factor)
  *         is WindowEvent.Focused        -> handleFocus(event.gained)
  *         is WindowEvent.KeyboardInput  -> handleKeyboard(event.key, event.state, event.modifiers)
- *         is WindowEvent.PointerMoved   -> handlePointer(event.position)
- *         WindowEvent.PointerEntered    -> handleEnter()
- *         WindowEvent.PointerLeft       -> handleLeave()
- *         is WindowEvent.MouseInput     -> handleMouse(event.button, event.state)
+ *         is WindowEvent.PointerMoved   -> handlePointer(event.position, event.source)
+ *         is WindowEvent.PointerEntered -> handleEnter(event.position, event.kind)
+ *         is WindowEvent.PointerLeft    -> handleLeave(event.position, event.kind)
+ *         is WindowEvent.PointerButton  -> handlePointerButton(event.button, event.state)
  *         is WindowEvent.MouseWheel     -> handleWheel(event.deltaX, event.deltaY)
- *         is WindowEvent.Touch          -> handleTouch(event.phase, event.location, event.id)
  *         WindowEvent.RedrawRequested   -> redraw()
  *         WindowEvent.Destroyed         -> releaseResources()
  *     }
@@ -304,10 +386,12 @@ sealed interface WindowEvent {
      * @property modifiers Modifiers active at the time of the event.
      */
     data class KeyboardInput(
+        val deviceId: DeviceId?,
         val key: Key,
         val state: KeyState,
         val modifiers: Modifiers,
         val isRepeat: Boolean = false,
+        val isSynthetic: Boolean = false,
     ) : WindowEvent
 
     /**
@@ -316,25 +400,46 @@ sealed interface WindowEvent {
      * @property position Current pointer position in physical pixels (floating point
      *   for the sub-pixel precision of tablets and trackpads).
      */
-    data class PointerMoved(val position: PhysicalPosition<Double>) : WindowEvent
+    data class PointerMoved(
+        val deviceId: DeviceId?,
+        val position: PhysicalPosition<Double>,
+        val primary: Boolean,
+        val source: PointerSource,
+    ) : WindowEvent
 
     /**
      * The pointer just entered the window's client area.
      */
-    data object PointerEntered : WindowEvent
+    data class PointerEntered(
+        val deviceId: DeviceId?,
+        val position: PhysicalPosition<Double>,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WindowEvent
 
     /**
      * The pointer just left the window's client area.
      */
-    data object PointerLeft : WindowEvent
+    data class PointerLeft(
+        val deviceId: DeviceId?,
+        val position: PhysicalPosition<Double>?,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WindowEvent
 
     /**
-     * A mouse button has been pressed or released.
+     * A pointer button has been pressed or released.
      *
-     * @property button Button involved.
+     * @property button Pointer button source.
      * @property state  Button state ([KeyState.Pressed] or [KeyState.Released]).
      */
-    data class MouseInput(val button: MouseButton, val state: KeyState) : WindowEvent
+    data class PointerButton(
+        val deviceId: DeviceId?,
+        val state: KeyState,
+        val position: PhysicalPosition<Double>,
+        val primary: Boolean,
+        val button: ButtonSource,
+    ) : WindowEvent
 
     /**
      * The mouse wheel (or trackpad) produced a scroll.
@@ -342,26 +447,52 @@ sealed interface WindowEvent {
      * @property deltaX Horizontal scroll (positive towards the right).
      * @property deltaY Vertical scroll (positive towards the bottom).
      */
-    data class MouseWheel(val deltaX: Double, val deltaY: Double) : WindowEvent
+    data class MouseWheel(
+        val deviceId: DeviceId?,
+        val deltaX: Double,
+        val deltaY: Double,
+        val phase: TouchPhase,
+    ) : WindowEvent
 
     /**
-     * A touch contact changed state.
-     *
-     * ### Platform support
-     * Emitted by the touchscreen-capable backends: Web (DOM touch events) and
-     * Win32 (`WM_TOUCH`). **Not** emitted on AppKit/macOS, which has no
-     * touchscreen API — its only touch source is the trackpad (indirect touch),
-     * intentionally left unmapped. X11/Wayland touch support is out of scope for now.
-     *
-     * @property phase    Contact phase.
-     * @property location Contact position in physical pixels.
-     * @property id       Unique contact identifier (stable between [TouchPhase.Started] and
-     *   [TouchPhase.Ended]/[TouchPhase.Cancelled]).
+     * Two-finger pinch gesture, usually used for magnification.
      */
-    data class Touch(
+    data class PinchGesture(
+        val deviceId: DeviceId?,
+        val delta: Double,
         val phase: TouchPhase,
-        val location: PhysicalPosition<Double>,
-        val id: Long,
+    ) : WindowEvent
+
+    /**
+     * N-finger pan gesture.
+     */
+    data class PanGesture(
+        val deviceId: DeviceId?,
+        val delta: PhysicalPosition<Float>,
+        val phase: TouchPhase,
+    ) : WindowEvent
+
+    /**
+     * Two-finger rotation gesture. Delta is in degrees.
+     */
+    data class RotationGesture(
+        val deviceId: DeviceId?,
+        val deltaDegrees: Float,
+        val phase: TouchPhase,
+    ) : WindowEvent
+
+    /**
+     * Double-tap gesture.
+     */
+    data class DoubleTapGesture(val deviceId: DeviceId?) : WindowEvent
+
+    /**
+     * Trackpad pressure event.
+     */
+    data class TouchpadPressure(
+        val deviceId: DeviceId?,
+        val pressure: Float,
+        val stage: Long,
     ) : WindowEvent
 
     /**

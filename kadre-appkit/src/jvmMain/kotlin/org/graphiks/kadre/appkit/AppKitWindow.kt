@@ -16,6 +16,7 @@ import org.graphiks.kadre.appkit.bindings.NSWindowStyleMask
 import org.graphiks.kadre.appkit.bindings.ObjCRuntime
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
@@ -171,6 +172,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
     override val rawDisplayHandle: Any
         get() = RawDisplayHandle.AppKit
+
+    override fun inputCapabilities(): InputCapabilities =
+        InputCapabilities(deviceIds = true)
 
     /**
      * Requested-redraw flag — read and reset by [CFRunLoopRedrawObserver]

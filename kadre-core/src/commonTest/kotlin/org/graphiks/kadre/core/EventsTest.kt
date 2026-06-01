@@ -186,7 +186,7 @@ class EventsTest {
     // -----------------------------------------------------------------------
 
     /**
-     * Explicitly enumerates the 14 variants without an `else` clause.
+     * Explicitly enumerates the variants without an `else` clause.
      * If a variant is added or removed, this `when` will no longer compile.
      */
     private fun classerWindowEvent(event: WindowEvent): String = when (event) {
@@ -197,11 +197,15 @@ class EventsTest {
         is WindowEvent.Focused            -> "Focused"
         is WindowEvent.KeyboardInput      -> "KeyboardInput"
         is WindowEvent.PointerMoved       -> "PointerMoved"
-        WindowEvent.PointerEntered        -> "PointerEntered"
-        WindowEvent.PointerLeft           -> "PointerLeft"
-        is WindowEvent.MouseInput         -> "MouseInput"
+        is WindowEvent.PointerEntered     -> "PointerEntered"
+        is WindowEvent.PointerLeft        -> "PointerLeft"
+        is WindowEvent.PointerButton      -> "PointerButton"
         is WindowEvent.MouseWheel         -> "MouseWheel"
-        is WindowEvent.Touch              -> "Touch"
+        is WindowEvent.PinchGesture       -> "PinchGesture"
+        is WindowEvent.PanGesture         -> "PanGesture"
+        is WindowEvent.RotationGesture    -> "RotationGesture"
+        is WindowEvent.DoubleTapGesture   -> "DoubleTapGesture"
+        is WindowEvent.TouchpadPressure   -> "TouchpadPressure"
         WindowEvent.RedrawRequested       -> "RedrawRequested"
         WindowEvent.Destroyed             -> "Destroyed"
     }
@@ -245,55 +249,106 @@ class EventsTest {
 
     @Test
     fun `WindowEvent KeyboardInput keeps key state and modifiers`() {
-        val event = WindowEvent.KeyboardInput(Key.A, KeyState.Pressed, Modifiers.SHIFT)
+        val event = WindowEvent.KeyboardInput(DeviceId(7L), Key.A, KeyState.Pressed, Modifiers.SHIFT)
         assertEquals("KeyboardInput", classerWindowEvent(event))
+        assertEquals(DeviceId(7L), event.deviceId)
         assertEquals(Key.A, event.key)
         assertEquals(KeyState.Pressed, event.state)
         assertEquals(Modifiers.SHIFT, event.modifiers)
     }
 
     @Test
-    fun `WindowEvent PointerMoved keeps the position`() {
+    fun `WindowEvent PointerMoved keeps source primary position and device`() {
         val pos = PhysicalPosition(123.4, 567.8)
-        val event = WindowEvent.PointerMoved(pos)
+        val event = WindowEvent.PointerMoved(
+            deviceId = DeviceId(3L),
+            position = pos,
+            primary = true,
+            source = PointerSource.Mouse,
+        )
         assertEquals("PointerMoved", classerWindowEvent(event))
+        assertEquals(DeviceId(3L), event.deviceId)
         assertEquals(pos, event.position)
+        assertTrue(event.primary)
+        assertEquals(PointerSource.Mouse, event.source)
     }
 
     @Test
-    fun `WindowEvent PointerEntered is correctly classified`() {
-        assertEquals("PointerEntered", classerWindowEvent(WindowEvent.PointerEntered))
+    fun `WindowEvent PointerEntered keeps position and kind`() {
+        val event = WindowEvent.PointerEntered(
+            deviceId = null,
+            position = PhysicalPosition(1.0, 2.0),
+            primary = true,
+            kind = PointerKind.Mouse,
+        )
+        assertEquals("PointerEntered", classerWindowEvent(event))
+        assertEquals(PointerKind.Mouse, event.kind)
     }
 
     @Test
-    fun `WindowEvent PointerLeft is correctly classified`() {
-        assertEquals("PointerLeft", classerWindowEvent(WindowEvent.PointerLeft))
+    fun `WindowEvent PointerLeft keeps nullable position and kind`() {
+        val event = WindowEvent.PointerLeft(
+            deviceId = null,
+            position = null,
+            primary = true,
+            kind = PointerKind.Unknown,
+        )
+        assertEquals("PointerLeft", classerWindowEvent(event))
+        assertEquals(null, event.position)
+        assertEquals(PointerKind.Unknown, event.kind)
     }
 
     @Test
-    fun `WindowEvent MouseInput keeps button and state`() {
-        val event = WindowEvent.MouseInput(MouseButton.Left, KeyState.Released)
-        assertEquals("MouseInput", classerWindowEvent(event))
-        assertEquals(MouseButton.Left, event.button)
+    fun `WindowEvent PointerButton keeps button source state position primary and device`() {
+        val event = WindowEvent.PointerButton(
+            deviceId = DeviceId(9L),
+            state = KeyState.Released,
+            position = PhysicalPosition(10.0, 20.0),
+            primary = true,
+            button = ButtonSource.Mouse(MouseButton.Left),
+        )
+        assertEquals("PointerButton", classerWindowEvent(event))
+        assertEquals(DeviceId(9L), event.deviceId)
+        assertEquals(ButtonSource.Mouse(MouseButton.Left), event.button)
         assertEquals(KeyState.Released, event.state)
     }
 
     @Test
-    fun `WindowEvent MouseWheel keeps the deltas`() {
-        val event = WindowEvent.MouseWheel(3.0, -1.5)
+    fun `WindowEvent MouseWheel keeps device deltas and phase`() {
+        val event = WindowEvent.MouseWheel(DeviceId(2L), 3.0, -1.5, TouchPhase.Moved)
         assertEquals("MouseWheel", classerWindowEvent(event))
+        assertEquals(DeviceId(2L), event.deviceId)
         assertEquals(3.0,  event.deltaX)
         assertEquals(-1.5, event.deltaY)
+        assertEquals(TouchPhase.Moved, event.phase)
     }
 
     @Test
-    fun `WindowEvent Touch keeps phase location and id`() {
-        val loc = PhysicalPosition(50.0, 75.0)
-        val event = WindowEvent.Touch(TouchPhase.Started, loc, 42L)
-        assertEquals("Touch", classerWindowEvent(event))
-        assertEquals(TouchPhase.Started, event.phase)
-        assertEquals(loc, event.location)
-        assertEquals(42L, event.id)
+    fun `PointerSource Touch keeps finger id and force`() {
+        val source = PointerSource.Touch(
+            fingerId = FingerId(42L),
+            force = TouchForce.Normalized(0.5),
+        )
+        assertEquals(FingerId(42L), source.fingerId)
+        assertEquals(TouchForce.Normalized(0.5), source.force)
+    }
+
+    @Test
+    fun `WindowEvent gestures keep device and payloads`() {
+        val deviceId = DeviceId(11L)
+        val pinch = WindowEvent.PinchGesture(deviceId, delta = 0.25, phase = TouchPhase.Moved)
+        val pan = WindowEvent.PanGesture(deviceId, delta = PhysicalPosition(1.5f, -2.5f), phase = TouchPhase.Moved)
+        val rotation = WindowEvent.RotationGesture(deviceId, deltaDegrees = 12.5f, phase = TouchPhase.Moved)
+        val doubleTap = WindowEvent.DoubleTapGesture(deviceId)
+        val pressure = WindowEvent.TouchpadPressure(deviceId, pressure = 0.75f, stage = 2L)
+
+        assertEquals("PinchGesture", classerWindowEvent(pinch))
+        assertEquals("PanGesture", classerWindowEvent(pan))
+        assertEquals("RotationGesture", classerWindowEvent(rotation))
+        assertEquals("DoubleTapGesture", classerWindowEvent(doubleTap))
+        assertEquals("TouchpadPressure", classerWindowEvent(pressure))
+        assertEquals(12.5f, rotation.deltaDegrees)
+        assertEquals(2L, pressure.stage)
     }
 
     @Test

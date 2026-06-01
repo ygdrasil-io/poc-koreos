@@ -11,10 +11,13 @@ import org.graphiks.kadre.core.Key
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.Modifiers
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 // ============================================================================
@@ -317,30 +320,48 @@ class WaylandMouseMapperTest {
     // ── mapWaylandPointerButton ───────────────────────────────────────────────
 
     @Test
-    fun `mapWaylandPointerButton BTN_LEFT pressed returns MouseInput Left Pressed`() {
-        val event = mapWaylandPointerButton(button = BTN_LEFT, state = WL_POINTER_BUTTON_STATE_PRESSED)
-        assertEquals(MouseButton.Left, event.button)
+    fun `mapWaylandPointerButton BTN_LEFT pressed returns PointerButton Left Pressed`() {
+        val event = mapWaylandPointerButton(
+            button = BTN_LEFT,
+            state = WL_POINTER_BUTTON_STATE_PRESSED,
+            position = PhysicalPosition(12.0, 34.0),
+        )
+        assertEquals(ButtonSource.Mouse(MouseButton.Left), event.button)
         assertEquals(KeyState.Pressed, event.state)
+        assertEquals(12.0, event.position.x)
+        assertEquals(34.0, event.position.y)
     }
 
     @Test
-    fun `mapWaylandPointerButton BTN_RIGHT released returns MouseInput Right Released`() {
-        val event = mapWaylandPointerButton(button = BTN_RIGHT, state = WL_POINTER_BUTTON_STATE_RELEASED)
-        assertEquals(MouseButton.Right, event.button)
+    fun `mapWaylandPointerButton BTN_RIGHT released returns PointerButton Right Released`() {
+        val event = mapWaylandPointerButton(
+            button = BTN_RIGHT,
+            state = WL_POINTER_BUTTON_STATE_RELEASED,
+            position = PhysicalPosition(12.0, 34.0),
+        )
+        assertEquals(ButtonSource.Mouse(MouseButton.Right), event.button)
         assertEquals(KeyState.Released, event.state)
     }
 
     @Test
-    fun `mapWaylandPointerButton BTN_MIDDLE pressed returns MouseInput Middle Pressed`() {
-        val event = mapWaylandPointerButton(button = BTN_MIDDLE, state = WL_POINTER_BUTTON_STATE_PRESSED)
-        assertEquals(MouseButton.Middle, event.button)
+    fun `mapWaylandPointerButton BTN_MIDDLE pressed returns PointerButton Middle Pressed`() {
+        val event = mapWaylandPointerButton(
+            button = BTN_MIDDLE,
+            state = WL_POINTER_BUTTON_STATE_PRESSED,
+            position = PhysicalPosition(12.0, 34.0),
+        )
+        assertEquals(ButtonSource.Mouse(MouseButton.Middle), event.button)
         assertEquals(KeyState.Pressed, event.state)
     }
 
     @Test
-    fun `mapWaylandPointerButton returns WindowEvent_MouseInput`() {
-        val event = mapWaylandPointerButton(button = BTN_LEFT, state = WL_POINTER_BUTTON_STATE_PRESSED)
-        assertTrue(event is WindowEvent.MouseInput)
+    fun `mapWaylandPointerButton returns WindowEvent_PointerButton`() {
+        val event = mapWaylandPointerButton(
+            button = BTN_LEFT,
+            state = WL_POINTER_BUTTON_STATE_PRESSED,
+            position = PhysicalPosition(12.0, 34.0),
+        )
+        assertIs<WindowEvent.PointerButton>(event)
     }
 
     // ── mapWaylandPointerAxis ─────────────────────────────────────────────────

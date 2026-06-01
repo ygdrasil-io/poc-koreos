@@ -17,6 +17,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.Window
@@ -63,6 +64,9 @@ class X11Window private constructor(
 
     override val rawDisplayHandle: Any
         get() = RawDisplayHandle.Xlib(display = displayPtr)
+
+    override fun inputCapabilities(): InputCapabilities =
+        InputCapabilities()
 
     /**
      * Current inner size in physical pixels.

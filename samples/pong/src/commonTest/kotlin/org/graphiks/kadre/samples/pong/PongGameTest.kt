@@ -249,6 +249,7 @@ class PongGameTest {
             eventLoop,
             WindowId(1L),
             WindowEvent.KeyboardInput(
+                deviceId = null,
                 key = org.graphiks.kadre.core.Key.ArrowUp,
                 state = org.graphiks.kadre.core.KeyState.Pressed,
                 modifiers = org.graphiks.kadre.core.Modifiers.NONE,

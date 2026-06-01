@@ -76,4 +76,24 @@ interface Window {
      * becomes invalid.
      */
     fun close()
+
+    /**
+     * Returns the input features this window backend can report precisely.
+     */
+    fun inputCapabilities(): InputCapabilities = InputCapabilities()
 }
+
+/**
+ * Runtime input capabilities reported by a window backend.
+ */
+data class InputCapabilities(
+    val deviceIds: Boolean = false,
+    val touch: Boolean = false,
+    val tabletTool: Boolean = false,
+    val touchForce: Boolean = false,
+    val pinchGesture: Boolean = false,
+    val panGesture: Boolean = false,
+    val rotationGesture: Boolean = false,
+    val doubleTapGesture: Boolean = false,
+    val touchpadPressure: Boolean = false,
+)

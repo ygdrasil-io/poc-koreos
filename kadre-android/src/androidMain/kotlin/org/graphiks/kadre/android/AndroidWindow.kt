@@ -79,6 +79,9 @@ class AndroidWindow internal constructor(
     override val rawDisplayHandle: Any
         get() = RawDisplayHandle.Android
 
+    override fun inputCapabilities(): InputCapabilities =
+        InputCapabilities(deviceIds = true, touch = true, touchForce = true)
+
     @Volatile
     internal var needsRedraw: Boolean = false
 
