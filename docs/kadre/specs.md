@@ -675,19 +675,22 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | partial (stub — DEFERRED.md) | partial (WM_SETICON stub — DEFERRED.md) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
-### 3.9 Keyboard richness (R4)
+### 3.9 Keyboard richness (R4/R6 incubation)
 
-`KeyboardInput` now carries additional fields with backward-compatible defaults:
+`WindowEvent.KeyInput` carries a winit-style `KeyEvent`:
 
-- `text: String?` — Unicode text produced by the key press (null if none or if the backend doesn't expose it).
+- `physicalKey: PhysicalKey` — layout-independent key, either standardized `KeyCode`, native platform code, or unidentified.
+- `logicalKey: LogicalKey` — layout-aware character, named key, dead key, or unidentified key.
+- `text: String?` and `textWithAllModifiers: String?` — produced text, including terminal/editor cases when the backend exposes them.
+- `keyWithoutModifiers: LogicalKey?` — shortcut-friendly logical key without active modifiers.
 - `location: KeyLocation` — Standard / Left / Right / Numpad.
-- `scanCode: Int?` — Physical key code independent of layout.
-- `isRepeat: Boolean` — Auto-repeat flag.
+- `repeat` and `synthetic` — auto-repeat and platform-synthesized key release metadata.
+- `native: NativeKeyInfo` — raw backend codes for debugging and fallback.
 
-`ModifiersChanged(modifiers: Modifiers)` is emitted when a modifier key changes state.
-**Emission status**: AppKit, Win32, Web — real. X11, Wayland, Android, UIKit — TODO (see DEFERRED.md).
+`KeyboardModifierState` is emitted by `WindowEvent.ModifiersChanged` and combines logical bitflags with left/right physical modifier state.
+**Emission status**: AppKit, Win32, Web — real. X11, Wayland, Android, UIKit — TODO/partial (see DEFERRED.md).
 
-`DeviceEvent.MouseWheel(deltaX, deltaY)` is dispatched alongside `WindowEvent.MouseWheel` when the device-events filter allows it via `ActiveEventLoop.listenDeviceEvents(DeviceEvents.Always/WhenFocused/Never)`.
+`DeviceEvent.Key` carries `RawKeyEvent(physicalKey, state, native)` for raw keyboard input, with legacy `scancode/state` accessors for existing backends. `DeviceEvent.MouseWheel(deltaX, deltaY)` is dispatched alongside `WindowEvent.MouseWheel` when the device-events filter allows it via `ActiveEventLoop.listenDeviceEvents(DeviceEvents.Always/WhenFocused/Never)`.
 
 ### 3.10 Advanced events: IME, DnD, gestures, Occluded
 
@@ -924,7 +927,7 @@ Key residual points:
 - **ModifiersChanged**: emitted on AppKit/Win32/Web; not yet wired on X11/Wayland/Android/UIKit.
 - **Custom cursors** (`createCustomCursor` / `setCustomCursor`): no-op on all backends (default interface impl).
 - **Misc window methods** (`requestUserAttention`, `setContentProtected`, `showWindowMenu`, `dragWindow`, `dragResizeWindow`): no-op everywhere.
-- **Closed keyboard model**: `Key` is a closed enum (~70 keys); winit's open model (`Character`/`Named`/`Dead` + 200+ `KeyCode`) is not reproduced. `text`/`scanCode`/`location` were added in R4 but the model divergence remains.
+- **Keyboard coverage**: the public model is now winit-style (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), but `KeyCode` and `NamedKey` are not yet exhaustive and rich fields remain backend-dependent.
 - **Stylus / tablet**: not supported (MouseInput + Touch kept instead of unified PointerButton/PointerKind model).
 
 ---
@@ -991,12 +994,12 @@ Key residual points:
 | winit (Rust) | Kadre |
 |--------------|-------|
 | `KeyLocation` (Standard/Left/Right/Numpad) | `KeyLocation` (Standard/Left/Right/Numpad) |
-| `KeyEvent::text` | `KeyboardInput.text: String?` |
-| `KeyEvent::physical_key` (scan code) | `KeyboardInput.scanCode: Int?` |
-| `KeyEvent::location` | `KeyboardInput.location: KeyLocation` |
-| `KeyEvent::repeat` | `KeyboardInput.isRepeat: Boolean` |
-| `Modifiers` | `Modifiers` (bit-field: SHIFT=0x1, CTRL=0x2, ALT=0x4, META=0x8) |
-| `WindowEvent::ModifiersChanged` | `WindowEvent.ModifiersChanged(modifiers: Modifiers)` |
+| `KeyEvent::text` | `KeyEvent.text: String?` |
+| `KeyEvent::physical_key` | `KeyEvent.physicalKey: PhysicalKey` |
+| `KeyEvent::location` | `KeyEvent.location: KeyLocation` |
+| `KeyEvent::repeat` | `KeyEvent.repeat: Boolean` |
+| `ModifiersState` / `Modifiers` | `KeyboardModifiers` + `KeyboardModifierState` |
+| `WindowEvent::ModifiersChanged` | `WindowEvent.ModifiersChanged(state: KeyboardModifierState)` |
 | `DeviceEvent::MouseWheel` | `DeviceEvent.MouseWheel(deltaX, deltaY)` |
 | `DeviceEvents` filter | `DeviceEvents` (Always/WhenFocused/Never) + `ActiveEventLoop.listenDeviceEvents()` |
 | `Window::reset_dead_keys()` | `Window.resetDeadKeys()` |

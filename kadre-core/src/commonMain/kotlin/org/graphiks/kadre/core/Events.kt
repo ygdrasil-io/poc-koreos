@@ -380,6 +380,9 @@ value class KeyboardModifiers(val bits: Int) {
         val Alt = KeyboardModifiers(ALT)
         val Meta = KeyboardModifiers(META)
         val AltGraph = KeyboardModifiers(ALT_GRAPH)
+        val CapsLock = KeyboardModifiers(CAPS_LOCK)
+        val NumLock = KeyboardModifiers(NUM_LOCK)
+        val Symbol = KeyboardModifiers(SYMBOL)
     }
 }
 
@@ -447,6 +450,28 @@ data class KeyEvent(
     val isPressed: Boolean get() = state == KeyState.Pressed
     val isReleased: Boolean get() = state == KeyState.Released
     val character: String? get() = (logicalKey as? LogicalKey.Character)?.text
+    val shortcutKey: LogicalKey get() = keyWithoutModifiers ?: logicalKey
+    val effectiveText: String? get() = textWithAllModifiers ?: text
+}
+
+data class RawKeyEvent(
+    val physicalKey: PhysicalKey,
+    val state: KeyState,
+    val native: NativeKeyInfo = NativeKeyInfo(),
+) {
+    val scancode: Int? get() = native.scanCode?.toInt()
+}
+
+enum class KeyChordModifierMatch {
+    /**
+     * Required modifiers must be present; additional modifiers are accepted.
+     */
+    Contains,
+
+    /**
+     * The event modifiers must exactly match [KeyChord.modifiers].
+     */
+    Exact,
 }
 
 data class KeyChord(
@@ -454,6 +479,7 @@ data class KeyChord(
     val logicalKey: LogicalKey? = null,
     val modifiers: KeyboardModifiers = KeyboardModifiers.NONE,
     val allowRepeat: Boolean = false,
+    val modifierMatch: KeyChordModifierMatch = KeyChordModifierMatch.Contains,
 ) {
     init {
         require(physicalKey != null || logicalKey != null) {
@@ -464,10 +490,56 @@ data class KeyChord(
     fun matches(event: KeyEvent): Boolean {
         if (!event.isPressed) return false
         if (!allowRepeat && event.repeat) return false
-        if (!event.modifiers.contains(modifiers)) return false
+        val modifiersMatch = when (modifierMatch) {
+            KeyChordModifierMatch.Contains -> event.modifiers.contains(modifiers)
+            KeyChordModifierMatch.Exact -> event.modifiers == modifiers
+        }
+        if (!modifiersMatch) return false
         if (physicalKey != null) return event.physicalKey == physicalKey
-        return event.logicalKey == logicalKey
+        return event.shortcutKey == logicalKey
     }
+}
+
+fun PhysicalKey.location(): KeyLocation = when (this) {
+    is PhysicalKey.Code -> code.location()
+    is PhysicalKey.Native,
+    PhysicalKey.Unidentified -> KeyLocation.Standard
+}
+
+fun KeyCode.location(): KeyLocation = when (this) {
+    KeyCode.AltLeft,
+    KeyCode.ControlLeft,
+    KeyCode.MetaLeft,
+    KeyCode.ShiftLeft -> KeyLocation.Left
+
+    KeyCode.AltRight,
+    KeyCode.ControlRight,
+    KeyCode.MetaRight,
+    KeyCode.ShiftRight -> KeyLocation.Right
+
+    KeyCode.NumLock,
+    KeyCode.Numpad0,
+    KeyCode.Numpad1,
+    KeyCode.Numpad2,
+    KeyCode.Numpad3,
+    KeyCode.Numpad4,
+    KeyCode.Numpad5,
+    KeyCode.Numpad6,
+    KeyCode.Numpad7,
+    KeyCode.Numpad8,
+    KeyCode.Numpad9,
+    KeyCode.NumpadAdd,
+    KeyCode.NumpadBackspace,
+    KeyCode.NumpadClear,
+    KeyCode.NumpadComma,
+    KeyCode.NumpadDecimal,
+    KeyCode.NumpadDivide,
+    KeyCode.NumpadEnter,
+    KeyCode.NumpadEqual,
+    KeyCode.NumpadMultiply,
+    KeyCode.NumpadSubtract -> KeyLocation.Numpad
+
+    else -> KeyLocation.Standard
 }
 
 /**
@@ -1014,7 +1086,7 @@ sealed interface WindowEvent {
  *     when (event) {
  *         is DeviceEvent.PointerMotion -> handleMotion(event.dx, event.dy)
  *         is DeviceEvent.Button        -> handleButton(event.button, event.state)
- *         is DeviceEvent.Key           -> handleKey(event.scancode, event.state)
+ *         is DeviceEvent.Key           -> handleKey(event.event.physicalKey, event.state)
  *         is DeviceEvent.MouseWheel    -> handleWheel(event.deltaX, event.deltaY)
  *     }
  * }
@@ -1039,12 +1111,20 @@ sealed interface DeviceEvent {
     data class Button(val button: Int, val state: KeyState) : DeviceEvent
 
     /**
-     * A physical keyboard key changed state (identified by scancode).
-     *
-     * @property scancode Physical key code (independent of the keyboard layout).
-     * @property state    Key state ([KeyState.Pressed] or [KeyState.Released]).
+     * A physical keyboard key changed state before layout processing.
      */
-    data class Key(val scancode: Int, val state: KeyState) : DeviceEvent
+    data class Key(val event: RawKeyEvent) : DeviceEvent {
+        constructor(scancode: Int, state: KeyState) : this(
+            RawKeyEvent(
+                physicalKey = PhysicalKey.Native(KeyPlatform.Unknown, scancode.toLong()),
+                state = state,
+                native = NativeKeyInfo(scanCode = scancode.toLong()),
+            ),
+        )
+
+        val scancode: Int? get() = event.scancode
+        val state: KeyState get() = event.state
+    }
 
     // ── R4 ────────────────────────────────────────────────────────────────────
 

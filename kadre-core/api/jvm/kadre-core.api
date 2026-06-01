@@ -140,12 +140,13 @@ public final class org/graphiks/kadre/core/DeviceEvent$Button : org/graphiks/kad
 
 public final class org/graphiks/kadre/core/DeviceEvent$Key : org/graphiks/kadre/core/DeviceEvent {
 	public fun <init> (ILorg/graphiks/kadre/core/KeyState;)V
-	public final fun component1 ()I
-	public final fun component2 ()Lorg/graphiks/kadre/core/KeyState;
-	public final fun copy (ILorg/graphiks/kadre/core/KeyState;)Lorg/graphiks/kadre/core/DeviceEvent$Key;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/DeviceEvent$Key;ILorg/graphiks/kadre/core/KeyState;ILjava/lang/Object;)Lorg/graphiks/kadre/core/DeviceEvent$Key;
+	public fun <init> (Lorg/graphiks/kadre/core/RawKeyEvent;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/RawKeyEvent;
+	public final fun copy (Lorg/graphiks/kadre/core/RawKeyEvent;)Lorg/graphiks/kadre/core/DeviceEvent$Key;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/DeviceEvent$Key;Lorg/graphiks/kadre/core/RawKeyEvent;ILjava/lang/Object;)Lorg/graphiks/kadre/core/DeviceEvent$Key;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getScancode ()I
+	public final fun getEvent ()Lorg/graphiks/kadre/core/RawKeyEvent;
+	public final fun getScancode ()Ljava/lang/Integer;
 	public final fun getState ()Lorg/graphiks/kadre/core/KeyState;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -219,6 +220,8 @@ public abstract interface class org/graphiks/kadre/core/EventLoopProxy {
 public final class org/graphiks/kadre/core/EventsKt {
 	public static final fun defaultLogicalKey (Lorg/graphiks/kadre/core/KeyCode;)Lorg/graphiks/kadre/core/LogicalKey;
 	public static final fun defaultText (Lorg/graphiks/kadre/core/KeyCode;)Ljava/lang/String;
+	public static final fun location (Lorg/graphiks/kadre/core/KeyCode;)Lorg/graphiks/kadre/core/KeyLocation;
+	public static final fun location (Lorg/graphiks/kadre/core/PhysicalKey;)Lorg/graphiks/kadre/core/KeyLocation;
 }
 
 public final class org/graphiks/kadre/core/FrameTimingTracer {
@@ -289,22 +292,32 @@ public final class org/graphiks/kadre/core/ImePurpose : java/lang/Enum {
 }
 
 public final class org/graphiks/kadre/core/KeyChord {
-	public synthetic fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZLorg/graphiks/kadre/core/KeyChordModifierMatch;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZLorg/graphiks/kadre/core/KeyChordModifierMatch;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalKey;
 	public final fun component2 ()Lorg/graphiks/kadre/core/LogicalKey;
 	public final fun component3-bWuc1c0 ()I
 	public final fun component4 ()Z
-	public final fun copy-caWVAIY (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZ)Lorg/graphiks/kadre/core/KeyChord;
-	public static synthetic fun copy-caWVAIY$default (Lorg/graphiks/kadre/core/KeyChord;Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZILjava/lang/Object;)Lorg/graphiks/kadre/core/KeyChord;
+	public final fun component5 ()Lorg/graphiks/kadre/core/KeyChordModifierMatch;
+	public final fun copy-tRNJYuA (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZLorg/graphiks/kadre/core/KeyChordModifierMatch;)Lorg/graphiks/kadre/core/KeyChord;
+	public static synthetic fun copy-tRNJYuA$default (Lorg/graphiks/kadre/core/KeyChord;Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;IZLorg/graphiks/kadre/core/KeyChordModifierMatch;ILjava/lang/Object;)Lorg/graphiks/kadre/core/KeyChord;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAllowRepeat ()Z
 	public final fun getLogicalKey ()Lorg/graphiks/kadre/core/LogicalKey;
+	public final fun getModifierMatch ()Lorg/graphiks/kadre/core/KeyChordModifierMatch;
 	public final fun getModifiers-bWuc1c0 ()I
 	public final fun getPhysicalKey ()Lorg/graphiks/kadre/core/PhysicalKey;
 	public fun hashCode ()I
 	public final fun matches (Lorg/graphiks/kadre/core/KeyEvent;)Z
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/KeyChordModifierMatch : java/lang/Enum {
+	public static final field Contains Lorg/graphiks/kadre/core/KeyChordModifierMatch;
+	public static final field Exact Lorg/graphiks/kadre/core/KeyChordModifierMatch;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/KeyChordModifierMatch;
+	public static fun values ()[Lorg/graphiks/kadre/core/KeyChordModifierMatch;
 }
 
 public final class org/graphiks/kadre/core/KeyCode : java/lang/Enum {
@@ -490,6 +503,7 @@ public final class org/graphiks/kadre/core/KeyEvent {
 	public static synthetic fun copy-vroUkzI$default (Lorg/graphiks/kadre/core/KeyEvent;Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/LogicalKey;Lorg/graphiks/kadre/core/KeyState;ILorg/graphiks/kadre/core/KeyLocation;ZZLjava/lang/String;Ljava/lang/String;Lorg/graphiks/kadre/core/LogicalKey;Lorg/graphiks/kadre/core/NativeKeyInfo;ILjava/lang/Object;)Lorg/graphiks/kadre/core/KeyEvent;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCharacter ()Ljava/lang/String;
+	public final fun getEffectiveText ()Ljava/lang/String;
 	public final fun getKeyWithoutModifiers ()Lorg/graphiks/kadre/core/LogicalKey;
 	public final fun getLocation ()Lorg/graphiks/kadre/core/KeyLocation;
 	public final fun getLogicalKey ()Lorg/graphiks/kadre/core/LogicalKey;
@@ -497,6 +511,7 @@ public final class org/graphiks/kadre/core/KeyEvent {
 	public final fun getNative ()Lorg/graphiks/kadre/core/NativeKeyInfo;
 	public final fun getPhysicalKey ()Lorg/graphiks/kadre/core/PhysicalKey;
 	public final fun getRepeat ()Z
+	public final fun getShortcutKey ()Lorg/graphiks/kadre/core/LogicalKey;
 	public final fun getState ()Lorg/graphiks/kadre/core/KeyState;
 	public final fun getSynthetic ()Z
 	public final fun getText ()Ljava/lang/String;
@@ -590,10 +605,13 @@ public final class org/graphiks/kadre/core/KeyboardModifiers {
 public final class org/graphiks/kadre/core/KeyboardModifiers$Companion {
 	public final fun getAlt-bWuc1c0 ()I
 	public final fun getAltGraph-bWuc1c0 ()I
+	public final fun getCapsLock-bWuc1c0 ()I
 	public final fun getCtrl-bWuc1c0 ()I
 	public final fun getMeta-bWuc1c0 ()I
 	public final fun getNONE-bWuc1c0 ()I
+	public final fun getNumLock-bWuc1c0 ()I
 	public final fun getShift-bWuc1c0 ()I
+	public final fun getSymbol-bWuc1c0 ()I
 }
 
 public abstract interface class org/graphiks/kadre/core/LogicalKey {
@@ -1005,6 +1023,23 @@ public final class org/graphiks/kadre/core/RawDisplayHandle$Xlib : org/graphiks/
 	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/RawDisplayHandle$Xlib;JILjava/lang/Object;)Lorg/graphiks/kadre/core/RawDisplayHandle$Xlib;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDisplay ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/RawKeyEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/KeyState;Lorg/graphiks/kadre/core/NativeKeyInfo;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/KeyState;Lorg/graphiks/kadre/core/NativeKeyInfo;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalKey;
+	public final fun component2 ()Lorg/graphiks/kadre/core/KeyState;
+	public final fun component3 ()Lorg/graphiks/kadre/core/NativeKeyInfo;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/KeyState;Lorg/graphiks/kadre/core/NativeKeyInfo;)Lorg/graphiks/kadre/core/RawKeyEvent;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/RawKeyEvent;Lorg/graphiks/kadre/core/PhysicalKey;Lorg/graphiks/kadre/core/KeyState;Lorg/graphiks/kadre/core/NativeKeyInfo;ILjava/lang/Object;)Lorg/graphiks/kadre/core/RawKeyEvent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getNative ()Lorg/graphiks/kadre/core/NativeKeyInfo;
+	public final fun getPhysicalKey ()Lorg/graphiks/kadre/core/PhysicalKey;
+	public final fun getScancode ()Ljava/lang/Integer;
+	public final fun getState ()Lorg/graphiks/kadre/core/KeyState;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

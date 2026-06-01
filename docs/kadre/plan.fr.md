@@ -1,8 +1,8 @@
 # Kadre — Plan projet
 
-> Statut : **Historique — 1.0.0 livré** (voir §12 pour la parité winit post-1.0.0)
+> Statut : **Incubation post-1.0.0 — breaking changes autorisés pour l'API input**
 > Auteur : équipe Kadre
-> Dernière mise à jour : 2026-06-01
+> Dernière mise à jour : 2026-06-02
 
 ---
 
@@ -365,7 +365,42 @@ Après la 1.0.0, une analyse des écarts avec l'API complète de winit a été c
 | **R1** | État fenêtre/moniteurs/plein écran — `setMinimized`, `setMaximized`, `setFullscreen`, `MonitorHandle`, `VideoMode`, `setDecorations`, `setWindowLevel`, `setAlwaysOnTop`, etc. | #171–#175 |
 | **R2** | Icône de fenêtre — `setWindowIcon(Icon?)` + type scellé `Icon` (bitmap RGBA) | #176–#177 |
 | **R3** | Curseur, thème & apparence — `setCursorIcon`, `setCursorVisible`, `setCursorGrab`, `setTheme`, `setTransparent`, `setBlur`, `WindowTheme` | #178–#180 |
-| **R4** | Richesse des entrées — `KeyboardInput.text`, `scanCode`, `location`, événement `ModifiersChanged`, événement device `MouseWheel`, variants `DeviceEvent` | #181 |
+| **R4** | Richesse des entrées — `KeyEvent`, `PhysicalKey`, `LogicalKey`, `RawKeyEvent`, événement `ModifiersChanged`, événement device `MouseWheel`, variants `DeviceEvent` | #181 |
 | **R5** | Events avancés & divers — événements DnD, gestes, API IME (`ImePurpose`, `setIme*`), `requestUserAttention`, `setContentProtected`, `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `memoryWarning`, événement `Occluded` | #182–#184 |
 
 Les éléments volontairement reportés (implémentations no-op, événements non émis, backends natifs partiels) sont suivis dans [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+---
+
+## 12. Plan incubation — parité winit input
+
+Objectif immédiat: assumer que Kadre peut casser son API pendant l'incubation pour converger vers un modèle winit moderne, mais Kotlin-first.
+
+### Priorité P0 — clavier
+
+- Garder `WindowEvent.KeyInput(KeyEvent)` comme unique API clavier publique.
+- Valider par TDD `PhysicalKey`, `LogicalKey`, `KeyboardModifiers`, `KeyboardModifierState`, `KeyLocation`, `KeyChord`.
+- Compléter les tables `KeyCode` / `NamedKey` manquantes par lots testés.
+- Brancher les champs riches par backend: `textWithAllModifiers`, `keyWithoutModifiers`, `location`, `synthetic`, état gauche/droite.
+
+### Priorité P0 — pointeur
+
+- Concevoir une API pointer v2 alignée sur winit/Web Pointer Events: source, kind, primary, device id, position, pression, stylet/tablette.
+- Décider si `MouseInput` et `Touch` deviennent des wrappers de compatibilité ou disparaissent pendant l'incubation.
+
+### Priorité P1 — runtime texte et UX
+
+- Brancher IME réellement sur desktop, mobile et web.
+- Brancher drag and drop avec garanties documentées par backend.
+- Ajouter `safeArea` / `Insets` avant de stabiliser mobile/web.
+
+### Priorité P1 — diagnostics
+
+- Ajouter des variantes `try*` avec résultat explicite pour cursor grab, cursor position, drag window, drag resize et hittest.
+- Garder les méthodes simples uniquement si leur no-op est explicitement documenté.
+
+### Définition de done
+
+- TDD rouge/vert pour chaque ajout d'API.
+- `:kadre-core:jvmTest` vert.
+- `:kadre-core:checkKotlinAbi` vert ou dumps API mis à jour volontairement.
+- PR avec gap analysis, proposition API, plan mis à jour et review locale.

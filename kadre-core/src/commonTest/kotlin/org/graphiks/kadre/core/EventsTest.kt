@@ -42,6 +42,13 @@ class EventsTest {
     }
 
     @Test
+    fun `lock and symbol modifier factories expose their bits`() {
+        assertTrue(KeyboardModifiers.CapsLock.capsLock)
+        assertTrue(KeyboardModifiers.NumLock.numLock)
+        assertTrue(KeyboardModifiers.Symbol.symbol)
+    }
+
+    @Test
     fun `minus removes a modifier`() {
         val mods = KeyboardModifiers.Shift + KeyboardModifiers.Ctrl - KeyboardModifiers.Shift
         assertFalse(mods.shift)
@@ -91,6 +98,22 @@ class EventsTest {
     }
 
     @Test
+    fun `KeyEvent exposes shortcut key and preferred text`() {
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyS),
+            logicalKey = LogicalKey.Character("S"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.Ctrl + KeyboardModifiers.Shift,
+            text = null,
+            textWithAllModifiers = "\u0013",
+            keyWithoutModifiers = LogicalKey.Character("s"),
+        )
+
+        assertEquals(LogicalKey.Character("s"), event.shortcutKey)
+        assertEquals("\u0013", event.effectiveText)
+    }
+
+    @Test
     fun `LogicalKey Dead is distinct from printable character`() {
         assertFalse(LogicalKey.Dead("^") == LogicalKey.Character("^"))
     }
@@ -100,6 +123,16 @@ class EventsTest {
         val key = PhysicalKey.Native(KeyPlatform.AppKit, 126)
         assertEquals(KeyPlatform.AppKit, key.platform)
         assertEquals(126, key.code)
+    }
+
+    @Test
+    fun `physical key location can be inferred from standardized key codes`() {
+        assertEquals(KeyLocation.Left, KeyCode.ShiftLeft.location())
+        assertEquals(KeyLocation.Right, KeyCode.ControlRight.location())
+        assertEquals(KeyLocation.Numpad, KeyCode.NumpadEnter.location())
+        assertEquals(KeyLocation.Standard, KeyCode.KeyA.location())
+        assertEquals(KeyLocation.Left, PhysicalKey.Code(KeyCode.AltLeft).location())
+        assertEquals(KeyLocation.Standard, PhysicalKey.Native(KeyPlatform.X11, 64).location())
     }
 
     @Test
@@ -113,6 +146,23 @@ class EventsTest {
         )
 
         assertTrue(chord.matches(event))
+    }
+
+    @Test
+    fun `KeyChord can require exact modifiers`() {
+        val chord = KeyChord(
+            logicalKey = LogicalKey.Character("s"),
+            modifiers = KeyboardModifiers.Ctrl,
+            modifierMatch = KeyChordModifierMatch.Exact,
+        )
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyS),
+            logicalKey = LogicalKey.Character("s"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.Ctrl + KeyboardModifiers.Shift,
+        )
+
+        assertFalse(chord.matches(event))
     }
 
     @Test
@@ -291,7 +341,13 @@ class EventsTest {
     fun `DeviceEvent variants keep payloads`() {
         val motion = DeviceEvent.PointerMotion(1.5, -2.5)
         val button = DeviceEvent.Button(2, KeyState.Pressed)
-        val key = DeviceEvent.Key(0x1E, KeyState.Released)
+        val key = DeviceEvent.Key(
+            RawKeyEvent(
+                physicalKey = PhysicalKey.Code(KeyCode.KeyA),
+                state = KeyState.Released,
+                native = NativeKeyInfo(platform = KeyPlatform.X11, scanCode = 0x1E),
+            ),
+        )
         val wheel = DeviceEvent.MouseWheel(3.0, -1.5)
 
         assertEquals("PointerMotion", classifyDeviceEvent(motion))
@@ -299,8 +355,18 @@ class EventsTest {
         assertEquals("Button", classifyDeviceEvent(button))
         assertEquals(2, button.button)
         assertEquals("Key", classifyDeviceEvent(key))
-        assertEquals(0x1E, key.scancode)
+        assertEquals(PhysicalKey.Code(KeyCode.KeyA), key.event.physicalKey)
+        assertEquals(0x1E, key.event.scancode)
         assertEquals("MouseWheel", classifyDeviceEvent(wheel))
         assertEquals(-1.5, wheel.deltaY)
+    }
+
+    @Test
+    fun `DeviceEvent Key keeps legacy scancode constructor`() {
+        val key = DeviceEvent.Key(0x1E, KeyState.Pressed)
+
+        assertEquals(PhysicalKey.Native(KeyPlatform.Unknown, 0x1E), key.event.physicalKey)
+        assertEquals(0x1E, key.scancode)
+        assertEquals(KeyState.Pressed, key.state)
     }
 }

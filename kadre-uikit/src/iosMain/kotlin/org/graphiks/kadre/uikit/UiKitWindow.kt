@@ -3,6 +3,11 @@ package org.graphiks.kadre.uikit
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.CursorGrabMode
+import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -15,6 +20,7 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
 import kotlinx.cinterop.CValue
@@ -37,6 +43,7 @@ import platform.UIKit.UIPressesEvent
 import platform.UIKit.UIScreen
 import platform.UIKit.UITouch
 import platform.UIKit.UITraitCollection
+import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 import platform.UIKit.UIViewMeta

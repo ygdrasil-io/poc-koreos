@@ -75,6 +75,17 @@ final enum class org.graphiks.kadre.core/ImePurpose : kotlin/Enum<org.graphiks.k
     final fun values(): kotlin/Array<org.graphiks.kadre.core/ImePurpose> // org.graphiks.kadre.core/ImePurpose.values|values#static(){}[0]
 }
 
+final enum class org.graphiks.kadre.core/KeyChordModifierMatch : kotlin/Enum<org.graphiks.kadre.core/KeyChordModifierMatch> { // org.graphiks.kadre.core/KeyChordModifierMatch|null[0]
+    enum entry Contains // org.graphiks.kadre.core/KeyChordModifierMatch.Contains|null[0]
+    enum entry Exact // org.graphiks.kadre.core/KeyChordModifierMatch.Exact|null[0]
+
+    final val entries // org.graphiks.kadre.core/KeyChordModifierMatch.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<org.graphiks.kadre.core/KeyChordModifierMatch> // org.graphiks.kadre.core/KeyChordModifierMatch.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): org.graphiks.kadre.core/KeyChordModifierMatch // org.graphiks.kadre.core/KeyChordModifierMatch.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<org.graphiks.kadre.core/KeyChordModifierMatch> // org.graphiks.kadre.core/KeyChordModifierMatch.values|values#static(){}[0]
+}
+
 final enum class org.graphiks.kadre.core/KeyCode : kotlin/Enum<org.graphiks.kadre.core/KeyCode> { // org.graphiks.kadre.core/KeyCode|null[0]
     enum entry AltLeft // org.graphiks.kadre.core/KeyCode.AltLeft|null[0]
     enum entry AltRight // org.graphiks.kadre.core/KeyCode.AltRight|null[0]
@@ -611,15 +622,17 @@ sealed interface org.graphiks.kadre.core/DeviceEvent { // org.graphiks.kadre.cor
 
     final class Key : org.graphiks.kadre.core/DeviceEvent { // org.graphiks.kadre.core/DeviceEvent.Key|null[0]
         constructor <init>(kotlin/Int, org.graphiks.kadre.core/KeyState) // org.graphiks.kadre.core/DeviceEvent.Key.<init>|<init>(kotlin.Int;org.graphiks.kadre.core.KeyState){}[0]
+        constructor <init>(org.graphiks.kadre.core/RawKeyEvent) // org.graphiks.kadre.core/DeviceEvent.Key.<init>|<init>(org.graphiks.kadre.core.RawKeyEvent){}[0]
 
+        final val event // org.graphiks.kadre.core/DeviceEvent.Key.event|{}event[0]
+            final fun <get-event>(): org.graphiks.kadre.core/RawKeyEvent // org.graphiks.kadre.core/DeviceEvent.Key.event.<get-event>|<get-event>(){}[0]
         final val scancode // org.graphiks.kadre.core/DeviceEvent.Key.scancode|{}scancode[0]
-            final fun <get-scancode>(): kotlin/Int // org.graphiks.kadre.core/DeviceEvent.Key.scancode.<get-scancode>|<get-scancode>(){}[0]
+            final fun <get-scancode>(): kotlin/Int? // org.graphiks.kadre.core/DeviceEvent.Key.scancode.<get-scancode>|<get-scancode>(){}[0]
         final val state // org.graphiks.kadre.core/DeviceEvent.Key.state|{}state[0]
             final fun <get-state>(): org.graphiks.kadre.core/KeyState // org.graphiks.kadre.core/DeviceEvent.Key.state.<get-state>|<get-state>(){}[0]
 
-        final fun component1(): kotlin/Int // org.graphiks.kadre.core/DeviceEvent.Key.component1|component1(){}[0]
-        final fun component2(): org.graphiks.kadre.core/KeyState // org.graphiks.kadre.core/DeviceEvent.Key.component2|component2(){}[0]
-        final fun copy(kotlin/Int = ..., org.graphiks.kadre.core/KeyState = ...): org.graphiks.kadre.core/DeviceEvent.Key // org.graphiks.kadre.core/DeviceEvent.Key.copy|copy(kotlin.Int;org.graphiks.kadre.core.KeyState){}[0]
+        final fun component1(): org.graphiks.kadre.core/RawKeyEvent // org.graphiks.kadre.core/DeviceEvent.Key.component1|component1(){}[0]
+        final fun copy(org.graphiks.kadre.core/RawKeyEvent = ...): org.graphiks.kadre.core/DeviceEvent.Key // org.graphiks.kadre.core/DeviceEvent.Key.copy|copy(org.graphiks.kadre.core.RawKeyEvent){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/DeviceEvent.Key.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/DeviceEvent.Key.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // org.graphiks.kadre.core/DeviceEvent.Key.toString|toString(){}[0]
@@ -1502,12 +1515,14 @@ final class org.graphiks.kadre.core/Icon { // org.graphiks.kadre.core/Icon|null[
 }
 
 final class org.graphiks.kadre.core/KeyChord { // org.graphiks.kadre.core/KeyChord|null[0]
-    constructor <init>(org.graphiks.kadre.core/PhysicalKey? = ..., org.graphiks.kadre.core/LogicalKey? = ..., org.graphiks.kadre.core/KeyboardModifiers = ..., kotlin/Boolean = ...) // org.graphiks.kadre.core/KeyChord.<init>|<init>(org.graphiks.kadre.core.PhysicalKey?;org.graphiks.kadre.core.LogicalKey?;org.graphiks.kadre.core.KeyboardModifiers;kotlin.Boolean){}[0]
+    constructor <init>(org.graphiks.kadre.core/PhysicalKey? = ..., org.graphiks.kadre.core/LogicalKey? = ..., org.graphiks.kadre.core/KeyboardModifiers = ..., kotlin/Boolean = ..., org.graphiks.kadre.core/KeyChordModifierMatch = ...) // org.graphiks.kadre.core/KeyChord.<init>|<init>(org.graphiks.kadre.core.PhysicalKey?;org.graphiks.kadre.core.LogicalKey?;org.graphiks.kadre.core.KeyboardModifiers;kotlin.Boolean;org.graphiks.kadre.core.KeyChordModifierMatch){}[0]
 
     final val allowRepeat // org.graphiks.kadre.core/KeyChord.allowRepeat|{}allowRepeat[0]
         final fun <get-allowRepeat>(): kotlin/Boolean // org.graphiks.kadre.core/KeyChord.allowRepeat.<get-allowRepeat>|<get-allowRepeat>(){}[0]
     final val logicalKey // org.graphiks.kadre.core/KeyChord.logicalKey|{}logicalKey[0]
         final fun <get-logicalKey>(): org.graphiks.kadre.core/LogicalKey? // org.graphiks.kadre.core/KeyChord.logicalKey.<get-logicalKey>|<get-logicalKey>(){}[0]
+    final val modifierMatch // org.graphiks.kadre.core/KeyChord.modifierMatch|{}modifierMatch[0]
+        final fun <get-modifierMatch>(): org.graphiks.kadre.core/KeyChordModifierMatch // org.graphiks.kadre.core/KeyChord.modifierMatch.<get-modifierMatch>|<get-modifierMatch>(){}[0]
     final val modifiers // org.graphiks.kadre.core/KeyChord.modifiers|{}modifiers[0]
         final fun <get-modifiers>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyChord.modifiers.<get-modifiers>|<get-modifiers>(){}[0]
     final val physicalKey // org.graphiks.kadre.core/KeyChord.physicalKey|{}physicalKey[0]
@@ -1517,7 +1532,8 @@ final class org.graphiks.kadre.core/KeyChord { // org.graphiks.kadre.core/KeyCho
     final fun component2(): org.graphiks.kadre.core/LogicalKey? // org.graphiks.kadre.core/KeyChord.component2|component2(){}[0]
     final fun component3(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyChord.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // org.graphiks.kadre.core/KeyChord.component4|component4(){}[0]
-    final fun copy(org.graphiks.kadre.core/PhysicalKey? = ..., org.graphiks.kadre.core/LogicalKey? = ..., org.graphiks.kadre.core/KeyboardModifiers = ..., kotlin/Boolean = ...): org.graphiks.kadre.core/KeyChord // org.graphiks.kadre.core/KeyChord.copy|copy(org.graphiks.kadre.core.PhysicalKey?;org.graphiks.kadre.core.LogicalKey?;org.graphiks.kadre.core.KeyboardModifiers;kotlin.Boolean){}[0]
+    final fun component5(): org.graphiks.kadre.core/KeyChordModifierMatch // org.graphiks.kadre.core/KeyChord.component5|component5(){}[0]
+    final fun copy(org.graphiks.kadre.core/PhysicalKey? = ..., org.graphiks.kadre.core/LogicalKey? = ..., org.graphiks.kadre.core/KeyboardModifiers = ..., kotlin/Boolean = ..., org.graphiks.kadre.core/KeyChordModifierMatch = ...): org.graphiks.kadre.core/KeyChord // org.graphiks.kadre.core/KeyChord.copy|copy(org.graphiks.kadre.core.PhysicalKey?;org.graphiks.kadre.core.LogicalKey?;org.graphiks.kadre.core.KeyboardModifiers;kotlin.Boolean;org.graphiks.kadre.core.KeyChordModifierMatch){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/KeyChord.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/KeyChord.hashCode|hashCode(){}[0]
     final fun matches(org.graphiks.kadre.core/KeyEvent): kotlin/Boolean // org.graphiks.kadre.core/KeyChord.matches|matches(org.graphiks.kadre.core.KeyEvent){}[0]
@@ -1529,6 +1545,8 @@ final class org.graphiks.kadre.core/KeyEvent { // org.graphiks.kadre.core/KeyEve
 
     final val character // org.graphiks.kadre.core/KeyEvent.character|{}character[0]
         final fun <get-character>(): kotlin/String? // org.graphiks.kadre.core/KeyEvent.character.<get-character>|<get-character>(){}[0]
+    final val effectiveText // org.graphiks.kadre.core/KeyEvent.effectiveText|{}effectiveText[0]
+        final fun <get-effectiveText>(): kotlin/String? // org.graphiks.kadre.core/KeyEvent.effectiveText.<get-effectiveText>|<get-effectiveText>(){}[0]
     final val isPressed // org.graphiks.kadre.core/KeyEvent.isPressed|{}isPressed[0]
         final fun <get-isPressed>(): kotlin/Boolean // org.graphiks.kadre.core/KeyEvent.isPressed.<get-isPressed>|<get-isPressed>(){}[0]
     final val isReleased // org.graphiks.kadre.core/KeyEvent.isReleased|{}isReleased[0]
@@ -1547,6 +1565,8 @@ final class org.graphiks.kadre.core/KeyEvent { // org.graphiks.kadre.core/KeyEve
         final fun <get-physicalKey>(): org.graphiks.kadre.core/PhysicalKey // org.graphiks.kadre.core/KeyEvent.physicalKey.<get-physicalKey>|<get-physicalKey>(){}[0]
     final val repeat // org.graphiks.kadre.core/KeyEvent.repeat|{}repeat[0]
         final fun <get-repeat>(): kotlin/Boolean // org.graphiks.kadre.core/KeyEvent.repeat.<get-repeat>|<get-repeat>(){}[0]
+    final val shortcutKey // org.graphiks.kadre.core/KeyEvent.shortcutKey|{}shortcutKey[0]
+        final fun <get-shortcutKey>(): org.graphiks.kadre.core/LogicalKey // org.graphiks.kadre.core/KeyEvent.shortcutKey.<get-shortcutKey>|<get-shortcutKey>(){}[0]
     final val state // org.graphiks.kadre.core/KeyEvent.state|{}state[0]
         final fun <get-state>(): org.graphiks.kadre.core/KeyState // org.graphiks.kadre.core/KeyEvent.state.<get-state>|<get-state>(){}[0]
     final val synthetic // org.graphiks.kadre.core/KeyEvent.synthetic|{}synthetic[0]
@@ -1646,6 +1666,27 @@ final class org.graphiks.kadre.core/NativeKeyInfo { // org.graphiks.kadre.core/N
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/NativeKeyInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/NativeKeyInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // org.graphiks.kadre.core/NativeKeyInfo.toString|toString(){}[0]
+}
+
+final class org.graphiks.kadre.core/RawKeyEvent { // org.graphiks.kadre.core/RawKeyEvent|null[0]
+    constructor <init>(org.graphiks.kadre.core/PhysicalKey, org.graphiks.kadre.core/KeyState, org.graphiks.kadre.core/NativeKeyInfo = ...) // org.graphiks.kadre.core/RawKeyEvent.<init>|<init>(org.graphiks.kadre.core.PhysicalKey;org.graphiks.kadre.core.KeyState;org.graphiks.kadre.core.NativeKeyInfo){}[0]
+
+    final val native // org.graphiks.kadre.core/RawKeyEvent.native|{}native[0]
+        final fun <get-native>(): org.graphiks.kadre.core/NativeKeyInfo // org.graphiks.kadre.core/RawKeyEvent.native.<get-native>|<get-native>(){}[0]
+    final val physicalKey // org.graphiks.kadre.core/RawKeyEvent.physicalKey|{}physicalKey[0]
+        final fun <get-physicalKey>(): org.graphiks.kadre.core/PhysicalKey // org.graphiks.kadre.core/RawKeyEvent.physicalKey.<get-physicalKey>|<get-physicalKey>(){}[0]
+    final val scancode // org.graphiks.kadre.core/RawKeyEvent.scancode|{}scancode[0]
+        final fun <get-scancode>(): kotlin/Int? // org.graphiks.kadre.core/RawKeyEvent.scancode.<get-scancode>|<get-scancode>(){}[0]
+    final val state // org.graphiks.kadre.core/RawKeyEvent.state|{}state[0]
+        final fun <get-state>(): org.graphiks.kadre.core/KeyState // org.graphiks.kadre.core/RawKeyEvent.state.<get-state>|<get-state>(){}[0]
+
+    final fun component1(): org.graphiks.kadre.core/PhysicalKey // org.graphiks.kadre.core/RawKeyEvent.component1|component1(){}[0]
+    final fun component2(): org.graphiks.kadre.core/KeyState // org.graphiks.kadre.core/RawKeyEvent.component2|component2(){}[0]
+    final fun component3(): org.graphiks.kadre.core/NativeKeyInfo // org.graphiks.kadre.core/RawKeyEvent.component3|component3(){}[0]
+    final fun copy(org.graphiks.kadre.core/PhysicalKey = ..., org.graphiks.kadre.core/KeyState = ..., org.graphiks.kadre.core/NativeKeyInfo = ...): org.graphiks.kadre.core/RawKeyEvent // org.graphiks.kadre.core/RawKeyEvent.copy|copy(org.graphiks.kadre.core.PhysicalKey;org.graphiks.kadre.core.KeyState;org.graphiks.kadre.core.NativeKeyInfo){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/RawKeyEvent.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/RawKeyEvent.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // org.graphiks.kadre.core/RawKeyEvent.toString|toString(){}[0]
 }
 
 final class org.graphiks.kadre.core/VideoMode { // org.graphiks.kadre.core/VideoMode|null[0]
@@ -1790,14 +1831,20 @@ final value class org.graphiks.kadre.core/KeyboardModifiers { // org.graphiks.ka
             final fun <get-Alt>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.Alt.<get-Alt>|<get-Alt>(){}[0]
         final val AltGraph // org.graphiks.kadre.core/KeyboardModifiers.Companion.AltGraph|{}AltGraph[0]
             final fun <get-AltGraph>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.AltGraph.<get-AltGraph>|<get-AltGraph>(){}[0]
+        final val CapsLock // org.graphiks.kadre.core/KeyboardModifiers.Companion.CapsLock|{}CapsLock[0]
+            final fun <get-CapsLock>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.CapsLock.<get-CapsLock>|<get-CapsLock>(){}[0]
         final val Ctrl // org.graphiks.kadre.core/KeyboardModifiers.Companion.Ctrl|{}Ctrl[0]
             final fun <get-Ctrl>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.Ctrl.<get-Ctrl>|<get-Ctrl>(){}[0]
         final val Meta // org.graphiks.kadre.core/KeyboardModifiers.Companion.Meta|{}Meta[0]
             final fun <get-Meta>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.Meta.<get-Meta>|<get-Meta>(){}[0]
         final val NONE // org.graphiks.kadre.core/KeyboardModifiers.Companion.NONE|{}NONE[0]
             final fun <get-NONE>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.NONE.<get-NONE>|<get-NONE>(){}[0]
+        final val NumLock // org.graphiks.kadre.core/KeyboardModifiers.Companion.NumLock|{}NumLock[0]
+            final fun <get-NumLock>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.NumLock.<get-NumLock>|<get-NumLock>(){}[0]
         final val Shift // org.graphiks.kadre.core/KeyboardModifiers.Companion.Shift|{}Shift[0]
             final fun <get-Shift>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.Shift.<get-Shift>|<get-Shift>(){}[0]
+        final val Symbol // org.graphiks.kadre.core/KeyboardModifiers.Companion.Symbol|{}Symbol[0]
+            final fun <get-Symbol>(): org.graphiks.kadre.core/KeyboardModifiers // org.graphiks.kadre.core/KeyboardModifiers.Companion.Symbol.<get-Symbol>|<get-Symbol>(){}[0]
     }
 }
 
@@ -1885,6 +1932,8 @@ final object org.graphiks.kadre.core/FrameTimingTracer { // org.graphiks.kadre.c
 
 final fun (org.graphiks.kadre.core/KeyCode).org.graphiks.kadre.core/defaultLogicalKey(): org.graphiks.kadre.core/LogicalKey // org.graphiks.kadre.core/defaultLogicalKey|defaultLogicalKey@org.graphiks.kadre.core.KeyCode(){}[0]
 final fun (org.graphiks.kadre.core/KeyCode).org.graphiks.kadre.core/defaultText(): kotlin/String? // org.graphiks.kadre.core/defaultText|defaultText@org.graphiks.kadre.core.KeyCode(){}[0]
+final fun (org.graphiks.kadre.core/KeyCode).org.graphiks.kadre.core/location(): org.graphiks.kadre.core/KeyLocation // org.graphiks.kadre.core/location|location@org.graphiks.kadre.core.KeyCode(){}[0]
+final fun (org.graphiks.kadre.core/PhysicalKey).org.graphiks.kadre.core/location(): org.graphiks.kadre.core/KeyLocation // org.graphiks.kadre.core/location|location@org.graphiks.kadre.core.PhysicalKey(){}[0]
 final fun <#A: kotlin/Number> (org.graphiks.kadre.core/LogicalPosition<#A>).org.graphiks.kadre.core/toPhysical(kotlin/Double): org.graphiks.kadre.core/PhysicalPosition<kotlin/Double> // org.graphiks.kadre.core/toPhysical|toPhysical@org.graphiks.kadre.core.LogicalPosition<0:0>(kotlin.Double){0§<kotlin.Number>}[0]
 final fun <#A: kotlin/Number> (org.graphiks.kadre.core/LogicalSize<#A>).org.graphiks.kadre.core/toPhysical(kotlin/Double): org.graphiks.kadre.core/PhysicalSize<kotlin/Double> // org.graphiks.kadre.core/toPhysical|toPhysical@org.graphiks.kadre.core.LogicalSize<0:0>(kotlin.Double){0§<kotlin.Number>}[0]
 final fun <#A: kotlin/Number> (org.graphiks.kadre.core/PhysicalPosition<#A>).org.graphiks.kadre.core/toLogical(kotlin/Double): org.graphiks.kadre.core/LogicalPosition<kotlin/Double> // org.graphiks.kadre.core/toLogical|toLogical@org.graphiks.kadre.core.PhysicalPosition<0:0>(kotlin.Double){0§<kotlin.Number>}[0]
