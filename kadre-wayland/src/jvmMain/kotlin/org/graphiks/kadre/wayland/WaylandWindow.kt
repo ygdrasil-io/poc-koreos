@@ -101,13 +101,16 @@ class WaylandWindow private constructor(
     override val scaleFactor: Double = 1.0
 
     /**
-     * Requests a redraw by committing the Wayland surface.
+     * Requests a redraw.
      *
-     * On Wayland, rendering is triggered by wl_surface.commit (opcode 6).
-     * If the bindings are not available (non-Linux), the call is ignored.
+     * When the window is an xdg_toplevel, redraws are driven by frame callbacks (see
+     * [armFrameCallback]) and the actual surface commit is performed by the renderer's
+     * present (eglSwapBuffers). Committing here as well would flood the compositor with empty
+     * commits and consume frame callbacks on non-displaying frames, so this is a no-op in that
+     * case. Only the bare-surface fallback (no xdg_shell) commits directly.
      */
     override fun requestRedraw() {
-        if (surfacePtr == 0L) return
+        if (surfacePtr == 0L || xdg != null) return
         val handle = wlProxyMarshalFlagsVoid ?: return
         try {
             val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
@@ -215,6 +218,7 @@ class WaylandWindow private constructor(
             compositor: Long,
             xdgWmBase: Long,
             attrs: WindowAttributes,
+            decorationManager: Long = 0L,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -252,9 +256,12 @@ class WaylandWindow private constructor(
                     displayPtr = display,
                     wmBasePtr = xdgWmBase,
                     surfacePtr = surface,
+                    decorationManagerPtr = decorationManager,
                     onResized = { w, h ->
                         window._innerSize = PhysicalSize(w, h)
                         window.onWindowEvent?.invoke(WindowEvent.Resized(PhysicalSize(w, h)))
+                        // Repaint once at the new size (on-demand rendering).
+                        window.onWindowEvent?.invoke(WindowEvent.RedrawRequested)
                     },
                     onClose = { window.onWindowEvent?.invoke(WindowEvent.CloseRequested) },
                 )

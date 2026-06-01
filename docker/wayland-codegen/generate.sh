@@ -38,15 +38,22 @@ echo "[gen] building kextract…"
 KEXTRACT="$KEXTRACT_DIR/build/kextract/bin/kextract"
 "$KEXTRACT" --help >/dev/null 2>&1 && echo "[gen] kextract launcher OK"
 
-# ── 2. wayland-scanner: protocol header + private code ──────────────────────────
-echo "[gen] wayland-scanner $PROTO"
-wayland-scanner client-header "$PROTO" "$GEN/xdg-shell-client-protocol.h"
-wayland-scanner private-code   "$PROTO" "$GEN/xdg-shell-protocol.c"
+# ── 2. wayland-scanner: protocol headers + public code ──────────────────────────
+# public-code (not private-code): the interface tables must be EXPORTED symbols so the JVM can
+# resolve them via dlsym/loaderLookup. private-code gives them hidden (LOCAL) visibility, which
+# compiles fine but the symbols are invisible to SymbolLookup at runtime.
+PROTO_DECO=/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+echo "[gen] wayland-scanner $PROTO + $PROTO_DECO"
+wayland-scanner client-header "$PROTO"      "$GEN/xdg-shell-client-protocol.h"
+wayland-scanner public-code    "$PROTO"      "$GEN/xdg-shell-protocol.c"
+wayland-scanner client-header "$PROTO_DECO" "$GEN/xdg-decoration-client-protocol.h"
+wayland-scanner public-code    "$PROTO_DECO" "$GEN/xdg-decoration-protocol.c"
 
 # ── 3. Compile the interface tables into a shared lib ───────────────────────────
 echo "[gen] gcc → libkadre-xdg.so"
-gcc -shared -fPIC -o "$OUT_SO_DIR/libkadre-xdg.so" "$GEN/xdg-shell-protocol.c" -lwayland-client
-nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "xdg_(wm_base|surface|toplevel)_interface" || true
+gcc -shared -fPIC -o "$OUT_SO_DIR/libkadre-xdg.so" \
+    "$GEN/xdg-shell-protocol.c" "$GEN/xdg-decoration-protocol.c" -lwayland-client
+nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "(xdg_(wm_base|surface|toplevel)|zxdg_(decoration_manager|toplevel_decoration))" || true
 
 # ── 4. kextract: header → Kotlin FFM bindings ───────────────────────────────────
 # -ffreestanding is required: kextract's bundled libclang, in hosted mode, can't follow
@@ -64,11 +71,14 @@ nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "xdg_(wm_base|surface|toplevel)_in
   --include-var xdg_wm_base_interface \
   --include-var xdg_surface_interface \
   --include-var xdg_toplevel_interface \
+  --include-var zxdg_decoration_manager_v1_interface \
+  --include-var zxdg_toplevel_decoration_v1_interface \
   --include-struct wl_interface \
   --include-struct wl_message \
   -A -ffreestanding \
   -I "$GEN" \
-  "$GEN/xdg-shell-client-protocol.h"
+  "$GEN/xdg-shell-client-protocol.h" \
+  "$GEN/xdg-decoration-client-protocol.h"
 
 echo "[gen] done. Generated:"
 find "$OUT_KT/org/graphiks/kadre/wayland/generated" -name '*.kt' 2>/dev/null

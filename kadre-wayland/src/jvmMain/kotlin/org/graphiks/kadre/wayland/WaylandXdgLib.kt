@@ -27,7 +27,11 @@ internal object WaylandXdgLib {
             else -> a ?: return@runCatching false
         }
         val resource = "/native/linux-$arch/libkadre-xdg.so"
-        val stream = WaylandXdgLib::class.java.getResourceAsStream(resource) ?: return@runCatching false
+        val stream = WaylandXdgLib::class.java.getResourceAsStream(resource)
+        if (stream == null) {
+            System.err.println("[kadre-wayland] libkadre-xdg.so not found on classpath: $resource")
+            return@runCatching false
+        }
 
         // Extract to a temp file (System.load needs a real filesystem path).
         val tmp = File.createTempFile("libkadre-xdg", ".so").apply { deleteOnExit() }
@@ -35,5 +39,8 @@ internal object WaylandXdgLib {
 
         System.load(tmp.absolutePath)
         true
-    }.getOrElse { false }
+    }.getOrElse { e ->
+        System.err.println("[kadre-wayland] failed to load libkadre-xdg.so: $e")
+        false
+    }
 }

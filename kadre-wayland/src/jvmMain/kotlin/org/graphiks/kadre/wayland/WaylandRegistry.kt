@@ -15,6 +15,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.wayland.generated.xdg_wm_base_interface
+import org.graphiks.kadre.wayland.generated.zxdg_decoration_manager_v1_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
@@ -28,7 +29,11 @@ private const val WL_DISPLAY_GET_REGISTRY: Int = 1
 private const val WL_REGISTRY_BIND: Int = 0
 
 /** Bound Wayland globals. Addresses are 0 when the global is unavailable. */
-internal data class WaylandGlobals(val compositorPtr: Long, val xdgWmBasePtr: Long)
+internal data class WaylandGlobals(
+    val compositorPtr: Long,
+    val xdgWmBasePtr: Long,
+    val decorationManagerPtr: Long = 0L,
+)
 
 /**
  * `wl_registry.global` event collector: retains the `name` and `version` of the globals
@@ -39,6 +44,8 @@ private class GlobalsCollector {
     var compositorVersion: Int = 0
     var xdgWmBaseName: Int = -1
     var xdgWmBaseVersion: Int = 0
+    var decorationManagerName: Int = -1
+    var decorationManagerVersion: Int = 0
 
     /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
     @Suppress("UNUSED_PARAMETER")
@@ -51,6 +58,8 @@ private class GlobalsCollector {
         when (ifaceName) {
             "wl_compositor" -> if (compositorName < 0) { compositorName = name; compositorVersion = version }
             "xdg_wm_base" -> if (xdgWmBaseName < 0) { xdgWmBaseName = name; xdgWmBaseVersion = version }
+            "zxdg_decoration_manager_v1" ->
+                if (decorationManagerName < 0) { decorationManagerName = name; decorationManagerVersion = version }
         }
     }
 
@@ -67,12 +76,12 @@ private class XdgWmBasePinger(private val wmBasePtr: Long, private val displayPt
     /** C callback: void ping(data, xdg_wm_base*, uint32 serial). */
     @Suppress("UNUSED_PARAMETER")
     fun onPing(data: MemorySegment, wmBase: MemorySegment, serial: Int) {
+        val pong = wlProxyMarshalFlagsUint ?: return
         runCatching {
-            wlProxyMarshalFlagsUint?.let {
-                it.invokeExact(
-                    MemorySegment.ofAddress(wmBasePtr), XDG_WM_BASE_PONG, MemorySegment.NULL, version, 0, serial,
-                )
-            }
+            // invokeExact in statement position (void handle) — see onSurfaceConfigure.
+            pong.invokeExact(
+                MemorySegment.ofAddress(wmBasePtr), XDG_WM_BASE_PONG, MemorySegment.NULL, version, 0, serial,
+            )
             wlDisplayFlush?.let { it.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int }
         }
     }
@@ -167,7 +176,20 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             xdgWmBasePtr = bindXdgWmBase(registry, bind, collector, addListener, lookup, arena, displayPtr)
         }
 
-        WaylandGlobals(compositor.address(), xdgWmBasePtr)
+        // 6. wl_registry.bind(zxdg_decoration_manager_v1) for server-side window decorations.
+        var decorationManagerPtr = 0L
+        if (collector.decorationManagerName >= 0 && WaylandXdgLib.loaded) {
+            decorationManagerPtr = runCatching {
+                val iface = zxdg_decoration_manager_v1_interface
+                val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.decorationManagerVersion, 0,
+                    collector.decorationManagerName, namePtr, collector.decorationManagerVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
+        WaylandGlobals(compositor.address(), xdgWmBasePtr, decorationManagerPtr)
     } catch (_: Throwable) {
         WaylandGlobals(0L, 0L)
     }
@@ -207,6 +229,7 @@ private fun bindXdgWmBase(
     (wlProxyAddListener ?: return 0L).invokeExact(wmBase, pingListener, MemorySegment.NULL) as Int
 
     wmBase.address()
-} catch (_: Throwable) {
+} catch (t: Throwable) {
+    System.err.println("[kadre-wayland] bindXdgWmBase failed: $t")
     0L
 }

@@ -1097,3 +1097,37 @@ enum class xdg_popup_error(val value: Long) {
     }
 }
 
+/**
+ * {@snippet lang=c : zxdg_decoration_manager_v1_interface Declared(wl_interface)
+ */
+val zxdg_decoration_manager_v1_interface: MemorySegment = SymbolLookup.loaderLookup().find("zxdg_decoration_manager_v1_interface").orElseThrow()
+
+/**
+ * {@snippet lang=c : zxdg_toplevel_decoration_v1_interface Declared(wl_interface)
+ */
+val zxdg_toplevel_decoration_v1_interface: MemorySegment = SymbolLookup.loaderLookup().find("zxdg_toplevel_decoration_v1_interface").orElseThrow()
+
+/**
+ * NS_ENUM: {@snippet lang=c : enum zxdg_toplevel_decoration_v1_error}
+ */
+enum class zxdg_toplevel_decoration_v1_error(val value: Long) {
+    ZXDG_TOPLEVEL_DECORATION_V1_ERROR_UNCONFIGURED_BUFFER(0L), ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED(1L), ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ORPHANED(2L), ZXDG_TOPLEVEL_DECORATION_V1_ERROR_INVALID_MODE(3L);
+    
+    companion object {
+        fun fromValue(v: Long): zxdg_toplevel_decoration_v1_error = entries.firstOrNull { it.value == v }
+            ?: error("Unknown zxdg_toplevel_decoration_v1_error value: $v")
+    }
+}
+
+/**
+ * NS_ENUM: {@snippet lang=c : enum zxdg_toplevel_decoration_v1_mode}
+ */
+enum class zxdg_toplevel_decoration_v1_mode(val value: Long) {
+    ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE(1L), ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE(2L);
+    
+    companion object {
+        fun fromValue(v: Long): zxdg_toplevel_decoration_v1_mode = entries.firstOrNull { it.value == v }
+            ?: error("Unknown zxdg_toplevel_decoration_v1_mode value: $v")
+    }
+}
+

@@ -20,6 +20,7 @@ package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.wayland.generated.xdg_surface_interface
 import org.graphiks.kadre.wayland.generated.xdg_toplevel_interface
+import org.graphiks.kadre.wayland.generated.zxdg_toplevel_decoration_v1_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
@@ -45,13 +46,14 @@ internal class XdgToplevel private constructor(
     /** xdg_surface.configure(serial): must ack, then the surface is considered configured. */
     @Suppress("UNUSED_PARAMETER")
     fun onSurfaceConfigure(data: MemorySegment, surface: MemorySegment, serial: Int) {
+        val ack = wlProxyMarshalFlagsUint ?: return
         runCatching {
-            wlProxyMarshalFlagsUint?.let {
-                it.invokeExact(
-                    MemorySegment.ofAddress(xdgSurfacePtr), XDG_SURFACE_ACK_CONFIGURE,
-                    MemorySegment.NULL, version, 0, serial,
-                )
-            }
+            // invokeExact must be in statement position (not the lambda's return value), else the
+            // void handle is matched against an Object return → WrongMethodTypeException.
+            ack.invokeExact(
+                MemorySegment.ofAddress(xdgSurfacePtr), XDG_SURFACE_ACK_CONFIGURE,
+                MemorySegment.NULL, version, 0, serial,
+            )
             wlDisplayFlush?.let { it.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int }
         }
     }
@@ -78,31 +80,32 @@ internal class XdgToplevel private constructor(
 
     /** Sets the toplevel title via xdg_toplevel.set_title. */
     fun setTitle(title: String) {
+        val setTitle = wlProxyMarshalFlagsString ?: return
         runCatching {
             val str = arena.allocateFrom(title)
-            wlProxyMarshalFlagsString?.let {
-                it.invokeExact(
-                    MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_SET_TITLE,
-                    MemorySegment.NULL, version, 0, str,
-                )
-            }
+            setTitle.invokeExact(
+                MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_SET_TITLE,
+                MemorySegment.NULL, version, 0, str,
+            )
+            Unit
         }
     }
 
     /** Tears down the toplevel then the surface (reverse creation order), freeing the upcalls. */
     fun destroy() {
-        runCatching {
-            wlProxyMarshalFlagsVoid?.let {
-                it.invokeExact(
+        val destroy = wlProxyMarshalFlagsVoid
+        if (destroy != null) {
+            runCatching {
+                destroy.invokeExact(
                     MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_DESTROY, MemorySegment.NULL, version, 0,
                 )
+                Unit
             }
-        }
-        runCatching {
-            wlProxyMarshalFlagsVoid?.let {
-                it.invokeExact(
+            runCatching {
+                destroy.invokeExact(
                     MemorySegment.ofAddress(xdgSurfacePtr), XDG_SURFACE_DESTROY, MemorySegment.NULL, version, 0,
                 )
+                Unit
             }
         }
         runCatching { arena.close() }
@@ -121,6 +124,7 @@ internal class XdgToplevel private constructor(
             surfacePtr: Long,
             onResized: (Int, Int) -> Unit,
             onClose: () -> Unit,
+            decorationManagerPtr: Long = 0L,
         ): XdgToplevel? {
             if (wmBasePtr == 0L || surfacePtr == 0L) return null
             if (!WaylandXdgLib.loaded) return null
@@ -153,6 +157,28 @@ internal class XdgToplevel private constructor(
                     xdgSurface, XDG_SURFACE_GET_TOPLEVEL, xdg_toplevel_interface, version, 0, MemorySegment.NULL,
                 ) as MemorySegment
                 if (xdgToplevel.address() == 0L) return null
+
+                // Request server-side decorations (titlebar + close/resize) when the compositor
+                // supports zxdg_decoration_manager_v1. Without this, Weston leaves the toplevel
+                // undecorated (clients are expected to draw their own).
+                if (decorationManagerPtr != 0L) {
+                    runCatching {
+                        val manager = MemorySegment.ofAddress(decorationManagerPtr)
+                        val decoration = getXdgSurface.invokeExact(
+                            manager, XDG_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
+                            zxdg_toplevel_decoration_v1_interface, version, 0, MemorySegment.NULL, xdgToplevel,
+                        ) as MemorySegment
+                        if (decoration.address() != 0L) {
+                            val setMode = wlProxyMarshalFlagsUint
+                            if (setMode != null) {
+                                setMode.invokeExact(
+                                    decoration, XDG_TOPLEVEL_DECORATION_SET_MODE, MemorySegment.NULL, version, 0,
+                                    XDG_TOPLEVEL_DECORATION_MODE_SERVER_SIDE,
+                                )
+                            }
+                        }
+                    }
+                }
 
                 val arena = Arena.ofShared()
                 val bridge = XdgToplevel(
