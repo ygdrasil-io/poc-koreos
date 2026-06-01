@@ -5,7 +5,7 @@
 [common]\
 data class [WindowAttributes](index.md)(val title: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;Kadre&quot;, val size: [PhysicalSize](../-physical-size/index.md)&lt;[Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)&gt;? = null, val visible: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = true, val resizable: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = true)
 
-Paramètres de création d'une fenêtre.
+Window creation parameters.
 
 ## Constructors
 
@@ -17,7 +17,7 @@ Paramètres de création d'une fenêtre.
 
 | Name | Summary |
 |---|---|
-| [resizable](resizable.md) | [common]<br>val [resizable](resizable.md): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)<br>Indique si l'utilisateur peut redimensionner la fenêtre. |
-| [size](size.md) | [common]<br>val [size](size.md): [PhysicalSize](../-physical-size/index.md)&lt;[Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)&gt;?<br>Taille initiale en pixels physiques, ou null pour utiliser la taille par défaut. |
-| [title](title.md) | [common]<br>val [title](title.md): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)<br>Titre affiché dans la barre de titre de la fenêtre. |
-| [visible](visible.md) | [common]<br>val [visible](visible.md): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)<br>Indique si la fenêtre est visible au moment de sa création. |
+| [resizable](resizable.md) | [common]<br>val [resizable](resizable.md): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)<br>Indicates whether the user can resize the window. |
+| [size](size.md) | [common]<br>val [size](size.md): [PhysicalSize](../-physical-size/index.md)&lt;[Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)&gt;?<br>Initial size in physical pixels, or null to use the default size. |
+| [title](title.md) | [common]<br>val [title](title.md): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)<br>Title shown in the window's title bar. |
+| [visible](visible.md) | [common]<br>val [visible](visible.md): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)<br>Indicates whether the window is visible at the time of its creation. |

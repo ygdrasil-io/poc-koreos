@@ -1,6 +1,9 @@
 package org.graphiks.kadre.uikit
 
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
@@ -10,6 +13,8 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -91,7 +96,7 @@ class KadreMetalView(
     }
 
     /**
-     * Translates UIPress key data into [WindowEvent.KeyboardInput].
+     * Translates UIPress key data into [WindowEvent.KeyInput].
      *
      * @return `true` if at least one press mapped to a known key (and was
      *   consumed); `false` so the caller forwards the event up the chain.
@@ -101,15 +106,25 @@ class KadreMetalView(
         presses.forEach { element ->
             val press = element as? UIPress ?: return@forEach
             val uiKey = press.key ?: return@forEach
-            val key = UiKitKeyMapper.fromHidUsage(uiKey.keyCode)
-            if (key == org.graphiks.kadre.core.Key.Unknown) return@forEach
+            val mappedCode = UiKitKeyMapper.keyCode(uiKey.keyCode) ?: return@forEach
+            val native = NativeKeyInfo(
+                platform = KeyPlatform.UIKit,
+                scanCode = uiKey.keyCode,
+            )
+            val logicalKey = mappedCode.defaultLogicalKey()
             handled = true
             onEvent(
-                WindowEvent.KeyboardInput(
-                    key = key,
-                    state = state,
-                    modifiers = UiKitKeyMapper.modifiersFrom(uiKey.modifierFlags),
-                    isRepeat = false,
+                WindowEvent.KeyInput(
+                    KeyEvent(
+                        physicalKey = UiKitKeyMapper.physicalKey(uiKey.keyCode),
+                        logicalKey = logicalKey,
+                        state = state,
+                        modifiers = UiKitKeyMapper.modifiersFrom(uiKey.modifierFlags),
+                        repeat = false,
+                        text = mappedCode.defaultText(),
+                        keyWithoutModifiers = logicalKey,
+                        native = native,
+                    ),
                 )
             )
         }

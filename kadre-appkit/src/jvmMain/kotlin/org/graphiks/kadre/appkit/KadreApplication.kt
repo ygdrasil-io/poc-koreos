@@ -2,7 +2,7 @@
  * Objective-C subclass of NSApplication for kadre.
  *
  * Overrides `sendEvent:` to intercept keyboard events (NSEventTypeKeyDown /
- * NSEventTypeKeyUp) and dispatch them as [WindowEvent.KeyboardInput] to the
+ * NSEventTypeKeyUp) and dispatch them as [WindowEvent.KeyInput] to the
  * active [AppKitEventLoop], and mouse events as the corresponding [WindowEvent].
  *
  * The reference to [AppKitEventLoop] is stored in the [KadreApplication] instance
@@ -38,10 +38,16 @@ import org.graphiks.kadre.appkit.bindings.NSEvent
 import org.graphiks.kadre.appkit.bindings.ObjCRuntime
 import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.LogicalKey
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -151,7 +157,7 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
      * `@JvmStatic` trampolines invoked by the Panama upcall stubs.
      *
      * `sendEvent:` is overridden to intercept keyDown/keyUp and dispatch them
-     * to [AppKitEventLoop] as [WindowEvent.KeyboardInput].
+     * to [AppKitEventLoop] as [WindowEvent.KeyInput].
      *
      * The event loop is retrieved via [Companion.sharedApp] (equivalent
      * to `NSApp as? KadreApplication`) — no mutable static variable dedicated
@@ -202,9 +208,15 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 // Get isARepeat: [event isARepeat] → Boolean
                 val isRepeat = ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, event, ObjCRuntime.sel("isARepeat")) as Boolean
 
-                val key = AppKitKeyMapper.keyCode(keyCode)
+                val mappedCode = AppKitKeyMapper.keyCode(keyCode)
                 val modifiers = AppKitKeyMapper.modifierFlags(modFlags)
                 val state = if (isKeyDown) KeyState.Pressed else KeyState.Released
+                val native = NativeKeyInfo(
+                    platform = KeyPlatform.AppKit,
+                    scanCode = keyCode.toLong(),
+                )
+                val logicalKey = mappedCode?.defaultLogicalKey()
+                    ?: LogicalKey.Unidentified(native)
 
                 // GRA-156: dispatch raw DeviceEvent.Key BEFORE window-scoped WindowEvent
                 loop.handler.deviceEvent(
@@ -216,7 +228,18 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 loop.handler.windowEvent(
                     loop,
                     appKitWindow.id,
-                    WindowEvent.KeyboardInput(key, state, modifiers, isRepeat),
+                    WindowEvent.KeyInput(
+                        KeyEvent(
+                            physicalKey = AppKitKeyMapper.physicalKey(keyCode),
+                            logicalKey = logicalKey,
+                            state = state,
+                            modifiers = modifiers,
+                            repeat = isRepeat,
+                            text = mappedCode?.defaultText(),
+                            keyWithoutModifiers = logicalKey,
+                            native = native,
+                        ),
+                    ),
                 )
                 return
             }

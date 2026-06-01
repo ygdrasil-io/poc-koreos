@@ -22,7 +22,7 @@ import org.w3c.dom.events.WheelEvent
  * JS DOM bridge to the Kadre engine.
  *
  * Listens to and dispatches the following DOM events:
- * - Keyboard: `keydown` / `keyup` → [WebWindowEvent.KeyboardInput]
+ * - Keyboard: `keydown` / `keyup` → [WebWindowEvent.KeyInput]
  * - Pointer: `pointermove` → [WebWindowEvent.PointerMoved]
  * - Pointer: `pointerdown` / `pointerup` → [WebWindowEvent.MouseInput]
  * - Pointer: `pointerenter` / `pointerleave` → [WebWindowEvent.PointerEntered] / [WebWindowEvent.PointerLeft]
@@ -80,24 +80,36 @@ class JsWebDomBridge : WebDomBridge {
         addListener(canvas, "keydown") { e ->
             val ke = e as KeyboardEvent
             dispatch(
-                WebWindowEvent.KeyboardInput(
-                    key = domCodeToKey(ke.code),
-                    state = WebKeyState.Pressed,
-                    modifiers = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey),
-                    isRepeat = ke.repeat,
-                )
+                WebWindowEvent.KeyInput(
+                    domKeyEvent(
+                        code = ke.code,
+                        key = ke.key,
+                        eventType = "keydown",
+                        shiftKey = ke.shiftKey,
+                        ctrlKey = ke.ctrlKey,
+                        altKey = ke.altKey,
+                        metaKey = ke.metaKey,
+                        repeat = ke.repeat,
+                    ),
+                ),
             )
         }
 
         addListener(canvas, "keyup") { e ->
             val ke = e as KeyboardEvent
             dispatch(
-                WebWindowEvent.KeyboardInput(
-                    key = domCodeToKey(ke.code),
-                    state = WebKeyState.Released,
-                    modifiers = domModifiers(ke.shiftKey, ke.ctrlKey, ke.altKey, ke.metaKey),
-                    isRepeat = false,
-                )
+                WebWindowEvent.KeyInput(
+                    domKeyEvent(
+                        code = ke.code,
+                        key = ke.key,
+                        eventType = "keyup",
+                        shiftKey = ke.shiftKey,
+                        ctrlKey = ke.ctrlKey,
+                        altKey = ke.altKey,
+                        metaKey = ke.metaKey,
+                        repeat = false,
+                    ),
+                ),
             )
         }
 

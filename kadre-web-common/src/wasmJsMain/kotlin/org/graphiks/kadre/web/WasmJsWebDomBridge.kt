@@ -38,6 +38,7 @@ external interface JsDomEvent : JsAny {
 @JsName("KeyboardEvent")
 external interface JsKeyboardEvent : JsDomEvent {
     val code: JsString
+    val key: JsString
     val shiftKey: JsBoolean
     val ctrlKey: JsBoolean
     val altKey: JsBoolean
@@ -243,34 +244,36 @@ class WasmJsWebDomBridge : WebDomBridge {
         addDomListener(canvas, "keydown") { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
             dispatch(
-                WebWindowEvent.KeyboardInput(
-                    key = domCodeToKey(ke.code.toString()),
-                    state = WebKeyState.Pressed,
-                    modifiers = domModifiers(
+                WebWindowEvent.KeyInput(
+                    domKeyEvent(
+                        code = ke.code.toString(),
+                        key = ke.key.toString(),
+                        eventType = "keydown",
                         shiftKey = ke.shiftKey.toBoolean(),
-                        ctrlKey  = ke.ctrlKey.toBoolean(),
-                        altKey   = ke.altKey.toBoolean(),
-                        metaKey  = ke.metaKey.toBoolean(),
+                        ctrlKey = ke.ctrlKey.toBoolean(),
+                        altKey = ke.altKey.toBoolean(),
+                        metaKey = ke.metaKey.toBoolean(),
+                        repeat = ke.repeat.toBoolean(),
                     ),
-                    isRepeat = ke.repeat.toBoolean(),
-                )
+                ),
             )
         }
 
         addDomListener(canvas, "keyup") { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
             dispatch(
-                WebWindowEvent.KeyboardInput(
-                    key = domCodeToKey(ke.code.toString()),
-                    state = WebKeyState.Released,
-                    modifiers = domModifiers(
+                WebWindowEvent.KeyInput(
+                    domKeyEvent(
+                        code = ke.code.toString(),
+                        key = ke.key.toString(),
+                        eventType = "keyup",
                         shiftKey = ke.shiftKey.toBoolean(),
-                        ctrlKey  = ke.ctrlKey.toBoolean(),
-                        altKey   = ke.altKey.toBoolean(),
-                        metaKey  = ke.metaKey.toBoolean(),
+                        ctrlKey = ke.ctrlKey.toBoolean(),
+                        altKey = ke.altKey.toBoolean(),
+                        metaKey = ke.metaKey.toBoolean(),
+                        repeat = false,
                     ),
-                    isRepeat = false,
-                )
+                ),
             )
         }
 

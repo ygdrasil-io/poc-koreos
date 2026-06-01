@@ -1,8 +1,9 @@
 package org.graphiks.kadre.samples.pong
 
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 
@@ -17,11 +18,14 @@ class InputAdapter {
     var playerInput: PaddleInput = PaddleInput.NONE
         private set
 
-    fun onKey(event: WindowEvent.KeyboardInput) {
+    fun onKey(event: WindowEvent.KeyInput) {
+        val key = event.event.physicalKey
+        val state = event.event.state
         playerInput = when {
-            event.key == Key.ArrowUp && event.state == KeyState.Pressed -> PaddleInput.UP
-            event.key == Key.ArrowDown && event.state == KeyState.Pressed -> PaddleInput.DOWN
-            (event.key == Key.ArrowUp || event.key == Key.ArrowDown) && event.state == KeyState.Released -> PaddleInput.NONE
+            key == PhysicalKey.Code(KeyCode.ArrowUp) && state == KeyState.Pressed -> PaddleInput.UP
+            key == PhysicalKey.Code(KeyCode.ArrowDown) && state == KeyState.Pressed -> PaddleInput.DOWN
+            (key == PhysicalKey.Code(KeyCode.ArrowUp) || key == PhysicalKey.Code(KeyCode.ArrowDown)) &&
+                state == KeyState.Released -> PaddleInput.NONE
             else -> playerInput
         }
     }

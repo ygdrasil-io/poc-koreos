@@ -36,14 +36,19 @@
  */
 package org.graphiks.kadre.win32
 
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
-import org.graphiks.kadre.core.Modifiers
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.LogicalKey
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -184,18 +189,18 @@ object KadreWndProc {
             // ── Keyboard ──────────────────────────────────────────────────────
             WM_KEYDOWN.toUInt(),
             WM_SYSKEYDOWN.toUInt() -> {
-                val key      = Win32KeyMapper.fromVkCode(wParam.toInt())
+                val vkCode   = wParam.toInt()
                 val isRepeat = (lParam and KF_REPEAT) != 0L
                 val mods     = currentModifiers()
-                emit(hwnd, WindowEvent.KeyboardInput(key, KeyState.Pressed, mods, isRepeat))
+                emit(hwnd, keyEvent(vkCode, KeyState.Pressed, mods, isRepeat))
                 0L
             }
 
             WM_KEYUP.toUInt(),
             WM_SYSKEYUP.toUInt() -> {
-                val key  = Win32KeyMapper.fromVkCode(wParam.toInt())
-                val mods = currentModifiers()
-                emit(hwnd, WindowEvent.KeyboardInput(key, KeyState.Released, mods, isRepeat = false))
+                val vkCode = wParam.toInt()
+                val mods   = currentModifiers()
+                emit(hwnd, keyEvent(vkCode, KeyState.Released, mods, isRepeat = false))
                 0L
             }
 
@@ -353,18 +358,41 @@ object KadreWndProc {
      * GetKeyState reads the key state at the moment the message is processed — consistent
      * with the Win32 message thread.
      *
-     * @return [Modifiers] representing the active modifiers.
+     * @return [KeyboardModifiers] representing the active modifiers.
      */
-    private fun currentModifiers(): Modifiers {
-        if (getKeyState == null) return Modifiers.NONE
+    private fun currentModifiers(): KeyboardModifiers {
+        if (getKeyState == null) return KeyboardModifiers.NONE
         var bits = 0
         // GetKeyState returns a Short: bit 15 = key down, bit 0 = toggle
-        if ((getKeyState!!.invokeExact(VK_SHIFT)   as Short).toInt() and 0x8000 != 0) bits = bits or 0x1
-        if ((getKeyState!!.invokeExact(VK_CONTROL) as Short).toInt() and 0x8000 != 0) bits = bits or 0x2
-        if ((getKeyState!!.invokeExact(VK_MENU)    as Short).toInt() and 0x8000 != 0) bits = bits or 0x4
+        if ((getKeyState!!.invokeExact(VK_SHIFT)   as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.SHIFT
+        if ((getKeyState!!.invokeExact(VK_CONTROL) as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.CTRL
+        if ((getKeyState!!.invokeExact(VK_MENU)    as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.ALT
         if ((getKeyState!!.invokeExact(VK_LWIN)    as Short).toInt() and 0x8000 != 0 ||
-            (getKeyState!!.invokeExact(VK_RWIN)    as Short).toInt() and 0x8000 != 0) bits = bits or 0x8
-        return Modifiers(bits)
+            (getKeyState!!.invokeExact(VK_RWIN)    as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.META
+        return KeyboardModifiers(bits)
+    }
+
+    private fun keyEvent(
+        vkCode: Int,
+        state: KeyState,
+        modifiers: KeyboardModifiers,
+        isRepeat: Boolean,
+    ): WindowEvent.KeyInput {
+        val mappedCode = Win32KeyMapper.keyCode(vkCode)
+        val native = NativeKeyInfo(platform = KeyPlatform.Win32, virtualKey = vkCode.toLong())
+        val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+        return WindowEvent.KeyInput(
+            KeyEvent(
+                physicalKey = Win32KeyMapper.physicalKey(vkCode),
+                logicalKey = logicalKey,
+                state = state,
+                modifiers = modifiers,
+                repeat = isRepeat,
+                text = mappedCode?.defaultText(),
+                keyWithoutModifiers = logicalKey,
+                native = native,
+            ),
+        )
     }
 
     /**

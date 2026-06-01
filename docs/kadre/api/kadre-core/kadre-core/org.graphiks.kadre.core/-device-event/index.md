@@ -4,18 +4,18 @@
 
 sealed interface [DeviceEvent](index.md)
 
-Événement brut de périphérique d'entrée.
+Raw input device event.
 
-Contrairement à [WindowEvent](../-window-event/index.md), ces événements sont émis indépendamment de la fenêtre active et reflètent l'état brut du périphérique.
+Unlike [WindowEvent](../-window-event/index.md), these events are emitted independently of the active window and reflect the raw state of the device.
 
-### Utilisation typique
+### Typical usage
 
 ```kotlin
 fun onDeviceEvent(event: DeviceEvent) {
     when (event) {
-        is DeviceEvent.PointerMotion -> gererMouvement(event.dx, event.dy)
-        is DeviceEvent.Button        -> gererBouton(event.button, event.state)
-        is DeviceEvent.Key           -> gererTouche(event.scancode, event.state)
+        is DeviceEvent.PointerMotion -> handleMotion(event.dx, event.dy)
+        is DeviceEvent.Button        -> handleButton(event.button, event.state)
+        is DeviceEvent.Key           -> handleKey(event.scancode, event.state)
     }
 }
 ```
@@ -32,6 +32,6 @@ fun onDeviceEvent(event: DeviceEvent) {
 
 | Name | Summary |
 |---|---|
-| [Button](-button/index.md) | [common]<br>data class [Button](-button/index.md)(val button: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), val state: [KeyState](../-key-state/index.md)) : [DeviceEvent](index.md)<br>Un bouton physique de périphérique a changé d'état. |
-| [Key](-key/index.md) | [common]<br>data class [Key](-key/index.md)(val scancode: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), val state: [KeyState](../-key-state/index.md)) : [DeviceEvent](index.md)<br>Une touche physique du clavier a changé d'état (identifiée par scancode). |
-| [PointerMotion](-pointer-motion/index.md) | [common]<br>data class [PointerMotion](-pointer-motion/index.md)(val dx: [Double](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html), val dy: [Double](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html)) : [DeviceEvent](index.md)<br>Mouvement brut du pointeur (delta, non limité aux bords de l'écran). |
+| [Button](-button/index.md) | [common]<br>data class [Button](-button/index.md)(val button: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), val state: [KeyState](../-key-state/index.md)) : [DeviceEvent](index.md)<br>A physical device button changed state. |
+| [Key](-key/index.md) | [common]<br>data class [Key](-key/index.md)(val scancode: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), val state: [KeyState](../-key-state/index.md)) : [DeviceEvent](index.md)<br>A physical keyboard key changed state (identified by scancode). |
+| [PointerMotion](-pointer-motion/index.md) | [common]<br>data class [PointerMotion](-pointer-motion/index.md)(val dx: [Double](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html), val dy: [Double](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html)) : [DeviceEvent](index.md)<br>Raw pointer motion (delta, not limited to the screen edges). |

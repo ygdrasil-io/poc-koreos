@@ -11,12 +11,18 @@ package org.graphiks.kadre.samples.pong
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.defaultLogicalKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -75,8 +81,8 @@ class FakeEventLoop : ActiveEventLoop {
         return win
     }
 
-    override fun setControlFlow(newFlow: ControlFlow) {
-        _controlFlow = newFlow
+    override fun setControlFlow(controlFlow: ControlFlow) {
+        _controlFlow = controlFlow
     }
 
     override val controlFlow: ControlFlow get() = _controlFlow
@@ -243,16 +249,12 @@ class PongGameTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `KeyboardInput does not crash`() {
+    fun `KeyInput does not crash`() {
         val (game, _, eventLoop) = makeGame()
         game.windowEvent(
             eventLoop,
             WindowId(1L),
-            WindowEvent.KeyboardInput(
-                key = org.graphiks.kadre.core.Key.ArrowUp,
-                state = org.graphiks.kadre.core.KeyState.Pressed,
-                modifiers = org.graphiks.kadre.core.Modifiers.NONE,
-            )
+            keyInput(KeyCode.ArrowUp, KeyState.Pressed),
         )
         // No assertion — just verify it doesn't crash
     }
@@ -269,3 +271,13 @@ class PongGameTest {
         assertFalse(eventLoop.exited)
     }
 }
+
+private fun keyInput(code: KeyCode, state: KeyState): WindowEvent.KeyInput =
+    WindowEvent.KeyInput(
+        KeyEvent(
+            physicalKey = PhysicalKey.Code(code),
+            logicalKey = code.defaultLogicalKey(),
+            state = state,
+            modifiers = KeyboardModifiers.NONE,
+        ),
+    )

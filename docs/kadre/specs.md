@@ -221,7 +221,7 @@ sequenceDiagram
 |-----------|-------------|
 | `pointerdown`/`pointerup` | `WindowEvent.MouseInput` (mouse) OR `WindowEvent.Touch` (touch) depending on `pointerType` |
 | `pointermove` | `WindowEvent.PointerMoved` |
-| `keydown`/`keyup` | `WindowEvent.KeyboardInput` (mapping `code` → `Key` enum) |
+| `keydown`/`keyup` | `WindowEvent.KeyInput` (mapping `code` → `KeyEvent`) |
 | `wheel` | `WindowEvent.MouseWheel` |
 | `resize` (window) | `WindowEvent.Resized` (via ResizeObserver on canvas) |
 | `visibilitychange` | `suspended` (hidden) / `resumed` (visible) |
@@ -306,7 +306,7 @@ sequenceDiagram
 | `WM_PAINT` | `WindowEvent.RedrawRequested` |
 | `WM_SIZE` | `WindowEvent.Resized(PhysicalSize)` |
 | `WM_DPICHANGED` | `WindowEvent.ScaleFactorChanged` |
-| `WM_KEYDOWN`/`WM_KEYUP` | `WindowEvent.KeyboardInput` |
+| `WM_KEYDOWN`/`WM_KEYUP` | `WindowEvent.KeyInput` |
 | `WM_LBUTTONDOWN`/`WM_LBUTTONUP` | `WindowEvent.MouseInput(Left)` |
 | `WM_MOUSEMOVE` | `WindowEvent.PointerMoved` |
 | `WM_MOUSEWHEEL` | `WindowEvent.MouseWheel` |
@@ -413,7 +413,7 @@ Thread-safe `EventLoopProxy.wakeUp`: `XSendEvent(display, window, false, NoEvent
 |-----------|-------------|
 | `Expose` | `WindowEvent.RedrawRequested` |
 | `ConfigureNotify` | `WindowEvent.Resized` + `Moved` depending on delta |
-| `KeyPress`/`KeyRelease` | `WindowEvent.KeyboardInput` (via XLookupString for mapping) |
+| `KeyPress`/`KeyRelease` | `WindowEvent.KeyInput` (via XLookupString for mapping) |
 | `ButtonPress`/`ButtonRelease` | `WindowEvent.MouseInput` |
 | `MotionNotify` | `WindowEvent.PointerMoved` |
 | `EnterNotify`/`LeaveNotify` | `WindowEvent.PointerEntered`/`PointerLeft` |
@@ -494,7 +494,7 @@ fun pumpEvents(controlFlow: ControlFlow) {
 | `wl_pointer.motion` | `WindowEvent.PointerMoved` |
 | `wl_pointer.button` | `WindowEvent.MouseInput` |
 | `wl_pointer.axis` | `WindowEvent.MouseWheel` |
-| `wl_keyboard.key` | `WindowEvent.KeyboardInput` (via libxkbcommon mapping) |
+| `wl_keyboard.key` | `WindowEvent.KeyInput` (via libxkbcommon mapping) |
 | `wl_keyboard.enter`/`leave` | `WindowEvent.Focused` |
 | `wl_touch.down`/`up`/`motion` | `WindowEvent.Touch` |
 | `wl_output.scale` | `WindowEvent.ScaleFactorChanged` (per-output scale) |
@@ -645,7 +645,7 @@ class PongGame : ApplicationHandler {
             is WindowEvent.CloseRequested -> eventLoop.exit()
             is WindowEvent.RedrawRequested -> draw()
             is WindowEvent.Resized -> renderer?.resize(event.size)
-            is WindowEvent.KeyboardInput -> inputAdapter.onKey(event)
+            is WindowEvent.KeyInput -> inputAdapter.onKey(event)
             is WindowEvent.Touch -> inputAdapter.onTouch(event, window!!.innerSize())
             else -> {}
         }
@@ -695,11 +695,11 @@ class InputAdapter {
     var playerInput = PaddleInput.None
         private set
 
-    fun onKey(event: WindowEvent.KeyboardInput) {
-        playerInput = when (event.key to event.state) {
-            Key.ArrowUp to KeyState.Pressed -> PaddleInput.Up
-            Key.ArrowDown to KeyState.Pressed -> PaddleInput.Down
-            else -> if (event.state == KeyState.Released) PaddleInput.None else playerInput
+    fun onKey(event: WindowEvent.KeyInput) {
+        playerInput = when (event.event.physicalKey to event.event.state) {
+            PhysicalKey.Code(KeyCode.ArrowUp) to KeyState.Pressed -> PaddleInput.Up
+            PhysicalKey.Code(KeyCode.ArrowDown) to KeyState.Pressed -> PaddleInput.Down
+            else -> if (event.event.state == KeyState.Released) PaddleInput.None else playerInput
         }
     }
 

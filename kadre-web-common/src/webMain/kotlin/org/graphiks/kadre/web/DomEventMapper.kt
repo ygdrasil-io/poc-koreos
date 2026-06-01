@@ -12,6 +12,17 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyPlatform
+import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.LogicalKey
+import org.graphiks.kadre.core.NativeKeyInfo
+import org.graphiks.kadre.core.PhysicalKey
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
+
 /**
  * Converts a DOM code (`KeyboardEvent.code`) into a Kadre [WebKey].
  *
@@ -102,6 +113,75 @@ internal fun domCodeToKey(code: String): WebKey = when (code) {
     else -> WebKey.Unknown
 }
 
+internal fun domCodeToKeyCode(code: String): KeyCode? = when (code) {
+    "KeyA" -> KeyCode.KeyA
+    "KeyB" -> KeyCode.KeyB
+    "KeyC" -> KeyCode.KeyC
+    "KeyD" -> KeyCode.KeyD
+    "KeyE" -> KeyCode.KeyE
+    "KeyF" -> KeyCode.KeyF
+    "KeyG" -> KeyCode.KeyG
+    "KeyH" -> KeyCode.KeyH
+    "KeyI" -> KeyCode.KeyI
+    "KeyJ" -> KeyCode.KeyJ
+    "KeyK" -> KeyCode.KeyK
+    "KeyL" -> KeyCode.KeyL
+    "KeyM" -> KeyCode.KeyM
+    "KeyN" -> KeyCode.KeyN
+    "KeyO" -> KeyCode.KeyO
+    "KeyP" -> KeyCode.KeyP
+    "KeyQ" -> KeyCode.KeyQ
+    "KeyR" -> KeyCode.KeyR
+    "KeyS" -> KeyCode.KeyS
+    "KeyT" -> KeyCode.KeyT
+    "KeyU" -> KeyCode.KeyU
+    "KeyV" -> KeyCode.KeyV
+    "KeyW" -> KeyCode.KeyW
+    "KeyX" -> KeyCode.KeyX
+    "KeyY" -> KeyCode.KeyY
+    "KeyZ" -> KeyCode.KeyZ
+    "Digit0" -> KeyCode.Digit0
+    "Digit1" -> KeyCode.Digit1
+    "Digit2" -> KeyCode.Digit2
+    "Digit3" -> KeyCode.Digit3
+    "Digit4" -> KeyCode.Digit4
+    "Digit5" -> KeyCode.Digit5
+    "Digit6" -> KeyCode.Digit6
+    "Digit7" -> KeyCode.Digit7
+    "Digit8" -> KeyCode.Digit8
+    "Digit9" -> KeyCode.Digit9
+    "F1" -> KeyCode.F1
+    "F2" -> KeyCode.F2
+    "F3" -> KeyCode.F3
+    "F4" -> KeyCode.F4
+    "F5" -> KeyCode.F5
+    "F6" -> KeyCode.F6
+    "F7" -> KeyCode.F7
+    "F8" -> KeyCode.F8
+    "F9" -> KeyCode.F9
+    "F10" -> KeyCode.F10
+    "F11" -> KeyCode.F11
+    "F12" -> KeyCode.F12
+    "Space" -> KeyCode.Space
+    "Enter" -> KeyCode.Enter
+    "Escape" -> KeyCode.Escape
+    "Backspace" -> KeyCode.Backspace
+    "Tab" -> KeyCode.Tab
+    "ArrowUp" -> KeyCode.ArrowUp
+    "ArrowDown" -> KeyCode.ArrowDown
+    "ArrowLeft" -> KeyCode.ArrowLeft
+    "ArrowRight" -> KeyCode.ArrowRight
+    "ShiftLeft" -> KeyCode.ShiftLeft
+    "ShiftRight" -> KeyCode.ShiftRight
+    "ControlLeft" -> KeyCode.ControlLeft
+    "ControlRight" -> KeyCode.ControlRight
+    "AltLeft" -> KeyCode.AltLeft
+    "AltRight" -> KeyCode.AltRight
+    "MetaLeft" -> KeyCode.MetaLeft
+    "MetaRight" -> KeyCode.MetaRight
+    else -> null
+}
+
 /**
  * Builds a [WebModifiers] from the boolean fields of a DOM `KeyboardEvent` or `MouseEvent`.
  *
@@ -123,6 +203,53 @@ internal fun domModifiers(
     if (altKey)   mods = mods + WebModifiers.ALT
     if (metaKey)  mods = mods + WebModifiers.META
     return mods
+}
+
+internal fun domKeyboardModifiers(
+    shiftKey: Boolean,
+    ctrlKey: Boolean,
+    altKey: Boolean,
+    metaKey: Boolean,
+): KeyboardModifiers {
+    var mods = KeyboardModifiers.NONE
+    if (shiftKey) mods += KeyboardModifiers.Shift
+    if (ctrlKey) mods += KeyboardModifiers.Ctrl
+    if (altKey) mods += KeyboardModifiers.Alt
+    if (metaKey) mods += KeyboardModifiers.Meta
+    return mods
+}
+
+internal fun domKeyEvent(
+    code: String,
+    key: String,
+    eventType: String,
+    shiftKey: Boolean,
+    ctrlKey: Boolean,
+    altKey: Boolean,
+    metaKey: Boolean,
+    repeat: Boolean,
+): KeyEvent {
+    val mappedCode = domCodeToKeyCode(code)
+    val native = NativeKeyInfo(
+        platform = KeyPlatform.Web,
+        keyCode = code,
+        keyValue = key,
+    )
+    val logicalKey = when {
+        key.length == 1 -> LogicalKey.Character(key)
+        mappedCode != null -> mappedCode.defaultLogicalKey()
+        else -> LogicalKey.Unidentified(native)
+    }
+    return KeyEvent(
+        physicalKey = mappedCode?.let(PhysicalKey::Code) ?: PhysicalKey.Native(KeyPlatform.Web, code.hashCode().toLong()),
+        logicalKey = logicalKey,
+        state = domCoreKeyStateFromEventType(eventType),
+        modifiers = domKeyboardModifiers(shiftKey, ctrlKey, altKey, metaKey),
+        repeat = repeat,
+        text = key.takeIf { it.length == 1 } ?: mappedCode?.defaultText(),
+        keyWithoutModifiers = mappedCode?.defaultLogicalKey(),
+        native = native,
+    )
 }
 
 /**
@@ -154,6 +281,11 @@ internal fun domKeyStateFromEventType(eventType: String): WebKeyState = when (ev
     "keydown"     -> WebKeyState.Pressed
     "pointerdown" -> WebKeyState.Pressed
     else          -> WebKeyState.Released
+}
+
+internal fun domCoreKeyStateFromEventType(eventType: String): KeyState = when (eventType) {
+    "keydown" -> KeyState.Pressed
+    else -> KeyState.Released
 }
 
 /**

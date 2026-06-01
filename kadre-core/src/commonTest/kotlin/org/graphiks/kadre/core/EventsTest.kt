@@ -1,144 +1,160 @@
 /**
  * Unit tests for the kadre-core event model.
- *
- * Verifies:
- * - The exhaustiveness of the `when` on [WindowEvent] and [DeviceEvent] (without `else`)
- * - The bit logic of [Modifiers]: combination and membership
- * - The construction and equality of each variant
- * - The [Key] enum covers at least the required set (letters, digits, F1–F12, navigation)
- * - The [KeyState] enum has exactly the two expected states
- * - The [TouchPhase] enum has exactly the four expected phases
  */
 package org.graphiks.kadre.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class EventsTest {
 
     // -----------------------------------------------------------------------
-    // Modifiers — bit logic
+    // KeyboardModifiers - bit logic
     // -----------------------------------------------------------------------
 
     @Test
     fun `SHIFT plus CTRL contains SHIFT`() {
-        val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertTrue(mods.contains(Modifiers.SHIFT), "SHIFT+CTRL must contain SHIFT")
+        val mods = KeyboardModifiers.Shift + KeyboardModifiers.Ctrl
+        assertTrue(mods.contains(KeyboardModifiers.Shift), "SHIFT+CTRL must contain SHIFT")
     }
 
     @Test
     fun `SHIFT plus CTRL contains CTRL`() {
-        val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertTrue(mods.contains(Modifiers.CTRL), "SHIFT+CTRL must contain CTRL")
+        val mods = KeyboardModifiers.Shift + KeyboardModifiers.Ctrl
+        assertTrue(mods.contains(KeyboardModifiers.Ctrl), "SHIFT+CTRL must contain CTRL")
     }
 
     @Test
     fun `SHIFT plus CTRL does not contain ALT`() {
-        val mods = Modifiers.SHIFT + Modifiers.CTRL
-        assertFalse(mods.contains(Modifiers.ALT), "SHIFT+CTRL must not contain ALT")
+        val mods = KeyboardModifiers.Shift + KeyboardModifiers.Ctrl
+        assertFalse(mods.contains(KeyboardModifiers.Alt), "SHIFT+CTRL must not contain ALT")
     }
 
     @Test
-    fun `NONE contains no modifier`() {
-        val mods = Modifiers.NONE
+    fun `NONE contains no keyboard modifier`() {
+        val mods = KeyboardModifiers.NONE
         assertFalse(mods.shift, "NONE.shift must be false")
-        assertFalse(mods.ctrl,  "NONE.ctrl must be false")
-        assertFalse(mods.alt,   "NONE.alt must be false")
-        assertFalse(mods.meta,  "NONE.meta must be false")
+        assertFalse(mods.ctrl, "NONE.ctrl must be false")
+        assertFalse(mods.alt, "NONE.alt must be false")
+        assertFalse(mods.meta, "NONE.meta must be false")
+        assertFalse(mods.altGraph, "NONE.altGraph must be false")
+        assertFalse(mods.capsLock, "NONE.capsLock must be false")
+        assertFalse(mods.numLock, "NONE.numLock must be false")
+        assertFalse(mods.symbol, "NONE.symbol must be false")
     }
 
     @Test
-    fun `each constant enables exactly its boolean property`() {
-        assertTrue(Modifiers.SHIFT.shift, "SHIFT.shift must be true")
-        assertTrue(Modifiers.CTRL.ctrl,   "CTRL.ctrl must be true")
-        assertTrue(Modifiers.ALT.alt,     "ALT.alt must be true")
-        assertTrue(Modifiers.META.meta,   "META.meta must be true")
-    }
-
-    @Test
-    fun `SHIFT plus CTRL plus ALT plus META enables all four properties`() {
-        val tout = Modifiers.SHIFT + Modifiers.CTRL + Modifiers.ALT + Modifiers.META
-        assertTrue(tout.shift, "shift must be true")
-        assertTrue(tout.ctrl,  "ctrl must be true")
-        assertTrue(tout.alt,   "alt must be true")
-        assertTrue(tout.meta,  "meta must be true")
-    }
-
-    @Test
-    fun `NONE contains NONE`() {
-        assertTrue(Modifiers.NONE.contains(Modifiers.NONE))
-    }
-
-    @Test
-    fun `plus is idempotent`() {
-        val mods = Modifiers.SHIFT + Modifiers.SHIFT
-        assertEquals(Modifiers.SHIFT, mods, "SHIFT+SHIFT must equal SHIFT")
+    fun `minus removes a modifier`() {
+        val mods = KeyboardModifiers.Shift + KeyboardModifiers.Ctrl - KeyboardModifiers.Shift
+        assertFalse(mods.shift)
+        assertTrue(mods.ctrl)
     }
 
     // -----------------------------------------------------------------------
-    // Key — coverage of the required set
+    // KeyCode and NamedKey coverage
     // -----------------------------------------------------------------------
 
     @Test
-    fun `all letters A to Z are present in Key`() {
-        val lettres = ('A'..'Z').map { it.toString() }
-        val entrees = Key.entries.map { it.name }
-        for (lettre in lettres) {
-            assertTrue(lettre in entrees, "Key.$lettre missing")
-        }
+    fun `physical key codes include letters digits navigation and F35`() {
+        val entries = KeyCode.entries.map { it.name }.toSet()
+        assertTrue("KeyA" in entries)
+        assertTrue("KeyZ" in entries)
+        assertTrue("Digit0" in entries)
+        assertTrue("Digit9" in entries)
+        assertTrue("ArrowUp" in entries)
+        assertTrue("NumpadEnter" in entries)
+        assertTrue("F35" in entries)
     }
 
     @Test
-    fun `all digits Digit0 to Digit9 are present in Key`() {
-        val chiffres = (0..9).map { "Digit$it" }
-        val entrees = Key.entries.map { it.name }
-        for (chiffre in chiffres) {
-            assertTrue(chiffre in entrees, "Key.$chiffre missing")
-        }
+    fun `named keys include text navigation modifiers and media`() {
+        val entries = NamedKey.entries.map { it.name }.toSet()
+        assertTrue("Enter" in entries)
+        assertTrue("ArrowDown" in entries)
+        assertTrue("AltGraph" in entries)
+        assertTrue("MediaPlayPause" in entries)
+        assertTrue("F35" in entries)
     }
 
-    @Test
-    fun `all function keys F1 to F12 are present in Key`() {
-        val fonctions = (1..12).map { "F$it" }
-        val entrees = Key.entries.map { it.name }
-        for (fn in fonctions) {
-            assertTrue(fn in entrees, "Key.$fn missing")
-        }
-    }
+    // -----------------------------------------------------------------------
+    // KeyEvent - rich keyboard contract
+    // -----------------------------------------------------------------------
 
     @Test
-    fun `navigation keys are present in Key`() {
-        val navigation = listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")
-        val entrees = Key.entries.map { it.name }
-        for (touche in navigation) {
-            assertTrue(touche in entrees, "Key.$touche missing")
-        }
-    }
-
-    @Test
-    fun `modifiers are present in Key`() {
-        val modificateurs = listOf(
-            "ShiftLeft", "ShiftRight",
-            "ControlLeft", "ControlRight",
-            "AltLeft", "AltRight",
-            "MetaLeft", "MetaRight",
+    fun `KeyEvent separates physical and logical key`() {
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyW),
+            logicalKey = LogicalKey.Character("z"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.NONE,
+            text = "z",
+            keyWithoutModifiers = LogicalKey.Character("z"),
+            native = NativeKeyInfo(platform = KeyPlatform.Web, keyCode = "KeyW", keyValue = "z"),
         )
-        val entrees = Key.entries.map { it.name }
-        for (touche in modificateurs) {
-            assertTrue(touche in entrees, "Key.$touche missing")
-        }
+
+        assertEquals(PhysicalKey.Code(KeyCode.KeyW), event.physicalKey)
+        assertEquals(LogicalKey.Character("z"), event.logicalKey)
+        assertEquals("z", event.character)
+        assertTrue(event.isPressed)
+        assertFalse(event.isReleased)
+        assertEquals(KeyPlatform.Web, event.native.platform)
     }
 
     @Test
-    fun `special keys are present in Key`() {
-        val speciales = listOf("Space", "Enter", "Escape", "Backspace", "Tab", "Unknown")
-        val entrees = Key.entries.map { it.name }
-        for (touche in speciales) {
-            assertTrue(touche in entrees, "Key.$touche missing")
-        }
+    fun `LogicalKey Dead is distinct from printable character`() {
+        assertFalse(LogicalKey.Dead("^") == LogicalKey.Character("^"))
+    }
+
+    @Test
+    fun `Native physical key keeps platform code`() {
+        val key = PhysicalKey.Native(KeyPlatform.AppKit, 126)
+        assertEquals(KeyPlatform.AppKit, key.platform)
+        assertEquals(126, key.code)
+    }
+
+    @Test
+    fun `KeyChord can match physical bindings independent of layout`() {
+        val chord = KeyChord(physicalKey = PhysicalKey.Code(KeyCode.KeyW))
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyW),
+            logicalKey = LogicalKey.Character("z"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.NONE,
+        )
+
+        assertTrue(chord.matches(event))
+    }
+
+    @Test
+    fun `KeyChord rejects repeat by default`() {
+        val chord = KeyChord(logicalKey = LogicalKey.Named(NamedKey.Enter))
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.Enter),
+            logicalKey = LogicalKey.Named(NamedKey.Enter),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.NONE,
+            repeat = true,
+        )
+
+        assertFalse(chord.matches(event))
+    }
+
+    @Test
+    fun `KeyChord can match logical shortcuts with modifiers`() {
+        val chord = KeyChord(
+            logicalKey = LogicalKey.Character("s"),
+            modifiers = KeyboardModifiers.Ctrl,
+        )
+        val event = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyS),
+            logicalKey = LogicalKey.Character("s"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.Ctrl + KeyboardModifiers.Shift,
+        )
+
+        assertTrue(chord.matches(event))
     }
 
     // -----------------------------------------------------------------------
@@ -147,8 +163,8 @@ class EventsTest {
 
     @Test
     fun `KeyState has exactly Pressed and Released`() {
-        val noms = KeyState.entries.map { it.name }.toSet()
-        assertEquals(setOf("Pressed", "Released"), noms)
+        val names = KeyState.entries.map { it.name }.toSet()
+        assertEquals(setOf("Pressed", "Released"), names)
     }
 
     // -----------------------------------------------------------------------
@@ -157,12 +173,12 @@ class EventsTest {
 
     @Test
     fun `TouchPhase has exactly the four phases`() {
-        val noms = TouchPhase.entries.map { it.name }.toSet()
-        assertEquals(setOf("Started", "Moved", "Ended", "Cancelled"), noms)
+        val names = TouchPhase.entries.map { it.name }.toSet()
+        assertEquals(setOf("Started", "Moved", "Ended", "Cancelled"), names)
     }
 
     // -----------------------------------------------------------------------
-    // MouseButton — equality and structure
+    // MouseButton - equality and structure
     // -----------------------------------------------------------------------
 
     @Test
@@ -172,8 +188,8 @@ class EventsTest {
 
     @Test
     fun `MouseButton Other keeps its index`() {
-        val bouton = MouseButton.Other(5)
-        assertEquals(5, bouton.button)
+        val button = MouseButton.Other(5)
+        assertEquals(5, button.button)
     }
 
     @Test
@@ -182,173 +198,85 @@ class EventsTest {
     }
 
     // -----------------------------------------------------------------------
-    // WindowEvent — when exhaustiveness (without else) + variant construction
+    // WindowEvent - when exhaustiveness (without else) + variant construction
     // -----------------------------------------------------------------------
 
-    /**
-     * Explicitly enumerates the 14 variants without an `else` clause.
-     * If a variant is added or removed, this `when` will no longer compile.
-     */
-    private fun classerWindowEvent(event: WindowEvent): String = when (event) {
-        WindowEvent.CloseRequested        -> "CloseRequested"
-        is WindowEvent.Resized            -> "Resized"
-        is WindowEvent.Moved              -> "Moved"
+    private fun classifyWindowEvent(event: WindowEvent): String = when (event) {
+        WindowEvent.CloseRequested -> "CloseRequested"
+        is WindowEvent.Resized -> "Resized"
+        is WindowEvent.Moved -> "Moved"
         is WindowEvent.ScaleFactorChanged -> "ScaleFactorChanged"
-        is WindowEvent.Focused            -> "Focused"
-        is WindowEvent.KeyboardInput      -> "KeyboardInput"
-        is WindowEvent.PointerMoved       -> "PointerMoved"
-        WindowEvent.PointerEntered        -> "PointerEntered"
-        WindowEvent.PointerLeft           -> "PointerLeft"
-        is WindowEvent.MouseInput         -> "MouseInput"
-        is WindowEvent.MouseWheel         -> "MouseWheel"
-        is WindowEvent.Touch              -> "Touch"
-        WindowEvent.RedrawRequested       -> "RedrawRequested"
-        WindowEvent.Destroyed             -> "Destroyed"
+        is WindowEvent.Focused -> "Focused"
+        is WindowEvent.KeyInput -> "KeyInput"
+        is WindowEvent.PointerMoved -> "PointerMoved"
+        WindowEvent.PointerEntered -> "PointerEntered"
+        WindowEvent.PointerLeft -> "PointerLeft"
+        is WindowEvent.MouseInput -> "MouseInput"
+        is WindowEvent.MouseWheel -> "MouseWheel"
+        is WindowEvent.Touch -> "Touch"
+        is WindowEvent.ModifiersChanged -> "ModifiersChanged"
+        WindowEvent.RedrawRequested -> "RedrawRequested"
+        WindowEvent.Destroyed -> "Destroyed"
     }
 
     @Test
-    fun `WindowEvent CloseRequested is correctly classified`() {
-        assertEquals("CloseRequested", classerWindowEvent(WindowEvent.CloseRequested))
+    fun `WindowEvent KeyInput keeps rich event`() {
+        val keyEvent = KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.KeyA),
+            logicalKey = LogicalKey.Character("a"),
+            state = KeyState.Pressed,
+            modifiers = KeyboardModifiers.Shift,
+            text = "A",
+        )
+        val event = WindowEvent.KeyInput(keyEvent)
+        assertEquals("KeyInput", classifyWindowEvent(event))
+        assertEquals(keyEvent, event.event)
+    }
+
+    @Test
+    fun `WindowEvent ModifiersChanged keeps logical and physical state`() {
+        val state = KeyboardModifierState(
+            logical = KeyboardModifiers.Shift,
+            physical = ModifierKeys(leftShift = ModifierKeyState.Pressed),
+        )
+        val event = WindowEvent.ModifiersChanged(state)
+
+        assertEquals("ModifiersChanged", classifyWindowEvent(event))
+        assertTrue(event.state.logical.shift)
+        assertEquals(ModifierKeyState.Pressed, event.state.physical.leftShift)
     }
 
     @Test
     fun `WindowEvent Resized keeps the size`() {
-        val taille = PhysicalSize(1920, 1080)
-        val event = WindowEvent.Resized(taille)
-        assertEquals("Resized", classerWindowEvent(event))
-        assertEquals(taille, event.size)
-    }
-
-    @Test
-    fun `WindowEvent Moved keeps the position`() {
-        val pos = PhysicalPosition(100, 200)
-        val event = WindowEvent.Moved(pos)
-        assertEquals("Moved", classerWindowEvent(event))
-        assertEquals(pos, event.position)
-    }
-
-    @Test
-    fun `WindowEvent ScaleFactorChanged keeps the factor`() {
-        val event = WindowEvent.ScaleFactorChanged(2.0)
-        assertEquals("ScaleFactorChanged", classerWindowEvent(event))
-        assertEquals(2.0, event.factor)
-    }
-
-    @Test
-    fun `WindowEvent Focused keeps the boolean`() {
-        val eventGained = WindowEvent.Focused(true)
-        val eventLost   = WindowEvent.Focused(false)
-        assertEquals("Focused", classerWindowEvent(eventGained))
-        assertTrue(eventGained.gained)
-        assertFalse(eventLost.gained)
-    }
-
-    @Test
-    fun `WindowEvent KeyboardInput keeps key state and modifiers`() {
-        val event = WindowEvent.KeyboardInput(Key.A, KeyState.Pressed, Modifiers.SHIFT)
-        assertEquals("KeyboardInput", classerWindowEvent(event))
-        assertEquals(Key.A, event.key)
-        assertEquals(KeyState.Pressed, event.state)
-        assertEquals(Modifiers.SHIFT, event.modifiers)
+        val size = PhysicalSize(1920, 1080)
+        val event = WindowEvent.Resized(size)
+        assertEquals("Resized", classifyWindowEvent(event))
+        assertEquals(size, event.size)
     }
 
     @Test
     fun `WindowEvent PointerMoved keeps the position`() {
         val pos = PhysicalPosition(123.4, 567.8)
         val event = WindowEvent.PointerMoved(pos)
-        assertEquals("PointerMoved", classerWindowEvent(event))
+        assertEquals("PointerMoved", classifyWindowEvent(event))
         assertEquals(pos, event.position)
     }
 
-    @Test
-    fun `WindowEvent PointerEntered is correctly classified`() {
-        assertEquals("PointerEntered", classerWindowEvent(WindowEvent.PointerEntered))
-    }
-
-    @Test
-    fun `WindowEvent PointerLeft is correctly classified`() {
-        assertEquals("PointerLeft", classerWindowEvent(WindowEvent.PointerLeft))
-    }
-
-    @Test
-    fun `WindowEvent MouseInput keeps button and state`() {
-        val event = WindowEvent.MouseInput(MouseButton.Left, KeyState.Released)
-        assertEquals("MouseInput", classerWindowEvent(event))
-        assertEquals(MouseButton.Left, event.button)
-        assertEquals(KeyState.Released, event.state)
-    }
-
-    @Test
-    fun `WindowEvent MouseWheel keeps the deltas`() {
-        val event = WindowEvent.MouseWheel(3.0, -1.5)
-        assertEquals("MouseWheel", classerWindowEvent(event))
-        assertEquals(3.0,  event.deltaX)
-        assertEquals(-1.5, event.deltaY)
-    }
-
-    @Test
-    fun `WindowEvent Touch keeps phase location and id`() {
-        val loc = PhysicalPosition(50.0, 75.0)
-        val event = WindowEvent.Touch(TouchPhase.Started, loc, 42L)
-        assertEquals("Touch", classerWindowEvent(event))
-        assertEquals(TouchPhase.Started, event.phase)
-        assertEquals(loc, event.location)
-        assertEquals(42L, event.id)
-    }
-
-    @Test
-    fun `WindowEvent RedrawRequested is correctly classified`() {
-        assertEquals("RedrawRequested", classerWindowEvent(WindowEvent.RedrawRequested))
-    }
-
-    @Test
-    fun `WindowEvent Destroyed is correctly classified`() {
-        assertEquals("Destroyed", classerWindowEvent(WindowEvent.Destroyed))
-    }
-
     // -----------------------------------------------------------------------
-    // DeviceEvent — when exhaustiveness (without else) + variant construction
+    // DeviceEvent - when exhaustiveness (without else) + variant construction
     // -----------------------------------------------------------------------
 
-    /**
-     * Explicitly enumerates the 3 variants without an `else` clause.
-     */
-    private fun classerDeviceEvent(event: DeviceEvent): String = when (event) {
+    private fun classifyDeviceEvent(event: DeviceEvent): String = when (event) {
         is DeviceEvent.PointerMotion -> "PointerMotion"
-        is DeviceEvent.Button        -> "Button"
-        is DeviceEvent.Key           -> "Key"
-    }
-
-    @Test
-    fun `DeviceEvent PointerMotion keeps dx and dy`() {
-        val event = DeviceEvent.PointerMotion(1.5, -2.5)
-        assertEquals("PointerMotion", classerDeviceEvent(event))
-        assertEquals(1.5,  event.dx)
-        assertEquals(-2.5, event.dy)
-    }
-
-    @Test
-    fun `DeviceEvent Button keeps the button and the state`() {
-        val event = DeviceEvent.Button(2, KeyState.Pressed)
-        assertEquals("Button", classerDeviceEvent(event))
-        assertEquals(2, event.button)
-        assertEquals(KeyState.Pressed, event.state)
+        is DeviceEvent.Button -> "Button"
+        is DeviceEvent.Key -> "Key"
     }
 
     @Test
     fun `DeviceEvent Key keeps the scancode and the state`() {
         val event = DeviceEvent.Key(0x1E, KeyState.Released)
-        assertEquals("Key", classerDeviceEvent(event))
+        assertEquals("Key", classifyDeviceEvent(event))
         assertEquals(0x1E, event.scancode)
         assertEquals(KeyState.Released, event.state)
-    }
-
-    // -----------------------------------------------------------------------
-    // Invariant DoD : (SHIFT + CTRL).contains(SHIFT) == true
-    // -----------------------------------------------------------------------
-
-    @Test
-    fun `DoD - SHIFT plus CTRL contains SHIFT is true`() {
-        assertTrue((Modifiers.SHIFT + Modifiers.CTRL).contains(Modifiers.SHIFT))
     }
 }

@@ -17,6 +17,8 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.KeyEvent
+
 // ---------------------------------------------------------------------------
 // Logical keys
 // ---------------------------------------------------------------------------
@@ -174,12 +176,7 @@ sealed interface WebWindowEvent {
      * @property modifiers Active modifiers.
      * @property isRepeat  `true` if the event is an auto-repeat.
      */
-    data class KeyboardInput(
-        val key: WebKey,
-        val state: WebKeyState,
-        val modifiers: WebModifiers,
-        val isRepeat: Boolean = false,
-    ) : WebWindowEvent
+    data class KeyInput(val event: KeyEvent) : WebWindowEvent
 
     /**
      * The pointer has moved.

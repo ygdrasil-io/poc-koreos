@@ -5,6 +5,6 @@
 [common]\
 abstract val [rawWindowHandle](raw-window-handle.md): [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)
 
-Retourne le handle natif de la surface de rendu.
+Returns the native handle of the rendering surface.
 
-Le type concret sera `RawWindowHandle` une fois GRA-122 mergé ; déclaré `Any` pour que commonMain reste indépendant de la plateforme.
+The concrete type will be `RawWindowHandle` once GRA-122 is merged; declared `Any` so that commonMain remains platform-independent.

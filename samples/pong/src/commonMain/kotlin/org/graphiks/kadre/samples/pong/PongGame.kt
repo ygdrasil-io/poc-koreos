@@ -88,7 +88,7 @@ class PongGame(
                 renderer = null
                 eventLoop.exit()
             }
-            is WindowEvent.KeyboardInput -> inputAdapter.onKey(event)
+            is WindowEvent.KeyInput -> inputAdapter.onKey(event)
             is WindowEvent.Touch -> {
                 val win = window
                 if (win != null) {
@@ -128,4 +128,3 @@ class PongGame(
         renderer = null
     }
 }
-

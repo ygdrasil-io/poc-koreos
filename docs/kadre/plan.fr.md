@@ -138,7 +138,7 @@ Une lib KMP qui :
 **Définition de "done"** :
 - `./gradlew :samples:hello-triangle-web:run` (ou équivalent webpack-serve) ouvre la page, triangle rendu 60fps stable
 - Idem pour Wasm
-- Mêmes WindowEvent dispatchés que sur Desktop (PointerMoved, MouseInput, KeyboardInput, Resized)
+- Mêmes WindowEvent dispatchés que sur Desktop (PointerMoved, MouseInput, KeyInput, Resized)
 - Lifecycle : `visibilitychange` → suspended/resumed cohérents
 
 ---
@@ -192,7 +192,7 @@ Une lib KMP qui :
 - `samples/pong` : module KMP avec cibles jvm, androidTarget, iosX64/Arm64/SimArm64, jsBrowser, wasmJsBrowser, jvm-windows, jvm-linux (cibles toutes via les facades existantes)
 - Logique Pong en `commonMain` :
   - `PongGame : ApplicationHandler`
-  - Raquette droite contrôlée par `WindowEvent.KeyboardInput` (Desktop : flèches haut/bas) OU `WindowEvent.Touch` (mobile/web touch : zone droite de l'écran tap to move)
+  - Raquette droite contrôlée par `WindowEvent.KeyInput` (Desktop : flèches haut/bas) OU `WindowEvent.Touch` (mobile/web touch : zone droite de l'écran tap to move)
   - Raquette gauche = IA simple (suit la balle avec un coefficient de lag pour difficulté)
   - Balle : physique 2D simple (rebonds raquettes/murs haut/bas)
   - Score affiché en haut (pas d'audio)

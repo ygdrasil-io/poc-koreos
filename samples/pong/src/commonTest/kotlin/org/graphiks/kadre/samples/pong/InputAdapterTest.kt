@@ -1,12 +1,15 @@
 package org.graphiks.kadre.samples.pong
 
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyState
-import org.graphiks.kadre.core.Modifiers
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.defaultLogicalKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -14,8 +17,15 @@ class InputAdapterTest {
 
     private val screenSize = PhysicalSize(800, 600)
 
-    private fun keyEvent(key: Key, state: KeyState) =
-        WindowEvent.KeyboardInput(key = key, state = state, modifiers = Modifiers.NONE)
+    private fun keyEvent(code: KeyCode, state: KeyState): WindowEvent.KeyInput =
+        WindowEvent.KeyInput(
+            KeyEvent(
+                physicalKey = PhysicalKey.Code(code),
+                logicalKey = code.defaultLogicalKey(),
+                state = state,
+                modifiers = KeyboardModifiers.NONE,
+            ),
+        )
 
     private fun touchEvent(phase: TouchPhase, x: Double, y: Double, id: Long = 0L) =
         WindowEvent.Touch(phase = phase, location = PhysicalPosition(x, y), id = id)
@@ -27,38 +37,38 @@ class InputAdapterTest {
     @Test
     fun `ArrowUp Pressed → UP`() {
         val adapter = InputAdapter()
-        adapter.onKey(keyEvent(Key.ArrowUp, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.ArrowUp, KeyState.Pressed))
         assertEquals(PaddleInput.UP, adapter.playerInput)
     }
 
     @Test
     fun `ArrowDown Pressed → DOWN`() {
         val adapter = InputAdapter()
-        adapter.onKey(keyEvent(Key.ArrowDown, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.ArrowDown, KeyState.Pressed))
         assertEquals(PaddleInput.DOWN, adapter.playerInput)
     }
 
     @Test
     fun `ArrowUp Released → NONE`() {
         val adapter = InputAdapter()
-        adapter.onKey(keyEvent(Key.ArrowUp, KeyState.Pressed))
-        adapter.onKey(keyEvent(Key.ArrowUp, KeyState.Released))
+        adapter.onKey(keyEvent(KeyCode.ArrowUp, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.ArrowUp, KeyState.Released))
         assertEquals(PaddleInput.NONE, adapter.playerInput)
     }
 
     @Test
     fun `ArrowDown Released → NONE`() {
         val adapter = InputAdapter()
-        adapter.onKey(keyEvent(Key.ArrowDown, KeyState.Pressed))
-        adapter.onKey(keyEvent(Key.ArrowDown, KeyState.Released))
+        adapter.onKey(keyEvent(KeyCode.ArrowDown, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.ArrowDown, KeyState.Released))
         assertEquals(PaddleInput.NONE, adapter.playerInput)
     }
 
     @Test
     fun `other key does not affect the state`() {
         val adapter = InputAdapter()
-        adapter.onKey(keyEvent(Key.ArrowUp, KeyState.Pressed))
-        adapter.onKey(keyEvent(Key.Space, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.ArrowUp, KeyState.Pressed))
+        adapter.onKey(keyEvent(KeyCode.Space, KeyState.Pressed))
         assertEquals(PaddleInput.UP, adapter.playerInput)
     }
 
