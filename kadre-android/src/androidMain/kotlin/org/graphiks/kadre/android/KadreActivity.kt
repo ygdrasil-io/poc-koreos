@@ -10,11 +10,17 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.TouchForce
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
@@ -199,23 +205,72 @@ abstract class KadreActivity : ComponentActivity() {
             else -> return
         }
 
-        if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+        if (event.actionMasked == MotionEvent.ACTION_MOVE || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             for (pointerIndex in 0 until event.pointerCount) {
-                val location = PhysicalPosition(
-                    event.getX(pointerIndex).toDouble(),
-                    event.getY(pointerIndex).toDouble(),
-                )
-                val id = event.getPointerId(pointerIndex).toLong()
-                handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
+                dispatchTouchPointer(event, window, pointerIndex, phase)
             }
         } else {
-            val pointerIndex = event.actionIndex
-            val location = PhysicalPosition(
-                event.getX(pointerIndex).toDouble(),
-                event.getY(pointerIndex).toDouble(),
+            dispatchTouchPointer(event, window, event.actionIndex, phase)
+        }
+    }
+
+    private fun dispatchTouchPointer(
+        event: MotionEvent,
+        window: AndroidWindow,
+        pointerIndex: Int,
+        phase: TouchPhase,
+    ) {
+        val location = PhysicalPosition(
+            event.getX(pointerIndex).toDouble(),
+            event.getY(pointerIndex).toDouble(),
+        )
+        val deviceId = DeviceId(event.deviceId.toLong())
+        val fingerId = FingerId(event.getPointerId(pointerIndex).toLong())
+        val primary = pointerIndex == 0
+        val force = TouchForce.Normalized(event.getPressure(pointerIndex).toDouble())
+
+        when (phase) {
+            TouchPhase.Started -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerEntered(deviceId, location, primary, PointerKind.Touch),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Pressed, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+            }
+            TouchPhase.Moved -> handler.windowEvent(
+                eventLoop,
+                window.id,
+                WindowEvent.PointerMoved(deviceId, location, primary, PointerSource.Touch(fingerId, force)),
             )
-            val id = event.getPointerId(pointerIndex).toLong()
-            handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
+            TouchPhase.Ended -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Released, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerLeft(deviceId, location, primary, PointerKind.Touch),
+                )
+            }
+            TouchPhase.Cancelled -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Released, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerLeft(deviceId, location, primary, PointerKind.Touch),
+                )
+            }
         }
     }
 
@@ -257,7 +312,7 @@ abstract class KadreActivity : ComponentActivity() {
                     repeat = isRepeat,
                     text = mappedCode.defaultText(),
                     keyWithoutModifiers = logicalKey,
-                    native = native,
+                    native = native.copy(scanCode = event.scanCode.toLong()),
                 ),
             ),
         )

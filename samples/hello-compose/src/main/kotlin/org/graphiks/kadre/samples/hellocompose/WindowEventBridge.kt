@@ -6,11 +6,13 @@
 package org.graphiks.kadre.samples.hellocompose
 
 import androidx.compose.ui.input.pointer.PointerButton
+import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.KeyboardModifiers
-import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.LogicalKey
 import org.graphiks.kadre.core.PhysicalKey
+import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowEvent
 import java.awt.Component
@@ -25,9 +27,11 @@ internal fun ComposeWindowRenderer.applyWindowEvent(event: WindowEvent, window: 
     when (event) {
         is WindowEvent.RedrawRequested -> renderFrame()
         is WindowEvent.PointerMoved -> onPointerMoved(event.position.x, event.position.y)
-        is WindowEvent.MouseInput ->
-            mapButton(event.button)?.let { (bit, button) ->
-                onPointerButton(bit, event.state == KeyState.Pressed, button)
+        is WindowEvent.PointerButton ->
+            (event.button as? ButtonSource.Mouse)?.let { source ->
+                mapButton(source.button)?.let { (bit, button) ->
+                    onPointerButton(bit, event.state == KeyState.Pressed, button)
+                }
             }
         is WindowEvent.MouseWheel -> onScroll(event.deltaX, event.deltaY)
         is WindowEvent.PointerEntered -> onPointerEnter()
@@ -67,18 +71,18 @@ class KeyForwarder {
         if (disabled) return
         val src = source ?: run { disabled = true; return }
 
-        val keyEvent = event.event
-        val mods = awtModifiers(keyEvent.modifiers)
-        val vk = toAwtKeyCode(keyEvent.physicalKey)
+        val key = event.event
+        val mods = awtModifiers(key.modifiers)
+        val vk = toAwtKeyCode(key.physicalKey)
         val now = System.currentTimeMillis()
 
         runCatching {
-            if (keyEvent.state == KeyState.Pressed) {
+            if (key.state == KeyState.Pressed) {
                 if (vk != AwtKeyEvent.VK_UNDEFINED) {
                     renderer.sendKey(AwtKeyEvent(src, AwtKeyEvent.KEY_PRESSED, now, mods, vk, AwtKeyEvent.CHAR_UNDEFINED))
                 }
-                val ch = keyEvent.text?.singleOrNull() ?: keyEvent.character?.singleOrNull()
-                if (ch != null && !keyEvent.modifiers.ctrl && !keyEvent.modifiers.meta) {
+                val ch = typedChar(key.logicalKey, key.physicalKey, key.modifiers.shift)
+                if (ch != null && !key.modifiers.ctrl && !key.modifiers.meta) {
                     renderer.sendKey(AwtKeyEvent(src, AwtKeyEvent.KEY_TYPED, now, mods, AwtKeyEvent.VK_UNDEFINED, ch))
                 }
             } else if (vk != AwtKeyEvent.VK_UNDEFINED) {
@@ -120,5 +124,19 @@ private fun toAwtKeyCode(physicalKey: PhysicalKey): Int {
         KeyCode.AltLeft, KeyCode.AltRight -> AwtKeyEvent.VK_ALT
         KeyCode.MetaLeft, KeyCode.MetaRight -> AwtKeyEvent.VK_META
         else -> AwtKeyEvent.VK_UNDEFINED
+    }
+}
+
+private fun typedChar(logicalKey: LogicalKey, physicalKey: PhysicalKey, shift: Boolean): Char? {
+    (logicalKey as? LogicalKey.Character)?.text?.singleOrNull()?.let { return it }
+    val key = (physicalKey as? PhysicalKey.Code)?.code ?: return null
+    return when {
+        key in KeyCode.KeyA..KeyCode.KeyZ -> {
+            val upper = 'A' + (key.ordinal - KeyCode.KeyA.ordinal)
+            if (shift) upper else upper.lowercaseChar()
+        }
+        key in KeyCode.Digit0..KeyCode.Digit9 -> '0' + (key.ordinal - KeyCode.Digit0.ordinal)
+        key == KeyCode.Space -> ' '
+        else -> null
     }
 }

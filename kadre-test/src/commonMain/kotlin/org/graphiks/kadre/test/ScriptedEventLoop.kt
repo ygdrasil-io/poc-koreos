@@ -22,6 +22,7 @@ package org.graphiks.kadre.test
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
@@ -43,9 +44,11 @@ import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -387,12 +390,39 @@ class ScriptBuilder {
 
     /** Déplace le pointeur. */
     fun pointerMove(x: Double, y: Double) {
-        events += ScriptedEvent.Window(windowId, WindowEvent.PointerMoved(PhysicalPosition(x, y)))
+        events += ScriptedEvent.Window(
+            windowId,
+            WindowEvent.PointerMoved(
+                deviceId = null,
+                position = PhysicalPosition(x, y),
+                primary = true,
+                source = PointerSource.Mouse,
+            ),
+        )
     }
 
     /** Clic souris (press + release implicite selon [state]). */
+    fun pointerButton(button: MouseButton, state: KeyState, x: Double = 0.0, y: Double = 0.0) {
+        events += ScriptedEvent.Window(
+            windowId,
+            WindowEvent.PointerButton(
+                deviceId = null,
+                state = state,
+                position = PhysicalPosition(x, y),
+                primary = true,
+                button = ButtonSource.Mouse(button),
+            ),
+        )
+    }
+
+    /** Alias de migration pour les anciens tests souris. */
     fun mouseInput(button: MouseButton, state: KeyState) {
-        events += ScriptedEvent.Window(windowId, WindowEvent.MouseInput(button, state))
+        pointerButton(button, state)
+    }
+
+    /** Scroll souris ou trackpad. */
+    fun mouseWheel(deltaX: Double, deltaY: Double, phase: TouchPhase = TouchPhase.Moved) {
+        events += ScriptedEvent.Window(windowId, WindowEvent.MouseWheel(null, deltaX, deltaY, phase))
     }
 
     /** Redimensionne la fenêtre. */

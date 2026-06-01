@@ -16,6 +16,8 @@ import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.LogicalKey
@@ -24,6 +26,8 @@ import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
@@ -377,21 +381,34 @@ internal fun normalizeWheelDelta(delta: Double, deltaMode: Int): Double {
 internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
     WebWindowEvent.CloseRequested -> WindowEvent.CloseRequested
     is WebWindowEvent.Resized -> WindowEvent.Resized(PhysicalSize(width, height))
-    is WebWindowEvent.KeyInput -> WindowEvent.KeyInput(event)
-    is WebWindowEvent.PointerMoved -> WindowEvent.PointerMoved(PhysicalPosition(x, y))
-    WebWindowEvent.PointerEntered -> WindowEvent.PointerEntered
-    WebWindowEvent.PointerLeft -> WindowEvent.PointerLeft
-    is WebWindowEvent.MouseInput -> WindowEvent.MouseInput(
-        button = button.toMouseButton(),
+is WebWindowEvent.KeyInput -> WindowEvent.KeyInput(event)
+    is WebWindowEvent.PointerMoved -> WindowEvent.PointerMoved(
+        deviceId = null,
+        position = PhysicalPosition(x, y),
+        primary = true,
+        source = PointerSource.Mouse,
+    )
+    WebWindowEvent.PointerEntered -> WindowEvent.PointerEntered(null, PhysicalPosition(0.0, 0.0), primary = true, kind = PointerKind.Mouse)
+    WebWindowEvent.PointerLeft -> WindowEvent.PointerLeft(null, position = null, primary = true, kind = PointerKind.Mouse)
+    is WebWindowEvent.MouseInput -> WindowEvent.PointerButton(
+        deviceId = null,
         state = state.toKeyState(),
+        position = PhysicalPosition(0.0, 0.0),
+        primary = true,
+        button = ButtonSource.Mouse(button.toMouseButton()),
     )
-    is WebWindowEvent.MouseWheel -> WindowEvent.MouseWheel(deltaX, deltaY)
+    is WebWindowEvent.MouseWheel -> WindowEvent.MouseWheel(null, deltaX, deltaY, TouchPhase.Moved)
     is WebWindowEvent.Focused -> WindowEvent.Focused(gained)
-    is WebWindowEvent.Touch -> WindowEvent.Touch(
-        phase = phase.toTouchPhase(),
-        location = PhysicalPosition(x, y),
-        id = id,
-    )
+    is WebWindowEvent.Touch -> {
+        val location = PhysicalPosition(x, y)
+        val fingerId = FingerId(id)
+        when (phase.toTouchPhase()) {
+            TouchPhase.Started -> WindowEvent.PointerButton(null, KeyState.Pressed, location, primary = id == 0L, button = ButtonSource.Touch(fingerId))
+            TouchPhase.Moved -> WindowEvent.PointerMoved(null, location, primary = id == 0L, source = PointerSource.Touch(fingerId))
+            TouchPhase.Ended -> WindowEvent.PointerButton(null, KeyState.Released, location, primary = id == 0L, button = ButtonSource.Touch(fingerId))
+            TouchPhase.Cancelled -> WindowEvent.PointerLeft(null, location, primary = id == 0L, kind = PointerKind.Touch)
+        }
+    }
     is WebWindowEvent.ScaleFactorChanged -> WindowEvent.ScaleFactorChanged(factor)
     WebWindowEvent.RedrawRequested -> WindowEvent.RedrawRequested
     WebWindowEvent.Destroyed -> WindowEvent.Destroyed

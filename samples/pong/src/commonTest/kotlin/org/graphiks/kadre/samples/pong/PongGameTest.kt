@@ -15,11 +15,11 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.Fullscreen
-import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalPosition
@@ -149,6 +149,8 @@ class FakeEventLoop : ActiveEventLoop {
 
     // R3 stub
     override fun systemTheme(): Theme? = null
+
+    // R4 stub
     override fun listenDeviceEvents(mode: DeviceEvents) {}
 }
 
@@ -165,6 +167,15 @@ class PongGameTest {
         game.canCreateSurfaces(eventLoop)
         return Triple(game, renderer, eventLoop)
     }
+
+    private fun keyInput(key: KeyCode, state: KeyState): WindowEvent.KeyInput = WindowEvent.KeyInput(
+        KeyEvent(
+            physicalKey = PhysicalKey.Code(key),
+            logicalKey = key.defaultLogicalKey(),
+            state = state,
+            modifiers = KeyboardModifiers.NONE,
+        ),
+    )
 
     // -------------------------------------------------------------------------
     // canCreateSurfaces
@@ -308,7 +319,7 @@ class PongGameTest {
         game.windowEvent(
             eventLoop,
             WindowId(1L),
-            keyInput(KeyCode.ArrowUp, KeyState.Pressed),
+            keyInput(KeyCode.ArrowUp, KeyState.Pressed)
         )
         // No assertion — just verify it doesn't crash
     }
@@ -320,18 +331,8 @@ class PongGameTest {
     @Test
     fun `unknown event is ignored`() {
         val (game, renderer, eventLoop) = makeGame()
-        game.windowEvent(eventLoop, WindowId(1L), WindowEvent.Focused(false))
+        game.windowEvent(eventLoop, WindowId(1L), WindowEvent.Moved(PhysicalPosition(12, 34)))
         assertEquals(0, renderer.drawCount)
         assertFalse(eventLoop.exited)
     }
 }
-
-private fun keyInput(code: KeyCode, state: KeyState): WindowEvent.KeyInput =
-    WindowEvent.KeyInput(
-        KeyEvent(
-            physicalKey = PhysicalKey.Code(code),
-            logicalKey = code.defaultLogicalKey(),
-            state = state,
-            modifiers = KeyboardModifiers.NONE,
-        ),
-    )

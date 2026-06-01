@@ -228,11 +228,10 @@ class EventsTest {
         is WindowEvent.Focused -> "Focused"
         is WindowEvent.KeyInput -> "KeyInput"
         is WindowEvent.PointerMoved -> "PointerMoved"
-        WindowEvent.PointerEntered -> "PointerEntered"
-        WindowEvent.PointerLeft -> "PointerLeft"
-        is WindowEvent.MouseInput -> "MouseInput"
+        is WindowEvent.PointerEntered -> "PointerEntered"
+        is WindowEvent.PointerLeft -> "PointerLeft"
+        is WindowEvent.PointerButton -> "PointerButton"
         is WindowEvent.MouseWheel -> "MouseWheel"
-        is WindowEvent.Touch -> "Touch"
         is WindowEvent.ModifiersChanged -> "ModifiersChanged"
         WindowEvent.RedrawRequested -> "RedrawRequested"
         WindowEvent.Destroyed -> "Destroyed"
@@ -245,7 +244,7 @@ class EventsTest {
         is WindowEvent.PinchGesture -> "PinchGesture"
         is WindowEvent.PanGesture -> "PanGesture"
         is WindowEvent.RotationGesture -> "RotationGesture"
-        WindowEvent.DoubleTapGesture -> "DoubleTapGesture"
+        is WindowEvent.DoubleTapGesture -> "DoubleTapGesture"
         is WindowEvent.TouchpadPressure -> "TouchpadPressure"
         is WindowEvent.Occluded -> "Occluded"
     }
@@ -279,18 +278,29 @@ class EventsTest {
 
     @Test
     fun `WindowEvent basic variants keep payloads`() {
+        val pointerPos = PhysicalPosition(1.0, 2.0)
+        assertEquals("CloseRequested", classifyWindowEvent(WindowEvent.CloseRequested))
         assertEquals("Resized", classifyWindowEvent(WindowEvent.Resized(PhysicalSize(1920, 1080))))
         assertEquals("Moved", classifyWindowEvent(WindowEvent.Moved(PhysicalPosition(10, 20))))
         assertEquals("ScaleFactorChanged", classifyWindowEvent(WindowEvent.ScaleFactorChanged(2.0)))
         assertEquals("Focused", classifyWindowEvent(WindowEvent.Focused(true)))
-        assertEquals("PointerMoved", classifyWindowEvent(WindowEvent.PointerMoved(PhysicalPosition(1.0, 2.0))))
-        assertEquals("PointerEntered", classifyWindowEvent(WindowEvent.PointerEntered))
-        assertEquals("PointerLeft", classifyWindowEvent(WindowEvent.PointerLeft))
-        assertEquals("MouseInput", classifyWindowEvent(WindowEvent.MouseInput(MouseButton.Left, KeyState.Pressed)))
-        assertEquals("MouseWheel", classifyWindowEvent(WindowEvent.MouseWheel(1.0, -1.0)))
-        assertEquals("Touch", classifyWindowEvent(WindowEvent.Touch(TouchPhase.Started, PhysicalPosition(3.0, 4.0), 42L)))
+        assertEquals("PointerMoved", classifyWindowEvent(WindowEvent.PointerMoved(DeviceId(3L), pointerPos, true, PointerSource.Mouse)))
+        assertEquals("PointerEntered", classifyWindowEvent(WindowEvent.PointerEntered(null, pointerPos, true, PointerKind.Mouse)))
+        assertEquals("PointerLeft", classifyWindowEvent(WindowEvent.PointerLeft(null, null, true, PointerKind.Unknown)))
+        assertEquals("PointerButton", classifyWindowEvent(WindowEvent.PointerButton(DeviceId(9L), KeyState.Released, pointerPos, true, ButtonSource.Mouse(MouseButton.Left))))
+        assertEquals("MouseWheel", classifyWindowEvent(WindowEvent.MouseWheel(DeviceId(2L), 1.0, -1.0, TouchPhase.Moved)))
         assertEquals("RedrawRequested", classifyWindowEvent(WindowEvent.RedrawRequested))
         assertEquals("Destroyed", classifyWindowEvent(WindowEvent.Destroyed))
+    }
+
+    @Test
+    fun `PointerSource Touch keeps finger id and force`() {
+        val source = PointerSource.Touch(
+            fingerId = FingerId(42L),
+            force = TouchForce.Normalized(0.5),
+        )
+        assertEquals(FingerId(42L), source.fingerId)
+        assertEquals(TouchForce.Normalized(0.5), source.force)
     }
 
     @Test
@@ -318,15 +328,32 @@ class EventsTest {
     @Test
     fun `WindowEvent drag and gesture variants keep payloads`() {
         val pos = PhysicalPosition(10.0, 20.0)
-        assertEquals("DragEntered", classifyWindowEvent(WindowEvent.DragEntered(pos, listOf("a"))))
-        assertEquals("DragMoved", classifyWindowEvent(WindowEvent.DragMoved(pos)))
-        assertEquals("DragDropped", classifyWindowEvent(WindowEvent.DragDropped(pos, listOf("b"))))
+        val panDelta = PhysicalPosition(1.5f, -2.5f)
+        val deviceId = DeviceId(11L)
+
+        val dragEntered = WindowEvent.DragEntered(pos, listOf("a"))
+        val dragMoved = WindowEvent.DragMoved(pos)
+        val dragDropped = WindowEvent.DragDropped(pos, listOf("b"))
+        val pinch = WindowEvent.PinchGesture(deviceId, delta = 0.5, phase = TouchPhase.Moved)
+        val pan = WindowEvent.PanGesture(deviceId, delta = panDelta, phase = TouchPhase.Started)
+        val rotation = WindowEvent.RotationGesture(deviceId, deltaDegrees = 12.5f, phase = TouchPhase.Ended)
+        val doubleTap = WindowEvent.DoubleTapGesture(deviceId)
+        val pressure = WindowEvent.TouchpadPressure(deviceId, pressure = 0.8f, stage = 2L)
+
+        assertEquals("DragEntered", classifyWindowEvent(dragEntered))
+        assertEquals(pos, dragEntered.position)
+        assertEquals("DragMoved", classifyWindowEvent(dragMoved))
+        assertEquals("DragDropped", classifyWindowEvent(dragDropped))
         assertEquals("DragLeft", classifyWindowEvent(WindowEvent.DragLeft))
-        assertEquals("PinchGesture", classifyWindowEvent(WindowEvent.PinchGesture(0.5, TouchPhase.Moved)))
-        assertEquals("PanGesture", classifyWindowEvent(WindowEvent.PanGesture(pos, TouchPhase.Started)))
-        assertEquals("RotationGesture", classifyWindowEvent(WindowEvent.RotationGesture(1.0, TouchPhase.Ended)))
-        assertEquals("DoubleTapGesture", classifyWindowEvent(WindowEvent.DoubleTapGesture))
-        assertEquals("TouchpadPressure", classifyWindowEvent(WindowEvent.TouchpadPressure(0.8f, 2)))
+        assertEquals("PinchGesture", classifyWindowEvent(pinch))
+        assertEquals(0.5, pinch.delta)
+        assertEquals("PanGesture", classifyWindowEvent(pan))
+        assertEquals(panDelta, pan.delta)
+        assertEquals("RotationGesture", classifyWindowEvent(rotation))
+        assertEquals(12.5f, rotation.deltaDegrees)
+        assertEquals("DoubleTapGesture", classifyWindowEvent(doubleTap))
+        assertEquals("TouchpadPressure", classifyWindowEvent(pressure))
+        assertEquals(2L, pressure.stage)
         assertEquals("Occluded", classifyWindowEvent(WindowEvent.Occluded(true)))
     }
 

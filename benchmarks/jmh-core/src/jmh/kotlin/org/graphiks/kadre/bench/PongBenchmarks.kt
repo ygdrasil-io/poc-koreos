@@ -11,8 +11,8 @@ import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.PhysicalKey
-import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.samples.pong.BitmapFont
 import org.graphiks.kadre.samples.pong.GameState
 import org.graphiks.kadre.samples.pong.InputAdapter
@@ -37,6 +37,16 @@ open class PongBenchmarks {
     private val ai = PongAi()
     private val keyDown = keyInput(KeyState.Pressed)
     private val keyUp = keyInput(KeyState.Released)
+
+
+    private fun keyInput(state: KeyState) = WindowEvent.KeyInput(
+        KeyEvent(
+            physicalKey = PhysicalKey.Code(KeyCode.ArrowUp),
+            logicalKey = KeyCode.ArrowUp.defaultLogicalKey(),
+            state = state,
+            modifiers = KeyboardModifiers.NONE,
+        ),
+    )
 
     // ── Tick physique ────────────────────────────────────────────────────────
 
@@ -100,16 +110,4 @@ open class PongBenchmarks {
         adapter.onKey(keyUp)
         return adapter.playerInput
     }
-}
-
-private fun keyInput(state: KeyState): WindowEvent.KeyInput {
-    val code = KeyCode.ArrowUp
-    return WindowEvent.KeyInput(
-        KeyEvent(
-            physicalKey = PhysicalKey.Code(code),
-            logicalKey = code.defaultLogicalKey(),
-            state = state,
-            modifiers = KeyboardModifiers.NONE,
-        ),
-    )
 }
