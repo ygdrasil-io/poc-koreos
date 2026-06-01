@@ -7,7 +7,13 @@
  *
  * It also defines the support types used by these events:
  * [KeyEvent], [PhysicalKey], [LogicalKey], [KeyState], [KeyboardModifiers],
- * [MouseButton] and [TouchPhase].
+ * [MouseButton], [TouchPhase] and [ImePurpose].
+ *
+ * ## Pointer model decision (R4)
+ * We KEEP the existing [WindowEvent.MouseInput] + [WindowEvent.Touch] model (Option A).
+ * We do NOT migrate to a unified PointerButton / PointerSource model (winit Option B).
+ * Rationale: no breaking change, all existing call sites remain valid, the unified model
+ * would require a major version bump with no clear gain for current consumers.
  *
  * ## Scope
  * All declarations are 100% commonMain (no native dependency).
@@ -590,6 +596,7 @@ sealed interface MouseButton {
     data class Other(val button: Int) : MouseButton
 }
 
+
 /**
  * Phase of a touch contact.
  */
@@ -605,6 +612,26 @@ enum class TouchPhase {
 
     /** The contact has been cancelled (e.g. incoming call, system gesture). */
     Cancelled,
+}
+
+/**
+ * Intended purpose of the IME text field currently focused.
+ *
+ * Passed to [Window.setImePurpose] so that the platform input method can
+ * adapt its behaviour (e.g. hide suggestions for a terminal, mask characters
+ * for a password field).
+ *
+ * @since R5-IME
+ */
+enum class ImePurpose {
+    /** General text input — the default. */
+    Normal,
+
+    /** Password field — the IME should hide the composed text. */
+    Password,
+
+    /** Terminal / command input — suggestions and auto-correct should be suppressed. */
+    Terminal,
 }
 
 // ---------------------------------------------------------------------------
@@ -635,6 +662,9 @@ enum class TouchPhase {
  *         is WindowEvent.Touch          -> handleTouch(event.phase, event.location, event.id)
  *         WindowEvent.RedrawRequested   -> redraw()
  *         WindowEvent.Destroyed         -> releaseResources()
+ *         is WindowEvent.ThemeChanged   -> applyTheme(event.theme)
+ *         is WindowEvent.ModifiersChanged -> updateModifiers(event.modifiers)
+ *         is WindowEvent.Ime            -> handleIme(event.ime)
  *     }
  * }
  * ```
@@ -753,6 +783,219 @@ sealed interface WindowEvent {
      * No further event will be emitted for this window after [Destroyed].
      */
     data object Destroyed : WindowEvent
+
+
+    // ── R3: theme ────────────────────────────────────────────────────────────
+
+    /**
+     * The system UI theme changed (light ↔ dark).
+     *
+     * Emitted by backends that support theme-change notifications
+     * (AppKit, Win32). Not emitted on X11, Wayland, Android (where
+     * [ActiveEventLoop.systemTheme] should be polled) or Web (use
+     * `matchMedia('prefers-color-scheme')` via the bridge).
+     *
+     * @property theme New active theme.
+     */
+    data class ThemeChanged(val theme: Theme) : WindowEvent
+
+    // ── R5-DnD: drag & drop ──────────────────────────────────────────────────
+
+    /**
+     * A drag operation entered the window, carrying files at the given position.
+     *
+     * Emitted when the user drags files over the window client area.
+     * Emission requires backend wiring — TODO per backend (AppKit NSDraggingDestination,
+     * Win32 IDropTarget, X11 XDND, Wayland wl_data_device, Web dragenter, UIKit UIDropInteraction).
+     *
+     * @property position Current drag position in physical pixels.
+     * @property paths    List of file paths (or file names on Web where full paths are unavailable).
+     */
+    data class DragEntered(val position: PhysicalPosition<Double>, val paths: List<String>) : WindowEvent
+
+    /**
+     * The drag cursor moved within the window while carrying files.
+     *
+     * Emitted continuously as the user moves the drag cursor over the window.
+     * Default emission: no-op — TODO per backend.
+     *
+     * @property position Current drag position in physical pixels.
+     */
+    data class DragMoved(val position: PhysicalPosition<Double>) : WindowEvent
+
+    /**
+     * Files were dropped onto the window.
+     *
+     * Emitted when the user releases the drag within the window client area.
+     * Default emission: no-op — TODO per backend.
+     *
+     * @property position Drop position in physical pixels.
+     * @property paths    List of dropped file paths (or file names on Web).
+     */
+    data class DragDropped(val position: PhysicalPosition<Double>, val paths: List<String>) : WindowEvent
+
+    /**
+     * The drag cursor left the window without dropping.
+     *
+     * Emitted when the user moves the drag out of the window client area.
+     * Default emission: no-op — TODO per backend.
+     */
+    data object DragLeft : WindowEvent
+
+    // ── R5-Gestures: trackpad & touchscreen gestures ──────────────────────────
+
+    /**
+     * A pinch (zoom) gesture changed state.
+     *
+     * Primarily emitted on macOS (NSGestureRecognizer magnification) and iOS
+     * (UIPinchGestureRecognizer). Other backends: no-op documented.
+     * Default emission: no-op — TODO per backend.
+     *
+     * @property delta Relative scale change (positive = zoom in, negative = zoom out).
+     * @property phase Current phase of the gesture.
+     */
+    data class PinchGesture(val delta: Double, val phase: TouchPhase) : WindowEvent
+
+    /**
+     * A pan (scroll) gesture changed state.
+     *
+     * Emitted on macOS (NSGestureRecognizer pan) and iOS (UIPanGestureRecognizer).
+     * Default emission: no-op — TODO per backend.
+     *
+     * @property delta Displacement vector in physical pixels.
+     * @property phase Current phase of the gesture.
+     */
+    data class PanGesture(val delta: PhysicalPosition<Double>, val phase: TouchPhase) : WindowEvent
+
+    /**
+     * A rotation gesture changed state.
+     *
+     * Emitted on macOS (NSGestureRecognizer rotation) and iOS (UIRotationGestureRecognizer).
+     * Default emission: no-op — TODO per backend.
+     *
+     * @property delta Rotation angle in radians (positive = clockwise).
+     * @property phase Current phase of the gesture.
+     */
+    data class RotationGesture(val delta: Double, val phase: TouchPhase) : WindowEvent
+
+    /**
+     * A double-tap gesture was recognized.
+     *
+     * Emitted on iOS (UITapGestureRecognizer, numberOfTapsRequired = 2) and Web (dblclick).
+     * Default emission: no-op — TODO per backend.
+     */
+    data object DoubleTapGesture : WindowEvent
+
+    /**
+     * A Force Touch / trackpad pressure event (macOS Force Touch trackpads only).
+     *
+     * Availability must be checked at runtime (`NSEvent.isMouseEventType` / device capability).
+     * Default emission: no-op — TODO appkit backend.
+     *
+     * @property pressure Normalized pressure value in `[0.0, 1.0]`.
+     * @property stage    Discrete pressure stage (1 = light click, 2 = force click, etc.).
+     */
+    data class TouchpadPressure(val pressure: Float, val stage: Int) : WindowEvent
+
+    // ── R5-MiscWindow: occluded ───────────────────────────────────────────────
+
+    /**
+     * The window's occlusion state changed.
+     *
+     * Emitted when the window becomes hidden behind other windows ([occluded] = true)
+     * or becomes visible again ([occluded] = false).
+     *
+     * Platform support:
+     * - AppKit: `NSWindowDidChangeOcclusionStateNotification` — TODO.
+     * - Web: Page Visibility API (`visibilitychange`) — TODO.
+     * - Win32 / X11 / Wayland / Android / UIKit: no-op documented.
+     *
+     * @property occluded `true` if the window is now occluded, `false` if it is visible.
+     */
+    data class Occluded(val occluded: Boolean) : WindowEvent
+
+    // ── R5-IME: input method ──────────────────────────────────────────────────
+
+    /**
+     * An IME (Input Method Editor) event occurred on this window.
+     *
+     * IME events are emitted on platforms that expose an input method pipeline
+     * (Wayland via `zwp_text_input_v3`, X11 via XIC, Win32 via TSF/IMM32,
+     * Android via `InputMethodManager`, iOS/macOS via `NSTextInputClient`).
+     *
+     * Emission of these events is out of scope for R5-IME — backends will be
+     * wired in later milestones. Use [Window.setImeAllowed] to opt in.
+     *
+     * @property ime The concrete IME event sub-type.
+     * @see ImeEvent
+     */
+    data class Ime(val ime: ImeEvent) : WindowEvent {
+
+        /**
+         * Sub-events of the IME pipeline.
+         *
+         * The typical lifecycle is:
+         * 1. [Enabled]  — the IME context was activated (e.g. focus entered a text field).
+         * 2. [Preedit]  — intermediate composed text (shown with underline in most UIs).
+         * 3. [Commit]   — the final string to insert into the text buffer.
+         * 4. [Disabled] — the IME context was deactivated.
+         *
+         * [DeleteSurrounding] may be emitted at any point to request deletion of text
+         * around the cursor (needed by some CJK / prediction engines).
+         */
+        sealed interface ImeEvent {
+
+            /**
+             * The IME context was activated for this window.
+             *
+             * From this point on [Preedit], [Commit] and [DeleteSurrounding] events
+             * may be emitted.
+             */
+            data object Enabled : ImeEvent
+
+            /**
+             * The IME is composing text (pre-edit string).
+             *
+             * The application should display [text] with a visual indicator (underline,
+             * highlight) at the current cursor position. When [text] is empty the
+             * pre-edit string is cleared.
+             *
+             * @property text         The current pre-edit string (may be empty).
+             * @property cursorRange  Byte range `[start, end)` within [text] where the
+             *   IME cursor / selection sits, or null if the IME does not expose it.
+             */
+            data class Preedit(val text: String, val cursorRange: Pair<Int, Int>?) : ImeEvent
+
+            /**
+             * The IME committed a final string.
+             *
+             * The application should insert [text] into its text buffer at the cursor
+             * position, replacing any active pre-edit string.
+             *
+             * @property text The committed text to insert.
+             */
+            data class Commit(val text: String) : ImeEvent
+
+            /**
+             * The IME requests deletion of surrounding text.
+             *
+             * The application should delete [beforeBytes] bytes before the cursor and
+             * [afterBytes] bytes after the cursor (byte offsets in UTF-8).
+             *
+             * @property beforeBytes Bytes to delete before the cursor (≥ 0).
+             * @property afterBytes  Bytes to delete after the cursor (≥ 0).
+             */
+            data class DeleteSurrounding(val beforeBytes: Int, val afterBytes: Int) : ImeEvent
+
+            /**
+             * The IME context was deactivated for this window.
+             *
+             * No further [Preedit] or [Commit] events will be emitted until the next
+             * [Enabled] event.
+             */
+            data object Disabled : ImeEvent
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -772,6 +1015,7 @@ sealed interface WindowEvent {
  *         is DeviceEvent.PointerMotion -> handleMotion(event.dx, event.dy)
  *         is DeviceEvent.Button        -> handleButton(event.button, event.state)
  *         is DeviceEvent.Key           -> handleKey(event.scancode, event.state)
+ *         is DeviceEvent.MouseWheel    -> handleWheel(event.deltaX, event.deltaY)
  *     }
  * }
  * ```
@@ -801,4 +1045,17 @@ sealed interface DeviceEvent {
      * @property state    Key state ([KeyState.Pressed] or [KeyState.Released]).
      */
     data class Key(val scancode: Int, val state: KeyState) : DeviceEvent
+
+    // ── R4 ────────────────────────────────────────────────────────────────────
+
+    /**
+     * The mouse wheel (or trackpad) scrolled — raw device event, not clipped to a window.
+     *
+     * Emitted alongside [WindowEvent.MouseWheel] when the device-events filter allows it.
+     * See [ActiveEventLoop.listenDeviceEvents].
+     *
+     * @property deltaX Horizontal scroll delta (positive towards the right).
+     * @property deltaY Vertical scroll delta (positive towards the bottom).
+     */
+    data class MouseWheel(val deltaX: Double, val deltaY: Double) : DeviceEvent
 }

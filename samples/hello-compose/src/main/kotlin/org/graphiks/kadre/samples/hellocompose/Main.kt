@@ -139,7 +139,12 @@ private fun runComposeApp() = kadreApplication {
                     renderer.applyWindowEvent(event, win.window, keys)
                 }
             }
-            else -> renderer.applyWindowEvent(event, win.window, keys)
+            else -> {
+                if (event is WindowEvent.Resized) {
+                    println("[hello-compose] Resized → ${event.size.width}×${event.size.height}")
+                }
+                renderer.applyWindowEvent(event, win.window, keys)
+            }
         }
     }
 }
@@ -171,7 +176,7 @@ private class CaptureApp(private val capturePath: String) : ApplicationHandler {
         eventLoop.exit()
     }
 
-    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) = Unit
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) = Unit
 }
 
 /**

@@ -20,8 +20,11 @@ package org.graphiks.kadre.win32
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
@@ -126,6 +129,43 @@ internal class Win32EventLoop : ActiveEventLoop {
      * from a secondary thread.
      */
     override fun createProxy(): EventLoopProxy = Win32EventLoopProxy.create()
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns all connected monitors via EnumDisplayMonitors + GetMonitorInfoW.
+     *
+     * Returns an empty list on non-Windows platforms (graceful no-op).
+     */
+    override fun availableMonitors(): List<MonitorHandle> = enumerateWin32Monitors()
+
+    /**
+     * Returns the primary monitor (dwFlags & MONITORINFOF_PRIMARY), or null.
+     */
+    override fun primaryMonitor(): MonitorHandle? =
+        enumerateWin32Monitors().firstOrNull { (it as? Win32MonitorHandle) != null }
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the current system theme by reading the registry.
+     *
+     * Reads HKCU\...\Personalize\AppsUseLightTheme via Java Preferences.
+     * Returns null if the key is absent or the call fails.
+     */
+    override fun systemTheme(): Theme? = Win32ThemeHelper.systemThemeFromRegistry()
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on Win32: device events are always dispatched regardless of focus.
+     *
+     * A proper implementation would require Raw Input (RIDEV_INPUTSINK / RIDEV_REMOVE)
+     * to globally enable/disable raw input. Out of scope for R4.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on Win32: device event filtering not implemented
+    }
 
     // ── Message loop ──────────────────────────────────────────────────────────
 

@@ -1,27 +1,38 @@
 public abstract interface class org/graphiks/kadre/core/ActiveEventLoop {
+	public abstract fun availableMonitors ()Ljava/util/List;
+	public fun createCustomCursor (Lorg/graphiks/kadre/core/CursorImage;)Lorg/graphiks/kadre/core/CustomCursor;
 	public abstract fun createProxy ()Lorg/graphiks/kadre/core/EventLoopProxy;
 	public abstract fun createWindow (Lorg/graphiks/kadre/core/WindowAttributes;)Lorg/graphiks/kadre/core/Window;
 	public abstract fun exit ()V
 	public abstract fun getControlFlow ()Lorg/graphiks/kadre/core/ControlFlow;
 	public abstract fun isExiting ()Z
+	public abstract fun listenDeviceEvents (Lorg/graphiks/kadre/core/DeviceEvents;)V
+	public abstract fun primaryMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
 	public abstract fun setControlFlow (Lorg/graphiks/kadre/core/ControlFlow;)V
+	public abstract fun systemTheme ()Lorg/graphiks/kadre/core/Theme;
+}
+
+public final class org/graphiks/kadre/core/ActiveEventLoop$DefaultImpls {
+	public static fun createCustomCursor (Lorg/graphiks/kadre/core/ActiveEventLoop;Lorg/graphiks/kadre/core/CursorImage;)Lorg/graphiks/kadre/core/CustomCursor;
 }
 
 public abstract interface class org/graphiks/kadre/core/ApplicationHandler {
 	public fun aboutToWait (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public abstract fun canCreateSurfaces (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public fun destroySurfaces (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
-	public fun deviceEvent-z3ZO6k8 (Lorg/graphiks/kadre/core/ActiveEventLoop;JLjava/lang/Object;)V
+	public fun deviceEvent-z3ZO6k8 (Lorg/graphiks/kadre/core/ActiveEventLoop;JLorg/graphiks/kadre/core/DeviceEvent;)V
+	public fun memoryWarning (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public fun newEvents (Lorg/graphiks/kadre/core/ActiveEventLoop;Lorg/graphiks/kadre/core/StartCause;)V
 	public fun resumed (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public fun suspended (Lorg/graphiks/kadre/core/ActiveEventLoop;)V
-	public abstract fun windowEvent-eDwKhTo (Lorg/graphiks/kadre/core/ActiveEventLoop;JLjava/lang/Object;)V
+	public abstract fun windowEvent-eDwKhTo (Lorg/graphiks/kadre/core/ActiveEventLoop;JLorg/graphiks/kadre/core/WindowEvent;)V
 }
 
 public final class org/graphiks/kadre/core/ApplicationHandler$DefaultImpls {
 	public static fun aboutToWait (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public static fun destroySurfaces (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;)V
-	public static fun deviceEvent-z3ZO6k8 (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;JLjava/lang/Object;)V
+	public static fun deviceEvent-z3ZO6k8 (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;JLorg/graphiks/kadre/core/DeviceEvent;)V
+	public static fun memoryWarning (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public static fun newEvents (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;Lorg/graphiks/kadre/core/StartCause;)V
 	public static fun resumed (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;)V
 	public static fun suspended (Lorg/graphiks/kadre/core/ApplicationHandler;Lorg/graphiks/kadre/core/ActiveEventLoop;)V
@@ -47,6 +58,68 @@ public final class org/graphiks/kadre/core/ControlFlow$WaitUntil : org/graphiks/
 	public final fun getInstant ()J
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/CursorGrabMode : java/lang/Enum {
+	public static final field Confined Lorg/graphiks/kadre/core/CursorGrabMode;
+	public static final field Locked Lorg/graphiks/kadre/core/CursorGrabMode;
+	public static final field None Lorg/graphiks/kadre/core/CursorGrabMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/CursorGrabMode;
+	public static fun values ()[Lorg/graphiks/kadre/core/CursorGrabMode;
+}
+
+public final class org/graphiks/kadre/core/CursorIcon : java/lang/Enum {
+	public static final field ColResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Crosshair Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Default Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field EwResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Grab Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Grabbing Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Move Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field NeswResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field NotAllowed Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field NsResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field NwseResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Pointer Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Progress Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeEast Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeNorth Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeNorthEast Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeNorthWest Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeSouth Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeSouthEast Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeSouthWest Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field ResizeWest Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field RowResize Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Text Lorg/graphiks/kadre/core/CursorIcon;
+	public static final field Wait Lorg/graphiks/kadre/core/CursorIcon;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/CursorIcon;
+	public static fun values ()[Lorg/graphiks/kadre/core/CursorIcon;
+}
+
+public final class org/graphiks/kadre/core/CursorImage {
+	public fun <init> ([BIIII)V
+	public synthetic fun <init> ([BIIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()[B
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()I
+	public final fun component5 ()I
+	public final fun copy ([BIIII)Lorg/graphiks/kadre/core/CursorImage;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/CursorImage;[BIIIIILjava/lang/Object;)Lorg/graphiks/kadre/core/CursorImage;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHeight ()I
+	public final fun getHotspotX ()I
+	public final fun getHotspotY ()I
+	public final fun getRgba ()[B
+	public final fun getWidth ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/CustomCursor {
 }
 
 public abstract interface class org/graphiks/kadre/core/DeviceEvent {
@@ -78,6 +151,19 @@ public final class org/graphiks/kadre/core/DeviceEvent$Key : org/graphiks/kadre/
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/DeviceEvent$MouseWheel : org/graphiks/kadre/core/DeviceEvent {
+	public fun <init> (DD)V
+	public final fun component1 ()D
+	public final fun component2 ()D
+	public final fun copy (DD)Lorg/graphiks/kadre/core/DeviceEvent$MouseWheel;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/DeviceEvent$MouseWheel;DDILjava/lang/Object;)Lorg/graphiks/kadre/core/DeviceEvent$MouseWheel;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeltaX ()D
+	public final fun getDeltaY ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/DeviceEvent$PointerMotion : org/graphiks/kadre/core/DeviceEvent {
 	public fun <init> (DD)V
 	public final fun component1 ()D
@@ -89,6 +175,15 @@ public final class org/graphiks/kadre/core/DeviceEvent$PointerMotion : org/graph
 	public final fun getDy ()D
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/DeviceEvents : java/lang/Enum {
+	public static final field Always Lorg/graphiks/kadre/core/DeviceEvents;
+	public static final field Never Lorg/graphiks/kadre/core/DeviceEvents;
+	public static final field WhenFocused Lorg/graphiks/kadre/core/DeviceEvents;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/DeviceEvents;
+	public static fun values ()[Lorg/graphiks/kadre/core/DeviceEvents;
 }
 
 public final class org/graphiks/kadre/core/DeviceId {
@@ -138,6 +233,59 @@ public final class org/graphiks/kadre/core/FrameTimingTracer {
 	public final fun setEnabled (Z)V
 	public final fun setSink (Lkotlin/jvm/functions/Function1;)V
 	public final fun setSlowFrameThresholdMs (D)V
+}
+
+public abstract interface class org/graphiks/kadre/core/Fullscreen {
+}
+
+public final class org/graphiks/kadre/core/Fullscreen$Borderless : org/graphiks/kadre/core/Fullscreen {
+	public fun <init> ()V
+	public fun <init> (Lorg/graphiks/kadre/core/MonitorHandle;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/core/MonitorHandle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public final fun copy (Lorg/graphiks/kadre/core/MonitorHandle;)Lorg/graphiks/kadre/core/Fullscreen$Borderless;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/Fullscreen$Borderless;Lorg/graphiks/kadre/core/MonitorHandle;ILjava/lang/Object;)Lorg/graphiks/kadre/core/Fullscreen$Borderless;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/Fullscreen$Exclusive : org/graphiks/kadre/core/Fullscreen {
+	public fun <init> (Lorg/graphiks/kadre/core/MonitorHandle;Lorg/graphiks/kadre/core/VideoMode;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public final fun component2 ()Lorg/graphiks/kadre/core/VideoMode;
+	public final fun copy (Lorg/graphiks/kadre/core/MonitorHandle;Lorg/graphiks/kadre/core/VideoMode;)Lorg/graphiks/kadre/core/Fullscreen$Exclusive;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/Fullscreen$Exclusive;Lorg/graphiks/kadre/core/MonitorHandle;Lorg/graphiks/kadre/core/VideoMode;ILjava/lang/Object;)Lorg/graphiks/kadre/core/Fullscreen$Exclusive;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public final fun getVideoMode ()Lorg/graphiks/kadre/core/VideoMode;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/Icon {
+	public fun <init> ([BII)V
+	public final fun component1 ()[B
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun copy ([BII)Lorg/graphiks/kadre/core/Icon;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/Icon;[BIIILjava/lang/Object;)Lorg/graphiks/kadre/core/Icon;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHeight ()I
+	public final fun getRgba ()[B
+	public final fun getWidth ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/ImePurpose : java/lang/Enum {
+	public static final field Normal Lorg/graphiks/kadre/core/ImePurpose;
+	public static final field Password Lorg/graphiks/kadre/core/ImePurpose;
+	public static final field Terminal Lorg/graphiks/kadre/core/ImePurpose;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/ImePurpose;
+	public static fun values ()[Lorg/graphiks/kadre/core/ImePurpose;
 }
 
 public final class org/graphiks/kadre/core/KeyChord {
@@ -559,6 +707,15 @@ public final class org/graphiks/kadre/core/ModifierKeys {
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract interface class org/graphiks/kadre/core/MonitorHandle {
+	public abstract fun getCurrentVideoMode ()Lorg/graphiks/kadre/core/VideoMode;
+	public abstract fun getId ()J
+	public abstract fun getName ()Ljava/lang/String;
+	public abstract fun getPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public abstract fun getScaleFactor ()D
+	public abstract fun getVideoModes ()Ljava/util/List;
+}
+
 public abstract interface class org/graphiks/kadre/core/MouseButton {
 }
 
@@ -949,6 +1106,20 @@ public final class org/graphiks/kadre/core/RawWindowHandle$Xlib : org/graphiks/k
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/ResizeDirection : java/lang/Enum {
+	public static final field East Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field North Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field NorthEast Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field NorthWest Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field South Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field SouthEast Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field SouthWest Lorg/graphiks/kadre/core/ResizeDirection;
+	public static final field West Lorg/graphiks/kadre/core/ResizeDirection;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/ResizeDirection;
+	public static fun values ()[Lorg/graphiks/kadre/core/ResizeDirection;
+}
+
 public abstract class org/graphiks/kadre/core/StartCause {
 }
 
@@ -986,6 +1157,14 @@ public final class org/graphiks/kadre/core/StartCause$WaitCancelled : org/graphi
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/Theme : java/lang/Enum {
+	public static final field Dark Lorg/graphiks/kadre/core/Theme;
+	public static final field Light Lorg/graphiks/kadre/core/Theme;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/Theme;
+	public static fun values ()[Lorg/graphiks/kadre/core/Theme;
+}
+
 public final class org/graphiks/kadre/core/TouchPhase : java/lang/Enum {
 	public static final field Cancelled Lorg/graphiks/kadre/core/TouchPhase;
 	public static final field Ended Lorg/graphiks/kadre/core/TouchPhase;
@@ -996,34 +1175,134 @@ public final class org/graphiks/kadre/core/TouchPhase : java/lang/Enum {
 	public static fun values ()[Lorg/graphiks/kadre/core/TouchPhase;
 }
 
+public final class org/graphiks/kadre/core/UserAttentionType : java/lang/Enum {
+	public static final field Critical Lorg/graphiks/kadre/core/UserAttentionType;
+	public static final field Informational Lorg/graphiks/kadre/core/UserAttentionType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/UserAttentionType;
+	public static fun values ()[Lorg/graphiks/kadre/core/UserAttentionType;
+}
+
+public final class org/graphiks/kadre/core/VideoMode {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalSize;Ljava/lang/Integer;Ljava/lang/Integer;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public final fun component2 ()Ljava/lang/Integer;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalSize;Ljava/lang/Integer;Ljava/lang/Integer;)Lorg/graphiks/kadre/core/VideoMode;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/VideoMode;Lorg/graphiks/kadre/core/PhysicalSize;Ljava/lang/Integer;Ljava/lang/Integer;ILjava/lang/Object;)Lorg/graphiks/kadre/core/VideoMode;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBitDepth ()Ljava/lang/Integer;
+	public final fun getRefreshRateMilliHz ()Ljava/lang/Integer;
+	public final fun getSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class org/graphiks/kadre/core/Window {
 	public abstract fun close ()V
+	public abstract fun currentMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
+	public fun dragResizeWindow (Lorg/graphiks/kadre/core/ResizeDirection;)V
+	public fun dragWindow ()V
+	public abstract fun getFullscreen ()Lorg/graphiks/kadre/core/Fullscreen;
 	public abstract fun getId-1uDr44Y ()J
 	public abstract fun getInnerSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public abstract fun getOuterPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
 	public abstract fun getOuterSize ()Lorg/graphiks/kadre/core/PhysicalSize;
-	public abstract fun getRawDisplayHandle ()Ljava/lang/Object;
-	public abstract fun getRawWindowHandle ()Ljava/lang/Object;
+	public abstract fun getRawDisplayHandle ()Lorg/graphiks/kadre/core/RawDisplayHandle;
+	public abstract fun getRawWindowHandle ()Lorg/graphiks/kadre/core/RawWindowHandle;
 	public abstract fun getScaleFactor ()D
+	public abstract fun getTheme ()Lorg/graphiks/kadre/core/Theme;
+	public abstract fun getTitle ()Ljava/lang/String;
+	public abstract fun isDecorated ()Z
+	public abstract fun isMaximized ()Z
+	public abstract fun isMinimized ()Z
+	public abstract fun isResizable ()Z
+	public abstract fun isVisible ()Z
+	public abstract fun prePresentNotify ()V
 	public abstract fun requestRedraw ()V
+	public fun requestUserAttention (Lorg/graphiks/kadre/core/UserAttentionType;)V
+	public abstract fun resetDeadKeys ()V
+	public abstract fun setBlur (Z)V
+	public fun setContentProtected (Z)V
+	public abstract fun setCursor (Lorg/graphiks/kadre/core/CursorIcon;)V
+	public abstract fun setCursorGrab (Lorg/graphiks/kadre/core/CursorGrabMode;)V
+	public abstract fun setCursorHittest (Z)V
+	public abstract fun setCursorPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+	public abstract fun setCursorVisible (Z)V
+	public fun setCustomCursor (Lorg/graphiks/kadre/core/CustomCursor;)V
+	public abstract fun setDecorations (Z)V
+	public abstract fun setFullscreen (Lorg/graphiks/kadre/core/Fullscreen;)V
+	public fun setImeAllowed (Z)V
+	public fun setImeCursorArea (Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public fun setImePurpose (Lorg/graphiks/kadre/core/ImePurpose;)V
+	public abstract fun setMaxSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public abstract fun setMaximized (Z)V
+	public abstract fun setMinSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public abstract fun setMinimized (Z)V
+	public abstract fun setOuterPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+	public abstract fun setResizable (Z)V
+	public abstract fun setTheme (Lorg/graphiks/kadre/core/Theme;)V
 	public abstract fun setTitle (Ljava/lang/String;)V
+	public abstract fun setTransparent (Z)V
 	public abstract fun setVisible (Z)V
+	public abstract fun setWindowIcon (Lorg/graphiks/kadre/core/Icon;)V
+	public abstract fun setWindowLevel (Lorg/graphiks/kadre/core/WindowLevel;)V
+	public fun showWindowMenu (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+}
+
+public final class org/graphiks/kadre/core/Window$DefaultImpls {
+	public static fun dragResizeWindow (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/ResizeDirection;)V
+	public static fun dragWindow (Lorg/graphiks/kadre/core/Window;)V
+	public static fun requestUserAttention (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/UserAttentionType;)V
+	public static fun setContentProtected (Lorg/graphiks/kadre/core/Window;Z)V
+	public static fun setCustomCursor (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/CustomCursor;)V
+	public static fun setImeAllowed (Lorg/graphiks/kadre/core/Window;Z)V
+	public static fun setImeCursorArea (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public static fun setImePurpose (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/ImePurpose;)V
+	public static fun showWindowMenu (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/PhysicalPosition;)V
 }
 
 public final class org/graphiks/kadre/core/WindowAttributes {
 	public fun <init> ()V
-	public fun <init> (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZ)V
-	public synthetic fun <init> (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZLorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalPosition;ZZZLorg/graphiks/kadre/core/Fullscreen;Lorg/graphiks/kadre/core/CursorIcon;Lorg/graphiks/kadre/core/Theme;ZZLorg/graphiks/kadre/core/WindowLevel;Lorg/graphiks/kadre/core/Icon;)V
+	public synthetic fun <init> (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZLorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalPosition;ZZZLorg/graphiks/kadre/core/Fullscreen;Lorg/graphiks/kadre/core/CursorIcon;Lorg/graphiks/kadre/core/Theme;ZZLorg/graphiks/kadre/core/WindowLevel;Lorg/graphiks/kadre/core/Icon;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Z
+	public final fun component11 ()Lorg/graphiks/kadre/core/Fullscreen;
+	public final fun component12 ()Lorg/graphiks/kadre/core/CursorIcon;
+	public final fun component13 ()Lorg/graphiks/kadre/core/Theme;
+	public final fun component14 ()Z
+	public final fun component15 ()Z
+	public final fun component16 ()Lorg/graphiks/kadre/core/WindowLevel;
+	public final fun component17 ()Lorg/graphiks/kadre/core/Icon;
 	public final fun component2 ()Lorg/graphiks/kadre/core/PhysicalSize;
 	public final fun component3 ()Z
 	public final fun component4 ()Z
-	public final fun copy (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZ)Lorg/graphiks/kadre/core/WindowAttributes;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowAttributes;Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowAttributes;
+	public final fun component5 ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public final fun component6 ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public final fun component7 ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun component8 ()Z
+	public final fun component9 ()Z
+	public final fun copy (Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZLorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalPosition;ZZZLorg/graphiks/kadre/core/Fullscreen;Lorg/graphiks/kadre/core/CursorIcon;Lorg/graphiks/kadre/core/Theme;ZZLorg/graphiks/kadre/core/WindowLevel;Lorg/graphiks/kadre/core/Icon;)Lorg/graphiks/kadre/core/WindowAttributes;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowAttributes;Ljava/lang/String;Lorg/graphiks/kadre/core/PhysicalSize;ZZLorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalSize;Lorg/graphiks/kadre/core/PhysicalPosition;ZZZLorg/graphiks/kadre/core/Fullscreen;Lorg/graphiks/kadre/core/CursorIcon;Lorg/graphiks/kadre/core/Theme;ZZLorg/graphiks/kadre/core/WindowLevel;Lorg/graphiks/kadre/core/Icon;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowAttributes;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActive ()Z
+	public final fun getBlur ()Z
+	public final fun getCursor ()Lorg/graphiks/kadre/core/CursorIcon;
+	public final fun getDecorations ()Z
+	public final fun getFullscreen ()Lorg/graphiks/kadre/core/Fullscreen;
+	public final fun getMaxSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public final fun getMaximized ()Z
+	public final fun getMinSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public final fun getPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun getPreferredTheme ()Lorg/graphiks/kadre/core/Theme;
 	public final fun getResizable ()Z
 	public final fun getSize ()Lorg/graphiks/kadre/core/PhysicalSize;
 	public final fun getTitle ()Ljava/lang/String;
+	public final fun getTransparent ()Z
 	public final fun getVisible ()Z
+	public final fun getWindowIcon ()Lorg/graphiks/kadre/core/Icon;
+	public final fun getWindowLevel ()Lorg/graphiks/kadre/core/WindowLevel;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -1045,6 +1324,57 @@ public final class org/graphiks/kadre/core/WindowEvent$Destroyed : org/graphiks/
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/WindowEvent$DoubleTapGesture : org/graphiks/kadre/core/WindowEvent {
+	public static final field INSTANCE Lorg/graphiks/kadre/core/WindowEvent$DoubleTapGesture;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$DragDropped : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;)Lorg/graphiks/kadre/core/WindowEvent$DragDropped;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$DragDropped;Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$DragDropped;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPaths ()Ljava/util/List;
+	public final fun getPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$DragEntered : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;)Lorg/graphiks/kadre/core/WindowEvent$DragEntered;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$DragEntered;Lorg/graphiks/kadre/core/PhysicalPosition;Ljava/util/List;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$DragEntered;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPaths ()Ljava/util/List;
+	public final fun getPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$DragLeft : org/graphiks/kadre/core/WindowEvent {
+	public static final field INSTANCE Lorg/graphiks/kadre/core/WindowEvent$DragLeft;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$DragMoved : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalPosition;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalPosition;)Lorg/graphiks/kadre/core/WindowEvent$DragMoved;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$DragMoved;Lorg/graphiks/kadre/core/PhysicalPosition;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$DragMoved;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/WindowEvent$Focused : org/graphiks/kadre/core/WindowEvent {
 	public fun <init> (Z)V
 	public final fun component1 ()Z
@@ -1052,6 +1382,71 @@ public final class org/graphiks/kadre/core/WindowEvent$Focused : org/graphiks/ka
 	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Focused;ZILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Focused;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getGained ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent;
+	public final fun copy (Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent;)Lorg/graphiks/kadre/core/WindowEvent$Ime;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Ime;Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Ime;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIme ()Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Commit : org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Commit;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Commit;Ljava/lang/String;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Commit;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$DeleteSurrounding : org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+	public fun <init> (II)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun copy (II)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$DeleteSurrounding;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$DeleteSurrounding;IIILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$DeleteSurrounding;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAfterBytes ()I
+	public final fun getBeforeBytes ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Disabled : org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+	public static final field INSTANCE Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Enabled : org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+	public static final field INSTANCE Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Enabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Preedit : org/graphiks/kadre/core/WindowEvent$Ime$ImeEvent {
+	public fun <init> (Ljava/lang/String;Lkotlin/Pair;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lkotlin/Pair;
+	public final fun copy (Ljava/lang/String;Lkotlin/Pair;)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Preedit;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Preedit;Ljava/lang/String;Lkotlin/Pair;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Ime$ImeEvent$Preedit;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCursorRange ()Lkotlin/Pair;
+	public final fun getText ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -1115,6 +1510,43 @@ public final class org/graphiks/kadre/core/WindowEvent$Moved : org/graphiks/kadr
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/WindowEvent$Occluded : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Z)V
+	public final fun component1 ()Z
+	public final fun copy (Z)Lorg/graphiks/kadre/core/WindowEvent$Occluded;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$Occluded;ZILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$Occluded;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOccluded ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$PanGesture : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/TouchPhase;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun component2 ()Lorg/graphiks/kadre/core/TouchPhase;
+	public final fun copy (Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/TouchPhase;)Lorg/graphiks/kadre/core/WindowEvent$PanGesture;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$PanGesture;Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/TouchPhase;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$PanGesture;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDelta ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public final fun getPhase ()Lorg/graphiks/kadre/core/TouchPhase;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$PinchGesture : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (DLorg/graphiks/kadre/core/TouchPhase;)V
+	public final fun component1 ()D
+	public final fun component2 ()Lorg/graphiks/kadre/core/TouchPhase;
+	public final fun copy (DLorg/graphiks/kadre/core/TouchPhase;)Lorg/graphiks/kadre/core/WindowEvent$PinchGesture;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$PinchGesture;DLorg/graphiks/kadre/core/TouchPhase;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$PinchGesture;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDelta ()D
+	public final fun getPhase ()Lorg/graphiks/kadre/core/TouchPhase;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/WindowEvent$PointerEntered : org/graphiks/kadre/core/WindowEvent {
 	public static final field INSTANCE Lorg/graphiks/kadre/core/WindowEvent$PointerEntered;
 	public fun equals (Ljava/lang/Object;)Z
@@ -1158,6 +1590,19 @@ public final class org/graphiks/kadre/core/WindowEvent$Resized : org/graphiks/ka
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/WindowEvent$RotationGesture : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (DLorg/graphiks/kadre/core/TouchPhase;)V
+	public final fun component1 ()D
+	public final fun component2 ()Lorg/graphiks/kadre/core/TouchPhase;
+	public final fun copy (DLorg/graphiks/kadre/core/TouchPhase;)Lorg/graphiks/kadre/core/WindowEvent$RotationGesture;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$RotationGesture;DLorg/graphiks/kadre/core/TouchPhase;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$RotationGesture;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDelta ()D
+	public final fun getPhase ()Lorg/graphiks/kadre/core/TouchPhase;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/WindowEvent$ScaleFactorChanged : org/graphiks/kadre/core/WindowEvent {
 	public fun <init> (D)V
 	public final fun component1 ()D
@@ -1165,6 +1610,17 @@ public final class org/graphiks/kadre/core/WindowEvent$ScaleFactorChanged : org/
 	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$ScaleFactorChanged;DILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$ScaleFactorChanged;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getFactor ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/WindowEvent$ThemeChanged : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (Lorg/graphiks/kadre/core/Theme;)V
+	public final fun component1 ()Lorg/graphiks/kadre/core/Theme;
+	public final fun copy (Lorg/graphiks/kadre/core/Theme;)Lorg/graphiks/kadre/core/WindowEvent$ThemeChanged;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$ThemeChanged;Lorg/graphiks/kadre/core/Theme;ILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$ThemeChanged;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTheme ()Lorg/graphiks/kadre/core/Theme;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -1184,6 +1640,19 @@ public final class org/graphiks/kadre/core/WindowEvent$Touch : org/graphiks/kadr
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/WindowEvent$TouchpadPressure : org/graphiks/kadre/core/WindowEvent {
+	public fun <init> (FI)V
+	public final fun component1 ()F
+	public final fun component2 ()I
+	public final fun copy (FI)Lorg/graphiks/kadre/core/WindowEvent$TouchpadPressure;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/WindowEvent$TouchpadPressure;FIILjava/lang/Object;)Lorg/graphiks/kadre/core/WindowEvent$TouchpadPressure;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPressure ()F
+	public final fun getStage ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/WindowId {
 	public static final synthetic fun box-impl (J)Lorg/graphiks/kadre/core/WindowId;
 	public static fun constructor-impl (J)J
@@ -1196,5 +1665,14 @@ public final class org/graphiks/kadre/core/WindowId {
 	public fun toString ()Ljava/lang/String;
 	public static fun toString-impl (J)Ljava/lang/String;
 	public final synthetic fun unbox-impl ()J
+}
+
+public final class org/graphiks/kadre/core/WindowLevel : java/lang/Enum {
+	public static final field AlwaysOnBottom Lorg/graphiks/kadre/core/WindowLevel;
+	public static final field AlwaysOnTop Lorg/graphiks/kadre/core/WindowLevel;
+	public static final field Normal Lorg/graphiks/kadre/core/WindowLevel;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/WindowLevel;
+	public static fun values ()[Lorg/graphiks/kadre/core/WindowLevel;
 }
 

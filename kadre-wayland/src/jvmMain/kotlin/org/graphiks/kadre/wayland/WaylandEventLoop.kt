@@ -19,10 +19,18 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -55,10 +63,17 @@ class WaylandEventLoop internal constructor(
     internal val compositorPtr: Long,
     internal val xdgWmBasePtr: Long,
     internal val eventFd: Int,
+    internal val decorationManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
 
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
+
+    /**
+     * Window events produced by native upcalls (xdg configure/close), queued here and drained
+     * into [ApplicationHandler.windowEvent] from the loop thread after each pump.
+     */
+    internal val eventQueue = java.util.concurrent.ConcurrentLinkedQueue<Pair<WindowId, WindowEvent>>()
 
     @Volatile private var _isExiting = false
     override val isExiting: Boolean get() = _isExiting
@@ -86,8 +101,14 @@ class WaylandEventLoop internal constructor(
             compositor = compositorPtr,
             xdgWmBase = xdgWmBasePtr,
             attrs = attributes,
+            decorationManager = decorationManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
+        // Route this window's compositor-driven events into the loop's queue for dispatch.
+        window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
         windows[window.id.value] = window
+        // Initial paint so the surface attaches a buffer and becomes visible. Subsequent repaints
+        // are driven on demand (e.g. after a resize), not continuously — see the main loop.
+        eventQueue.add(window.id to org.graphiks.kadre.core.WindowEvent.RedrawRequested)
         return window
     }
 
@@ -97,6 +118,69 @@ class WaylandEventLoop internal constructor(
      * The proxy uses the eventfd to wake up the loop from any thread.
      */
     override fun createProxy(): EventLoopProxy = WaylandEventLoopProxy(eventFd)
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns a synthetic monitor derived from the first window's size and scale factor.
+     *
+     * On Wayland, the compositor does not expose physical monitor geometry to clients
+     * via a simple public API in the core protocol (wl_output geometry is available
+     * but requires additional setup). We return a synthetic monitor based on the
+     * current window/screen state.
+     *
+     * A complete implementation would iterate the bound wl_output objects and read
+     * their `geometry` and `mode` events, which requires storing that data during
+     * the registry binding phase (TODO for a future ticket).
+     */
+    override fun availableMonitors(): List<MonitorHandle> {
+        val win = windows.values.firstOrNull()
+        val scale = win?._scaleFactor ?: 1.0
+        val size = win?.innerSize ?: PhysicalSize(1920, 1080)
+        return listOf(syntheticWaylandMonitor(displayPtr, scale, size))
+    }
+
+    /**
+     * Returns the primary monitor (the single synthetic monitor).
+     */
+    override fun primaryMonitor(): MonitorHandle? = availableMonitors().firstOrNull()
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * Returns null on Wayland.
+     *
+     * Theme detection via org.freedesktop.portal.Settings (D-Bus) is not yet wired.
+     * Documented no-op.
+     *
+     * TODO(R3-wayland-theme): query org.freedesktop.portal.Settings via JVM D-Bus.
+     */
+    override fun systemTheme(): Theme? = null
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on Wayland: device events are always dispatched.
+     *
+     * TODO(R4-wayland-device-filter): use wl_seat capabilities to control dispatch.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on Wayland
+    }
+}
+
+/** Creates a synthetic [MonitorHandle] for a Wayland output. */
+private fun syntheticWaylandMonitor(
+    outputPtr: Long,
+    scale: Double,
+    size: PhysicalSize<Int>,
+): MonitorHandle = object : MonitorHandle {
+    override val id: Long = outputPtr
+    override val name: String? = null
+    override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+    override val scaleFactor: Double = scale
+    override val currentVideoMode: VideoMode = VideoMode(size, null, null)
+    override val videoModes: List<VideoMode> = listOf(currentVideoMode)
 }
 
 // ── runApp ────────────────────────────────────────────────────────────────────
@@ -166,13 +250,39 @@ private fun runAppInternal(handler: ApplicationHandler) {
         throw t
     }
 
-    // ── 4. Discover Wayland globals (compositor) ──────────────────────────────
-    // get_registry + listener(global) + roundtrip + bind(wl_compositor).
-    // xdg_wm_base remains to be negotiated (not required to create a wl_surface / wgpu surface).
-    val compositorPtr = discoverCompositor(displayPtr)
-    val xdgWmBasePtr = 0L
+    // ── 4. Discover Wayland globals (compositor, seat, output) ───────────────
+    // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
+    val globals = discoverGlobals(displayPtr)
 
-    val eventLoop = WaylandEventLoop(displayPtr, compositorPtr, xdgWmBasePtr, eventFd)
+    val eventLoop = WaylandEventLoop(
+        displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, eventFd, globals.decorationManagerPtr,
+    )
+
+    // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
+    // Route all input events into the eventQueue; events will be dispatched below in the main loop.
+    // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
+    installSeatListeners(
+        displayPtr    = displayPtr,
+        seatPtr       = globals.seatPtr,
+        outputPtr     = globals.outputPtr,
+        seatVersion   = globals.seatVersion,
+        outputVersion = globals.outputVersion,
+        onEvent = { event ->
+            // Dispatch to the first available window (input events target the focused window;
+            // on Wayland, the compositor ensures the keyboard surface matches the focused one).
+            val win = eventLoop.windows.values.firstOrNull() ?: return@installSeatListeners
+            eventLoop.eventQueue.add(win.id to event)
+        },
+        onScaleChanged = { scale ->
+            val factor = scale.toDouble()
+            for (win in eventLoop.windows.values) {
+                if (win._scaleFactor != factor) {
+                    win._scaleFactor = factor
+                    eventLoop.eventQueue.add(win.id to org.graphiks.kadre.core.WindowEvent.ScaleFactorChanged(factor))
+                }
+            }
+        },
+    )
 
     try {
         // ── 5. Lifecycle: resumed ─────────────────────────────────────────────
@@ -189,8 +299,11 @@ private fun runAppInternal(handler: ApplicationHandler) {
             // aboutToWait — the handler can change controlFlow here
             handler.aboutToWait(eventLoop)
 
-            // Compute the timeout in milliseconds
-            val timeoutMs: Int = when (val cf = eventLoop.controlFlow) {
+            // Compute the timeout in milliseconds. If we already have queued window events (e.g.
+            // a pending RedrawRequested), don't block in poll — drain them this iteration.
+            val timeoutMs: Int = if (eventLoop.eventQueue.isNotEmpty()) {
+                0
+            } else when (val cf = eventLoop.controlFlow) {
                 is ControlFlow.Wait -> -1
                 is ControlFlow.Poll -> 0
                 is ControlFlow.WaitUntil -> {
@@ -199,8 +312,18 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 }
             }
 
-            // Canonical Wayland prepare_read / poll / read_events sequence
+            // Canonical Wayland prepare_read / poll / read_events sequence. This dispatches the
+            // pending Wayland protocol events, whose native upcalls enqueue WindowEvents.
             val startCause = pumpOnce(displaySeg, displayFd, eventFd, timeoutMs, eventLoop)
+
+            // Drain queued window events (initial/resize RedrawRequested, xdg configure/close)
+            // into the handler. Rendering happens here, on demand — NOT on a continuous pump:
+            // eglSwapBuffers blocks the loop thread (no frame-callback pacing yet), so a steady
+            // pump deadlocks the loop. On-demand keeps the loop responsive to resize/close.
+            while (true) {
+                val (windowId, event) = eventLoop.eventQueue.poll() ?: break
+                handler.windowEvent(eventLoop, windowId, event)
+            }
 
             handler.newEvents(eventLoop, startCause)
         }

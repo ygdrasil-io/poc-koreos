@@ -3,8 +3,6 @@
 # rawWindowHandle
 
 [common]\
-abstract val [rawWindowHandle](raw-window-handle.md): [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)
+abstract val [rawWindowHandle](raw-window-handle.md): [RawWindowHandle](../-raw-window-handle/index.md)
 
 Returns the native handle of the rendering surface.
-
-The concrete type will be `RawWindowHandle` once GRA-122 is merged; declared `Any` so that commonMain remains platform-independent.

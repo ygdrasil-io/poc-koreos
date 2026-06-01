@@ -3,8 +3,6 @@
 # rawDisplayHandle
 
 [common]\
-abstract val [rawDisplayHandle](raw-display-handle.md): [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)
+abstract val [rawDisplayHandle](raw-display-handle.md): [RawDisplayHandle](../-raw-display-handle/index.md)
 
 Returns the native handle of the display.
-
-The concrete type will be `RawDisplayHandle` once GRA-122 is merged; declared `Any` so that commonMain remains platform-independent.

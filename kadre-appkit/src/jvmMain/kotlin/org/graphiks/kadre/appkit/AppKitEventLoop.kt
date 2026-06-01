@@ -15,7 +15,10 @@ import org.graphiks.kadre.appkit.bindings.ObjCRuntime
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import java.lang.foreign.MemorySegment
@@ -109,6 +112,53 @@ internal class AppKitEventLoop(
      * [AppKitEventLoopProxy].
      */
     override fun createProxy(): EventLoopProxy = AppKitEventLoopProxy.create()
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns all connected screens via NSScreen.screens.
+     *
+     * Falls back to an empty list if the AppKit bindings are unavailable
+     * (e.g. non-macOS or headless CI).
+     */
+    override fun availableMonitors(): List<MonitorHandle> =
+        AppKitMonitorHandle.allScreens()
+
+    /**
+     * Returns the primary monitor via NSScreen.mainScreen, or null if unavailable.
+     */
+    override fun primaryMonitor(): MonitorHandle? =
+        AppKitMonitorHandle.primaryScreen()
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the current system-wide theme by reading `NSApp.effectiveAppearance`.
+     *
+     * Returns null if AppKit is not available or the call fails.
+     */
+    override fun systemTheme(): Theme? = try {
+        val nsAppClass = ObjCRuntime.getClass("NSApplication")
+        val nsApp = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            nsAppClass,
+            ObjCRuntime.sel("sharedApplication"),
+        ) as MemorySegment
+        AppKitThemeHelper.effectiveTheme(nsApp)
+    } catch (_: Throwable) { null }
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on AppKit: device events are dispatched independently of focus.
+     *
+     * AppKit dispatches raw device events (PointerMotion, Button, Key) via
+     * `sendEvent:` which fires regardless of window focus. A proper filter
+     * would require an NSEvent global monitor; out of scope for R4.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on AppKit: all device events are always dispatched
+    }
 }
 
 /**

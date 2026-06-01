@@ -396,6 +396,53 @@ object KadreWndProc {
     }
 
     /**
+     * Returns true if the given VK code is a modifier key.
+     */
+    private fun isModifierVk(vkCode: Int): Boolean = vkCode in setOf(
+        VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+        VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+        VK_MENU, VK_LMENU, VK_RMENU,
+        VK_LWIN, VK_RWIN,
+    )
+
+    /**
+     * Returns the Unicode text produced by a key via ToUnicode (FFM, lazy binding).
+     *
+     * Returns null if:
+     * - ToUnicode is not available (non-Windows platform)
+     * - The key does not produce printable text (control chars, function keys, etc.)
+     * - The call fails
+     *
+     * **FFM risk note (R4)**: `toUnicode` calls `ToUnicode` which has a side-effect:
+     * it may consume the dead-key state in the Win32 keyboard buffer. Call only when
+     * [isRepeat] is false to avoid clearing it for every repeated keystroke.
+     * A later follow-up may replace this with `ToUnicodeEx` + keyboard state snapshot.
+     *
+     * @param vkCode   Virtual key code (wParam).
+     * @param scanCode Scan code (bits 16-23 of lParam).
+     */
+    private fun win32KeyText(vkCode: Int, scanCode: Int): String? {
+        val handle = toUnicode ?: return null
+        return try {
+            // Native (off-heap) buffers: heap MemorySegments cannot be passed to a downcall,
+            // which would throw and silently force text=null on every keystroke.
+            java.lang.foreign.Arena.ofConfined().use { arena ->
+                val buf = arena.allocate(16L, 2L)        // 8 WCHARs
+                val keyState = arena.allocate(256L, 1L)  // BYTE[256]
+                getKeyboardState?.invoke(keyState)
+                val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
+                if (result <= 0) return@use null
+                val sb = StringBuilder()
+                for (i in 0 until result) {
+                    val ch = buf.getAtIndex(ValueLayout.JAVA_CHAR, i.toLong())
+                    if (ch >= ' ') sb.append(ch)
+                }
+                if (sb.isEmpty()) null else sb.toString()
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    /**
      * Arms WM_MOUSELEAVE tracking for the window [hwnd] via TrackMouseEvent.
      *
      * Must be called on every WM_MOUSEMOVE to keep the tracking active,

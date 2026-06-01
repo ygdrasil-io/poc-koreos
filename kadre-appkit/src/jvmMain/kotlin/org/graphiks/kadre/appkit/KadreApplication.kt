@@ -38,9 +38,11 @@ import org.graphiks.kadre.appkit.bindings.NSEvent
 import org.graphiks.kadre.appkit.bindings.ObjCRuntime
 import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.LogicalKey
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.NativeKeyInfo
@@ -218,6 +220,32 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 val logicalKey = mappedCode?.defaultLogicalKey()
                     ?: LogicalKey.Unidentified(native)
 
+                // R4: extract text via [NSEvent characters] (nil-safe)
+                val text: String? = if (isKeyDown) {
+                    try {
+                        val charsPtr = ObjCRuntime.msgSend(
+                            ValueLayout.ADDRESS,
+                            event,
+                            ObjCRuntime.sel("characters"),
+                        ) as MemorySegment
+                        if (charsPtr == MemorySegment.NULL) null
+                        else {
+                            // NSString → UTF-8 via UTF8String selector
+                            val utf8Ptr = ObjCRuntime.msgSend(
+                                ValueLayout.ADDRESS,
+                                charsPtr,
+                                ObjCRuntime.sel("UTF8String"),
+                            ) as MemorySegment
+                            if (utf8Ptr == MemorySegment.NULL) null
+                            else {
+                                val s = utf8Ptr.reinterpret(256L).getString(0L, java.nio.charset.StandardCharsets.UTF_8)
+                                // Only return text if it's printable (non-control)
+                                if (s.isNotEmpty() && s.all { it >= ' ' }) s else null
+                            }
+                        }
+                    } catch (_: Throwable) { null }
+                } else null
+
                 // GRA-156: dispatch raw DeviceEvent.Key BEFORE window-scoped WindowEvent
                 loop.handler.deviceEvent(
                     loop,
@@ -235,12 +263,27 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                             state = state,
                             modifiers = modifiers,
                             repeat = isRepeat,
-                            text = mappedCode?.defaultText(),
+                            text = text ?: mappedCode?.defaultText(),
                             keyWithoutModifiers = logicalKey,
                             native = native,
                         ),
                     ),
                 )
+
+                // R4: emit ModifiersChanged when a modifier key is involved
+                val isModifierKey = mappedCode in setOf(
+                    KeyCode.ShiftLeft, KeyCode.ShiftRight,
+                    KeyCode.ControlLeft, KeyCode.ControlRight,
+                    KeyCode.AltLeft, KeyCode.AltRight,
+                    KeyCode.MetaLeft, KeyCode.MetaRight,
+                )
+                if (isModifierKey) {
+                    loop.handler.windowEvent(
+                        loop,
+                        appKitWindow.id,
+                        WindowEvent.ModifiersChanged(KeyboardModifierState(logical = modifiers)),
+                    )
+                }
                 return
             }
 

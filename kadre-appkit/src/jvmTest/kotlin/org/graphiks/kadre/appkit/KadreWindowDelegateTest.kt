@@ -28,11 +28,11 @@ class KadreWindowDelegateTest {
 
     /** ApplicationHandler stub recording the received events. */
     private class RecordingHandler : ApplicationHandler {
-        val events = mutableListOf<Pair<WindowId, Any>>()
+        val events = mutableListOf<Pair<WindowId, WindowEvent>>()
 
         override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
 
-        override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
+        override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
             events.add(windowId to event)
         }
     }
@@ -50,6 +50,15 @@ class KadreWindowDelegateTest {
         override fun setControlFlow(controlFlow: ControlFlow) = Unit
         override fun exit() { _exiting = true }
         override fun createProxy(): EventLoopProxy = throw UnsupportedOperationException()
+        // R2 stubs
+        override fun availableMonitors() = emptyList<org.graphiks.kadre.core.MonitorHandle>()
+        override fun primaryMonitor() = null
+
+        // R3 stub
+        override fun systemTheme() = null
+
+        // R4 stub
+        override fun listenDeviceEvents(mode: org.graphiks.kadre.core.DeviceEvents) = Unit
     }
 
     // ── Tests ────────────────────────────────────────────────────────────────

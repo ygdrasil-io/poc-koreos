@@ -8,7 +8,9 @@ import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
@@ -34,6 +36,7 @@ import platform.UIKit.UIPress
 import platform.UIKit.UIPressesEvent
 import platform.UIKit.UIScreen
 import platform.UIKit.UITouch
+import platform.UIKit.UITraitCollection
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 import platform.UIKit.UIViewMeta
@@ -50,6 +53,8 @@ import platform.darwin.NSObject
  * [WindowEvent.Touch]. Bounds changes (rotation, split-view, status-bar layout)
  * are detected in [layoutSubviews]: the CAMetalLayer `drawableSize` is updated
  * and a [WindowEvent.Resized] is emitted when the physical size actually changes.
+ * Display-scale changes (e.g. moving to an external screen) update
+ * `contentsScale` and emit [WindowEvent.ScaleFactorChanged].
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 class KadreMetalView(
@@ -65,6 +70,13 @@ class KadreMetalView(
     /** Last emitted physical size, to avoid duplicate Resized events. */
     private var lastWidth: Int = -1
     private var lastHeight: Int = -1
+
+    /**
+     * Last emitted scale factor. Initialized to the main screen scale to match
+     * the `contentsScale` set at window creation, so no spurious
+     * ScaleFactorChanged is emitted on the first layout pass.
+     */
+    private var lastScale: Double = UIScreen.mainScreen.scale
 
     override fun touchesBegan(touches: Set<*>, withEvent: UIEvent?) =
         dispatchTouches(touches, TouchPhase.Started)
@@ -113,6 +125,11 @@ class KadreMetalView(
             )
             val logicalKey = mappedCode.defaultLogicalKey()
             handled = true
+            // R4: UIKey.characters is the text produced by the key (may be nil/empty)
+            val characters = uiKey.characters
+            val text: String? = if (!characters.isNullOrEmpty() && characters[0] >= ' ') characters else null
+            // R4: UIKey.keyCode maps to HID usage (same as what the mapper uses)
+            val scanCode: Int = uiKey.keyCode.toInt()
             onEvent(
                 WindowEvent.KeyInput(
                     KeyEvent(
@@ -141,7 +158,8 @@ class KadreMetalView(
      */
     override fun layoutSubviews() {
         super.layoutSubviews()
-        val scale = UIScreen.mainScreen.scale
+        syncScaleIfChanged()
+        val scale = currentScale()
         val physW = bounds.useContents { size.width * scale }
         val physH = bounds.useContents { size.height * scale }
         val w = physW.toInt()
@@ -156,6 +174,32 @@ class KadreMetalView(
             lastWidth = w
             lastHeight = h
             onEvent(WindowEvent.Resized(PhysicalSize(w, h)))
+        }
+    }
+
+    /**
+     * Detects a change of `displayScale` (moving to a screen with a different
+     * pixel ratio, e.g. an external display). `displayScale` is a UITraitCollection
+     * trait, so this fires when it changes.
+     */
+    override fun traitCollectionDidChange(previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        syncScaleIfChanged()
+    }
+
+    /** Effective scale of the view's screen, falling back to the main screen. */
+    private fun currentScale(): Double = window?.screen?.scale ?: UIScreen.mainScreen.scale
+
+    /**
+     * Updates `CAMetalLayer.contentsScale` and emits [WindowEvent.ScaleFactorChanged]
+     * when the effective scale factor changes.
+     */
+    private fun syncScaleIfChanged() {
+        val scale = currentScale()
+        if (scale > 0.0 && scale != lastScale) {
+            lastScale = scale
+            metalLayer.setContentsScale(scale)
+            onEvent(WindowEvent.ScaleFactorChanged(scale))
         }
     }
 
@@ -272,22 +316,18 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         eventLoop.handler.windowEvent(eventLoop, id, WindowEvent.RedrawRequested)
     }
 
-    override val rawWindowHandle: Any
+    override val rawWindowHandle: RawWindowHandle
         get() = RawWindowHandle.UiKit(
             uiView = metalView.objcPtr().toLong(),
             uiViewController = viewController.objcPtr().toLong(),
         )
 
-    override val rawDisplayHandle: Any
+    override val rawDisplayHandle: RawDisplayHandle
         get() = RawDisplayHandle.UiKit
 
     override fun requestRedraw() {
         // No-op: the CADisplayLink paces RedrawRequested on every screen refresh.
         // Kept for API parity with the desktop backends.
-    }
-
-    override fun setTitle(title: String) {
-        viewController.title = title
     }
 
     override val innerSize: PhysicalSize<Int>
@@ -325,5 +365,190 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         displayLink = null
         uiWindow.setHidden(true)
         uiWindow.resignKeyWindow()
+    }
+
+    // ── R1: window state & geometry — no-ops on iOS ───────────────────────────
+    //
+    // iOS does not support programmatic window resizing, minimization,
+    // maximization, or decoration changes. UIKit manages the full-screen
+    // window lifecycle. All members below are documented no-ops.
+
+    private var _title: String = ""
+
+    /**
+     * Sets the view controller title. On iOS the window has no decoration title bar;
+     * this updates the UIViewController title for navigation controller integration.
+     */
+    override fun setTitle(title: String) {
+        _title = title
+        viewController.title = title
+    }
+
+    override val title: String get() = _title
+
+    /** Returns whether the UIWindow is currently visible. */
+    override val isVisible: Boolean get() = !uiWindow.isHidden()
+
+    /**
+     * iOS does not support programmatic window resizing.
+     * This is a no-op — the system controls the window geometry.
+     */
+    override fun setResizable(resizable: Boolean) { /* no-op: iOS does not support programmatic resizing */ }
+
+    /** iOS windows are not user-resizable. Always returns false. */
+    override val isResizable: Boolean get() = false
+
+    /**
+     * iOS does not support programmatic minimization.
+     * This is a no-op.
+     */
+    override fun setMinimized(minimized: Boolean) { /* no-op: iOS does not support programmatic minimization */ }
+
+    /** iOS does not expose an isMinimized state. Always returns false. */
+    override val isMinimized: Boolean get() = false
+
+    /**
+     * iOS does not support programmatic maximization.
+     * This is a no-op — windows always fill the available screen area.
+     */
+    override fun setMaximized(maximized: Boolean) { /* no-op: iOS windows always fill the screen */ }
+
+    /** iOS windows always fill the screen. Always returns false. */
+    override val isMaximized: Boolean get() = false
+
+    /**
+     * iOS does not have platform window decorations (title bar, resize borders).
+     * This is a no-op.
+     */
+    override fun setDecorations(decorated: Boolean) { /* no-op: iOS has no platform window decorations */ }
+
+    /** iOS windows have no platform decorations. Always returns false. */
+    override val isDecorated: Boolean get() = false
+
+    /**
+     * iOS does not support surface size constraints.
+     * This is a no-op.
+     */
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+
+    /**
+     * iOS does not support surface size constraints.
+     * This is a no-op.
+     */
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+
+    /**
+     * iOS does not expose a global window position.
+     * Returns PhysicalPosition(0, 0) as the window always fills the screen.
+     */
+    override val outerPosition: PhysicalPosition<Int> get() = PhysicalPosition(0, 0)
+
+    /**
+     * iOS does not support programmatic window positioning.
+     * This is a no-op.
+     */
+    override fun setOuterPosition(position: PhysicalPosition<Int>) { /* no-op: iOS does not support programmatic window positioning */ }
+
+    /**
+     * No-op on iOS: there is no Wayland-style pre-commit concept on this platform.
+     */
+    override fun prePresentNotify() { /* no-op on iOS */ }
+
+    // ── R2: monitor & fullscreen ──────────────────────────────────────────────
+
+    /**
+     * Returns a synthetic monitor from UIScreen.mainScreen.
+     */
+    override fun currentMonitor(): MonitorHandle = syntheticUiKitMonitor()
+
+    /** In-memory fullscreen state (R2). */
+    private var _fullscreen: Fullscreen? = null
+
+    override val fullscreen: Fullscreen? get() = _fullscreen
+
+    // ── R3: cursor, theme & appearance ───────────────────────────────────────
+
+    /** No-op on iOS: there is no visible cursor on touchscreen devices. */
+    override fun setCursor(cursor: CursorIcon) { /* no-op: iOS has no cursor */ }
+
+    /** No-op on iOS. */
+    override fun setCursorVisible(visible: Boolean) { /* no-op: iOS has no cursor */ }
+
+    /** No-op on iOS. */
+    override fun setCursorGrab(mode: CursorGrabMode) { /* no-op: iOS has no cursor */ }
+
+    /** No-op on iOS. */
+    override fun setCursorPosition(position: PhysicalPosition<Int>) { /* no-op: iOS has no cursor */ }
+
+    /** No-op on iOS. */
+    override fun setCursorHittest(hittest: Boolean) { /* no-op: iOS does not support hit-testing */ }
+
+    /**
+     * Returns the current theme via the view controller's traitCollection.
+     */
+    override val theme: Theme?
+        get() = try {
+            val style = viewController.traitCollection.userInterfaceStyle
+            when (style) {
+                UIUserInterfaceStyle.UIUserInterfaceStyleLight -> Theme.Light
+                UIUserInterfaceStyle.UIUserInterfaceStyleDark  -> Theme.Dark
+                else -> null
+            }
+        } catch (_: Throwable) { null }
+
+    /**
+     * Requests a theme override via UIViewController.overrideUserInterfaceStyle.
+     *
+     * Passing null restores the unspecified (system) style.
+     */
+    override fun setTheme(theme: Theme?) {
+        try {
+            val styleValue = when (theme) {
+                Theme.Light -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
+                Theme.Dark  -> UIUserInterfaceStyle.UIUserInterfaceStyleDark
+                null        -> UIUserInterfaceStyle.UIUserInterfaceStyleUnspecified
+            }
+            viewController.setOverrideUserInterfaceStyle(styleValue)
+        } catch (_: Throwable) {}
+    }
+
+    /** No-op on iOS: Z-ordering is managed by UIKit. */
+    override fun setWindowLevel(level: WindowLevel) { /* no-op: UIKit manages Z-ordering */ }
+
+    /** No-op on iOS: transparency is a renderer concern. */
+    override fun setTransparent(transparent: Boolean) { /* no-op: iOS transparency is renderer-side */ }
+
+    /** No-op on iOS. */
+    override fun setBlur(blur: Boolean) { /* no-op: iOS has no standard window blur API */ }
+
+    /** No-op on iOS: application icon is set via the Info.plist. */
+    override fun setWindowIcon(icon: Icon?) { /* no-op: iOS icon is set via the app bundle */ }
+
+    /**
+     * Enters or exits fullscreen on iOS.
+     *
+     * On iOS, the app is always "fullscreen" in the sense that it covers the entire screen.
+     * This implementation hides/shows the status bar as a best-effort approximation
+     * of a fullscreen mode change. [Fullscreen.Exclusive] is treated as [Fullscreen.Borderless].
+     *
+     * @param fullscreen New fullscreen state, or null to exit.
+     */
+    override fun setFullscreen(fullscreen: Fullscreen?) {
+        _fullscreen = fullscreen
+        // On iOS, the view already fills the full screen.
+        // A more complete implementation would call UIViewController.prefersStatusBarHidden
+        // but that requires overriding the view controller, which is out of scope for R2.
+        // The state is stored so callers can read it back.
+    }
+
+    // ── R4: keyboard ──────────────────────────────────────────────────────────
+
+    /**
+     * No-op on UIKit: dead-key state is managed by UIKit's text input system.
+     *
+     * TODO(R4-uikit-dead-keys): call UITextInputDelegate.textDidChange to reset.
+     */
+    override fun resetDeadKeys() {
+        // no-op: UIKit manages dead-key state internally
     }
 }

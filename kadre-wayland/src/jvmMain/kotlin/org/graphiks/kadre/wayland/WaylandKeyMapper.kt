@@ -126,3 +126,5 @@ fun mapWaylandKeyEvent(
         ),
     )
 }
+
+fun mapWaylandKeyboardFocused(focused: Boolean): WindowEvent.Focused = WindowEvent.Focused(focused)

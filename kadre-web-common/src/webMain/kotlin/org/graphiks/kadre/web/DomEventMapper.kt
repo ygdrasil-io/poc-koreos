@@ -16,10 +16,16 @@ import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.LogicalKey
+import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.PhysicalKey
+import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
 
@@ -305,6 +311,37 @@ internal fun domTouchTypeToPhase(eventType: String): WebTouchPhase = when (event
 }
 
 /**
+ * Maps a DOM `KeyboardEvent.location` value to a [WebKeyLocation].
+ *
+ * Standard DOM values: 0=Standard, 1=Left, 2=Right, 3=Numpad.
+ *
+ * @param location Value of `KeyboardEvent.location`.
+ * @return Corresponding [WebKeyLocation].
+ */
+internal fun domLocationToKeyLocation(location: Int): WebKeyLocation = when (location) {
+    1 -> WebKeyLocation.Left
+    2 -> WebKeyLocation.Right
+    3 -> WebKeyLocation.Numpad
+    else -> WebKeyLocation.Standard
+}
+
+/**
+ * Returns the printable text for a DOM key string (from `KeyboardEvent.key`).
+ *
+ * Returns the string if it is a single printable character; null otherwise
+ * (e.g. "Shift", "ArrowUp", "Enter" are not printable text).
+ *
+ * @param domKey Value of `KeyboardEvent.key`.
+ * @return The character if printable, null otherwise.
+ */
+internal fun domKeyToText(domKey: String): String? {
+    // A named key (e.g. "Shift", "ArrowUp", "F1") has length > 1 in most cases,
+    // but some named keys have length 1 (e.g. "a", " "). We only return text for
+    // single printable characters.
+    return if (domKey.length == 1 && domKey[0] >= ' ') domKey else null
+}
+
+/**
  * Normalizes a DOM wheel delta into logical pixels.
  *
  * The DOM exposes three scroll modes:
@@ -323,4 +360,63 @@ internal fun normalizeWheelDelta(delta: Double, deltaMode: Int): Double {
         else -> 1.0
     }
     return delta * scale
+}
+
+// ---------------------------------------------------------------------------
+// WebWindowEvent → WindowEvent bridge
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a [WebWindowEvent] to the canonical kadre-core [WindowEvent].
+ *
+ * This bridge is needed because kadre-web-common uses its own Web* mirror types
+ * (defined in [WebTypes]) while the [ApplicationHandler] interface uses kadre-core
+ * sealed types. When kadre-core gains JS/wasmJs targets (ticket #32), these mirror
+ * types will be replaced with typealiases and this mapper can be removed.
+ */
+internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
+    WebWindowEvent.CloseRequested -> WindowEvent.CloseRequested
+    is WebWindowEvent.Resized -> WindowEvent.Resized(PhysicalSize(width, height))
+    is WebWindowEvent.KeyInput -> WindowEvent.KeyInput(event)
+    is WebWindowEvent.PointerMoved -> WindowEvent.PointerMoved(PhysicalPosition(x, y))
+    WebWindowEvent.PointerEntered -> WindowEvent.PointerEntered
+    WebWindowEvent.PointerLeft -> WindowEvent.PointerLeft
+    is WebWindowEvent.MouseInput -> WindowEvent.MouseInput(
+        button = button.toMouseButton(),
+        state = state.toKeyState(),
+    )
+    is WebWindowEvent.MouseWheel -> WindowEvent.MouseWheel(deltaX, deltaY)
+    is WebWindowEvent.Focused -> WindowEvent.Focused(gained)
+    is WebWindowEvent.Touch -> WindowEvent.Touch(
+        phase = phase.toTouchPhase(),
+        location = PhysicalPosition(x, y),
+        id = id,
+    )
+    is WebWindowEvent.ScaleFactorChanged -> WindowEvent.ScaleFactorChanged(factor)
+    WebWindowEvent.RedrawRequested -> WindowEvent.RedrawRequested
+    WebWindowEvent.Destroyed -> WindowEvent.Destroyed
+    is WebWindowEvent.ModifiersChanged -> WindowEvent.ModifiersChanged(
+        KeyboardModifierState(logical = modifiers.toKeyboardModifiers()),
+    )
+}
+
+private fun WebKeyState.toKeyState(): KeyState = when (this) {
+    WebKeyState.Pressed  -> KeyState.Pressed
+    WebKeyState.Released -> KeyState.Released
+}
+
+private fun WebModifiers.toKeyboardModifiers(): KeyboardModifiers = KeyboardModifiers(bits)
+
+private fun WebMouseButton.toMouseButton(): MouseButton = when (this) {
+    WebMouseButton.Left   -> MouseButton.Left
+    WebMouseButton.Right  -> MouseButton.Right
+    WebMouseButton.Middle -> MouseButton.Middle
+    is WebMouseButton.Other -> MouseButton.Other(button)
+}
+
+private fun WebTouchPhase.toTouchPhase(): TouchPhase = when (this) {
+    WebTouchPhase.Started   -> TouchPhase.Started
+    WebTouchPhase.Moved     -> TouchPhase.Moved
+    WebTouchPhase.Ended     -> TouchPhase.Ended
+    WebTouchPhase.Cancelled -> TouchPhase.Cancelled
 }
