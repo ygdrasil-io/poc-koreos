@@ -1,5 +1,6 @@
 package org.graphiks.kadre.android
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -81,6 +82,13 @@ abstract class KadreActivity : ComponentActivity() {
     @Volatile
     internal var destroyed = false
 
+    /**
+     * Last dispatched scale factor (display density), to emit
+     * [WindowEvent.ScaleFactorChanged] only on an actual change.
+     * Initialized in [onCreate] from the current display density.
+     */
+    private var lastScaleFactor: Double = 1.0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -112,6 +120,7 @@ abstract class KadreActivity : ComponentActivity() {
         // ── Handler + EventLoop ────────────────────────────────────────────────
         handler = createHandler()
         eventLoop = AndroidEventLoop(this)
+        lastScaleFactor = resources.displayMetrics.density.toDouble()
 
         // ── SurfaceHolder callbacks (surface lifecycle) ────────────────────────
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
@@ -232,6 +241,27 @@ abstract class KadreActivity : ComponentActivity() {
             ),
         )
         return true
+    }
+
+    // ── Display density (scale factor) ────────────────────────────────────────
+
+    /**
+     * Emits [WindowEvent.ScaleFactorChanged] when the display density changes
+     * (e.g. moved to an external display, runtime density override).
+     *
+     * Note: this is only invoked when the manifest declares the relevant
+     * `android:configChanges` (e.g. `density`); otherwise Android recreates the
+     * Activity instead, and the new density is picked up on re-creation.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val window = eventLoop.pendingWindow
+        if (destroyed || window == null) return
+        val density = resources.displayMetrics.density.toDouble()
+        if (density != lastScaleFactor) {
+            lastScaleFactor = density
+            handler.windowEvent(eventLoop, window.id, WindowEvent.ScaleFactorChanged(density))
+        }
     }
 
     override fun onDestroy() {
