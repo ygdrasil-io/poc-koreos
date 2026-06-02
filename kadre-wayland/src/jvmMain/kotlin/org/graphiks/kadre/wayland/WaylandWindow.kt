@@ -206,15 +206,15 @@ class WaylandWindow private constructor(
 
     override val title: String get() = _title
 
-    override val isVisible: Boolean get() = xdg != null // true once xdg_shell handshake completes
+    override val isVisible: Boolean? get() = null
 
     @Volatile private var _isResizable: Boolean = attrs.resizable
 
     override val isResizable: Boolean get() = _isResizable
 
-    @Volatile private var _isMinimized: Boolean = false
+    @Volatile private var _isMinimized: Boolean? = null
 
-    override val isMinimized: Boolean get() = _isMinimized
+    override val isMinimized: Boolean? get() = _isMinimized
 
     @Volatile private var _isMaximized: Boolean = attrs.maximized
 
@@ -240,7 +240,7 @@ class WaylandWindow private constructor(
     }
 
     override fun setMinimized(minimized: Boolean) {
-        _isMinimized = minimized
+        _isMinimized = null
         if (minimized) {
             xdg?.setMinimized()
             flushDisplay()

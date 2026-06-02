@@ -614,7 +614,8 @@ Sinon → fallback X11 ou erreur finale.
 | `outerPosition` / `setOuterPosition()` | Position du cadre fenêtre à l'écran |
 | `setMinSurfaceSize()` / `setMaxSurfaceSize()` | Contraintes de taille |
 | `isResizable` / `setResizable()` | Redimensionnement utilisateur |
-| `isMinimized` / `setMinimized()` | Minimiser / restaurer |
+| `isVisible: Boolean?` / `setVisible()` | Afficher / masquer ; `null` si la plateforme n'expose pas cet etat |
+| `isMinimized: Boolean?` / `setMinimized()` | Minimiser / restaurer ; `null` si la plateforme n'expose pas cet etat |
 | `isMaximized` / `setMaximized()` | Maximiser / restaurer |
 | `isDecorated` / `setDecorations()` | Décorations plateforme (barre de titre, bordures) |
 | `prePresentNotify()` | Hint au compositeur avant présentation de frame (optimisation Wayland, no-op ailleurs) |

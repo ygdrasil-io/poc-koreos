@@ -595,8 +595,8 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
 
     override val title: String get() = _title
 
-    /** Returns whether the UIWindow is currently visible. */
-    override val isVisible: Boolean get() = !uiWindow.isHidden()
+    /** UIKit does not expose a reliable winit-style window visibility state. */
+    override val isVisible: Boolean? get() = null
 
     /**
      * iOS does not support programmatic window resizing.
@@ -613,8 +613,8 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      */
     override fun setMinimized(minimized: Boolean) { /* no-op: iOS does not support programmatic minimization */ }
 
-    /** iOS does not expose an isMinimized state. Always returns false. */
-    override val isMinimized: Boolean get() = false
+    /** iOS does not expose a reliable minimized state. */
+    override val isMinimized: Boolean? get() = null
 
     /**
      * iOS does not support programmatic maximization.

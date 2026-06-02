@@ -93,6 +93,18 @@ class WinitWindowingCompatibilityTest {
         assertUnsupported(window.dragResizeWindow(ResizeDirection.SouthEast))
     }
 
+    @Test
+    fun `window visibility and minimized state can represent unknown platform state`() {
+        val window = TestWindow(
+            currentMonitor = null,
+            visible = null,
+            minimized = null,
+        )
+
+        assertNull(window.isVisible)
+        assertNull(window.isMinimized)
+    }
+
     private companion object {
         const val targetWinitCommit = "c4afadbfabf7b1e7989b40b493db1a4c7bd8ff4e"
 
@@ -157,15 +169,15 @@ class WinitWindowingCompatibilityTest {
             ),
             WinitWindowingApi(
                 winitApi = "Window.is_visible",
-                kadreApi = "Window.isVisible: Boolean",
-                status = WinitWindowingStatus.Deferred,
-                note = "winit returns Option<bool>; Kadre currently exposes a non-null Boolean and cannot express unknown platform visibility.",
+                kadreApi = "Window.isVisible: Boolean?",
+                status = WinitWindowingStatus.Implemented,
+                note = "Kadre mirrors winit Option<bool> with a nullable Boolean; null means the platform does not expose a reliable visibility state.",
             ),
             WinitWindowingApi(
                 winitApi = "Window.is_minimized",
-                kadreApi = "Window.isMinimized: Boolean",
-                status = WinitWindowingStatus.Deferred,
-                note = "winit returns Option<bool>; Kadre currently exposes a non-null Boolean and cannot express unknown platform minimized state.",
+                kadreApi = "Window.isMinimized: Boolean?",
+                status = WinitWindowingStatus.Implemented,
+                note = "Kadre mirrors winit Option<bool> with a nullable Boolean; null means the platform does not expose a reliable minimized state.",
             ),
             WinitWindowingApi(
                 winitApi = "Window monitor/fullscreen methods",
@@ -312,6 +324,8 @@ class WinitWindowingCompatibilityTest {
 
     private class TestWindow(
         private val currentMonitor: MonitorHandle?,
+        private val visible: Boolean? = true,
+        private val minimized: Boolean? = false,
     ) : Window {
         override val id: WindowId = WindowId(1L)
         override val rawWindowHandle: RawWindowHandle = RawWindowHandle.Web(canvasElementId = "test-window")
@@ -320,9 +334,9 @@ class WinitWindowingCompatibilityTest {
         override val innerSize: PhysicalSize<Int> = PhysicalSize(800, 600)
         override val outerSize: PhysicalSize<Int> = innerSize
         override val scaleFactor: Double = 1.0
-        override val isVisible: Boolean = true
+        override val isVisible: Boolean? = visible
         override val isResizable: Boolean = true
-        override val isMinimized: Boolean = false
+        override val isMinimized: Boolean? = minimized
         override val isMaximized: Boolean = false
         override val isDecorated: Boolean = true
         override val outerPosition: PhysicalPosition<Int> = PhysicalPosition(0, 0)

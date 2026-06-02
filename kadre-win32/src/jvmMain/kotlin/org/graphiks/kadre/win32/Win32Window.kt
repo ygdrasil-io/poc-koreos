@@ -191,7 +191,7 @@ class Win32Window private constructor(
             } catch (_: Throwable) { attrs.title }
         }
 
-    override val isVisible: Boolean
+    override val isVisible: Boolean?
         get() = try {
             (isWindowVisible?.invokeExact(hwnd) as? Int ?: 0) != 0
         } catch (_: Throwable) { false }
@@ -230,7 +230,7 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
-    override val isMinimized: Boolean
+    override val isMinimized: Boolean?
         get() = try {
             (isIconic?.invokeExact(hwnd) as? Int ?: 0) != 0
         } catch (_: Throwable) { false }

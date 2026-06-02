@@ -303,7 +303,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             NSWindow(nsWindowPtr).titleAsString()
         } catch (_: Throwable) { "" }
 
-    override val isVisible: Boolean
+    override val isVisible: Boolean?
         get() = try {
             NSWindow(nsWindowPtr).isVisible()
         } catch (_: Throwable) { false }
@@ -332,7 +332,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         } catch (_: Throwable) {}
     }
 
-    override val isMinimized: Boolean
+    override val isMinimized: Boolean?
         get() = try {
             NSWindow(nsWindowPtr).isMiniaturized()
         } catch (_: Throwable) { false }

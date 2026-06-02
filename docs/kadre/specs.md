@@ -613,7 +613,8 @@ Otherwise → X11 fallback or final error.
 | `outerPosition` / `setOuterPosition()` | Window frame position on screen |
 | `setMinSurfaceSize()` / `setMaxSurfaceSize()` | Size constraints |
 | `isResizable` / `setResizable()` | User resizability |
-| `isMinimized` / `setMinimized()` | Minimize / restore |
+| `isVisible: Boolean?` / `setVisible()` | Show / hide; `null` when the platform does not expose the state |
+| `isMinimized: Boolean?` / `setMinimized()` | Minimize / restore; `null` when the platform does not expose the state |
 | `isMaximized` / `setMaximized()` | Maximize / restore |
 | `isDecorated` / `setDecorations()` | Platform decorations (title bar, borders) |
 | `prePresentNotify()` | Compositor hint before frame present (Wayland optimization, no-op elsewhere) |

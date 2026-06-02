@@ -86,8 +86,11 @@ interface Window {
 
     /**
      * Returns whether the window is currently visible.
+     *
+     * Returns `null` when the platform does not expose a reliable visibility
+     * state.
      */
-    val isVisible: Boolean
+    val isVisible: Boolean?
 
     /**
      * Closes the window.
@@ -120,8 +123,11 @@ interface Window {
 
     /**
      * Returns whether the window is currently minimized.
+     *
+     * Returns `null` when the platform does not expose a reliable minimized
+     * state.
      */
-    val isMinimized: Boolean
+    val isMinimized: Boolean?
 
     /**
      * Maximizes or restores the window.

@@ -162,7 +162,7 @@ class X11Window private constructor(
 
     @Volatile private var _isVisible: Boolean = attrs.visible
 
-    override val isVisible: Boolean get() = _isVisible
+    override val isVisible: Boolean? get() = _isVisible
 
     @Volatile private var _isResizable: Boolean = attrs.resizable
 
@@ -170,7 +170,7 @@ class X11Window private constructor(
 
     @Volatile private var _isMinimized: Boolean = false
 
-    override val isMinimized: Boolean get() = _isMinimized
+    override val isMinimized: Boolean? get() = _isMinimized
 
     @Volatile private var _isMaximized: Boolean = attrs.maximized
 

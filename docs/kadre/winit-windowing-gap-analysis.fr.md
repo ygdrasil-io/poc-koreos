@@ -17,7 +17,7 @@ Kadre couvre deja le socle portable de fenetrage winit: attributs de creation, c
 
 Les ecarts prioritaires ne demandent pas de breaking change dans cette tache, mais doivent rester visibles:
 
-1. `Window.is_visible` et `Window.is_minimized` sont `Option<bool>` dans winit, mais `Boolean` non nullable dans Kadre. Kadre ne peut donc pas representer l'etat inconnu.
+1. `Window.is_visible` et `Window.is_minimized` sont `Option<bool>` dans winit; Kadre les represente maintenant par `Boolean?`, avec `null` pour l'etat inconnu ou non expose par la plateforme.
 2. Les operations winit fallibles de curseur et de gestion fenetre (`set_cursor_position`, `set_cursor_grab`, `drag_window`, `drag_resize_window`, `show_window_menu`) retournent maintenant des resultats types cote API commune; plusieurs backends doivent encore remplacer le fallback `RequestError.Unsupported` par du support natif.
 3. `Window.available_monitors` et `Window.primary_monitor` existent dans winit en plus des methodes `ActiveEventLoop`; Kadre expose maintenant les equivalents `Window.availableMonitors()` et `Window.primaryMonitor()` avec fallback `emptyList`/`null` quand le backend ne sait pas repondre.
 4. `ActiveEventLoop.owned_display_handle` est non nullable dans winit; `ActiveEventLoop.ownedDisplayHandle()` est nullable et retourne `null` par defaut dans Kadre.
@@ -33,8 +33,8 @@ Statuts autorises par le test commun: `implemented`, `unsupported-platform`, `de
 | `WindowAttributes` | `WindowAttributes` | implemented | Couvre titre, taille, visibilite initiale, resizable, contraintes, position, fullscreen, decorations, activation, cursor, theme, transparence, level, icon, parent. |
 | `Window.id` / handles / redraw / title / sizes / scale | `Window.id`, `rawWindowHandle`, `rawDisplayHandle`, `requestRedraw`, `title`, `innerSize`, `outerSize`, `scaleFactor` | implemented | Socle portable represente. |
 | Surface geometry et contraintes | `surfacePosition`, `outerPosition`, `setOuterPosition`, `surfaceSize`, `requestSurfaceSize`, `outerSize`, `safeArea`, `setMinSurfaceSize`, `setMaxSurfaceSize`, `surfaceResizeIncrements`, `setSurfaceResizeIncrements` | implemented | API portable presente; support exact encore variable selon backend. |
-| `Window.is_visible() -> Option<bool>` | `Window.isVisible: Boolean` | deferred | Nullable winit non represente; Kadre force `true`/`false`. |
-| `Window.is_minimized() -> Option<bool>` | `Window.isMinimized: Boolean` | deferred | Nullable winit non represente; Kadre force `true`/`false`. |
+| `Window.is_visible() -> Option<bool>` | `Window.isVisible: Boolean?` | implemented | Kadre represente `Option<bool>` via un Boolean nullable; `null` signifie etat inconnu ou non expose par la plateforme. |
+| `Window.is_minimized() -> Option<bool>` | `Window.isMinimized: Boolean?` | implemented | Kadre represente `Option<bool>` via un Boolean nullable; `null` signifie etat inconnu ou non expose par la plateforme. |
 | Monitor/fullscreen sur `Window` | `currentMonitor`, `setFullscreen`, `fullscreen` | implemented | Sous-ensemble portable present. |
 | Focus sur `Window` | `focusWindow`, `hasFocus` | implemented | API commune presente; AppKit implemente le focus, les autres backends restent a valider finement. |
 | Apparence et etat fenetre | `setWindowLevel`, `requestUserAttention`, `setTheme`, `theme`, `setTransparent`, `setBlur`, `setWindowIcon`, `setContentProtected` | deferred | API commune presente, mais plusieurs methodes restent no-op ou partielles selon backend; content protection AppKit est implemente dans cet increment. |
@@ -61,7 +61,7 @@ Cette analyse suit l'API courante. Les methodes Window-level de monitoring sont 
 
 Priorites probables pour une suite:
 
-1. Ajouter une representation nullable ou inconnue pour `isVisible` et `isMinimized`, ou documenter formellement le choix Kadre d'un bool par defaut backend.
+1. Completer les backends desktop qui exposent encore des etats best-effort pour documenter ou tester leur source native.
 2. Convertir les operations cursor/drag critiques vers des result types Kadre existants, sans exceptions pour les limitations attendues.
 3. Faire progresser les backends non desktop vers une enumeration multi-ecran reelle si la plateforme expose plus qu'un moniteur synthetique.
 4. Rendre `ownedDisplayHandle` non nullable quand chaque backend peut produire un handle fiable, ou documenter la divergence.

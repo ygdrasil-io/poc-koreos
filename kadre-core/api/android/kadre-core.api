@@ -2057,9 +2057,9 @@ public abstract interface class org/graphiks/kadre/core/Window {
 	public fun inputCapabilities ()Lorg/graphiks/kadre/core/InputCapabilities;
 	public abstract fun isDecorated ()Z
 	public abstract fun isMaximized ()Z
-	public abstract fun isMinimized ()Z
+	public abstract fun isMinimized ()Ljava/lang/Boolean;
 	public abstract fun isResizable ()Z
-	public abstract fun isVisible ()Z
+	public abstract fun isVisible ()Ljava/lang/Boolean;
 	public abstract fun prePresentNotify ()V
 	public fun primaryMonitor ()Lorg/graphiks/kadre/core/MonitorHandle;
 	public fun recognizeDoubleTapGesture (Z)V
