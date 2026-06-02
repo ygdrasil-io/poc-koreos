@@ -62,6 +62,9 @@ open class WebEventLoop : ActiveEventLoop {
     /** List of active windows created by this loop. */
     private val windows = mutableListOf<WebWindow>()
 
+    /** Next internal window id. Canvas ids are DOM handles, not identity. */
+    private var nextWindowId: Long = 1L
+
     /** Queue of DOM events received between two frames. */
     private val pendingEvents = mutableListOf<Pair<WindowId, WebWindowEvent>>()
 
@@ -116,16 +119,20 @@ open class WebEventLoop : ActiveEventLoop {
      */
     fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
+        val canvasId = bridge.ensureCanvas(attrs)
+        val window = WebWindow(
+            id = WindowId(nextWindowId++),
+            canvasElementId = canvasId,
+            bridge = bridge,
+        )
         bridge.onWindowEvent = { event ->
-            // Queue the event for dispatch on the next frame
-            pendingEvents.add(Pair(windows.firstOrNull()?.id ?: WindowId(0L), event))
+            // Queue the event for the window owned by this DOM bridge.
+            pendingEvents.add(Pair(window.id, event))
             // In Wait mode, wake the loop immediately
             if (_controlFlow is ControlFlow.Wait) {
                 scheduleWakeUp()
             }
         }
-        val canvasId = bridge.ensureCanvas(attrs)
-        val window = WebWindow(canvasId, bridge)
         windows.add(window)
         bridge.attach(canvasId)
         return window

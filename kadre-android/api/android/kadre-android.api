@@ -6,15 +6,53 @@ public final class org/graphiks/kadre/android/AndroidKadreRuntime {
 
 public final class org/graphiks/kadre/android/AndroidWindow : org/graphiks/kadre/core/Window {
 	public fun close ()V
+	public fun dragResizeWindow (Lorg/graphiks/kadre/core/ResizeDirection;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun dragWindow ()Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun focusWindow ()Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun getEnabledButtons ()Lorg/graphiks/kadre/core/WindowButtons;
+	public fun getFullscreen ()Lorg/graphiks/kadre/core/Fullscreen;
+	public fun getHasFocus ()Z
 	public fun getId-1uDr44Y ()J
 	public fun getInnerSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public fun getOuterPosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
 	public fun getOuterSize ()Lorg/graphiks/kadre/core/PhysicalSize;
-	public fun getRawDisplayHandle ()Ljava/lang/Object;
-	public fun getRawWindowHandle ()Ljava/lang/Object;
+	public fun getRawDisplayHandle ()Lorg/graphiks/kadre/core/RawDisplayHandle;
+	public fun getRawWindowHandle ()Lorg/graphiks/kadre/core/RawWindowHandle;
+	public fun getSafeArea ()Lorg/graphiks/kadre/core/Insets;
 	public fun getScaleFactor ()D
+	public fun getSurfacePosition ()Lorg/graphiks/kadre/core/PhysicalPosition;
+	public fun getSurfaceResizeIncrements ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public fun getSurfaceSize ()Lorg/graphiks/kadre/core/PhysicalSize;
+	public fun getTitle ()Ljava/lang/String;
+	public fun isDecorated ()Z
+	public fun isMaximized ()Z
+	public fun isMinimized ()Ljava/lang/Boolean;
+	public fun isResizable ()Z
+	public fun isVisible ()Ljava/lang/Boolean;
 	public fun requestRedraw ()V
+	public fun requestSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)Lorg/graphiks/kadre/core/SurfaceSizeRequestResult;
+	public fun requestUserAttention (Lorg/graphiks/kadre/core/UserAttentionType;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setContentProtected (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setCursor (Lorg/graphiks/kadre/core/Cursor;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setCursorGrab (Lorg/graphiks/kadre/core/CursorGrabMode;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setCursorHittest (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setCursorPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setCursorVisible (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setDecorations (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setEnabledButtons (Lorg/graphiks/kadre/core/WindowButtons;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setFullscreen (Lorg/graphiks/kadre/core/Fullscreen;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setMaxSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setMaximized (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setMinSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setMinimized (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setOuterPosition (Lorg/graphiks/kadre/core/PhysicalPosition;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setResizable (Z)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setSurfaceResizeIncrements (Lorg/graphiks/kadre/core/PhysicalSize;)Lorg/graphiks/kadre/core/WindowRequestResult;
 	public fun setTitle (Ljava/lang/String;)V
 	public fun setVisible (Z)V
+	public fun setWindowIcon (Lorg/graphiks/kadre/core/Icon;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun setWindowLevel (Lorg/graphiks/kadre/core/WindowLevel;)Lorg/graphiks/kadre/core/WindowRequestResult;
+	public fun showWindowMenu (Lorg/graphiks/kadre/core/PhysicalPosition;)Lorg/graphiks/kadre/core/WindowRequestResult;
 }
 
 public abstract class org/graphiks/kadre/android/KadreActivity : androidx/activity/ComponentActivity {

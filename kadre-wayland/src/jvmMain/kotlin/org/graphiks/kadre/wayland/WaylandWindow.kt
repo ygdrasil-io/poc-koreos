@@ -54,10 +54,10 @@ class WaylandWindow private constructor(
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
 
-    override val rawWindowHandle: Any
+    override val rawWindowHandle: RawWindowHandle
         get() = RawWindowHandle.Wayland(surface = surfacePtr, display = displayPtr)
 
-    override val rawDisplayHandle: Any
+    override val rawDisplayHandle: RawDisplayHandle
         get() = RawDisplayHandle.Wayland(display = displayPtr)
 
     /**

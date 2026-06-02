@@ -23,6 +23,30 @@ interface ActiveEventLoop {
     fun createWindow(attributes: WindowAttributes): Window
 
     /**
+     * Creates a platform custom cursor.
+     *
+     * Unsupported platforms return [WindowRequestResult.Failure] with
+     * [RequestError.Unsupported] and leave [cursorOut] unused.
+     */
+    fun createCustomCursor(image: CursorImage, cursorOut: (CustomCursor) -> Unit): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Custom cursors are unsupported by this event loop"))
+
+    /**
+     * Returns all monitors visible to the event loop.
+     */
+    fun availableMonitors(): List<MonitorHandle> = emptyList()
+
+    /**
+     * Returns the primary monitor, if the platform can identify one.
+     */
+    fun primaryMonitor(): MonitorHandle? = null
+
+    /**
+     * Returns a persistent display handle usable independently from a window.
+     */
+    fun ownedDisplayHandle(): OwnedDisplayHandle? = null
+
+    /**
      * Sets the waiting behavior of the event loop
      * after the end of the current iteration.
      *

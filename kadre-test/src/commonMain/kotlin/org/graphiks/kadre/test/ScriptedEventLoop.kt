@@ -94,7 +94,7 @@ sealed interface ScriptedEvent {
      *
      * @property dtMs Durée virtuelle écoulée (informative — la boucle est déterministe).
      */
-    data class Tick(val dtMs: Long) : ScriptedEvent
+    data class Tick(val dtMs: Long, val windowId: WindowId = WindowId(1L)) : ScriptedEvent
 }
 
 // ---------------------------------------------------------------------------
@@ -114,15 +114,16 @@ class ScriptedWindow(
     override val scaleFactor: Double = 1.0,
 ) : Window {
 
-    override val rawWindowHandle: Any = RawWindowHandle.Web(canvasElementId = "scripted-window")
-    override val rawDisplayHandle: Any = RawDisplayHandle.Web
+    override val rawWindowHandle: RawWindowHandle =
+        RawWindowHandle.Web(canvasElementId = "scripted-window-${id.value}")
+    override val rawDisplayHandle: RawDisplayHandle = RawDisplayHandle.Web
 
     /** Nombre d'appels à [requestRedraw] — utile pour asserter le rendu continu. */
     var redrawRequests: Int = 0
         private set
 
     /** Titre courant (dernier passé à [setTitle]). */
-    var title: String = "scripted"
+    override var title: String = "scripted"
         private set
 
     /** Visibilité courante. */
@@ -134,7 +135,14 @@ class ScriptedWindow(
     override val innerSize: PhysicalSize<Int> get() = size
     override val outerSize: PhysicalSize<Int> get() = size
     override fun setVisible(visible: Boolean) { this.visible = visible }
+    override val isVisible: Boolean get() = visible
     override fun close() { /* no-op en mémoire */ }
+
+    internal fun apply(attributes: WindowAttributes) {
+        title = attributes.title
+        size = attributes.size ?: size
+        visible = attributes.visible
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -160,10 +168,29 @@ class ScriptedEventLoop(
     private var _controlFlow: ControlFlow = ControlFlow.Wait
     private var _isExiting = false
     private val trace = mutableListOf<Callback>()
+    private val windowsById = linkedMapOf(window.id to window)
+    private var firstWindowPending = true
+    private var nextWindowIdValue: Long = window.id.value + 1
+
+    /** Fenêtres créées par la boucle, dans l'ordre déterministe de création. */
+    val windows: List<ScriptedWindow> get() = windowsById.values.toList()
 
     // ── ActiveEventLoop ─────────────────────────────────────────────────────
 
-    override fun createWindow(attributes: WindowAttributes): Window = window
+    override fun createWindow(attributes: WindowAttributes): Window {
+        if (firstWindowPending) {
+            firstWindowPending = false
+            window.apply(attributes)
+            return window
+        }
+
+        val nextWindow = ScriptedWindow(
+            id = WindowId(nextWindowIdValue++),
+            size = attributes.size ?: PhysicalSize(800, 600),
+        ).also { it.apply(attributes) }
+        windowsById[nextWindow.id] = nextWindow
+        return nextWindow
+    }
     override fun setControlFlow(controlFlow: ControlFlow) { _controlFlow = controlFlow }
     override val controlFlow: ControlFlow get() = _controlFlow
     override fun exit() { _isExiting = true }
@@ -201,8 +228,8 @@ class ScriptedEventLoop(
 
                 is ScriptedEvent.Tick -> {
                     record(Callback.NewEvents(StartCause.Poll)) { handler.newEvents(this, StartCause.Poll) }
-                    if (!_isExiting) record(Callback.WindowEventCb(window.id, WindowEvent.RedrawRequested)) {
-                        handler.windowEvent(this, window.id, WindowEvent.RedrawRequested)
+                    if (!_isExiting) record(Callback.WindowEventCb(event.windowId, WindowEvent.RedrawRequested)) {
+                        handler.windowEvent(this, event.windowId, WindowEvent.RedrawRequested)
                     }
                     if (!_isExiting) record(Callback.AboutToWait) { handler.aboutToWait(this) }
                 }
@@ -235,45 +262,47 @@ class ScriptBuilder {
     fun canCreateSurfaces() { events += ScriptedEvent.CanCreateSurfaces }
 
     /** Enfonce une touche logique. */
-    fun keyPress(key: Key, modifiers: Modifiers = Modifiers.NONE) {
+    fun keyPress(key: Key, modifiers: Modifiers = Modifiers.NONE, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.KeyboardInput(key, KeyState.Pressed, modifiers))
     }
 
     /** Relâche une touche logique. */
-    fun keyRelease(key: Key, modifiers: Modifiers = Modifiers.NONE) {
+    fun keyRelease(key: Key, modifiers: Modifiers = Modifiers.NONE, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.KeyboardInput(key, KeyState.Released, modifiers))
     }
 
     /** Déplace le pointeur. */
-    fun pointerMove(x: Double, y: Double) {
+    fun pointerMove(x: Double, y: Double, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.PointerMoved(PhysicalPosition(x, y)))
     }
 
     /** Clic souris (press + release implicite selon [state]). */
-    fun mouseInput(button: MouseButton, state: KeyState) {
+    fun mouseInput(button: MouseButton, state: KeyState, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.MouseInput(button, state))
     }
 
     /** Redimensionne la fenêtre. */
-    fun resized(width: Int, height: Int) {
+    fun resized(width: Int, height: Int, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.Resized(PhysicalSize(width, height)))
     }
 
     /** Changement de facteur d'échelle (DPI). */
-    fun scaleFactorChanged(factor: Double) {
+    fun scaleFactorChanged(factor: Double, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.ScaleFactorChanged(factor))
     }
 
     /** Simule une frame (newEvents → RedrawRequested → aboutToWait). */
-    fun tick(dtMs: Long = 16L) { events += ScriptedEvent.Tick(dtMs) }
+    fun tick(dtMs: Long = 16L, windowId: WindowId = this.windowId) {
+        events += ScriptedEvent.Tick(dtMs, windowId)
+    }
 
     /** Demande de fermeture de la fenêtre. */
-    fun closeRequested() {
+    fun closeRequested(windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, WindowEvent.CloseRequested)
     }
 
     /** Événement de fenêtre brut (échappatoire pour les cas non couverts). */
-    fun windowEvent(event: WindowEvent) {
+    fun windowEvent(event: WindowEvent, windowId: WindowId = this.windowId) {
         events += ScriptedEvent.Window(windowId, event)
     }
 

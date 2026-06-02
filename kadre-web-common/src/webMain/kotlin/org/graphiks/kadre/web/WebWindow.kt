@@ -40,6 +40,7 @@ import org.graphiks.kadre.core.WindowId
  * in the native-window sense).
  */
 class WebWindow(
+    override val id: WindowId,
     /**
      * CSS identifier of the target canvas element.
      *
@@ -64,33 +65,26 @@ class WebWindow(
                 "pour cibler explicitement un canvas DOM par son id.",
     )
     constructor(attrs: WindowAttributes, bridge: WebDomBridge)
-            : this(attrs.title.ifEmpty { WebWindowAttributes.DEFAULT_CANVAS_ID }, bridge)
-
-
-    /**
-     * Unique identifier of this web window.
-     *
-     * Generated from the hash of [canvasElementId] to be stable
-     * and reproducible on the same page.
-     */
-    override val id: WindowId = WindowId(canvasElementId.hashCode().toLong())
+            : this(
+                id = WindowId(1L),
+                canvasElementId = attrs.title.ifEmpty { WebWindowAttributes.DEFAULT_CANVAS_ID },
+                bridge = bridge,
+            )
 
     /**
      * Raw handle of the rendering surface — identifies the canvas by its CSS id.
      *
      * Returns [RawWindowHandle.Web] with [canvasElementId].
-     * Declared `Any` in [Window] to stay platform-independent.
      */
-    override val rawWindowHandle: Any
+    override val rawWindowHandle: RawWindowHandle
         get() = RawWindowHandle.Web(canvasElementId = canvasElementId)
 
     /**
      * Raw handle of the display — web singleton with no additional pointer.
      *
      * Returns [RawDisplayHandle.Web].
-     * Declared `Any` in [Window] to stay platform-independent.
      */
-    override val rawDisplayHandle: Any
+    override val rawDisplayHandle: RawDisplayHandle
         get() = RawDisplayHandle.Web
 
     /**
