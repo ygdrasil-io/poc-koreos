@@ -291,6 +291,61 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 return
             }
 
+            // ── Trackpad gestures ─────────────────────────────────────────────────────
+            if (eventType == AppKitGestureMapper.EVENT_TYPE_MAGNIFY ||
+                eventType == AppKitGestureMapper.EVENT_TYPE_ROTATE ||
+                eventType == AppKitGestureMapper.EVENT_TYPE_SMART_MAGNIFY ||
+                eventType == AppKitGestureMapper.EVENT_TYPE_PRESSURE
+            ) {
+                val eventWindow = ObjCRuntime.msgSend(ValueLayout.ADDRESS, event, ObjCRuntime.sel("window")) as MemorySegment
+                if (eventWindow == MemorySegment.NULL) return
+                val appKitWindow = loop.windows[eventWindow.address()] ?: return
+                val nsEvent = NSEvent(event)
+                val deviceId = DeviceId(
+                    ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("deviceID")) as Long
+                )
+                if (eventType == AppKitGestureMapper.EVENT_TYPE_MAGNIFY ||
+                    eventType == AppKitGestureMapper.EVENT_TYPE_ROTATE ||
+                    eventType == AppKitGestureMapper.EVENT_TYPE_SMART_MAGNIFY
+                ) {
+                    val locPt = nsEvent.locationInWindow()
+                    val locX = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 0)
+                    val locY = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 1)
+                    val scale = appKitWindow.scaleFactor
+                    val contentHeightPoints = appKitWindow.innerSize.height / scale
+                    loop.handler.windowEvent(
+                        loop,
+                        appKitWindow.id,
+                        WindowEvent.PointerMoved(
+                            deviceId = deviceId,
+                            position = PhysicalPosition(locX * scale, (contentHeightPoints - locY) * scale),
+                            primary = true,
+                            source = PointerSource.Mouse,
+                        ),
+                    )
+                }
+                val phase = if (eventType == AppKitGestureMapper.EVENT_TYPE_MAGNIFY ||
+                    eventType == AppKitGestureMapper.EVENT_TYPE_ROTATE
+                ) {
+                    AppKitGestureMapper.phase(
+                        ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("phase")) as Long
+                    ) ?: return
+                } else {
+                    TouchPhase.Moved
+                }
+                val gestureEvent = AppKitGestureMapper.event(
+                    eventType = eventType,
+                    deviceId = deviceId,
+                    phase = phase,
+                    magnification = if (eventType == AppKitGestureMapper.EVENT_TYPE_MAGNIFY) nsEvent.magnification() else 0.0,
+                    rotationDegrees = if (eventType == AppKitGestureMapper.EVENT_TYPE_ROTATE) nsEvent.rotation() else 0f,
+                    pressure = if (eventType == AppKitGestureMapper.EVENT_TYPE_PRESSURE) nsEvent.pressure() else 0f,
+                    stage = if (eventType == AppKitGestureMapper.EVENT_TYPE_PRESSURE) nsEvent.stage() else 0L,
+                ) ?: return
+                loop.handler.windowEvent(loop, appKitWindow.id, gestureEvent)
+                return
+            }
+
             // ── Mouse ─────────────────────────────────────────────────────────────────
             val isLeftDown     = eventType == 1L
             val isLeftUp       = eventType == 2L
