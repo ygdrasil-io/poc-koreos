@@ -312,17 +312,28 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                     val locX = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 0)
                     val locY = locPt.getAtIndex(ValueLayout.JAVA_DOUBLE, 1)
                     val scale = appKitWindow.scaleFactor
+                    val contentWidthPoints = appKitWindow.innerSize.width / scale
                     val contentHeightPoints = appKitWindow.innerSize.height / scale
-                    loop.handler.windowEvent(
-                        loop,
-                        appKitWindow.id,
-                        WindowEvent.PointerMoved(
-                            deviceId = deviceId,
-                            position = PhysicalPosition(locX * scale, (contentHeightPoints - locY) * scale),
-                            primary = true,
-                            source = PointerSource.Mouse,
-                        ),
+                    val position = AppKitGestureMapper.pointerMovedPosition(
+                        locationXPoints = locX,
+                        locationYPoints = locY,
+                        contentWidthPoints = contentWidthPoints,
+                        contentHeightPoints = contentHeightPoints,
+                        scaleFactor = scale,
+                        pressedMouseButtons = NSEvent.pressedMouseButtons(),
                     )
+                    if (position != null) {
+                        loop.handler.windowEvent(
+                            loop,
+                            appKitWindow.id,
+                            WindowEvent.PointerMoved(
+                                deviceId = deviceId,
+                                position = position,
+                                primary = true,
+                                source = PointerSource.Mouse,
+                            ),
+                        )
+                    }
                 }
                 val phase = if (eventType == AppKitGestureMapper.EVENT_TYPE_MAGNIFY ||
                     eventType == AppKitGestureMapper.EVENT_TYPE_ROTATE

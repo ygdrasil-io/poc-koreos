@@ -105,4 +105,58 @@ class AppKitGestureMapperTest {
             )
         )
     }
+
+    @Test
+    fun `gesture pointer move is suppressed outside client area when no mouse button is down`() {
+        assertNull(
+            AppKitGestureMapper.pointerMovedPosition(
+                locationXPoints = -1.0,
+                locationYPoints = 10.0,
+                contentWidthPoints = 100.0,
+                contentHeightPoints = 50.0,
+                scaleFactor = 2.0,
+                pressedMouseButtons = 0L,
+            )
+        )
+        assertNull(
+            AppKitGestureMapper.pointerMovedPosition(
+                locationXPoints = 10.0,
+                locationYPoints = 51.0,
+                contentWidthPoints = 100.0,
+                contentHeightPoints = 50.0,
+                scaleFactor = 2.0,
+                pressedMouseButtons = 0L,
+            )
+        )
+    }
+
+    @Test
+    fun `gesture pointer move is kept outside client area when a mouse button is down`() {
+        val position = AppKitGestureMapper.pointerMovedPosition(
+            locationXPoints = -1.0,
+            locationYPoints = 10.0,
+            contentWidthPoints = 100.0,
+            contentHeightPoints = 50.0,
+            scaleFactor = 2.0,
+            pressedMouseButtons = 1L,
+        )
+
+        assertEquals(-2.0, position?.x)
+        assertEquals(80.0, position?.y)
+    }
+
+    @Test
+    fun `gesture pointer move converts client points to physical top-left coordinates`() {
+        val position = AppKitGestureMapper.pointerMovedPosition(
+            locationXPoints = 12.5,
+            locationYPoints = 10.0,
+            contentWidthPoints = 100.0,
+            contentHeightPoints = 50.0,
+            scaleFactor = 2.0,
+            pressedMouseButtons = 0L,
+        )
+
+        assertEquals(25.0, position?.x)
+        assertEquals(80.0, position?.y)
+    }
 }

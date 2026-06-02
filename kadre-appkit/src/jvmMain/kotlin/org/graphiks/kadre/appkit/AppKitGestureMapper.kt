@@ -1,6 +1,7 @@
 package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 
@@ -26,6 +27,29 @@ internal object AppKitGestureMapper {
         PHASE_CANCELLED -> TouchPhase.Cancelled
         PHASE_CHANGED -> TouchPhase.Moved
         else -> null
+    }
+
+    fun pointerMovedPosition(
+        locationXPoints: Double,
+        locationYPoints: Double,
+        contentWidthPoints: Double,
+        contentHeightPoints: Double,
+        scaleFactor: Double,
+        pressedMouseButtons: Long,
+    ): PhysicalPosition<Double>? {
+        val isOutsideClientArea = locationXPoints < 0.0 ||
+            locationYPoints < 0.0 ||
+            locationXPoints > contentWidthPoints ||
+            locationYPoints > contentHeightPoints
+
+        if (isOutsideClientArea && pressedMouseButtons == 0L) {
+            return null
+        }
+
+        return PhysicalPosition(
+            locationXPoints * scaleFactor,
+            (contentHeightPoints - locationYPoints) * scaleFactor,
+        )
     }
 
     fun event(
