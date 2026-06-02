@@ -120,6 +120,16 @@ class AppKitGestureMapperTest {
         )
         assertNull(
             AppKitGestureMapper.pointerMovedPosition(
+                locationXPoints = -0.0,
+                locationYPoints = 10.0,
+                contentWidthPoints = 100.0,
+                contentHeightPoints = 50.0,
+                scaleFactor = 2.0,
+                pressedMouseButtons = 0L,
+            )
+        )
+        assertNull(
+            AppKitGestureMapper.pointerMovedPosition(
                 locationXPoints = 10.0,
                 locationYPoints = 51.0,
                 contentWidthPoints = 100.0,

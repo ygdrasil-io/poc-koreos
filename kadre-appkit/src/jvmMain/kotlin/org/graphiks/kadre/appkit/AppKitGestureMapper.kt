@@ -37,8 +37,8 @@ internal object AppKitGestureMapper {
         scaleFactor: Double,
         pressedMouseButtons: Long,
     ): PhysicalPosition<Double>? {
-        val isOutsideClientArea = locationXPoints < 0.0 ||
-            locationYPoints < 0.0 ||
+        val isOutsideClientArea = locationXPoints.isSignNegative() ||
+            locationYPoints.isSignNegative() ||
             locationXPoints > contentWidthPoints ||
             locationYPoints > contentHeightPoints
 
@@ -51,6 +51,9 @@ internal object AppKitGestureMapper {
             (contentHeightPoints - locationYPoints) * scaleFactor,
         )
     }
+
+    private fun Double.isSignNegative(): Boolean =
+        java.lang.Double.doubleToRawLongBits(this) < 0L
 
     fun event(
         eventType: Long,
