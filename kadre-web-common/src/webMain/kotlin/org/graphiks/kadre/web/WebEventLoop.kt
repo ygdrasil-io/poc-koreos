@@ -34,10 +34,17 @@ package org.graphiks.kadre.web
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 
 /**
@@ -62,11 +69,14 @@ open class WebEventLoop : ActiveEventLoop {
     /** List of active windows created by this loop. */
     private val windows = mutableListOf<WebWindow>()
 
+    /** Primary DOM bridge (the first one created); used for system-level queries. */
+    private var primaryBridge: WebDomBridge? = null
+
     /** Next internal window id. Canvas ids are DOM handles, not identity. */
     private var nextWindowId: Long = 1L
 
     /** Queue of DOM events received between two frames. */
-    private val pendingEvents = mutableListOf<Pair<WindowId, WebWindowEvent>>()
+    private val pendingEvents = mutableListOf<Pair<WindowId, WindowEvent>>()
 
     // -------------------------------------------------------------------------
     // ActiveEventLoop
@@ -119,15 +129,30 @@ open class WebEventLoop : ActiveEventLoop {
      */
     fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
+        if (primaryBridge == null) primaryBridge = bridge
         val canvasId = bridge.ensureCanvas(attrs)
         val window = WebWindow(
             id = WindowId(nextWindowId++),
             canvasElementId = canvasId,
             bridge = bridge,
         )
+
+        // Initialise synchronously from the current DOM state (before any event fires).
+        val (initW, initH) = bridge.readCanvasPhysicalSize(canvasId)
+        window.updatePhysicalSize(initW, initH)
+        window.updateScaleFactor(bridge.readDevicePixelRatio())
+
         bridge.onWindowEvent = { event ->
+            // Keep WebWindow's cached state in sync with DOM events.
+            when (event) {
+                is WebWindowEvent.Resized ->
+                    window.updatePhysicalSize(event.width, event.height)
+                is WebWindowEvent.ScaleFactorChanged ->
+                    window.updateScaleFactor(event.factor)
+                else -> Unit
+            }
             // Queue the event for the window owned by this DOM bridge.
-            pendingEvents.add(Pair(window.id, event))
+            pendingEvents.add(Pair(window.id, event.toWindowEvent()))
             // In Wait mode, wake the loop immediately
             if (_controlFlow is ControlFlow.Wait) {
                 scheduleWakeUp()
@@ -147,9 +172,53 @@ open class WebEventLoop : ActiveEventLoop {
         override fun wakeUp() = scheduleWakeUp()
     }
 
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns a synthetic monitor representing the browser window.
+     *
+     * Uses the current canvas size and device pixel ratio from the first window.
+     * The Fullscreen API cannot expose physical monitor properties.
+     */
+    override fun availableMonitors(): List<MonitorHandle> {
+        val win = windows.firstOrNull()
+        val scale = win?._scaleFactor ?: 1.0
+        val size = win?._physicalSize ?: PhysicalSize(1920, 1080)
+        return listOf(syntheticWebMonitor(scale, size))
+    }
+
+    /**
+     * Returns the single synthetic web monitor.
+     */
+    override fun primaryMonitor(): MonitorHandle? = availableMonitors().firstOrNull()
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on Web: device events are not emitted (no raw input API in the browser).
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on Web: raw device events are not dispatched
+    }
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the current system theme via `prefers-color-scheme`.
+     *
+     * Delegates to [WebDomBridge.prefersDarkColorScheme] on the primary bridge.
+     * Returns null if no window has been created yet.
+     */
+    override fun systemTheme(): Theme? {
+        val b = primaryBridge ?: return null
+        return if (b.prefersDarkColorScheme()) Theme.Dark else Theme.Light
+    }
+
     // -------------------------------------------------------------------------
     // Public entry point
     // -------------------------------------------------------------------------
+
+
 
     /**
      * Starts the event loop and notifies the handler.
@@ -268,3 +337,14 @@ open class WebEventLoop : ActiveEventLoop {
         override fun detach() {}
     }
 }
+
+/** Creates a synthetic [MonitorHandle] representing the browser window. */
+internal fun syntheticWebMonitor(scale: Double, size: PhysicalSize<Int>): MonitorHandle =
+    object : MonitorHandle {
+        override val id: Long = 0L
+        override val name: String? = null
+        override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+        override val scaleFactor: Double = scale
+        override val currentVideoMode: VideoMode = VideoMode(size, null, null)
+        override val videoModes: List<VideoMode> = listOf(currentVideoMode)
+    }

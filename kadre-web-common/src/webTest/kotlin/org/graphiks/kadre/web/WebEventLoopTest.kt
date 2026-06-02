@@ -3,6 +3,7 @@ package org.graphiks.kadre.web
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,10 +24,10 @@ class WebEventLoopTest {
         secondBridge.emit(WebWindowEvent.RedrawRequested)
         loop.pump(handler)
 
-        val expected: List<Pair<WindowId, Any>> =
+        val expected: List<Pair<WindowId, WindowEvent>> =
             listOf(
-                firstWindow.id to WebWindowEvent.Focused(true),
-                secondWindow.id to WebWindowEvent.RedrawRequested,
+                firstWindow.id to WindowEvent.Focused(true),
+                secondWindow.id to WindowEvent.RedrawRequested,
             )
 
         assertEquals(expected, handler.windowEvents)
@@ -47,10 +48,10 @@ class WebEventLoopTest {
         loop.pump(handler)
 
         assertEquals(listOf(WindowId(1L), WindowId(2L)), listOf(firstWindow.id, secondWindow.id))
-        val expected: List<Pair<WindowId, Any>> =
+        val expected: List<Pair<WindowId, WindowEvent>> =
             listOf(
-                firstWindow.id to WebWindowEvent.RedrawRequested,
-                secondWindow.id to WebWindowEvent.RedrawRequested,
+                firstWindow.id to WindowEvent.RedrawRequested,
+                secondWindow.id to WindowEvent.RedrawRequested,
             )
 
         assertEquals(expected, handler.windowEvents)
@@ -87,13 +88,13 @@ class WebEventLoopTest {
     }
 
     private class RecordingHandler : ApplicationHandler {
-        val windowEvents = mutableListOf<Pair<WindowId, Any>>()
+        val windowEvents = mutableListOf<Pair<WindowId, WindowEvent>>()
 
         override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
 
         override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) = Unit
 
-        override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
+        override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
             windowEvents += windowId to event
         }
     }

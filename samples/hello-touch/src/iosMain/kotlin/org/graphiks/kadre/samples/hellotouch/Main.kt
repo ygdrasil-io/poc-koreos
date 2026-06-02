@@ -6,6 +6,8 @@ import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.Window
 import org.graphiks.kadre.WindowAttributes
 import org.graphiks.kadre.WindowId
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.WindowEvent
 
 /**
@@ -36,9 +38,15 @@ private class IosHelloTouchHandler : ApplicationHandler {
         println("[HelloTouch] window created id=${window?.id?.value}")
     }
 
-    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
-        if (event is WindowEvent.Touch) {
-            println("[HelloTouch] Touch ${event.phase} id=${event.id} @ (${event.location.x.toInt()}, ${event.location.y.toInt()})")
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
+        when (event) {
+            is WindowEvent.PointerMoved -> if (event.source is PointerSource.Touch) {
+                println("[HelloTouch] Touch move @ (${event.position.x.toInt()}, ${event.position.y.toInt()})")
+            }
+            is WindowEvent.PointerButton -> if (event.button is ButtonSource.Touch) {
+                println("[HelloTouch] Touch ${event.state} @ (${event.position.x.toInt()}, ${event.position.y.toInt()})")
+            }
+            else -> Unit
         }
     }
 

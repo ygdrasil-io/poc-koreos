@@ -81,7 +81,7 @@ class MyAppHandler : ApplicationHandler {
     }
 
     // Appelé pour chaque événement de fenêtre
-    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
         when (event) {
             // Dessin : déclenché par WM_PAINT / InvalidateRect
             WindowEvent.RedrawRequested -> {
@@ -109,8 +109,8 @@ class MyAppHandler : ApplicationHandler {
                 println("PointerMoved (${event.position.x.toInt()}, ${event.position.y.toInt()})")
 
             // Entrées clavier
-            is WindowEvent.KeyboardInput ->
-                println("Key ${event.state} key=${event.key} repeat=${event.isRepeat}")
+            is WindowEvent.KeyInput ->
+                println("Key ${event.event.state} physical=${event.event.physicalKey} logical=${event.event.logicalKey} repeat=${event.event.repeat}")
 
             // Fenêtre détruite : libérer les ressources GPU ici
             WindowEvent.Destroyed -> window = null

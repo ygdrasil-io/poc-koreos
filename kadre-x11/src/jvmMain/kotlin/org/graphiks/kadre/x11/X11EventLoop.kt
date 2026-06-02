@@ -19,19 +19,35 @@ package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
-import org.graphiks.kadre.core.Modifiers
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.LogicalKey
+import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.NativeKeyInfo
+import org.graphiks.kadre.core.NativeKeyCode
+import org.graphiks.kadre.core.NativeLogicalKey
+import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -75,6 +91,7 @@ private const val XCLIENT_DATA_L0_OFFSET: Long = 32L       // long data.l[0]
 private const val X11_SHIFT_MASK: Int = 0x0001
 private const val X11_CONTROL_MASK: Int = 0x0004
 private const val X11_MOD1_MASK: Int = 0x0008  // Alt
+private const val X11_MOD4_MASK: Int = 0x0040  // Super / Meta
 
 // X11 buttons
 private const val X11_BUTTON1: Int = 1
@@ -194,81 +211,169 @@ class X11EventLoop internal constructor(
      */
     override fun createProxy(): EventLoopProxy =
         X11EventLoopProxy(this, displayPtr)
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns all monitors for this X11 display.
+     *
+     * Tries RANDR, then Xinerama, then a synthetic single-monitor fallback.
+     */
+    override fun availableMonitors(): List<MonitorHandle> {
+        val scale = windows.values.firstOrNull()?.scaleFactor ?: 1.0
+        return enumerateX11Monitors(displayPtr, screen, scale)
+    }
+
+    /**
+     * Returns the first monitor (primary/leftmost) or the synthetic monitor.
+     */
+    override fun primaryMonitor(): MonitorHandle? = availableMonitors().firstOrNull()
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * X11 has no standard theme API.
+     *
+     * The xsettings daemon exposes `Net/ThemeName` but there is no standardised
+     * Light/Dark distinction. Documented null.
+     *
+     * TODO(R3-x11-theme): query xsettings or GTK_THEME env variable.
+     */
+    override fun systemTheme(): Theme? = null
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on X11: device events are always dispatched.
+     *
+     * TODO(R4-x11-device-filter): use XSelectInput to selectively disable raw motion.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on X11
+    }
 }
 
 // ── Dispatch X11 events ───────────────────────────────────────────────────────
 
 /**
- * Translates an X11 keysym into a kadre [Key].
+ * Translates an X11 keysym into a kadre [KeyCode].
  *
  * X11 keysym = symbolic key code (defined in keysymdef.h).
  * For letters a-z and digits 0-9, the keysyms are identical to the ASCII codes.
  *
  * @param keysym X11 keysym (INT in XKeyEvent.keycode, translated via XLookupKeysym).
- * @return The corresponding kadre key, or [Key.Unknown] if unrecognized.
+ * @return The corresponding kadre key code, or null if unrecognized.
  */
-private fun keysymToKey(keysym: Int): Key = when (keysym) {
+private fun keysymToKeyCode(keysym: Int): KeyCode? = when (keysym) {
     // Letters a-z (keysyms = lowercase ASCII codes 0x61–0x7A)
-    in 0x61..0x7A -> enumValues<Key>()[keysym - 0x61]  // A-Z have the same indices 0-25
+    in 0x61..0x7A -> KeyCode.entries[KeyCode.KeyA.ordinal + (keysym - 0x61)]
 
     // Letters A-Z (keysyms = uppercase ASCII codes 0x41–0x5A)
-    in 0x41..0x5A -> enumValues<Key>()[keysym - 0x41]
+    in 0x41..0x5A -> KeyCode.entries[KeyCode.KeyA.ordinal + (keysym - 0x41)]
 
     // Digits 0-9 (keysyms = ASCII codes 0x30–0x39)
-    0x30 -> Key.Digit0
-    0x31 -> Key.Digit1
-    0x32 -> Key.Digit2
-    0x33 -> Key.Digit3
-    0x34 -> Key.Digit4
-    0x35 -> Key.Digit5
-    0x36 -> Key.Digit6
-    0x37 -> Key.Digit7
-    0x38 -> Key.Digit8
-    0x39 -> Key.Digit9
+    0x30 -> KeyCode.Digit0
+    0x31 -> KeyCode.Digit1
+    0x32 -> KeyCode.Digit2
+    0x33 -> KeyCode.Digit3
+    0x34 -> KeyCode.Digit4
+    0x35 -> KeyCode.Digit5
+    0x36 -> KeyCode.Digit6
+    0x37 -> KeyCode.Digit7
+    0x38 -> KeyCode.Digit8
+    0x39 -> KeyCode.Digit9
 
     // Function keys F1-F12
-    in XK_F1..XK_F12 -> enumValues<Key>()[Key.F1.ordinal + (keysym - XK_F1)]
+    in XK_F1..XK_F12 -> KeyCode.entries[KeyCode.F1.ordinal + (keysym - XK_F1)]
 
     // Navigation keys
-    XK_Left  -> Key.ArrowLeft
-    XK_Right -> Key.ArrowRight
-    XK_Up    -> Key.ArrowUp
-    XK_Down  -> Key.ArrowDown
+    XK_Left  -> KeyCode.ArrowLeft
+    XK_Right -> KeyCode.ArrowRight
+    XK_Up    -> KeyCode.ArrowUp
+    XK_Down  -> KeyCode.ArrowDown
 
     // Special keys
-    XK_space     -> Key.Space
-    XK_Return    -> Key.Enter
-    XK_Escape    -> Key.Escape
-    XK_BackSpace -> Key.Backspace
-    XK_Tab       -> Key.Tab
+    XK_space     -> KeyCode.Space
+    XK_Return    -> KeyCode.Enter
+    XK_Escape    -> KeyCode.Escape
+    XK_BackSpace -> KeyCode.Backspace
+    XK_Tab       -> KeyCode.Tab
 
     // Modifiers
-    XK_Shift_L   -> Key.ShiftLeft
-    XK_Shift_R   -> Key.ShiftRight
-    XK_Control_L -> Key.ControlLeft
-    XK_Control_R -> Key.ControlRight
-    XK_Alt_L     -> Key.AltLeft
-    XK_Alt_R     -> Key.AltRight
+    XK_Shift_L   -> KeyCode.ShiftLeft
+    XK_Shift_R   -> KeyCode.ShiftRight
+    XK_Control_L -> KeyCode.ControlLeft
+    XK_Control_R -> KeyCode.ControlRight
+    XK_Alt_L     -> KeyCode.AltLeft
+    XK_Alt_R     -> KeyCode.AltRight
     XK_Meta_L,
-    XK_Super_L   -> Key.MetaLeft
+    XK_Super_L   -> KeyCode.MetaLeft
     XK_Meta_R,
-    XK_Super_R   -> Key.MetaRight
+    XK_Super_R   -> KeyCode.MetaRight
 
-    else -> Key.Unknown
+    else -> null
 }
 
 /**
- * Translates an X11 state field (modifiers) into kadre [Modifiers].
+ * Translates an X11 state field (modifiers) into kadre [KeyboardModifiers].
  *
  * @param state state field of XKeyEvent or XButtonEvent.
- * @return The corresponding [Modifiers].
+ * @return The corresponding [KeyboardModifiers].
  */
-private fun x11StateToModifiers(state: Int): Modifiers {
+internal fun x11StateToModifiers(state: Int): KeyboardModifiers {
     var bits = 0
-    if (state and X11_SHIFT_MASK != 0) bits = bits or 0x1
-    if (state and X11_CONTROL_MASK != 0) bits = bits or 0x2
-    if (state and X11_MOD1_MASK != 0) bits = bits or 0x4
-    return Modifiers(bits)
+    if (state and X11_SHIFT_MASK != 0) bits = bits or KeyboardModifiers.SHIFT
+    if (state and X11_CONTROL_MASK != 0) bits = bits or KeyboardModifiers.CTRL
+    if (state and X11_MOD1_MASK != 0) bits = bits or KeyboardModifiers.ALT
+    if (state and X11_MOD4_MASK != 0) bits = bits or KeyboardModifiers.META
+    return KeyboardModifiers(bits)
+}
+
+internal object X11LiveRepeatTracker {
+    private val pressedKeycodes = mutableSetOf<Int>()
+
+    fun update(keycode: Int, state: KeyState): Boolean = when (state) {
+        KeyState.Pressed -> !pressedKeycodes.add(keycode)
+        KeyState.Released -> {
+            pressedKeycodes.remove(keycode)
+            false
+        }
+    }
+
+    fun reset() {
+        pressedKeycodes.clear()
+    }
+}
+
+private fun x11KeyInput(
+    keycode: Int,
+    keysym: Int,
+    mappedCode: KeyCode?,
+    state: KeyState,
+    modifiers: KeyboardModifiers,
+    repeat: Boolean = false,
+): WindowEvent.KeyInput {
+    val native = NativeKeyInfo(
+        platform = KeyPlatform.X11,
+        scanCode = keycode.toLong(),
+        keyValue = keysym.toString(),
+        nativeCode = NativeKeyCode.X11(keycode.toLong()),
+        nativeKey = NativeLogicalKey.X11(keysym.toLong()),
+    )
+    val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+    return WindowEvent.KeyInput(
+        event = KeyEvent(
+            physicalKey = mappedCode?.let(PhysicalKey::Code) ?: PhysicalKey.Native(NativeKeyCode.X11(keycode.toLong())),
+            logicalKey = logicalKey,
+            state = state,
+            modifiers = modifiers,
+            repeat = repeat,
+            text = mappedCode?.defaultText(),
+            keyWithoutModifiers = logicalKey,
+            native = native,
+        ),
+        deviceId = null,
+    )
 }
 
 /**
@@ -401,52 +506,56 @@ private fun dispatchEvent(
             val keycode = eventBuf.get(ValueLayout.JAVA_INT, XKEY_KEYCODE_OFFSET)
             val state   = eventBuf.get(ValueLayout.JAVA_INT, XKEY_STATE_OFFSET)
             val keysym  = keycodeToKeysym(keycode)
-            val key     = keysymToKey(keysym)
+            val mappedCode = keysymToKeyCode(keysym)
             val mods    = x11StateToModifiers(state)
-            handler.windowEvent(loop, windowId, WindowEvent.KeyboardInput(key, KeyState.Pressed, mods))
+            val repeat = X11LiveRepeatTracker.update(keycode, KeyState.Pressed)
+            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Pressed, mods, repeat))
         }
 
         KeyRelease -> {
             val keycode = eventBuf.get(ValueLayout.JAVA_INT, XKEY_KEYCODE_OFFSET)
             val state   = eventBuf.get(ValueLayout.JAVA_INT, XKEY_STATE_OFFSET)
             val keysym  = keycodeToKeysym(keycode)
-            val key     = keysymToKey(keysym)
+            val mappedCode = keysymToKeyCode(keysym)
             val mods    = x11StateToModifiers(state)
-            handler.windowEvent(loop, windowId, WindowEvent.KeyboardInput(key, KeyState.Released, mods))
+            X11LiveRepeatTracker.update(keycode, KeyState.Released)
+            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Released, mods))
         }
 
         // ── Mouse buttons ─────────────────────────────────────────────────────
         ButtonPress -> {
             val button = eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_BUTTON_OFFSET)
+            val position = xButtonPosition(eventBuf)
             when (button) {
                 X11_BUTTON1 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Left, KeyState.Pressed))
+                    pointerButton(MouseButton.Left, KeyState.Pressed, position))
                 X11_BUTTON2 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Middle, KeyState.Pressed))
+                    pointerButton(MouseButton.Middle, KeyState.Pressed, position))
                 X11_BUTTON3 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Right, KeyState.Pressed))
+                    pointerButton(MouseButton.Right, KeyState.Pressed, position))
                 X11_BUTTON4 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseWheel(deltaX = 0.0, deltaY = 1.0))
+                    WindowEvent.MouseWheel(null, deltaX = 0.0, deltaY = 1.0, phase = TouchPhase.Moved))
                 X11_BUTTON5 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseWheel(deltaX = 0.0, deltaY = -1.0))
+                    WindowEvent.MouseWheel(null, deltaX = 0.0, deltaY = -1.0, phase = TouchPhase.Moved))
                 else -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Other(button), KeyState.Pressed))
+                    pointerButton(MouseButton.Other(button), KeyState.Pressed, position))
             }
         }
 
         ButtonRelease -> {
             val button = eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_BUTTON_OFFSET)
+            val position = xButtonPosition(eventBuf)
             // Do not emit MouseInput Released for scroll wheel events (4 and 5)
             when (button) {
                 X11_BUTTON1 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Left, KeyState.Released))
+                    pointerButton(MouseButton.Left, KeyState.Released, position))
                 X11_BUTTON2 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Middle, KeyState.Released))
+                    pointerButton(MouseButton.Middle, KeyState.Released, position))
                 X11_BUTTON3 -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Right, KeyState.Released))
+                    pointerButton(MouseButton.Right, KeyState.Released, position))
                 X11_BUTTON4, X11_BUTTON5 -> { /* scroll wheel — no Released */ }
                 else -> handler.windowEvent(loop, windowId,
-                    WindowEvent.MouseInput(MouseButton.Other(button), KeyState.Released))
+                    pointerButton(MouseButton.Other(button), KeyState.Released, position))
             }
         }
 
@@ -454,16 +563,16 @@ private fun dispatchEvent(
         MotionNotify -> {
             val x = eventBuf.get(ValueLayout.JAVA_INT, XMOTION_X_OFFSET).toDouble()
             val y = eventBuf.get(ValueLayout.JAVA_INT, XMOTION_Y_OFFSET).toDouble()
-            handler.windowEvent(loop, windowId, WindowEvent.PointerMoved(PhysicalPosition(x, y)))
+            handler.windowEvent(loop, windowId, WindowEvent.PointerMoved(null, PhysicalPosition(x, y), primary = true, source = PointerSource.Mouse))
         }
 
         // ── Cursor enter/leave ────────────────────────────────────────────────
         EnterNotify -> {
-            handler.windowEvent(loop, windowId, WindowEvent.PointerEntered)
+            handler.windowEvent(loop, windowId, WindowEvent.PointerEntered(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
         }
 
         LeaveNotify -> {
-            handler.windowEvent(loop, windowId, WindowEvent.PointerLeft)
+            handler.windowEvent(loop, windowId, WindowEvent.PointerLeft(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
         }
 
         // ── Window destruction ────────────────────────────────────────────────
@@ -483,6 +592,31 @@ private fun dispatchEvent(
         }
     }
 }
+
+private fun pointerButton(
+    button: MouseButton,
+    state: KeyState,
+    position: PhysicalPosition<Double>,
+): WindowEvent.PointerButton =
+    WindowEvent.PointerButton(
+        deviceId = null,
+        state = state,
+        position = position,
+        primary = true,
+        button = ButtonSource.Mouse(button),
+    )
+
+private fun xButtonPosition(eventBuf: MemorySegment): PhysicalPosition<Double> =
+    PhysicalPosition(
+        eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_X_OFFSET).toDouble(),
+        eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_Y_OFFSET).toDouble(),
+    )
+
+private fun xCrossingPosition(eventBuf: MemorySegment): PhysicalPosition<Double> =
+    PhysicalPosition(
+        eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_X_OFFSET).toDouble(),
+        eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_Y_OFFSET).toDouble(),
+    )
 
 // ── Dispatch modes ──────────────────────────────────────────────────────────
 

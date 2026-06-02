@@ -1,8 +1,8 @@
 # Kadre — Project Plan
 
-> Status: **Canonical**
+> Status: **Historical — 1.0.0 delivered** (see §12 for post-1.0.0 winit parity)
 > Author: Kadre team
-> Last updated: 2026-05-31
+> Last updated: 2026-06-01
 
 ---
 
@@ -138,7 +138,7 @@ A KMP lib that:
 **Done definition**:
 - `./gradlew :samples:hello-triangle-web:run` (or equivalent webpack-serve) opens the page, triangle rendered at stable 60 fps
 - Same for Wasm
-- Same WindowEvents dispatched as on Desktop (PointerMoved, MouseInput, KeyboardInput, Resized)
+- Same WindowEvents dispatched as on Desktop (PointerMoved, MouseInput, KeyInput, Resized)
 - Lifecycle: `visibilitychange` → consistent suspended/resumed
 
 ---
@@ -192,7 +192,7 @@ A KMP lib that:
 - `samples/pong`: KMP module with targets jvm, androidTarget, iosX64/Arm64/SimArm64, jsBrowser, wasmJsBrowser, jvm-windows, jvm-linux (all targets via existing facades)
 - Pong logic in `commonMain`:
   - `PongGame : ApplicationHandler`
-  - Right paddle controlled by `WindowEvent.KeyboardInput` (Desktop: arrow up/down) OR `WindowEvent.Touch` (mobile/web touch: right zone of screen tap to move)
+  - Right paddle controlled by `WindowEvent.KeyInput` (Desktop: arrow up/down) OR `WindowEvent.Touch` (mobile/web touch: right zone of screen tap to move)
   - Left paddle = simple AI (follows ball with a lag coefficient for difficulty)
   - Ball: simple 2D physics (bounces off paddles/top/bottom walls)
   - Score displayed at top (no audio)
@@ -350,3 +350,22 @@ A reviewer legitimately raised the question of JDK 25 vs JDK 22/21 for broader a
 
 - [Technical specifications](./specs.md)
 - [Sprint review](./sprint-review.md)
+
+---
+
+## 12. Winit parity — R0–R5 (post-1.0.0, delivered 2026-06)
+
+> The 1.0.0 plan above is complete and historical. This section documents the post-release remediation rounds R0–R5 (PRs #167–#184).
+
+After 1.0.0, a gap analysis against the full winit API surface was conducted. Six remediation rounds were delivered:
+
+| Round | Scope | PRs |
+|-------|-------|-----|
+| **R0** | Event type safety — `event: Any` → `event: WindowEvent` / `event: DeviceEvent`; `rawWindowHandle`/`rawDisplayHandle` → typed (`RawWindowHandle`/`RawDisplayHandle`). **Breaking change.** | #167–#170 |
+| **R1** | Window state/monitors/fullscreen — `setMinimized`, `setMaximized`, `setFullscreen`, `MonitorHandle`, `VideoMode`, `setDecorations`, `setWindowLevel`, `setAlwaysOnTop`, etc. | #171–#175 |
+| **R2** | Window icon — `setWindowIcon(Icon?)` + `Icon` sealed type (RGBA bitmap) | #176–#177 |
+| **R3** | Cursor, theme & appearance — `setCursorIcon`, `setCursorVisible`, `setCursorGrab`, `setTheme`, `setTransparent`, `setBlur`, `WindowTheme` | #178–#180 |
+| **R4** | Input richness — `KeyEvent`, `PhysicalKey`, `LogicalKey`, `RawKeyEvent`, `ModifiersChanged` event, `MouseWheel` device event, `DeviceEvent` variants | #181 |
+| **R5** | Advanced events & misc — DnD events, gesture events, IME API (`ImePurpose`, `setIme*`), `requestUserAttention`, `setContentProtected`, `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `memoryWarning`, `Occluded` event | #182–#184 |
+
+Items that were intentionally deferred (no-op implementations, unemitted events, partial native backends) are tracked in [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).

@@ -546,6 +546,30 @@ internal val closeTouchInputHandle: MethodHandle? by lazy {
     )
 }
 
+// ── ScreenToClient ────────────────────────────────────────────────────────────
+
+/**
+ * BOOL ScreenToClient(HWND hWnd, LPPOINT lpPoint);
+ *
+ * Converts a point from screen coordinates to client-area coordinates for the
+ * specified window. Used for WM_TOUCH because TOUCHINPUT.x/y are screen
+ * coordinates while kadre pointer positions are client coordinates.
+ *
+ * POINT layout: { LONG x, LONG y } = 8 bytes.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-screentoclient
+ */
+internal val screenToClient: MethodHandle? by lazy {
+    user32.downcall(
+        "ScreenToClient",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // LPPOINT
+        )
+    )
+}
+
 // ── GetCursorPos ──────────────────────────────────────────────────────────────
 
 /**
@@ -606,3 +630,470 @@ internal const val CS_HREDRAW_VREDRAW: Int = 0x0003
 
 /** WM_DESTROY */
 internal const val WM_DESTROY: Int = 0x0002
+
+// ── GetClientRect ─────────────────────────────────────────────────────────────
+
+/**
+ * BOOL GetClientRect(HWND hWnd, LPRECT lpRect);
+ *
+ * Fills [lpRect] with the coordinates of the client area (rendering surface)
+ * of the window in client coordinates (left/top are always 0).
+ * right = width, bottom = height — no decorations included.
+ *
+ * RECT layout (16 bytes): {LONG left, LONG top, LONG right, LONG bottom}
+ */
+internal val getClientRect: MethodHandle? by lazy {
+    user32.downcall(
+        "GetClientRect",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // LPRECT
+        )
+    )
+}
+
+// ── GetWindowRect ─────────────────────────────────────────────────────────────
+
+/**
+ * BOOL GetWindowRect(HWND hWnd, LPRECT lpRect);
+ *
+ * Fills [lpRect] with the bounding rectangle of the window in screen
+ * coordinates — includes title bar, borders, and other decorations.
+ * width  = right  - left
+ * height = bottom - top
+ *
+ * RECT layout (16 bytes): {LONG left, LONG top, LONG right, LONG bottom}
+ */
+internal val getWindowRect: MethodHandle? by lazy {
+    user32.downcall(
+        "GetWindowRect",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // LPRECT
+        )
+    )
+}
+
+/** Size of the RECT structure in bytes (4 × LONG = 4 × 4 bytes). */
+internal const val RECT_SIZE: Long = 16L
+
+// ── SetWindowLongPtrW ─────────────────────────────────────────────────────────
+
+/**
+ * LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+ *
+ * Sets a value in the extra window information. Used to change the window style
+ * (GWL_STYLE / GWL_EXSTYLE) and to set the resizable flag (WS_THICKFRAME).
+ */
+internal val setWindowLongPtrW: MethodHandle? by lazy {
+    user32.downcall(
+        "SetWindowLongPtrW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // LONG_PTR (return)
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // int nIndex
+            ValueLayout.JAVA_LONG,  // LONG_PTR dwNewLong
+        )
+    )
+}
+
+// ── GetWindowLongPtrW ─────────────────────────────────────────────────────────
+
+/**
+ * LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
+ *
+ * Retrieves information about the specified window.
+ * nIndex = GWL_STYLE (-16) to get the window style flags.
+ */
+internal val getWindowLongPtrW: MethodHandle? by lazy {
+    user32.downcall(
+        "GetWindowLongPtrW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // LONG_PTR (return)
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // int nIndex
+        )
+    )
+}
+
+// ── IsZoomed ──────────────────────────────────────────────────────────────────
+
+/**
+ * BOOL IsZoomed(HWND hWnd);
+ *
+ * Returns non-zero if the window is maximized.
+ */
+internal val isZoomed: MethodHandle? by lazy {
+    user32.downcall(
+        "IsZoomed",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+        )
+    )
+}
+
+// ── IsIconic ──────────────────────────────────────────────────────────────────
+
+/**
+ * BOOL IsIconic(HWND hWnd);
+ *
+ * Returns non-zero if the window is minimized (iconic).
+ */
+internal val isIconic: MethodHandle? by lazy {
+    user32.downcall(
+        "IsIconic",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+        )
+    )
+}
+
+// ── IsWindowVisible ───────────────────────────────────────────────────────────
+
+/**
+ * BOOL IsWindowVisible(HWND hWnd);
+ *
+ * Returns non-zero if the window is visible (WS_VISIBLE style flag is set).
+ */
+internal val isWindowVisible: MethodHandle? by lazy {
+    user32.downcall(
+        "IsWindowVisible",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+        )
+    )
+}
+
+// ── GetWindowTextW ────────────────────────────────────────────────────────────
+
+/**
+ * int GetWindowTextW(HWND hWnd, LPWSTR lpString, int nMaxCount);
+ *
+ * Copies the text of the specified window's title bar into a buffer.
+ * Returns the number of characters copied (0 on failure).
+ */
+internal val getWindowTextW: MethodHandle? by lazy {
+    user32.downcall(
+        "GetWindowTextW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int (char count)
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // LPWSTR lpString
+            ValueLayout.JAVA_INT,   // int nMaxCount
+        )
+    )
+}
+
+// ── SetWindowPos ──────────────────────────────────────────────────────────────
+
+/**
+ * BOOL SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
+ *
+ * Changes the size, position, and Z order of a child, pop-up, or top-level window.
+ * Pass SWP_NOSIZE to move without resizing; SWP_NOZORDER to keep the Z order.
+ */
+internal val setWindowPos: MethodHandle? by lazy {
+    user32.downcall(
+        "SetWindowPos",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND hWnd
+            ValueLayout.ADDRESS,    // HWND hWndInsertAfter
+            ValueLayout.JAVA_INT,   // int X
+            ValueLayout.JAVA_INT,   // int Y
+            ValueLayout.JAVA_INT,   // int cx
+            ValueLayout.JAVA_INT,   // int cy
+            ValueLayout.JAVA_INT,   // UINT uFlags
+        )
+    )
+}
+
+// ── Win32 style / ShowWindow constants for R1 ────────────────────────────────
+
+/** GWL_STYLE — window style index for Get/SetWindowLongPtrW. */
+internal const val GWL_STYLE: Int = -16
+
+/** WS_THICKFRAME — resizable border / size box. */
+internal const val WS_THICKFRAME: Int = 0x00040000
+
+/** WS_CAPTION — title bar and border (= WS_BORDER | WS_DLGFRAME). */
+internal const val WS_CAPTION: Int = 0x00C00000
+
+/** WS_BORDER — thin border. */
+internal const val WS_BORDER: Int = 0x00800000
+
+/** WS_SYSMENU — system menu in title bar. */
+internal const val WS_SYSMENU: Int = 0x00080000
+
+/** WS_MINIMIZEBOX — minimize button. */
+internal const val WS_MINIMIZEBOX: Int = 0x00020000
+
+/** WS_MAXIMIZEBOX — maximize button. */
+internal const val WS_MAXIMIZEBOX: Int = 0x00010000
+
+/** SW_MINIMIZE — minimize (iconic) state. */
+internal const val SW_MINIMIZE: Int = 6
+
+/** SW_RESTORE — restore minimized/maximized window to normal. */
+internal const val SW_RESTORE: Int = 9
+
+/** SW_MAXIMIZE — maximize the window. */
+internal const val SW_MAXIMIZE: Int = 3
+
+/** SWP_NOSIZE — retain the current size when calling SetWindowPos. */
+internal const val SWP_NOSIZE: Int = 0x0001
+
+/** SWP_NOMOVE — retain the current position when calling SetWindowPos. */
+internal const val SWP_NOMOVE: Int = 0x0002
+
+/** SWP_NOZORDER — retain the current Z order when calling SetWindowPos. */
+internal const val SWP_NOZORDER: Int = 0x0004
+
+/** SWP_NOACTIVATE — do not activate the window when moving it. */
+internal const val SWP_NOACTIVATE: Int = 0x0010
+
+/** WS_VISIBLE — window is visible. */
+internal const val WS_VISIBLE: Int = 0x10000000
+
+/** HWND_TOP — place the window at the top of the Z-order (non-topmost). */
+internal val HWND_TOP: MemorySegment = MemorySegment.ofAddress(0L)
+
+/** Byte alignment of RECT (LONG = 4 bytes). */
+internal const val RECT_ALIGN: Long = 4L
+
+/** Byte offset of RECT.left */
+internal const val RECT_OFFSET_LEFT: Long = 0L
+
+/** Byte offset of RECT.top */
+internal const val RECT_OFFSET_TOP: Long = 4L
+
+/** Byte offset of RECT.right */
+internal const val RECT_OFFSET_RIGHT: Long = 8L
+
+/** Byte offset of RECT.bottom */
+internal const val RECT_OFFSET_BOTTOM: Long = 12L
+
+// ── R3 bindings ──────────────────────────────────────────────────────────────
+
+/**
+ * BOOL SetCursorPos(int X, int Y);
+ *
+ * Moves the cursor to the specified screen coordinates.
+ */
+internal val setCursorPos: MethodHandle? by lazy {
+    user32.downcall(
+        "SetCursorPos",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.JAVA_INT,   // X
+            ValueLayout.JAVA_INT,   // Y
+        )
+    )
+}
+
+/**
+ * HCURSOR SetCursor(HCURSOR hCursor);
+ *
+ * Sets the cursor shape for the current thread.
+ */
+internal val setCursor: MethodHandle? by lazy {
+    user32.downcall(
+        "SetCursor",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // HCURSOR (previous cursor)
+            ValueLayout.ADDRESS,    // HCURSOR hCursor
+        )
+    )
+}
+
+/**
+ * int ShowCursor(BOOL bShow);
+ *
+ * Shows or hides the cursor. Returns the display counter (>= 0 = visible).
+ */
+internal val showCursorHandle: MethodHandle? by lazy {
+    user32.downcall(
+        "ShowCursor",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int (display counter)
+            ValueLayout.JAVA_INT,   // BOOL bShow
+        )
+    )
+}
+
+/**
+ * BOOL ClipCursor(const RECT *lpRect);
+ *
+ * Confines the cursor to the given rectangle. Pass NULL to release.
+ */
+internal val clipCursor: MethodHandle? by lazy {
+    user32.downcall(
+        "ClipCursor",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // const RECT* (NULL to release)
+        )
+    )
+}
+
+/**
+ * BOOL GetClientRect(HWND hWnd, LPRECT lpRect) — re-exported as getClientRectW for R3 use.
+ * Already declared above as [getClientRect].
+ */
+
+/**
+ * BOOL SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+ *
+ * Used here for WM_SETICON.
+ */
+internal val sendMessageW: MethodHandle? by lazy {
+    user32.downcall(
+        "SendMessageW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // LRESULT
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // UINT Msg
+            ValueLayout.JAVA_LONG,  // WPARAM
+            ValueLayout.JAVA_LONG,  // LPARAM
+        )
+    )
+}
+
+/**
+ * HRESULT DwmSetWindowAttribute(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute);
+ *
+ * Used for DWMWA_USE_IMMERSIVE_DARK_MODE (= 20) to apply dark mode title bar.
+ * Available since Windows 11 Build 22000; silently fails on older versions.
+ *
+ * Risk (FFM): dwmapi.dll may not be available in all configurations; the lazy
+ * lookup and try/catch guard against this.
+ */
+internal val dwmapi: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("dwmapi.dll", Arena.global()) } catch (_: Throwable) { null }
+}
+
+internal val dwmSetWindowAttribute: MethodHandle? by lazy {
+    dwmapi.downcall(
+        "DwmSetWindowAttribute",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // HRESULT
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // DWORD dwAttribute
+            ValueLayout.ADDRESS,    // LPCVOID pvAttribute
+            ValueLayout.JAVA_INT,   // DWORD cbAttribute
+        )
+    )
+}
+
+/** DWMWA_USE_IMMERSIVE_DARK_MODE — enables dark title bar (Windows 11+). */
+internal const val DWMWA_USE_IMMERSIVE_DARK_MODE: Int = 20
+
+// IDC cursor resource IDs (passed to LoadCursorW via MAKEINTRESOURCE)
+internal const val IDC_WAIT: Long     = 32514L
+internal const val IDC_IBEAM: Long    = 32513L
+internal const val IDC_CROSS: Long    = 32515L
+internal const val IDC_SIZEALL: Long  = 32646L
+internal const val IDC_NO: Long       = 32648L
+internal const val IDC_HAND: Long     = 32649L
+internal const val IDC_APPSTARTING: Long = 32650L
+internal const val IDC_SIZENS: Long   = 32645L
+internal const val IDC_SIZEWE: Long   = 32644L
+internal const val IDC_SIZENWSE: Long = 32642L
+internal const val IDC_SIZENESW: Long = 32643L
+internal const val IDC_SIZENWS: Long  = 32642L
+internal const val IDC_SIZENORTH: Long = 32645L  // same as SIZENS
+internal const val IDC_SIZESOUTH: Long = 32645L
+internal const val IDC_SIZEEAST: Long  = 32644L
+internal const val IDC_SIZEWEST: Long  = 32644L
+
+// HWND Z-order constants
+/** HWND_TOPMOST = (HWND)(LONG_PTR)-1 */
+internal val HWND_TOPMOST: MemorySegment = MemorySegment.ofAddress(-1L)
+/** HWND_NOTOPMOST = (HWND)(LONG_PTR)-2 */
+internal val HWND_NOTOPMOST: MemorySegment = MemorySegment.ofAddress(-2L)
+/** HWND_BOTTOM = (HWND)(LONG_PTR)1 */
+internal val HWND_BOTTOM: MemorySegment = MemorySegment.ofAddress(1L)
+
+/** WM_SETICON message. */
+internal const val WM_SETICON: Int = 0x0080
+
+// ── R4: ToUnicode / GetKeyboardState ─────────────────────────────────────────
+
+/**
+ * int ToUnicode(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState,
+ *               LPWSTR pwszBuff, int cchBuff, UINT wFlags);
+ *
+ * Translates the virtual-key code and keyboard state into a Unicode character.
+ * Returns the number of wide characters written into [pwszBuff]:
+ *  > 0 : character(s) produced
+ *  = 0 : key does not produce a character
+ *  < 0 : dead key (diacritical)
+ *
+ * **FFM risk**: ToUnicode has a side-effect — it may consume the dead-key state.
+ * Use only for non-repeat key-down events; see KadreWndProc.win32KeyText.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-tounicode
+ */
+internal val toUnicode: MethodHandle? by lazy {
+    user32.downcall(
+        "ToUnicode",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int (chars written)
+            ValueLayout.JAVA_INT,   // UINT wVirtKey
+            ValueLayout.JAVA_INT,   // UINT wScanCode
+            ValueLayout.ADDRESS,    // const BYTE *lpKeyState (256 bytes)
+            ValueLayout.ADDRESS,    // LPWSTR pwszBuff
+            ValueLayout.JAVA_INT,   // int cchBuff
+            ValueLayout.JAVA_INT,   // UINT wFlags
+        )
+    )
+}
+
+/**
+ * BOOL GetKeyboardState(PBYTE lpKeyState);
+ *
+ * Fills a 256-byte buffer with the current state of all virtual keys.
+ * Each byte: bit 7 = key down, bit 0 = toggled (Caps Lock etc.).
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getkeyboardstate
+ */
+internal val getKeyboardState: MethodHandle? by lazy {
+    user32.downcall(
+        "GetKeyboardState",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // PBYTE lpKeyState (256 bytes)
+        )
+    )
+}
+/** ICON_SMALL (0) and ICON_BIG (1) for WM_SETICON. */
+internal const val ICON_SMALL: Long = 0L
+internal const val ICON_BIG: Long = 1L
+
+/** WS_EX_LAYERED — required to use SetLayeredWindowAttributes. */
+internal const val WS_EX_LAYERED: Int = 0x00080000
+
+/** GWL_EXSTYLE — window extended style index. */
+internal const val GWL_EXSTYLE: Int = -20
+
+/**
+ * BOOL SetLayeredWindowAttributes(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags);
+ * LWA_ALPHA = 0x2 → use bAlpha for the entire window.
+ */
+internal val setLayeredWindowAttributes: MethodHandle? by lazy {
+    user32.downcall(
+        "SetLayeredWindowAttributes",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // COLORREF crKey (0 = no color key)
+            ValueLayout.JAVA_BYTE,  // BYTE bAlpha (ignored when LWA_COLORKEY only)
+            ValueLayout.JAVA_INT,   // DWORD dwFlags
+        )
+    )
+}

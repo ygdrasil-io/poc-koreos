@@ -13,11 +13,17 @@
  */
 package org.graphiks.kadre.win32
 
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.FingerId
+import org.graphiks.kadre.core.NativeKeyCode
+import org.graphiks.kadre.core.PhysicalKey
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
-import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.WindowEvent
 import java.lang.foreign.Arena
 import java.lang.foreign.ValueLayout
@@ -90,14 +96,14 @@ class KadreWndProcTest {
     // ── WM_KEYDOWN ────────────────────────────────────────────────────────────
 
     @Test
-    fun `WM_KEYDOWN emits KeyboardInput Pressed for key A`() {
+    fun `WM_KEYDOWN emits KeyInput Pressed for key A`() {
         // wParam = VK_A, lParam = 0 (no repeat)
         KadreWndProc.dispatch(TEST_HWND, WM_KEYDOWN, VK_A.toLong(), 0L)
 
-        assertIs<WindowEvent.KeyboardInput>(capturedEvent).also { event ->
-            assertEquals(Key.A, event.key)
-            assertEquals(KeyState.Pressed, event.state)
-            assertEquals(false, event.isRepeat)
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(PhysicalKey.Code(KeyCode.KeyA), event.event.physicalKey)
+            assertEquals(KeyState.Pressed, event.event.state)
+            assertEquals(false, event.event.repeat)
         }
     }
 
@@ -107,41 +113,56 @@ class KadreWndProcTest {
         val lParamRepeat = KF_REPEAT
         KadreWndProc.dispatch(TEST_HWND, WM_KEYDOWN, VK_SPACE.toLong(), lParamRepeat)
 
-        assertIs<WindowEvent.KeyboardInput>(capturedEvent).also { event ->
-            assertEquals(Key.Space, event.key)
-            assertEquals(KeyState.Pressed, event.state)
-            assertEquals(true, event.isRepeat)
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(PhysicalKey.Code(KeyCode.Space), event.event.physicalKey)
+            assertEquals(KeyState.Pressed, event.event.state)
+            assertEquals(true, event.event.repeat)
         }
     }
 
     @Test
-    fun `WM_KEYUP emits KeyboardInput Released`() {
+    fun `WM_KEYDOWN preserves extended scancode in native key code`() {
+        val scanCode = 0x4DL
+        val lParam = (scanCode shl 16) or KF_EXTENDED
+        KadreWndProc.dispatch(TEST_HWND, WM_KEYDOWN, VK_RIGHT.toLong(), lParam)
+
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(0xE000L or scanCode, event.event.native.scanCode)
+            assertEquals(
+                NativeKeyCode.Win32(scanCode = 0xE000L or scanCode, virtualKey = VK_RIGHT.toLong()),
+                event.event.native.nativeCode,
+            )
+        }
+    }
+
+    @Test
+    fun `WM_KEYUP emits KeyInput Released`() {
         KadreWndProc.dispatch(TEST_HWND, WM_KEYUP, VK_ESCAPE.toLong(), 0L)
 
-        assertIs<WindowEvent.KeyboardInput>(capturedEvent).also { event ->
-            assertEquals(Key.Escape, event.key)
-            assertEquals(KeyState.Released, event.state)
-            assertEquals(false, event.isRepeat)
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(PhysicalKey.Code(KeyCode.Escape), event.event.physicalKey)
+            assertEquals(KeyState.Released, event.event.state)
+            assertEquals(false, event.event.repeat)
         }
     }
 
     @Test
-    fun `WM_SYSKEYDOWN emits KeyboardInput Pressed for key F4`() {
+    fun `WM_SYSKEYDOWN emits KeyInput Pressed for key F4`() {
         KadreWndProc.dispatch(TEST_HWND, WM_SYSKEYDOWN, VK_F4.toLong(), 0L)
 
-        assertIs<WindowEvent.KeyboardInput>(capturedEvent).also { event ->
-            assertEquals(Key.F4, event.key)
-            assertEquals(KeyState.Pressed, event.state)
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(PhysicalKey.Code(KeyCode.F4), event.event.physicalKey)
+            assertEquals(KeyState.Pressed, event.event.state)
         }
     }
 
     @Test
-    fun `WM_SYSKEYUP emits KeyboardInput Released`() {
+    fun `WM_SYSKEYUP emits KeyInput Released`() {
         KadreWndProc.dispatch(TEST_HWND, WM_SYSKEYUP, VK_F4.toLong(), 0L)
 
-        assertIs<WindowEvent.KeyboardInput>(capturedEvent).also { event ->
-            assertEquals(Key.F4, event.key)
-            assertEquals(KeyState.Released, event.state)
+        assertIs<WindowEvent.KeyInput>(capturedEvent).also { event ->
+            assertEquals(PhysicalKey.Code(KeyCode.F4), event.event.physicalKey)
+            assertEquals(KeyState.Released, event.event.state)
         }
     }
 
@@ -162,55 +183,55 @@ class KadreWndProcTest {
     // ── Mouse buttons ───────────────────────────────────────────────────────────
 
     @Test
-    fun `WM_LBUTTONDOWN emits MouseInput Left Pressed`() {
+    fun `WM_LBUTTONDOWN emits PointerButton Left Pressed`() {
         KadreWndProc.dispatch(TEST_HWND, WM_LBUTTONDOWN, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Left, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Left), event.button)
             assertEquals(KeyState.Pressed, event.state)
         }
     }
 
     @Test
-    fun `WM_LBUTTONUP emits MouseInput Left Released`() {
+    fun `WM_LBUTTONUP emits PointerButton Left Released`() {
         KadreWndProc.dispatch(TEST_HWND, WM_LBUTTONUP, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Left, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Left), event.button)
             assertEquals(KeyState.Released, event.state)
         }
     }
 
     @Test
-    fun `WM_RBUTTONDOWN emits MouseInput Right Pressed`() {
+    fun `WM_RBUTTONDOWN emits PointerButton Right Pressed`() {
         KadreWndProc.dispatch(TEST_HWND, WM_RBUTTONDOWN, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Right, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Right), event.button)
             assertEquals(KeyState.Pressed, event.state)
         }
     }
 
     @Test
-    fun `WM_RBUTTONUP emits MouseInput Right Released`() {
+    fun `WM_RBUTTONUP emits PointerButton Right Released`() {
         KadreWndProc.dispatch(TEST_HWND, WM_RBUTTONUP, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Right, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Right), event.button)
             assertEquals(KeyState.Released, event.state)
         }
     }
 
     @Test
-    fun `WM_MBUTTONDOWN emits MouseInput Middle Pressed`() {
+    fun `WM_MBUTTONDOWN emits PointerButton Middle Pressed`() {
         KadreWndProc.dispatch(TEST_HWND, WM_MBUTTONDOWN, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Middle, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Middle), event.button)
             assertEquals(KeyState.Pressed, event.state)
         }
     }
 
     @Test
-    fun `WM_MBUTTONUP emits MouseInput Middle Released`() {
+    fun `WM_MBUTTONUP emits PointerButton Middle Released`() {
         KadreWndProc.dispatch(TEST_HWND, WM_MBUTTONUP, 0L, 0L)
-        assertIs<WindowEvent.MouseInput>(capturedEvent).also { event ->
-            assertEquals(MouseButton.Middle, event.button)
+        assertIs<WindowEvent.PointerButton>(capturedEvent).also { event ->
+            assertEquals(ButtonSource.Mouse(MouseButton.Middle), event.button)
             assertEquals(KeyState.Released, event.state)
         }
     }
@@ -313,33 +334,52 @@ class KadreWndProcTest {
         }
 
     @Test
-    fun `decodeTouchInput maps TOUCHEVENTF_DOWN to Started`() {
+    fun `decodeTouchInput maps TOUCHEVENTF_DOWN to enter and press`() {
         Arena.ofConfined().use { arena ->
             val buffer = touchInputBuffer(arena, x = 320, y = 240, id = 7, flags = TOUCHEVENTF_DOWN)
-            val touch = KadreWndProc.decodeTouchInput(buffer, 0)
-            assertEquals(TouchPhase.Started, touch.phase)
-            assertEquals(320.0, touch.location.x)
-            assertEquals(240.0, touch.location.y)
-            assertEquals(7L, touch.id)
+            val events = KadreWndProc.decodeTouchInput(buffer, 0)
+
+            assertIs<WindowEvent.PointerEntered>(events[0]).also { event ->
+                assertEquals(PointerKind.Touch, event.kind)
+                assertEquals(320.0, event.position.x)
+                assertEquals(240.0, event.position.y)
+            }
+            assertIs<WindowEvent.PointerButton>(events[1]).also { event ->
+                assertEquals(ButtonSource.Touch(FingerId(7L)), event.button)
+                assertEquals(KeyState.Pressed, event.state)
+                assertEquals(320.0, event.position.x)
+                assertEquals(240.0, event.position.y)
+            }
         }
     }
 
     @Test
-    fun `decodeTouchInput maps TOUCHEVENTF_MOVE to Moved`() {
+    fun `decodeTouchInput maps TOUCHEVENTF_MOVE to pointer moved`() {
         Arena.ofConfined().use { arena ->
             val buffer = touchInputBuffer(arena, x = 10, y = 20, id = 1, flags = TOUCHEVENTF_MOVE)
-            val touch = KadreWndProc.decodeTouchInput(buffer, 0)
-            assertEquals(TouchPhase.Moved, touch.phase)
-            assertEquals(1L, touch.id)
+            val events = KadreWndProc.decodeTouchInput(buffer, 0)
+
+            assertIs<WindowEvent.PointerMoved>(events.single()).also { event ->
+                assertEquals(PointerSource.Touch(FingerId(1L)), event.source)
+                assertEquals(10.0, event.position.x)
+                assertEquals(20.0, event.position.y)
+            }
         }
     }
 
     @Test
-    fun `decodeTouchInput maps TOUCHEVENTF_UP to Ended`() {
+    fun `decodeTouchInput maps TOUCHEVENTF_UP to release and leave`() {
         Arena.ofConfined().use { arena ->
             val buffer = touchInputBuffer(arena, x = 0, y = 0, id = 3, flags = TOUCHEVENTF_UP)
-            val touch = KadreWndProc.decodeTouchInput(buffer, 0)
-            assertEquals(TouchPhase.Ended, touch.phase)
+            val events = KadreWndProc.decodeTouchInput(buffer, 0)
+
+            assertIs<WindowEvent.PointerButton>(events[0]).also { event ->
+                assertEquals(ButtonSource.Touch(FingerId(3L)), event.button)
+                assertEquals(KeyState.Released, event.state)
+            }
+            assertIs<WindowEvent.PointerLeft>(events[1]).also { event ->
+                assertEquals(PointerKind.Touch, event.kind)
+            }
         }
     }
 
@@ -351,9 +391,70 @@ class KadreWndProcTest {
             buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_X, 12345)
             buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_Y, 6789)
             buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_FLAGS, TOUCHEVENTF_MOVE)
-            val touch = KadreWndProc.decodeTouchInput(buffer, 0)
-            assertEquals(123.45, touch.location.x)
-            assertEquals(67.89, touch.location.y)
+            val event = KadreWndProc.decodeTouchInput(buffer, 0).single()
+            assertIs<WindowEvent.PointerMoved>(event)
+            assertEquals(123.45, event.position.x)
+            assertEquals(67.89, event.position.y)
+        }
+    }
+
+    @Test
+    fun `decodeTouchInput converts TOUCHINPUT screen coordinates to client coordinates`() {
+        Arena.ofConfined().use { arena ->
+            // TOUCHINPUT stores screen coordinates in hundredths of a physical pixel.
+            // The native ScreenToClient call only accepts integer POINT values, so the
+            // decoder must convert the integer screen pixel and preserve the fraction.
+            val buffer = arena.allocate(TOUCHINPUT_SIZE.toLong(), 8L)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_X, 12345)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_Y, 6789)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_FLAGS, TOUCHEVENTF_MOVE)
+
+            val event = KadreWndProc.decodeTouchInput(TEST_HWND, buffer, 0) { hwnd, screenX, screenY ->
+                assertEquals(TEST_HWND, hwnd)
+                assertEquals(123, screenX)
+                assertEquals(67, screenY)
+                PhysicalPosition(screenX - 100, screenY - 50)
+            }.single()
+
+            assertIs<WindowEvent.PointerMoved>(event)
+            assertEquals(23.45, event.position.x)
+            assertEquals(17.89, event.position.y)
+        }
+    }
+
+    @Test
+    fun `decodeTouchInput keeps screen coordinates when client conversion fails`() {
+        Arena.ofConfined().use { arena ->
+            val buffer = arena.allocate(TOUCHINPUT_SIZE.toLong(), 8L)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_X, 12345)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_Y, 6789)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_FLAGS, TOUCHEVENTF_MOVE)
+
+            val event = KadreWndProc.decodeTouchInput(TEST_HWND, buffer, 0) { _, _, _ -> null }.single()
+
+            assertIs<WindowEvent.PointerMoved>(event)
+            assertEquals(123.45, event.position.x)
+            assertEquals(67.89, event.position.y)
+        }
+    }
+
+    @Test
+    fun `decodeTouchInput truncates negative touch coordinates toward zero before client conversion`() {
+        Arena.ofConfined().use { arena ->
+            val buffer = arena.allocate(TOUCHINPUT_SIZE.toLong(), 8L)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_X, -12345)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_Y, -6789)
+            buffer.set(ValueLayout.JAVA_INT, TOUCHINPUT_OFFSET_FLAGS, TOUCHEVENTF_MOVE)
+
+            val event = KadreWndProc.decodeTouchInput(TEST_HWND, buffer, 0) { _, screenX, screenY ->
+                assertEquals(-123, screenX)
+                assertEquals(-67, screenY)
+                PhysicalPosition(screenX + 100, screenY + 50)
+            }.single()
+
+            assertIs<WindowEvent.PointerMoved>(event)
+            assertEquals(-23.45, event.position.x)
+            assertEquals(-17.89, event.position.y)
         }
     }
 
@@ -367,10 +468,14 @@ class KadreWndProcTest {
             buffer.set(ValueLayout.JAVA_INT, base + TOUCHINPUT_OFFSET_Y, 6000)
             buffer.set(ValueLayout.JAVA_INT, base + TOUCHINPUT_OFFSET_ID, 42)
             buffer.set(ValueLayout.JAVA_INT, base + TOUCHINPUT_OFFSET_FLAGS, TOUCHEVENTF_DOWN)
-            val touch = KadreWndProc.decodeTouchInput(buffer, 1)
-            assertEquals(50.0, touch.location.x)
-            assertEquals(60.0, touch.location.y)
-            assertEquals(42L, touch.id)
+            val events = KadreWndProc.decodeTouchInput(buffer, 1)
+            assertIs<WindowEvent.PointerEntered>(events[0]).also { event ->
+                assertEquals(50.0, event.position.x)
+                assertEquals(60.0, event.position.y)
+            }
+            assertIs<WindowEvent.PointerButton>(events[1]).also { event ->
+                assertEquals(ButtonSource.Touch(FingerId(42L)), event.button)
+            }
         }
     }
 

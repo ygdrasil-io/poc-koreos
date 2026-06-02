@@ -16,12 +16,23 @@
  */
 package org.graphiks.kadre.wayland
 
+import org.graphiks.kadre.core.CursorGrabMode
+import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
+import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowLevel
 import java.lang.foreign.MemorySegment
 
 /** wl_compositor.create_surface opcode in the core Wayland protocol. */
@@ -54,11 +65,24 @@ class WaylandWindow private constructor(
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
 
+    /**
+     * Sink for compositor-driven window events (Resized, CloseRequested), set by
+     * [WaylandEventLoop] right after creation so the loop can enqueue and dispatch them.
+     */
+    @Volatile
+    internal var onWindowEvent: ((WindowEvent) -> Unit)? = null
+
+    /** The xdg_shell decoration (real toplevel), or null if xdg_shell is unavailable. */
+    private var xdg: XdgToplevel? = null
+
     override val rawWindowHandle: RawWindowHandle
         get() = RawWindowHandle.Wayland(surface = surfacePtr, display = displayPtr)
 
     override val rawDisplayHandle: RawDisplayHandle
         get() = RawDisplayHandle.Wayland(display = displayPtr)
+
+    override fun inputCapabilities(): InputCapabilities =
+        InputCapabilities()
 
     /**
      * Current inner size in physical pixels.
@@ -85,18 +109,25 @@ class WaylandWindow private constructor(
     /**
      * DPI scale factor of this window.
      *
-     * Returns 1.0 by default; updated via wl_output.scale events (planned for later).
+     * Initialized to 1.0; updated when a wl_output.scale event is received
+     * (see [WaylandSeat.kt] / [installSeatListeners]).
      */
-    override val scaleFactor: Double = 1.0
+    @Volatile
+    internal var _scaleFactor: Double = 1.0
+
+    override val scaleFactor: Double get() = _scaleFactor
 
     /**
-     * Requests a redraw by committing the Wayland surface.
+     * Requests a redraw.
      *
-     * On Wayland, rendering is triggered by wl_surface.commit (opcode 6).
-     * If the bindings are not available (non-Linux), the call is ignored.
+     * When the window is an xdg_toplevel, redraws are driven by frame callbacks (see
+     * [armFrameCallback]) and the actual surface commit is performed by the renderer's
+     * present (eglSwapBuffers). Committing here as well would flood the compositor with empty
+     * commits and consume frame callbacks on non-displaying frames, so this is a no-op in that
+     * case. Only the bare-surface fallback (no xdg_shell) commits directly.
      */
     override fun requestRedraw() {
-        if (surfacePtr == 0L) return
+        if (surfacePtr == 0L || xdg != null) return
         val handle = wlProxyMarshalFlagsVoid ?: return
         try {
             val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
@@ -120,14 +151,11 @@ class WaylandWindow private constructor(
     /**
      * Sets the window title via xdg_toplevel.set_title.
      *
-     * The xdg_toplevel.set_title call requires an xdg_toplevel* pointer created
-     * during xdg_shell negotiation. This implementation is a logged stub;
-     * full support will be provided by WaylandEventLoop (ticket #66).
-     *
      * @param title New window title.
      */
     override fun setTitle(title: String) {
-        // Stub: xdg_toplevel requires full xdg_shell negotiation (ticket #66)
+        _title = title
+        xdg?.setTitle(title)
     }
 
     /**
@@ -153,6 +181,9 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        // Tear down xdg_toplevel/xdg_surface first (reverse creation order).
+        xdg?.destroy()
+        xdg = null
         if (surfacePtr == 0L) return
         val handle = wlProxyDestroy ?: return
         try {
@@ -167,6 +198,183 @@ class WaylandWindow private constructor(
         }
     }
 
+    // ── R1: window state & geometry ───────────────────────────────────────────
+
+    @Volatile private var _title: String = attrs.title
+
+    override val title: String get() = _title
+
+    override val isVisible: Boolean get() = xdg != null // true once xdg_shell handshake completes
+
+    @Volatile private var _isResizable: Boolean = attrs.resizable
+
+    override val isResizable: Boolean get() = _isResizable
+
+    @Volatile private var _isMinimized: Boolean = false
+
+    override val isMinimized: Boolean get() = _isMinimized
+
+    @Volatile private var _isMaximized: Boolean = attrs.maximized
+
+    override val isMaximized: Boolean get() = _isMaximized
+
+    @Volatile private var _isDecorated: Boolean = attrs.decorations
+
+    override val isDecorated: Boolean get() = _isDecorated
+
+    override fun setResizable(resizable: Boolean) {
+        _isResizable = resizable
+        // On Wayland, resizability is communicated via set_min_size / set_max_size:
+        // setting min == max prevents the compositor from suggesting a different size.
+        if (!resizable) {
+            val sz = _innerSize
+            xdg?.setMinSize(sz.width, sz.height)
+            xdg?.setMaxSize(sz.width, sz.height)
+        } else {
+            xdg?.setMinSize(0, 0)
+            xdg?.setMaxSize(0, 0)
+        }
+        flushDisplay()
+    }
+
+    override fun setMinimized(minimized: Boolean) {
+        _isMinimized = minimized
+        if (minimized) {
+            xdg?.setMinimized()
+            flushDisplay()
+        }
+        // Restoring from minimized is compositor-driven; no un-minimize request in xdg_shell.
+    }
+
+    override fun setMaximized(maximized: Boolean) {
+        _isMaximized = maximized
+        xdg?.setMaximized(maximized)
+        flushDisplay()
+    }
+
+    override fun setDecorations(decorated: Boolean) {
+        _isDecorated = decorated
+        // Decoration mode is set at creation via zxdg_decoration_manager_v1.
+        // Runtime switching is not yet wired — no-op with a note.
+        // TODO: call zxdg_toplevel_decoration_v1.set_mode at runtime (R3 / future).
+    }
+
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
+        val w = size?.width ?: 0
+        val h = size?.height ?: 0
+        xdg?.setMinSize(w, h)
+        flushDisplay()
+    }
+
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
+        val w = size?.width ?: 0
+        val h = size?.height ?: 0
+        xdg?.setMaxSize(w, h)
+        flushDisplay()
+    }
+
+    /**
+     * On Wayland, global screen positions are not exposed by the protocol.
+     * Returns PhysicalPosition(0, 0) as a documented no-op.
+     */
+    override val outerPosition: PhysicalPosition<Int>
+        get() = PhysicalPosition(0, 0)
+
+    /**
+     * No-op on Wayland: the compositor controls window placement.
+     *
+     * The Wayland protocol intentionally does not allow clients to set their
+     * global screen position. This method is a documented no-op.
+     */
+    override fun setOuterPosition(position: PhysicalPosition<Int>) { /* no-op: Wayland does not expose global positions */ }
+
+    // ── R2: monitor & fullscreen ──────────────────────────────────────────────
+
+    /**
+     * Returns a synthetic monitor representing the Wayland compositor's output.
+     *
+     * Uses the current window size and scale factor as the monitor's video mode,
+     * since the Wayland protocol does not expose physical screen geometry directly.
+     */
+    override fun currentMonitor(): MonitorHandle? = object : MonitorHandle {
+        override val id: Long = displayPtr
+        override val name: String? = null
+        override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+        override val scaleFactor: Double = _scaleFactor
+        override val currentVideoMode: VideoMode = VideoMode(_innerSize, null, null)
+        override val videoModes: List<VideoMode> = listOf(currentVideoMode)
+    }
+
+    /** In-memory fullscreen state (R2). */
+    @Volatile private var _fullscreen: Fullscreen? = attrs.fullscreen
+
+    override val fullscreen: Fullscreen?
+        get() = _fullscreen
+
+    /**
+     * Enters or exits borderless fullscreen via xdg_toplevel.set_fullscreen / unset_fullscreen.
+     *
+     * **Exclusive fullscreen is not supported on Wayland** — the xdg-shell protocol does not
+     * expose mode-change requests to clients. [Fullscreen.Exclusive] is treated as
+     * [Fullscreen.Borderless] and the no-op is intentional.
+     *
+     * @param fullscreen New fullscreen state, or null to exit fullscreen.
+     */
+    override fun setFullscreen(fullscreen: Fullscreen?) {
+        when (fullscreen) {
+            null -> {
+                xdg?.setFullscreen(false)
+                flushDisplay()
+                _fullscreen = null
+            }
+            is Fullscreen.Borderless -> {
+                xdg?.setFullscreen(true)
+                flushDisplay()
+                _fullscreen = fullscreen
+            }
+            is Fullscreen.Exclusive -> {
+                // Exclusive fullscreen is not supported on Wayland (xdg-shell limitation).
+                // Fall back to borderless silently.
+                xdg?.setFullscreen(true)
+                flushDisplay()
+                _fullscreen = fullscreen // store requested mode for API parity
+            }
+        }
+    }
+
+    /**
+     * Sends a `wl_surface.commit` to the compositor to signal that the next frame is ready.
+     *
+     * On Wayland this is equivalent to a `pre_commit` hint — the surface commit
+     * is sent immediately without attaching a new buffer, letting the compositor
+     * update its internal state.
+     */
+    override fun prePresentNotify() {
+        if (surfacePtr == 0L) return
+        val handle = wlProxyMarshalFlagsVoid ?: return
+        try {
+            val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
+            handle.invokeExact(
+                surfaceSeg,
+                WL_SURFACE_COMMIT_OPCODE,
+                MemorySegment.NULL,
+                WL_COMPOSITOR_VERSION,
+                0,
+            )
+            flushDisplay()
+        } catch (_: Throwable) {}
+    }
+
+    /** Convenience: flush the Wayland display connection. */
+    private fun flushDisplay() {
+        wlDisplayFlush?.let { flush ->
+            try {
+                val displaySeg = MemorySegment.ofAddress(displayPtr)
+                flush.invokeExact(displaySeg) as Int
+            } catch (_: Throwable) {}
+        }
+    }
+
     /**
      * Updates the inner size upon receiving an xdg_surface.configure event.
      *
@@ -177,6 +385,135 @@ class WaylandWindow private constructor(
         if (width > 0 && height > 0) {
             _innerSize = PhysicalSize(width, height)
         }
+    }
+
+    // ── R3: cursor, theme & appearance ───────────────────────────────────────
+
+    /**
+     * No-op on Wayland.
+     *
+     * Cursor shape requires wl_pointer.set_cursor with a wl_surface carrying
+     * a cursor buffer from libwayland-cursor. This is significant extra work
+     * (loading cursor theme, creating a wl_surface, attaching a shm buffer).
+     *
+     * TODO(R3-wayland-cursor): implement via wl_cursor_theme_load +
+     * wl_pointer.set_cursor if libwayland-cursor is available.
+     */
+    override fun setCursor(cursor: CursorIcon) {
+        // No-op on Wayland: cursor theme requires libwayland-cursor integration.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * TODO(R3-wayland-cursor-visible): hide via wl_pointer.set_cursor(null).
+     */
+    override fun setCursorVisible(visible: Boolean) {
+        // No-op on Wayland: cursor visibility requires libwayland-cursor integration.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Pointer confinement requires zwp_pointer_constraints_v1, which is an
+     * optional Wayland protocol extension not yet wired in this backend.
+     *
+     * TODO(R3-wayland-grab): implement via zwp_pointer_constraints_v1.
+     */
+    override fun setCursorGrab(mode: CursorGrabMode) {
+        // No-op on Wayland: pointer constraints require zwp_pointer_constraints_v1.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Wayland does not expose global cursor warping. The protocol intentionally
+     * hides pointer positions from clients for security reasons.
+     */
+    override fun setCursorPosition(position: PhysicalPosition<Int>) {
+        // No-op on Wayland: cursor warping is not exposed by the Wayland protocol.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * TODO(R3-wayland-hittest): implement via the input-region protocol.
+     */
+    override fun setCursorHittest(hittest: Boolean) {
+        // No-op on Wayland: no standard click-through mechanism.
+    }
+
+    /**
+     * Returns null on Wayland.
+     *
+     * Theme detection via org.freedesktop.portal.Settings is not yet wired.
+     *
+     * TODO(R3-wayland-theme): query org.freedesktop.portal.Settings via D-Bus.
+     */
+    override val theme: Theme? get() = null
+
+    /**
+     * No-op on Wayland — no standard per-window theme control.
+     */
+    override fun setTheme(theme: Theme?) {
+        // No-op on Wayland: no standard per-window theme API.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Window Z-ordering is managed entirely by the compositor.
+     * There is no standard Wayland protocol to request AlwaysOnTop/AlwaysOnBottom.
+     */
+    override fun setWindowLevel(level: WindowLevel) {
+        // No-op on Wayland: Z-ordering is compositor-managed.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Per-pixel alpha transparency requires the compositor to support the
+     * EGL_EXT_platform_wayland or similar; this is renderer-side and outside
+     * the window API scope.
+     *
+     * TODO(R3-wayland-transparent): set _NET_WM_WINDOW_OPACITY or use
+     * wl_surface with ARGB buffer format when the renderer supports it.
+     */
+    override fun setTransparent(transparent: Boolean) {
+        // No-op on Wayland.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Blur requires compositor-specific protocols (e.g. org.kde.kwin.blur).
+     */
+    override fun setBlur(blur: Boolean) {
+        // No-op on Wayland: no standard blur protocol.
+    }
+
+    /**
+     * No-op on Wayland.
+     *
+     * Wayland does not support per-window application icons; the desktop
+     * file or XDG portal is the correct mechanism.
+     */
+    override fun setWindowIcon(icon: Icon?) {
+        // No-op on Wayland: window icons are not part of the Wayland protocol.
+    }
+
+    // ── R4: keyboard ──────────────────────────────────────────────────────────
+
+    /**
+     * Resets dead-key state for this Wayland window.
+     *
+     * Best-effort: would require an xkb_compose_state pointer, which is not yet stored.
+     * Documented no-op.
+     *
+     * TODO(R4-wayland-dead-keys): store xkb_compose_state and call xkb_compose_state_reset.
+     */
+    override fun resetDeadKeys() {
+        // no-op: xkb_compose_state not yet wired (TODO R4-wayland-dead-keys)
     }
 
     // ── Companion ─────────────────────────────────────────────────────────────
@@ -201,6 +538,7 @@ class WaylandWindow private constructor(
             compositor: Long,
             xdgWmBase: Long,
             attrs: WindowAttributes,
+            decorationManager: Long = 0L,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -232,8 +570,31 @@ class WaylandWindow private constructor(
 
             val window = WaylandWindow(display, compositor, xdgWmBase, surface, attrs)
 
-            // ── 2. Initial commit (makes the surface visible to the compositor) ──
-            if (attrs.visible && surface != 0L) {
+            // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
+            if (surface != 0L && xdgWmBase != 0L && WaylandXdgLib.loaded) {
+                window.xdg = XdgToplevel.create(
+                    displayPtr = display,
+                    wmBasePtr = xdgWmBase,
+                    surfacePtr = surface,
+                    decorationManagerPtr = decorationManager,
+                    onResized = { w, h ->
+                        window._innerSize = PhysicalSize(w, h)
+                        window.onWindowEvent?.invoke(WindowEvent.Resized(PhysicalSize(w, h)))
+                        // Repaint once at the new size (on-demand rendering).
+                        window.onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+                    },
+                    onClose = { window.onWindowEvent?.invoke(WindowEvent.CloseRequested) },
+                )
+                window.xdg?.setTitle(attrs.title)
+                // Apply R1 attrs
+                if (attrs.maximized) window.xdg?.setMaximized(true)
+                attrs.minSize?.let { window.xdg?.setMinSize(it.width, it.height) }
+                attrs.maxSize?.let { window.xdg?.setMaxSize(it.width, it.height) }
+                if (attrs.fullscreen != null) window.xdg?.setFullscreen(true)
+            }
+
+            // ── 3. Fallback for a bare surface (no xdg_shell): legacy initial commit ──
+            if (window.xdg == null && attrs.visible && surface != 0L) {
                 window.requestRedraw()
             }
 

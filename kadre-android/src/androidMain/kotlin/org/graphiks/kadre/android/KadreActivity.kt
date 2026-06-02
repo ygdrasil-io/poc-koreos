@@ -1,5 +1,6 @@
 package org.graphiks.kadre.android
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -9,11 +10,24 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.FingerId
+import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.NativeKeyInfo
+import org.graphiks.kadre.core.NativeKeyCode
+import org.graphiks.kadre.core.NativeLogicalKey
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.TouchForce
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.defaultLogicalKey
+import org.graphiks.kadre.core.defaultText
+import org.graphiks.kadre.core.KeyEvent as KadreKeyEvent
 
 /**
  * Root Kadre Activity for Android.
@@ -35,7 +49,16 @@ import org.graphiks.kadre.core.WindowEvent
  * - Surface created   → [ApplicationHandler.canCreateSurfaces]
  * - Surface changed → [ApplicationHandler.windowEvent] ([WindowEvent.Resized])
  * - Surface destroyed → [ApplicationHandler.destroySurfaces]
- * - [onDestroy] → `destroyed` guard set, then cleanup
+ * - [onDestroy] → [WindowEvent.Destroyed], then `destroyed` guard set + cleanup
+ *
+ * ## Lifecycle vs WindowEvent (two parallel channels)
+ * [onResume] / [onPause] / surface-destroyed drive the **app-level**
+ * [ApplicationHandler] lifecycle (coarse, activity-scoped). Separately,
+ * [onWindowFocusChanged] emits the **per-window** [WindowEvent.Focused] and
+ * [onDestroy] emits [WindowEvent.Destroyed], for parity with the desktop/winit
+ * backends so that consumers switching on [WindowEvent] also observe focus and
+ * destruction. Focus (window-level) and resume/pause (activity-level) are
+ * distinct signals on Android, so they are reported independently.
  *
  * ## Full screen
  * Status bar and navigation bar hidden via `FLAG_FULLSCREEN` and cutout-aware layout.
@@ -81,6 +104,13 @@ abstract class KadreActivity : ComponentActivity() {
     @Volatile
     internal var destroyed = false
 
+    /**
+     * Last dispatched scale factor (display density), to emit
+     * [WindowEvent.ScaleFactorChanged] only on an actual change.
+     * Initialized in [onCreate] from the current display density.
+     */
+    private var lastScaleFactor: Double = 1.0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -112,6 +142,7 @@ abstract class KadreActivity : ComponentActivity() {
         // ── Handler + EventLoop ────────────────────────────────────────────────
         handler = createHandler()
         eventLoop = AndroidEventLoop(this)
+        lastScaleFactor = resources.displayMetrics.density.toDouble()
 
         // ── SurfaceHolder callbacks (surface lifecycle) ────────────────────────
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
@@ -176,23 +207,72 @@ abstract class KadreActivity : ComponentActivity() {
             else -> return
         }
 
-        if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+        if (event.actionMasked == MotionEvent.ACTION_MOVE || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             for (pointerIndex in 0 until event.pointerCount) {
-                val location = PhysicalPosition(
-                    event.getX(pointerIndex).toDouble(),
-                    event.getY(pointerIndex).toDouble(),
-                )
-                val id = event.getPointerId(pointerIndex).toLong()
-                handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
+                dispatchTouchPointer(event, window, pointerIndex, phase)
             }
         } else {
-            val pointerIndex = event.actionIndex
-            val location = PhysicalPosition(
-                event.getX(pointerIndex).toDouble(),
-                event.getY(pointerIndex).toDouble(),
+            dispatchTouchPointer(event, window, event.actionIndex, phase)
+        }
+    }
+
+    private fun dispatchTouchPointer(
+        event: MotionEvent,
+        window: AndroidWindow,
+        pointerIndex: Int,
+        phase: TouchPhase,
+    ) {
+        val location = PhysicalPosition(
+            event.getX(pointerIndex).toDouble(),
+            event.getY(pointerIndex).toDouble(),
+        )
+        val deviceId = DeviceId(event.deviceId.toLong())
+        val fingerId = FingerId(event.getPointerId(pointerIndex).toLong())
+        val primary = pointerIndex == 0
+        val force = TouchForce.Normalized(event.getPressure(pointerIndex).toDouble())
+
+        when (phase) {
+            TouchPhase.Started -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerEntered(deviceId, location, primary, PointerKind.Touch),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Pressed, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+            }
+            TouchPhase.Moved -> handler.windowEvent(
+                eventLoop,
+                window.id,
+                WindowEvent.PointerMoved(deviceId, location, primary, PointerSource.Touch(fingerId, force)),
             )
-            val id = event.getPointerId(pointerIndex).toLong()
-            handler.windowEvent(eventLoop, window.id, WindowEvent.Touch(phase, location, id))
+            TouchPhase.Ended -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Released, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerLeft(deviceId, location, primary, PointerKind.Touch),
+                )
+            }
+            TouchPhase.Cancelled -> {
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerButton(deviceId, KeyState.Released, location, primary, ButtonSource.Touch(fingerId, force)),
+                )
+                handler.windowEvent(
+                    eventLoop,
+                    window.id,
+                    WindowEvent.PointerLeft(deviceId, location, primary, PointerKind.Touch),
+                )
+            }
         }
     }
 
@@ -210,7 +290,7 @@ abstract class KadreActivity : ComponentActivity() {
     }
 
     /**
-     * Translates an Android key event into a [WindowEvent.KeyboardInput] and
+     * Translates an Android key event into a [WindowEvent.KeyInput] and
      * dispatches it to the handler.
      *
      * @return `true` if the key was mapped and consumed; `false` for unmapped
@@ -219,22 +299,81 @@ abstract class KadreActivity : ComponentActivity() {
     private fun dispatchKey(keyCode: Int, event: KeyEvent, state: KeyState, isRepeat: Boolean): Boolean {
         val window = eventLoop.pendingWindow
         if (destroyed || window == null) return false
-        val key = AndroidKeyMapper.fromKeyCode(keyCode)
-        if (key == org.graphiks.kadre.core.Key.Unknown) return false
+        val mappedCode = AndroidKeyMapper.keyCode(keyCode) ?: return false
+        val deviceId = DeviceId(event.deviceId.toLong())
+        val native = NativeKeyInfo(
+            platform = KeyPlatform.Android,
+            scanCode = event.scanCode.toLong(),
+            virtualKey = keyCode.toLong(),
+            nativeCode = NativeKeyCode.Android(event.scanCode.toLong(), keyCode.toLong()),
+            nativeKey = NativeLogicalKey.Android(keyCode.toLong()),
+        )
+        val logicalKey = mappedCode.defaultLogicalKey()
         handler.windowEvent(
             eventLoop,
             window.id,
-            WindowEvent.KeyboardInput(
-                key = key,
-                state = state,
-                modifiers = AndroidKeyMapper.modifiersFrom(event.metaState),
-                isRepeat = isRepeat,
+            WindowEvent.KeyInput(
+                event = KadreKeyEvent(
+                    physicalKey = AndroidKeyMapper.physicalKey(keyCode),
+                    logicalKey = logicalKey,
+                    state = state,
+                    modifiers = AndroidKeyMapper.modifiersFrom(event.metaState),
+                    repeat = isRepeat,
+                    text = mappedCode.defaultText(),
+                    keyWithoutModifiers = logicalKey,
+                    native = native,
+                ),
+                deviceId = deviceId,
             ),
         )
         return true
     }
 
+    // ── Display density (scale factor) ────────────────────────────────────────
+
+    /**
+     * Emits [WindowEvent.ScaleFactorChanged] when the display density changes
+     * (e.g. moved to an external display, runtime density override).
+     *
+     * Note: this is only invoked when the manifest declares the relevant
+     * `android:configChanges` (e.g. `density`); otherwise Android recreates the
+     * Activity instead, and the new density is picked up on re-creation.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val window = eventLoop.pendingWindow
+        if (destroyed || window == null) return
+        val density = resources.displayMetrics.density.toDouble()
+        if (density != lastScaleFactor) {
+            lastScaleFactor = density
+            handler.windowEvent(eventLoop, window.id, WindowEvent.ScaleFactorChanged(density))
+        }
+    }
+
+    // ── Focus (window-level) ──────────────────────────────────────────────────
+
+    /**
+     * Emits [WindowEvent.Focused] when the activity window gains or loses focus
+     * (app switch, notification shade, dialog overlay).
+     *
+     * This is the per-window counterpart of the activity-level [onResume] /
+     * [onPause] lifecycle and is reported independently (a window can lose focus
+     * without the activity pausing, e.g. the notification shade).
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        val window = eventLoop.pendingWindow
+        if (destroyed || window == null) return
+        handler.windowEvent(eventLoop, window.id, WindowEvent.Focused(hasFocus))
+    }
+
     override fun onDestroy() {
+        // Per-window terminal event, emitted before the guard/cleanup while the
+        // window is still resolvable (counterpart of the surface-destroyed
+        // app-level destroySurfaces callback).
+        eventLoop.pendingWindow?.let { window ->
+            handler.windowEvent(eventLoop, window.id, WindowEvent.Destroyed)
+        }
         destroyed = true
         eventLoop.onSurfaceDestroyed()
         super.onDestroy()

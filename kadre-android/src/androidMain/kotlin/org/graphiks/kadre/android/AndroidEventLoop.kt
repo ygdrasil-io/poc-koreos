@@ -4,7 +4,13 @@ import android.view.Choreographer
 import androidx.activity.ComponentActivity
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
@@ -130,6 +136,67 @@ internal class AndroidEventLoop(
         override fun wakeUp() {
             // No-op: Android manages its own scheduling via the Looper/Handler
         }
+    }
+
+    // ── R2: monitor enumeration ───────────────────────────────────────────────
+
+    /**
+     * Returns a synthetic monitor based on the Android display metrics.
+     *
+     * Android exposes the physical screen size via DisplayMetrics. We use the
+     * window manager's default display to build a single synthetic MonitorHandle.
+     */
+    override fun availableMonitors(): List<MonitorHandle> {
+        return try {
+            val dm = android.util.DisplayMetrics()
+            (activity.getSystemService(android.content.Context.WINDOW_SERVICE)
+                as android.view.WindowManager).defaultDisplay.getRealMetrics(dm)
+            listOf(object : MonitorHandle {
+                override val id: Long = 0L
+                override val name: String? = null
+                override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+                override val scaleFactor: Double = dm.density.toDouble()
+                override val currentVideoMode: VideoMode = VideoMode(
+                    PhysicalSize(dm.widthPixels, dm.heightPixels), null,
+                    dm.xdpi.toInt().let { if (it > 0) it else null }
+                )
+                override val videoModes: List<VideoMode> = listOf(currentVideoMode)
+            })
+        } catch (_: Throwable) { emptyList() }
+    }
+
+    /**
+     * Returns the primary monitor (the single Android screen).
+     */
+    override fun primaryMonitor(): MonitorHandle? = availableMonitors().firstOrNull()
+
+    // ── R3: system theme ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the current system UI theme via UiModeManager.nightMode.
+     *
+     * - MODE_NIGHT_YES → [Theme.Dark]
+     * - MODE_NIGHT_NO  → [Theme.Light]
+     * - otherwise      → null (FOLLOW_SYSTEM or unknown)
+     */
+    override fun systemTheme(): Theme? = try {
+        val uiModeManager = activity
+            .getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager
+        when (uiModeManager?.nightMode) {
+            android.app.UiModeManager.MODE_NIGHT_YES -> Theme.Dark
+            android.app.UiModeManager.MODE_NIGHT_NO  -> Theme.Light
+            else -> null
+        }
+    } catch (_: Throwable) { null }
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    /**
+     * No-op on Android: raw device events are not dispatched at the Android level.
+     */
+    override fun listenDeviceEvents(mode: DeviceEvents) {
+        // no-op on Android
     }
 
     /**

@@ -9,13 +9,19 @@ package org.graphiks.kadre.test
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
-import org.graphiks.kadre.core.Key
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.KeyLocation
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.LogicalKey
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.NamedKey
+import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.Window
+import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
-import org.graphiks.kadre.core.WindowAttributes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -38,11 +44,9 @@ private class RecordingHandler(
         }
     }
 
-    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
-        if (event is WindowEvent) {
-            received += event
-            receivedByWindow += windowId to event
-        }
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
+        received += event
+        receivedByWindow += windowId to event
         if (exitOnClose && event is WindowEvent.CloseRequested) eventLoop.exit()
     }
 }
@@ -61,19 +65,91 @@ class ScriptedEventLoopTest {
     }
 
     @Test
-    fun keyPressRelease_dispatchInOrder() {
+    fun physicalKeyPressRelease_dispatchInOrder() {
         val handler = RecordingHandler()
         scriptedTest {
-            keyPress(Key.ArrowUp)
-            keyRelease(Key.ArrowUp)
+            physicalKeyPress(KeyCode.ArrowUp)
+            physicalKeyRelease(KeyCode.ArrowUp)
         }.run(handler)
 
         assertEquals(2, handler.received.size)
-        val press = handler.received[0] as WindowEvent.KeyboardInput
-        val release = handler.received[1] as WindowEvent.KeyboardInput
-        assertEquals(KeyState.Pressed, press.state)
-        assertEquals(Key.ArrowUp, press.key)
-        assertEquals(KeyState.Released, release.state)
+        val press = handler.received[0] as WindowEvent.KeyInput
+        val release = handler.received[1] as WindowEvent.KeyInput
+        assertEquals(KeyState.Pressed, press.event.state)
+        assertEquals(PhysicalKey.Code(KeyCode.ArrowUp), press.event.physicalKey)
+        assertEquals(LogicalKey.Named(NamedKey.ArrowUp), press.event.logicalKey)
+        assertEquals(KeyState.Released, release.event.state)
+    }
+
+    @Test
+    fun physicalKeyPress_keyA_usesCoreDefaultLogicalKeyAndText() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            physicalKeyPress(KeyCode.KeyA)
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(LogicalKey.Character("a"), press.event.logicalKey)
+        assertEquals("a", press.event.text)
+    }
+
+    @Test
+    fun physicalKeyPress_usesOverriddenCharacterLogicalKeyForDefaultText() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            physicalKeyPress(KeyCode.KeyQ, logicalKey = LogicalKey.Character("a"))
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(LogicalKey.Character("a"), press.event.logicalKey)
+        assertEquals("a", press.event.text)
+    }
+
+    @Test
+    fun physicalKeyPress_doesNotInferTextWhenLogicalKeyIsOverriddenToNamedKey() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            physicalKeyPress(KeyCode.KeyA, logicalKey = LogicalKey.Named(NamedKey.Enter))
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(LogicalKey.Named(NamedKey.Enter), press.event.logicalKey)
+        assertEquals(null, press.event.text)
+    }
+
+    @Test
+    fun physicalKeyPress_shiftLeft_usesCoreDefaultLocation() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            physicalKeyPress(KeyCode.ShiftLeft)
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(KeyLocation.Left, press.event.location)
+    }
+
+    @Test
+    fun physicalKeyPress_numpadEnter_usesCoreDefaultLocation() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            physicalKeyPress(KeyCode.NumpadEnter)
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(KeyLocation.Numpad, press.event.location)
+    }
+
+    @Test
+    fun logicalKeyPress_dispatchesTextAndModifiers() {
+        val handler = RecordingHandler()
+        scriptedTest {
+            logicalKeyPress(LogicalKey.Character("s"), modifiers = KeyboardModifiers.Ctrl, text = "s")
+        }.run(handler)
+
+        val press = handler.received.single() as WindowEvent.KeyInput
+        assertEquals(LogicalKey.Character("s"), press.event.logicalKey)
+        assertEquals("s", press.event.text)
+        assertTrue(press.event.modifiers.ctrl)
     }
 
     @Test
@@ -87,9 +163,9 @@ class ScriptedEventLoopTest {
 
         assertEquals(3, handler.received.size)
         assertTrue(handler.received[0] is WindowEvent.PointerMoved)
-        assertTrue(handler.received[1] is WindowEvent.MouseInput)
-        val click = handler.received[1] as WindowEvent.MouseInput
-        assertEquals(MouseButton.Left, click.button)
+        assertTrue(handler.received[1] is WindowEvent.PointerButton)
+        val click = handler.received[1] as WindowEvent.PointerButton
+        assertEquals(ButtonSource.Mouse(MouseButton.Left), click.button)
     }
 
     @Test
@@ -112,10 +188,10 @@ class ScriptedEventLoopTest {
     fun outputStream_exitStopsRemainingEvents() {
         val handler = RecordingHandler(exitOnClose = true)
         val trace = scriptedTest {
-            keyPress(Key.Escape)
+            physicalKeyPress(KeyCode.Escape)
             closeRequested()
             // These events must NOT be dispatched after exit().
-            keyPress(Key.ArrowUp)
+            physicalKeyPress(KeyCode.ArrowUp)
             tick()
         }.run(handler)
 
@@ -149,8 +225,8 @@ class ScriptedEventLoopTest {
 
         scriptedTest {
             canCreateSurfaces()
-            keyPress(Key.ArrowUp, windowId = WindowId(1L))
-            keyPress(Key.Escape, windowId = WindowId(2L))
+            physicalKeyPress(KeyCode.ArrowUp, windowId = WindowId(1L))
+            physicalKeyPress(KeyCode.Escape, windowId = WindowId(2L))
             tick(16, windowId = WindowId(2L))
         }.run(handler)
 
@@ -161,9 +237,9 @@ class ScriptedEventLoopTest {
         val secondWindowEvents = handler.receivedByWindow.filter { it.first == WindowId(2L) }.map { it.second }
 
         assertEquals(1, firstWindowEvents.size)
-        assertEquals(Key.ArrowUp, (firstWindowEvents.single() as WindowEvent.KeyboardInput).key)
+        assertTrue(firstWindowEvents.single() is WindowEvent.KeyInput)
         assertEquals(2, secondWindowEvents.size)
-        assertEquals(Key.Escape, (secondWindowEvents.first() as WindowEvent.KeyboardInput).key)
+        assertTrue(secondWindowEvents.first() is WindowEvent.KeyInput)
         assertTrue(secondWindowEvents.last() is WindowEvent.RedrawRequested)
     }
 }

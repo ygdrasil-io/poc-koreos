@@ -17,6 +17,8 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.KeyEvent
+
 // ---------------------------------------------------------------------------
 // Logical keys
 // ---------------------------------------------------------------------------
@@ -49,6 +51,26 @@ enum class WebKey {
     MetaLeft, MetaRight,
 
     Unknown,
+}
+
+// ---------------------------------------------------------------------------
+// Key location
+// ---------------------------------------------------------------------------
+
+/**
+ * Physical location of a keyboard key on the keyboard (web mirror of kadre-core.KeyLocation).
+ *
+ * Maps the DOM `KeyboardEvent.location` property values:
+ * - `0` (DOM_KEY_LOCATION_STANDARD) → [Standard]
+ * - `1` (DOM_KEY_LOCATION_LEFT)     → [Left]
+ * - `2` (DOM_KEY_LOCATION_RIGHT)    → [Right]
+ * - `3` (DOM_KEY_LOCATION_NUMPAD)   → [Numpad]
+ */
+enum class WebKeyLocation {
+    Standard,
+    Left,
+    Right,
+    Numpad,
 }
 
 // ---------------------------------------------------------------------------
@@ -173,13 +195,20 @@ sealed interface WebWindowEvent {
      * @property state     State (pressed / released).
      * @property modifiers Active modifiers.
      * @property isRepeat  `true` if the event is an auto-repeat.
+     * @property text      Printable character(s) produced (from `KeyboardEvent.key` if printable), or null.
+     * @property location  Physical key location on the keyboard.
+     * @property scanCode  DOM `KeyboardEvent.code` string used as a layout-independent identifier.
      */
-    data class KeyboardInput(
-        val key: WebKey,
-        val state: WebKeyState,
-        val modifiers: WebModifiers,
-        val isRepeat: Boolean = false,
-    ) : WebWindowEvent
+    data class KeyInput(val event: KeyEvent) : WebWindowEvent
+
+    /**
+     * The set of active keyboard modifiers changed.
+     *
+     * Emitted when a modifier key (Shift, Ctrl, Alt, Meta) is pressed or released.
+     *
+     * @property modifiers New modifier state after the change.
+     */
+    data class ModifiersChanged(val modifiers: WebModifiers) : WebWindowEvent
 
     /**
      * The pointer has moved.
