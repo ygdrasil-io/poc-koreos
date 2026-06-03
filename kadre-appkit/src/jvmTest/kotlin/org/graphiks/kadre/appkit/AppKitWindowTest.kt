@@ -182,4 +182,12 @@ class AppKitWindowTest {
         assertTrue(NSWindowStyleMask.NSWindowStyleMaskClosable !in borderless)
         assertTrue(NSWindowStyleMask.NSWindowStyleMaskMiniaturizable !in borderless)
     }
+
+    @Test
+    fun `AppKit focus follows winit visible and non-minimized guard`() {
+        assertTrue(appKitShouldFocusWindow(isVisible = true, isMiniaturized = false))
+        assertTrue(!appKitShouldFocusWindow(isVisible = false, isMiniaturized = false))
+        assertTrue(!appKitShouldFocusWindow(isVisible = true, isMiniaturized = true))
+        assertTrue(!appKitShouldFocusWindow(isVisible = false, isMiniaturized = true))
+    }
 }

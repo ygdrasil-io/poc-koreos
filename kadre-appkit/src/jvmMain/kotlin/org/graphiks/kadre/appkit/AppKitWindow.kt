@@ -596,12 +596,12 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
     override fun focusWindow() {
         try {
-            val nsWindow = NSWindow(nsWindowPtr)
-            activateApplicationForWindowFocus()
-            if (nsWindow.isVisible() && !nsWindow.isMiniaturized()) {
-                nsWindow.makeKeyAndOrderFront(MemorySegment.NULL)
-            } else {
-                nsWindow.makeKeyWindow()
+            AppKitMainThread.runSync {
+                val nsWindow = NSWindow(nsWindowPtr)
+                if (appKitShouldFocusWindow(nsWindow.isVisible(), nsWindow.isMiniaturized())) {
+                    activateApplicationForWindowFocus()
+                    nsWindow.makeKeyAndOrderFront(MemorySegment.NULL)
+                }
             }
         } catch (_: Throwable) {}
     }
@@ -999,6 +999,9 @@ internal fun appKitStyleMaskWithEnabledButtons(
     } else {
         styleMask
     }
+
+internal fun appKitShouldFocusWindow(isVisible: Boolean, isMiniaturized: Boolean): Boolean =
+    isVisible && !isMiniaturized
 
 private fun NSWindowStyleMask.withStyleFlag(flag: NSWindowStyleMask, enabled: Boolean): NSWindowStyleMask =
     if (enabled) {
