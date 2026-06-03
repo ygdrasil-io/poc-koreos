@@ -1,6 +1,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
@@ -145,6 +146,33 @@ class X11WindowTest {
         val hidden = x11VisibilityAfterSet(visible, visible = false)
         assertEquals(X11_VISIBILITY_NO, hidden)
         assertEquals(false, x11VisibilityIsVisible(hidden))
+    }
+
+    @Test
+    fun `X11 fullscreen requests are deferred until the window is visible`() {
+        assertEquals(
+            X11FullscreenRequest(defer = true, send = false),
+            x11FullscreenRequest(current = null, requested = null, visibilityState = X11_VISIBILITY_NO),
+        )
+        assertEquals(
+            X11FullscreenRequest(defer = true, send = false),
+            x11FullscreenRequest(current = null, requested = null, visibilityState = X11_VISIBILITY_YES_WAIT),
+        )
+    }
+
+    @Test
+    fun `X11 fullscreen visible requests send only when state changes`() {
+        val monitor = null
+        val requested = Fullscreen.Borderless(monitor)
+
+        assertEquals(
+            X11FullscreenRequest(defer = false, send = true),
+            x11FullscreenRequest(current = null, requested = requested, visibilityState = X11_VISIBILITY_YES),
+        )
+        assertEquals(
+            X11FullscreenRequest(defer = false, send = false),
+            x11FullscreenRequest(current = requested, requested = requested, visibilityState = X11_VISIBILITY_YES),
+        )
     }
 
     @Test

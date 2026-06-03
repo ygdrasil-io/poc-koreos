@@ -364,10 +364,12 @@ class X11Window private constructor(
         primaryX11Monitor(displayPtr, screen, scaleFactor)
 
     /** In-memory fullscreen state (R2). */
-    @Volatile private var _fullscreen: Fullscreen? = attrs.fullscreen
+    @Volatile private var _fullscreen: Fullscreen? = null
+    @Volatile private var _desiredFullscreenPending: Boolean = attrs.fullscreen != null
+    @Volatile private var _desiredFullscreen: Fullscreen? = attrs.fullscreen
 
     override val fullscreen: Fullscreen?
-        get() = _fullscreen
+        get() = if (_desiredFullscreenPending) _desiredFullscreen else _fullscreen
 
     /**
      * Enters or exits fullscreen on X11 via _NET_WM_STATE_FULLSCREEN.
@@ -379,21 +381,33 @@ class X11Window private constructor(
      * _NET_WM_STATE_FULLSCREEN atom — X11 WMs do not support exclusive mode.
      */
     override fun setFullscreen(fullscreen: Fullscreen?) {
+        val request = x11FullscreenRequest(_fullscreen, fullscreen, _visibilityState)
+        if (request.defer) {
+            _desiredFullscreenPending = true
+            _desiredFullscreen = fullscreen
+            return
+        }
+
+        _desiredFullscreenPending = false
+        _desiredFullscreen = null
+        if (!request.send) {
+            _fullscreen = fullscreen
+            return
+        }
+
+        applyFullscreenHint(fullscreen)
+        _fullscreen = fullscreen
+    }
+
+    private fun applyFullscreenHint(fullscreen: Fullscreen?) {
         val atom = internAtom(displayPtr, "_NET_WM_STATE_FULLSCREEN")
         when (fullscreen) {
-            null -> {
-                sendNetWmState(false, atom, 0L)
-                _fullscreen = null
-            }
-            is Fullscreen.Borderless -> {
-                sendNetWmState(true, atom, 0L)
-                _fullscreen = fullscreen
-            }
+            null -> sendNetWmState(false, atom, 0L)
+            is Fullscreen.Borderless -> sendNetWmState(true, atom, 0L)
             is Fullscreen.Exclusive  -> {
                 // Exclusive fullscreen not supported on X11 via EWMH — fall back to borderless.
                 // Note: XRandR mode-setting is possible but out of scope for R2.
                 sendNetWmState(true, atom, 0L)
-                _fullscreen = fullscreen // store requested mode for API parity
             }
         }
     }
@@ -1157,7 +1171,15 @@ class X11Window private constructor(
                     if (flush != null) flush.invokeExact(display) as Int
                 } catch (_: Throwable) {}
             }
-            X11_VISIBILITY_YES_WAIT -> _visibilityState = x11VisibilityAfterNotify(_visibilityState)
+            X11_VISIBILITY_YES_WAIT -> {
+                _visibilityState = x11VisibilityAfterNotify(_visibilityState)
+                if (_desiredFullscreenPending) {
+                    val desiredFullscreen = _desiredFullscreen
+                    _desiredFullscreenPending = false
+                    _desiredFullscreen = null
+                    setFullscreen(desiredFullscreen)
+                }
+            }
             X11_VISIBILITY_YES -> {}
         }
     }
@@ -1453,6 +1475,22 @@ internal fun x11VisibilityAfterNotify(current: Int): Int =
 
 internal fun x11VisibilityIsVisible(state: Int): Boolean =
     state == X11_VISIBILITY_YES
+
+internal data class X11FullscreenRequest(
+    val defer: Boolean,
+    val send: Boolean,
+)
+
+internal fun x11FullscreenRequest(
+    current: Fullscreen?,
+    requested: Fullscreen?,
+    visibilityState: Int,
+): X11FullscreenRequest =
+    if (visibilityState != X11_VISIBILITY_YES) {
+        X11FullscreenRequest(defer = true, send = false)
+    } else {
+        X11FullscreenRequest(defer = false, send = current != requested)
+    }
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,
