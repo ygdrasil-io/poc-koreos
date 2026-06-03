@@ -8,6 +8,7 @@
  */
 package org.graphiks.kadre.wayland
 
+import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.RawDisplayHandle
@@ -232,6 +233,17 @@ class WaylandWindowTest {
 
         assertIs<WindowRequestResult.Failure>(result)
         assertIs<RequestError.Unsupported>(result.error)
+    }
+
+    @Test
+    fun `Wayland cursor grab none is a success no-op like winit`() {
+        val window = WaylandWindow.createForTest()
+
+        assertEquals(WindowRequestResult.Success, window.setCursorGrab(CursorGrabMode.None))
+
+        val confined = window.setCursorGrab(CursorGrabMode.Confined)
+        assertIs<WindowRequestResult.Failure>(confined)
+        assertIs<RequestError.Unsupported>(confined.error)
     }
 
     @Test

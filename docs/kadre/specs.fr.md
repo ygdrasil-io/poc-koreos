@@ -656,6 +656,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 |----------------|--------|-------|-----|---------|-----|---------|-------|
 | `setCursor(CursorIcon)` | réel | réel | réel | no-op (libwayland-cursor TODO) | réel (CSS cursor) | no-op | no-op |
 | `setCursorVisible()` | réel | partiel (`ShowCursor` non rééquilibré — DEFERRED.md) | réel | no-op | réel (CSS) | no-op | no-op |
+| `setCursorGrab(None)` | réel | réel | réel | success no-op (parité winit) | réel | no-op | no-op |
 | `setCursorGrab(Confined)` | réel | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | réel | réel | réel | unsupported | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partiel (CGWarpMouseCursorPosition, cast scalaire) | réel | réel | unsupported | unsupported | unsupported | unsupported |
@@ -930,7 +931,7 @@ Points résiduels clés :
 - **Events DnD** (DragEntered/Moved/Dropped/Left) : API définie, tous les backends = no-op.
 - **Events gestes** (Pinch/Pan/Rotation/DoubleTap/TouchpadPressure) : émis sur AppKit et sur UIKit après opt-in explicite ; les autres backends restent non câblés.
 - **Event Occluded** : API définie ; AppKit et Web prévoient de l'émettre.
-- **ModifiersChanged** : émis sur AppKit/Win32/Web ; non câblé sur X11/Wayland/Android/UIKit.
+- **ModifiersChanged** : émis sur AppKit/Win32/Web/Android/UIKit/X11/Wayland pour les transitions de touches modificatrices ; la sémantique XKB locked/latched sous Linux reste future.
 - **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : no-op sur tous les backends (impl interface par défaut).
 - **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` et `setContentProtected` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; AppKit câble l’attention Dock, la protection de contenu et les boutons de fenêtre activés, Win32 câble le menu natif, les drags move/resize, les boutons de fenêtre activés, l’attention utilisateur et la protection de contenu, X11 et Wayland signalent la protection de contenu en success no-op comme winit, AppKit et X11 signalent le menu fenetre en success no-op comme winit, et Wayland câble menu/move/resize localement.
 - **Couverture clavier** : le modèle public suit maintenant winit (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), mais `KeyCode` et `NamedKey` ne sont pas encore exhaustifs et les champs riches restent dépendants des backends.

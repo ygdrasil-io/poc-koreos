@@ -655,6 +655,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 |---------|--------|-------|-----|---------|-----|---------|-------|
 | `setCursor(CursorIcon)` | real | real | real | no-op (libwayland-cursor TODO) | real (CSS cursor) | no-op | no-op |
 | `setCursorVisible()` | real | partial (`ShowCursor` not rebalanced — DEFERRED.md) | real | no-op | real (CSS) | no-op | no-op |
+| `setCursorGrab(None)` | real | real | real | success no-op (winit parity) | real | no-op | no-op |
 | `setCursorGrab(Confined)` | real | real | real | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | real | real | real | unsupported | unsupported (Pointer Lock bridge TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partial (CGWarpMouseCursorPosition, scalar cast) | real | real | unsupported | unsupported | unsupported | unsupported |
@@ -929,7 +930,7 @@ Key residual points:
 - **DnD events** (DragEntered/Moved/Dropped/Left): API defined, all backends no-op.
 - **Gesture events** (Pinch/Pan/Rotation/DoubleTap/TouchpadPressure): emitted on AppKit and on UIKit after explicit opt-in; other backends remain unwired.
 - **Occluded event**: API defined; only AppKit and Web plan to wire it.
-- **ModifiersChanged**: emitted on AppKit/Win32/Web; not yet wired on X11/Wayland/Android/UIKit.
+- **ModifiersChanged**: emitted on AppKit/Win32/Web/Android/UIKit/X11/Wayland for modifier key transitions; XKB locked/latched semantics on Linux remain future work.
 - **Custom cursors** (`createCustomCursor` / `setCustomCursor`): no-op on all backends (default interface impl).
 - **Misc window methods**: `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` and `setContentProtected` now return `WindowRequestResult` and report `RequestError.Unsupported` by default; AppKit wires Dock attention, content protection and enabled buttons, Win32 wires native menu, move/resize drags, enabled buttons, user attention and content protection, X11 and Wayland report content protection as success no-ops like winit, AppKit and X11 report window menu as success no-ops like winit, and Wayland wires menu/move/resize locally.
 - **Keyboard coverage**: the public model is now winit-style (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), but `KeyCode` and `NamedKey` are not yet exhaustive and rich fields remain backend-dependent.

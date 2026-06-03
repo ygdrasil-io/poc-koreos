@@ -478,15 +478,17 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * No-op on Wayland.
+     * Releases pointer grabs as a success no-op, matching winit.
      *
-     * Pointer confinement requires zwp_pointer_constraints_v1, which is an
-     * optional Wayland protocol extension not yet wired in this backend.
-     *
-     * TODO(R3-wayland-grab): implement via zwp_pointer_constraints_v1.
+     * Pointer confinement/locking requires zwp_pointer_constraints_v1, which is
+     * an optional Wayland protocol extension not yet wired in this backend.
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Wayland pointer constraints are not wired"))
+        if (mode == CursorGrabMode.None) {
+            WindowRequestResult.Success
+        } else {
+            WindowRequestResult.Failure(RequestError.Unsupported("Wayland pointer constraints are not wired"))
+        }
 
     /**
      * No-op on Wayland.

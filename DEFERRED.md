@@ -45,7 +45,7 @@ Dernière mise à jour : 2026-06-01
 |---|---|
 | **Win32** | enforcement min/max via `WM_GETMINMAXINFO` ; plein écran **exclusif** (`ChangeDisplaySettingsExW`, fallback borderless) ; `ShowCursor` non rééquilibré |
 | **X11** | `setResizable` → `XSetWMNormalHints` ; **texte clavier** → `XLookupString` (`text = null`) ; `ScaleFactorChanged` dynamique (RRNotify) |
-| **Wayland** | **curseur** → `libwayland-cursor` (no-op) ; **grab** → pointer-constraints (no-op) ; **texte clavier** → `xkb_state_key_get_utf8` (`text = null`) ; changement dynamique de décoration SSD/CSD ; plein écran exclusif N/A |
+| **Wayland** | **curseur** → `libwayland-cursor` (no-op) ; **grab** → `CursorGrabMode.None` success no-op comme winit, `Confined`/`Locked` restent à câbler via pointer-constraints ; **texte clavier** → `xkb_state_key_get_utf8` (`text = null`) ; changement dynamique de décoration SSD/CSD ; plein écran exclusif N/A |
 | **AppKit** | `outerPosition` en coords Cocoa bas-gauche non converties ; `CGWarpMouseCursorPosition` en scalaires (marche x64/arm64, non conforme spec FFM) |
 | **Web** | `setCustomCursor` / window level / transparent / blur / cursor-warp = no-op |
 
