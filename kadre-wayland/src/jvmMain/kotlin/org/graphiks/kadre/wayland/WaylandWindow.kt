@@ -226,17 +226,18 @@ class WaylandWindow private constructor(
 
     override val isDecorated: Boolean get() = _isDecorated
 
+    @Volatile private var _minSurfaceSize: PhysicalSize<Int>? = attrs.minSize
+    @Volatile private var _maxSurfaceSize: PhysicalSize<Int>? = attrs.maxSize
+    @Volatile private var _surfaceResizeIncrements: PhysicalSize<Int>? = attrs.resizeIncrements
+
     override fun setResizable(resizable: Boolean) {
         _isResizable = resizable
         // On Wayland, resizability is communicated via set_min_size / set_max_size:
         // setting min == max prevents the compositor from suggesting a different size.
         if (!resizable) {
-            val sz = _innerSize
-            xdg?.setMinSize(sz.width, sz.height)
-            xdg?.setMaxSize(sz.width, sz.height)
+            applyWaylandSurfaceConstraints()
         } else {
-            xdg?.setMinSize(0, 0)
-            xdg?.setMaxSize(0, 0)
+            applyWaylandSurfaceConstraints()
         }
         flushDisplay()
     }
@@ -264,17 +265,22 @@ class WaylandWindow private constructor(
     }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
-        val w = size?.width ?: 0
-        val h = size?.height ?: 0
-        xdg?.setMinSize(w, h)
+        _minSurfaceSize = size
+        applyWaylandSurfaceConstraints()
         flushDisplay()
     }
 
     override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
-        val w = size?.width ?: 0
-        val h = size?.height ?: 0
-        xdg?.setMaxSize(w, h)
+        _maxSurfaceSize = size
+        applyWaylandSurfaceConstraints()
         flushDisplay()
+    }
+
+    override val surfaceResizeIncrements: PhysicalSize<Int>?
+        get() = _surfaceResizeIncrements
+
+    override fun setSurfaceResizeIncrements(increments: PhysicalSize<Int>?) {
+        _surfaceResizeIncrements = increments
     }
 
     /**
@@ -396,9 +402,18 @@ class WaylandWindow private constructor(
      * @param width  New width suggested by the compositor in pixels (0 = leave unchanged).
      * @param height New height suggested by the compositor in pixels (0 = leave unchanged).
      */
-    fun onConfigure(width: Int, height: Int) {
+    fun onConfigure(width: Int, height: Int, applyResizeIncrements: Boolean = true) {
         if (width > 0 && height > 0) {
-            _innerSize = PhysicalSize(width, height)
+            val size = PhysicalSize(width, height)
+            _innerSize = if (applyResizeIncrements) {
+                waylandApplyResizeIncrements(
+                    size = size,
+                    minSize = _minSurfaceSize,
+                    increments = _surfaceResizeIncrements,
+                )
+            } else {
+                size
+            }
         }
     }
 
@@ -649,9 +664,10 @@ class WaylandWindow private constructor(
                     wmBasePtr = xdgWmBase,
                     surfacePtr = surface,
                     decorationManagerPtr = decorationManager,
-                    onResized = { w, h ->
-                        window._innerSize = PhysicalSize(w, h)
-                        window.onWindowEvent?.invoke(WindowEvent.Resized(PhysicalSize(w, h)))
+                    onResized = { w, h, applyResizeIncrements ->
+                        window.onConfigure(w, h, applyResizeIncrements)
+                        val size = window.innerSize
+                        window.onWindowEvent?.invoke(WindowEvent.Resized(size))
                         // Repaint once at the new size (on-demand rendering).
                         window.onWindowEvent?.invoke(WindowEvent.RedrawRequested)
                     },
@@ -660,8 +676,7 @@ class WaylandWindow private constructor(
                 window.xdg?.setTitle(attrs.title)
                 // Apply R1 attrs
                 if (attrs.maximized) window.xdg?.setMaximized(true)
-                attrs.minSize?.let { window.xdg?.setMinSize(it.width, it.height) }
-                attrs.maxSize?.let { window.xdg?.setMaxSize(it.width, it.height) }
+                window.applyWaylandSurfaceConstraints()
                 if (attrs.fullscreen != null) window.xdg?.setFullscreen(true)
             }
 
@@ -693,4 +708,33 @@ class WaylandWindow private constructor(
             attrs: WindowAttributes = WindowAttributes(),
         ): WaylandWindow = WaylandWindow(display, compositor, xdgWmBase, surface, attrs)
     }
+
+    private fun applyWaylandSurfaceConstraints() {
+        if (!_isResizable) {
+            val size = _innerSize
+            xdg?.setMinSize(size.width, size.height)
+            xdg?.setMaxSize(size.width, size.height)
+            return
+        }
+        xdg?.setMinSize(_minSurfaceSize?.width ?: 0, _minSurfaceSize?.height ?: 0)
+        xdg?.setMaxSize(_maxSurfaceSize?.width ?: 0, _maxSurfaceSize?.height ?: 0)
+    }
+}
+
+internal fun waylandApplyResizeIncrements(
+    size: PhysicalSize<Int>,
+    minSize: PhysicalSize<Int>?,
+    increments: PhysicalSize<Int>?,
+): PhysicalSize<Int> {
+    increments ?: return size
+    val widthIncrement = increments.width.takeIf { it > 0 } ?: return size
+    val heightIncrement = increments.height.takeIf { it > 0 } ?: return size
+    val baseWidth = minSize?.width ?: 0
+    val baseHeight = minSize?.height ?: 0
+    val deltaWidth = (size.width - baseWidth).coerceAtLeast(0)
+    val deltaHeight = (size.height - baseHeight).coerceAtLeast(0)
+    return PhysicalSize(
+        baseWidth + (deltaWidth / widthIncrement) * widthIncrement,
+        baseHeight + (deltaHeight / heightIncrement) * heightIncrement,
+    )
 }

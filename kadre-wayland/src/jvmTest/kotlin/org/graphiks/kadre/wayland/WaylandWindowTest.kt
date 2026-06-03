@@ -86,6 +86,85 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `surface resize increments are initialized from attrs and mutable`() {
+        val window = WaylandWindow.createForTest(
+            attrs = WindowAttributes(resizeIncrements = PhysicalSize(8, 16)),
+        )
+        assertEquals(PhysicalSize(8, 16), window.surfaceResizeIncrements)
+
+        window.setSurfaceResizeIncrements(PhysicalSize(4, 6))
+        assertEquals(PhysicalSize(4, 6), window.surfaceResizeIncrements)
+
+        window.setSurfaceResizeIncrements(null)
+        assertEquals(null, window.surfaceResizeIncrements)
+    }
+
+    @Test
+    fun `onConfigure applies resize increments from minimum size base`() {
+        val attrs = WindowAttributes(
+            minSize = PhysicalSize(100, 50),
+            resizeIncrements = PhysicalSize(30, 20),
+        )
+        val window = WaylandWindow.createForTest(attrs = attrs)
+
+        window.onConfigure(176, 99)
+
+        assertEquals(PhysicalSize(160, 90), window.innerSize)
+    }
+
+    @Test
+    fun `onConfigure can skip resize increments for compositor enforced sizes`() {
+        val attrs = WindowAttributes(
+            minSize = PhysicalSize(100, 50),
+            resizeIncrements = PhysicalSize(30, 20),
+        )
+        val window = WaylandWindow.createForTest(attrs = attrs)
+
+        window.onConfigure(176, 99, applyResizeIncrements = false)
+
+        assertEquals(PhysicalSize(176, 99), window.innerSize)
+    }
+
+    @Test
+    fun `Wayland resize increments apply only for resizing unconstrained states`() {
+        assertEquals(
+            true,
+            waylandShouldApplyResizeIncrements(
+                isResizing = true,
+                isMaximized = false,
+                isFullscreen = false,
+                isTiled = false,
+            ),
+        )
+        assertEquals(
+            false,
+            waylandShouldApplyResizeIncrements(
+                isResizing = true,
+                isMaximized = true,
+                isFullscreen = false,
+                isTiled = false,
+            ),
+        )
+        assertEquals(
+            false,
+            waylandShouldApplyResizeIncrements(
+                isResizing = false,
+                isMaximized = false,
+                isFullscreen = false,
+                isTiled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `wayland resize increments ignore invalid increments`() {
+        val size = PhysicalSize(176, 99)
+        assertEquals(size, waylandApplyResizeIncrements(size, PhysicalSize(100, 50), PhysicalSize(0, 20)))
+        assertEquals(size, waylandApplyResizeIncrements(size, PhysicalSize(100, 50), PhysicalSize(30, -1)))
+        assertEquals(size, waylandApplyResizeIncrements(size, PhysicalSize(100, 50), null))
+    }
+
+    @Test
     fun `onConfigure ignores zero dimensions`() {
         val attrs = WindowAttributes(size = PhysicalSize(800, 600))
         val window = WaylandWindow.createForTest(attrs = attrs)

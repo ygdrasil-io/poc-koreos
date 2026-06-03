@@ -36,7 +36,7 @@ internal class XdgToplevel private constructor(
     private val xdgSurfacePtr: Long,
     private val xdgToplevelPtr: Long,
     private val version: Int,
-    private val onResized: (Int, Int) -> Unit,
+    private val onResized: (Int, Int, Boolean) -> Unit,
     private val onClose: () -> Unit,
     private val arena: Arena,
 ) {
@@ -61,7 +61,19 @@ internal class XdgToplevel private constructor(
     /** xdg_toplevel.configure(width, height, states): a (0,0) size means "pick your own". */
     @Suppress("UNUSED_PARAMETER")
     fun onToplevelConfigure(data: MemorySegment, tl: MemorySegment, width: Int, height: Int, states: MemorySegment) {
-        if (width > 0 && height > 0) onResized(width, height)
+        if (width > 0 && height > 0) {
+            val configureStates = waylandToplevelConfigureStates(states)
+            onResized(
+                width,
+                height,
+                waylandShouldApplyResizeIncrements(
+                    isResizing = configureStates.resizing,
+                    isMaximized = configureStates.maximized,
+                    isFullscreen = configureStates.fullscreen,
+                    isTiled = configureStates.tiled,
+                ),
+            )
+        }
     }
 
     /** xdg_toplevel.close(): the user/compositor asked to close the window. */
@@ -224,7 +236,7 @@ internal class XdgToplevel private constructor(
             displayPtr: Long,
             wmBasePtr: Long,
             surfacePtr: Long,
-            onResized: (Int, Int) -> Unit,
+            onResized: (Int, Int, Boolean) -> Unit,
             onClose: () -> Unit,
             decorationManagerPtr: Long = 0L,
         ): XdgToplevel? {
@@ -362,5 +374,61 @@ internal class XdgToplevel private constructor(
                 null
             }
         }
+    }
+}
+
+internal data class WaylandToplevelConfigureStates(
+    val maximized: Boolean = false,
+    val fullscreen: Boolean = false,
+    val resizing: Boolean = false,
+    val tiled: Boolean = false,
+)
+
+internal fun waylandShouldApplyResizeIncrements(
+    isResizing: Boolean,
+    isMaximized: Boolean,
+    isFullscreen: Boolean,
+    isTiled: Boolean,
+    constrain: Boolean = false,
+): Boolean =
+    (constrain || isResizing) && !isMaximized && !isFullscreen && !isTiled
+
+private const val WAYLAND_WL_ARRAY_SIZE_OFFSET: Long = 0L
+private const val WAYLAND_WL_ARRAY_DATA_OFFSET: Long = 16L
+private const val XDG_TOPLEVEL_STATE_MAXIMIZED_VALUE: Int = 1
+private const val XDG_TOPLEVEL_STATE_FULLSCREEN_VALUE: Int = 2
+private const val XDG_TOPLEVEL_STATE_RESIZING_VALUE: Int = 3
+private const val XDG_TOPLEVEL_STATE_TILED_LEFT_VALUE: Int = 5
+private const val XDG_TOPLEVEL_STATE_TILED_RIGHT_VALUE: Int = 6
+private const val XDG_TOPLEVEL_STATE_TILED_TOP_VALUE: Int = 7
+private const val XDG_TOPLEVEL_STATE_TILED_BOTTOM_VALUE: Int = 8
+
+internal fun waylandToplevelConfigureStates(states: MemorySegment): WaylandToplevelConfigureStates {
+    if (states == MemorySegment.NULL) return WaylandToplevelConfigureStates()
+    return try {
+        val size = states.get(ValueLayout.JAVA_LONG, WAYLAND_WL_ARRAY_SIZE_OFFSET)
+        if (size <= 0L) return WaylandToplevelConfigureStates()
+        val data = states.get(ValueLayout.ADDRESS, WAYLAND_WL_ARRAY_DATA_OFFSET)
+        if (data == MemorySegment.NULL) return WaylandToplevelConfigureStates()
+        val items = data.reinterpret(size)
+        var maximized = false
+        var fullscreen = false
+        var resizing = false
+        var tiled = false
+        val count = (size / 4L).toInt()
+        for (index in 0 until count) {
+            when (items.getAtIndex(ValueLayout.JAVA_INT, index.toLong())) {
+                XDG_TOPLEVEL_STATE_MAXIMIZED_VALUE -> maximized = true
+                XDG_TOPLEVEL_STATE_FULLSCREEN_VALUE -> fullscreen = true
+                XDG_TOPLEVEL_STATE_RESIZING_VALUE -> resizing = true
+                XDG_TOPLEVEL_STATE_TILED_LEFT_VALUE,
+                XDG_TOPLEVEL_STATE_TILED_RIGHT_VALUE,
+                XDG_TOPLEVEL_STATE_TILED_TOP_VALUE,
+                XDG_TOPLEVEL_STATE_TILED_BOTTOM_VALUE -> tiled = true
+            }
+        }
+        WaylandToplevelConfigureStates(maximized, fullscreen, resizing, tiled)
+    } catch (_: Throwable) {
+        WaylandToplevelConfigureStates()
     }
 }
