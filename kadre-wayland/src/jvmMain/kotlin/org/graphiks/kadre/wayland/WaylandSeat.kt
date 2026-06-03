@@ -16,10 +16,10 @@
  * | wl_pointer  | motion        | PointerMoved (via WaylandMouseMapper)        |
  * | wl_pointer  | button        | MouseInput (via WaylandMouseMapper)          |
  * | wl_pointer  | axis          | MouseWheel (via WaylandMouseMapper)          |
- * | wl_touch    | down          | Touch(Started) (via WaylandTouchMapper)      |
- * | wl_touch    | up            | Touch(Ended)                                 |
- * | wl_touch    | motion        | Touch(Moved)                                 |
- * | wl_touch    | cancel        | Touch(Cancelled) for all active contacts     |
+ * | wl_touch    | down          | PointerEntered + PointerButton(Touch)        |
+ * | wl_touch    | up            | PointerButton(Touch) + PointerLeft           |
+ * | wl_touch    | motion        | PointerMoved(Touch)                          |
+ * | wl_touch    | cancel        | PointerButton(Touch) + PointerLeft           |
  *
  * ### wl_output (scale)
  * Binds `wl_output` and installs a `wl_output_listener` to receive the `scale` integer event.
@@ -43,13 +43,15 @@ import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 
+private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
+
 // ── wl_seat opcodes ───────────────────────────────────────────────────────────
 
-/** wl_seat.get_keyboard opcode. */
-private const val WL_SEAT_GET_KEYBOARD: Int = 0
-
 /** wl_seat.get_pointer opcode. */
-private const val WL_SEAT_GET_POINTER: Int = 1
+private const val WL_SEAT_GET_POINTER: Int = 0
+
+/** wl_seat.get_keyboard opcode. */
+private const val WL_SEAT_GET_KEYBOARD: Int = 1
 
 /** wl_seat.get_touch opcode. */
 private const val WL_SEAT_GET_TOUCH: Int = 2
@@ -106,8 +108,10 @@ private class WlOutputListener(
  *   0: keymap, 1: enter, 2: leave, 3: key, 4: modifiers, 5: repeat_info.
  */
 private class WlKeyboardListener(
-    private val onEvent: (WindowEvent) -> Unit,
+    private val onEvent: RoutedWindowEventSink,
 ) {
+    private var focusedSurfacePtr: Long = 0L
+
     @Suppress("UNUSED_PARAMETER")
     fun onKeymap(
         data: MemorySegment, keyboard: MemorySegment,
@@ -119,7 +123,8 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, surface: MemorySegment, keys: MemorySegment,
     ) {
-        onEvent(mapWaylandKeyboardFocused(true))
+        focusedSurfacePtr = surface.address()
+        onEvent(focusedSurfacePtr, mapWaylandKeyboardFocused(true))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -127,7 +132,9 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, surface: MemorySegment,
     ) {
-        onEvent(mapWaylandKeyboardFocused(false))
+        val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
+        onEvent(surfacePtr, mapWaylandKeyboardFocused(false))
+        if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -135,7 +142,7 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, time: Int, key: Int, state: Int,
     ) {
-        onEvent(mapWaylandKeyEvent(keycode = key, state = state))
+        onEvent(focusedSurfacePtr, mapWaylandKeyEvent(keycode = key, state = state))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -157,15 +164,15 @@ private class WlKeyboardListener(
  *   0: enter, 1: leave, 2: motion, 3: button, 4: axis,
  *   5: frame (v5+), 6: axis_source, 7: axis_stop, 8: axis_discrete.
  *
- * We cap the listener at 5 entries (enter→axis) to cover protocol versions 1–4.
- * Compositors that send v5+ events beyond index 4 will use the same vtable size
- * since wl_proxy_add_listener is told the version via the proxy itself.
+ * We install 9 entries (enter→axis_discrete) so wl_pointer remains safe when
+ * the seat is bound at a modern protocol version.
  */
 private class WlPointerListener(
-    private val onEvent: (WindowEvent) -> Unit,
+    private val onEvent: RoutedWindowEventSink,
     private val seatPtr: Long,
 ) {
     private var lastPosition: PhysicalPosition<Double> = PhysicalPosition(0.0, 0.0)
+    private var focusedSurfacePtr: Long = 0L
 
     @Suppress("UNUSED_PARAMETER")
     fun onEnter(
@@ -173,9 +180,10 @@ private class WlPointerListener(
         serial: Int, surface: MemorySegment, xFixed: Int, yFixed: Int,
     ) {
         WaylandPointerState.updateSeat(seatPtr)
-        WaylandPointerState.enterSurface(surface.address())
+        focusedSurfacePtr = surface.address()
+        WaylandPointerState.enterSurface(focusedSurfacePtr)
         lastPosition = PhysicalPosition(wlFixedToDouble(xFixed), wlFixedToDouble(yFixed))
-        onEvent(WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
+        onEvent(focusedSurfacePtr, WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -183,8 +191,10 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, surface: MemorySegment,
     ) {
-        WaylandPointerState.leaveSurface(surface.address())
-        onEvent(WindowEvent.PointerLeft(null, lastPosition, primary = true, kind = PointerKind.Mouse))
+        val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
+        WaylandPointerState.leaveSurface(surfacePtr)
+        onEvent(surfacePtr, WindowEvent.PointerLeft(null, lastPosition, primary = true, kind = PointerKind.Mouse))
+        if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -194,7 +204,7 @@ private class WlPointerListener(
     ) {
         val event = mapWaylandPointerMotion(xFixed, yFixed)
         lastPosition = event.position
-        onEvent(event)
+        onEvent(focusedSurfacePtr, event)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -204,7 +214,7 @@ private class WlPointerListener(
     ) {
         WaylandPointerState.updateSeat(seatPtr)
         WaylandPointerState.recordButton(serial, button, state)
-        onEvent(mapWaylandPointerButton(button, state, lastPosition))
+        onEvent(focusedSurfacePtr, mapWaylandPointerButton(button, state, lastPosition))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -212,8 +222,20 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         time: Int, axis: Int, valueFixed: Int,
     ) {
-        onEvent(mapWaylandPointerAxis(axis, valueFixed))
+        onEvent(focusedSurfacePtr, mapWaylandPointerAxis(axis, valueFixed))
     }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onFrame(data: MemorySegment, pointer: MemorySegment) { /* no-op */ }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onAxisSource(data: MemorySegment, pointer: MemorySegment, axisSource: Int) { /* no-op */ }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onAxisStop(data: MemorySegment, pointer: MemorySegment, time: Int, axis: Int) { /* no-op */ }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onAxisDiscrete(data: MemorySegment, pointer: MemorySegment, axis: Int, discrete: Int) { /* no-op */ }
 }
 
 // ── wl_touch listener ─────────────────────────────────────────────────────────
@@ -228,10 +250,16 @@ private class WlPointerListener(
  * events can carry the last known location (wl_touch.up does not include coordinates).
  */
 private class WlTouchListener(
-    private val onEvent: (WindowEvent) -> Unit,
+    private val onEvent: RoutedWindowEventSink,
 ) {
-    /** Last known position per touch id (in physical pixels as Double pair). */
-    private val lastPositions = mutableMapOf<Int, Pair<Double, Double>>()
+    private data class TouchContact(
+        val surfacePtr: Long,
+        val position: Pair<Double, Double>,
+    )
+
+    /** Last known surface and position per touch id. */
+    private val contacts = mutableMapOf<Int, TouchContact>()
+    private var primaryTouchId: Int? = null
 
     @Suppress("UNUSED_PARAMETER")
     fun onDown(
@@ -240,8 +268,11 @@ private class WlTouchListener(
     ) {
         val x = wlFixedToDouble(xFixed)
         val y = wlFixedToDouble(yFixed)
-        lastPositions[id] = x to y
-        mapWaylandTouchDown(id, xFixed, yFixed).forEach(onEvent)
+        val surfacePtr = surface.address()
+        contacts[id] = TouchContact(surfacePtr, x to y)
+        if (primaryTouchId == null) primaryTouchId = id
+        val primary = primaryTouchId == id
+        mapWaylandTouchDown(id, xFixed, yFixed, primary).forEach { event -> onEvent(surfacePtr, event) }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -249,9 +280,12 @@ private class WlTouchListener(
         data: MemorySegment, touch: MemorySegment,
         serial: Int, time: Int, id: Int,
     ) {
-        val (lx, ly) = lastPositions.remove(id) ?: (0.0 to 0.0)
+        val contact = contacts.remove(id) ?: return
+        val (lx, ly) = contact.position
+        val primary = primaryTouchId == id
+        if (contacts.isEmpty()) primaryTouchId = null
         // Build terminal events with the last known location (wl_touch.up has no coords).
-        mapWaylandTouchUp(id, PhysicalPosition(lx, ly)).forEach(onEvent)
+        mapWaylandTouchUp(id, PhysicalPosition(lx, ly), primary).forEach { event -> onEvent(contact.surfacePtr, event) }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -261,8 +295,9 @@ private class WlTouchListener(
     ) {
         val x = wlFixedToDouble(xFixed)
         val y = wlFixedToDouble(yFixed)
-        lastPositions[id] = x to y
-        onEvent(mapWaylandTouchMotion(id, xFixed, yFixed))
+        val surfacePtr = contacts[id]?.surfacePtr ?: return
+        contacts[id] = TouchContact(surfacePtr, x to y)
+        onEvent(surfacePtr, mapWaylandTouchMotion(id, xFixed, yFixed, primaryTouchId == id))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -271,12 +306,20 @@ private class WlTouchListener(
     @Suppress("UNUSED_PARAMETER")
     fun onCancel(data: MemorySegment, touch: MemorySegment) {
         // Cancel ALL active contacts.
-        for (id in lastPositions.keys.toList()) {
-            val (lx, ly) = lastPositions[id] ?: (0.0 to 0.0)
-            mapWaylandTouchCancel(id, PhysicalPosition(lx, ly)).forEach(onEvent)
+        for ((id, contact) in contacts.toMap()) {
+            val (lx, ly) = contact.position
+            mapWaylandTouchCancel(id, PhysicalPosition(lx, ly), primaryTouchId == id)
+                .forEach { event -> onEvent(contact.surfacePtr, event) }
         }
-        lastPositions.clear()
+        contacts.clear()
+        primaryTouchId = null
     }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onShape(data: MemorySegment, touch: MemorySegment, id: Int, major: Int, minor: Int) { /* no-op */ }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onOrientation(data: MemorySegment, touch: MemorySegment, id: Int, orientation: Int) { /* no-op */ }
 }
 
 // ── WaylandSeatBinding ────────────────────────────────────────────────────────
@@ -355,7 +398,7 @@ internal fun installSeatListeners(
     outputPtr: Long,
     seatVersion: Int,
     outputVersion: Int,
-    onEvent: (WindowEvent) -> Unit,
+    onEvent: RoutedWindowEventSink,
     onScaleChanged: (Int) -> Unit,
 ) {
     val addListener = wlProxyAddListener ?: return
@@ -487,7 +530,7 @@ private fun installKeyboardListener(
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
-    onEvent: (WindowEvent) -> Unit,
+    onEvent: RoutedWindowEventSink,
 ) {
     val listener = WlKeyboardListener(onEvent)
     val ptr = ValueLayout.ADDRESS.byteSize()
@@ -573,7 +616,7 @@ private fun installPointerListener(
     lookup: MethodHandles.Lookup,
     arena: Arena,
     seatPtr: Long,
-    onEvent: (WindowEvent) -> Unit,
+    onEvent: RoutedWindowEventSink,
 ) {
     val listener = WlPointerListener(onEvent, seatPtr)
     val ptr = ValueLayout.ADDRESS.byteSize()
@@ -630,12 +673,53 @@ private fun installPointerListener(
             ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
         arena,
     )
-    val vtable = arena.allocate(ptr * 5)
+    val frameStub = upcallStub(
+        lookup.findVirtual(WlPointerListener::class.java, "onFrame",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+        arena,
+    )
+    val axisSourceStub = upcallStub(
+        lookup.findVirtual(WlPointerListener::class.java, "onAxisSource",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+                Int::class.javaPrimitiveType,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+        arena,
+    )
+    val axisStopStub = upcallStub(
+        lookup.findVirtual(WlPointerListener::class.java, "onAxisStop",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+        arena,
+    )
+    val axisDiscreteStub = upcallStub(
+        lookup.findVirtual(WlPointerListener::class.java, "onAxisDiscrete",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+        arena,
+    )
+    val vtable = arena.allocate(ptr * 9)
     vtable.set(ValueLayout.ADDRESS, 0L,       enterStub)
     vtable.set(ValueLayout.ADDRESS, ptr,      leaveStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 2,  motionStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  buttonStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  axisStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 5,  frameStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 6,  axisSourceStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 7,  axisStopStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 8,  axisDiscreteStub)
     runCatching { addListener.invokeExact(pointer, vtable, MemorySegment.NULL) as Int }
 }
 
@@ -644,12 +728,12 @@ private fun installTouchListener(
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
-    onEvent: (WindowEvent) -> Unit,
+    onEvent: RoutedWindowEventSink,
 ) {
     val listener = WlTouchListener(onEvent)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
-    // vtable: down, up, motion, frame, cancel — 5 entries.
+    // vtable: down, up, motion, frame, cancel, shape, orientation — 7 entries for wl_touch v6+.
     val downStub = upcallStub(
         lookup.findVirtual(WlTouchListener::class.java, "onDown",
             MethodType.methodType(Void.TYPE,
@@ -699,12 +783,34 @@ private fun installTouchListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
         arena,
     )
-    val vtable = arena.allocate(ptr * 5)
+    val shapeStub = upcallStub(
+        lookup.findVirtual(WlTouchListener::class.java, "onShape",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+        arena,
+    )
+    val orientationStub = upcallStub(
+        lookup.findVirtual(WlTouchListener::class.java, "onOrientation",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS,
+            ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+        arena,
+    )
+    val vtable = arena.allocate(ptr * 7)
     vtable.set(ValueLayout.ADDRESS, 0L,       downStub)
     vtable.set(ValueLayout.ADDRESS, ptr,      upStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 2,  motionStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  frameStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  cancelStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 5,  shapeStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 6,  orientationStub)
     runCatching { addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int }
 }
 

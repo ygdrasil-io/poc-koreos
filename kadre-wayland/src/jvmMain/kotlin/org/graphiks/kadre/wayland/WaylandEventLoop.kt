@@ -259,7 +259,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
     )
 
     // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
-    // Route all input events into the eventQueue; events will be dispatched below in the main loop.
+    // Route all input events into the eventQueue by their source wl_surface.
     // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
     installSeatListeners(
         displayPtr    = displayPtr,
@@ -267,10 +267,8 @@ private fun runAppInternal(handler: ApplicationHandler) {
         outputPtr     = globals.outputPtr,
         seatVersion   = globals.seatVersion,
         outputVersion = globals.outputVersion,
-        onEvent = { event ->
-            // Dispatch to the first available window (input events target the focused window;
-            // on Wayland, the compositor ensures the keyboard surface matches the focused one).
-            val win = eventLoop.windows.values.firstOrNull() ?: return@installSeatListeners
+        onEvent = { surfacePtr, event ->
+            val win = eventLoop.windows[surfacePtr] ?: return@installSeatListeners
             eventLoop.eventQueue.add(win.id to event)
         },
         onScaleChanged = { scale ->

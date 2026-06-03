@@ -497,8 +497,10 @@ fun pumpEvents(controlFlow: ControlFlow) {
 | `wl_pointer.axis` | `WindowEvent.MouseWheel` |
 | `wl_keyboard.key` | `WindowEvent.KeyInput` (via libxkbcommon mapping) |
 | `wl_keyboard.enter`/`leave` | `WindowEvent.Focused` |
-| `wl_touch.down`/`up`/`motion` | `WindowEvent.Touch` |
+| `wl_touch.down`/`up`/`motion` | `WindowEvent.Pointer*` avec `PointerSource.Touch` |
 | `wl_output.scale` | `WindowEvent.ScaleFactorChanged` (per-output scale) |
+
+Les events d'input sont routés via le `wl_surface` source avant d'entrer dans la queue d'events Kadre. Les listeners pointer et clavier conservent la surface actuellement entrée/focalisée pour les callbacks protocole qui ne la répètent pas, tandis que le listener touch conserve la surface par contact actif.
 
 #### 3.4.4 RawWindowHandle
 

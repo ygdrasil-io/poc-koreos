@@ -694,18 +694,18 @@ internal val wlTouchInterface: MemorySegment? by lazy { libWaylandClient.symbol(
 /** &wl_output_interface — required by bind(wl_output). */
 internal val wlOutputInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_output_interface") }
 
-// ── wl_seat_get_keyboard / wl_seat_get_pointer / wl_seat_get_touch ────────────
+// ── wl_seat_get_pointer / wl_seat_get_keyboard / wl_seat_get_touch ────────────
 
 /**
- * wl_proxy_marshal_flags for wl_seat.get_keyboard (opcode 0).
+ * wl_proxy_marshal_flags for wl_seat.get_keyboard (opcode 1).
  *
- * Signature: wl_keyboard* wl_proxy_marshal_flags(seat, 0, &wl_keyboard_interface, version, flags, NULL).
+ * Signature: wl_keyboard* wl_proxy_marshal_flags(seat, 1, &wl_keyboard_interface, version, flags, NULL).
  */
 internal val wlSeatGetKeyboard: MethodHandle? by lazy {
     libWaylandClient.downcall("wl_proxy_marshal_flags",
         FunctionDescriptor.of(ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,   // wl_proxy* (seat)
-            ValueLayout.JAVA_INT,  // opcode = 0
+            ValueLayout.JAVA_INT,  // opcode = 1
             ValueLayout.ADDRESS,   // wl_interface* (&wl_keyboard_interface)
             ValueLayout.JAVA_INT,  // version
             ValueLayout.JAVA_INT,  // flags
@@ -714,15 +714,15 @@ internal val wlSeatGetKeyboard: MethodHandle? by lazy {
 }
 
 /**
- * wl_proxy_marshal_flags for wl_seat.get_pointer (opcode 1).
+ * wl_proxy_marshal_flags for wl_seat.get_pointer (opcode 0).
  *
- * Signature: wl_pointer* wl_proxy_marshal_flags(seat, 1, &wl_pointer_interface, version, flags, NULL).
+ * Signature: wl_pointer* wl_proxy_marshal_flags(seat, 0, &wl_pointer_interface, version, flags, NULL).
  */
 internal val wlSeatGetPointer: MethodHandle? by lazy {
     libWaylandClient.downcall("wl_proxy_marshal_flags",
         FunctionDescriptor.of(ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,   // wl_proxy* (seat)
-            ValueLayout.JAVA_INT,  // opcode = 1
+            ValueLayout.JAVA_INT,  // opcode = 0
             ValueLayout.ADDRESS,   // wl_interface* (&wl_pointer_interface)
             ValueLayout.JAVA_INT,  // version
             ValueLayout.JAVA_INT,  // flags
