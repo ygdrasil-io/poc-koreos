@@ -17,7 +17,9 @@ import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
+import org.graphiks.kadre.core.Icon
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -153,6 +155,30 @@ class Win32WindowTest {
         assertEquals(HWND_TOPMOST.address(), win32WindowLevelInsertAfter(WindowLevel.AlwaysOnTop).address())
         assertEquals(HWND_NOTOPMOST.address(), win32WindowLevelInsertAfter(WindowLevel.Normal).address())
         assertEquals(HWND_BOTTOM.address(), win32WindowLevelInsertAfter(WindowLevel.AlwaysOnBottom).address())
+    }
+
+    @Test
+    fun `window icon buffers convert RGBA to Win32 BGRA and inverted alpha mask`() {
+        val icon = Icon(
+            rgba = byteArrayOf(
+                0x11, 0x22, 0x33, 0xFF.toByte(),
+                0x44, 0x55, 0x66, 0x00,
+            ),
+            width = 2,
+            height = 1,
+        )
+
+        val buffers = win32IconBuffers(icon)
+
+        assertNotNull(buffers)
+        assertContentEquals(
+            byteArrayOf(
+                0x33, 0x22, 0x11, 0xFF.toByte(),
+                0x66, 0x55, 0x44, 0x00,
+            ),
+            buffers.bgra,
+        )
+        assertContentEquals(byteArrayOf(0x00, 0x01), buffers.andMask)
     }
 
     @Test

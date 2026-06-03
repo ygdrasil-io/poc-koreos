@@ -1235,6 +1235,43 @@ internal val sendMessageW: MethodHandle? by lazy {
 }
 
 /**
+ * HICON CreateIcon(HINSTANCE hInstance, int nWidth, int nHeight, BYTE cPlanes,
+ *                  BYTE cBitsPixel, const BYTE *lpbANDbits, const BYTE *lpbXORbits);
+ *
+ * Creates an HICON from Kadre RGBA pixels converted to Win32 BGRA pixels.
+ */
+internal val createIcon: MethodHandle? by lazy {
+    user32.downcall(
+        "CreateIcon",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // HICON
+            ValueLayout.ADDRESS,    // HINSTANCE
+            ValueLayout.JAVA_INT,   // int nWidth
+            ValueLayout.JAVA_INT,   // int nHeight
+            ValueLayout.JAVA_BYTE,  // BYTE cPlanes
+            ValueLayout.JAVA_BYTE,  // BYTE cBitsPixel
+            ValueLayout.ADDRESS,    // const BYTE *lpbANDbits
+            ValueLayout.ADDRESS,    // const BYTE *lpbXORbits
+        )
+    )
+}
+
+/**
+ * BOOL DestroyIcon(HICON hIcon);
+ *
+ * Releases HICON handles created by [createIcon].
+ */
+internal val destroyIcon: MethodHandle? by lazy {
+    user32.downcall(
+        "DestroyIcon",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HICON
+        )
+    )
+}
+
+/**
  * BOOL PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
  *
  * Queues a message without re-entering the current window procedure.

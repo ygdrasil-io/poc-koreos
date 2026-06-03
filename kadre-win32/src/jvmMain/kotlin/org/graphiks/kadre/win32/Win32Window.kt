@@ -74,6 +74,9 @@ class Win32Window private constructor(
     /** Tracks enabled title-bar/system-menu buttons, matching winit's WindowButtons model. */
     @Volatile private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
+    private val iconLock = Any()
+    private var ownedWindowIconHandle: MemorySegment = MemorySegment.NULL
+
     override val id: WindowId = WindowId(hwnd.address())
 
     override val rawWindowHandle: RawWindowHandle
@@ -178,6 +181,7 @@ class Win32Window private constructor(
 
     override fun close() {
         val handle = destroyWindow ?: return
+        setWindowIcon(null)
         handle.invokeExact(hwnd) as Int
     }
 
@@ -803,20 +807,27 @@ class Win32Window private constructor(
     /**
      * Sets the window icon via WM_SETICON.
      *
-     * Creates an HICON from the RGBA data via CreateIconFromResourceEx (best-effort).
-     * Note: risk FFM — CreateIconFromResourceEx requires a packed DIB-format buffer.
-     *
-     * TODO(R3-win32-icon): full CreateBitmap + CreateIconIndirect implementation.
+     * Mirrors winit's Win32 RGBA path: Kadre's RGBA bytes are converted to
+     * BGRA color bits and paired with an inverted-alpha AND mask for CreateIcon.
      */
     override fun setWindowIcon(icon: Icon?) {
+        var newHandle = MemorySegment.NULL
         try {
-            // Pass NULL to reset the icon
-            sendMessageW?.invokeExact(hwnd, WM_SETICON, ICON_SMALL, 0L) as? Long
-            sendMessageW?.invokeExact(hwnd, WM_SETICON, ICON_BIG, 0L) as? Long
-            if (icon == null) return
-            // TODO: full icon creation from RGBA data (CreateBitmap / CreateIconIndirect).
-            // Current implementation resets to default (null HICON).
+            if (icon != null) {
+                newHandle = win32CreateIcon(hInstance, icon) ?: return
+            }
+            val send = sendMessageW ?: return
+            synchronized(iconLock) {
+                send.invokeExact(hwnd, WM_SETICON, ICON_SMALL, newHandle.address()) as Long
+                val oldHandle = ownedWindowIconHandle
+                ownedWindowIconHandle = newHandle
+                win32DestroyIcon(oldHandle)
+                newHandle = MemorySegment.NULL
+            }
         } catch (_: Throwable) {}
+        finally {
+            win32DestroyIcon(newHandle)
+        }
     }
 
     override fun setContentProtected(protected: Boolean): WindowRequestResult =
@@ -1094,6 +1105,7 @@ class Win32Window private constructor(
             Win32FocusState.register(hwnd.address())
             window.applyEnabledButtons(attrs.enabledButtons)
             window.setWindowLevel(attrs.windowLevel)
+            attrs.windowIcon?.let(window::setWindowIcon)
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
             // instead of being emulated as mouse input. Best-effort: ignored on
@@ -1266,4 +1278,71 @@ private fun fillKeyboardInput(inputs: MemorySegment, index: Int, scanCode: Int, 
     inputs.set(ValueLayout.JAVA_INT, offset + INPUT_OFFSET_KI_DWFLAGS, flags)
     inputs.set(ValueLayout.JAVA_INT, offset + INPUT_OFFSET_KI_TIME, 0)
     inputs.set(ValueLayout.JAVA_LONG, offset + INPUT_OFFSET_KI_DWEXTRAINFO, 0L)
+}
+
+internal data class Win32IconBuffers(
+    val andMask: ByteArray,
+    val bgra: ByteArray,
+)
+
+internal fun win32IconBuffers(icon: Icon): Win32IconBuffers? {
+    if (icon.width <= 0 || icon.height <= 0) return null
+    val pixelCount = icon.width.toLong() * icon.height.toLong()
+    val byteCount = pixelCount * 4L
+    if (byteCount > Int.MAX_VALUE || icon.rgba.size != byteCount.toInt()) return null
+
+    val andMask = ByteArray(pixelCount.toInt())
+    val bgra = ByteArray(byteCount.toInt())
+    var source = 0
+    var target = 0
+    var pixel = 0
+    while (source < icon.rgba.size) {
+        val red = icon.rgba[source]
+        val green = icon.rgba[source + 1]
+        val blue = icon.rgba[source + 2]
+        val alpha = icon.rgba[source + 3]
+
+        bgra[target] = blue
+        bgra[target + 1] = green
+        bgra[target + 2] = red
+        bgra[target + 3] = alpha
+        andMask[pixel] = ((alpha.toInt() and 0xFF) - 255).toByte()
+
+        source += 4
+        target += 4
+        pixel += 1
+    }
+    return Win32IconBuffers(andMask = andMask, bgra = bgra)
+}
+
+private fun win32CreateIcon(hInstance: MemorySegment, icon: Icon): MemorySegment? {
+    val create = createIcon ?: return null
+    val buffers = win32IconBuffers(icon) ?: return null
+    return Arena.ofConfined().use { arena ->
+        val andMask = arena.allocate(buffers.andMask.size.toLong(), 1L)
+        val bgra = arena.allocate(buffers.bgra.size.toLong(), 1L)
+        for (index in buffers.andMask.indices) {
+            andMask.setAtIndex(ValueLayout.JAVA_BYTE, index.toLong(), buffers.andMask[index])
+        }
+        for (index in buffers.bgra.indices) {
+            bgra.setAtIndex(ValueLayout.JAVA_BYTE, index.toLong(), buffers.bgra[index])
+        }
+        val handle = create.invokeExact(
+            hInstance,
+            icon.width,
+            icon.height,
+            1.toByte(),
+            32.toByte(),
+            andMask,
+            bgra,
+        ) as MemorySegment
+        handle.takeUnless { it == MemorySegment.NULL }
+    }
+}
+
+private fun win32DestroyIcon(handle: MemorySegment) {
+    if (handle == MemorySegment.NULL) return
+    try {
+        destroyIcon?.invokeExact(handle) as? Int
+    } catch (_: Throwable) {}
 }
