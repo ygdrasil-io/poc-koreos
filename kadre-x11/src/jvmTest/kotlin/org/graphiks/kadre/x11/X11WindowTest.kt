@@ -4,6 +4,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.Theme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -74,6 +75,13 @@ class X11WindowTest {
         assertEquals(X11WindowLevelState(above = true, below = false), x11WindowLevelState(WindowLevel.AlwaysOnTop))
         assertEquals(X11WindowLevelState(above = false, below = false), x11WindowLevelState(WindowLevel.Normal))
         assertEquals(X11WindowLevelState(above = false, below = true), x11WindowLevelState(WindowLevel.AlwaysOnBottom))
+    }
+
+    @Test
+    fun `X11 theme variants match winit GTK theme hint values`() {
+        assertEquals("dark", x11ThemeVariant(Theme.Dark))
+        assertEquals("light", x11ThemeVariant(Theme.Light))
+        assertEquals("dark", x11ThemeVariant(null))
     }
 
     @Test

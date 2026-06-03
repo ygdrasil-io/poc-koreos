@@ -666,7 +666,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | Feature | appkit | win32 | x11 | wayland | web | android | uikit |
 |---------|--------|-------|-----|---------|-----|---------|-------|
 | `systemTheme()` | real (NSApp.effectiveAppearance) | real (Registry AppsUseLightTheme) | always null (no standard) | always null (portal TODO) | real (matchMedia) | real (UiModeManager) | real (UITraitCollection) |
-| `setTheme(theme?)` | real (NSAppearance per-window) | real | no-op | no-op | no-op | no-op | no-op |
+| `setTheme(theme?)` | real (NSAppearance per-window) | real | real (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `ThemeChanged` event | real | real | not emitted | not emitted | not emitted | not emitted | not emitted |
 
 **Platform matrix — appearance:**
@@ -674,6 +674,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | Feature | appkit | win32 | x11 | wayland | web | android | uikit |
 |---------|--------|-------|-----|---------|-----|---------|-------|
 | `setWindowLevel()` | real | real | real | real (xdg layer) | no-op | no-op | no-op |
+| `setTheme()` | real | real | real (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | real | real | real | real | no-op | no-op | no-op |
 | `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (winit AppKit parity) | real (WM_SETICON/ICON_SMALL) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |

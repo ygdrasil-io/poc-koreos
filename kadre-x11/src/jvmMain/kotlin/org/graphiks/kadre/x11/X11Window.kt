@@ -493,18 +493,43 @@ class X11Window private constructor(
         )
 
     /**
-     * Returns null — X11 has no standard theme API.
-     *
-     * The xsettings daemon or GTK theme variables could be queried, but there
-     * is no reliable cross-distribution standard. Documented null.
+     * Returns null, matching winit X11: the backend can request a GTK theme
+     * variant but does not expose a reliable current per-window theme query.
      */
     override val theme: Theme? get() = null
 
     /**
-     * No-op — X11 has no standard theme API.
+     * Requests a GTK theme variant through `_GTK_THEME_VARIANT`.
+     *
+     * This follows winit's X11 behavior. `null` maps to `"dark"`, which asks
+     * GTK-aware window managers/toolkits to use their dark variant.
      */
     override fun setTheme(theme: Theme?) {
-        // No-op: X11 does not expose a standard theme control API.
+        try {
+            val display = MemorySegment.ofAddress(displayPtr)
+            val themeVariantAtom = internAtom(displayPtr, "_GTK_THEME_VARIANT")
+            val utf8StringAtom = internAtom(displayPtr, "UTF8_STRING")
+            if (themeVariantAtom == 0L || utf8StringAtom == 0L) return
+            val variant = x11ThemeVariant(theme)
+            Arena.ofConfined().use { arena ->
+                val bytes = variant.toByteArray(Charsets.UTF_8)
+                val data = arena.allocate(bytes.size.toLong(), 1L)
+                for (index in bytes.indices) {
+                    data.set(ValueLayout.JAVA_BYTE, index.toLong(), bytes[index])
+                }
+                xChangeProperty?.invokeExact(
+                    display,
+                    xWindowId,
+                    themeVariantAtom,
+                    utf8StringAtom,
+                    8,
+                    0,
+                    data,
+                    bytes.size,
+                ) as? Int
+                xFlush?.invokeExact(display) as? Int
+            }
+        } catch (_: Throwable) {}
     }
 
     /**
@@ -940,6 +965,7 @@ class X11Window private constructor(
             }
 
             val window = X11Window(display, screen, xWindowId, attrs)
+            attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()
 
             // ── 6. XMapWindow (if visible) ────────────────────────────────────
@@ -1181,6 +1207,13 @@ internal fun x11WindowLevelState(level: WindowLevel): X11WindowLevelState =
         WindowLevel.AlwaysOnTop -> X11WindowLevelState(above = true, below = false)
         WindowLevel.Normal -> X11WindowLevelState(above = false, below = false)
         WindowLevel.AlwaysOnBottom -> X11WindowLevelState(above = false, below = true)
+    }
+
+internal fun x11ThemeVariant(theme: Theme?): String =
+    when (theme) {
+        Theme.Dark -> "dark"
+        Theme.Light -> "light"
+        null -> "dark"
     }
 
 internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =

@@ -667,7 +667,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | Fonctionnalité | appkit | win32 | x11 | wayland | web | android | uikit |
 |----------------|--------|-------|-----|---------|-----|---------|-------|
 | `systemTheme()` | réel (NSApp.effectiveAppearance) | réel (registre AppsUseLightTheme) | toujours null (pas de standard) | toujours null (portail TODO) | réel (matchMedia) | réel (UiModeManager) | réel (UITraitCollection) |
-| `setTheme(theme?)` | réel (NSAppearance par fenêtre) | réel | no-op | no-op | no-op | no-op | no-op |
+| `setTheme(theme?)` | réel (NSAppearance par fenêtre) | réel | réel (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | Événement `ThemeChanged` | réel | réel | non émis | non émis | non émis | non émis | non émis |
 
 **Matrice plateforme — apparence :**
@@ -675,6 +675,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | Fonctionnalité | appkit | win32 | x11 | wayland | web | android | uikit |
 |----------------|--------|-------|-----|---------|-----|---------|-------|
 | `setWindowLevel()` | réel | réel | réel | réel (xdg layer) | no-op | no-op | no-op |
+| `setTheme()` | réel | réel | réel (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | réel | réel | réel | réel | no-op | no-op | no-op |
 | `setBlur()` | réel (NSVisualEffectView) | réel (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (parité AppKit winit) | réel (WM_SETICON/ICON_SMALL) | réel (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
