@@ -91,6 +91,10 @@ class WinitWindowingCompatibilityTest {
         assertUnsupported(window.showWindowMenu(PhysicalPosition(10, 20)))
         assertUnsupported(window.dragWindow())
         assertUnsupported(window.dragResizeWindow(ResizeDirection.SouthEast))
+        assertUnsupported(window.requestUserAttention(UserAttentionType.Informational))
+        assertUnsupported(window.requestUserAttention(null))
+        assertUnsupported(window.setContentProtected(true))
+        assertUnsupported(window.setContentProtected(false))
     }
 
     @Test
@@ -195,7 +199,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window appearance/state setters",
                 kadreApi = "setWindowLevel, requestUserAttention, setTheme, theme, setTransparent, setBlur, setWindowIcon, setContentProtected",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre exposes these methods, but several are still default no-ops or backend-incomplete; AppKit content protection is implemented.",
+                note = "Kadre exposes these methods; requestUserAttention and setContentProtected now return typed WindowRequestResult failures on unsupported backends. setWindowIcon is implemented on Win32/X11 and intentionally no-op on AppKit like winit. X11 setTheme writes _GTK_THEME_VARIANT like winit while theme remains null; other appearance setters still need the same fallible-result audit.",
             ),
             WinitWindowingApi(
                 winitApi = "Window reset_dead_keys",
@@ -225,19 +229,19 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window drag_window",
                 kadreApi = "Window.dragWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native desktop drag support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; AppKit uses the current NSEvent and reports RequestError.Ignored when none is available, Win32 queues cross-thread requests onto the message thread, X11 sends _NET_WM_MOVERESIZE, and Wayland sends xdg_toplevel.move. Final native drag completion is fire-and-forget.",
             ),
             WinitWindowingApi(
                 winitApi = "Window drag_resize_window",
                 kadreApi = "Window.dragResizeWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native desktop resize-drag support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 queues cross-thread requests onto the message thread, X11 sends _NET_WM_MOVERESIZE, and Wayland sends xdg_toplevel.resize. AppKit is unsupported like winit; final native resize completion is fire-and-forget.",
             ),
             WinitWindowingApi(
                 winitApi = "Window show_window_menu",
                 kadreApi = "Window.showWindowMenu",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native menu support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 system-menu support is wired, Wayland sends xdg_toplevel.show_window_menu, while AppKit and X11 remain unsupported/no-op like local winit.",
             ),
             WinitWindowingApi(
                 winitApi = "Window.request_ime_update",
@@ -291,7 +295,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "WindowRequestResult and RequestError",
                 kadreApi = "WindowRequestResult, SurfaceSizeRequestResult, RequestError",
                 status = WinitWindowingStatus.Implemented,
-                note = "Kadre has support result types for fallible requests, though not all Window methods use them yet.",
+                note = "Kadre has support result types for fallible requests, including RequestError.Ignored for winit ignored requests; appearance setters are being migrated away from silent no-ops incrementally.",
             ),
         )
     }
