@@ -16,7 +16,7 @@ Dernière mise à jour : 2026-06-01
 
 ## 2. API winit jamais reprise (aucun ticket)
 
-- `WindowButtons` — `setEnabledButtons` / `enabledButtons`.
+- `WindowButtons` — `setEnabledButtons` / `enabledButtons`: API commune présente; Win32 câblé localement via `WS_MINIMIZEBOX`, `WS_MAXIMIZEBOX` et `EnableMenuItem(SC_CLOSE)`, autres backends encore à compléter.
 - `surfaceResizeIncrements` (redimensionnement par incréments).
 - `safeArea` / `Insets` (avait été envisagé pour R5, abandonné).
 - `ActivationTokenDone` (event) — listé à l'analyse d'écart, non implémenté (seul `Occluded` ajouté).

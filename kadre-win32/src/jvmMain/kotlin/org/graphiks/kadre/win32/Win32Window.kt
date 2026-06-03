@@ -29,6 +29,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
@@ -68,6 +69,9 @@ class Win32Window private constructor(
 
     /** Saved window rect before entering borderless fullscreen (for restoration). */
     @Volatile private var _savedRect: IntArray? = null
+
+    /** Tracks enabled title-bar/system-menu buttons, matching winit's WindowButtons model. */
+    @Volatile private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
     override val id: WindowId = WindowId(hwnd.address())
 
@@ -211,7 +215,7 @@ class Win32Window private constructor(
             // SWP with no-op move/size forces the frame to redraw immediately.
             setWindowPos?.invokeExact(
                 hwnd, MemorySegment.NULL, 0, 0, 0, 0,
-                SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE or 0x0020 /* SWP_FRAMECHANGED */,
+                WIN32_STYLE_UPDATE_FLAGS,
             ) as? Int
         } catch (_: Throwable) {}
     }
@@ -260,10 +264,41 @@ class Win32Window private constructor(
             WS_MINIMIZEBOX.toLong() or WS_MAXIMIZEBOX.toLong()).inv()
         }
         setWindowStyle(newStyle)
+        applyEnabledButtons(enabledButtons)
     }
 
     override val isDecorated: Boolean
         get() = (getWindowStyle() and WS_CAPTION.toLong()) != 0L
+
+    override fun setEnabledButtons(buttons: WindowButtons) {
+        _enabledButtons = buttons
+        applyEnabledButtons(buttons)
+    }
+
+    override val enabledButtons: WindowButtons
+        get() = _enabledButtons
+
+    private fun applyEnabledButtons(buttons: WindowButtons) {
+        val style = getWindowStyle()
+        val decorated = (style and WS_CAPTION.toLong()) != 0L
+        val newStyle = style.withEnabledWindowButtonStyles(buttons, decorated)
+        if (newStyle != style) {
+            setWindowStyle(newStyle)
+        }
+        updateCloseMenuItem(buttons.contains(WindowButtons.CLOSE))
+    }
+
+    private fun updateCloseMenuItem(enabled: Boolean) {
+        try {
+            val menu = getSystemMenu?.invokeExact(hwnd, 0) as? MemorySegment ?: return
+            if (menu == MemorySegment.NULL) return
+            enableMenuItem?.invokeExact(
+                menu,
+                SC_CLOSE,
+                win32CloseMenuState(enabled),
+            ) as? Int
+        } catch (_: Throwable) {}
+    }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
         // Win32 min/max size is enforced via WM_GETMINMAXINFO in the WndProc.
@@ -391,7 +426,7 @@ class Win32Window private constructor(
         setWindowPos?.invokeExact(
             hwnd, HWND_TOP,
             mx, my, mw, mh,
-            SWP_NOACTIVATE or 0x0020 /* SWP_FRAMECHANGED */,
+            SWP_NOACTIVATE or SWP_FRAMECHANGED,
         ) as? Int
 
         _fullscreen = Fullscreen.Borderless(monitor)
@@ -408,7 +443,7 @@ class Win32Window private constructor(
                 setWindowPos?.invokeExact(
                     hwnd, HWND_TOP,
                     savedRect[0], savedRect[1], w, h,
-                    SWP_NOACTIVATE or 0x0020 /* SWP_FRAMECHANGED */,
+                    SWP_NOACTIVATE or SWP_FRAMECHANGED,
                 ) as? Int
             }
             _savedStyle = null
@@ -1016,6 +1051,7 @@ class Win32Window private constructor(
             } else {
                 0x80000000.toInt() // WS_POPUP — borderless, no caption
             }
+            val buttonStyle = win32StyleWithEnabledButtons(baseStyle, attrs.enabledButtons, attrs.decorations)
 
             val hwnd: MemorySegment = Arena.ofConfined().use { arena ->
                 val titlePtr = arena.allocateWString(attrs.title)
@@ -1023,7 +1059,7 @@ class Win32Window private constructor(
                     WS_EX_APPWINDOW,        // dwExStyle
                     classNamePtr,           // lpClassName
                     titlePtr,               // lpWindowName
-                    baseStyle,              // dwStyle
+                    buttonStyle,            // dwStyle
                     posX,                   // X
                     posY,                   // Y
                     width,                  // nWidth
@@ -1038,6 +1074,7 @@ class Win32Window private constructor(
             if (hwnd == MemorySegment.NULL) return null
 
             val window = Win32Window(hwnd, hInstance, attrs, currentWin32ThreadId())
+            window.applyEnabledButtons(attrs.enabledButtons)
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
             // instead of being emulated as mouse input. Best-effort: ignored on
@@ -1089,3 +1126,29 @@ internal fun cursorIdcResource(cursor: CursorIcon): Long = when (cursor) {
     CursorIcon.Wait           -> IDC_WAIT
     CursorIcon.Progress       -> IDC_APPSTARTING
 }
+
+internal const val WIN32_STYLE_UPDATE_FLAGS: Int =
+    SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or SWP_FRAMECHANGED
+
+internal fun win32CloseMenuState(enabled: Boolean): Int =
+    MF_BYCOMMAND or if (enabled) MF_ENABLED else MF_DISABLED
+
+internal fun win32StyleWithEnabledButtons(
+    style: Int,
+    buttons: WindowButtons,
+    decorated: Boolean = true,
+): Int =
+    style
+        .withStyleBit(WS_MINIMIZEBOX, decorated && buttons.contains(WindowButtons.MINIMIZE))
+        .withStyleBit(WS_MAXIMIZEBOX, decorated && buttons.contains(WindowButtons.MAXIMIZE))
+
+private fun Long.withEnabledWindowButtonStyles(buttons: WindowButtons, decorated: Boolean): Long =
+    this
+        .withStyleBit(WS_MINIMIZEBOX.toLong(), decorated && buttons.contains(WindowButtons.MINIMIZE))
+        .withStyleBit(WS_MAXIMIZEBOX.toLong(), decorated && buttons.contains(WindowButtons.MAXIMIZE))
+
+private fun Int.withStyleBit(bit: Int, enabled: Boolean): Int =
+    if (enabled) this or bit else this and bit.inv()
+
+private fun Long.withStyleBit(bit: Long, enabled: Boolean): Long =
+    if (enabled) this or bit else this and bit.inv()

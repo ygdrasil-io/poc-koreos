@@ -13,6 +13,7 @@
 package org.graphiks.kadre.win32
 
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
 import kotlin.test.Test
@@ -72,6 +73,43 @@ class Win32WindowTest {
         assertEquals(0, SW_HIDE)
         assertEquals(0x0003, CS_HREDRAW_VREDRAW)
         assertEquals(0x0002, WM_DESTROY)
+    }
+
+    @Test
+    fun `enabled window buttons update minimize and maximize style bits`() {
+        val base = WS_OVERLAPPEDWINDOW
+
+        val closeOnly = win32StyleWithEnabledButtons(base, WindowButtons.CLOSE)
+        assertEquals(0, closeOnly and WS_MINIMIZEBOX)
+        assertEquals(0, closeOnly and WS_MAXIMIZEBOX)
+
+        val minimizeOnly = win32StyleWithEnabledButtons(base, WindowButtons.MINIMIZE)
+        assertTrue((minimizeOnly and WS_MINIMIZEBOX) != 0)
+        assertEquals(0, minimizeOnly and WS_MAXIMIZEBOX)
+
+        val maximizeOnly = win32StyleWithEnabledButtons(base, WindowButtons.MAXIMIZE)
+        assertEquals(0, maximizeOnly and WS_MINIMIZEBOX)
+        assertTrue((maximizeOnly and WS_MAXIMIZEBOX) != 0)
+
+        val all = win32StyleWithEnabledButtons(closeOnly, WindowButtons.ALL)
+        assertTrue((all and WS_MINIMIZEBOX) != 0)
+        assertTrue((all and WS_MAXIMIZEBOX) != 0)
+
+        val undecorated = win32StyleWithEnabledButtons(base, WindowButtons.ALL, decorated = false)
+        assertEquals(0, undecorated and WS_MINIMIZEBOX)
+        assertEquals(0, undecorated and WS_MAXIMIZEBOX)
+    }
+
+    @Test
+    fun `enabled window buttons use winit close menu flags`() {
+        assertEquals(MF_BYCOMMAND or MF_ENABLED, win32CloseMenuState(enabled = true))
+        assertEquals(MF_BYCOMMAND or MF_DISABLED, win32CloseMenuState(enabled = false))
+    }
+
+    @Test
+    fun `style updates preserve current position`() {
+        assertTrue((WIN32_STYLE_UPDATE_FLAGS and SWP_NOMOVE) != 0)
+        assertTrue((WIN32_STYLE_UPDATE_FLAGS and SWP_FRAMECHANGED) != 0)
     }
 
     @Test

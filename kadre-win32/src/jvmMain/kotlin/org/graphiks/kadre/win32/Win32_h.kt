@@ -780,6 +780,8 @@ internal const val SC_RESTORE: Int = 0xF120
 
 /** EnableMenuItem flags. */
 internal const val MF_BYCOMMAND: Int = 0x0000
+internal const val MF_ENABLED: Int = 0x0000
+internal const val MF_DISABLED: Int = 0x0002
 internal const val MFS_ENABLED: Int = 0x0000
 internal const val MFS_DISABLED: Int = 0x0003
 
@@ -1047,6 +1049,9 @@ internal const val SWP_NOZORDER: Int = 0x0004
 
 /** SWP_NOACTIVATE — do not activate the window when moving it. */
 internal const val SWP_NOACTIVATE: Int = 0x0010
+
+/** SWP_FRAMECHANGED — apply non-client frame changes after style updates. */
+internal const val SWP_FRAMECHANGED: Int = 0x0020
 
 /** WS_VISIBLE — window is visible. */
 internal const val WS_VISIBLE: Int = 0x10000000
