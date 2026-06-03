@@ -100,6 +100,25 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `transparent hint is initialized from attrs and mutable`() {
+        val window = WaylandWindow.createForTest(
+            attrs = WindowAttributes(transparent = true),
+        )
+        assertEquals(true, window.transparentHint)
+
+        window.setTransparent(false)
+        assertEquals(false, window.transparentHint)
+
+        window.setTransparent(true)
+        assertEquals(true, window.transparentHint)
+    }
+
+    @Test
+    fun `Wayland opaque region uses full positive extent like winit`() {
+        assertEquals(Int.MAX_VALUE, WAYLAND_OPAQUE_REGION_EXTENT)
+    }
+
+    @Test
     fun `onConfigure applies resize increments from minimum size base`() {
         val attrs = WindowAttributes(
             minSize = PhysicalSize(100, 50),

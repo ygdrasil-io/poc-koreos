@@ -41,9 +41,15 @@ import kotlin.math.roundToInt
 
 /** wl_compositor.create_surface opcode in the core Wayland protocol. */
 private const val WL_COMPOSITOR_CREATE_SURFACE_OPCODE: Int = 0
+private const val WL_COMPOSITOR_CREATE_REGION_OPCODE: Int = 1
 
 /** wl_surface.commit opcode in the core Wayland protocol. */
 private const val WL_SURFACE_COMMIT_OPCODE: Int = 6
+private const val WL_SURFACE_SET_OPAQUE_REGION_OPCODE: Int = 4
+private const val WL_SURFACE_VERSION: Int = 1
+private const val WL_REGION_DESTROY_OPCODE: Int = 0
+private const val WL_REGION_ADD_OPCODE: Int = 1
+private const val WL_REGION_VERSION: Int = 1
 
 
 /**
@@ -120,6 +126,10 @@ class WaylandWindow private constructor(
     internal var _scaleFactor: Double = 1.0
 
     override val scaleFactor: Double get() = _scaleFactor
+
+    @Volatile
+    internal var transparentHint: Boolean = false
+        private set
 
     /**
      * Requests a redraw.
@@ -557,17 +567,15 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * No-op on Wayland.
+     * Stores the renderer-side transparency hint.
      *
-     * Per-pixel alpha transparency requires the compositor to support the
-     * EGL_EXT_platform_wayland or similar; this is renderer-side and outside
-     * the window API scope.
-     *
-     * TODO(R3-wayland-transparent): set _NET_WM_WINDOW_OPACITY or use
-     * wl_surface with ARGB buffer format when the renderer supports it.
+     * Wayland transparency is expressed by attaching buffers with an alpha
+     * channel; there is no xdg_toplevel request for global window opacity. The
+     * hint is kept so creation/runtime calls preserve winit's state semantics.
      */
     override fun setTransparent(transparent: Boolean) {
-        // No-op on Wayland.
+        transparentHint = transparent
+        applyWaylandTransparencyHint()
     }
 
     /**
@@ -656,6 +664,7 @@ class WaylandWindow private constructor(
             }
 
             val window = WaylandWindow(display, compositor, xdgWmBase, surface, attrs)
+            window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
             if (surface != 0L && xdgWmBase != 0L && WaylandXdgLib.loaded) {
@@ -706,7 +715,10 @@ class WaylandWindow private constructor(
             xdgWmBase: Long = 0L,
             surface: Long = 0L,
             attrs: WindowAttributes = WindowAttributes(),
-        ): WaylandWindow = WaylandWindow(display, compositor, xdgWmBase, surface, attrs)
+        ): WaylandWindow =
+            WaylandWindow(display, compositor, xdgWmBase, surface, attrs).also {
+                it.setTransparent(attrs.transparent)
+            }
     }
 
     private fun applyWaylandSurfaceConstraints() {
@@ -719,7 +731,91 @@ class WaylandWindow private constructor(
         xdg?.setMinSize(_minSurfaceSize?.width ?: 0, _minSurfaceSize?.height ?: 0)
         xdg?.setMaxSize(_maxSurfaceSize?.width ?: 0, _maxSurfaceSize?.height ?: 0)
     }
+
+    internal fun applyWaylandTransparencyHint(): Boolean {
+        if (surfacePtr == 0L) return false
+        val surface = MemorySegment.ofAddress(surfacePtr)
+        val setOpaqueRegion = wlProxyMarshalFlagsObject ?: return false
+        val region = if (transparentHint) {
+            MemorySegment.NULL
+        } else {
+            createFullOpaqueRegion() ?: return false
+        }
+
+        return try {
+            setOpaqueRegion.invokeExact(
+                surface,
+                WL_SURFACE_SET_OPAQUE_REGION_OPCODE,
+                MemorySegment.NULL,
+                WL_SURFACE_VERSION,
+                0,
+                region,
+            )
+            flushDisplay()
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            if (region != MemorySegment.NULL) {
+                destroyWaylandRegion(region)
+            }
+        }
+    }
+
+    private fun createFullOpaqueRegion(): MemorySegment? {
+        if (compositorPtr == 0L) return null
+        val createRegion = wlCompositorCreateRegion ?: return null
+        val regionInterface = wlRegionInterface ?: return null
+        val addRegion = wlProxyMarshalFlagsFourInt ?: return null
+        var region = MemorySegment.NULL
+        return try {
+            val compositor = MemorySegment.ofAddress(compositorPtr)
+            region = createRegion.invokeExact(
+                compositor,
+                WL_COMPOSITOR_CREATE_REGION_OPCODE,
+                regionInterface,
+                WL_REGION_VERSION,
+                0,
+                MemorySegment.NULL,
+            ) as MemorySegment
+            if (region == MemorySegment.NULL) return null
+            addRegion.invokeExact(
+                region,
+                WL_REGION_ADD_OPCODE,
+                MemorySegment.NULL,
+                WL_REGION_VERSION,
+                0,
+                0,
+                0,
+                WAYLAND_OPAQUE_REGION_EXTENT,
+                WAYLAND_OPAQUE_REGION_EXTENT,
+            )
+            region.also {
+                region = MemorySegment.NULL
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            if (region != MemorySegment.NULL) {
+                destroyWaylandRegion(region)
+            }
+        }
+    }
+
+    private fun destroyWaylandRegion(region: MemorySegment) {
+        try {
+            wlProxyMarshalFlagsVoid?.invokeExact(
+                region,
+                WL_REGION_DESTROY_OPCODE,
+                MemorySegment.NULL,
+                WL_REGION_VERSION,
+                WL_MARSHAL_FLAG_DESTROY,
+            )
+        } catch (_: Throwable) {}
+    }
 }
+
+internal const val WAYLAND_OPAQUE_REGION_EXTENT: Int = Int.MAX_VALUE
 
 internal fun waylandApplyResizeIncrements(
     size: PhysicalSize<Int>,
