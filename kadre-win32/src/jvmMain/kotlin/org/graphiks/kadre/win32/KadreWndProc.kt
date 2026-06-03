@@ -164,6 +164,12 @@ object KadreWndProc {
                 0L
             }
 
+            // ── Kadre private native actions ─────────────────────────────────
+            WM_KADRE_NON_CLIENT_DRAG.toUInt() -> {
+                Win32Window.performNonClientDrag(MemorySegment.ofAddress(hwnd), wParam)
+                0L
+            }
+
             // ── Resize ────────────────────────────────────────────────────────
             WM_SIZE.toUInt() -> {
                 // lParam: LOWORD = new width, HIWORD = new height (client pixels)

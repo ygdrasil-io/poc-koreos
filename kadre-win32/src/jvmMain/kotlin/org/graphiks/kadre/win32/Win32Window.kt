@@ -24,6 +24,7 @@ import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -53,6 +54,7 @@ class Win32Window private constructor(
     private val hwnd: MemorySegment,
     private val hInstance: MemorySegment,
     private val attrs: WindowAttributes,
+    private val ownerThreadId: Int,
 ) : Window {
 
     // ── R2 fullscreen state ──────────────────────────────────────────────────
@@ -555,6 +557,120 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor hit-testing failed"))
         }
 
+    /**
+     * Shows the native Win32 system menu at a window-relative physical position.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        try {
+            val menuHandle = getSystemMenu ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 GetSystemMenu is unavailable"),
+            )
+            val trackMenu = trackPopupMenu ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 TrackPopupMenu is unavailable"),
+            )
+            val postMessage = postMessageW ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 PostMessageW is unavailable"),
+            )
+            val toScreen = clientToScreen ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 ClientToScreen is unavailable"),
+            )
+            val menu = menuHandle.invokeExact(hwnd, 0) as MemorySegment
+            if (menu == MemorySegment.NULL) {
+                return WindowRequestResult.Success
+            }
+            syncSystemMenuState(menu)
+            val (screenX, screenY) = Arena.ofConfined().use { arena ->
+                val point = arena.allocate(POINT_SIZE, POINT_ALIGN)
+                point.set(ValueLayout.JAVA_INT, POINT_OFFSET_X, position.x)
+                point.set(ValueLayout.JAVA_INT, POINT_OFFSET_Y, position.y)
+                val ok = toScreen.invokeExact(hwnd, point) as Int
+                if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("ClientToScreen failed for window menu"))
+                point.get(ValueLayout.JAVA_INT, POINT_OFFSET_X) to
+                    point.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
+            }
+            val command = trackMenu.invokeExact(
+                menu,
+                TPM_RETURNCMD or TPM_LEFTALIGN,
+                screenX,
+                screenY,
+                0,
+                hwnd,
+                MemorySegment.NULL,
+            ) as Int
+            if (command != 0) {
+                val ok = postMessage.invokeExact(hwnd, WM_SYSCOMMAND, command.toLong(), 0L) as Int
+                if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_SYSCOMMAND) failed"))
+            }
+            WindowRequestResult.Success
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 window menu failed"))
+        }
+
+    /**
+     * Starts a native system move drag from the current pointer position.
+     */
+    override fun dragWindow(): WindowRequestResult =
+        sendNonClientDrag(HTCAPTION, "Win32 window drag failed")
+
+    /**
+     * Starts a native system resize drag for the requested border/corner.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        sendNonClientDrag(direction.toWin32HitTest(), "Win32 resize drag failed")
+
+    private fun sendNonClientDrag(hitTest: Long, failureMessage: String): WindowRequestResult =
+        try {
+            val postMessage = postMessageW ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 PostMessageW is unavailable"),
+            )
+            if (!isOwnerThread()) {
+                val ok = postMessage.invokeExact(hwnd, WM_KADRE_NON_CLIENT_DRAG, hitTest, 0L) as Int
+                return if (ok == 0) {
+                    WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_KADRE_NON_CLIENT_DRAG) failed"))
+                } else {
+                    WindowRequestResult.Success
+                }
+            }
+            performNonClientDrag(hwnd, hitTest)
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: failureMessage))
+        }
+
+    private fun isOwnerThread(): Boolean {
+        val current = currentWin32ThreadId()
+        return current == 0 || ownerThreadId == 0 || current == ownerThreadId
+    }
+
+    private fun syncSystemMenuState(menu: MemorySegment) {
+        try {
+            val enableItem = enableMenuItem ?: return
+            fun state(enabled: Boolean): Int = if (enabled) MFS_ENABLED else MFS_DISABLED
+            val maximized = isMaximized
+            val resizable = isResizable
+            enableItem.invokeExact(menu, SC_RESTORE, MF_BYCOMMAND or state(maximized && resizable)) as Int
+            enableItem.invokeExact(menu, SC_MOVE, MF_BYCOMMAND or state(!maximized)) as Int
+            enableItem.invokeExact(menu, SC_SIZE, MF_BYCOMMAND or state(!maximized && resizable)) as Int
+            enableItem.invokeExact(menu, SC_MINIMIZE, MF_BYCOMMAND or MFS_ENABLED) as Int
+            enableItem.invokeExact(menu, SC_MAXIMIZE, MF_BYCOMMAND or state(!maximized && resizable)) as Int
+            enableItem.invokeExact(menu, SC_CLOSE, MF_BYCOMMAND or MFS_ENABLED) as Int
+            setMenuDefaultItem?.let { it.invokeExact(menu, SC_CLOSE, 0) as Int }
+        } catch (_: Throwable) {
+            // Menu state synchronization is best-effort; showing the menu is still useful.
+        }
+    }
+
+    private fun ResizeDirection.toWin32HitTest(): Long =
+        when (this) {
+            ResizeDirection.East -> HTRIGHT
+            ResizeDirection.North -> HTTOP
+            ResizeDirection.NorthEast -> HTTOPRIGHT
+            ResizeDirection.NorthWest -> HTTOPLEFT
+            ResizeDirection.South -> HTBOTTOM
+            ResizeDirection.SouthEast -> HTBOTTOMRIGHT
+            ResizeDirection.SouthWest -> HTBOTTOMLEFT
+            ResizeDirection.West -> HTLEFT
+        }
+
     /** In-memory theme for this window. */
     @Volatile private var _theme: Theme? = attrs.preferredTheme
 
@@ -682,6 +798,42 @@ class Win32Window private constructor(
 
         /** Name of the registered Win32 window class. */
         private const val CLASS_NAME = "KadreWin32Window"
+
+        internal fun performNonClientDrag(hwnd: MemorySegment, hitTest: Long): WindowRequestResult =
+            try {
+                val release = releaseCapture ?: return WindowRequestResult.Failure(
+                    RequestError.Unsupported("Win32 ReleaseCapture is unavailable"),
+                )
+                val postMessage = postMessageW ?: return WindowRequestResult.Failure(
+                    RequestError.Unsupported("Win32 PostMessageW is unavailable"),
+                )
+                release.invokeExact() as Int
+                val ok = postMessage.invokeExact(hwnd, WM_NCLBUTTONDOWN, hitTest, currentCursorLParam()) as Int
+                if (ok == 0) {
+                    WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_NCLBUTTONDOWN) failed"))
+                } else {
+                    WindowRequestResult.Success
+                }
+            } catch (t: Throwable) {
+                WindowRequestResult.Failure(
+                    RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 native move/resize drag failed"),
+                )
+            }
+
+        private fun currentCursorLParam(): Long =
+            try {
+                val cursor = getCursorPos ?: return 0L
+                Arena.ofConfined().use { arena ->
+                    val point = arena.allocate(POINT_SIZE, POINT_ALIGN)
+                    val ok = cursor.invokeExact(point) as Int
+                    if (ok == 0) return@use 0L
+                    val x = point.get(ValueLayout.JAVA_INT, POINT_OFFSET_X)
+                    val y = point.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
+                    ((y.toLong() and 0xffffL) shl 16) or (x.toLong() and 0xffffL)
+                }
+            } catch (_: Throwable) {
+                0L
+            }
 
         /**
          * Atomic guard for window class registration.
@@ -840,7 +992,7 @@ class Win32Window private constructor(
 
             if (hwnd == MemorySegment.NULL) return null
 
-            val window = Win32Window(hwnd, hInstance, attrs)
+            val window = Win32Window(hwnd, hInstance, attrs, currentWin32ThreadId())
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
             // instead of being emulated as mouse input. Best-effort: ignored on

@@ -69,6 +69,28 @@ private fun SymbolLookup?.downcall(name: String, desc: FunctionDescriptor): Meth
     return this.find(name).map { linker.downcallHandle(it, desc) }.orElse(null)
 }
 
+// ── Thread helpers ───────────────────────────────────────────────────────────
+
+/**
+ * DWORD GetCurrentThreadId(void);
+ *
+ * Used to guard thread-affine Win32 requests such as ReleaseCapture.
+ */
+internal val getCurrentThreadIdHandle: MethodHandle? by lazy {
+    kernel32.downcall(
+        "GetCurrentThreadId",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT)
+    )
+}
+
+internal fun currentWin32ThreadId(): Int =
+    try {
+        val handle = getCurrentThreadIdHandle ?: return 0
+        handle.invokeExact() as Int
+    } catch (_: Throwable) {
+        0
+    }
+
 // ── RegisterClassExW ──────────────────────────────────────────────────────────
 
 /**
@@ -570,6 +592,22 @@ internal val screenToClient: MethodHandle? by lazy {
     )
 }
 
+/**
+ * BOOL ClientToScreen(HWND hWnd, LPPOINT lpPoint);
+ *
+ * Converts a point from client-area coordinates to screen coordinates.
+ */
+internal val clientToScreen: MethodHandle? by lazy {
+    user32.downcall(
+        "ClientToScreen",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // LPPOINT
+        )
+    )
+}
+
 // ── GetCursorPos ──────────────────────────────────────────────────────────────
 
 /**
@@ -585,6 +623,89 @@ internal val getCursorPos: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,   // BOOL
             ValueLayout.ADDRESS,    // LPPOINT
         )
+    )
+}
+
+// ── Window system menu / interactive move-resize ─────────────────────────────
+
+/**
+ * HMENU GetSystemMenu(HWND hWnd, BOOL bRevert);
+ *
+ * Returns the system menu associated with the window.
+ */
+internal val getSystemMenu: MethodHandle? by lazy {
+    user32.downcall(
+        "GetSystemMenu",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // HMENU
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // BOOL bRevert
+        )
+    )
+}
+
+/**
+ * BOOL TrackPopupMenu(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, const RECT *prcRect);
+ *
+ * With TPM_RETURNCMD, returns the selected command id instead of posting it.
+ */
+internal val trackPopupMenu: MethodHandle? by lazy {
+    user32.downcall(
+        "TrackPopupMenu",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL or command id with TPM_RETURNCMD
+            ValueLayout.ADDRESS,    // HMENU
+            ValueLayout.JAVA_INT,   // UINT uFlags
+            ValueLayout.JAVA_INT,   // x
+            ValueLayout.JAVA_INT,   // y
+            ValueLayout.JAVA_INT,   // nReserved
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // const RECT*
+        )
+    )
+}
+
+/**
+ * BOOL EnableMenuItem(HMENU hMenu, UINT uIDEnableItem, UINT uEnable);
+ *
+ * Enables/disables system-menu commands before TrackPopupMenu.
+ */
+internal val enableMenuItem: MethodHandle? by lazy {
+    user32.downcall(
+        "EnableMenuItem",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL / previous item state
+            ValueLayout.ADDRESS,    // HMENU
+            ValueLayout.JAVA_INT,   // UINT uIDEnableItem
+            ValueLayout.JAVA_INT,   // UINT uEnable
+        )
+    )
+}
+
+/**
+ * BOOL SetMenuDefaultItem(HMENU hMenu, UINT uItem, UINT fByPos);
+ */
+internal val setMenuDefaultItem: MethodHandle? by lazy {
+    user32.downcall(
+        "SetMenuDefaultItem",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HMENU
+            ValueLayout.JAVA_INT,   // UINT uItem
+            ValueLayout.JAVA_INT,   // UINT fByPos
+        )
+    )
+}
+
+/**
+ * BOOL ReleaseCapture(void);
+ *
+ * Releases mouse capture before asking the non-client area to start a move/resize drag.
+ */
+internal val releaseCapture: MethodHandle? by lazy {
+    user32.downcall(
+        "ReleaseCapture",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT)
     )
 }
 
@@ -630,6 +751,50 @@ internal const val CS_HREDRAW_VREDRAW: Int = 0x0003
 
 /** WM_DESTROY */
 internal const val WM_DESTROY: Int = 0x0002
+
+/** WM_NCLBUTTONDOWN — non-client left-button press used to start system move/resize. */
+internal const val WM_NCLBUTTONDOWN: Int = 0x00A1
+
+/** WM_SYSCOMMAND — dispatch selected system-menu commands. */
+internal const val WM_SYSCOMMAND: Int = 0x0112
+
+/** WM_APP base for application-private messages. */
+internal const val WM_APP: Int = 0x8000
+
+/** Kadre-private request: run native non-client move/resize drag on the HWND owner thread. */
+internal const val WM_KADRE_NON_CLIENT_DRAG: Int = WM_APP + 0x4D1
+
+/** TrackPopupMenu: return selected command id. */
+internal const val TPM_RETURNCMD: Int = 0x0100
+
+/** TrackPopupMenu: align menu left-to-right, matching the current winit Win32 path. */
+internal const val TPM_LEFTALIGN: Int = 0x0000
+
+/** System-menu command ids. */
+internal const val SC_SIZE: Int = 0xF000
+internal const val SC_MOVE: Int = 0xF010
+internal const val SC_MINIMIZE: Int = 0xF020
+internal const val SC_MAXIMIZE: Int = 0xF030
+internal const val SC_CLOSE: Int = 0xF060
+internal const val SC_RESTORE: Int = 0xF120
+
+/** EnableMenuItem flags. */
+internal const val MF_BYCOMMAND: Int = 0x0000
+internal const val MFS_ENABLED: Int = 0x0000
+internal const val MFS_DISABLED: Int = 0x0003
+
+/** Hit-test code for title-bar move drag. */
+internal const val HTCAPTION: Long = 2L
+
+/** Hit-test codes for window resize borders/corners. */
+internal const val HTLEFT: Long = 10L
+internal const val HTRIGHT: Long = 11L
+internal const val HTTOP: Long = 12L
+internal const val HTTOPLEFT: Long = 13L
+internal const val HTTOPRIGHT: Long = 14L
+internal const val HTBOTTOM: Long = 15L
+internal const val HTBOTTOMLEFT: Long = 16L
+internal const val HTBOTTOMRIGHT: Long = 17L
 
 // ── GetClientRect ─────────────────────────────────────────────────────────────
 
@@ -904,6 +1069,12 @@ internal const val RECT_OFFSET_RIGHT: Long = 8L
 /** Byte offset of RECT.bottom */
 internal const val RECT_OFFSET_BOTTOM: Long = 12L
 
+/** Byte size/alignment and offsets of POINT { LONG x, LONG y }. */
+internal const val POINT_SIZE: Long = 8L
+internal const val POINT_ALIGN: Long = 4L
+internal const val POINT_OFFSET_X: Long = 0L
+internal const val POINT_OFFSET_Y: Long = 4L
+
 // ── R3 bindings ──────────────────────────────────────────────────────────────
 
 /**
@@ -982,6 +1153,24 @@ internal val sendMessageW: MethodHandle? by lazy {
         "SendMessageW",
         FunctionDescriptor.of(
             ValueLayout.JAVA_LONG,  // LRESULT
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // UINT Msg
+            ValueLayout.JAVA_LONG,  // WPARAM
+            ValueLayout.JAVA_LONG,  // LPARAM
+        )
+    )
+}
+
+/**
+ * BOOL PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+ *
+ * Queues a message without re-entering the current window procedure.
+ */
+internal val postMessageW: MethodHandle? by lazy {
+    user32.downcall(
+        "PostMessageW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
             ValueLayout.ADDRESS,    // HWND
             ValueLayout.JAVA_INT,   // UINT Msg
             ValueLayout.JAVA_LONG,  // WPARAM

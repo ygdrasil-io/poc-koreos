@@ -225,19 +225,19 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window drag_window",
                 kadreApi = "Window.dragWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native desktop drag support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 queues cross-thread requests onto the message thread like winit, while final native drag completion remains fire-and-forget and other desktop backends remain deferred.",
             ),
             WinitWindowingApi(
                 winitApi = "Window drag_resize_window",
                 kadreApi = "Window.dragResizeWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native desktop resize-drag support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 queues cross-thread requests onto the message thread like winit, while final native resize completion remains fire-and-forget and other desktop backends remain deferred.",
             ),
             WinitWindowingApi(
                 winitApi = "Window show_window_menu",
                 kadreApi = "Window.showWindowMenu",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op, but native menu support is not wired yet.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 system-menu support is wired, while other desktop backends remain deferred.",
             ),
             WinitWindowingApi(
                 winitApi = "Window.request_ime_update",
