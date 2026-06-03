@@ -306,7 +306,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     override val isVisible: Boolean?
         get() = try {
             NSWindow(nsWindowPtr).isVisible()
-        } catch (_: Throwable) { false }
+        } catch (_: Throwable) { null }
 
     override fun setResizable(resizable: Boolean) {
         try {
@@ -335,7 +335,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     override val isMinimized: Boolean?
         get() = try {
             NSWindow(nsWindowPtr).isMiniaturized()
-        } catch (_: Throwable) { false }
+        } catch (_: Throwable) { null }
 
     override fun setMaximized(maximized: Boolean) {
         try {

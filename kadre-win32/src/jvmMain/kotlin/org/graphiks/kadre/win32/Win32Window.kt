@@ -193,8 +193,8 @@ class Win32Window private constructor(
 
     override val isVisible: Boolean?
         get() = try {
-            (isWindowVisible?.invokeExact(hwnd) as? Int ?: 0) != 0
-        } catch (_: Throwable) { false }
+            isWindowVisible?.let { (it.invokeExact(hwnd) as Int) != 0 }
+        } catch (_: Throwable) { null }
 
     /** Returns the current Win32 GWL_STYLE value, or 0 on failure. */
     private fun getWindowStyle(): Long = try {
@@ -232,8 +232,8 @@ class Win32Window private constructor(
 
     override val isMinimized: Boolean?
         get() = try {
-            (isIconic?.invokeExact(hwnd) as? Int ?: 0) != 0
-        } catch (_: Throwable) { false }
+            isIconic?.let { (it.invokeExact(hwnd) as Int) != 0 }
+        } catch (_: Throwable) { null }
 
     override fun setMaximized(maximized: Boolean) {
         try {
