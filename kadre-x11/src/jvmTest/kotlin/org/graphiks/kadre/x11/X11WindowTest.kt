@@ -94,6 +94,11 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 window menu is a success no-op like winit`() {
+        assertEquals(WindowRequestResult.Success, x11ShowWindowMenuResult(PhysicalPosition(10, 20)))
+    }
+
+    @Test
     fun `X11 initial position uses attributes or zero fallback`() {
         assertEquals(PhysicalPosition(12, 34), x11InitialPosition(PhysicalPosition(12, 34)))
         assertEquals(PhysicalPosition(0, 0), x11InitialPosition(null))

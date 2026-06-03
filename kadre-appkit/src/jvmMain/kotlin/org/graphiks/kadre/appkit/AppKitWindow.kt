@@ -752,6 +752,15 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit window drag failed"))
         }
 
+    /**
+     * No-op on AppKit, matching winit.
+     *
+     * macOS does not expose a native per-window system menu equivalent to the
+     * Win32/Wayland title-bar menu path. winit accepts this call and ignores it.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        appKitShowWindowMenuResult(position)
+
     /** In-memory theme override. */
     @Volatile private var _theme: Theme? = attrs.preferredTheme
 
@@ -1105,6 +1114,10 @@ private fun cursorSelectorName(cursor: CursorIcon): String = when (cursor) {
 }
 
 internal fun appKitWindowIconIsSupported(): Boolean = false
+
+@Suppress("UNUSED_PARAMETER")
+internal fun appKitShowWindowMenuResult(position: PhysicalPosition<Int>): WindowRequestResult =
+    WindowRequestResult.Success
 
 /**
  * NSSize GroupLayout: struct { CGFloat width, CGFloat height }.

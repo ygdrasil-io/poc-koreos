@@ -680,6 +680,15 @@ class X11Window private constructor(
         )
 
     /**
+     * No-op on X11, matching winit.
+     *
+     * EWMH exposes move/resize initiation but no portable window-menu request.
+     * winit accepts this call and ignores it on X11.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        x11ShowWindowMenuResult(position)
+
+    /**
      * Returns null, matching winit X11: the backend can request a GTK theme
      * variant but does not expose a reliable current per-window theme query.
      */
@@ -1865,6 +1874,10 @@ internal fun x11ThemeVariant(theme: Theme?): String =
 
 @Suppress("UNUSED_PARAMETER")
 internal fun x11ContentProtectionResult(protected: Boolean): WindowRequestResult =
+    WindowRequestResult.Success
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11ShowWindowMenuResult(position: PhysicalPosition<Int>): WindowRequestResult =
     WindowRequestResult.Success
 
 internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =

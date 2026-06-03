@@ -512,6 +512,7 @@ interface Window {
      * Platform behaviour:
      * - Win32  : `TrackPopupMenu(GetSystemMenu(...))`.
      * - Wayland: `xdg_toplevel.show_window_menu` when an active pointer serial is available.
+     * - AppKit/X11: success no-op, matching winit.
      * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Default implementation returns [WindowRequestResult.Failure] with

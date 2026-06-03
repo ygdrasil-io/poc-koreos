@@ -14,9 +14,11 @@ Platform behaviour:
 -
    Wayland: `xdg_toplevel.show_window_menu` when an active pointer serial is available.
 -
+   AppKit/X11: success no-op, matching winit.
+-
    Others : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. AppKit and X11 are success no-ops like winit.
 
 #### Parameters
 

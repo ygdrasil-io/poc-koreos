@@ -5,6 +5,7 @@ import org.graphiks.kadre.appkit.bindings.NSWindow
 import org.graphiks.kadre.appkit.bindings.NSWindowButton
 import org.graphiks.kadre.appkit.bindings.NSWindowSharingType
 import org.graphiks.kadre.appkit.bindings.NSWindowStyleMask
+import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
@@ -16,6 +17,7 @@ import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -130,6 +132,17 @@ class AppKitWindowTest {
             WindowRequestResult::class.java.isAssignableFrom(setContentProtected.returnType),
             "setContentProtected must return WindowRequestResult",
         )
+
+        val showWindowMenu = appKitWindowClass.getMethod("showWindowMenu", PhysicalPosition::class.java)
+        assertTrue(
+            WindowRequestResult::class.java.isAssignableFrom(showWindowMenu.returnType),
+            "showWindowMenu must return WindowRequestResult",
+        )
+    }
+
+    @Test
+    fun `AppKit window menu is a success no-op like winit`() {
+        assertEquals(WindowRequestResult.Success, appKitShowWindowMenuResult(PhysicalPosition(10, 20)))
     }
 
     @Test

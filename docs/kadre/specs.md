@@ -931,7 +931,7 @@ Key residual points:
 - **Occluded event**: API defined; only AppKit and Web plan to wire it.
 - **ModifiersChanged**: emitted on AppKit/Win32/Web; not yet wired on X11/Wayland/Android/UIKit.
 - **Custom cursors** (`createCustomCursor` / `setCustomCursor`): no-op on all backends (default interface impl).
-- **Misc window methods**: `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` and `setContentProtected` now return `WindowRequestResult` and report `RequestError.Unsupported` by default; AppKit wires Dock attention, content protection and enabled buttons, Win32 wires native menu, move/resize drags, enabled buttons, user attention and content protection, X11 and Wayland report content protection as success no-ops like winit, and Wayland wires menu/move/resize locally.
+- **Misc window methods**: `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` and `setContentProtected` now return `WindowRequestResult` and report `RequestError.Unsupported` by default; AppKit wires Dock attention, content protection and enabled buttons, Win32 wires native menu, move/resize drags, enabled buttons, user attention and content protection, X11 and Wayland report content protection as success no-ops like winit, AppKit and X11 report window menu as success no-ops like winit, and Wayland wires menu/move/resize locally.
 - **Keyboard coverage**: the public model is now winit-style (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), but `KeyCode` and `NamedKey` are not yet exhaustive and rich fields remain backend-dependent.
 - **Stylus / tablet**: not supported (MouseInput + Touch kept instead of unified PointerButton/PointerKind model).
 
@@ -1048,7 +1048,7 @@ Key residual points:
 | `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean): WindowRequestResult` — default `RequestError.Unsupported`; AppKit and Win32 are wired locally, while X11 and Wayland are success no-ops like winit (see DEFERRED.md) |
 | `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — default `RequestError.Unsupported`; AppKit may return `RequestError.Ignored`; Win32/X11/Wayland are wired locally (see DEFERRED.md) |
 | `Window::drag_resize_window()` | `Window.dragResizeWindow(direction: ResizeDirection): WindowRequestResult` — default `RequestError.Unsupported`; Win32/X11/Wayland are wired locally (see DEFERRED.md) |
-| `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — default `RequestError.Unsupported`; Win32/Wayland are wired locally (see DEFERRED.md) |
+| `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — default `RequestError.Unsupported`; Win32/Wayland are wired locally, while AppKit/X11 are success no-ops like winit (see DEFERRED.md) |
 
 #### WindowAttributes (R3 additions)
 
