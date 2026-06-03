@@ -13,6 +13,8 @@ import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.SurfaceSizeRequestResult
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.WindowAttributes
 import kotlin.test.Test
@@ -86,6 +88,45 @@ class WaylandWindowTest {
         val window = WaylandWindow.createForTest()
         window.onConfigure(1920, 1080)
         assertEquals(PhysicalSize(1920, 1080), window.innerSize)
+    }
+
+    @Test
+    fun `requestSurfaceSize applies surface size immediately like winit Wayland`() {
+        val window = WaylandWindow.createForTest()
+        val events = mutableListOf<WindowEvent>()
+        window.onWindowEvent = events::add
+
+        val result = window.requestSurfaceSize(PhysicalSize(640, 480))
+
+        assertIs<SurfaceSizeRequestResult.Applied>(result)
+        assertEquals(PhysicalSize(640, 480), result.size)
+        assertEquals(PhysicalSize(640, 480), window.surfaceSize)
+        assertEquals(PhysicalSize(640, 480), window.innerSize)
+        assertEquals(listOf(WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
+    fun `requestSurfaceSize keeps compositor controlled size in non stateless Wayland states`() {
+        val window = WaylandWindow.createForTest(attrs = WindowAttributes(size = PhysicalSize(800, 600)))
+        val events = mutableListOf<WindowEvent>()
+        window.onWindowEvent = events::add
+        window.onToplevelStateConfigured(WaylandToplevelConfigureStates(fullscreen = true))
+
+        val result = window.requestSurfaceSize(PhysicalSize(640, 480))
+
+        assertIs<SurfaceSizeRequestResult.Applied>(result)
+        assertEquals(PhysicalSize(800, 600), result.size)
+        assertEquals(PhysicalSize(800, 600), window.surfaceSize)
+        assertEquals(emptyList(), events)
+    }
+
+    @Test
+    fun `Wayland configure states stateless matches winit request surface size rule`() {
+        assertEquals(true, WaylandToplevelConfigureStates().isStateless())
+        assertEquals(true, WaylandToplevelConfigureStates(resizing = true).isStateless())
+        assertEquals(false, WaylandToplevelConfigureStates(maximized = true).isStateless())
+        assertEquals(false, WaylandToplevelConfigureStates(fullscreen = true).isStateless())
+        assertEquals(false, WaylandToplevelConfigureStates(tiled = true).isStateless())
     }
 
     @Test

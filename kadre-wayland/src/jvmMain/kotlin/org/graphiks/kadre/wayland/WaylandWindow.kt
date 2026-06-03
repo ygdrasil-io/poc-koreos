@@ -28,6 +28,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
+import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
@@ -104,8 +105,22 @@ class WaylandWindow private constructor(
     @Volatile
     private var _innerSize: PhysicalSize<Int> = attrs.size ?: PhysicalSize(800, 600)
 
+    @Volatile
+    private var lastConfigureStates: WaylandToplevelConfigureStates? = null
+
     override val innerSize: PhysicalSize<Int>
         get() = _innerSize
+
+    override val surfaceSize: PhysicalSize<Int>
+        get() = _innerSize
+
+    override fun requestSurfaceSize(size: PhysicalSize<Int>): SurfaceSizeRequestResult {
+        if (lastConfigureStates?.isStateless() != false) {
+            _innerSize = size
+            onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+        }
+        return SurfaceSizeRequestResult.Applied(_innerSize)
+    }
 
     /**
      * Outer size (surface + WM decorations) in physical pixels.
@@ -431,6 +446,7 @@ class WaylandWindow private constructor(
     }
 
     internal fun onToplevelStateConfigured(states: WaylandToplevelConfigureStates) {
+        lastConfigureStates = states
         _isMaximized = states.maximized
         _fullscreen = if (states.fullscreen) {
             Fullscreen.Borderless(currentMonitor())

@@ -460,7 +460,10 @@ internal data class WaylandToplevelConfigureStates(
     val fullscreen: Boolean = false,
     val resizing: Boolean = false,
     val tiled: Boolean = false,
-)
+) {
+    fun isStateless(): Boolean =
+        !maximized && !fullscreen && !tiled
+}
 
 internal fun waylandShouldApplyResizeIncrements(
     isResizing: Boolean,
