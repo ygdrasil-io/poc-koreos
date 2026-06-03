@@ -21,6 +21,7 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -470,13 +471,21 @@ class WaylandWindow private constructor(
     // ── R3: cursor, theme & appearance ───────────────────────────────────────
 
     /**
-     * No-op on Wayland.
+     * Applies a previously created [CustomCursor] by looking up the stored
+     * [CursorImage] data.
      *
-     * TODO(R5-wayland-cursor): implement via wl_pointer.set_cursor with a
-     * custom wl_buffer created from the cursor image data.
+     * The cursor is stored and will be applied via wl_pointer.set_cursor when
+     * the cursor-surface + wl_shm buffer path is implemented. Currently this
+     * calls [setCursor] with [CursorIcon.Default] as a best-effort fallback.
      */
     override fun setCustomCursor(cursor: CustomCursor) {
-        // No-op on Wayland: custom cursor surfaces are not wired yet.
+        val image = WaylandCustomCursorStore.get(cursor.id)
+        if (image != null) {
+            // Cursor image data is now stored. The actual wl_pointer.set_cursor
+            // call with a wl_shm-backed wl_buffer is deferred.
+            // For now, fall back to the default cursor.
+            setCursor(CursorIcon.Default)
+        }
     }
 
     /**
@@ -667,6 +676,40 @@ class WaylandWindow private constructor(
         // no-op: xkb_compose_state not yet wired (TODO R4-wayland-dead-keys)
     }
 
+    // ── R5-IME: input method ──────────────────────────────────────────────────
+
+    /**
+     * Enables or disables IME for this window via `zwp_text_input_v3.enable/disable`.
+     *
+     * Only takes effect if the compositor supports `zwp_text_input_manager_v3`
+     * and this window's surface has text-input focus.
+     */
+    override fun setImeAllowed(allowed: Boolean) {
+        if (allowed) {
+            waylandTextInputEnable()
+        } else {
+            waylandTextInputDisable()
+        }
+    }
+
+    /**
+     * Updates the IME cursor rectangle via `zwp_text_input_v3.set_cursor_rectangle`.
+     *
+     * The compositor uses this to position the IME candidate window.
+     * Coordinates are converted from physical pixels to surface-local (buffer) coordinates
+     * using the current scale factor.
+     */
+    override fun setImeCursorArea(position: PhysicalPosition<Int>, size: PhysicalSize<Int>) {
+        waylandTextInputSetCursorRectangle(position, size, _scaleFactor)
+    }
+
+    /**
+     * Hints the IME about the text-field purpose via `zwp_text_input_v3.set_input_purpose`.
+     */
+    override fun setImePurpose(purpose: ImePurpose) {
+        waylandTextInputSetPurpose(purpose)
+    }
+
     // ── Companion ─────────────────────────────────────────────────────────────
 
     companion object {
@@ -818,6 +861,28 @@ class WaylandWindow private constructor(
                 destroyWaylandRegion(region)
             }
         }
+    }
+
+    /** Returns the xdg_toplevel pointer, or 0 if not available. */
+    internal fun xdgToplevelPtr(): Long =
+        xdg?.xdgToplevelPtr ?: 0L
+
+    /**
+     * Sets the client-side decoration preference.
+     * When preferCsd=true, requests client-side decorations (CSD);
+     * when false, requests server-side decorations (SSD).
+     */
+    internal fun setPreferCsd(preferCsd: Boolean) {
+        xdg?.setDecorations(!preferCsd)
+        flushDisplay()
+    }
+
+    /**
+     * Sets the xdg_activation_v1 activation token for this window.
+     * Stub: xdg_activation_v1 protocol not yet wired in Kadre.
+     */
+    internal fun setActivationToken(token: String?) {
+        // no-op: xdg_activation_v1 is not yet bound.
     }
 
     internal fun applyWaylandInputRegionHittest(hittest: Boolean): Boolean {

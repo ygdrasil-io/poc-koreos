@@ -419,6 +419,15 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
     is WebWindowEvent.ModifiersChanged -> WindowEvent.ModifiersChanged(
         KeyboardModifierState(logical = modifiers.toKeyboardModifiers()),
     )
+    is WebWindowEvent.Ime -> WindowEvent.Ime(ime.toCoreImeEvent())
+}
+
+private fun WebImeEvent.toCoreImeEvent(): WindowEvent.Ime.ImeEvent = when (this) {
+    WebImeEvent.Enabled -> WindowEvent.Ime.ImeEvent.Enabled
+    is WebImeEvent.Preedit -> WindowEvent.Ime.ImeEvent.Preedit(text, cursorRange)
+    is WebImeEvent.Commit -> WindowEvent.Ime.ImeEvent.Commit(text)
+    is WebImeEvent.DeleteSurrounding -> WindowEvent.Ime.ImeEvent.DeleteSurrounding(beforeBytes, afterBytes)
+    WebImeEvent.Disabled -> WindowEvent.Ime.ImeEvent.Disabled
 }
 
 private fun WebKeyState.toKeyState(): KeyState = when (this) {
