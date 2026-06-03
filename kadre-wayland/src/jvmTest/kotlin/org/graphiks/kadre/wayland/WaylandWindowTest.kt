@@ -18,6 +18,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -202,6 +203,15 @@ class WaylandWindowTest {
     fun `Wayland content protection is a success no-op like winit`() {
         assertEquals(WindowRequestResult.Success, waylandContentProtectionResult(true))
         assertEquals(WindowRequestResult.Success, waylandContentProtectionResult(false))
+    }
+
+    @Test
+    fun `Wayland window level is a safe no-op like winit`() {
+        val window = WaylandWindow.createForTest(surface = 4_242L)
+
+        window.setWindowLevel(WindowLevel.Normal)
+        window.setWindowLevel(WindowLevel.AlwaysOnTop)
+        window.setWindowLevel(WindowLevel.AlwaysOnBottom)
     }
 
     @Test

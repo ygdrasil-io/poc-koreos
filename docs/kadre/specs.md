@@ -673,7 +673,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 
 | Feature | appkit | win32 | x11 | wayland | web | android | uikit |
 |---------|--------|-------|-----|---------|-----|---------|-------|
-| `setWindowLevel()` | real | real | real | real (xdg layer) | no-op | no-op | no-op |
+| `setWindowLevel()` | real | real | real | no-op (winit Wayland parity) | no-op | no-op | no-op |
 | `setTheme()` | real | real | real (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | real | real | real | real | no-op | no-op | no-op |
 | `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |

@@ -674,7 +674,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 
 | Fonctionnalité | appkit | win32 | x11 | wayland | web | android | uikit |
 |----------------|--------|-------|-----|---------|-----|---------|-------|
-| `setWindowLevel()` | réel | réel | réel | réel (xdg layer) | no-op | no-op | no-op |
+| `setWindowLevel()` | réel | réel | réel | no-op (parité Wayland winit) | no-op | no-op | no-op |
 | `setTheme()` | réel | réel | réel (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | réel | réel | réel | réel | no-op | no-op | no-op |
 | `setBlur()` | réel (NSVisualEffectView) | réel (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
