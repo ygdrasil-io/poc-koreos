@@ -612,6 +612,16 @@ class WaylandWindow private constructor(
         // No-op on Wayland: window icons are not part of the Wayland protocol.
     }
 
+    /**
+     * No-op on Wayland, matching winit.
+     *
+     * The core Wayland/xdg-shell protocol has no portable screen-capture
+     * protection request. winit accepts this call and ignores it, so Kadre
+     * reports success instead of a platform-unsupported failure.
+     */
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        waylandContentProtectionResult(protected)
+
     // ── R4: keyboard ──────────────────────────────────────────────────────────
 
     /**
@@ -914,6 +924,10 @@ internal data class WaylandRegionRect(
 
 internal fun waylandEmptyInputRegionRect(): WaylandRegionRect =
     WaylandRegionRect(x = 0, y = 0, width = 0, height = 0)
+
+@Suppress("UNUSED_PARAMETER")
+internal fun waylandContentProtectionResult(protected: Boolean): WindowRequestResult =
+    WindowRequestResult.Success
 
 internal fun waylandApplyResizeIncrements(
     size: PhysicalSize<Int>,

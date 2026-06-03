@@ -199,6 +199,12 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland content protection is a success no-op like winit`() {
+        assertEquals(WindowRequestResult.Success, waylandContentProtectionResult(true))
+        assertEquals(WindowRequestResult.Success, waylandContentProtectionResult(false))
+    }
+
+    @Test
     fun `Wayland opaque region uses full positive extent like winit`() {
         assertEquals(Int.MAX_VALUE, WAYLAND_OPAQUE_REGION_EXTENT)
     }

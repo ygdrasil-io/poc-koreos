@@ -495,7 +495,7 @@ interface Window {
      * Platform behaviour:
      * - Win32  : `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`.
      * - AppKit : `NSWindow.sharingType = NSWindowSharingNone`.
-     * - X11    : success no-op, matching winit; no portable capture-protection mechanism.
+     * - X11/Wayland: success no-op, matching winit; no portable capture-protection mechanism.
      * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Backends that neither implement native protection nor match a winit no-op return
