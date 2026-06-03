@@ -422,6 +422,14 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 setResizable is a full no-op under Xfwm4 like winit`() {
+        assertNull(x11ResizableChangeAfterRequest(current = true, requested = false, isXfwm4 = true))
+        assertNull(x11ResizableChangeAfterRequest(current = false, requested = true, isXfwm4 = true))
+        assertEquals(false, x11ResizableChangeAfterRequest(current = true, requested = false, isXfwm4 = false))
+        assertEquals(true, x11ResizableChangeAfterRequest(current = false, requested = true, isXfwm4 = false))
+    }
+
+    @Test
     fun `scaleFactor computed from Xft_dpi 96 equals 1_0`() {
         val resources = "Xft.dpi:\t96"
         assertEquals(1.0, parseXftDpi(resources), "96 DPI should yield scale factor 1.0")

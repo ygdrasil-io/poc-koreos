@@ -267,9 +267,14 @@ class X11Window private constructor(
     }
 
     override fun setResizable(resizable: Boolean) {
-        _isResizable = resizable
+        val newResizable = x11ResizableChangeAfterRequest(
+            current = _isResizable,
+            requested = resizable,
+            isXfwm4 = isXfwm4WindowManager(),
+        ) ?: return
+        _isResizable = newResizable
         applyNormalHints()
-        setMotifMaximizable(resizable)
+        setMotifMaximizable(newResizable)
     }
 
     override fun setMinimized(minimized: Boolean) {
@@ -1902,6 +1907,18 @@ internal fun x11TransparencyRequiresNativeUpdate(transparent: Boolean): Boolean 
 
 @Suppress("UNUSED_PARAMETER")
 internal fun x11BlurRequiresNativeUpdate(blur: Boolean): Boolean = false
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11ResizableChangeAfterRequest(
+    current: Boolean,
+    requested: Boolean,
+    isXfwm4: Boolean,
+): Boolean? =
+    if (isXfwm4) {
+        null
+    } else {
+        requested
+    }
 
 @Suppress("UNUSED_PARAMETER")
 internal fun x11EnabledButtonsAfterSet(buttons: WindowButtons): WindowButtons = WindowButtons.ALL
