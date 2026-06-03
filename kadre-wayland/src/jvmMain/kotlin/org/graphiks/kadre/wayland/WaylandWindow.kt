@@ -33,6 +33,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
@@ -353,6 +354,20 @@ class WaylandWindow private constructor(
 
     override val hasFocus: Boolean
         get() = WaylandFocusState.hasFocus(surfacePtr)
+
+    /**
+     * No-op on Wayland, matching winit.
+     *
+     * Current xdg-shell does not expose per-button control; local winit accepts
+     * the request and continues reporting all buttons enabled.
+     */
+    override fun setEnabledButtons(buttons: WindowButtons) {
+        @Suppress("UNUSED_EXPRESSION")
+        waylandEnabledButtonsAfterSet(buttons)
+    }
+
+    override val enabledButtons: WindowButtons
+        get() = waylandEnabledButtons()
 
     /**
      * Enters or exits borderless fullscreen via xdg_toplevel.set_fullscreen / unset_fullscreen.
@@ -930,6 +945,11 @@ internal fun waylandEmptyInputRegionRect(): WaylandRegionRect =
 @Suppress("UNUSED_PARAMETER")
 internal fun waylandContentProtectionResult(protected: Boolean): WindowRequestResult =
     WindowRequestResult.Success
+
+@Suppress("UNUSED_PARAMETER")
+internal fun waylandEnabledButtonsAfterSet(buttons: WindowButtons): WindowButtons = WindowButtons.ALL
+
+internal fun waylandEnabledButtons(): WindowButtons = WindowButtons.ALL
 
 internal fun waylandApplyResizeIncrements(
     size: PhysicalSize<Int>,

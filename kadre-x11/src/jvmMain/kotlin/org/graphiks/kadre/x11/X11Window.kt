@@ -33,6 +33,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
@@ -221,6 +222,20 @@ class X11Window private constructor(
     @Volatile private var _isResizable: Boolean = attrs.resizable
 
     override val isResizable: Boolean get() = _isResizable
+
+    /**
+     * No-op on X11, matching winit.
+     *
+     * The local winit X11 backend accepts the request and continues reporting
+     * all window buttons enabled.
+     */
+    override fun setEnabledButtons(buttons: WindowButtons) {
+        @Suppress("UNUSED_EXPRESSION")
+        x11EnabledButtonsAfterSet(buttons)
+    }
+
+    override val enabledButtons: WindowButtons
+        get() = x11EnabledButtons()
 
     @Volatile private var _isMinimized: Boolean = false
 
@@ -1887,6 +1902,11 @@ internal fun x11TransparencyRequiresNativeUpdate(transparent: Boolean): Boolean 
 
 @Suppress("UNUSED_PARAMETER")
 internal fun x11BlurRequiresNativeUpdate(blur: Boolean): Boolean = false
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11EnabledButtonsAfterSet(buttons: WindowButtons): WindowButtons = WindowButtons.ALL
+
+internal fun x11EnabledButtons(): WindowButtons = WindowButtons.ALL
 
 internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =
     position ?: PhysicalPosition(0, 0)

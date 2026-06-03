@@ -155,11 +155,16 @@ interface Window {
 
     /**
      * Enables or disables individual native window buttons where supported.
+     *
+     * X11 and Wayland accept the request as a no-op and continue reporting
+     * [WindowButtons.ALL], matching local winit.
      */
     fun setEnabledButtons(buttons: WindowButtons) { /* no-op by default */ }
 
     /**
      * Returns the enabled native window buttons, if tracked by the backend.
+     *
+     * X11 and Wayland return [WindowButtons.ALL], matching local winit.
      */
     val enabledButtons: WindowButtons get() = WindowButtons.ALL
 

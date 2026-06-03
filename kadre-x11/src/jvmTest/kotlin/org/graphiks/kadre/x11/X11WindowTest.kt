@@ -7,6 +7,7 @@ import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -104,6 +105,14 @@ class X11WindowTest {
         assertEquals(false, x11TransparencyRequiresNativeUpdate(false))
         assertEquals(false, x11BlurRequiresNativeUpdate(true))
         assertEquals(false, x11BlurRequiresNativeUpdate(false))
+    }
+
+    @Test
+    fun `X11 enabled buttons are all after set like winit`() {
+        assertEquals(WindowButtons.ALL, x11EnabledButtons())
+        assertEquals(WindowButtons.ALL, x11EnabledButtonsAfterSet(WindowButtons.NONE))
+        assertEquals(WindowButtons.ALL, x11EnabledButtonsAfterSet(WindowButtons.CLOSE))
+        assertEquals(WindowButtons.ALL, x11EnabledButtonsAfterSet(WindowButtons.ALL))
     }
 
     @Test
