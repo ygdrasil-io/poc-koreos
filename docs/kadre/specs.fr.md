@@ -678,7 +678,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | `setWindowLevel()` | réel | réel | réel | no-op (parité Wayland winit) | no-op | no-op | no-op |
 | `setTheme()` | réel | réel | réel (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | réel | réel | no-op (parité winit) | réel | no-op | no-op | no-op |
-| `setBlur()` | réel (NSVisualEffectView) | réel (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
+| `setBlur()` | réel (NSVisualEffectView) | no-op (parité runtime winit; le chemin transparent initial peut utiliser DWM) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (parité AppKit winit) | réel (WM_SETICON/ICON_SMALL) | réel (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
 ### 3.9 Richesse clavier (R4/R6 incubation)

@@ -677,7 +677,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | `setWindowLevel()` | real | real | real | no-op (winit Wayland parity) | no-op | no-op | no-op |
 | `setTheme()` | real | real | real (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
 | `setTransparent()` | real | real | no-op (winit parity) | real | no-op | no-op | no-op |
-| `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
+| `setBlur()` | real (NSVisualEffectView) | no-op (winit runtime parity; initial transparent path may use DWM) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (winit AppKit parity) | real (WM_SETICON/ICON_SMALL) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
 ### 3.9 Keyboard richness (R4/R6 incubation)
