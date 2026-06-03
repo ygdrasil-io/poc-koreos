@@ -104,6 +104,56 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 motif decoration hints preserve existing function input and status fields`() {
+        val existing = longArrayOf(
+            X11_MWM_HINTS_FUNCTIONS,
+            X11_MWM_FUNC_ALL or X11_MWM_FUNC_MAXIMIZE,
+            0L,
+            7L,
+            9L,
+        )
+
+        val decorated = x11MotifDecorationHints(decorated = true, existing = existing)
+
+        assertEquals(X11_MWM_HINTS_FUNCTIONS or X11_MWM_HINTS_DECORATIONS, decorated[0])
+        assertEquals(X11_MWM_FUNC_ALL or X11_MWM_FUNC_MAXIMIZE, decorated[1])
+        assertEquals(1L, decorated[2])
+        assertEquals(7L, decorated[3])
+        assertEquals(9L, decorated[4])
+    }
+
+    @Test
+    fun `X11 motif maximizable hints match winit all-functions encoding`() {
+        val disabled = x11MotifMaximizableHints(maximizable = false)
+
+        assertEquals(X11_MWM_HINTS_FUNCTIONS, disabled[0])
+        assertEquals(X11_MWM_FUNC_ALL or X11_MWM_FUNC_MAXIMIZE, disabled[1])
+
+        val enabled = x11MotifMaximizableHints(maximizable = true, existing = disabled)
+
+        assertEquals(X11_MWM_HINTS_FUNCTIONS, enabled[0])
+        assertEquals(X11_MWM_FUNC_ALL, enabled[1])
+    }
+
+    @Test
+    fun `X11 motif maximizable hints match winit explicit-functions encoding`() {
+        val existing = longArrayOf(
+            X11_MWM_HINTS_FUNCTIONS or X11_MWM_HINTS_DECORATIONS,
+            0L,
+            1L,
+            0L,
+            0L,
+        )
+
+        val enabled = x11MotifMaximizableHints(maximizable = true, existing = existing)
+        assertEquals(X11_MWM_FUNC_MAXIMIZE, enabled[1])
+
+        val disabled = x11MotifMaximizableHints(maximizable = false, existing = enabled)
+        assertEquals(0L, disabled[1])
+        assertEquals(1L, disabled[2])
+    }
+
+    @Test
     fun `X11 normal hints encode position size constraints and increments`() {
         val hints = x11NormalHints(
             position = PhysicalPosition(10, 20),

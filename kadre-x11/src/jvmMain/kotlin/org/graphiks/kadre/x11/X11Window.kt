@@ -195,6 +195,7 @@ class X11Window private constructor(
     override fun setResizable(resizable: Boolean) {
         _isResizable = resizable
         applyNormalHints()
+        setMotifMaximizable(resizable)
     }
 
     override fun setMinimized(minimized: Boolean) {
@@ -801,7 +802,7 @@ class X11Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 move/resize request failed"))
         }
 
-    // ── X11 helper: set/unset _MOTIF_WM_HINTS for decorations ────────────────
+    // ── X11 helper: set/unset _MOTIF_WM_HINTS ────────────────────────────────
 
     /**
      * Sets or clears the _MOTIF_WM_HINTS property to request the window
@@ -817,14 +818,23 @@ class X11Window private constructor(
      *   [4] status
      */
     private fun setMotifDecorations(decorated: Boolean) {
+        setMotifHints { existing -> x11MotifDecorationHints(decorated, existing) }
+    }
+
+    private fun setMotifMaximizable(maximizable: Boolean) {
+        setMotifHints { existing -> x11MotifMaximizableHints(maximizable, existing) }
+    }
+
+    private fun setMotifHints(update: (LongArray?) -> LongArray) {
         val display = MemorySegment.ofAddress(displayPtr)
         val motifAtom = internAtom(displayPtr, "_MOTIF_WM_HINTS")
         if (motifAtom == 0L) return
         try {
+            val updatedHints = update(readMotifHints(display, motifAtom))
             Arena.ofConfined().use { arena ->
                 // format 32 → array of C long on LP64: 5 × 8 = 40 bytes.
                 val hints = arena.allocate(40L, 8L)
-                x11MotifDecorationHints(decorated).forEachIndexed { index, value ->
+                updatedHints.forEachIndexed { index, value ->
                     hints.setAtIndex(ValueLayout.JAVA_LONG, index.toLong(), value)
                 }
                 xChangeProperty?.invokeExact(
@@ -836,6 +846,16 @@ class X11Window private constructor(
                 xFlush?.invokeExact(display) as Int
             }
         } catch (_: Throwable) {}
+    }
+
+    private fun readMotifHints(display: MemorySegment, motifAtom: Long): LongArray? {
+        val getProperty = xGetWindowProperty ?: return null
+        return readX11Property(getProperty, display, xWindowId, motifAtom, reqType = motifAtom, length = X11_MOTIF_HINTS_ELEMENTS.toLong()) { ptr, nitems ->
+            if (nitems <= 0L) return@readX11Property null
+            LongArray(X11_MOTIF_HINTS_ELEMENTS) { index ->
+                if (index.toLong() < nitems) ptr.getAtIndex(ValueLayout.JAVA_LONG, index.toLong()) else 0L
+            }
+        }
     }
 
     /**
@@ -1026,7 +1046,10 @@ class X11Window private constructor(
 
 internal const val X11_NORMAL_HINTS_ELEMENTS: Int = 18
 internal const val X11_MOTIF_HINTS_ELEMENTS: Int = 5
+internal const val X11_MWM_HINTS_FUNCTIONS: Long = 1L shl 0
 internal const val X11_MWM_HINTS_DECORATIONS: Long = 1L shl 1
+internal const val X11_MWM_FUNC_ALL: Long = 1L shl 0
+internal const val X11_MWM_FUNC_MAXIMIZE: Long = 1L shl 4
 internal const val X11_US_POSITION: Long = 1L shl 0
 internal const val X11_US_SIZE: Long = 1L shl 1
 internal const val X11_P_MIN_SIZE: Long = 1L shl 4
@@ -1043,14 +1066,37 @@ internal data class X11NormalHints(
         elements.contentHashCode()
 }
 
-internal fun x11MotifDecorationHints(decorated: Boolean): LongArray =
-    longArrayOf(
-        X11_MWM_HINTS_DECORATIONS,
-        0L,
-        if (decorated) 1L else 0L,
-        0L,
-        0L,
-    )
+internal fun x11MotifDecorationHints(decorated: Boolean, existing: LongArray? = null): LongArray =
+    x11MotifHints(existing).also { hints ->
+        hints[0] = hints[0] or X11_MWM_HINTS_DECORATIONS
+        hints[2] = if (decorated) 1L else 0L
+    }
+
+internal fun x11MotifMaximizableHints(maximizable: Boolean, existing: LongArray? = null): LongArray =
+    x11MotifHints(existing).also { hints ->
+        if (maximizable) {
+            if (hints[0] and X11_MWM_HINTS_FUNCTIONS != 0L) {
+                if (hints[1] and X11_MWM_FUNC_ALL != 0L) {
+                    hints[1] = hints[1] and X11_MWM_FUNC_MAXIMIZE.inv()
+                } else {
+                    hints[1] = hints[1] or X11_MWM_FUNC_MAXIMIZE
+                }
+            }
+        } else {
+            if (hints[0] and X11_MWM_HINTS_FUNCTIONS == 0L) {
+                hints[0] = hints[0] or X11_MWM_HINTS_FUNCTIONS
+                hints[1] = X11_MWM_FUNC_ALL
+            }
+            if (hints[1] and X11_MWM_FUNC_ALL != 0L) {
+                hints[1] = hints[1] or X11_MWM_FUNC_MAXIMIZE
+            } else {
+                hints[1] = hints[1] and X11_MWM_FUNC_MAXIMIZE.inv()
+            }
+        }
+    }
+
+private fun x11MotifHints(existing: LongArray?): LongArray =
+    LongArray(X11_MOTIF_HINTS_ELEMENTS) { index -> existing?.getOrNull(index) ?: 0L }
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,
