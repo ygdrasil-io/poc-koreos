@@ -270,9 +270,8 @@ class WaylandWindow private constructor(
 
     override fun setDecorations(decorated: Boolean) {
         _isDecorated = decorated
-        // Decoration mode is set at creation via zxdg_decoration_manager_v1.
-        // Runtime switching is not yet wired — no-op with a note.
-        // TODO: call zxdg_toplevel_decoration_v1.set_mode at runtime (R3 / future).
+        xdg?.setDecorations(decorated)
+        flushDisplay()
     }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
@@ -673,6 +672,7 @@ class WaylandWindow private constructor(
                     wmBasePtr = xdgWmBase,
                     surfacePtr = surface,
                     decorationManagerPtr = decorationManager,
+                    decorated = attrs.decorations,
                     onResized = { w, h, applyResizeIncrements ->
                         window.onConfigure(w, h, applyResizeIncrements)
                         val size = window.innerSize

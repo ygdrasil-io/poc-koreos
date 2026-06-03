@@ -136,6 +136,26 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland decoration mode follows winit decorated flag`() {
+        assertEquals(XDG_TOPLEVEL_DECORATION_MODE_SERVER_SIDE, waylandDecorationMode(decorated = true))
+        assertEquals(XDG_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE, waylandDecorationMode(decorated = false))
+    }
+
+    @Test
+    fun `Wayland decorations state is initialized from attrs and mutable`() {
+        val window = WaylandWindow.createForTest(
+            attrs = WindowAttributes(decorations = false),
+        )
+        assertEquals(false, window.isDecorated)
+
+        window.setDecorations(true)
+        assertEquals(true, window.isDecorated)
+
+        window.setDecorations(false)
+        assertEquals(false, window.isDecorated)
+    }
+
+    @Test
     fun `onConfigure applies resize increments from minimum size base`() {
         val attrs = WindowAttributes(
             minSize = PhysicalSize(100, 50),
