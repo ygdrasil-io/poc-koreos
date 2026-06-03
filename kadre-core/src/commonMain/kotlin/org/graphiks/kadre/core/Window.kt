@@ -525,17 +525,16 @@ interface Window {
      * Intended to be called from a pointer-pressed event handler to allow dragging
      * a custom title bar.
      * Platform behaviour:
-     * - AppKit   : `NSWindow.performWindowDragWithEvent(currentEvent)` on the
-     *   AppKit main thread; returns [RequestError.Ignored] when no current event
-     *   is available.
+     * - AppKit   : marshals to the AppKit main queue and calls
+     *   `NSWindow.performWindowDragWithEvent(currentEvent)`; returns
+     *   [RequestError.Ignored] when no current event is available.
      * - Win32    : posts a non-client move request to the window owner thread.
      * - Wayland  : `xdg_toplevel.move` when implemented.
      * - Others   : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Default implementation returns [WindowRequestResult.Failure] with
      * [RequestError.Unsupported]. Never throws.
-     * TODO R5-MiscWindow: wire in X11/Wayland and AppKit off-main-thread
-     * marshalling.
+     * TODO R5-MiscWindow: wire in X11/Wayland.
      */
     fun dragWindow(): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported by this window"))

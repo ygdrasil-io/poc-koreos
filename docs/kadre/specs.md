@@ -1042,7 +1042,7 @@ Key residual points:
 |--------------|-------|
 | `WindowEvent::Occluded` | `WindowEvent.Occluded(occluded: Boolean)` — not yet emitted |
 | `Window::request_user_attention()` | `Window.requestUserAttention(requestType: UserAttentionType?)` — no-op (see DEFERRED.md) |
-| `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean)` — no-op (see DEFERRED.md) |
+| `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean)` — backend-partial, no-op by default (see DEFERRED.md) |
 | `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — default `RequestError.Unsupported`; AppKit may return `RequestError.Ignored` when no current `NSEvent` is available (see DEFERRED.md) |
 | `Window::drag_resize_window()` | `Window.dragResizeWindow(direction: ResizeDirection): WindowRequestResult` — default `RequestError.Unsupported` (see DEFERRED.md) |
 | `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — default `RequestError.Unsupported` (see DEFERRED.md) |

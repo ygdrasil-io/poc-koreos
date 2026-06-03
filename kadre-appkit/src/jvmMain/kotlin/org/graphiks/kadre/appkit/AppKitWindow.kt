@@ -629,26 +629,27 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      */
     override fun dragWindow(): WindowRequestResult =
         try {
-            MainThreadCheck.require()
-            val nsAppClass = ObjCRuntime.getClass("NSApplication")
-            val nsApp = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS,
-                nsAppClass,
-                ObjCRuntime.sel("sharedApplication"),
-            ) as MemorySegment
-            if (nsApp == MemorySegment.NULL) {
-                return WindowRequestResult.Failure(RequestError.OsError("NSApplication.sharedApplication is unavailable"))
+            AppKitMainThread.runSync {
+                val nsAppClass = ObjCRuntime.getClass("NSApplication")
+                val nsApp = ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    nsAppClass,
+                    ObjCRuntime.sel("sharedApplication"),
+                ) as MemorySegment
+                if (nsApp == MemorySegment.NULL) {
+                    return@runSync WindowRequestResult.Failure(RequestError.OsError("NSApplication.sharedApplication is unavailable"))
+                }
+                val event = ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    nsApp,
+                    ObjCRuntime.sel("currentEvent"),
+                ) as MemorySegment
+                if (event == MemorySegment.NULL) {
+                    return@runSync WindowRequestResult.Failure(RequestError.Ignored("NSApplication.currentEvent is unavailable for window drag"))
+                }
+                NSWindow(nsWindowPtr).performWindowDragWithEvent(event)
+                WindowRequestResult.Success
             }
-            val event = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS,
-                nsApp,
-                ObjCRuntime.sel("currentEvent"),
-            ) as MemorySegment
-            if (event == MemorySegment.NULL) {
-                return WindowRequestResult.Failure(RequestError.Ignored("NSApplication.currentEvent is unavailable for window drag"))
-            }
-            NSWindow(nsWindowPtr).performWindowDragWithEvent(event)
-            WindowRequestResult.Success
         } catch (t: Throwable) {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit window drag failed"))
         }
