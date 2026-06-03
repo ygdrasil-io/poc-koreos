@@ -660,7 +660,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | `setCursorGrab(Confined)` | unsupported (parité winit) | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | réel | réel | réel | unsupported | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partiel (CGWarpMouseCursorPosition, cast scalaire) | réel | réel | unsupported | unsupported | unsupported | unsupported |
-| `setCursorHittest()` | réel | réel | unsupported | unsupported (input-region TODO) | unsupported | unsupported | unsupported |
+| `setCursorHittest()` | réel | réel | réel (extension Shape) | réel (`wl_surface.set_input_region`) | unsupported | unsupported | unsupported |
 | `setCustomCursor()` | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op | no-op |
 
 **Matrice plateforme — thème :**

@@ -659,7 +659,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | `setCursorGrab(Confined)` | unsupported (winit parity) | real | real | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | real | real | real | unsupported | unsupported (Pointer Lock bridge TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partial (CGWarpMouseCursorPosition, scalar cast) | real | real | unsupported | unsupported | unsupported | unsupported |
-| `setCursorHittest()` | real | real | unsupported | unsupported (input-region TODO) | unsupported | unsupported | unsupported |
+| `setCursorHittest()` | real | real | real (Shape extension) | real (`wl_surface.set_input_region`) | unsupported | unsupported | unsupported |
 | `setCustomCursor()` | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op | no-op |
 
 **Platform matrix — theme:**
