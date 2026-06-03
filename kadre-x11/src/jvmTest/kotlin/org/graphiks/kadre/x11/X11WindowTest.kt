@@ -125,6 +125,14 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 focus request follows winit visible and non-minimized guard`() {
+        assertEquals(true, x11FocusRequestAllowed(visible = true, minimized = false))
+        assertEquals(false, x11FocusRequestAllowed(visible = false, minimized = false))
+        assertEquals(false, x11FocusRequestAllowed(visible = true, minimized = true))
+        assertEquals(false, x11FocusRequestAllowed(visible = false, minimized = true))
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)

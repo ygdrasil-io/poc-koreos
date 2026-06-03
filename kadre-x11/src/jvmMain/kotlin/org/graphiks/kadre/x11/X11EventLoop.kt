@@ -62,30 +62,34 @@ private const val XEVENT_SIZE: Long = 96L
 /** Alignment of XEvent (8 bytes for 64-bit pointers). */
 private const val XEVENT_ALIGN: Long = 8L
 
-// Offsets in XEvent for the common fields (XAnyEvent)
+// Offsets in XEvent for Xlib LP64 structs.
 private const val XEVENT_TYPE_OFFSET: Long = 0L     // int type
-private const val XEVENT_WINDOW_OFFSET: Long = 16L  // Window window (unsigned long)
+internal const val XANY_WINDOW_OFFSET: Long = 32L   // XAnyEvent.window
 
 // XKeyEvent offsets (type=KeyPress or KeyRelease)
-private const val XKEY_STATE_OFFSET: Long = 28L     // unsigned int state (modifiers)
-private const val XKEY_KEYCODE_OFFSET: Long = 32L   // unsigned int keycode
+private const val XKEY_STATE_OFFSET: Long = 80L     // unsigned int state (modifiers)
+private const val XKEY_KEYCODE_OFFSET: Long = 84L   // unsigned int keycode
 
 // XButtonEvent offsets (type=ButtonPress or ButtonRelease)
-private const val XBUTTON_X_OFFSET: Long = 20L      // int x
-private const val XBUTTON_Y_OFFSET: Long = 24L      // int y
-private const val XBUTTON_BUTTON_OFFSET: Long = 32L // unsigned int button
+private const val XBUTTON_X_OFFSET: Long = 64L      // int x
+private const val XBUTTON_Y_OFFSET: Long = 68L      // int y
+private const val XBUTTON_BUTTON_OFFSET: Long = 84L // unsigned int button
 
 // XMotionEvent offsets (type=MotionNotify)
-private const val XMOTION_X_OFFSET: Long = 20L      // int x
-private const val XMOTION_Y_OFFSET: Long = 24L      // int y
+private const val XMOTION_X_OFFSET: Long = 64L      // int x
+private const val XMOTION_Y_OFFSET: Long = 68L      // int y
 
 // XConfigureEvent offsets (type=ConfigureNotify)
-private const val XCONFIGURE_WIDTH_OFFSET: Long = 28L   // int width
-private const val XCONFIGURE_HEIGHT_OFFSET: Long = 32L  // int height
+private const val XCONFIGURE_WINDOW_OFFSET: Long = 40L  // Window window
+private const val XCONFIGURE_WIDTH_OFFSET: Long = 56L   // int width
+private const val XCONFIGURE_HEIGHT_OFFSET: Long = 60L  // int height
+
+// XDestroyWindowEvent offsets (type=DestroyNotify)
+private const val XDESTROY_WINDOW_OFFSET: Long = 40L // Window window
 
 // XClientMessageEvent offsets (type=ClientMessage)
-private const val XCLIENT_MESSAGE_TYPE_OFFSET: Long = 20L  // Atom message_type (unsigned long)
-private const val XCLIENT_DATA_L0_OFFSET: Long = 32L       // long data.l[0]
+private const val XCLIENT_MESSAGE_TYPE_OFFSET: Long = 40L  // Atom message_type (unsigned long)
+private const val XCLIENT_DATA_L0_OFFSET: Long = 56L       // long data.l[0]
 
 // X11 modifiers
 private const val X11_SHIFT_MASK: Int = 0x0001
@@ -484,7 +488,7 @@ private fun dispatchEvent(
     wmDeleteWindow: Long,
 ) {
     val eventType = eventBuf.get(ValueLayout.JAVA_INT, XEVENT_TYPE_OFFSET)
-    val windowXid = eventBuf.get(ValueLayout.JAVA_LONG, XEVENT_WINDOW_OFFSET)
+    val windowXid = x11EventWindowXid(eventBuf, eventType)
     val windowId = WindowId(windowXid)
 
     when (eventType) {
@@ -578,6 +582,20 @@ private fun dispatchEvent(
             handler.windowEvent(loop, windowId, WindowEvent.PointerLeft(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
         }
 
+        FocusIn -> {
+            val window = loop.windows[windowXid] ?: return
+            if (window.onFocusChanged(true)) {
+                handler.windowEvent(loop, windowId, WindowEvent.Focused(gained = true))
+            }
+        }
+
+        FocusOut -> {
+            val window = loop.windows[windowXid] ?: return
+            if (window.onFocusChanged(false)) {
+                handler.windowEvent(loop, windowId, WindowEvent.Focused(gained = false))
+            }
+        }
+
         // ── Window destruction ────────────────────────────────────────────────
         DestroyNotify -> {
             handler.windowEvent(loop, windowId, WindowEvent.Destroyed)
@@ -620,6 +638,15 @@ private fun xCrossingPosition(eventBuf: MemorySegment): PhysicalPosition<Double>
         eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_X_OFFSET).toDouble(),
         eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_Y_OFFSET).toDouble(),
     )
+
+internal fun x11EventWindowXid(eventBuf: MemorySegment, eventType: Int): Long {
+    val offset = when (eventType) {
+        ConfigureNotify -> XCONFIGURE_WINDOW_OFFSET
+        DestroyNotify -> XDESTROY_WINDOW_OFFSET
+        else -> XANY_WINDOW_OFFSET
+    }
+    return eventBuf.get(ValueLayout.JAVA_LONG, offset)
+}
 
 // ── Dispatch modes ──────────────────────────────────────────────────────────
 

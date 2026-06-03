@@ -43,7 +43,7 @@ import java.lang.foreign.ValueLayout
  * Combined event mask selected for each X11 window.
  *
  * Includes: Expose, KeyPress, KeyRelease, ButtonPress, ButtonRelease,
- * PointerMotion, StructureNotify (ConfigureNotify, DestroyNotify, …).
+ * PointerMotion, FocusIn/FocusOut, StructureNotify (ConfigureNotify, DestroyNotify, …).
  */
 private val FULL_EVENT_MASK: Long =
     ExposureMask or
@@ -52,6 +52,7 @@ private val FULL_EVENT_MASK: Long =
     ButtonPressMask or
     ButtonReleaseMask or
     PointerMotionMask or
+    FocusChangeMask or
     StructureNotifyMask
 
 // EWMH _NET_WM_MOVERESIZE directions.
@@ -192,6 +193,16 @@ class X11Window private constructor(
     @Volatile private var _isDecorated: Boolean = attrs.decorations
 
     override val isDecorated: Boolean get() = _isDecorated
+
+    @Volatile private var _hasFocus: Boolean = false
+
+    override val hasFocus: Boolean get() = _hasFocus
+
+    override fun focusWindow() {
+        val iconic = readWmStateIconic() ?: (isMinimized == true)
+        if (!x11FocusRequestAllowed(isVisible == true, iconic)) return
+        sendNetActiveWindow()
+    }
 
     override fun setResizable(resizable: Boolean) {
         _isResizable = resizable
@@ -787,6 +798,35 @@ class X11Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    private fun sendNetActiveWindow() {
+        val sendEvent = xSendEvent ?: return
+        val rootHandle = xRootWindow ?: return
+        val display = MemorySegment.ofAddress(displayPtr)
+        val activeWindowAtom = internAtom(displayPtr, "_NET_ACTIVE_WINDOW")
+        if (activeWindowAtom == 0L) return
+        try {
+            Arena.ofConfined().use { arena ->
+                val root = rootHandle.invokeExact(display, screen) as Long
+                if (root == 0L) return@use
+                val eventBuf = arena.allocate(96L, 8L)
+                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
+                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
+                eventBuf.set(ValueLayout.JAVA_LONG, 40L, activeWindowAtom)
+                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
+                eventBuf.set(ValueLayout.JAVA_LONG, 56L, 1L)
+                eventBuf.set(ValueLayout.JAVA_LONG, 64L, 0L)
+                eventBuf.set(ValueLayout.JAVA_LONG, 72L, 0L)
+                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 0L)
+                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 0L)
+
+                val mask = SubstructureRedirectMask or SubstructureNotifyMask
+                sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+            }
+        } catch (_: Throwable) {}
+    }
+
     /**
      * Sends the EWMH _NET_WM_MOVERESIZE ClientMessage to the root window.
      *
@@ -994,6 +1034,18 @@ class X11Window private constructor(
         }
     }
 
+    private fun readWmStateIconic(): Boolean? {
+        val getProperty = xGetWindowProperty ?: return null
+        val wmStateAtom = internAtom(displayPtr, "WM_STATE")
+        val card32Atom = internAtom(displayPtr, "CARD32")
+        if (wmStateAtom == 0L || card32Atom == 0L) return null
+        val display = MemorySegment.ofAddress(displayPtr)
+        return readX11Property(getProperty, display, xWindowId, wmStateAtom, reqType = card32Atom, length = 2L) { ptr, nitems ->
+            if (nitems <= 0L) return@readX11Property null
+            ptr.getAtIndex(ValueLayout.JAVA_LONG, 0L) == X11_ICONIC_STATE
+        }
+    }
+
     /**
      * Updates the inner size upon receiving a ConfigureNotify event.
      *
@@ -1004,6 +1056,12 @@ class X11Window private constructor(
         if (width > 0 && height > 0) {
             _innerSize = PhysicalSize(width, height)
         }
+    }
+
+    fun onFocusChanged(focused: Boolean): Boolean {
+        if (_hasFocus == focused) return false
+        _hasFocus = focused
+        return true
     }
 
     // ── R3 helpers ────────────────────────────────────────────────────────────
@@ -1179,6 +1237,7 @@ internal const val X11_MWM_HINTS_FUNCTIONS: Long = 1L shl 0
 internal const val X11_MWM_HINTS_DECORATIONS: Long = 1L shl 1
 internal const val X11_MWM_FUNC_ALL: Long = 1L shl 0
 internal const val X11_MWM_FUNC_MAXIMIZE: Long = 1L shl 4
+internal const val X11_ICONIC_STATE: Long = 3L
 internal const val X11_COLOR_SIZE_BYTES: Long = 16L
 internal const val X11_COLOR_ALIGN_BYTES: Long = 8L
 internal const val X11_US_POSITION: Long = 1L shl 0
@@ -1241,6 +1300,9 @@ internal fun x11CursorChangeRequiresApply(
 
 internal fun x11WindowStateContains(atoms: LongArray, atom: Long): Boolean =
     atom != 0L && atoms.any { it == atom }
+
+internal fun x11FocusRequestAllowed(visible: Boolean, minimized: Boolean): Boolean =
+    visible && !minimized
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,
