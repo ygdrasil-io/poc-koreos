@@ -61,19 +61,14 @@ jobs:
       - name: Build samples/pong (production JS bundle)
         run: ./gradlew :samples:pong:jsBrowserDistribution --no-daemon --stacktrace
 
-      - name: Install E2E deps + Chrome stable
+      - name: Install E2E deps
         working-directory: samples/pong/e2e
+        run: npm install
+
+      - name: Use system Chrome (macOS runners have it pre-installed)
         run: |
-          npm install
-          # Stable Chrome (release channel) — not Chromium; no --with-deps
-          # (macOS does not need apt-get install for the native libs).
-          # Retry up to 3 times because the Google CDN occasionally flakes
-          # (returns an error page instead of the DMG).
-          for i in 1 2 3; do
-            npx playwright install chrome && break
-            echo "Chrome install attempt $i failed, retrying in 10s..."
-            sleep 10
-          done
+          echo "CHROME_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          echo "Using system Chrome at $(ls -d /Applications/Google\ Chrome.app 2>/dev/null || echo 'not found')"
 
       - name: Run Playwright scenario
         working-directory: samples/pong/e2e
