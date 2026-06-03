@@ -30,6 +30,7 @@ import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
@@ -72,6 +73,8 @@ private const val X11_SHAPE_SET: Int = 0
 private const val X11_SHAPE_INPUT: Int = 2
 private const val X11_SHAPE_UNSORTED: Int = 0
 private const val X11_RECTANGLE_SIZE_BYTES: Long = 8L
+private const val X11_WM_HINTS_FLAGS_OFFSET: Long = 0L
+private const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
 
 /**
  * Native X11 window implementing [Window].
@@ -736,6 +739,52 @@ class X11Window private constructor(
                 sendNetWmState(false, aboveAtom, 0L)
                 sendNetWmState(false, belowAtom, 0L)
             }
+        }
+    }
+
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult {
+        val getHints = xGetWMHints ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("XGetWMHints is unavailable"),
+        )
+        val allocHints = xAllocWMHints ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("XAllocWMHints is unavailable"),
+        )
+        val setHints = xSetWMHints ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("XSetWMHints is unavailable"),
+        )
+        val free = xFree
+        return try {
+            val display = MemorySegment.ofAddress(displayPtr)
+            val existingHints = try {
+                val existing = getHints.invokeExact(display, xWindowId) as MemorySegment
+                if (existing != MemorySegment.NULL && existing.address() != 0L) existing else null
+            } catch (_: Throwable) {
+                null
+            }
+            val hints = existingHints ?: allocHints.invokeExact() as MemorySegment
+            if (hints == MemorySegment.NULL || hints.address() == 0L) {
+                return WindowRequestResult.Failure(RequestError.OsError("XAllocWMHints returned null"))
+            }
+            try {
+                val view = hints.reinterpret(X11_WM_HINTS_SIZE_BYTES)
+                if (existingHints == null) view.fill(0)
+                val flags = view.get(ValueLayout.JAVA_LONG, X11_WM_HINTS_FLAGS_OFFSET)
+                view.set(
+                    ValueLayout.JAVA_LONG,
+                    X11_WM_HINTS_FLAGS_OFFSET,
+                    x11WmHintsUrgencyFlags(flags, requestType != null),
+                )
+                setHints.invokeExact(display, xWindowId, view)
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+                WindowRequestResult.Success
+            } finally {
+                if (free != null) free.invokeExact(hints) as Int
+            }
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(
+                RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 user attention request failed"),
+            )
         }
     }
 
@@ -1455,6 +1504,7 @@ internal const val X11_VISIBILITY_YES_WAIT: Int = 1
 internal const val X11_VISIBILITY_YES: Int = 2
 internal const val X11_COLOR_SIZE_BYTES: Long = 16L
 internal const val X11_COLOR_ALIGN_BYTES: Long = 8L
+internal const val X11_WM_HINTS_SIZE_BYTES: Long = 56L
 internal const val X11_US_POSITION: Long = 1L shl 0
 internal const val X11_US_SIZE: Long = 1L shl 1
 internal const val X11_P_MIN_SIZE: Long = 1L shl 4
@@ -1530,6 +1580,13 @@ internal fun x11ShouldReapplyCursorHittestAfterConfigure(
     resized: Boolean,
 ): Boolean =
     cursorHittest == true && resized
+
+internal fun x11WmHintsUrgencyFlags(flags: Long, urgent: Boolean): Long =
+    if (urgent) {
+        flags or X11_WM_HINTS_URGENCY_FLAG
+    } else {
+        flags and X11_WM_HINTS_URGENCY_FLAG.inv()
+    }
 
 internal fun x11ConfigureChanges(
     currentSize: PhysicalSize<Int>,

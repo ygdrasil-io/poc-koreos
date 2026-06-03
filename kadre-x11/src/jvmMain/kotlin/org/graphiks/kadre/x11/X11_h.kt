@@ -811,6 +811,44 @@ internal val xWarpPointer: MethodHandle? by lazy {
 }
 
 /**
+ * XWMHints *XGetWMHints(Display *display, Window w);
+ */
+internal val xGetWMHints: MethodHandle? by lazy {
+    libX11.downcall(
+        "XGetWMHints",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // XWMHints*
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window
+        )
+    )
+}
+
+/**
+ * XWMHints *XAllocWMHints(void);
+ */
+internal val xAllocWMHints: MethodHandle? by lazy {
+    libX11.downcall(
+        "XAllocWMHints",
+        FunctionDescriptor.of(ValueLayout.ADDRESS)
+    )
+}
+
+/**
+ * void XSetWMHints(Display *display, Window w, XWMHints *wm_hints);
+ */
+internal val xSetWMHints: MethodHandle? by lazy {
+    libX11.downcall(
+        "XSetWMHints",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window
+            ValueLayout.ADDRESS,    // XWMHints*
+        )
+    )
+}
+
+/**
  * void XShapeCombineRectangles(Display*, Window dest, int dest_kind, int x_off, int y_off,
  *                              XRectangle* rectangles, int n_rects, int op, int ordering);
  */

@@ -250,6 +250,21 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 WM hints urgency flag toggles without clearing other flags`() {
+        val otherFlag = 1L shl 1
+        val urgent = x11WmHintsUrgencyFlags(otherFlag, urgent = true)
+        assertEquals(otherFlag or X11_WM_HINTS_URGENCY_FLAG, urgent)
+
+        val cleared = x11WmHintsUrgencyFlags(urgent, urgent = false)
+        assertEquals(otherFlag, cleared)
+    }
+
+    @Test
+    fun `X11 WM hints LP64 layout size covers through window_group`() {
+        assertEquals(56L, X11_WM_HINTS_SIZE_BYTES)
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)
