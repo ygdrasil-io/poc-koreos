@@ -356,22 +356,12 @@ class X11Window private constructor(
 
     // ── R2: monitor & fullscreen ──────────────────────────────────────────────
 
-    /**
-     * Returns the monitor that contains this window by finding the monitor whose
-     * rect contains the window's outerPosition.
-     *
-     * Falls back to the first available monitor (primary screen).
-     */
     override fun currentMonitor(): MonitorHandle? {
         val monitors = enumerateX11Monitors(displayPtr, screen, scaleFactor)
-        if (monitors.isEmpty()) return null
-        val pos = outerPosition
-        return monitors.firstOrNull { m ->
-            val mw = m.currentVideoMode?.size?.width ?: 0
-            val mh = m.currentVideoMode?.size?.height ?: 0
-            pos.x >= m.position.x && pos.x < m.position.x + mw &&
-            pos.y >= m.position.y && pos.y < m.position.y + mh
-        } ?: monitors.first()
+        return selectX11MonitorForWindow(
+            monitors,
+            X11WindowRect(position = outerPosition, size = surfaceSize),
+        )
     }
 
     override fun availableMonitors(): List<MonitorHandle> =
