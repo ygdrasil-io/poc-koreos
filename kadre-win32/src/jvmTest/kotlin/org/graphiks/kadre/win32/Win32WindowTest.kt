@@ -164,6 +164,17 @@ class Win32WindowTest {
     }
 
     @Test
+    fun `DWM blur behind layout matches Win64 ABI and winit flags`() {
+        assertEquals(DWM_BB_ENABLE or DWM_BB_BLURREGION, win32TransparentBlurBehindFlags())
+        assertEquals(24L, DWM_BLURBEHIND_SIZE)
+        assertEquals(8L, DWM_BLURBEHIND_ALIGN)
+        assertEquals(0L, DWM_BLURBEHIND_OFFSET_DW_FLAGS)
+        assertEquals(4L, DWM_BLURBEHIND_OFFSET_F_ENABLE)
+        assertEquals(8L, DWM_BLURBEHIND_OFFSET_H_RGN_BLUR)
+        assertEquals(16L, DWM_BLURBEHIND_OFFSET_F_TRANSITION_ON_MAXIMIZED)
+    }
+
+    @Test
     fun `window icon buffers convert RGBA to Win32 BGRA and inverted alpha mask`() {
         val icon = Icon(
             rgba = byteArrayOf(

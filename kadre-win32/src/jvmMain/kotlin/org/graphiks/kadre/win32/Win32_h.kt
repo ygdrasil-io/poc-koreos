@@ -56,6 +56,17 @@ internal val kernel32: SymbolLookup? by lazy {
     }
 }
 
+/**
+ * Lookup of gdi32.dll — null on non-Windows platforms.
+ */
+internal val gdi32: SymbolLookup? by lazy {
+    try {
+        SymbolLookup.libraryLookup("gdi32.dll", Arena.global())
+    } catch (e: Throwable) {
+        null
+    }
+}
+
 private val linker: Linker = Linker.nativeLinker()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1315,8 +1326,63 @@ internal val dwmSetWindowAttribute: MethodHandle? by lazy {
     )
 }
 
+/**
+ * HRESULT DwmEnableBlurBehindWindow(HWND hWnd, const DWM_BLURBEHIND *pBlurBehind);
+ *
+ * Used by winit's Win32 transparent-window creation path.
+ */
+internal val dwmEnableBlurBehindWindow: MethodHandle? by lazy {
+    dwmapi.downcall(
+        "DwmEnableBlurBehindWindow",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // HRESULT
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.ADDRESS,    // const DWM_BLURBEHIND*
+        )
+    )
+}
+
 /** DWMWA_USE_IMMERSIVE_DARK_MODE — enables dark title bar (Windows 11+). */
 internal const val DWMWA_USE_IMMERSIVE_DARK_MODE: Int = 20
+
+internal const val DWM_BB_ENABLE: Int = 0x00000001
+internal const val DWM_BB_BLURREGION: Int = 0x00000002
+
+internal const val DWM_BLURBEHIND_SIZE: Long = 24L
+internal const val DWM_BLURBEHIND_ALIGN: Long = 8L
+internal const val DWM_BLURBEHIND_OFFSET_DW_FLAGS: Long = 0L
+internal const val DWM_BLURBEHIND_OFFSET_F_ENABLE: Long = 4L
+internal const val DWM_BLURBEHIND_OFFSET_H_RGN_BLUR: Long = 8L
+internal const val DWM_BLURBEHIND_OFFSET_F_TRANSITION_ON_MAXIMIZED: Long = 16L
+
+/**
+ * HRGN CreateRectRgn(int x1, int y1, int x2, int y2);
+ */
+internal val createRectRgn: MethodHandle? by lazy {
+    gdi32.downcall(
+        "CreateRectRgn",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,    // HRGN
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT,
+        )
+    )
+}
+
+/**
+ * BOOL DeleteObject(HGDIOBJ ho);
+ */
+internal val deleteObject: MethodHandle? by lazy {
+    gdi32.downcall(
+        "DeleteObject",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HGDIOBJ
+        )
+    )
+}
 
 // IDC cursor resource IDs (passed to LoadCursorW via MAKEINTRESOURCE)
 internal const val IDC_WAIT: Long     = 32514L

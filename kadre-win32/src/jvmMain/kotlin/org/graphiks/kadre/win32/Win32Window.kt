@@ -1108,6 +1108,7 @@ class Win32Window private constructor(
             attrs.windowIcon?.let(window::setWindowIcon)
             if (attrs.transparent) {
                 window.setTransparent(true)
+                enableWin32TransparentBlurBehind(hwnd)
             }
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
@@ -1227,6 +1228,36 @@ internal fun win32InitialExtendedStyle(transparent: Boolean): Int =
     } else {
         WS_EX_APPWINDOW
     }
+
+internal fun win32TransparentBlurBehindFlags(): Int =
+    DWM_BB_ENABLE or DWM_BB_BLURREGION
+
+internal fun enableWin32TransparentBlurBehind(hwnd: MemorySegment): Boolean {
+    val createRegion = createRectRgn ?: return false
+    val enableBlur = dwmEnableBlurBehindWindow ?: return false
+    var region = MemorySegment.NULL
+    return try {
+        region = createRegion.invokeExact(0, 0, -1, -1) as MemorySegment
+        if (region == MemorySegment.NULL) return false
+        Arena.ofConfined().use { arena ->
+            val blurBehind = arena.allocate(DWM_BLURBEHIND_SIZE, DWM_BLURBEHIND_ALIGN)
+            blurBehind.set(ValueLayout.JAVA_INT, DWM_BLURBEHIND_OFFSET_DW_FLAGS, win32TransparentBlurBehindFlags())
+            blurBehind.set(ValueLayout.JAVA_INT, DWM_BLURBEHIND_OFFSET_F_ENABLE, 1)
+            blurBehind.set(ValueLayout.ADDRESS, DWM_BLURBEHIND_OFFSET_H_RGN_BLUR, region)
+            blurBehind.set(ValueLayout.JAVA_INT, DWM_BLURBEHIND_OFFSET_F_TRANSITION_ON_MAXIMIZED, 0)
+            val hr = enableBlur.invokeExact(hwnd, blurBehind) as Int
+            hr >= 0
+        }
+    } catch (_: Throwable) {
+        false
+    } finally {
+        if (region != MemorySegment.NULL) {
+            try {
+                deleteObject?.let { it.invokeExact(region) as Int }
+            } catch (_: Throwable) {}
+        }
+    }
+}
 
 internal fun win32WindowLevelInsertAfter(level: WindowLevel): MemorySegment =
     when (level) {
