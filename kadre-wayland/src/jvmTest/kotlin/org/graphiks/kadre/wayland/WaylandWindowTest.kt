@@ -422,8 +422,8 @@ class WaylandWindowTest {
     }
 
     @Test
-    fun `setVisible does not crash`() {
-        val window = WaylandWindow.createForTest(surface = 0L)
+    fun `setVisible is ignored on Wayland without native calls like winit`() {
+        val window = WaylandWindow.createForTest(surface = 4_242L)
         window.setVisible(true)
         window.setVisible(false)
     }

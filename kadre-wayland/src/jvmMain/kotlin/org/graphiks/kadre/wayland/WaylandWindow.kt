@@ -196,18 +196,13 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Makes the window visible or invisible.
+     * Ignored on Wayland, matching winit.
      *
-     * On Wayland, the visibility of a toplevel surface is controlled via
-     * xdg_surface / xdg_toplevel. The initial commit makes the surface visible;
-     * wl_surface.attach(NULL) + commit hides it.
-     * This implementation performs a commit to make it visible.
-     *
-     * @param visible true to show the window, false ignored (stub).
+     * xdg-shell does not expose a runtime show/hide request for toplevels. The initial surface
+     * commit controls mapping; subsequent `set_visible` calls are intentionally no-ops.
      */
     override fun setVisible(visible: Boolean) {
-        if (visible) requestRedraw()
-        // setInvisible requires wl_surface.attach(NULL) + commit — deferred to later
+        // no-op: Wayland runtime visibility changes are unsupported.
     }
 
     /**
