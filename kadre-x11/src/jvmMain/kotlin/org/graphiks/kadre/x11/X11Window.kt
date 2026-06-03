@@ -103,6 +103,12 @@ class X11Window private constructor(
     @Volatile
     private var _innerSize: PhysicalSize<Int> = attrs.size ?: PhysicalSize(800, 600)
 
+    @Volatile
+    private var _outerPosition: PhysicalPosition<Int> = x11InitialPosition(attrs.position)
+
+    @Volatile
+    private var _frameExtents: X11FrameExtents? = null
+
     override val innerSize: PhysicalSize<Int>
         get() = _innerSize
 
@@ -117,6 +123,10 @@ class X11Window private constructor(
      */
     override val outerSize: PhysicalSize<Int>
         get() = _innerSize
+
+    override val surfacePosition: PhysicalPosition<Int>
+        get() = (_frameExtents ?: readFrameExtents()?.also { _frameExtents = it })?.surfacePosition
+            ?: PhysicalPosition(0, 0)
 
     /**
      * DPI scale factor of this window.
@@ -280,29 +290,45 @@ class X11Window private constructor(
             val display = MemorySegment.ofAddress(displayPtr)
             return try {
                 Arena.ofConfined().use { arena ->
-                    val rootOut = arena.allocate(ValueLayout.JAVA_LONG)
+                    val translate = xTranslateCoordinates ?: return@use _outerPosition
+                    val rootHandle = xRootWindow ?: return@use _outerPosition
+                    val extents = _frameExtents ?: readFrameExtents()?.also { _frameExtents = it }
                     val xOut    = arena.allocate(ValueLayout.JAVA_INT)
                     val yOut    = arena.allocate(ValueLayout.JAVA_INT)
-                    val wOut    = arena.allocate(ValueLayout.JAVA_INT)
-                    val hOut    = arena.allocate(ValueLayout.JAVA_INT)
-                    val bwOut   = arena.allocate(ValueLayout.JAVA_INT)
-                    val dOut    = arena.allocate(ValueLayout.JAVA_INT)
-                    val ok = xGetGeometry?.invokeExact(
-                        display, xWindowId, rootOut, xOut, yOut, wOut, hOut, bwOut, dOut,
-                    ) as? Int ?: 0
-                    if (ok == 0) return@use PhysicalPosition(0, 0)
+                    val childOut = arena.allocate(ValueLayout.JAVA_LONG)
+                    val root = rootHandle.invokeExact(display, screen) as Long
+                    if (root == 0L) return@use _outerPosition
+                    val ok = translate.invokeExact(
+                        display,
+                        xWindowId,
+                        root,
+                        0,
+                        0,
+                        xOut,
+                        yOut,
+                        childOut,
+                    ) as Int
+                    if (ok == 0) return@use _outerPosition
                     val x = xOut.get(ValueLayout.JAVA_INT, 0L)
                     val y = yOut.get(ValueLayout.JAVA_INT, 0L)
-                    PhysicalPosition(x, y)
+                    val position = if (extents != null) {
+                        extents.innerToOuter(PhysicalPosition(x, y))
+                    } else {
+                        _outerPosition
+                    }
+                    position.also { _outerPosition = it }
                 }
-            } catch (_: Throwable) { PhysicalPosition(0, 0) }
+            } catch (_: Throwable) { _outerPosition }
         }
 
     override fun setOuterPosition(position: PhysicalPosition<Int>) {
         try {
             val display = MemorySegment.ofAddress(displayPtr)
-            xMoveWindow?.invokeExact(display, xWindowId, position.x, position.y) as? Int
-            xFlush?.invokeExact(display) as? Int
+            val moveWindow = xMoveWindow ?: return
+            moveWindow.invokeExact(display, xWindowId, position.x, position.y) as Int
+            val flush = xFlush
+            if (flush != null) flush.invokeExact(display) as Int
+            _outerPosition = position
         } catch (_: Throwable) {}
     }
 
@@ -1058,16 +1084,60 @@ class X11Window private constructor(
         }
     }
 
+    private fun readFrameExtents(): X11FrameExtents? {
+        val getProperty = xGetWindowProperty ?: return null
+        val frameExtentsAtom = internAtom(displayPtr, "_NET_FRAME_EXTENTS")
+        if (frameExtentsAtom == 0L) return null
+        val cardinalAtom = internAtom(displayPtr, "CARDINAL")
+        val display = MemorySegment.ofAddress(displayPtr)
+        return readX11Property(
+            getProperty = getProperty,
+            display = display,
+            window = xWindowId,
+            property = frameExtentsAtom,
+            reqType = cardinalAtom,
+            length = 4L,
+        ) { ptr, nitems ->
+            if (nitems < 4L) return@readX11Property null
+            X11FrameExtents(
+                left = ptr.getAtIndex(ValueLayout.JAVA_LONG, 0L).toInt(),
+                right = ptr.getAtIndex(ValueLayout.JAVA_LONG, 1L).toInt(),
+                top = ptr.getAtIndex(ValueLayout.JAVA_LONG, 2L).toInt(),
+                bottom = ptr.getAtIndex(ValueLayout.JAVA_LONG, 3L).toInt(),
+            )
+        }
+    }
+
     /**
      * Updates the inner size upon receiving a ConfigureNotify event.
      *
      * @param width  New width in pixels.
      * @param height New height in pixels.
      */
-    fun onConfigureNotify(width: Int, height: Int) {
+    internal fun onConfigureNotify(width: Int, height: Int) {
+        onConfigureNotify(width, height, position = null, positionIsRootRelative = false)
+    }
+
+    internal fun onConfigureNotify(
+        width: Int,
+        height: Int,
+        position: PhysicalPosition<Int>?,
+        positionIsRootRelative: Boolean,
+    ): X11ConfigureChanges {
+        val extents = _frameExtents ?: readFrameExtents()?.also { _frameExtents = it }
+        val outerPosition = if (positionIsRootRelative && position != null && extents != null) {
+            extents.innerToOuter(position)
+        } else {
+            null
+        }
+        val changes = x11ConfigureChanges(_innerSize, _outerPosition, width, height, outerPosition, outerPosition != null)
         if (width > 0 && height > 0) {
             _innerSize = PhysicalSize(width, height)
         }
+        if (outerPosition != null) {
+            _outerPosition = outerPosition
+        }
+        return changes
     }
 
     fun onFocusChanged(focused: Boolean): Boolean {
@@ -1291,6 +1361,37 @@ internal data class X11NormalHints(
     override fun hashCode(): Int =
         elements.contentHashCode()
 }
+
+internal data class X11ConfigureChanges(
+    val sizeChanged: Boolean,
+    val movedPosition: PhysicalPosition<Int>?,
+)
+
+internal data class X11FrameExtents(
+    val left: Int,
+    val right: Int,
+    val top: Int,
+    val bottom: Int,
+) {
+    val surfacePosition: PhysicalPosition<Int>
+        get() = PhysicalPosition(left, top)
+
+    fun innerToOuter(position: PhysicalPosition<Int>): PhysicalPosition<Int> =
+        PhysicalPosition(position.x - left, position.y - top)
+}
+
+internal fun x11ConfigureChanges(
+    currentSize: PhysicalSize<Int>,
+    currentPosition: PhysicalPosition<Int>,
+    width: Int,
+    height: Int,
+    position: PhysicalPosition<Int>?,
+    positionIsRootRelative: Boolean,
+): X11ConfigureChanges =
+    X11ConfigureChanges(
+        sizeChanged = width > 0 && height > 0 && currentSize != PhysicalSize(width, height),
+        movedPosition = if (positionIsRootRelative && position != null && currentPosition != position) position else null,
+    )
 
 internal fun x11MotifDecorationHints(decorated: Boolean, existing: LongArray? = null): LongArray =
     x11MotifHints(existing).also { hints ->

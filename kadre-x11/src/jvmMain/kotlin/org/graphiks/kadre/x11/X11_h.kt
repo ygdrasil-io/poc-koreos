@@ -522,6 +522,30 @@ internal val xGetGeometry: MethodHandle? by lazy {
     )
 }
 
+// ── XTranslateCoordinates ────────────────────────────────────────────────────
+
+/**
+ * Bool XTranslateCoordinates(Display *display, Window src_w, Window dest_w,
+ *     int src_x, int src_y, int *dest_x_return, int *dest_y_return,
+ *     Window *child_return);
+ */
+internal val xTranslateCoordinates: MethodHandle? by lazy {
+    libX11.downcall(
+        "XTranslateCoordinates",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        )
+    )
+}
+
 // ── XUnmapWindow ──────────────────────────────────────────────────────────────
 
 /**

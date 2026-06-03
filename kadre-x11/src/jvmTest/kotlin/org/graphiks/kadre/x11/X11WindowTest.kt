@@ -148,6 +148,43 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 configure changes track size and only synthetic root-relative moves`() {
+        val currentSize = PhysicalSize(800, 600)
+        val currentPosition = PhysicalPosition(10, 20)
+
+        assertEquals(
+            X11ConfigureChanges(sizeChanged = true, movedPosition = PhysicalPosition(30, 40)),
+            x11ConfigureChanges(
+                currentSize = currentSize,
+                currentPosition = currentPosition,
+                width = 1024,
+                height = 768,
+                position = PhysicalPosition(30, 40),
+                positionIsRootRelative = true,
+            ),
+        )
+        assertEquals(
+            X11ConfigureChanges(sizeChanged = false, movedPosition = null),
+            x11ConfigureChanges(
+                currentSize = currentSize,
+                currentPosition = currentPosition,
+                width = 800,
+                height = 600,
+                position = PhysicalPosition(30, 40),
+                positionIsRootRelative = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `X11 frame extents convert inner root position to outer position`() {
+        val extents = X11FrameExtents(left = 8, right = 8, top = 24, bottom = 4)
+
+        assertEquals(PhysicalPosition(8, 24), extents.surfacePosition)
+        assertEquals(PhysicalPosition(92, 176), extents.innerToOuter(PhysicalPosition(100, 200)))
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)

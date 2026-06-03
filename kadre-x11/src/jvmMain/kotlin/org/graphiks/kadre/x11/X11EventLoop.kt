@@ -80,7 +80,10 @@ private const val XMOTION_X_OFFSET: Long = 64L      // int x
 private const val XMOTION_Y_OFFSET: Long = 68L      // int y
 
 // XConfigureEvent offsets (type=ConfigureNotify)
+private const val XCONFIGURE_SEND_EVENT_OFFSET: Long = 16L // Bool send_event
 private const val XCONFIGURE_WINDOW_OFFSET: Long = 40L  // Window window
+private const val XCONFIGURE_X_OFFSET: Long = 48L       // int x
+private const val XCONFIGURE_Y_OFFSET: Long = 52L       // int y
 private const val XCONFIGURE_WIDTH_OFFSET: Long = 56L   // int width
 private const val XCONFIGURE_HEIGHT_OFFSET: Long = 60L  // int height
 
@@ -505,11 +508,23 @@ private fun dispatchEvent(
 
         // ── Resize ────────────────────────────────────────────────────────────
         ConfigureNotify -> {
+            val isSynthetic = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_SEND_EVENT_OFFSET) != 0
+            val x = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_X_OFFSET)
+            val y = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_Y_OFFSET)
             val width  = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_WIDTH_OFFSET)
             val height = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_HEIGHT_OFFSET)
-            loop.windows[windowXid]?.onConfigureNotify(width, height)
-            if (width > 0 && height > 0) {
+            val window = loop.windows[windowXid] ?: return
+            val changes = window.onConfigureNotify(
+                width = width,
+                height = height,
+                position = PhysicalPosition(x, y),
+                positionIsRootRelative = isSynthetic,
+            )
+            if (changes.sizeChanged && width > 0 && height > 0) {
                 handler.windowEvent(loop, windowId, WindowEvent.Resized(PhysicalSize(width, height)))
+            }
+            changes.movedPosition?.let { position ->
+                handler.windowEvent(loop, windowId, WindowEvent.Moved(position))
             }
         }
 
