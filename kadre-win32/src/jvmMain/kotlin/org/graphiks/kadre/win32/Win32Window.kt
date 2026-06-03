@@ -41,6 +41,7 @@ import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -356,6 +357,27 @@ class Win32Window private constructor(
 
     override val fullscreen: Fullscreen?
         get() = _fullscreen
+
+    override fun focusWindow() {
+        try {
+            val visible = isVisible == true
+            val minimized = isMinimized == true
+            if (win32ShouldFocusWindow(visible, minimized, isForegroundWindow())) {
+                forceWindowActive(hwnd)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    override val hasFocus: Boolean
+        get() = Win32FocusState.hasActiveFocus(hwnd.address())
+
+    private fun isForegroundWindow(): Boolean =
+        try {
+            val foreground = getForegroundWindow?.invokeExact() as? MemorySegment ?: return false
+            foreground.address() == hwnd.address()
+        } catch (_: Throwable) {
+            false
+        }
 
     /**
      * Enters or exits fullscreen mode on Win32.
@@ -1074,6 +1096,7 @@ class Win32Window private constructor(
             if (hwnd == MemorySegment.NULL) return null
 
             val window = Win32Window(hwnd, hInstance, attrs, currentWin32ThreadId())
+            Win32FocusState.register(hwnd.address())
             window.applyEnabledButtons(attrs.enabledButtons)
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
@@ -1095,6 +1118,53 @@ class Win32Window private constructor(
             return window
         }
     }
+}
+
+internal object Win32FocusState {
+    private data class State(
+        @Volatile var active: Boolean = false,
+        @Volatile var focused: Boolean = false,
+    )
+
+    private val states = ConcurrentHashMap<Long, State>()
+
+    fun register(hwnd: Long) {
+        states.putIfAbsent(hwnd, State())
+    }
+
+    fun unregister(hwnd: Long) {
+        states.remove(hwnd)
+    }
+
+    @Synchronized
+    fun setActive(hwnd: Long, active: Boolean): Boolean? {
+        val state = state(hwnd)
+        val previous = state.hasActiveFocus
+        state.active = active
+        val current = state.hasActiveFocus
+        return current.takeIf { previous != current }
+    }
+
+    @Synchronized
+    fun setFocused(hwnd: Long, focused: Boolean): Boolean? {
+        val state = state(hwnd)
+        val previous = state.hasActiveFocus
+        state.focused = focused
+        val current = state.hasActiveFocus
+        return current.takeIf { previous != current }
+    }
+
+    @Synchronized
+    fun hasActiveFocus(hwnd: Long): Boolean {
+        val state = states[hwnd] ?: return false
+        return state.hasActiveFocus
+    }
+
+    private fun state(hwnd: Long): State =
+        states.computeIfAbsent(hwnd) { State() }
+
+    private val State.hasActiveFocus: Boolean
+        get() = active && focused
 }
 
 /**
@@ -1133,6 +1203,13 @@ internal const val WIN32_STYLE_UPDATE_FLAGS: Int =
 internal fun win32CloseMenuState(enabled: Boolean): Int =
     MF_BYCOMMAND or if (enabled) MF_ENABLED else MF_DISABLED
 
+internal fun win32ShouldFocusWindow(
+    isVisible: Boolean,
+    isMinimized: Boolean,
+    isForeground: Boolean,
+): Boolean =
+    isVisible && !isMinimized && !isForeground
+
 internal fun win32StyleWithEnabledButtons(
     style: Int,
     buttons: WindowButtons,
@@ -1152,3 +1229,38 @@ private fun Int.withStyleBit(bit: Int, enabled: Boolean): Int =
 
 private fun Long.withStyleBit(bit: Long, enabled: Boolean): Long =
     if (enabled) this or bit else this and bit.inv()
+
+private fun forceWindowActive(hwnd: MemorySegment) {
+    val setForeground = setForegroundWindow ?: return
+    val send = sendInput
+    val map = mapVirtualKeyW
+    if (send != null && map != null) {
+        try {
+            val scanCode = map.invokeExact(VK_MENU, MAPVK_VK_TO_VSC) as Int
+            Arena.ofConfined().use { arena ->
+                val inputs = arena.allocate(INPUT_SIZE * 2, INPUT_ALIGN)
+                fillKeyboardInput(inputs, index = 0, scanCode = scanCode, flags = KEYEVENTF_EXTENDEDKEY)
+                fillKeyboardInput(
+                    inputs,
+                    index = 1,
+                    scanCode = scanCode,
+                    flags = KEYEVENTF_EXTENDEDKEY or KEYEVENTF_KEYUP,
+                )
+                send.invokeExact(2, inputs, INPUT_SIZE.toInt()) as Int
+            }
+        } catch (_: Throwable) {
+            // Fall through to SetForegroundWindow; the Alt-key permission hack is best-effort.
+        }
+    }
+    setForeground.invokeExact(hwnd) as Int
+}
+
+private fun fillKeyboardInput(inputs: MemorySegment, index: Int, scanCode: Int, flags: Int) {
+    val offset = INPUT_SIZE * index
+    inputs.set(ValueLayout.JAVA_INT, offset + INPUT_OFFSET_TYPE, INPUT_KEYBOARD)
+    inputs.set(ValueLayout.JAVA_SHORT, offset + INPUT_OFFSET_KI_WVK, VK_LMENU.toShort())
+    inputs.set(ValueLayout.JAVA_SHORT, offset + INPUT_OFFSET_KI_WSCAN, scanCode.toShort())
+    inputs.set(ValueLayout.JAVA_INT, offset + INPUT_OFFSET_KI_DWFLAGS, flags)
+    inputs.set(ValueLayout.JAVA_INT, offset + INPUT_OFFSET_KI_TIME, 0)
+    inputs.set(ValueLayout.JAVA_LONG, offset + INPUT_OFFSET_KI_DWEXTRAINFO, 0L)
+}

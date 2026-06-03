@@ -113,6 +113,57 @@ class Win32WindowTest {
     }
 
     @Test
+    fun `Win32 focus follows winit visible non-minimized non-foreground guard`() {
+        assertTrue(win32ShouldFocusWindow(isVisible = true, isMinimized = false, isForeground = false))
+        assertTrue(!win32ShouldFocusWindow(isVisible = false, isMinimized = false, isForeground = false))
+        assertTrue(!win32ShouldFocusWindow(isVisible = true, isMinimized = true, isForeground = false))
+        assertTrue(!win32ShouldFocusWindow(isVisible = true, isMinimized = false, isForeground = true))
+    }
+
+    @Test
+    fun `Win32 hasFocus requires active non-client area and keyboard focus`() {
+        val hwnd = 0xCAFE_BABEL
+
+        Win32FocusState.unregister(hwnd)
+        Win32FocusState.register(hwnd)
+        assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+
+        assertNull(Win32FocusState.setFocused(hwnd, true))
+        assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+
+        assertEquals(true, Win32FocusState.setActive(hwnd, true))
+        assertTrue(Win32FocusState.hasActiveFocus(hwnd))
+
+        assertNull(Win32FocusState.setActive(hwnd, true))
+        assertTrue(Win32FocusState.hasActiveFocus(hwnd))
+
+        assertEquals(false, Win32FocusState.setActive(hwnd, false))
+        assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+
+        assertNull(Win32FocusState.setFocused(hwnd, false))
+        assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+
+        Win32FocusState.unregister(hwnd)
+        assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+    }
+
+    @Test
+    fun `Win32 INPUT layout matches supported 64-bit JVM target`() {
+        assertEquals(40L, INPUT_SIZE)
+        assertEquals(8L, INPUT_ALIGN)
+        assertEquals(0L, INPUT_OFFSET_TYPE)
+        assertEquals(8L, INPUT_OFFSET_KI_WVK)
+        assertEquals(10L, INPUT_OFFSET_KI_WSCAN)
+        assertEquals(12L, INPUT_OFFSET_KI_DWFLAGS)
+        assertEquals(16L, INPUT_OFFSET_KI_TIME)
+        assertEquals(24L, INPUT_OFFSET_KI_DWEXTRAINFO)
+        assertEquals(1, INPUT_KEYBOARD)
+        assertEquals(0xA4, VK_LMENU)
+        assertEquals(0x12, VK_MENU)
+        assertEquals(0, MAPVK_VK_TO_VSC)
+    }
+
+    @Test
     fun `user32 and kernel32 are null on non-Windows platform`() {
         if (isWindows()) return  // skip on Windows (the libs exist)
         // On macOS/Linux, the lazy loaders must return null

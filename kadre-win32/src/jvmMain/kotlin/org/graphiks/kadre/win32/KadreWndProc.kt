@@ -189,12 +189,22 @@ object KadreWndProc {
             }
 
             // ── Focus ─────────────────────────────────────────────────────────
+            WM_NCACTIVATE.toUInt() -> {
+                Win32FocusState.setActive(hwnd, wParam != 0L)?.let { gained ->
+                    emit(hwnd, WindowEvent.Focused(gained))
+                }
+                defWindowProcW(hwnd, msg, wParam, lParam)
+            }
             WM_SETFOCUS.toUInt() -> {
-                emit(hwnd, WindowEvent.Focused(gained = true))
+                Win32FocusState.setFocused(hwnd, true)?.let { gained ->
+                    emit(hwnd, WindowEvent.Focused(gained))
+                }
                 0L
             }
             WM_KILLFOCUS.toUInt() -> {
-                emit(hwnd, WindowEvent.Focused(gained = false))
+                Win32FocusState.setFocused(hwnd, false)?.let { gained ->
+                    emit(hwnd, WindowEvent.Focused(gained))
+                }
                 0L
             }
 
@@ -309,6 +319,7 @@ object KadreWndProc {
             // ── Destroy ───────────────────────────────────────────────────────
             WM_DESTROY.toUInt() -> {
                 emit(hwnd, WindowEvent.Destroyed)
+                Win32FocusState.unregister(hwnd)
                 // PostQuitMessage(0) — signal to end the Win32 message loop.
                 postQuitMessage(0)
                 0L

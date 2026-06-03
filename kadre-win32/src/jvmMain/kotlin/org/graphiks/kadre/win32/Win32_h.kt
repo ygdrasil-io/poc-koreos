@@ -1006,6 +1006,60 @@ internal val setWindowPos: MethodHandle? by lazy {
     )
 }
 
+// ── Foreground activation helpers ────────────────────────────────────────────
+
+/**
+ * HWND GetForegroundWindow(void);
+ */
+internal val getForegroundWindow: MethodHandle? by lazy {
+    user32.downcall(
+        "GetForegroundWindow",
+        FunctionDescriptor.of(ValueLayout.ADDRESS)
+    )
+}
+
+/**
+ * BOOL SetForegroundWindow(HWND hWnd);
+ */
+internal val setForegroundWindow: MethodHandle? by lazy {
+    user32.downcall(
+        "SetForegroundWindow",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+        )
+    )
+}
+
+/**
+ * UINT MapVirtualKeyW(UINT uCode, UINT uMapType);
+ */
+internal val mapVirtualKeyW: MethodHandle? by lazy {
+    user32.downcall(
+        "MapVirtualKeyW",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // UINT
+            ValueLayout.JAVA_INT,   // UINT uCode
+            ValueLayout.JAVA_INT,   // UINT uMapType
+        )
+    )
+}
+
+/**
+ * UINT SendInput(UINT cInputs, LPINPUT pInputs, int cbSize);
+ */
+internal val sendInput: MethodHandle? by lazy {
+    user32.downcall(
+        "SendInput",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // UINT
+            ValueLayout.JAVA_INT,   // UINT cInputs
+            ValueLayout.ADDRESS,    // LPINPUT pInputs
+            ValueLayout.JAVA_INT,   // int cbSize
+        )
+    )
+}
+
 // ── Win32 style / ShowWindow constants for R1 ────────────────────────────────
 
 /** GWL_STYLE — window style index for Get/SetWindowLongPtrW. */
@@ -1052,6 +1106,20 @@ internal const val SWP_NOACTIVATE: Int = 0x0010
 
 /** SWP_FRAMECHANGED — apply non-client frame changes after style updates. */
 internal const val SWP_FRAMECHANGED: Int = 0x0020
+
+/** INPUT / KEYBDINPUT constants and layout for Win32 foreground activation. */
+internal const val INPUT_KEYBOARD: Int = 1
+internal const val INPUT_SIZE: Long = 40L
+internal const val INPUT_ALIGN: Long = 8L
+internal const val INPUT_OFFSET_TYPE: Long = 0L
+internal const val INPUT_OFFSET_KI_WVK: Long = 8L
+internal const val INPUT_OFFSET_KI_WSCAN: Long = 10L
+internal const val INPUT_OFFSET_KI_DWFLAGS: Long = 12L
+internal const val INPUT_OFFSET_KI_TIME: Long = 16L
+internal const val INPUT_OFFSET_KI_DWEXTRAINFO: Long = 24L
+internal const val MAPVK_VK_TO_VSC: Int = 0
+internal const val KEYEVENTF_EXTENDEDKEY: Int = 0x0001
+internal const val KEYEVENTF_KEYUP: Int = 0x0002
 
 /** WS_VISIBLE — window is visible. */
 internal const val WS_VISIBLE: Int = 0x10000000
