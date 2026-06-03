@@ -643,7 +643,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | appkit | réel (CGDirectDisplay) | réel | réel | réel |
 | win32 | réel (HMONITOR/EnumDisplayMonitors) | réel | réel | partiel — stub `ChangeDisplaySettingsExW` (cf. DEFERRED.md) |
 | x11 | réel (XRandR) | réel | réel | réel |
-| wayland | réel (wl_output) | réel | réel | no-op → fallback Borderless |
+| wayland | synthétique (wl_output TODO) | null (pas de concept primaire) | réel | no-op → fallback Borderless |
 | web | synthétique (1 moniteur = screen) | synthétique | réel (API fullscreen) | no-op → fallback Borderless |
 | android | synthétique (1 moniteur = display) | synthétique | réel (FLAG_FULLSCREEN) | no-op → fallback Borderless |
 | uikit | synthétique (1 moniteur = screen) | synthétique | réel (UIScreen bounds) | no-op → fallback Borderless |

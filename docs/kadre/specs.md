@@ -642,7 +642,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | appkit | real (CGDirectDisplay) | real | real | real |
 | win32 | real (HMONITOR/EnumDisplayMonitors) | real | real | partial — `ChangeDisplaySettingsExW` stub (see DEFERRED.md) |
 | x11 | real (XRandR) | real | real | real |
-| wayland | real (wl_output) | real | real | no-op → falls back to Borderless |
+| wayland | synthetic (wl_output TODO) | null (no primary concept) | real | no-op → falls back to Borderless |
 | web | synthetic (1 monitor = screen) | synthetic | real (fullscreen API) | no-op → falls back to Borderless |
 | android | synthetic (1 monitor = display) | synthetic | real (FLAG_FULLSCREEN) | no-op → falls back to Borderless |
 | uikit | synthetic (1 monitor = screen) | synthetic | real (UIScreen bounds) | no-op → falls back to Borderless |
