@@ -36,7 +36,7 @@ Dernière mise à jour : 2026-06-01
 ## 5. Méthodes définies mais no-op (selon la plateforme)
 
 - **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : no-op partout (défaut interface).
-- **Divers fenêtre** : `requestUserAttention`, `setContentProtected` et `memoryWarning` restent no-op partout; `showWindowMenu`, `dragWindow` et `dragResizeWindow` retournent désormais `WindowRequestResult.Failure(RequestError.Unsupported(...))` par défaut. Win32 câble le menu système et enfile les drags move/resize cross-thread vers le thread fenêtre comme winit; le démarrage natif reste fire-and-forget. AppKit, X11 et Wayland restent à câbler.
+- **Divers fenêtre** : `requestUserAttention`, `setContentProtected` et `memoryWarning` restent no-op partout; `showWindowMenu`, `dragWindow` et `dragResizeWindow` retournent désormais `WindowRequestResult.Failure(RequestError.Unsupported(...))` par défaut. AppKit câble `dragWindow` via le `NSEvent` courant; Win32 câble le menu système et enfile les drags move/resize cross-thread vers le thread fenêtre comme winit; le démarrage natif reste fire-and-forget. `dragResizeWindow` AppKit reste unsupported comme winit; X11 et Wayland restent à câbler.
 - **iOS / Android** : la quasi-totalité de l'état/géométrie de fenêtre = no-op (attendu sur mobile).
 
 ## 6. Implémentations natives partielles (TODO concrets dans le code)

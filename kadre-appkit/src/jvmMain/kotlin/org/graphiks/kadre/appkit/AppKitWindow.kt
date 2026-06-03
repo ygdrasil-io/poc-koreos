@@ -621,6 +621,38 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "NSWindow cursor hit-testing failed"))
         }
 
+    /**
+     * Starts a native AppKit window drag using the current NSEvent.
+     *
+     * AppKit requires this to be called while processing a mouse event. When no
+     * current event exists we report a typed failure instead of silently no-oping.
+     */
+    override fun dragWindow(): WindowRequestResult =
+        try {
+            MainThreadCheck.require()
+            val nsAppClass = ObjCRuntime.getClass("NSApplication")
+            val nsApp = ObjCRuntime.msgSend(
+                ValueLayout.ADDRESS,
+                nsAppClass,
+                ObjCRuntime.sel("sharedApplication"),
+            ) as MemorySegment
+            if (nsApp == MemorySegment.NULL) {
+                return WindowRequestResult.Failure(RequestError.OsError("NSApplication.sharedApplication is unavailable"))
+            }
+            val event = ObjCRuntime.msgSend(
+                ValueLayout.ADDRESS,
+                nsApp,
+                ObjCRuntime.sel("currentEvent"),
+            ) as MemorySegment
+            if (event == MemorySegment.NULL) {
+                return WindowRequestResult.Failure(RequestError.OsError("NSApplication.currentEvent is unavailable for window drag"))
+            }
+            NSWindow(nsWindowPtr).performWindowDragWithEvent(event)
+            WindowRequestResult.Success
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit window drag failed"))
+        }
+
     /** In-memory theme override. */
     @Volatile private var _theme: Theme? = attrs.preferredTheme
 
