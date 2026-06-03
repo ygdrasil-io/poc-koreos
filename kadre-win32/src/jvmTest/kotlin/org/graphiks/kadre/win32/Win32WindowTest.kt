@@ -14,6 +14,7 @@ package org.graphiks.kadre.win32
 
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowButtons
+import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
 import kotlin.test.Test
@@ -145,6 +146,13 @@ class Win32WindowTest {
 
         Win32FocusState.unregister(hwnd)
         assertTrue(!Win32FocusState.hasActiveFocus(hwnd))
+    }
+
+    @Test
+    fun `window levels map to winit Win32 insert-after handles`() {
+        assertEquals(HWND_TOPMOST.address(), win32WindowLevelInsertAfter(WindowLevel.AlwaysOnTop).address())
+        assertEquals(HWND_NOTOPMOST.address(), win32WindowLevelInsertAfter(WindowLevel.Normal).address())
+        assertEquals(HWND_BOTTOM.address(), win32WindowLevelInsertAfter(WindowLevel.AlwaysOnBottom).address())
     }
 
     @Test

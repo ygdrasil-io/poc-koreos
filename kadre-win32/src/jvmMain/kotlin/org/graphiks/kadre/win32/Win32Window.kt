@@ -757,14 +757,9 @@ class Win32Window private constructor(
      */
     override fun setWindowLevel(level: WindowLevel) {
         try {
-            val insertAfter: MemorySegment = when (level) {
-                WindowLevel.AlwaysOnTop    -> HWND_TOPMOST
-                WindowLevel.Normal         -> HWND_NOTOPMOST
-                WindowLevel.AlwaysOnBottom -> HWND_BOTTOM
-            }
             // Change Z-order via insertAfter → must NOT pass SWP_NOZORDER.
             setWindowPos?.invokeExact(
-                hwnd, insertAfter,
+                hwnd, win32WindowLevelInsertAfter(level),
                 0, 0, 0, 0,
                 SWP_NOSIZE or SWP_NOMOVE or SWP_NOACTIVATE,
             ) as? Int
@@ -1098,6 +1093,7 @@ class Win32Window private constructor(
             val window = Win32Window(hwnd, hInstance, attrs, currentWin32ThreadId())
             Win32FocusState.register(hwnd.address())
             window.applyEnabledButtons(attrs.enabledButtons)
+            window.setWindowLevel(attrs.windowLevel)
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
             // instead of being emulated as mouse input. Best-effort: ignored on
@@ -1209,6 +1205,13 @@ internal fun win32ShouldFocusWindow(
     isForeground: Boolean,
 ): Boolean =
     isVisible && !isMinimized && !isForeground
+
+internal fun win32WindowLevelInsertAfter(level: WindowLevel): MemorySegment =
+    when (level) {
+        WindowLevel.AlwaysOnTop -> HWND_TOPMOST
+        WindowLevel.Normal -> HWND_NOTOPMOST
+        WindowLevel.AlwaysOnBottom -> HWND_BOTTOM
+    }
 
 internal fun win32StyleWithEnabledButtons(
     style: Int,
