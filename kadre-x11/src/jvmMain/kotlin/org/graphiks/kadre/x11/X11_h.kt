@@ -608,6 +608,31 @@ internal val xUngrabPointer: MethodHandle? by lazy {
 }
 
 /**
+ * Bool XQueryPointer(Display* display, Window w,
+ *                    Window* root_return, Window* child_return,
+ *                    int* root_x_return, int* root_y_return,
+ *                    int* win_x_return, int* win_y_return,
+ *                    unsigned int* mask_return);
+ */
+internal val xQueryPointer: MethodHandle? by lazy {
+    libX11.downcall(
+        "XQueryPointer",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // Bool
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window
+            ValueLayout.ADDRESS,    // Window* root_return
+            ValueLayout.ADDRESS,    // Window* child_return
+            ValueLayout.ADDRESS,    // int* root_x_return
+            ValueLayout.ADDRESS,    // int* root_y_return
+            ValueLayout.ADDRESS,    // int* win_x_return
+            ValueLayout.ADDRESS,    // int* win_y_return
+            ValueLayout.ADDRESS,    // unsigned int* mask_return
+        )
+    )
+}
+
+/**
  * int XWarpPointer(Display*, Window src_w, Window dest_w, int src_x, int src_y,
  *                  unsigned int src_width, unsigned int src_height, int dest_x, int dest_y);
  */

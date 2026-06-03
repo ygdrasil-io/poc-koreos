@@ -14,8 +14,10 @@ Intended to be called from a pointer-pressed event handler to allow dragging a c
 -
    Win32    : posts a non-client move request to the window owner thread.
 -
+   X11      : sends `_NET_WM_MOVERESIZE` with the move action to the WM.
+-
    Wayland  : `xdg_toplevel.move` when implemented.
 -
    Others   : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. TODO R5-MiscWindow: wire in X11/Wayland.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. TODO R5-MiscWindow: wire in Wayland.

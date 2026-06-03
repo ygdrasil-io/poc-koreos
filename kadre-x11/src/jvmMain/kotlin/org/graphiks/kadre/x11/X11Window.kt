@@ -27,6 +27,7 @@ import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -52,6 +53,17 @@ private val FULL_EVENT_MASK: Long =
     ButtonReleaseMask or
     PointerMotionMask or
     StructureNotifyMask
+
+// EWMH _NET_WM_MOVERESIZE directions.
+private const val MOVERESIZE_TOPLEFT: Long = 0L
+private const val MOVERESIZE_TOP: Long = 1L
+private const val MOVERESIZE_TOPRIGHT: Long = 2L
+private const val MOVERESIZE_RIGHT: Long = 3L
+private const val MOVERESIZE_BOTTOMRIGHT: Long = 4L
+private const val MOVERESIZE_BOTTOM: Long = 5L
+private const val MOVERESIZE_BOTTOMLEFT: Long = 6L
+private const val MOVERESIZE_LEFT: Long = 7L
+private const val MOVERESIZE_MOVE: Long = 8L
 
 /**
  * Native X11 window implementing [Window].
@@ -451,6 +463,29 @@ class X11Window private constructor(
         WindowRequestResult.Failure(RequestError.Unsupported("X11 cursor hit-testing is not implemented"))
 
     /**
+     * Starts an interactive WM-managed move via EWMH _NET_WM_MOVERESIZE.
+     */
+    override fun dragWindow(): WindowRequestResult =
+        sendNetWmMoveResize(MOVERESIZE_MOVE)
+
+    /**
+     * Starts an interactive WM-managed resize via EWMH _NET_WM_MOVERESIZE.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        sendNetWmMoveResize(
+            when (direction) {
+                ResizeDirection.East -> MOVERESIZE_RIGHT
+                ResizeDirection.North -> MOVERESIZE_TOP
+                ResizeDirection.NorthEast -> MOVERESIZE_TOPRIGHT
+                ResizeDirection.NorthWest -> MOVERESIZE_TOPLEFT
+                ResizeDirection.South -> MOVERESIZE_BOTTOM
+                ResizeDirection.SouthEast -> MOVERESIZE_BOTTOMRIGHT
+                ResizeDirection.SouthWest -> MOVERESIZE_BOTTOMLEFT
+                ResizeDirection.West -> MOVERESIZE_LEFT
+            }
+        )
+
+    /**
      * Returns null — X11 has no standard theme API.
      *
      * The xsettings daemon or GTK theme variables could be queried, but there
@@ -642,6 +677,96 @@ class X11Window private constructor(
             }
         } catch (_: Throwable) {}
     }
+
+    /**
+     * Sends the EWMH _NET_WM_MOVERESIZE ClientMessage to the root window.
+     *
+     * Data layout:
+     * - data.l[0]: root x
+     * - data.l[1]: root y
+     * - data.l[2]: direction/action
+     * - data.l[3]: button (1 = left mouse button)
+     * - data.l[4]: source indication (1 = normal application)
+     */
+    private fun sendNetWmMoveResize(action: Long): WindowRequestResult =
+        try {
+            val queryPointer = xQueryPointer ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("XQueryPointer is unavailable"),
+            )
+            val ungrabPointer = xUngrabPointer ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("XUngrabPointer is unavailable"),
+            )
+            val sendEvent = xSendEvent ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("XSendEvent is unavailable"),
+            )
+            val rootHandle = xRootWindow ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("XRootWindow is unavailable"),
+            )
+            val wmMoveResizeAtom = internAtom(displayPtr, "_NET_WM_MOVERESIZE")
+            if (wmMoveResizeAtom == 0L) {
+                return WindowRequestResult.Failure(RequestError.Unsupported("_NET_WM_MOVERESIZE is unavailable"))
+            }
+
+            val display = MemorySegment.ofAddress(displayPtr)
+            Arena.ofConfined().use { arena ->
+                val rootOut = arena.allocate(ValueLayout.JAVA_LONG)
+                val childOut = arena.allocate(ValueLayout.JAVA_LONG)
+                val rootXOut = arena.allocate(ValueLayout.JAVA_INT)
+                val rootYOut = arena.allocate(ValueLayout.JAVA_INT)
+                val winXOut = arena.allocate(ValueLayout.JAVA_INT)
+                val winYOut = arena.allocate(ValueLayout.JAVA_INT)
+                val maskOut = arena.allocate(ValueLayout.JAVA_INT)
+
+                val pointerOk = queryPointer.invokeExact(
+                    display,
+                    xWindowId,
+                    rootOut,
+                    childOut,
+                    rootXOut,
+                    rootYOut,
+                    winXOut,
+                    winYOut,
+                    maskOut,
+                ) as Int
+                if (pointerOk == 0) {
+                    return WindowRequestResult.Failure(
+                        RequestError.OsError("XQueryPointer did not return a pointer position for this window"),
+                    )
+                }
+
+                // Match winit: release any pointer grab before asking the WM to move/resize.
+                ungrabPointer.invokeExact(display, 0L) as Int
+                xFlush?.invokeExact(display) as? Int
+
+                val root: Long = rootHandle.invokeExact(display, screen) as Long
+                if (root == 0L) {
+                    return WindowRequestResult.Failure(RequestError.OsError("XRootWindow returned 0"))
+                }
+
+                val eventBuf = arena.allocate(96L, 8L)
+                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
+                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
+                eventBuf.set(ValueLayout.JAVA_LONG, 40L, wmMoveResizeAtom)
+                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
+                eventBuf.set(ValueLayout.JAVA_LONG, 56L, rootXOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventBuf.set(ValueLayout.JAVA_LONG, 64L, rootYOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventBuf.set(ValueLayout.JAVA_LONG, 72L, action)
+                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 1L)
+                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 1L)
+
+                val mask = SubstructureRedirectMask or SubstructureNotifyMask
+                val status = sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
+                if (status == 0) {
+                    return WindowRequestResult.Failure(
+                        RequestError.OsError("XSendEvent(_NET_WM_MOVERESIZE) failed"),
+                    )
+                }
+                xFlush?.invokeExact(display) as? Int
+                WindowRequestResult.Success
+            }
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 move/resize request failed"))
+        }
 
     // ── X11 helper: set/unset _MOTIF_WM_HINTS for decorations ────────────────
 

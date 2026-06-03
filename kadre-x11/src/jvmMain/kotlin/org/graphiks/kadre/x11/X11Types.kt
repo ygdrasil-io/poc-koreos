@@ -26,3 +26,5 @@ internal const val EnterWindowMask: Long = 16L
 internal const val LeaveWindowMask: Long = 32L
 internal const val ExposureMask: Long = 32768L
 internal const val StructureNotifyMask: Long = 131072L
+internal const val SubstructureNotifyMask: Long = 524288L
+internal const val SubstructureRedirectMask: Long = 1048576L

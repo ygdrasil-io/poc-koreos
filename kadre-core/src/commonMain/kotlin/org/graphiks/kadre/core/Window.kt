@@ -529,12 +529,13 @@ interface Window {
      *   `NSWindow.performWindowDragWithEvent(currentEvent)`; returns
      *   [RequestError.Ignored] when no current event is available.
      * - Win32    : posts a non-client move request to the window owner thread.
+     * - X11      : sends `_NET_WM_MOVERESIZE` with the move action to the WM.
      * - Wayland  : `xdg_toplevel.move` when implemented.
      * - Others   : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Default implementation returns [WindowRequestResult.Failure] with
      * [RequestError.Unsupported]. Never throws.
-     * TODO R5-MiscWindow: wire in X11/Wayland.
+     * TODO R5-MiscWindow: wire in Wayland.
      */
     fun dragWindow(): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported by this window"))
@@ -544,12 +545,14 @@ interface Window {
      *
      * Must be called from a pointer-pressed event handler.
      * Platform behaviour:
+     * - Win32    : posts a non-client resize request to the window owner thread.
+     * - X11      : sends `_NET_WM_MOVERESIZE` with the matching resize action.
      * - Wayland  : `xdg_toplevel.resize` with the matching edge when implemented.
      * - Others   : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Default implementation returns [WindowRequestResult.Failure] with
      * [RequestError.Unsupported]. Never throws.
-     * TODO R5-MiscWindow: wire in Wayland (and potentially Win32) backend.
+     * TODO R5-MiscWindow: wire in Wayland.
      *
      * @param direction The window edge / corner to resize from.
      */
