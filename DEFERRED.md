@@ -57,4 +57,4 @@ Dernière mise à jour : 2026-06-01
 
 ## 8. Bug pré-existant flaggé séparément (hors R0–R5)
 
-- **X11 `X11DrawMapper`** : offsets de lecture `ClientMessage` (`data.l[0] @ 64`) incohérents avec le layout canonique LP64 (`@ 56`) → `WindowEvent.CloseRequested` X11 possiblement non émis. Le **writer** (`sendNetWmState`, R1) a été corrigé en offsets canoniques ; le **reader** reste à vérifier (un chip de tâche séparé a été créé pendant R1).
+- **X11 `ClientMessage` LP64** : résolu localement — `X11DrawMapper` lit `data.l[0] @ 56` et le wakeup proxy écrit `window/message_type/format` aux offsets canoniques `32/40/48`.

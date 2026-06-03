@@ -8,6 +8,7 @@ import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.ModifierKeyState
 import org.graphiks.kadre.core.NativeKeyCode
 import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.PointerKind
@@ -36,6 +37,11 @@ private fun MemorySegment.setInt(offset: Long, value: Int): MemorySegment {
 
 private fun MemorySegment.setLong(offset: Long, value: Long): MemorySegment {
     set(ValueLayout.JAVA_LONG, offset, value)
+    return this
+}
+
+private fun MemorySegment.setByte(offset: Long, value: Int): MemorySegment {
+    set(ValueLayout.JAVA_BYTE, offset, value.toByte())
     return this
 }
 
@@ -96,6 +102,77 @@ class X11MapperTest {
         assertEquals(true, X11LiveRepeatTracker.update(38, KeyState.Pressed))
         assertEquals(false, X11LiveRepeatTracker.update(38, KeyState.Released))
         assertEquals(false, X11LiveRepeatTracker.update(38, KeyState.Pressed))
+    }
+
+    @Test
+    fun `modifierStateFrom tracks physical sides and logical modifiers`() {
+        val initial = X11KeyMapper.initialModifierState()
+        val leftPressed = X11KeyMapper.modifierStateFrom(initial, KeyCode.ShiftLeft, KeyState.Pressed)
+        val bothPressed = X11KeyMapper.modifierStateFrom(leftPressed, KeyCode.ShiftRight, KeyState.Pressed)
+        val rightReleased = X11KeyMapper.modifierStateFrom(bothPressed, KeyCode.ShiftRight, KeyState.Released)
+
+        assertTrue(leftPressed.logical.shift)
+        assertEquals(ModifierKeyState.Pressed, leftPressed.physical.leftShift)
+        assertEquals(ModifierKeyState.Pressed, bothPressed.physical.leftShift)
+        assertEquals(ModifierKeyState.Pressed, bothPressed.physical.rightShift)
+        assertTrue(rightReleased.logical.shift)
+        assertEquals(ModifierKeyState.Pressed, rightReleased.physical.leftShift)
+        assertEquals(ModifierKeyState.Released, rightReleased.physical.rightShift)
+    }
+
+    @Test
+    fun `fromXEvent uses post-transition modifiers for modifier key events`() {
+        val shiftPress = assertIs<WindowEvent.KeyInput>(
+            X11KeyMapper.fromXEvent(xEvent(keycode = 50), KeyPress, keysym = 0xFFE1),
+        ).event
+        val shiftRelease = assertIs<WindowEvent.KeyInput>(
+            X11KeyMapper.fromXEvent(xEvent(state = 0x01, keycode = 50), KeyRelease, keysym = 0xFFE1),
+        ).event
+
+        assertTrue(shiftPress.modifiers.shift)
+        assertEquals(KeyState.Pressed, shiftPress.state)
+        assertEquals(KeyboardModifiers.NONE, shiftRelease.modifiers)
+        assertEquals(KeyState.Released, shiftRelease.state)
+    }
+
+    @Test
+    fun `resetModifiersChangedIfNeeded clears tracked modifiers once`() {
+        val tracker = X11KeyboardModifierTracker()
+        val pressed = tracker.modifierStateFor(KeyCode.ControlLeft, KeyState.Pressed)
+        assertIs<WindowEvent.ModifiersChanged>(tracker.modifiersChangedIfNeeded(pressed))
+
+        val reset = assertIs<WindowEvent.ModifiersChanged>(tracker.resetIfNeeded())
+        assertEquals(KeyboardModifiers.NONE, reset.state.logical)
+        assertEquals(null, tracker.resetIfNeeded())
+    }
+
+    @Test
+    fun `keymap snapshot initializes pressed modifier state`() {
+        Arena.ofConfined().use { arena ->
+            val keymap = arena.allocate(32L)
+                .setByte((50 / 8).toLong(), 1 shl (50 % 8))
+                .setByte((37 / 8).toLong(), 1 shl (37 % 8))
+
+            val state = x11ModifierStateFromPressedKeycodes(x11PressedKeycodesFromKeymap(keymap))
+
+            assertTrue(state.logical.shift)
+            assertTrue(state.logical.ctrl)
+            assertEquals(ModifierKeyState.Pressed, state.physical.leftShift)
+            assertEquals(ModifierKeyState.Pressed, state.physical.leftCtrl)
+        }
+    }
+
+    @Test
+    fun `tracker focus initialization emits current modifiers after reset`() {
+        val tracker = X11KeyboardModifierTracker()
+        val pressed = x11ModifierStateFromPressedKeycodes(listOf(50))
+
+        val initialized = assertIs<WindowEvent.ModifiersChanged>(tracker.initializeIfNeeded(pressed))
+        assertTrue(initialized.state.logical.shift)
+        assertEquals(null, tracker.initializeIfNeeded(pressed))
+        assertEquals(KeyboardModifiers.NONE, tracker.resetIfNeeded()!!.state.logical)
+        val reinitialized = assertIs<WindowEvent.ModifiersChanged>(tracker.initializeIfNeeded(pressed))
+        assertTrue(reinitialized.state.logical.shift)
     }
 
     @Test
@@ -338,10 +415,23 @@ class X11DrawMapperTest {
             val wmDelete = 0x1234_5678L
             val seg = xEventSegment(arena)
                 .setType(ClientMessage)
-                .setLong(64L, wmDelete)   // data.l[0] = wmDeleteWindow
+                .setLong(XCLIENT_DATA_L0_OFFSET, wmDelete)   // data.l[0] = wmDeleteWindow
 
             val event = X11DrawMapper.fromXEvent(seg, ClientMessage, null, wmDelete)
             assertEquals(WindowEvent.CloseRequested, event)
+        }
+    }
+
+    @Test
+    fun `ClientMessage ignores stale non-canonical data offset`() {
+        Arena.ofConfined().use { arena ->
+            val wmDelete = 0x1234_5678L
+            val seg = xEventSegment(arena)
+                .setType(ClientMessage)
+                .setLong(64L, wmDelete)
+
+            val event = X11DrawMapper.fromXEvent(seg, ClientMessage, null, wmDelete)
+            assertNull(event)
         }
     }
 
@@ -351,7 +441,7 @@ class X11DrawMapperTest {
             val wmDelete = 0x1234_5678L
             val seg = xEventSegment(arena)
                 .setType(ClientMessage)
-                .setLong(64L, 0x9999L)   // different from wmDeleteWindow
+                .setLong(XCLIENT_DATA_L0_OFFSET, 0x9999L)   // different from wmDeleteWindow
 
             val event = X11DrawMapper.fromXEvent(seg, ClientMessage, null, wmDelete)
             assertNull(event)
