@@ -48,13 +48,13 @@ private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent)
 // ── wl_seat opcodes ───────────────────────────────────────────────────────────
 
 /** wl_seat.get_pointer opcode. */
-private const val WL_SEAT_GET_POINTER: Int = 0
+internal const val WL_SEAT_GET_POINTER: Int = 0
 
 /** wl_seat.get_keyboard opcode. */
-private const val WL_SEAT_GET_KEYBOARD: Int = 1
+internal const val WL_SEAT_GET_KEYBOARD: Int = 1
 
 /** wl_seat.get_touch opcode. */
-private const val WL_SEAT_GET_TOUCH: Int = 2
+internal const val WL_SEAT_GET_TOUCH: Int = 2
 
 // ── wl_seat capability bits ───────────────────────────────────────────────────
 
