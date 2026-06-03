@@ -167,6 +167,12 @@ class AppKitWindowTest {
     }
 
     @Test
+    fun `AppKit transparency selects clear or window background color like winit`() {
+        assertTrue(appKitBackgroundColorSelectorForTransparency(true) == "clearColor")
+        assertTrue(appKitBackgroundColorSelectorForTransparency(false) == "windowBackgroundColor")
+    }
+
+    @Test
     fun `AppKit enabled buttons update close and minimize style bits`() {
         val base = NSWindowStyleMask.NSWindowStyleMaskTitled +
             NSWindowStyleMask.NSWindowStyleMaskClosable +

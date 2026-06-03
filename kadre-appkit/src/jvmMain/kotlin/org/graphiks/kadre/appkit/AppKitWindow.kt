@@ -798,20 +798,18 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     /**
      * Makes the window background transparent via NSWindow.
      *
-     * Sets opaque = false and backgroundColor = NSColor.clearColor.
+     * Sets opaque/backgroundColor together, matching winit AppKit.
      */
     override fun setTransparent(transparent: Boolean) {
         try {
             ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setOpaque:"), !transparent)
-            if (transparent) {
-                val nsColorClass = ObjCRuntime.getClass("NSColor")
-                val clearColor = ObjCRuntime.msgSend(
-                    ValueLayout.ADDRESS,
-                    nsColorClass,
-                    ObjCRuntime.sel("clearColor"),
-                ) as MemorySegment
-                ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setBackgroundColor:"), clearColor)
-            }
+            val nsColorClass = ObjCRuntime.getClass("NSColor")
+            val backgroundColor = ObjCRuntime.msgSend(
+                ValueLayout.ADDRESS,
+                nsColorClass,
+                ObjCRuntime.sel(appKitBackgroundColorSelectorForTransparency(transparent)),
+            ) as MemorySegment
+            ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setBackgroundColor:"), backgroundColor)
         } catch (_: Throwable) {}
     }
 
@@ -1001,6 +999,9 @@ internal fun appKitShouldFocusWindow(isVisible: Boolean, isMiniaturized: Boolean
 internal fun appKitShouldApplyInitialTransparency(transparent: Boolean): Boolean = transparent
 
 internal fun appKitShouldApplyInitialBlur(blur: Boolean): Boolean = blur
+
+internal fun appKitBackgroundColorSelectorForTransparency(transparent: Boolean): String =
+    if (transparent) "clearColor" else "windowBackgroundColor"
 
 internal fun appKitWindowLevelValue(level: WindowLevel): Long =
     when (level) {
