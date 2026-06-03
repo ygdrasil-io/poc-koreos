@@ -39,6 +39,7 @@ internal class XdgToplevel private constructor(
     private val version: Int,
     private val decorationVersion: Int,
     private val onResized: (Int, Int, Boolean) -> Unit,
+    private val onStateConfigured: (WaylandToplevelConfigureStates) -> Unit,
     private val onClose: () -> Unit,
     private val arena: Arena,
 ) {
@@ -63,8 +64,9 @@ internal class XdgToplevel private constructor(
     /** xdg_toplevel.configure(width, height, states): a (0,0) size means "pick your own". */
     @Suppress("UNUSED_PARAMETER")
     fun onToplevelConfigure(data: MemorySegment, tl: MemorySegment, width: Int, height: Int, states: MemorySegment) {
+        val configureStates = waylandToplevelConfigureStates(states)
+        onStateConfigured(configureStates)
         if (width > 0 && height > 0) {
-            val configureStates = waylandToplevelConfigureStates(states)
             onResized(
                 width,
                 height,
@@ -272,6 +274,7 @@ internal class XdgToplevel private constructor(
             wmBasePtr: Long,
             surfacePtr: Long,
             onResized: (Int, Int, Boolean) -> Unit,
+            onStateConfigured: (WaylandToplevelConfigureStates) -> Unit = {},
             onClose: () -> Unit,
             decorationManagerPtr: Long = 0L,
             decorated: Boolean = true,
@@ -343,6 +346,7 @@ internal class XdgToplevel private constructor(
                     version,
                     decorationVersion,
                     onResized,
+                    onStateConfigured,
                     onClose,
                     arena,
                 )

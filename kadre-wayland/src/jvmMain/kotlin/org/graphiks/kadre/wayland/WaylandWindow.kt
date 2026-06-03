@@ -263,7 +263,6 @@ class WaylandWindow private constructor(
     }
 
     override fun setMaximized(maximized: Boolean) {
-        _isMaximized = maximized
         xdg?.setMaximized(maximized)
         flushDisplay()
     }
@@ -351,19 +350,16 @@ class WaylandWindow private constructor(
             null -> {
                 xdg?.setFullscreen(false)
                 flushDisplay()
-                _fullscreen = null
             }
             is Fullscreen.Borderless -> {
                 xdg?.setFullscreen(true)
                 flushDisplay()
-                _fullscreen = fullscreen
             }
             is Fullscreen.Exclusive -> {
                 // Exclusive fullscreen is not supported on Wayland (xdg-shell limitation).
                 // Fall back to borderless silently.
                 xdg?.setFullscreen(true)
                 flushDisplay()
-                _fullscreen = fullscreen // store requested mode for API parity
             }
         }
     }
@@ -424,6 +420,15 @@ class WaylandWindow private constructor(
             } else {
                 size
             }
+        }
+    }
+
+    internal fun onToplevelStateConfigured(states: WaylandToplevelConfigureStates) {
+        _isMaximized = states.maximized
+        _fullscreen = if (states.fullscreen) {
+            Fullscreen.Borderless(currentMonitor())
+        } else {
+            null
         }
     }
 
@@ -680,6 +685,7 @@ class WaylandWindow private constructor(
                         // Repaint once at the new size (on-demand rendering).
                         window.onWindowEvent?.invoke(WindowEvent.RedrawRequested)
                     },
+                    onStateConfigured = { states -> window.onToplevelStateConfigured(states) },
                     onClose = { window.onWindowEvent?.invoke(WindowEvent.CloseRequested) },
                 )
                 window.xdg?.setTitle(attrs.title)

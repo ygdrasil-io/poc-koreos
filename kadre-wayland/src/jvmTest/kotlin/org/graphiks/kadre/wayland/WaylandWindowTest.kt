@@ -9,6 +9,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
@@ -179,6 +180,34 @@ class WaylandWindowTest {
         window.onConfigure(176, 99, applyResizeIncrements = false)
 
         assertEquals(PhysicalSize(176, 99), window.innerSize)
+    }
+
+    @Test
+    fun `Wayland toplevel configure states update maximized and fullscreen like winit`() {
+        val window = WaylandWindow.createForTest()
+
+        window.onToplevelStateConfigured(
+            WaylandToplevelConfigureStates(maximized = true, fullscreen = true),
+        )
+
+        assertEquals(true, window.isMaximized)
+        assertIs<Fullscreen.Borderless>(window.fullscreen)
+
+        window.onToplevelStateConfigured(WaylandToplevelConfigureStates())
+
+        assertEquals(false, window.isMaximized)
+        assertEquals(null, window.fullscreen)
+    }
+
+    @Test
+    fun `Wayland fullscreen and maximized setters wait for compositor configure like winit`() {
+        val window = WaylandWindow.createForTest()
+
+        window.setMaximized(true)
+        window.setFullscreen(Fullscreen.Borderless())
+
+        assertEquals(false, window.isMaximized)
+        assertEquals(null, window.fullscreen)
     }
 
     @Test
