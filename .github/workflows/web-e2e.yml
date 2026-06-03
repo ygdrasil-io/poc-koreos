@@ -79,7 +79,12 @@ jobs:
         working-directory: samples/hello-triangle-web/e2e
         # Stable Chrome (release channel) installed by Playwright. No
         # `--with-deps` (Linux-only, we are on macOS).
-        run: npx playwright install chrome
+        run: |
+          for i in 1 2 3; do
+            npx playwright install chrome && break
+            echo "Chrome install attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
 
       - name: Run Playwright smoke + visual tests
         working-directory: samples/hello-triangle-web/e2e

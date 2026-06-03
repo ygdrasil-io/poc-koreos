@@ -67,7 +67,13 @@ jobs:
           npm install
           # Stable Chrome (release channel) — not Chromium; no --with-deps
           # (macOS does not need apt-get install for the native libs).
-          npx playwright install chrome
+          # Retry up to 3 times because the Google CDN occasionally flakes
+          # (returns an error page instead of the DMG).
+          for i in 1 2 3; do
+            npx playwright install chrome && break
+            echo "Chrome install attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
 
       - name: Run Playwright scenario
         working-directory: samples/pong/e2e
