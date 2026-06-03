@@ -46,6 +46,7 @@ private const val WL_COMPOSITOR_CREATE_REGION_OPCODE: Int = 1
 /** wl_surface.commit opcode in the core Wayland protocol. */
 private const val WL_SURFACE_COMMIT_OPCODE: Int = 6
 private const val WL_SURFACE_SET_OPAQUE_REGION_OPCODE: Int = 4
+private const val WL_SURFACE_SET_INPUT_REGION_OPCODE: Int = 5
 private const val WL_SURFACE_VERSION: Int = 1
 private const val WL_REGION_DESTROY_OPCODE: Int = 0
 private const val WL_REGION_ADD_OPCODE: Int = 1
@@ -472,13 +473,12 @@ class WaylandWindow private constructor(
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Wayland does not expose cursor warping"))
 
-    /**
-     * No-op on Wayland.
-     *
-     * TODO(R3-wayland-hittest): implement via the input-region protocol.
-     */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Wayland input-region cursor hit-testing is not wired"))
+        if (applyWaylandInputRegionHittest(hittest)) {
+            WindowRequestResult.Success
+        } else {
+            WindowRequestResult.Failure(RequestError.Unsupported("Wayland input-region cursor hit-testing is unavailable"))
+        }
 
     /**
      * Shows the compositor-managed window menu via xdg_toplevel.show_window_menu.
@@ -762,6 +762,36 @@ class WaylandWindow private constructor(
         }
     }
 
+    internal fun applyWaylandInputRegionHittest(hittest: Boolean): Boolean {
+        if (surfacePtr == 0L) return false
+        val setInputRegion = wlProxyMarshalFlagsObject ?: return false
+        val surface = MemorySegment.ofAddress(surfacePtr)
+        val region = if (hittest) {
+            MemorySegment.NULL
+        } else {
+            createEmptyInputRegion() ?: return false
+        }
+
+        return try {
+            setInputRegion.invokeExact(
+                surface,
+                WL_SURFACE_SET_INPUT_REGION_OPCODE,
+                MemorySegment.NULL,
+                WL_SURFACE_VERSION,
+                0,
+                region,
+            )
+            flushDisplay()
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            if (region != MemorySegment.NULL) {
+                destroyWaylandRegion(region)
+            }
+        }
+    }
+
     private fun createFullOpaqueRegion(): MemorySegment? {
         if (compositorPtr == 0L) return null
         val createRegion = wlCompositorCreateRegion ?: return null
@@ -802,6 +832,47 @@ class WaylandWindow private constructor(
         }
     }
 
+    private fun createEmptyInputRegion(): MemorySegment? {
+        if (compositorPtr == 0L) return null
+        val createRegion = wlCompositorCreateRegion ?: return null
+        val regionInterface = wlRegionInterface ?: return null
+        val addRegion = wlProxyMarshalFlagsFourInt ?: return null
+        var region = MemorySegment.NULL
+        return try {
+            val compositor = MemorySegment.ofAddress(compositorPtr)
+            region = createRegion.invokeExact(
+                compositor,
+                WL_COMPOSITOR_CREATE_REGION_OPCODE,
+                regionInterface,
+                WL_REGION_VERSION,
+                0,
+                MemorySegment.NULL,
+            ) as MemorySegment
+            if (region == MemorySegment.NULL) return null
+            val rect = waylandEmptyInputRegionRect()
+            addRegion.invokeExact(
+                region,
+                WL_REGION_ADD_OPCODE,
+                MemorySegment.NULL,
+                WL_REGION_VERSION,
+                0,
+                rect.x,
+                rect.y,
+                rect.width,
+                rect.height,
+            )
+            region.also {
+                region = MemorySegment.NULL
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            if (region != MemorySegment.NULL) {
+                destroyWaylandRegion(region)
+            }
+        }
+    }
+
     private fun destroyWaylandRegion(region: MemorySegment) {
         try {
             wlProxyMarshalFlagsVoid?.invokeExact(
@@ -816,6 +887,16 @@ class WaylandWindow private constructor(
 }
 
 internal const val WAYLAND_OPAQUE_REGION_EXTENT: Int = Int.MAX_VALUE
+
+internal data class WaylandRegionRect(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+internal fun waylandEmptyInputRegionRect(): WaylandRegionRect =
+    WaylandRegionRect(x = 0, y = 0, width = 0, height = 0)
 
 internal fun waylandApplyResizeIncrements(
     size: PhysicalSize<Int>,

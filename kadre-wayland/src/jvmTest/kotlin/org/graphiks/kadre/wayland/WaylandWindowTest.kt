@@ -11,6 +11,8 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
+import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.WindowAttributes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -116,6 +118,21 @@ class WaylandWindowTest {
     @Test
     fun `Wayland opaque region uses full positive extent like winit`() {
         assertEquals(Int.MAX_VALUE, WAYLAND_OPAQUE_REGION_EXTENT)
+    }
+
+    @Test
+    fun `Wayland cursor hittest disabled uses empty input region like winit`() {
+        assertEquals(WaylandRegionRect(x = 0, y = 0, width = 0, height = 0), waylandEmptyInputRegionRect())
+    }
+
+    @Test
+    fun `Wayland cursor hittest reports unsupported without a surface`() {
+        val window = WaylandWindow.createForTest(surface = 0L)
+
+        val result = window.setCursorHittest(false)
+
+        assertIs<WindowRequestResult.Failure>(result)
+        assertIs<RequestError.Unsupported>(result.error)
     }
 
     @Test
