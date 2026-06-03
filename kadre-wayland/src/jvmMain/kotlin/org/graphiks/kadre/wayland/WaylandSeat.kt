@@ -112,6 +112,7 @@ private class WlKeyboardListener(
     private val seatPtr: Long,
 ) {
     private var focusedSurfacePtr: Long = 0L
+    private val modifiers = WaylandKeyboardModifierTracker()
 
     @Suppress("UNUSED_PARAMETER")
     fun onKeymap(
@@ -125,8 +126,11 @@ private class WlKeyboardListener(
         serial: Int, surface: MemorySegment, keys: MemorySegment,
     ) {
         focusedSurfacePtr = surface.address()
-        if (WaylandFocusState.addSeatFocus(focusedSurfacePtr, seatPtr)) {
-            onEvent(focusedSurfacePtr, mapWaylandKeyboardFocused(true))
+        val focusChanged = WaylandFocusState.addSeatFocus(focusedSurfacePtr, seatPtr)
+        modifiers.mapFocusGained(waylandPressedKeysFromArray(keys)).forEach { event ->
+            if (event !is WindowEvent.Focused || focusChanged) {
+                onEvent(focusedSurfacePtr, event)
+            }
         }
     }
 
@@ -136,8 +140,11 @@ private class WlKeyboardListener(
         serial: Int, surface: MemorySegment,
     ) {
         val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
-        if (WaylandFocusState.removeSeatFocus(surfacePtr, seatPtr)) {
-            onEvent(surfacePtr, mapWaylandKeyboardFocused(false))
+        val focusChanged = WaylandFocusState.removeSeatFocus(surfacePtr, seatPtr)
+        modifiers.mapFocusLost().forEach { event ->
+            if (event !is WindowEvent.Focused || focusChanged) {
+                onEvent(surfacePtr, event)
+            }
         }
         if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
     }
@@ -147,7 +154,9 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, time: Int, key: Int, state: Int,
     ) {
-        onEvent(focusedSurfacePtr, mapWaylandKeyEvent(keycode = key, state = state))
+        modifiers.mapKey(keycode = key, state = state).forEach { event ->
+            onEvent(focusedSurfacePtr, event)
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
