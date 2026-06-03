@@ -210,6 +210,14 @@ class X11WindowTest {
 
         assertEquals(PhysicalPosition(8, 24), extents.surfacePosition)
         assertEquals(PhysicalPosition(92, 176), extents.innerToOuter(PhysicalPosition(100, 200)))
+        assertEquals(PhysicalSize(816, 628), extents.surfaceSizeToOuter(PhysicalSize(800, 600)))
+    }
+
+    @Test
+    fun `X11 surface resize requests clamp invalid sizes before native calls`() {
+        assertEquals(PhysicalSize(1, 1), x11ValidSurfaceSize(PhysicalSize(0, 0)))
+        assertEquals(PhysicalSize(1, 20), x11ValidSurfaceSize(PhysicalSize(-10, 20)))
+        assertEquals(PhysicalSize(640, 480), x11ValidSurfaceSize(PhysicalSize(640, 480)))
     }
 
     @Test

@@ -28,6 +28,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
+import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -112,17 +113,33 @@ class X11Window private constructor(
     override val innerSize: PhysicalSize<Int>
         get() = _innerSize
 
-    /**
-     * Outer size (surface + WM decorations) in physical pixels.
-     *
-     * On X11, decorations are managed by the window manager and
-     * unknown without a call to XGetGeometry + XQueryTree. We return the same
-     * value as [innerSize] for now.
-     *
-     * TODO: use XGetGeometry to distinguish inner/outer if needed.
-     */
     override val outerSize: PhysicalSize<Int>
-        get() = _innerSize
+        get() = (_frameExtents ?: readFrameExtents()?.also { _frameExtents = it })?.surfaceSizeToOuter(surfaceSize)
+            ?: surfaceSize
+
+    override val surfaceSize: PhysicalSize<Int>
+        get() = readSurfaceSize() ?: _innerSize
+
+    override fun requestSurfaceSize(size: PhysicalSize<Int>): SurfaceSizeRequestResult {
+        val resizeWindow = xResizeWindow ?: return SurfaceSizeRequestResult.Failure(
+            RequestError.Unsupported("XResizeWindow is unavailable"),
+        )
+        val requested = x11ValidSurfaceSize(size)
+        return try {
+            if (!_isResizable) {
+                applyNormalHints(sizeOverride = requested)
+            }
+            val display = MemorySegment.ofAddress(displayPtr)
+            resizeWindow.invokeExact(display, xWindowId, requested.width, requested.height) as Int
+            val flush = xFlush
+            if (flush != null) flush.invokeExact(display) as Int
+            SurfaceSizeRequestResult.Pending
+        } catch (t: Throwable) {
+            SurfaceSizeRequestResult.Failure(
+                RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 surface resize failed"),
+            )
+        }
+    }
 
     override val surfacePosition: PhysicalPosition<Int>
         get() = (_frameExtents ?: readFrameExtents()?.also { _frameExtents = it })?.surfacePosition
@@ -1122,6 +1139,44 @@ class X11Window private constructor(
         }
     }
 
+    private fun readSurfaceSize(): PhysicalSize<Int>? {
+        val getGeometry = xGetGeometry ?: return null
+        val display = MemorySegment.ofAddress(displayPtr)
+        return try {
+            Arena.ofConfined().use { arena ->
+                val rootOut = arena.allocate(ValueLayout.JAVA_LONG)
+                val xOut = arena.allocate(ValueLayout.JAVA_INT)
+                val yOut = arena.allocate(ValueLayout.JAVA_INT)
+                val widthOut = arena.allocate(ValueLayout.JAVA_INT)
+                val heightOut = arena.allocate(ValueLayout.JAVA_INT)
+                val borderWidthOut = arena.allocate(ValueLayout.JAVA_INT)
+                val depthOut = arena.allocate(ValueLayout.JAVA_INT)
+                val ok = getGeometry.invokeExact(
+                    display,
+                    xWindowId,
+                    rootOut,
+                    xOut,
+                    yOut,
+                    widthOut,
+                    heightOut,
+                    borderWidthOut,
+                    depthOut,
+                ) as Int
+                if (ok == 0) return@use null
+                val size = x11ValidSurfaceSize(
+                    PhysicalSize(
+                        width = widthOut.get(ValueLayout.JAVA_INT, 0L),
+                        height = heightOut.get(ValueLayout.JAVA_INT, 0L),
+                    )
+                )
+                _innerSize = size
+                size
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     /**
      * Updates the inner size upon receiving a ConfigureNotify event.
      *
@@ -1317,13 +1372,13 @@ class X11Window private constructor(
         }
     }
 
-    private fun applyNormalHints() {
+    private fun applyNormalHints(sizeOverride: PhysicalSize<Int>? = null) {
         val wmNormalHints = internAtom(displayPtr, "WM_NORMAL_HINTS")
         val wmSizeHints = internAtom(displayPtr, "WM_SIZE_HINTS")
         if (wmNormalHints == 0L || wmSizeHints == 0L) return
         val hints = x11NormalHints(
             position = _initialPosition,
-            size = _innerSize,
+            size = sizeOverride ?: _innerSize,
             minSize = _minSurfaceSize,
             maxSize = _maxSurfaceSize,
             resizeIncrements = _surfaceResizeIncrements,
@@ -1400,7 +1455,19 @@ internal data class X11FrameExtents(
 
     fun innerToOuter(position: PhysicalPosition<Int>): PhysicalPosition<Int> =
         PhysicalPosition(position.x - left, position.y - top)
+
+    fun surfaceSizeToOuter(size: PhysicalSize<Int>): PhysicalSize<Int> =
+        PhysicalSize(
+            width = size.width + left + right,
+            height = size.height + top + bottom,
+        )
 }
+
+internal fun x11ValidSurfaceSize(size: PhysicalSize<Int>): PhysicalSize<Int> =
+    PhysicalSize(
+        width = size.width.coerceAtLeast(1),
+        height = size.height.coerceAtLeast(1),
+    )
 
 internal fun x11ConfigureChanges(
     currentSize: PhysicalSize<Int>,
