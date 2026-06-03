@@ -61,14 +61,13 @@ jobs:
       - name: Build samples/pong (production JS bundle)
         run: ./gradlew :samples:pong:jsBrowserDistribution --no-daemon --stacktrace
 
-      - name: Install E2E deps
+      - name: Install E2E deps + ffmpeg (video recording)
         working-directory: samples/pong/e2e
-        run: npm install
-
-      - name: Use system Chrome (macOS runners have it pre-installed)
         run: |
-          echo "CHROME_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
-          echo "Using system Chrome at $(ls -d /Applications/Google\ Chrome.app 2>/dev/null || echo 'not found')"
+          npm install
+          # ffmpeg for Playwright video recording (not bundled with @playwright/test).
+          # Chrome itself is the system Chrome at the default path.
+          npx playwright install ffmpeg
 
       - name: Run Playwright scenario
         working-directory: samples/pong/e2e
