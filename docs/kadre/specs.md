@@ -676,7 +676,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | `setWindowLevel()` | real | real | real | real (xdg layer) | no-op | no-op | no-op |
 | `setTransparent()` | real | real | real | real | no-op | no-op | no-op |
 | `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
-| `setWindowIcon()` | partial (stub — DEFERRED.md) | partial (WM_SETICON stub — DEFERRED.md) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
+| `setWindowIcon()` | no-op (winit AppKit parity) | real (WM_SETICON/ICON_SMALL) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
 ### 3.9 Keyboard richness (R4/R6 incubation)
 

@@ -834,38 +834,19 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     }
 
     /**
-     * Sets the application icon via NSApp.applicationIconImage.
+     * No-op on AppKit, matching winit.
      *
-     * Converts the RGBA [Icon] to an NSImage and sets it on NSApplication.
-     * This is a best-effort operation — no-op if conversion fails.
+     * macOS does not expose a per-window icon. NSApplication.applicationIconImage
+     * is process-global and represented-file icons are semantically distinct, so
+     * `Window.setWindowIcon` intentionally does not mutate either of them.
      */
     override fun setWindowIcon(icon: Icon?) {
-        try {
-            val nsAppClass = ObjCRuntime.getClass("NSApplication")
-            val nsApp = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS, nsAppClass, ObjCRuntime.sel("sharedApplication"),
-            ) as MemorySegment
-            if (icon == null) {
-                ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("setApplicationIconImage:"), MemorySegment.NULL)
-                return
-            }
-            // Build NSBitmapImageRep from raw RGBA data
-            val nsImageClass = ObjCRuntime.getClass("NSImage")
-            val nsImage = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS, nsImageClass, ObjCRuntime.sel("new"),
-            ) as MemorySegment
-            // Best-effort: set size only; actual pixel data would require NSBitmapImageRep which
-            // requires more complex FFM calls. Using null image resets to default gracefully.
-            // TODO(R3-appkit-icon): implement full NSBitmapImageRep pixel upload.
-            Arena.ofConfined().use { a ->
-                val sizePtr = a.allocate(16L, 8L)
-                sizePtr.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, icon.width.toDouble())
-                sizePtr.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, icon.height.toDouble())
-                ObjCRuntime.msgSend(null, nsImage, ObjCRuntime.sel("setSize:"),
-                    ObjCRuntime.ObjCStructArg(sizePtr, NS_SIZE_LAYOUT))
-            }
-            ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("setApplicationIconImage:"), nsImage)
-        } catch (_: Throwable) {}
+        if (appKitWindowIconIsSupported()) {
+            // Kept as a branch instead of removing the parameter to make the
+            // platform policy testable while preserving the common API shape.
+            @Suppress("UNUSED_EXPRESSION")
+            icon
+        }
     }
 
     override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
@@ -1085,6 +1066,8 @@ private fun cursorSelectorName(cursor: CursorIcon): String = when (cursor) {
     CursorIcon.NeswResize     -> "resizeCursor"
     CursorIcon.NwseResize     -> "resizeCursor"
 }
+
+internal fun appKitWindowIconIsSupported(): Boolean = false
 
 /**
  * NSSize GroupLayout: struct { CGFloat width, CGFloat height }.

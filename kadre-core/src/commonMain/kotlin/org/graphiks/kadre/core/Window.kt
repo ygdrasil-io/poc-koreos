@@ -394,11 +394,11 @@ interface Window {
     fun setBlur(blur: Boolean)
 
     /**
-     * Sets the application icon shown in the taskbar / dock.
+     * Sets the native window icon where the platform exposes one.
      *
      * Passing null resets to the default icon. Behaviour is best-effort:
-     * - AppKit: sets `NSApp.applicationIconImage`.
-     * - Win32:  sends `WM_SETICON`.
+     * - AppKit: no-op, matching winit: macOS has no per-window icon.
+     * - Win32:  sends `WM_SETICON` for `ICON_SMALL`.
      * - X11:    sets `_NET_WM_ICON`.
      * - Others: no-op.
      * Never throws.

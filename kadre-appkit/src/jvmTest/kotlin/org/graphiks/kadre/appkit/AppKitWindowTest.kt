@@ -198,4 +198,9 @@ class AppKitWindowTest {
         assertTrue(appKitWindowLevelValue(WindowLevel.Normal) == 0L)
         assertTrue(appKitWindowLevelValue(WindowLevel.AlwaysOnBottom) == -1L)
     }
+
+    @Test
+    fun `AppKit window icon is unsupported like winit`() {
+        assertTrue(!appKitWindowIconIsSupported())
+    }
 }

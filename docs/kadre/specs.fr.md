@@ -677,7 +677,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | `setWindowLevel()` | réel | réel | réel | réel (xdg layer) | no-op | no-op | no-op |
 | `setTransparent()` | réel | réel | réel | réel | no-op | no-op | no-op |
 | `setBlur()` | réel (NSVisualEffectView) | réel (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
-| `setWindowIcon()` | partiel (stub — DEFERRED.md) | partiel (stub WM_SETICON — DEFERRED.md) | réel (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
+| `setWindowIcon()` | no-op (parité AppKit winit) | réel (WM_SETICON/ICON_SMALL) | réel (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
 ### 3.9 Richesse clavier (R4/R6 incubation)
 

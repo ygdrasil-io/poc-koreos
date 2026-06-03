@@ -43,10 +43,10 @@ Dernière mise à jour : 2026-06-01
 
 | Backend | À compléter |
 |---|---|
-| **Win32** | enforcement min/max via `WM_GETMINMAXINFO` ; plein écran **exclusif** (`ChangeDisplaySettingsExW`, fallback borderless) ; icône (`WM_SETICON`, stub) ; `ShowCursor` non rééquilibré |
+| **Win32** | enforcement min/max via `WM_GETMINMAXINFO` ; plein écran **exclusif** (`ChangeDisplaySettingsExW`, fallback borderless) ; `ShowCursor` non rééquilibré |
 | **X11** | `setResizable` → `XSetWMNormalHints` ; `setCursorVisible` → `XCreatePixmapCursor` ; **texte clavier** → `XLookupString` (`text = null`) ; `ScaleFactorChanged` dynamique (RRNotify) ; thème (`null`, pas de standard) |
 | **Wayland** | **curseur** → `libwayland-cursor` (no-op) ; **grab** → pointer-constraints (no-op) ; **texte clavier** → `xkb_state_key_get_utf8` (`text = null`) ; changement dynamique de décoration SSD/CSD ; plein écran exclusif N/A |
-| **AppKit** | `setWindowIcon` (upload `NSBitmapImageRep`, stub) ; `outerPosition` en coords Cocoa bas-gauche non converties ; `CGWarpMouseCursorPosition` en scalaires (marche x64/arm64, non conforme spec FFM) |
+| **AppKit** | `outerPosition` en coords Cocoa bas-gauche non converties ; `CGWarpMouseCursorPosition` en scalaires (marche x64/arm64, non conforme spec FFM) |
 | **Web** | `setCustomCursor` / window level / transparent / blur / cursor-warp = no-op |
 
 ## 7. Findings mineurs de revue laissés (non bloquants)

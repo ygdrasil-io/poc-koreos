@@ -51,7 +51,7 @@ Goal: expose native handles (`NSView`, `UIView`, `android.view.Surface`) that a 
 | setTheme() per-window | real | real | no-op | no-op | no-op | no-op | no-op |
 | ThemeChanged event | real | real | — | — | — | — | — |
 | setBlur() | real | real | no-op | no-op | no-op | no-op | no-op |
-| setWindowIcon() | partial* | partial* | real | no-op | no-op | no-op | no-op |
+| setWindowIcon() | no-op | real | real | no-op | no-op | no-op | no-op |
 | ModifiersChanged event | real | real | TODO | TODO | real | TODO | TODO |
 | IME (setImeAllowed etc.) | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
 | DnD events | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
