@@ -657,7 +657,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | `setCursor(CursorIcon)` | réel | réel | réel | no-op (libwayland-cursor TODO) | réel (CSS cursor) | no-op | no-op |
 | `setCursorVisible()` | réel | partiel (`ShowCursor` non rééquilibré — DEFERRED.md) | réel | no-op | réel (CSS) | no-op | no-op |
 | `setCursorGrab(None)` | réel | réel | réel | success no-op (parité winit) | réel | no-op | no-op |
-| `setCursorGrab(Confined)` | réel | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
+| `setCursorGrab(Confined)` | unsupported (parité winit) | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | réel | réel | réel | unsupported | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partiel (CGWarpMouseCursorPosition, cast scalaire) | réel | réel | unsupported | unsupported | unsupported | unsupported |
 | `setCursorHittest()` | réel | réel | unsupported | unsupported (input-region TODO) | unsupported | unsupported | unsupported |
@@ -677,7 +677,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 |----------------|--------|-------|-----|---------|-----|---------|-------|
 | `setWindowLevel()` | réel | réel | réel | no-op (parité Wayland winit) | no-op | no-op | no-op |
 | `setTheme()` | réel | réel | réel (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
-| `setTransparent()` | réel | réel | réel | réel | no-op | no-op | no-op |
+| `setTransparent()` | réel | réel | no-op (parité winit) | réel | no-op | no-op | no-op |
 | `setBlur()` | réel (NSVisualEffectView) | réel (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (parité AppKit winit) | réel (WM_SETICON/ICON_SMALL) | réel (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 

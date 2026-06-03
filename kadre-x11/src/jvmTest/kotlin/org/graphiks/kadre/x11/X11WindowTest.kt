@@ -99,6 +99,14 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 transparency and blur are no native updates like winit`() {
+        assertEquals(false, x11TransparencyRequiresNativeUpdate(true))
+        assertEquals(false, x11TransparencyRequiresNativeUpdate(false))
+        assertEquals(false, x11BlurRequiresNativeUpdate(true))
+        assertEquals(false, x11BlurRequiresNativeUpdate(false))
+    }
+
+    @Test
     fun `X11 initial position uses attributes or zero fallback`() {
         assertEquals(PhysicalPosition(12, 34), x11InitialPosition(PhysicalPosition(12, 34)))
         assertEquals(PhysicalPosition(0, 0), x11InitialPosition(null))

@@ -807,6 +807,7 @@ class X11Window private constructor(
      * TODO(R3-x11-transparent): set _NET_WM_WINDOW_OPACITY or request ARGB visual.
      */
     override fun setTransparent(transparent: Boolean) {
+        if (!x11TransparencyRequiresNativeUpdate(transparent)) return
         // No-op on X11: standard transparency requires compositor-specific APIs.
     }
 
@@ -817,6 +818,7 @@ class X11Window private constructor(
      * Documented no-op.
      */
     override fun setBlur(blur: Boolean) {
+        if (!x11BlurRequiresNativeUpdate(blur)) return
         // No-op on X11: no standard blur API.
     }
 
@@ -1879,6 +1881,12 @@ internal fun x11ContentProtectionResult(protected: Boolean): WindowRequestResult
 @Suppress("UNUSED_PARAMETER")
 internal fun x11ShowWindowMenuResult(position: PhysicalPosition<Int>): WindowRequestResult =
     WindowRequestResult.Success
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11TransparencyRequiresNativeUpdate(transparent: Boolean): Boolean = false
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11BlurRequiresNativeUpdate(blur: Boolean): Boolean = false
 
 internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =
     position ?: PhysicalPosition(0, 0)

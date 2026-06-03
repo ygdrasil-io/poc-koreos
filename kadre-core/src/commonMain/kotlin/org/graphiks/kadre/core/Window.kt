@@ -312,6 +312,8 @@ interface Window {
      *
      * Backends that do not support a given mode return [WindowRequestResult.Failure]
      * with [RequestError.Unsupported]. Never throws.
+     * AppKit supports [CursorGrabMode.Locked] and [CursorGrabMode.None], but
+     * reports [RequestError.Unsupported] for [CursorGrabMode.Confined], matching winit.
      * Wayland accepts [CursorGrabMode.None] as a success no-op like winit when
      * pointer constraints are unavailable.
      *

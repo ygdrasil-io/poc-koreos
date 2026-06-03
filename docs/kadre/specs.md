@@ -656,7 +656,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | `setCursor(CursorIcon)` | real | real | real | no-op (libwayland-cursor TODO) | real (CSS cursor) | no-op | no-op |
 | `setCursorVisible()` | real | partial (`ShowCursor` not rebalanced — DEFERRED.md) | real | no-op | real (CSS) | no-op | no-op |
 | `setCursorGrab(None)` | real | real | real | success no-op (winit parity) | real | no-op | no-op |
-| `setCursorGrab(Confined)` | real | real | real | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
+| `setCursorGrab(Confined)` | unsupported (winit parity) | real | real | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | real | real | real | unsupported | unsupported (Pointer Lock bridge TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partial (CGWarpMouseCursorPosition, scalar cast) | real | real | unsupported | unsupported | unsupported | unsupported |
 | `setCursorHittest()` | real | real | unsupported | unsupported (input-region TODO) | unsupported | unsupported | unsupported |
@@ -676,7 +676,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 |---------|--------|-------|-----|---------|-----|---------|-------|
 | `setWindowLevel()` | real | real | real | no-op (winit Wayland parity) | no-op | no-op | no-op |
 | `setTheme()` | real | real | real (`_GTK_THEME_VARIANT`) | no-op | no-op | no-op | no-op |
-| `setTransparent()` | real | real | real | real | no-op | no-op | no-op |
+| `setTransparent()` | real | real | no-op (winit parity) | real | no-op | no-op | no-op |
 | `setBlur()` | real (NSVisualEffectView) | real (DwmEnableBlurBehind) | no-op | no-op | no-op | no-op | no-op |
 | `setWindowIcon()` | no-op (winit AppKit parity) | real (WM_SETICON/ICON_SMALL) | real (_NET_WM_ICON) | no-op | no-op | no-op | no-op |
 
