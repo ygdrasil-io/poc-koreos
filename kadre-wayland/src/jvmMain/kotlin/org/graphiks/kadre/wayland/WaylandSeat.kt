@@ -45,11 +45,11 @@ import java.lang.invoke.MethodType
 
 // ── wl_seat opcodes ───────────────────────────────────────────────────────────
 
-/** wl_seat.get_pointer opcode. */
-private const val WL_SEAT_GET_POINTER: Int = 0
-
 /** wl_seat.get_keyboard opcode. */
-private const val WL_SEAT_GET_KEYBOARD: Int = 1
+private const val WL_SEAT_GET_KEYBOARD: Int = 0
+
+/** wl_seat.get_pointer opcode. */
+private const val WL_SEAT_GET_POINTER: Int = 1
 
 /** wl_seat.get_touch opcode. */
 private const val WL_SEAT_GET_TOUCH: Int = 2
@@ -163,6 +163,7 @@ private class WlKeyboardListener(
  */
 private class WlPointerListener(
     private val onEvent: (WindowEvent) -> Unit,
+    private val seatPtr: Long,
 ) {
     private var lastPosition: PhysicalPosition<Double> = PhysicalPosition(0.0, 0.0)
 
@@ -171,6 +172,8 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, surface: MemorySegment, xFixed: Int, yFixed: Int,
     ) {
+        WaylandPointerState.updateSeat(seatPtr)
+        WaylandPointerState.enterSurface(surface.address())
         lastPosition = PhysicalPosition(wlFixedToDouble(xFixed), wlFixedToDouble(yFixed))
         onEvent(WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
     }
@@ -180,6 +183,7 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, surface: MemorySegment,
     ) {
+        WaylandPointerState.leaveSurface(surface.address())
         onEvent(WindowEvent.PointerLeft(null, lastPosition, primary = true, kind = PointerKind.Mouse))
     }
 
@@ -198,6 +202,8 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, time: Int, button: Int, state: Int,
     ) {
+        WaylandPointerState.updateSeat(seatPtr)
+        WaylandPointerState.recordButton(serial, button, state)
         onEvent(mapWaylandPointerButton(button, state, lastPosition))
     }
 
@@ -431,7 +437,7 @@ internal fun installSeatListeners(
                         ) as MemorySegment
                     }.getOrNull()
                     if (ptrSeg != null && ptrSeg.address() != 0L) {
-                        installPointerListener(ptrSeg, addListener, lookup, arena, onEvent)
+                        installPointerListener(ptrSeg, addListener, lookup, arena, seatPtr, onEvent)
                         anyListenerInstalled = true
                     }
                 }
@@ -566,9 +572,10 @@ private fun installPointerListener(
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
+    seatPtr: Long,
     onEvent: (WindowEvent) -> Unit,
 ) {
-    val listener = WlPointerListener(onEvent)
+    val listener = WlPointerListener(onEvent, seatPtr)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     val enterStub = upcallStub(

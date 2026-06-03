@@ -225,13 +225,13 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window drag_window",
                 kadreApi = "Window.dragWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op; AppKit uses the current NSEvent and reports RequestError.Ignored when none is available, Win32 queues cross-thread requests onto the message thread, and X11 sends _NET_WM_MOVERESIZE. Wayland remains deferred; final native drag completion is fire-and-forget.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; AppKit uses the current NSEvent and reports RequestError.Ignored when none is available, Win32 queues cross-thread requests onto the message thread, X11 sends _NET_WM_MOVERESIZE, and Wayland sends xdg_toplevel.move. Final native drag completion is fire-and-forget.",
             ),
             WinitWindowingApi(
                 winitApi = "Window drag_resize_window",
                 kadreApi = "Window.dragResizeWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 queues cross-thread requests onto the message thread and X11 sends _NET_WM_MOVERESIZE. AppKit is unsupported like winit; Wayland remains deferred; final native resize completion is fire-and-forget.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 queues cross-thread requests onto the message thread, X11 sends _NET_WM_MOVERESIZE, and Wayland sends xdg_toplevel.resize. AppKit is unsupported like winit; final native resize completion is fire-and-forget.",
             ),
             WinitWindowingApi(
                 winitApi = "Window show_window_menu",

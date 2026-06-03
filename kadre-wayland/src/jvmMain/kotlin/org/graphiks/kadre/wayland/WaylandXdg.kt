@@ -102,6 +102,30 @@ internal class XdgToplevel private constructor(
         }
     }
 
+    /** Starts compositor-managed interactive window movement. */
+    fun move(seatPtr: Long, serial: Int): Boolean {
+        val handle = wlProxyMarshalFlagsObjectUint ?: return false
+        return runCatching {
+            handle.invokeExact(
+                MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_MOVE,
+                MemorySegment.NULL, version, 0, MemorySegment.ofAddress(seatPtr), serial,
+            )
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Starts compositor-managed interactive window resize. */
+    fun resize(seatPtr: Long, serial: Int, edges: Int): Boolean {
+        val handle = wlProxyMarshalFlagsObjectTwoUint ?: return false
+        return runCatching {
+            handle.invokeExact(
+                MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_RESIZE,
+                MemorySegment.NULL, version, 0, MemorySegment.ofAddress(seatPtr), serial, edges,
+            )
+            true
+        }.getOrDefault(false)
+    }
+
     /** Requests that the toplevel be maximized. */
     fun setMaximized(maximized: Boolean) {
         val opcode = if (maximized) XDG_TOPLEVEL_SET_MAXIMIZED else XDG_TOPLEVEL_UNSET_MAXIMIZED

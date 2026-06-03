@@ -27,6 +27,7 @@ import org.graphiks.kadre.core.InputCapabilities
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
@@ -447,6 +448,48 @@ class WaylandWindow private constructor(
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Wayland input-region cursor hit-testing is not wired"))
+
+    /**
+     * Starts compositor-managed interactive window movement via xdg_toplevel.move.
+     */
+    override fun dragWindow(): WindowRequestResult {
+        val toplevel = xdg ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("Wayland xdg_toplevel is unavailable"),
+        )
+        val pointer = WaylandPointerState.current(surfacePtr) ?: return WindowRequestResult.Success
+        return if (toplevel.move(pointer.seatPtr, pointer.serial)) {
+            flushDisplay()
+            WindowRequestResult.Success
+        } else {
+            WindowRequestResult.Failure(RequestError.OsError("xdg_toplevel.move failed"))
+        }
+    }
+
+    /**
+     * Starts compositor-managed interactive window resize via xdg_toplevel.resize.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult {
+        val toplevel = xdg ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("Wayland xdg_toplevel is unavailable"),
+        )
+        val pointer = WaylandPointerState.current(surfacePtr) ?: return WindowRequestResult.Success
+        val edge = when (direction) {
+            ResizeDirection.North -> XDG_TOPLEVEL_RESIZE_EDGE_TOP
+            ResizeDirection.West -> XDG_TOPLEVEL_RESIZE_EDGE_LEFT
+            ResizeDirection.NorthWest -> XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT
+            ResizeDirection.NorthEast -> XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT
+            ResizeDirection.East -> XDG_TOPLEVEL_RESIZE_EDGE_RIGHT
+            ResizeDirection.SouthWest -> XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT
+            ResizeDirection.SouthEast -> XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT
+            ResizeDirection.South -> XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM
+        }
+        return if (toplevel.resize(pointer.seatPtr, pointer.serial, edge)) {
+            flushDisplay()
+            WindowRequestResult.Success
+        } else {
+            WindowRequestResult.Failure(RequestError.OsError("xdg_toplevel.resize failed"))
+        }
+    }
 
     /**
      * Returns null on Wayland.

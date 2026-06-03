@@ -1040,8 +1040,8 @@ Points résiduels clés :
 | `WindowEvent::Occluded` | `WindowEvent.Occluded(occluded: Boolean)` — non émis (cf. DEFERRED.md) |
 | `Window::request_user_attention()` | `Window.requestUserAttention(requestType: UserAttentionType?)` — no-op (cf. DEFERRED.md) |
 | `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean)` — partiel selon backend, no-op par défaut (cf. DEFERRED.md) |
-| `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit peut retourner `RequestError.Ignored`; Win32/X11 sont câblés localement (cf. DEFERRED.md) |
-| `Window::drag_resize_window()` | `Window.dragResizeWindow(direction: ResizeDirection): WindowRequestResult` — `RequestError.Unsupported` par défaut; Win32/X11 sont câblés localement (cf. DEFERRED.md) |
+| `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit peut retourner `RequestError.Ignored`; Win32/X11/Wayland sont câblés localement (cf. DEFERRED.md) |
+| `Window::drag_resize_window()` | `Window.dragResizeWindow(direction: ResizeDirection): WindowRequestResult` — `RequestError.Unsupported` par défaut; Win32/X11/Wayland sont câblés localement (cf. DEFERRED.md) |
 | `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — `RequestError.Unsupported` par défaut (cf. DEFERRED.md) |
 
 #### WindowAttributes (ajouts R3)

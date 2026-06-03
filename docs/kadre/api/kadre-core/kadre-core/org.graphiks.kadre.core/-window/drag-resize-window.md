@@ -14,11 +14,11 @@ Must be called from a pointer-pressed event handler. Platform behaviour:
 -
    X11      : sends `_NET_WM_MOVERESIZE` with the matching resize action.
 -
-   Wayland  : `xdg_toplevel.resize` with the matching edge when implemented.
+   Wayland  : sends `xdg_toplevel.resize` with the latest pointer button serial.
 -
    Others   : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. TODO R5-MiscWindow: wire in Wayland.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws.
 
 #### Parameters
 

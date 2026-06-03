@@ -16,8 +16,8 @@ Intended to be called from a pointer-pressed event handler to allow dragging a c
 -
    X11      : sends `_NET_WM_MOVERESIZE` with the move action to the WM.
 -
-   Wayland  : `xdg_toplevel.move` when implemented.
+   Wayland  : sends `xdg_toplevel.move` with the latest pointer button serial.
 -
    Others   : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. TODO R5-MiscWindow: wire in Wayland.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws.
