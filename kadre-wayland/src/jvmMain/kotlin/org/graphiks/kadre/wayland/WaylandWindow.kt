@@ -261,15 +261,11 @@ class WaylandWindow private constructor(
     @Volatile private var _surfaceResizeIncrements: PhysicalSize<Int>? = attrs.resizeIncrements
 
     override fun setResizable(resizable: Boolean) {
+        if (_isResizable == resizable) return
         _isResizable = resizable
-        // On Wayland, resizability is communicated via set_min_size / set_max_size:
-        // setting min == max prevents the compositor from suggesting a different size.
-        if (!resizable) {
-            applyWaylandSurfaceConstraints()
-        } else {
-            applyWaylandSurfaceConstraints()
-        }
+        applyWaylandSurfaceConstraints()
         flushDisplay()
+        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
     }
 
     override fun setMinimized(minimized: Boolean) {
@@ -296,12 +292,14 @@ class WaylandWindow private constructor(
         _minSurfaceSize = size
         applyWaylandSurfaceConstraints()
         flushDisplay()
+        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
     }
 
     override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
         _maxSurfaceSize = size
         applyWaylandSurfaceConstraints()
         flushDisplay()
+        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
     }
 
     override val surfaceResizeIncrements: PhysicalSize<Int>?

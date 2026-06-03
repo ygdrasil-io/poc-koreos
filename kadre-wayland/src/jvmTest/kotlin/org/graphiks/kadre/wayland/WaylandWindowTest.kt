@@ -130,6 +130,32 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland min and max surface size constraints request redraw like winit`() {
+        val window = WaylandWindow.createForTest()
+        val events = mutableListOf<WindowEvent>()
+        window.onWindowEvent = events::add
+
+        window.setMinSurfaceSize(PhysicalSize(320, 200))
+        window.setMaxSurfaceSize(PhysicalSize(1280, 720))
+
+        assertEquals(listOf(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
+    fun `Wayland setResizable requests redraw only when state changes like winit`() {
+        val window = WaylandWindow.createForTest(attrs = WindowAttributes(resizable = true))
+        val events = mutableListOf<WindowEvent>()
+        window.onWindowEvent = events::add
+
+        window.setResizable(true)
+        assertEquals(emptyList(), events)
+
+        window.setResizable(false)
+        assertEquals(false, window.isResizable)
+        assertEquals(listOf(WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
     fun `surface resize increments are initialized from attrs and mutable`() {
         val window = WaylandWindow.createForTest(
             attrs = WindowAttributes(resizeIncrements = PhysicalSize(8, 16)),
