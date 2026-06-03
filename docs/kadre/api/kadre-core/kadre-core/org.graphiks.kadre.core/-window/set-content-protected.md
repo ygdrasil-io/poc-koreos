@@ -14,9 +14,11 @@ When `true`, the window content is excluded from screenshots and screen recordin
 -
    AppKit : `NSWindow.sharingType = NSWindowSharingNone`.
 -
+   X11    : success no-op, matching winit; no portable capture-protection mechanism.
+-
    Others : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. AppKit and Win32 are wired.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. AppKit and Win32 are wired; X11 is a success no-op like winit.
 
 #### Parameters
 

@@ -867,6 +867,16 @@ class X11Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    /**
+     * No-op on X11, matching winit.
+     *
+     * The X11 backend has no portable screen-capture protection mechanism.
+     * winit accepts this request and ignores it, so Kadre reports success
+     * instead of a platform-unsupported failure.
+     */
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        x11ContentProtectionResult(protected)
+
     // ── R4: keyboard ──────────────────────────────────────────────────────────
 
     /**
@@ -1852,6 +1862,10 @@ internal fun x11ThemeVariant(theme: Theme?): String =
         Theme.Light -> "light"
         null -> "dark"
     }
+
+@Suppress("UNUSED_PARAMETER")
+internal fun x11ContentProtectionResult(protected: Boolean): WindowRequestResult =
+    WindowRequestResult.Success
 
 internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =
     position ?: PhysicalPosition(0, 0)

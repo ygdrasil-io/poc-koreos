@@ -7,6 +7,7 @@ import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -84,6 +85,12 @@ class X11WindowTest {
         assertEquals("dark", x11ThemeVariant(Theme.Dark))
         assertEquals("light", x11ThemeVariant(Theme.Light))
         assertEquals("dark", x11ThemeVariant(null))
+    }
+
+    @Test
+    fun `X11 content protection is a success no-op like winit`() {
+        assertEquals(WindowRequestResult.Success, x11ContentProtectionResult(true))
+        assertEquals(WindowRequestResult.Success, x11ContentProtectionResult(false))
     }
 
     @Test
