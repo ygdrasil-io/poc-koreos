@@ -176,11 +176,18 @@ class X11Window private constructor(
 
     @Volatile private var _isMinimized: Boolean = false
 
-    override val isMinimized: Boolean? get() = _isMinimized
+    override val isMinimized: Boolean? get() =
+        readNetWmStateContains(
+            internAtom(displayPtr, "_NET_WM_STATE_HIDDEN"),
+        ) ?: _isMinimized
 
     @Volatile private var _isMaximized: Boolean = attrs.maximized
 
-    override val isMaximized: Boolean get() = _isMaximized
+    override val isMaximized: Boolean get() =
+        readNetWmStateContainsAll(
+            internAtom(displayPtr, "_NET_WM_STATE_MAXIMIZED_VERT"),
+            internAtom(displayPtr, "_NET_WM_STATE_MAXIMIZED_HORZ"),
+        ) ?: _isMaximized
 
     @Volatile private var _isDecorated: Boolean = attrs.decorations
 
@@ -967,6 +974,26 @@ class X11Window private constructor(
         }
     }
 
+    private fun readNetWmStateContains(atom: Long): Boolean? =
+        if (atom == 0L) null else readNetWmStateAtoms()?.let { x11WindowStateContains(it, atom) }
+
+    private fun readNetWmStateContainsAll(first: Long, second: Long): Boolean? =
+        if (first == 0L || second == 0L) null else readNetWmStateAtoms()?.let { atoms ->
+            x11WindowStateContains(atoms, first) && x11WindowStateContains(atoms, second)
+        }
+
+    private fun readNetWmStateAtoms(): LongArray? {
+        val getProperty = xGetWindowProperty ?: return null
+        val stateAtom = internAtom(displayPtr, "_NET_WM_STATE")
+        val atomType = internAtom(displayPtr, "ATOM")
+        if (stateAtom == 0L || atomType == 0L) return null
+        val display = MemorySegment.ofAddress(displayPtr)
+        return readX11Property(getProperty, display, xWindowId, stateAtom, reqType = atomType, length = 1024L) { ptr, nitems ->
+            if (nitems <= 0L) return@readX11Property LongArray(0)
+            LongArray(nitems.toInt()) { index -> ptr.getAtIndex(ValueLayout.JAVA_LONG, index.toLong()) }
+        }
+    }
+
     /**
      * Updates the inner size upon receiving a ConfigureNotify event.
      *
@@ -1212,6 +1239,9 @@ internal fun x11CursorChangeRequiresApply(
 ): Boolean =
     visible && previous != next
 
+internal fun x11WindowStateContains(atoms: LongArray, atom: Long): Boolean =
+    atom != 0L && atoms.any { it == atom }
+
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,
     size: PhysicalSize<Int>,
@@ -1342,7 +1372,8 @@ private inline fun <T> readX11Property(
                 if (byteSize <= 0L) return@use null
                 read(ptr.reinterpret(byteSize), itemCount)
             } finally {
-                xFree?.invokeExact(ptr) as? Int
+                val free = xFree
+                if (free != null) free.invokeExact(ptr) as Int
             }
         }
     } catch (_: Throwable) {

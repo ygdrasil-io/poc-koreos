@@ -111,6 +111,20 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 window state atom matching supports minimized and maximized queries`() {
+        val hidden = 11L
+        val maximizedVert = 12L
+        val maximizedHorz = 13L
+        val atoms = longArrayOf(hidden, maximizedVert, maximizedHorz)
+
+        assertEquals(true, x11WindowStateContains(atoms, hidden))
+        assertEquals(true, x11WindowStateContains(atoms, maximizedVert))
+        assertEquals(true, x11WindowStateContains(atoms, maximizedHorz))
+        assertEquals(false, x11WindowStateContains(atoms, 99L))
+        assertEquals(false, x11WindowStateContains(atoms, 0L))
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)
