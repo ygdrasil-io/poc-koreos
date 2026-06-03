@@ -1084,7 +1084,7 @@ class Win32Window private constructor(
             val hwnd: MemorySegment = Arena.ofConfined().use { arena ->
                 val titlePtr = arena.allocateWString(attrs.title)
                 createHandle.invokeExact(
-                    WS_EX_APPWINDOW,        // dwExStyle
+                    win32InitialExtendedStyle(attrs.transparent), // dwExStyle
                     classNamePtr,           // lpClassName
                     titlePtr,               // lpWindowName
                     buttonStyle,            // dwStyle
@@ -1106,6 +1106,9 @@ class Win32Window private constructor(
             window.applyEnabledButtons(attrs.enabledButtons)
             window.setWindowLevel(attrs.windowLevel)
             attrs.windowIcon?.let(window::setWindowIcon)
+            if (attrs.transparent) {
+                window.setTransparent(true)
+            }
 
             // Register for WM_TOUCH so touchscreen contacts arrive as touch events
             // instead of being emulated as mouse input. Best-effort: ignored on
@@ -1217,6 +1220,13 @@ internal fun win32ShouldFocusWindow(
     isForeground: Boolean,
 ): Boolean =
     isVisible && !isMinimized && !isForeground
+
+internal fun win32InitialExtendedStyle(transparent: Boolean): Int =
+    if (transparent) {
+        WS_EX_APPWINDOW or WS_EX_LAYERED
+    } else {
+        WS_EX_APPWINDOW
+    }
 
 internal fun win32WindowLevelInsertAfter(level: WindowLevel): MemorySegment =
     when (level) {

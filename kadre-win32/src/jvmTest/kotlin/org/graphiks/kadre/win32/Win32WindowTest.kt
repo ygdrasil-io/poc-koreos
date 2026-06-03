@@ -158,6 +158,12 @@ class Win32WindowTest {
     }
 
     @Test
+    fun `initial extended style includes layered only for transparent windows`() {
+        assertEquals(WS_EX_APPWINDOW, win32InitialExtendedStyle(transparent = false))
+        assertEquals(WS_EX_APPWINDOW or WS_EX_LAYERED, win32InitialExtendedStyle(transparent = true))
+    }
+
+    @Test
     fun `window icon buffers convert RGBA to Win32 BGRA and inverted alpha mask`() {
         val icon = Icon(
             rgba = byteArrayOf(
