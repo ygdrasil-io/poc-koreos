@@ -611,22 +611,25 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * No-op on Wayland.
+     * Deferred optional-protocol support on Wayland.
      *
-     * Blur requires compositor-specific protocols (e.g. org.kde.kwin.blur).
+     * winit can use compositor-specific blur protocols such as
+     * `ext_background_effect` or `org_kde_kwin_blur` when available. Kadre has
+     * not generated or bound those protocols yet, so this is a documented no-op.
      */
     override fun setBlur(blur: Boolean) {
-        // No-op on Wayland: no standard blur protocol.
+        // No-op until optional Wayland blur protocols are bound.
     }
 
     /**
-     * No-op on Wayland.
+     * Deferred optional-protocol support on Wayland.
      *
-     * Wayland does not support per-window application icons; the desktop
-     * file or XDG portal is the correct mechanism.
+     * winit can use `xdg_toplevel_icon_manager_v1` when the compositor exposes
+     * it. Kadre has not generated or bound that protocol yet, so this remains a
+     * documented no-op instead of claiming Wayland cannot support it.
      */
     override fun setWindowIcon(icon: Icon?) {
-        // No-op on Wayland: window icons are not part of the Wayland protocol.
+        // No-op until xdg_toplevel_icon_manager_v1 is bound.
     }
 
     /**

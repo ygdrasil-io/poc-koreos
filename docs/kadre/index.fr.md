@@ -50,16 +50,16 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 | systemTheme() | réel | réel | null | null | réel | réel | réel |
 | setTheme() par fenêtre | réel | réel | réel (_GTK_THEME_VARIANT) | no-op | no-op | no-op | no-op |
 | Événement ThemeChanged | réel | réel | — | — | — | — | — |
-| setBlur() | réel | réel | no-op | no-op | no-op | no-op | no-op |
-| setWindowIcon() | no-op | réel | réel | no-op | no-op | no-op | no-op |
-| Événement ModifiersChanged | réel | réel | TODO | TODO | réel | TODO | TODO |
+| setBlur() | réel | no-op runtime | no-op | deferred protocole optionnel | no-op | no-op | no-op |
+| setWindowIcon() | no-op | réel | réel | deferred protocole optionnel | no-op | no-op | no-op |
+| Événement ModifiersChanged | réel | réel | réel* | réel* | réel | réel | réel |
 | IME (setImeAllowed etc.) | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
 | Événements DnD | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
 | Événements gestes | réel | TODO | — | — | TODO | — | opt-in |
 | Événement Occluded | TODO | — | — | — | TODO | — | — |
 | Curseurs custom | TODO | TODO | TODO | TODO | TODO | no-op | no-op |
 
-`réel` = implémenté. `partiel*` / `no-op*` = partiel ou no-op documenté, cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md). `TODO` = API définie, câblage backend en attente. `—` = non applicable sur cette plateforme.
+`réel` = implémenté. `partiel*` / `no-op*` = partiel ou no-op documenté, cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md). `TODO` = API définie, câblage backend en attente. `—` = non applicable sur cette plateforme. Sous Linux, `ModifiersChanged` est câblé pour les transitions de touches et le reset/réhydratation de focus ; la sémantique XKB locked/latched reste future.
 
 ## Plateformes
 
