@@ -645,7 +645,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
                 ObjCRuntime.sel("currentEvent"),
             ) as MemorySegment
             if (event == MemorySegment.NULL) {
-                return WindowRequestResult.Failure(RequestError.OsError("NSApplication.currentEvent is unavailable for window drag"))
+                return WindowRequestResult.Failure(RequestError.Ignored("NSApplication.currentEvent is unavailable for window drag"))
             }
             NSWindow(nsWindowPtr).performWindowDragWithEvent(event)
             WindowRequestResult.Success

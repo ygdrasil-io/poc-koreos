@@ -225,7 +225,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window drag_window",
                 kadreApi = "Window.dragWindow",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op; AppKit uses the current NSEvent, and Win32 queues cross-thread requests onto the message thread like winit while final native drag completion remains fire-and-forget. X11/Wayland remain deferred.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; AppKit uses the current NSEvent and reports RequestError.Ignored when none is available, and Win32 queues cross-thread requests onto the message thread like winit while final native drag completion remains fire-and-forget. X11/Wayland remain deferred.",
             ),
             WinitWindowingApi(
                 winitApi = "Window drag_resize_window",
@@ -291,7 +291,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "WindowRequestResult and RequestError",
                 kadreApi = "WindowRequestResult, SurfaceSizeRequestResult, RequestError",
                 status = WinitWindowingStatus.Implemented,
-                note = "Kadre has support result types for fallible requests, though not all Window methods use them yet.",
+                note = "Kadre has support result types for fallible requests, including RequestError.Ignored for winit ignored requests, though not all Window methods use result types yet.",
             ),
         )
     }

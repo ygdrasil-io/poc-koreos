@@ -1803,6 +1803,19 @@ public abstract interface class org/graphiks/kadre/core/RequestError {
 	public abstract fun getMessage ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/RequestError$Ignored : org/graphiks/kadre/core/RequestError {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lorg/graphiks/kadre/core/RequestError$Ignored;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/RequestError$Ignored;Ljava/lang/String;ILjava/lang/Object;)Lorg/graphiks/kadre/core/RequestError$Ignored;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/core/RequestError$OsError : org/graphiks/kadre/core/RequestError {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -2629,4 +2642,3 @@ public final class org/graphiks/kadre/core/WindowRequestResult$Success : org/gra
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
-

@@ -1707,6 +1707,19 @@ sealed interface org.graphiks.kadre.core/RequestError { // org.graphiks.kadre.co
     abstract val message // org.graphiks.kadre.core/RequestError.message|{}message[0]
         abstract fun <get-message>(): kotlin/String // org.graphiks.kadre.core/RequestError.message.<get-message>|<get-message>(){}[0]
 
+    final class Ignored : org.graphiks.kadre.core/RequestError { // org.graphiks.kadre.core/RequestError.Ignored|null[0]
+        constructor <init>(kotlin/String = ...) // org.graphiks.kadre.core/RequestError.Ignored.<init>|<init>(kotlin.String){}[0]
+
+        final val message // org.graphiks.kadre.core/RequestError.Ignored.message|{}message[0]
+            final fun <get-message>(): kotlin/String // org.graphiks.kadre.core/RequestError.Ignored.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // org.graphiks.kadre.core/RequestError.Ignored.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): org.graphiks.kadre.core/RequestError.Ignored // org.graphiks.kadre.core/RequestError.Ignored.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/RequestError.Ignored.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/RequestError.Ignored.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // org.graphiks.kadre.core/RequestError.Ignored.toString|toString(){}[0]
+    }
+
     final class OsError : org.graphiks.kadre.core/RequestError { // org.graphiks.kadre.core/RequestError.OsError|null[0]
         constructor <init>(kotlin/String) // org.graphiks.kadre.core/RequestError.OsError.<init>|<init>(kotlin.String){}[0]
 
