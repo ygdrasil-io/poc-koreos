@@ -824,18 +824,16 @@ class X11Window private constructor(
             Arena.ofConfined().use { arena ->
                 // format 32 → array of C long on LP64: 5 × 8 = 40 bytes.
                 val hints = arena.allocate(40L, 8L)
-                hints.setAtIndex(ValueLayout.JAVA_LONG, 0L, 2L)              // flags = MWM_HINTS_DECORATIONS (2)
-                hints.setAtIndex(ValueLayout.JAVA_LONG, 1L, 0L)             // functions (unused)
-                hints.setAtIndex(ValueLayout.JAVA_LONG, 2L, if (decorated) 1L else 0L) // decorations
-                hints.setAtIndex(ValueLayout.JAVA_LONG, 3L, 0L)             // inputMode
-                hints.setAtIndex(ValueLayout.JAVA_LONG, 4L, 0L)             // status
+                x11MotifDecorationHints(decorated).forEachIndexed { index, value ->
+                    hints.setAtIndex(ValueLayout.JAVA_LONG, index.toLong(), value)
+                }
                 xChangeProperty?.invokeExact(
                     display, xWindowId,
                     motifAtom, motifAtom,
                     32, 0 /* PropModeReplace */,
                     hints, 5,
-                ) as? Int
-                xFlush?.invokeExact(display) as? Int
+                ) as Int
+                xFlush?.invokeExact(display) as Int
             }
         } catch (_: Throwable) {}
     }
@@ -967,6 +965,7 @@ class X11Window private constructor(
             val window = X11Window(display, screen, xWindowId, attrs)
             attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()
+            window.setMotifDecorations(attrs.decorations)
 
             // ── 6. XMapWindow (if visible) ────────────────────────────────────
             if (attrs.visible) {
@@ -1026,6 +1025,8 @@ class X11Window private constructor(
 }
 
 internal const val X11_NORMAL_HINTS_ELEMENTS: Int = 18
+internal const val X11_MOTIF_HINTS_ELEMENTS: Int = 5
+internal const val X11_MWM_HINTS_DECORATIONS: Long = 1L shl 1
 internal const val X11_US_POSITION: Long = 1L shl 0
 internal const val X11_US_SIZE: Long = 1L shl 1
 internal const val X11_P_MIN_SIZE: Long = 1L shl 4
@@ -1041,6 +1042,15 @@ internal data class X11NormalHints(
     override fun hashCode(): Int =
         elements.contentHashCode()
 }
+
+internal fun x11MotifDecorationHints(decorated: Boolean): LongArray =
+    longArrayOf(
+        X11_MWM_HINTS_DECORATIONS,
+        0L,
+        if (decorated) 1L else 0L,
+        0L,
+        0L,
+    )
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,

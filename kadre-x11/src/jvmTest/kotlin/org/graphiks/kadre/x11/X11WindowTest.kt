@@ -91,6 +91,19 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 motif decoration hints encode decorated and undecorated states`() {
+        val decorated = x11MotifDecorationHints(decorated = true)
+        assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)
+        assertEquals(X11_MWM_HINTS_DECORATIONS, decorated[0])
+        assertEquals(1L, decorated[2])
+
+        val undecorated = x11MotifDecorationHints(decorated = false)
+        assertEquals(X11_MOTIF_HINTS_ELEMENTS, undecorated.size)
+        assertEquals(X11_MWM_HINTS_DECORATIONS, undecorated[0])
+        assertEquals(0L, undecorated[2])
+    }
+
+    @Test
     fun `X11 normal hints encode position size constraints and increments`() {
         val hints = x11NormalHints(
             position = PhysicalPosition(10, 20),
