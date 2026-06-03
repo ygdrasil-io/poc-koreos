@@ -87,6 +87,9 @@ private const val XCONFIGURE_HEIGHT_OFFSET: Long = 60L  // int height
 // XDestroyWindowEvent offsets (type=DestroyNotify)
 private const val XDESTROY_WINDOW_OFFSET: Long = 40L // Window window
 
+// XVisibilityEvent offsets (type=VisibilityNotify)
+private const val XVISIBILITY_STATE_OFFSET: Long = 40L // int state
+
 // XClientMessageEvent offsets (type=ClientMessage)
 private const val XCLIENT_MESSAGE_TYPE_OFFSET: Long = 40L  // Atom message_type (unsigned long)
 private const val XCLIENT_DATA_L0_OFFSET: Long = 56L       // long data.l[0]
@@ -96,6 +99,8 @@ private const val X11_SHIFT_MASK: Int = 0x0001
 private const val X11_CONTROL_MASK: Int = 0x0004
 private const val X11_MOD1_MASK: Int = 0x0008  // Alt
 private const val X11_MOD4_MASK: Int = 0x0040  // Super / Meta
+
+private const val X11_VISIBILITY_FULLY_OBSCURED: Int = 2
 
 // X11 buttons
 private const val X11_BUTTON1: Int = 1
@@ -594,6 +599,13 @@ private fun dispatchEvent(
             if (window.onFocusChanged(false)) {
                 handler.windowEvent(loop, windowId, WindowEvent.Focused(gained = false))
             }
+        }
+
+        VisibilityNotify -> {
+            val window = loop.windows[windowXid] ?: return
+            val state = eventBuf.get(ValueLayout.JAVA_INT, XVISIBILITY_STATE_OFFSET)
+            handler.windowEvent(loop, windowId, WindowEvent.Occluded(state == X11_VISIBILITY_FULLY_OBSCURED))
+            window.onVisibilityNotify()
         }
 
         // ── Window destruction ────────────────────────────────────────────────

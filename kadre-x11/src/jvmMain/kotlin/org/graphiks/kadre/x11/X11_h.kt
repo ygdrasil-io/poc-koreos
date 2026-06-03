@@ -319,6 +319,20 @@ internal val xMapWindow: MethodHandle? by lazy {
     )
 }
 
+/**
+ * int XRaiseWindow(Display *display, Window w);
+ */
+internal val xRaiseWindow: MethodHandle? by lazy {
+    libX11.downcall(
+        "XRaiseWindow",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+        )
+    )
+}
+
 // ── XSendEvent ────────────────────────────────────────────────────────────────
 
 /**

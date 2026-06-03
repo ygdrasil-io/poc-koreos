@@ -43,7 +43,7 @@ import java.lang.foreign.ValueLayout
  * Combined event mask selected for each X11 window.
  *
  * Includes: Expose, KeyPress, KeyRelease, ButtonPress, ButtonRelease,
- * PointerMotion, FocusIn/FocusOut, StructureNotify (ConfigureNotify, DestroyNotify, …).
+ * PointerMotion, VisibilityNotify, FocusIn/FocusOut, StructureNotify.
  */
 private val FULL_EVENT_MASK: Long =
     ExposureMask or
@@ -52,6 +52,7 @@ private val FULL_EVENT_MASK: Long =
     ButtonPressMask or
     ButtonReleaseMask or
     PointerMotionMask or
+    VisibilityChangeMask or
     FocusChangeMask or
     StructureNotifyMask
 
@@ -134,15 +135,25 @@ class X11Window private constructor(
     }
 
     override fun setVisible(visible: Boolean) {
-        _isVisible = visible
         val display = MemorySegment.ofAddress(displayPtr)
         try {
             if (visible) {
-                xMapWindow?.invokeExact(display, xWindowId) as? Int
+                if (_visibilityState != X11_VISIBILITY_NO) return
+                val mapWindow = xMapWindow ?: return
+                val raiseWindow = xRaiseWindow
+                mapWindow.invokeExact(display, xWindowId) as Int
+                if (raiseWindow != null) raiseWindow.invokeExact(display, xWindowId) as Int
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+                _visibilityState = x11VisibilityAfterSet(_visibilityState, visible = true)
             } else {
-                xUnmapWindow?.invokeExact(display, xWindowId) as? Int
+                if (_visibilityState == X11_VISIBILITY_NO) return
+                val unmapWindow = xUnmapWindow ?: return
+                unmapWindow.invokeExact(display, xWindowId) as Int
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+                _visibilityState = x11VisibilityAfterSet(_visibilityState, visible = false)
             }
-            xFlush?.invokeExact(display) as? Int
         } catch (_: Throwable) {}
     }
 
@@ -167,9 +178,10 @@ class X11Window private constructor(
         writeX11Title(title)
     }
 
-    @Volatile private var _isVisible: Boolean = attrs.visible
+    @Volatile private var _visibilityState: Int =
+        if (attrs.visible) X11_VISIBILITY_YES_WAIT else X11_VISIBILITY_NO
 
-    override val isVisible: Boolean? get() = _isVisible
+    override val isVisible: Boolean? get() = x11VisibilityIsVisible(_visibilityState)
 
     @Volatile private var _isResizable: Boolean = attrs.resizable
 
@@ -1064,6 +1076,22 @@ class X11Window private constructor(
         return true
     }
 
+    fun onVisibilityNotify() {
+        when (_visibilityState) {
+            X11_VISIBILITY_NO -> {
+                val unmapWindow = xUnmapWindow ?: return
+                val display = MemorySegment.ofAddress(displayPtr)
+                try {
+                    unmapWindow.invokeExact(display, xWindowId) as Int
+                    val flush = xFlush
+                    if (flush != null) flush.invokeExact(display) as Int
+                } catch (_: Throwable) {}
+            }
+            X11_VISIBILITY_YES_WAIT -> _visibilityState = x11VisibilityAfterNotify(_visibilityState)
+            X11_VISIBILITY_YES -> {}
+        }
+    }
+
     // ── R3 helpers ────────────────────────────────────────────────────────────
 
     /** Maps a [CursorIcon] to the X11 cursorfont shape constant. */
@@ -1144,7 +1172,8 @@ class X11Window private constructor(
             if (xWindowId == 0L) return null
 
             // ── 3. XSelectInput ───────────────────────────────────────────────
-            xSelectInput?.invokeExact(displaySeg, xWindowId, FULL_EVENT_MASK) as? Int
+            val selectInput = xSelectInput ?: return null
+            selectInput.invokeExact(displaySeg, xWindowId, FULL_EVENT_MASK) as Int
 
             // ── 4. WM_DELETE_WINDOW (clean-close protocol) ────────────────────
             Arena.ofConfined().use { arena ->
@@ -1176,8 +1205,12 @@ class X11Window private constructor(
 
             // ── 6. XMapWindow (if visible) ────────────────────────────────────
             if (attrs.visible) {
-                xMapWindow?.invokeExact(displaySeg, xWindowId) as? Int
-                xFlush?.invokeExact(displaySeg) as? Int
+                val mapWindow = xMapWindow ?: return null
+                mapWindow.invokeExact(displaySeg, xWindowId) as Int
+                val raiseWindow = xRaiseWindow
+                if (raiseWindow != null) raiseWindow.invokeExact(displaySeg, xWindowId) as Int
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(displaySeg) as Int
             }
 
             // ── 7. Apply initial fullscreen from attrs ────────────────────────
@@ -1238,6 +1271,9 @@ internal const val X11_MWM_HINTS_DECORATIONS: Long = 1L shl 1
 internal const val X11_MWM_FUNC_ALL: Long = 1L shl 0
 internal const val X11_MWM_FUNC_MAXIMIZE: Long = 1L shl 4
 internal const val X11_ICONIC_STATE: Long = 3L
+internal const val X11_VISIBILITY_NO: Int = 0
+internal const val X11_VISIBILITY_YES_WAIT: Int = 1
+internal const val X11_VISIBILITY_YES: Int = 2
 internal const val X11_COLOR_SIZE_BYTES: Long = 16L
 internal const val X11_COLOR_ALIGN_BYTES: Long = 8L
 internal const val X11_US_POSITION: Long = 1L shl 0
@@ -1303,6 +1339,19 @@ internal fun x11WindowStateContains(atoms: LongArray, atom: Long): Boolean =
 
 internal fun x11FocusRequestAllowed(visible: Boolean, minimized: Boolean): Boolean =
     visible && !minimized
+
+internal fun x11VisibilityAfterSet(current: Int, visible: Boolean): Int =
+    if (visible) {
+        if (current == X11_VISIBILITY_NO) X11_VISIBILITY_YES_WAIT else current
+    } else {
+        X11_VISIBILITY_NO
+    }
+
+internal fun x11VisibilityAfterNotify(current: Int): Int =
+    if (current == X11_VISIBILITY_YES_WAIT) X11_VISIBILITY_YES else current
+
+internal fun x11VisibilityIsVisible(state: Int): Boolean =
+    state == X11_VISIBILITY_YES
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,

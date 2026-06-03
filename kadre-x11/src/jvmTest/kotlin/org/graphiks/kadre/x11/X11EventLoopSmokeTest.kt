@@ -113,6 +113,7 @@ class X11EventLoopSmokeTest {
             event.set(ValueLayout.JAVA_LONG, 40L, 20L)
 
             assertEquals(10L, x11EventWindowXid(event, FocusIn))
+            assertEquals(10L, x11EventWindowXid(event, VisibilityNotify))
             assertEquals(10L, x11EventWindowXid(event, ClientMessage))
             assertEquals(20L, x11EventWindowXid(event, ConfigureNotify))
             assertEquals(20L, x11EventWindowXid(event, DestroyNotify))

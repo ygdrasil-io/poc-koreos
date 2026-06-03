@@ -133,6 +133,21 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 visibility follows winit YesWait until VisibilityNotify`() {
+        val waiting = x11VisibilityAfterSet(X11_VISIBILITY_NO, visible = true)
+        assertEquals(X11_VISIBILITY_YES_WAIT, waiting)
+        assertEquals(false, x11VisibilityIsVisible(waiting))
+
+        val visible = x11VisibilityAfterNotify(waiting)
+        assertEquals(X11_VISIBILITY_YES, visible)
+        assertEquals(true, x11VisibilityIsVisible(visible))
+
+        val hidden = x11VisibilityAfterSet(visible, visible = false)
+        assertEquals(X11_VISIBILITY_NO, hidden)
+        assertEquals(false, x11VisibilityIsVisible(hidden))
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)
