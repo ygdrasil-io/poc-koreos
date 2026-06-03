@@ -9,6 +9,8 @@
 package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.appkit.bindings.NSBackingStoreType
+import org.graphiks.kadre.appkit.bindings.NSApplication
+import org.graphiks.kadre.appkit.bindings.NSRequestUserAttentionType
 import org.graphiks.kadre.appkit.bindings.NSRect
 import org.graphiks.kadre.appkit.bindings.NSView
 import org.graphiks.kadre.appkit.bindings.NSWindow
@@ -29,6 +31,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
@@ -57,6 +60,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     /** In-memory fullscreen state (R2). */
     @Volatile
     private var _fullscreen: Fullscreen? = attrs.fullscreen
+
+    @Volatile
+    private var activeAttentionRequest: Long? = null
 
     /**
      * NSWindowDelegate installed on this window.
@@ -780,17 +786,51 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         } catch (_: Throwable) {}
     }
 
-    override fun setContentProtected(protected: Boolean) {
-        try {
-            NSWindow(nsWindowPtr).setSharingType(
-                if (protected) {
-                    NSWindowSharingType.NSWindowSharingNone
-                } else {
-                    NSWindowSharingType.NSWindowSharingReadOnly
-                },
-            )
-        } catch (_: Throwable) {}
-    }
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        AppKitMainThread.runSync {
+            try {
+                val nsAppPtr = NSApplication.sharedApplication()
+                if (nsAppPtr == MemorySegment.NULL) {
+                    return@runSync WindowRequestResult.Failure(RequestError.OsError("NSApplication.sharedApplication is unavailable"))
+                }
+
+                val nsApp = NSApplication(nsAppPtr)
+                if (requestType == null) {
+                    // Match winit AppKit: None has no effect for attention requests.
+                    return@runSync WindowRequestResult.Success
+                }
+
+                activeAttentionRequest?.let { request ->
+                    nsApp.cancelUserAttentionRequest(request)
+                    activeAttentionRequest = null
+                }
+
+                val appKitRequest = when (requestType) {
+                    UserAttentionType.Critical -> NSRequestUserAttentionType.NSCriticalRequest
+                    UserAttentionType.Informational -> NSRequestUserAttentionType.NSInformationalRequest
+                }
+                activeAttentionRequest = nsApp.requestUserAttention(appKitRequest)
+                WindowRequestResult.Success
+            } catch (t: Throwable) {
+                WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit user attention failed"))
+            }
+        }
+
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        AppKitMainThread.runSync {
+            try {
+                NSWindow(nsWindowPtr).setSharingType(
+                    if (protected) {
+                        NSWindowSharingType.NSWindowSharingNone
+                    } else {
+                        NSWindowSharingType.NSWindowSharingReadOnly
+                    },
+                )
+                WindowRequestResult.Success
+            } catch (t: Throwable) {
+                WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit content protection failed"))
+            }
+        }
 
     /**
      * Installs a [KadreWindowDelegate] on this window.

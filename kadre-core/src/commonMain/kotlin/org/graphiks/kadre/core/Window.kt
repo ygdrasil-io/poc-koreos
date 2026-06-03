@@ -477,15 +477,16 @@ interface Window {
      *
      * Platform behaviour:
      * - AppKit : `NSApp.requestUserAttention` / `cancelUserAttentionRequest`.
-     * - Win32  : `FlashWindowEx` (FLASHW_TRAY / FLASHW_TIMER).
-     * - Others : no-op documented.
+     * - Win32  : deferred; returns [RequestError.Unsupported] until `FlashWindowEx` is wired.
+     * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
-     * Default implementation is a no-op. Never throws.
-     * TODO R5-MiscWindow: wire in AppKit and Win32 backends.
+     * Backends that do not support user-attention requests return
+     * [WindowRequestResult.Failure] with [RequestError.Unsupported]. Never throws.
      *
      * @param requestType Attention level, or null to cancel the current request.
      */
-    fun requestUserAttention(requestType: UserAttentionType?) { /* no-op by default, TODO R5-MiscWindow */ }
+    fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("User attention is unsupported by this window"))
 
     /**
      * Enables or disables screen-capture protection for this window.
@@ -494,14 +495,15 @@ interface Window {
      * Platform behaviour:
      * - Win32  : `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`.
      * - AppKit : `NSWindow.sharingType = NSWindowSharingNone`.
-     * - Others : no-op documented.
+     * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
-     * Default implementation is a no-op. Never throws.
-     * TODO R5-MiscWindow: wire in Win32 and AppKit backends.
+     * Backends that do not support content protection return
+     * [WindowRequestResult.Failure] with [RequestError.Unsupported]. Never throws.
      *
      * @param protected `true` to enable content protection, `false` to disable.
      */
-    fun setContentProtected(protected: Boolean) { /* no-op by default, TODO R5-MiscWindow */ }
+    fun setContentProtected(protected: Boolean): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Content protection is unsupported by this window"))
 
     /**
      * Shows the platform window menu (system / title-bar context menu) at the given position.

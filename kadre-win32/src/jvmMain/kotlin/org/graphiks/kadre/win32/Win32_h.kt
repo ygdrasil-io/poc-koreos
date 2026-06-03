@@ -1312,3 +1312,25 @@ internal val setLayeredWindowAttributes: MethodHandle? by lazy {
         )
     )
 }
+
+/**
+ * BOOL SetWindowDisplayAffinity(HWND hWnd, DWORD dwAffinity);
+ *
+ * Excludes a window from screen capture where supported by the OS/compositor.
+ */
+internal val setWindowDisplayAffinity: MethodHandle? by lazy {
+    user32.downcall(
+        "SetWindowDisplayAffinity",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HWND
+            ValueLayout.JAVA_INT,   // DWORD dwAffinity
+        )
+    )
+}
+
+/** WDA_NONE disables display-affinity protection. */
+internal const val WDA_NONE: Int = 0x00000000
+
+/** WDA_EXCLUDEFROMCAPTURE excludes the window from screen capture on Windows 10 2004+. */
+internal const val WDA_EXCLUDEFROMCAPTURE: Int = 0x00000011

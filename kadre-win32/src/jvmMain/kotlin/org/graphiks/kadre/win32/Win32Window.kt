@@ -766,6 +766,22 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        try {
+            val setAffinity = setWindowDisplayAffinity ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 SetWindowDisplayAffinity is unavailable"),
+            )
+            val affinity = if (protected) WDA_EXCLUDEFROMCAPTURE else WDA_NONE
+            val ok = setAffinity.invokeExact(hwnd, affinity) as Int
+            if (ok == 0) {
+                WindowRequestResult.Failure(RequestError.OsError("SetWindowDisplayAffinity failed"))
+            } else {
+                WindowRequestResult.Success
+            }
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 content protection failed"))
+        }
+
     // ── R4: keyboard ──────────────────────────────────────────────────────────
 
     /**

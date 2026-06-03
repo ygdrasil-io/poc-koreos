@@ -6,9 +6,11 @@ import org.graphiks.kadre.appkit.bindings.NSWindowSharingType
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -111,7 +113,17 @@ class AppKitWindowTest {
         assertNotNull(appKitWindowClass.getMethod("setSurfaceResizeIncrements", PhysicalSize::class.java))
         assertNotNull(appKitWindowClass.getMethod("focusWindow"))
         assertNotNull(appKitWindowClass.getMethod("getHasFocus"))
-        assertNotNull(appKitWindowClass.getMethod("setContentProtected", Boolean::class.javaPrimitiveType))
+        val requestUserAttention = appKitWindowClass.getMethod("requestUserAttention", UserAttentionType::class.java)
+        assertTrue(
+            WindowRequestResult::class.java.isAssignableFrom(requestUserAttention.returnType),
+            "requestUserAttention must return WindowRequestResult",
+        )
+
+        val setContentProtected = appKitWindowClass.getMethod("setContentProtected", Boolean::class.javaPrimitiveType)
+        assertTrue(
+            WindowRequestResult::class.java.isAssignableFrom(setContentProtected.returnType),
+            "setContentProtected must return WindowRequestResult",
+        )
     }
 
     @Test

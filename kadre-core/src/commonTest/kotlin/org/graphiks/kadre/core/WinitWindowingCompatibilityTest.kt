@@ -91,6 +91,10 @@ class WinitWindowingCompatibilityTest {
         assertUnsupported(window.showWindowMenu(PhysicalPosition(10, 20)))
         assertUnsupported(window.dragWindow())
         assertUnsupported(window.dragResizeWindow(ResizeDirection.SouthEast))
+        assertUnsupported(window.requestUserAttention(UserAttentionType.Informational))
+        assertUnsupported(window.requestUserAttention(null))
+        assertUnsupported(window.setContentProtected(true))
+        assertUnsupported(window.setContentProtected(false))
     }
 
     @Test
@@ -195,7 +199,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window appearance/state setters",
                 kadreApi = "setWindowLevel, requestUserAttention, setTheme, theme, setTransparent, setBlur, setWindowIcon, setContentProtected",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre exposes these methods, but several are still default no-ops or backend-incomplete; AppKit content protection is implemented.",
+                note = "Kadre exposes these methods; requestUserAttention and setContentProtected now return typed WindowRequestResult failures on unsupported backends, while other appearance setters still need the same fallible-result audit.",
             ),
             WinitWindowingApi(
                 winitApi = "Window reset_dead_keys",
@@ -291,7 +295,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "WindowRequestResult and RequestError",
                 kadreApi = "WindowRequestResult, SurfaceSizeRequestResult, RequestError",
                 status = WinitWindowingStatus.Implemented,
-                note = "Kadre has support result types for fallible requests, including RequestError.Ignored for winit ignored requests, though not all Window methods use result types yet.",
+                note = "Kadre has support result types for fallible requests, including RequestError.Ignored for winit ignored requests; appearance setters are being migrated away from silent no-ops incrementally.",
             ),
         )
     }
