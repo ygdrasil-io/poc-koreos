@@ -477,7 +477,7 @@ interface Window {
      *
      * Platform behaviour:
      * - AppKit : `NSApp.requestUserAttention` / `cancelUserAttentionRequest`.
-     * - Win32  : deferred; returns [RequestError.Unsupported] until `FlashWindowEx` is wired.
+     * - Win32  : `FlashWindowEx` with winit-aligned `FLASHW_*` flags.
      * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Backends that do not support user-attention requests return

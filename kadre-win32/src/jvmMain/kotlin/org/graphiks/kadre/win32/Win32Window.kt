@@ -26,6 +26,7 @@ import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
@@ -780,6 +781,34 @@ class Win32Window private constructor(
             }
         } catch (t: Throwable) {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 content protection failed"))
+        }
+
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        try {
+            val flash = flashWindowEx ?: return WindowRequestResult.Failure(
+                RequestError.Unsupported("Win32 FlashWindowEx is unavailable"),
+            )
+            val active = getActiveWindow?.invokeExact() as? MemorySegment
+            if (active != null && active.address() == hwnd.address()) {
+                return WindowRequestResult.Success
+            }
+            val (flags, count) = when (requestType) {
+                UserAttentionType.Critical -> (FLASHW_ALL or FLASHW_TIMERNOFG) to -1
+                UserAttentionType.Informational -> (FLASHW_TRAY or FLASHW_TIMERNOFG) to 0
+                null -> FLASHW_STOP to 0
+            }
+            Arena.ofConfined().use { arena ->
+                val info = arena.allocate(FLASHWINFO_SIZE, FLASHWINFO_ALIGN)
+                info.set(ValueLayout.JAVA_INT, FLASHWINFO_CB_SIZE_OFFSET, FLASHWINFO_SIZE.toInt())
+                info.set(ValueLayout.ADDRESS, FLASHWINFO_HWND_OFFSET, hwnd)
+                info.set(ValueLayout.JAVA_INT, FLASHWINFO_FLAGS_OFFSET, flags)
+                info.set(ValueLayout.JAVA_INT, FLASHWINFO_COUNT_OFFSET, count)
+                info.set(ValueLayout.JAVA_INT, FLASHWINFO_TIMEOUT_OFFSET, 0)
+                flash.invokeExact(info) as Int
+                WindowRequestResult.Success
+            }
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 user attention failed"))
         }
 
     // ── R4: keyboard ──────────────────────────────────────────────────────────

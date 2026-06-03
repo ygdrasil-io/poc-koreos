@@ -14,11 +14,11 @@ Platform behaviour:
 -
    AppKit : `NSApp.requestUserAttention` / `cancelUserAttentionRequest`.
 -
-   Win32  : `FlashWindowEx` (FLASHW_TRAY / FLASHW_TIMER).
+   Win32  : `FlashWindowEx` (FLASHW_TRAY / FLASHW_TIMERNOFG).
 -
    Others : [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
-Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. AppKit is wired; Win32 attention remains deferred.
+Default implementation returns [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws. AppKit and Win32 are wired.
 
 #### Parameters
 

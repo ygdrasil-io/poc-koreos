@@ -1334,3 +1334,49 @@ internal const val WDA_NONE: Int = 0x00000000
 
 /** WDA_EXCLUDEFROMCAPTURE excludes the window from screen capture on Windows 10 2004+. */
 internal const val WDA_EXCLUDEFROMCAPTURE: Int = 0x00000011
+
+/**
+ * BOOL FlashWindowEx(const FLASHWINFO *pfwi);
+ *
+ * Used by Window.requestUserAttention on Win32.
+ */
+internal val flashWindowEx: MethodHandle? by lazy {
+    user32.downcall(
+        "FlashWindowEx",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // const FLASHWINFO*
+        )
+    )
+}
+
+/**
+ * HWND GetActiveWindow(void);
+ *
+ * Used to match winit's request_user_attention behavior: an already-active
+ * window should not be flashed.
+ */
+internal val getActiveWindow: MethodHandle? by lazy {
+    user32.downcall(
+        "GetActiveWindow",
+        FunctionDescriptor.of(ValueLayout.ADDRESS)
+    )
+}
+
+/**
+ * FLASHWINFO layout for Kadre's supported 64-bit Windows/JVM target:
+ * UINT, padding, HWND, DWORD, UINT, DWORD.
+ */
+internal const val FLASHWINFO_SIZE: Long = 32L
+internal const val FLASHWINFO_ALIGN: Long = 8L
+internal const val FLASHWINFO_CB_SIZE_OFFSET: Long = 0L
+internal const val FLASHWINFO_HWND_OFFSET: Long = 8L
+internal const val FLASHWINFO_FLAGS_OFFSET: Long = 16L
+internal const val FLASHWINFO_COUNT_OFFSET: Long = 20L
+internal const val FLASHWINFO_TIMEOUT_OFFSET: Long = 24L
+
+internal const val FLASHW_STOP: Int = 0x00000000
+internal const val FLASHW_CAPTION: Int = 0x00000001
+internal const val FLASHW_TRAY: Int = 0x00000002
+internal const val FLASHW_ALL: Int = FLASHW_CAPTION or FLASHW_TRAY
+internal const val FLASHW_TIMERNOFG: Int = 0x0000000C
