@@ -69,6 +69,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     @Volatile
     private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
+    @Volatile
+    private var blurEffectViewPtr: MemorySegment = MemorySegment.NULL
+
     /**
      * NSWindowDelegate installed on this window.
      * Null until [setWindowDelegate] has been called.
@@ -817,28 +820,41 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      * Enables a blur effect behind the window via NSVisualEffectView.
      *
      * Inserts a full-size NSVisualEffectView as the first subview of contentView
-     * when enabled. Removing blur is a best-effort (no-op if the view was
-     * not inserted by this method). No-op on non-macOS.
+     * when enabled, and removes the inserted view when disabled.
      */
     override fun setBlur(blur: Boolean) {
+        AppKitMainThread.runSync {
+            try {
+                if (blur) {
+                    if (!appKitShouldInstallBlurEffectView(blurEffectViewPtr)) return@runSync
+                    installBlurEffectView()
+                } else if (appKitShouldRemoveBlurEffectView(blurEffectViewPtr)) {
+                    ObjCRuntime.msgSend(null, blurEffectViewPtr, ObjCRuntime.sel("removeFromSuperview"))
+                    blurEffectViewPtr = MemorySegment.NULL
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun installBlurEffectView() {
+        var vev = MemorySegment.NULL
         try {
-            if (blur) {
-                // Insert NSVisualEffectView behind content
-                val vevClass = ObjCRuntime.getClass("NSVisualEffectView")
-                val vev = ObjCRuntime.msgSend(
-                    ValueLayout.ADDRESS, vevClass, ObjCRuntime.sel("new"),
-                ) as MemorySegment
-                // Set frame to contentView bounds
-                val frame = NSView(contentViewPtr).frame()
-                ObjCRuntime.msgSend(null, vev, ObjCRuntime.sel("setFrame:"),
-                    ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT))
-                // NSVisualEffectBlendingModeBehindWindow = 0
-                ObjCRuntime.msgSend(null, vev, ObjCRuntime.sel("setBlendingMode:"), 0L)
-                ObjCRuntime.msgSend(null, contentViewPtr, ObjCRuntime.sel("addSubview:positioned:relativeTo:"),
-                    vev, 0L /* NSWindowBelow */, MemorySegment.NULL)
+            val vevClass = ObjCRuntime.getClass("NSVisualEffectView")
+            vev = ObjCRuntime.msgSend(
+                ValueLayout.ADDRESS, vevClass, ObjCRuntime.sel("new"),
+            ) as MemorySegment
+            val frame = NSView(contentViewPtr).frame()
+            ObjCRuntime.msgSend(null, vev, ObjCRuntime.sel("setFrame:"),
+                ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT))
+            ObjCRuntime.msgSend(null, vev, ObjCRuntime.sel("setBlendingMode:"), 0L)
+            ObjCRuntime.msgSend(null, contentViewPtr, ObjCRuntime.sel("addSubview:positioned:relativeTo:"),
+                vev, 0L /* NSWindowBelow */, MemorySegment.NULL)
+            blurEffectViewPtr = vev
+        } finally {
+            if (vev != MemorySegment.NULL) {
+                ObjCRuntime.msgSend(null, vev, ObjCRuntime.sel("release"))
             }
-            // No remove logic — application responsibility to recreate window if needed.
-        } catch (_: Throwable) {}
+        }
     }
 
     /**
@@ -1002,6 +1018,12 @@ internal fun appKitShouldApplyInitialBlur(blur: Boolean): Boolean = blur
 
 internal fun appKitBackgroundColorSelectorForTransparency(transparent: Boolean): String =
     if (transparent) "clearColor" else "windowBackgroundColor"
+
+internal fun appKitShouldInstallBlurEffectView(currentBlurView: MemorySegment): Boolean =
+    currentBlurView == MemorySegment.NULL
+
+internal fun appKitShouldRemoveBlurEffectView(currentBlurView: MemorySegment): Boolean =
+    currentBlurView != MemorySegment.NULL
 
 internal fun appKitWindowLevelValue(level: WindowLevel): Long =
     when (level) {

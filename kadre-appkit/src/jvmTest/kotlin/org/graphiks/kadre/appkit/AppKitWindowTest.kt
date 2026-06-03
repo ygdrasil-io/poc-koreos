@@ -173,6 +173,16 @@ class AppKitWindowTest {
     }
 
     @Test
+    fun `AppKit blur effect view install and remove decisions are idempotent`() {
+        assertTrue(appKitShouldInstallBlurEffectView(java.lang.foreign.MemorySegment.NULL))
+        assertTrue(!appKitShouldRemoveBlurEffectView(java.lang.foreign.MemorySegment.NULL))
+
+        val existingView = java.lang.foreign.MemorySegment.ofAddress(0xB10BL)
+        assertTrue(!appKitShouldInstallBlurEffectView(existingView))
+        assertTrue(appKitShouldRemoveBlurEffectView(existingView))
+    }
+
+    @Test
     fun `AppKit enabled buttons update close and minimize style bits`() {
         val base = NSWindowStyleMask.NSWindowStyleMaskTitled +
             NSWindowStyleMask.NSWindowStyleMaskClosable +
