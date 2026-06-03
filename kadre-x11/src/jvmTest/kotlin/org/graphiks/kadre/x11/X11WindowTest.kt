@@ -1,5 +1,6 @@
 package org.graphiks.kadre.x11
 
+import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
@@ -94,6 +95,19 @@ class X11WindowTest {
     fun `X11 title property bytes are UTF-8 like winit NET_WM_NAME`() {
         assertEquals("Kadre".toByteArray(Charsets.UTF_8).toList(), x11TitlePropertyBytes("Kadre").toList())
         assertEquals("Fenetre é".toByteArray(Charsets.UTF_8).toList(), x11TitlePropertyBytes("Fenetre é").toList())
+    }
+
+    @Test
+    fun `X11 cursor change applies only when visible and changed`() {
+        assertEquals(true, x11CursorChangeRequiresApply(CursorIcon.Default, CursorIcon.Pointer, visible = true))
+        assertEquals(false, x11CursorChangeRequiresApply(CursorIcon.Default, CursorIcon.Default, visible = true))
+        assertEquals(false, x11CursorChangeRequiresApply(CursorIcon.Default, CursorIcon.Pointer, visible = false))
+    }
+
+    @Test
+    fun `X11 transparent cursor XColor layout matches LP64 Xlib`() {
+        assertEquals(16L, X11_COLOR_SIZE_BYTES)
+        assertEquals(8L, X11_COLOR_ALIGN_BYTES)
     }
 
     @Test

@@ -149,7 +149,9 @@ class X11Window private constructor(
         val handle = xDestroyWindow ?: return
         val display = MemorySegment.ofAddress(displayPtr)
         handle.invokeExact(display, xWindowId) as Int
-        xFlush?.invokeExact(display) as? Int
+        freeCachedCursors(display)
+        val flush = xFlush
+        if (flush != null) flush.invokeExact(display) as Int
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -342,39 +344,111 @@ class X11Window private constructor(
 
     // ── R3: cursor, theme & appearance ───────────────────────────────────────
 
+    @Volatile private var _selectedCursor: CursorIcon = attrs.cursor
+    @Volatile private var _cursorVisible: Boolean = true
+    @Volatile private var _hiddenCursor: Long = 0L
+    private val namedCursorCache: MutableMap<CursorIcon, Long> = mutableMapOf()
+
     /**
      * Sets the cursor shape via XCreateFontCursor + XDefineCursor.
      */
     override fun setCursor(cursor: CursorIcon) {
-        try {
-            val display = MemorySegment.ofAddress(displayPtr)
-            val shape = cursorToXShape(cursor)
-            val xcursor = xCreateFontCursor?.invokeExact(display, shape) as? Long ?: return
-            xDefineCursor?.invokeExact(display, xWindowId, xcursor) as? Int
-            xFlush?.invokeExact(display) as? Int
-        } catch (_: Throwable) {}
+        val previous = _selectedCursor
+        _selectedCursor = cursor
+        if (x11CursorChangeRequiresApply(previous, cursor, _cursorVisible)) {
+            applySelectedCursor()
+        }
     }
 
     /**
-     * Shows or hides the cursor.
-     *
-     * When hiding: creates an invisible cursor using XCreateFontCursor(XC_left_ptr)
-     * with a pixel mask that makes it transparent.
-     * Best-effort — uses XUndefineCursor to restore.
+     * Shows or hides the cursor by defining either the selected X cursor or a
+     * cached transparent 1x1 pixmap cursor on this window.
      */
     override fun setCursorVisible(visible: Boolean) {
+        if (visible == _cursorVisible) return
+        _cursorVisible = visible
+        applySelectedCursor()
+    }
+
+    private fun applySelectedCursor() {
         try {
+            val defineCursor = xDefineCursor ?: return
             val display = MemorySegment.ofAddress(displayPtr)
-            if (visible) {
-                xUndefineCursor?.invokeExact(display, xWindowId) as? Int
+            val cursor = if (_cursorVisible) {
+                createNamedCursor(display, _selectedCursor)
             } else {
-                // Invisible cursor: use XDefineCursor with a blank cursor
-                // Best-effort: create a 1x1 blank cursor via XCreateFontCursor shape 0
-                // (a proper invisible cursor requires XCreatePixmapCursor — TODO)
-                // For now, just leave cursor as-is. Full implementation deferred.
-                // TODO(R3-x11-hide): XCreatePixmapCursor with blank 1×1 bitmaps.
+                hiddenCursor(display)
             }
-            xFlush?.invokeExact(display) as? Int
+            if (cursor == 0L) return
+            defineCursor.invokeExact(display, xWindowId, cursor) as Int
+            val flush = xFlush
+            if (flush != null) flush.invokeExact(display) as Int
+        } catch (_: Throwable) {}
+    }
+
+    private fun createNamedCursor(display: MemorySegment, cursor: CursorIcon): Long {
+        synchronized(namedCursorCache) {
+            namedCursorCache[cursor]?.let { return it }
+            val createFontCursor = xCreateFontCursor ?: return 0L
+            val shape = cursorToXShape(cursor)
+            val xcursor = createFontCursor.invokeExact(display, shape) as Long
+            if (xcursor != 0L) namedCursorCache[cursor] = xcursor
+            return xcursor
+        }
+    }
+
+    private fun hiddenCursor(display: MemorySegment): Long {
+        if (_hiddenCursor != 0L) return _hiddenCursor
+        val rootHandle = xRootWindow ?: return 0L
+        val createBitmap = xCreateBitmapFromData ?: return 0L
+        val createPixmapCursor = xCreatePixmapCursor ?: return 0L
+        val freePixmap = xFreePixmap
+        return try {
+            val root = rootHandle.invokeExact(display, screen) as Long
+            if (root == 0L) return 0L
+            Arena.ofConfined().use { arena ->
+                val bitmapData = arena.allocate(1L, 1L)
+                bitmapData.set(ValueLayout.JAVA_BYTE, 0L, 0)
+                val source = createBitmap.invokeExact(display, root, bitmapData, 1, 1) as Long
+                if (source == 0L) return@use 0L
+                val mask = createBitmap.invokeExact(display, root, bitmapData, 1, 1) as Long
+                if (mask == 0L) {
+                    if (freePixmap != null) freePixmap.invokeExact(display, source) as Int
+                    return@use 0L
+                }
+                try {
+                    val foreground = arena.allocate(X11_COLOR_SIZE_BYTES, X11_COLOR_ALIGN_BYTES)
+                    val background = arena.allocate(X11_COLOR_SIZE_BYTES, X11_COLOR_ALIGN_BYTES)
+                    foreground.fill(0)
+                    background.fill(0)
+                    val cursor = createPixmapCursor.invokeExact(display, source, mask, foreground, background, 0, 0) as Long
+                    _hiddenCursor = cursor
+                    cursor
+                } finally {
+                    if (freePixmap != null) {
+                        freePixmap.invokeExact(display, source) as Int
+                        freePixmap.invokeExact(display, mask) as Int
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
+    private fun freeCachedCursors(display: MemorySegment) {
+        val freeCursor = xFreeCursor ?: return
+        try {
+            synchronized(namedCursorCache) {
+                namedCursorCache.values.forEach { cursor ->
+                    if (cursor != 0L) freeCursor.invokeExact(display, cursor) as Int
+                }
+                namedCursorCache.clear()
+            }
+            if (_hiddenCursor != 0L) {
+                freeCursor.invokeExact(display, _hiddenCursor) as Int
+                _hiddenCursor = 0L
+            }
         } catch (_: Throwable) {}
     }
 
@@ -421,7 +495,8 @@ class X11Window private constructor(
                     }
                 }
             }
-            xFlush?.invokeExact(display) as? Int
+            val flush = xFlush
+            if (flush != null) flush.invokeExact(display) as Int
             WindowRequestResult.Success
         } catch (t: Throwable) {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 cursor grab failed"))
@@ -444,7 +519,8 @@ class X11Window private constructor(
                 position.x,
                 position.y,
             ) as Int
-            xFlush?.invokeExact(display) as? Int
+            val flush = xFlush
+            if (flush != null) flush.invokeExact(display) as Int
             WindowRequestResult.Success
         } catch (t: Throwable) {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 cursor position failed"))
@@ -1011,6 +1087,7 @@ class X11Window private constructor(
             attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()
             window.setMotifDecorations(attrs.decorations)
+            window.applySelectedCursor()
 
             // ── 6. XMapWindow (if visible) ────────────────────────────────────
             if (attrs.visible) {
@@ -1075,6 +1152,8 @@ internal const val X11_MWM_HINTS_FUNCTIONS: Long = 1L shl 0
 internal const val X11_MWM_HINTS_DECORATIONS: Long = 1L shl 1
 internal const val X11_MWM_FUNC_ALL: Long = 1L shl 0
 internal const val X11_MWM_FUNC_MAXIMIZE: Long = 1L shl 4
+internal const val X11_COLOR_SIZE_BYTES: Long = 16L
+internal const val X11_COLOR_ALIGN_BYTES: Long = 8L
 internal const val X11_US_POSITION: Long = 1L shl 0
 internal const val X11_US_SIZE: Long = 1L shl 1
 internal const val X11_P_MIN_SIZE: Long = 1L shl 4
@@ -1125,6 +1204,13 @@ private fun x11MotifHints(existing: LongArray?): LongArray =
 
 internal fun x11TitlePropertyBytes(title: String): ByteArray =
     title.toByteArray(Charsets.UTF_8)
+
+internal fun x11CursorChangeRequiresApply(
+    previous: CursorIcon,
+    next: CursorIcon,
+    visible: Boolean,
+): Boolean =
+    visible && previous != next
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,

@@ -655,7 +655,7 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 | Fonctionnalité | appkit | win32 | x11 | wayland | web | android | uikit |
 |----------------|--------|-------|-----|---------|-----|---------|-------|
 | `setCursor(CursorIcon)` | réel | réel | réel | no-op (libwayland-cursor TODO) | réel (CSS cursor) | no-op | no-op |
-| `setCursorVisible()` | réel | partiel (`ShowCursor` non rééquilibré — DEFERRED.md) | no-op (XCreatePixmapCursor TODO) | no-op | réel (CSS) | no-op | no-op |
+| `setCursorVisible()` | réel | partiel (`ShowCursor` non rééquilibré — DEFERRED.md) | réel | no-op | réel (CSS) | no-op | no-op |
 | `setCursorGrab(Confined)` | réel | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | réel | réel | réel | unsupported | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partiel (CGWarpMouseCursorPosition, cast scalaire) | réel | réel | unsupported | unsupported | unsupported | unsupported |

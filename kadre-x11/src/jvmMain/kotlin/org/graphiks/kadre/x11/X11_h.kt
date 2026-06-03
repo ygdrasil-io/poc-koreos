@@ -613,6 +613,73 @@ internal val xUndefineCursor: MethodHandle? by lazy {
 }
 
 /**
+ * int XFreeCursor(Display* display, Cursor cursor);
+ */
+internal val xFreeCursor: MethodHandle? by lazy {
+    libX11.downcall(
+        "XFreeCursor",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+        )
+    )
+}
+
+/**
+ * Pixmap XCreateBitmapFromData(Display* display, Drawable d, const char* data,
+ *     unsigned int width, unsigned int height);
+ */
+internal val xCreateBitmapFromData: MethodHandle? by lazy {
+    libX11.downcall(
+        "XCreateBitmapFromData",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // Pixmap
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Drawable
+            ValueLayout.ADDRESS,    // const char*
+            ValueLayout.JAVA_INT,   // unsigned int width
+            ValueLayout.JAVA_INT,   // unsigned int height
+        )
+    )
+}
+
+/**
+ * Cursor XCreatePixmapCursor(Display* display, Pixmap source, Pixmap mask,
+ *     XColor* foreground_color, XColor* background_color,
+ *     unsigned int x, unsigned int y);
+ */
+internal val xCreatePixmapCursor: MethodHandle? by lazy {
+    libX11.downcall(
+        "XCreatePixmapCursor",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_LONG,  // Cursor
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Pixmap source
+            ValueLayout.JAVA_LONG,  // Pixmap mask
+            ValueLayout.ADDRESS,    // XColor* foreground
+            ValueLayout.ADDRESS,    // XColor* background
+            ValueLayout.JAVA_INT,   // unsigned int x
+            ValueLayout.JAVA_INT,   // unsigned int y
+        )
+    )
+}
+
+/**
+ * int XFreePixmap(Display* display, Pixmap pixmap);
+ */
+internal val xFreePixmap: MethodHandle? by lazy {
+    libX11.downcall(
+        "XFreePixmap",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+        )
+    )
+}
+
+/**
  * int XGrabPointer(Display*, Window, Bool, unsigned int, int, int, Window, Cursor, Time);
  *
  * Grabs the pointer (mouse). Returns GrabSuccess (0) on success.

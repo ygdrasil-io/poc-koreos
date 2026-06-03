@@ -654,7 +654,7 @@ Fullscreen is set per-window: `window.setFullscreen(Fullscreen.Borderless())` / 
 | Feature | appkit | win32 | x11 | wayland | web | android | uikit |
 |---------|--------|-------|-----|---------|-----|---------|-------|
 | `setCursor(CursorIcon)` | real | real | real | no-op (libwayland-cursor TODO) | real (CSS cursor) | no-op | no-op |
-| `setCursorVisible()` | real | partial (`ShowCursor` not rebalanced — DEFERRED.md) | no-op (XCreatePixmapCursor TODO) | no-op | real (CSS) | no-op | no-op |
+| `setCursorVisible()` | real | partial (`ShowCursor` not rebalanced — DEFERRED.md) | real | no-op | real (CSS) | no-op | no-op |
 | `setCursorGrab(Confined)` | real | real | real | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
 | `setCursorGrab(Locked)` | real | real | real | unsupported | unsupported (Pointer Lock bridge TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partial (CGWarpMouseCursorPosition, scalar cast) | real | real | unsupported | unsupported | unsupported | unsupported |
