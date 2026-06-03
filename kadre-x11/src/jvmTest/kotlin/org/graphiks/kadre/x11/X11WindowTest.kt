@@ -1,6 +1,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -64,6 +65,13 @@ class X11WindowTest {
         if (libX11 != null) return // Skip on Linux where this could be undefined behaviour
         val sf = readXftDpi(0L)
         assertEquals(1.0, sf, "Expected fallback scale factor 1.0 when libX11 is absent")
+    }
+
+    @Test
+    fun `X11 window levels map to EWMH above and below states`() {
+        assertEquals(X11WindowLevelState(above = true, below = false), x11WindowLevelState(WindowLevel.AlwaysOnTop))
+        assertEquals(X11WindowLevelState(above = false, below = false), x11WindowLevelState(WindowLevel.Normal))
+        assertEquals(X11WindowLevelState(above = false, below = true), x11WindowLevelState(WindowLevel.AlwaysOnBottom))
     }
 
     @Test

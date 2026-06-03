@@ -506,16 +506,17 @@ class X11Window private constructor(
     override fun setWindowLevel(level: WindowLevel) {
         val aboveAtom = internAtom(displayPtr, "_NET_WM_STATE_ABOVE")
         val belowAtom = internAtom(displayPtr, "_NET_WM_STATE_BELOW")
-        when (level) {
-            WindowLevel.AlwaysOnTop -> {
+        val state = x11WindowLevelState(level)
+        when {
+            state.above -> {
                 sendNetWmState(false, belowAtom, 0L)
                 sendNetWmState(true,  aboveAtom, 0L)
             }
-            WindowLevel.AlwaysOnBottom -> {
+            state.below -> {
                 sendNetWmState(false, aboveAtom, 0L)
                 sendNetWmState(true,  belowAtom, 0L)
             }
-            WindowLevel.Normal -> {
+            else -> {
                 sendNetWmState(false, aboveAtom, 0L)
                 sendNetWmState(false, belowAtom, 0L)
             }
@@ -943,7 +944,22 @@ class X11Window private constructor(
                 window.setFullscreen(attrs.fullscreen)
             }
 
+            // winit applies _NET_WM_STATE_ABOVE/_BELOW after initial mapping/fullscreen.
+            window.setWindowLevel(attrs.windowLevel)
+
             return window
         }
     }
 }
+
+internal data class X11WindowLevelState(
+    val above: Boolean,
+    val below: Boolean,
+)
+
+internal fun x11WindowLevelState(level: WindowLevel): X11WindowLevelState =
+    when (level) {
+        WindowLevel.AlwaysOnTop -> X11WindowLevelState(above = true, below = false)
+        WindowLevel.Normal -> X11WindowLevelState(above = false, below = false)
+        WindowLevel.AlwaysOnBottom -> X11WindowLevelState(above = false, below = true)
+    }
