@@ -931,7 +931,7 @@ Points résiduels clés :
 - **Event Occluded** : API définie ; AppKit et Web prévoient de l'émettre.
 - **ModifiersChanged** : émis sur AppKit/Win32/Web ; non câblé sur X11/Wayland/Android/UIKit.
 - **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : no-op sur tous les backends (impl interface par défaut).
-- **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` et `setContentProtected` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; AppKit câble l’attention Dock et la protection de contenu, Win32 câble le menu natif, les drags move/resize, les boutons de fenêtre activés, l’attention utilisateur et la protection de contenu, et Wayland câble menu/move/resize localement.
+- **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` et `setContentProtected` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; AppKit câble l’attention Dock, la protection de contenu et les boutons de fenêtre activés, Win32 câble le menu natif, les drags move/resize, les boutons de fenêtre activés, l’attention utilisateur et la protection de contenu, et Wayland câble menu/move/resize localement.
 - **Couverture clavier** : le modèle public suit maintenant winit (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), mais `KeyCode` et `NamedKey` ne sont pas encore exhaustifs et les champs riches restent dépendants des backends.
 - **Stylet / tablette** : non supporté (MouseInput + Touch conservés au lieu du modèle unifié PointerButton/PointerKind).
 

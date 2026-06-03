@@ -14,6 +14,7 @@ import org.graphiks.kadre.appkit.bindings.NSRequestUserAttentionType
 import org.graphiks.kadre.appkit.bindings.NSRect
 import org.graphiks.kadre.appkit.bindings.NSView
 import org.graphiks.kadre.appkit.bindings.NSWindow
+import org.graphiks.kadre.appkit.bindings.NSWindowButton
 import org.graphiks.kadre.appkit.bindings.NSWindowSharingType
 import org.graphiks.kadre.appkit.bindings.NSWindowStyleMask
 import org.graphiks.kadre.appkit.bindings.ObjCRuntime
@@ -34,6 +35,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
@@ -64,6 +66,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     @Volatile
     private var activeAttentionRequest: Long? = null
 
+    @Volatile
+    private var _enabledButtons: WindowButtons = attrs.enabledButtons
+
     /**
      * NSWindowDelegate installed on this window.
      * Null until [setWindowDelegate] has been called.
@@ -85,6 +90,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         if (attrs.resizable && attrs.decorations) {
             styleMask = styleMask + NSWindowStyleMask.NSWindowStyleMaskResizable
         }
+        styleMask = appKitStyleMaskWithEnabledButtons(styleMask, attrs.enabledButtons)
 
         // 2. Window size (in logical points — scaleFactor is 1.0 at init time,
         //    before the window is attached to a screen)
@@ -143,6 +149,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
         // 7. Initial title
         nsWindow.setTitle(attrs.title)
+        applyEnabledButtons(attrs.enabledButtons)
 
         // 7b. Apply R1 attrs: minSize / maxSize / position / maximized
         attrs.minSize?.let { min ->
@@ -357,16 +364,23 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
     override fun setDecorations(decorated: Boolean) {
         try {
-            val nsWindow = NSWindow(nsWindowPtr)
-            val newMask = if (decorated) {
-                NSWindowStyleMask.NSWindowStyleMaskTitled +
-                NSWindowStyleMask.NSWindowStyleMaskClosable +
-                NSWindowStyleMask.NSWindowStyleMaskMiniaturizable +
-                (if (isResizable) NSWindowStyleMask.NSWindowStyleMaskResizable else NSWindowStyleMask.NSWindowStyleMaskBorderless)
-            } else {
-                NSWindowStyleMask.NSWindowStyleMaskBorderless
+            AppKitMainThread.runSync {
+                val nsWindow = NSWindow(nsWindowPtr)
+                val newMask = if (decorated) {
+                    NSWindowStyleMask.NSWindowStyleMaskTitled +
+                    NSWindowStyleMask.NSWindowStyleMaskClosable +
+                    NSWindowStyleMask.NSWindowStyleMaskMiniaturizable +
+                    (if (isResizable) NSWindowStyleMask.NSWindowStyleMaskResizable else NSWindowStyleMask.NSWindowStyleMaskBorderless)
+                } else {
+                    NSWindowStyleMask.NSWindowStyleMaskBorderless
+                }
+                nsWindow.setStyleMask(newMask)
+                if (decorated) {
+                    applyEnabledButtons(_enabledButtons)
+                } else {
+                    setStandardWindowButtonEnabled(nsWindow, NSWindowButton.NSWindowZoomButton, false)
+                }
             }
-            nsWindow.setStyleMask(newMask)
         } catch (_: Throwable) {}
     }
 
@@ -374,6 +388,70 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         get() = try {
             NSWindowStyleMask.NSWindowStyleMaskTitled in NSWindow(nsWindowPtr).styleMask()
         } catch (_: Throwable) { true }
+
+    override fun setEnabledButtons(buttons: WindowButtons) {
+        _enabledButtons = buttons
+        try {
+            AppKitMainThread.runSync {
+                try {
+                    applyEnabledButtons(buttons)
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+    }
+
+    override val enabledButtons: WindowButtons
+        get() = try {
+            AppKitMainThread.runSync {
+                try {
+                    val nsWindow = NSWindow(nsWindowPtr)
+                    val mask = nsWindow.styleMask()
+                    var buttons = WindowButtons.NONE
+                    if (NSWindowStyleMask.NSWindowStyleMaskClosable in mask) {
+                        buttons += WindowButtons.CLOSE
+                    }
+                    if (NSWindowStyleMask.NSWindowStyleMaskMiniaturizable in mask) {
+                        buttons += WindowButtons.MINIMIZE
+                    }
+                    if (isStandardWindowButtonEnabled(nsWindow, NSWindowButton.NSWindowZoomButton)) {
+                        buttons += WindowButtons.MAXIMIZE
+                    }
+                    buttons
+                } catch (_: Throwable) {
+                    _enabledButtons
+                }
+            }
+        } catch (_: Throwable) {
+            _enabledButtons
+        }
+
+    private fun applyEnabledButtons(buttons: WindowButtons) {
+        val nsWindow = NSWindow(nsWindowPtr)
+        val newMask = appKitStyleMaskWithEnabledButtons(nsWindow.styleMask(), buttons)
+        nsWindow.setStyleMask(newMask)
+        setStandardWindowButtonEnabled(
+            nsWindow,
+            NSWindowButton.NSWindowZoomButton,
+            buttons.contains(WindowButtons.MAXIMIZE),
+        )
+        _enabledButtons = buttons
+    }
+
+    private fun setStandardWindowButtonEnabled(nsWindow: NSWindow, button: NSWindowButton, enabled: Boolean) {
+        val buttonPtr = nsWindow.standardWindowButton(button)
+        if (buttonPtr == MemorySegment.NULL) return
+        ObjCRuntime.msgSend(null, buttonPtr, ObjCRuntime.sel("setEnabled:"), enabled)
+    }
+
+    private fun isStandardWindowButtonEnabled(nsWindow: NSWindow, button: NSWindowButton): Boolean {
+        val buttonPtr = nsWindow.standardWindowButton(button)
+        if (buttonPtr == MemorySegment.NULL) return true
+        return ObjCRuntime.msgSend(
+            ValueLayout.JAVA_BOOLEAN,
+            buttonPtr,
+            ObjCRuntime.sel("isEnabled"),
+        ) as Boolean
+    }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
         try {
@@ -908,6 +986,25 @@ internal fun physicalSizeToAppKitResizeIncrements(
         0.0 to 0.0
     } else {
         increments.width / scale to increments.height / scale
+    }
+
+internal fun appKitStyleMaskWithEnabledButtons(
+    styleMask: NSWindowStyleMask,
+    buttons: WindowButtons,
+): NSWindowStyleMask =
+    if (NSWindowStyleMask.NSWindowStyleMaskTitled in styleMask) {
+        styleMask
+            .withStyleFlag(NSWindowStyleMask.NSWindowStyleMaskClosable, buttons.contains(WindowButtons.CLOSE))
+            .withStyleFlag(NSWindowStyleMask.NSWindowStyleMaskMiniaturizable, buttons.contains(WindowButtons.MINIMIZE))
+    } else {
+        styleMask
+    }
+
+private fun NSWindowStyleMask.withStyleFlag(flag: NSWindowStyleMask, enabled: Boolean): NSWindowStyleMask =
+    if (enabled) {
+        NSWindowStyleMask(rawValue or flag.rawValue)
+    } else {
+        NSWindowStyleMask(rawValue and flag.rawValue.inv())
     }
 
 private fun activateApplicationForWindowFocus() {

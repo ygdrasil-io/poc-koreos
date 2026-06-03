@@ -2,13 +2,16 @@ package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.appkit.bindings.NSView
 import org.graphiks.kadre.appkit.bindings.NSWindow
+import org.graphiks.kadre.appkit.bindings.NSWindowButton
 import org.graphiks.kadre.appkit.bindings.NSWindowSharingType
+import org.graphiks.kadre.appkit.bindings.NSWindowStyleMask
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
@@ -113,6 +116,8 @@ class AppKitWindowTest {
         assertNotNull(appKitWindowClass.getMethod("setSurfaceResizeIncrements", PhysicalSize::class.java))
         assertNotNull(appKitWindowClass.getMethod("focusWindow"))
         assertNotNull(appKitWindowClass.getMethod("getHasFocus"))
+        assertNotNull(appKitWindowClass.getMethod("setEnabledButtons", WindowButtons::class.java))
+        assertNotNull(appKitWindowClass.getMethod("getEnabledButtons"))
         val requestUserAttention = appKitWindowClass.getMethod("requestUserAttention", UserAttentionType::class.java)
         assertTrue(
             WindowRequestResult::class.java.isAssignableFrom(requestUserAttention.returnType),
@@ -138,6 +143,7 @@ class AppKitWindowTest {
         assertNotNull(nsWindowClass.getMethod("isMiniaturized"))
         assertNotNull(nsWindowClass.getMethod("isVisible"))
         assertNotNull(nsWindowClass.getMethod("setSharingType", NSWindowSharingType::class.java))
+        assertNotNull(nsWindowClass.getMethod("standardWindowButton", NSWindowButton::class.java))
     }
 
     @Test
@@ -149,5 +155,31 @@ class AppKitWindowTest {
         assertTrue(physicalSizeToAppKitResizeIncrements(PhysicalSize(8, 16), scale = 2.0) == (4.0 to 8.0))
         assertTrue(physicalSizeToAppKitResizeIncrements(null, scale = 2.0) == (0.0 to 0.0))
         assertTrue(physicalSizeToAppKitResizeIncrements(PhysicalSize(8, 16), scale = 0.0) == (0.0 to 0.0))
+    }
+
+    @Test
+    fun `AppKit enabled buttons update close and minimize style bits`() {
+        val base = NSWindowStyleMask.NSWindowStyleMaskTitled +
+            NSWindowStyleMask.NSWindowStyleMaskClosable +
+            NSWindowStyleMask.NSWindowStyleMaskMiniaturizable +
+            NSWindowStyleMask.NSWindowStyleMaskResizable
+
+        val maximizeOnly = appKitStyleMaskWithEnabledButtons(base, WindowButtons.MAXIMIZE)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskTitled in maximizeOnly)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskResizable in maximizeOnly)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskClosable !in maximizeOnly)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskMiniaturizable !in maximizeOnly)
+
+        val closeAndMinimize = appKitStyleMaskWithEnabledButtons(maximizeOnly, WindowButtons.CLOSE + WindowButtons.MINIMIZE)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskClosable in closeAndMinimize)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskMiniaturizable in closeAndMinimize)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskResizable in closeAndMinimize)
+
+        val borderless = appKitStyleMaskWithEnabledButtons(
+            NSWindowStyleMask.NSWindowStyleMaskBorderless,
+            WindowButtons.ALL,
+        )
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskClosable !in borderless)
+        assertTrue(NSWindowStyleMask.NSWindowStyleMaskMiniaturizable !in borderless)
     }
 }
