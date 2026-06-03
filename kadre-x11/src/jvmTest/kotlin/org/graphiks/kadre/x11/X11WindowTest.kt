@@ -221,6 +221,35 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 cursor hittest disabled uses empty input shape`() {
+        assertEquals(emptyList(), x11CursorHittestRectangles(hittest = false, surfaceSize = PhysicalSize(640, 480)))
+    }
+
+    @Test
+    fun `X11 cursor hittest enabled uses full surface input shape`() {
+        assertEquals(
+            listOf(X11ShapeRectangle(x = 0, y = 0, width = 640, height = 480)),
+            x11CursorHittestRectangles(hittest = true, surfaceSize = PhysicalSize(640, 480)),
+        )
+    }
+
+    @Test
+    fun `X11 cursor hittest rectangle clamps to XRectangle unsigned short range`() {
+        assertEquals(
+            listOf(X11ShapeRectangle(x = 0, y = 0, width = 65535, height = 1)),
+            x11CursorHittestRectangles(hittest = true, surfaceSize = PhysicalSize(100_000, 0)),
+        )
+    }
+
+    @Test
+    fun `X11 cursor hittest is reapplied only after effective resize configure`() {
+        assertEquals(true, x11ShouldReapplyCursorHittestAfterConfigure(cursorHittest = true, resized = true))
+        assertEquals(false, x11ShouldReapplyCursorHittestAfterConfigure(cursorHittest = true, resized = false))
+        assertEquals(false, x11ShouldReapplyCursorHittestAfterConfigure(cursorHittest = false, resized = true))
+        assertEquals(false, x11ShouldReapplyCursorHittestAfterConfigure(cursorHittest = null, resized = true))
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)

@@ -68,6 +68,11 @@ private const val MOVERESIZE_BOTTOMLEFT: Long = 6L
 private const val MOVERESIZE_LEFT: Long = 7L
 private const val MOVERESIZE_MOVE: Long = 8L
 
+private const val X11_SHAPE_SET: Int = 0
+private const val X11_SHAPE_INPUT: Int = 2
+private const val X11_SHAPE_UNSORTED: Int = 0
+private const val X11_RECTANGLE_SIZE_BYTES: Long = 8L
+
 /**
  * Native X11 window implementing [Window].
  *
@@ -424,6 +429,7 @@ class X11Window private constructor(
     @Volatile private var _selectedCursor: CursorIcon = attrs.cursor
     @Volatile private var _cursorVisible: Boolean = true
     @Volatile private var _hiddenCursor: Long = 0L
+    @Volatile private var _cursorHittest: Boolean? = null
     private val namedCursorCache: MutableMap<CursorIcon, Long> = mutableMapOf()
 
     /**
@@ -603,17 +609,49 @@ class X11Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 cursor position failed"))
         }
 
-    /**
-     * Hit-testing is not supported on X11.
-     *
-     * X11 has no standard mechanism for click-through windows.
-     * Documented no-op.
-     *
-     * TODO(R3-x11-hittest): use _NET_WM_WINDOW_TYPE_DESKTOP or
-     * XInputShape (X11 Shape Extension) for partial hit-testing.
-     */
-    override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("X11 cursor hit-testing is not implemented"))
+    override fun setCursorHittest(hittest: Boolean): WindowRequestResult {
+        val combineRectangles = xShapeCombineRectangles ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("XShapeCombineRectangles is unavailable"),
+        )
+        return try {
+            val display = MemorySegment.ofAddress(displayPtr)
+            Arena.ofConfined().use { arena ->
+                val rectangles = x11CursorHittestRectangles(hittest, surfaceSize)
+                val rectPtr = if (rectangles.isEmpty()) {
+                    MemorySegment.NULL
+                } else {
+                    val ptr = arena.allocate(X11_RECTANGLE_SIZE_BYTES * rectangles.size, 2L)
+                    rectangles.forEachIndexed { index, rectangle ->
+                        val offset = X11_RECTANGLE_SIZE_BYTES * index
+                        ptr.set(ValueLayout.JAVA_SHORT, offset, rectangle.x.toShort())
+                        ptr.set(ValueLayout.JAVA_SHORT, offset + 2L, rectangle.y.toShort())
+                        ptr.set(ValueLayout.JAVA_SHORT, offset + 4L, rectangle.width.toShort())
+                        ptr.set(ValueLayout.JAVA_SHORT, offset + 6L, rectangle.height.toShort())
+                    }
+                    ptr
+                }
+                combineRectangles.invokeExact(
+                    display,
+                    xWindowId,
+                    X11_SHAPE_INPUT,
+                    0,
+                    0,
+                    rectPtr,
+                    rectangles.size,
+                    X11_SHAPE_SET,
+                    X11_SHAPE_UNSORTED,
+                )
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+            }
+            _cursorHittest = hittest
+            WindowRequestResult.Success
+        } catch (t: Throwable) {
+            WindowRequestResult.Failure(
+                RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 cursor hit-testing failed"),
+            )
+        }
+    }
 
     /**
      * Starts an interactive WM-managed move via EWMH _NET_WM_MOVERESIZE.
@@ -1190,11 +1228,15 @@ class X11Window private constructor(
             null
         }
         val changes = x11ConfigureChanges(_innerSize, _outerPosition, width, height, outerPosition, outerPosition != null)
-        if (width > 0 && height > 0) {
+        val resized = width > 0 && height > 0
+        if (resized) {
             _innerSize = PhysicalSize(width, height)
         }
         if (outerPosition != null) {
             _outerPosition = outerPosition
+        }
+        if (x11ShouldReapplyCursorHittestAfterConfigure(_cursorHittest, resized)) {
+            setCursorHittest(true)
         }
         return changes
     }
@@ -1458,6 +1500,36 @@ internal fun x11ValidSurfaceSize(size: PhysicalSize<Int>): PhysicalSize<Int> =
         width = size.width.coerceAtLeast(1),
         height = size.height.coerceAtLeast(1),
     )
+
+internal data class X11ShapeRectangle(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+internal fun x11CursorHittestRectangles(
+    hittest: Boolean,
+    surfaceSize: PhysicalSize<Int>,
+): List<X11ShapeRectangle> =
+    if (hittest) {
+        listOf(
+            X11ShapeRectangle(
+                x = 0,
+                y = 0,
+                width = surfaceSize.width.coerceIn(1, UShort.MAX_VALUE.toInt()),
+                height = surfaceSize.height.coerceIn(1, UShort.MAX_VALUE.toInt()),
+            )
+        )
+    } else {
+        emptyList()
+    }
+
+internal fun x11ShouldReapplyCursorHittestAfterConfigure(
+    cursorHittest: Boolean?,
+    resized: Boolean,
+): Boolean =
+    cursorHittest == true && resized
 
 internal fun x11ConfigureChanges(
     currentSize: PhysicalSize<Int>,

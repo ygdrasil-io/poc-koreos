@@ -47,6 +47,14 @@ internal val libX11: SymbolLookup? by lazy {
     }
 }
 
+internal val libXext: SymbolLookup? by lazy {
+    try {
+        SymbolLookup.libraryLookup("libXext.so.6", Arena.global())
+    } catch (e: Throwable) {
+        null
+    }
+}
+
 private val linker: Linker = Linker.nativeLinker()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -798,6 +806,27 @@ internal val xWarpPointer: MethodHandle? by lazy {
             ValueLayout.JAVA_INT,   // unsigned src_height
             ValueLayout.JAVA_INT,   // int dest_x
             ValueLayout.JAVA_INT,   // int dest_y
+        )
+    )
+}
+
+/**
+ * void XShapeCombineRectangles(Display*, Window dest, int dest_kind, int x_off, int y_off,
+ *                              XRectangle* rectangles, int n_rects, int op, int ordering);
+ */
+internal val xShapeCombineRectangles: MethodHandle? by lazy {
+    libXext.downcall(
+        "XShapeCombineRectangles",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window
+            ValueLayout.JAVA_INT,   // dest_kind
+            ValueLayout.JAVA_INT,   // x_off
+            ValueLayout.JAVA_INT,   // y_off
+            ValueLayout.ADDRESS,    // XRectangle*
+            ValueLayout.JAVA_INT,   // n_rects
+            ValueLayout.JAVA_INT,   // op
+            ValueLayout.JAVA_INT,   // ordering
         )
     )
 }
