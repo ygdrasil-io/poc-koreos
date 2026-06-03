@@ -74,7 +74,7 @@ private const val X11_SHAPE_INPUT: Int = 2
 private const val X11_SHAPE_UNSORTED: Int = 0
 private const val X11_RECTANGLE_SIZE_BYTES: Long = 8L
 private const val X11_WM_HINTS_FLAGS_OFFSET: Long = 0L
-private const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
+internal const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
 
 /**
  * Native X11 window implementing [Window].

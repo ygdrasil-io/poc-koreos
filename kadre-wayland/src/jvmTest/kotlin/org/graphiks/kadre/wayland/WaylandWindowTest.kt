@@ -105,7 +105,7 @@ class WaylandWindowTest {
         assertEquals(PhysicalSize(640, 480), result.size)
         assertEquals(PhysicalSize(640, 480), window.surfaceSize)
         assertEquals(PhysicalSize(640, 480), window.innerSize)
-        assertEquals(listOf(WindowEvent.RedrawRequested), events)
+        assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
     }
 
     @Test
@@ -120,7 +120,7 @@ class WaylandWindowTest {
         assertIs<SurfaceSizeRequestResult.Applied>(result)
         assertEquals(PhysicalSize(800, 600), result.size)
         assertEquals(PhysicalSize(800, 600), window.surfaceSize)
-        assertEquals(emptyList(), events)
+        assertEquals(emptyList<WindowEvent>(), events)
     }
 
     @Test
@@ -141,7 +141,10 @@ class WaylandWindowTest {
         window.setMinSurfaceSize(PhysicalSize(320, 200))
         window.setMaxSurfaceSize(PhysicalSize(1280, 720))
 
-        assertEquals(listOf(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested), events)
+        assertEquals(
+            listOf<WindowEvent>(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested),
+            events,
+        )
     }
 
     @Test
@@ -151,11 +154,11 @@ class WaylandWindowTest {
         window.onWindowEvent = events::add
 
         window.setResizable(true)
-        assertEquals(emptyList(), events)
+        assertEquals(emptyList<WindowEvent>(), events)
 
         window.setResizable(false)
         assertEquals(false, window.isResizable)
-        assertEquals(listOf(WindowEvent.RedrawRequested), events)
+        assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
     }
 
     @Test
