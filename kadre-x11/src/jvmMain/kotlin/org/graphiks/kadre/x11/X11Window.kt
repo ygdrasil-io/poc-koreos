@@ -161,15 +161,7 @@ class X11Window private constructor(
 
     override fun setTitle(title: String) {
         _title = title
-        val handle = xStoreName ?: return
-        val display = MemorySegment.ofAddress(displayPtr)
-        Arena.ofConfined().use { arena ->
-            val nameBytes = title.toByteArray(Charsets.ISO_8859_1)
-            val namePtr = arena.allocate(nameBytes.size.toLong() + 1)
-            for (i in nameBytes.indices) namePtr.set(ValueLayout.JAVA_BYTE, i.toLong(), nameBytes[i])
-            namePtr.set(ValueLayout.JAVA_BYTE, nameBytes.size.toLong(), 0)
-            handle.invokeExact(display, xWindowId, namePtr) as Int
-        }
+        writeX11Title(title)
     }
 
     @Volatile private var _isVisible: Boolean = attrs.visible
@@ -802,6 +794,47 @@ class X11Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "X11 move/resize request failed"))
         }
 
+    private fun writeX11Title(title: String) {
+        val changeProperty = xChangeProperty ?: return
+        val display = MemorySegment.ofAddress(displayPtr)
+        val wmNameAtom = internAtom(displayPtr, "WM_NAME")
+        val stringAtom = internAtom(displayPtr, "STRING")
+        val netWmNameAtom = internAtom(displayPtr, "_NET_WM_NAME")
+        val utf8StringAtom = internAtom(displayPtr, "UTF8_STRING")
+        if (wmNameAtom == 0L || stringAtom == 0L || netWmNameAtom == 0L || utf8StringAtom == 0L) return
+        val titleBytes = x11TitlePropertyBytes(title)
+        try {
+            Arena.ofConfined().use { arena ->
+                val data = arena.allocate(maxOf(titleBytes.size, 1).toLong(), 1L)
+                for (index in titleBytes.indices) {
+                    data.set(ValueLayout.JAVA_BYTE, index.toLong(), titleBytes[index])
+                }
+                changeProperty.invokeExact(
+                    display,
+                    xWindowId,
+                    wmNameAtom,
+                    stringAtom,
+                    8,
+                    0,
+                    data,
+                    titleBytes.size,
+                ) as Int
+                changeProperty.invokeExact(
+                    display,
+                    xWindowId,
+                    netWmNameAtom,
+                    utf8StringAtom,
+                    8,
+                    0,
+                    data,
+                    titleBytes.size,
+                ) as Int
+                val flush = xFlush
+                if (flush != null) flush.invokeExact(display) as Int
+            }
+        } catch (_: Throwable) {}
+    }
+
     // ── X11 helper: set/unset _MOTIF_WM_HINTS ────────────────────────────────
 
     /**
@@ -973,16 +1006,8 @@ class X11Window private constructor(
                 }
             }
 
-            // ── 5. XStoreName ─────────────────────────────────────────────────
-            Arena.ofConfined().use { arena ->
-                val nameBytes = attrs.title.toByteArray(Charsets.ISO_8859_1)
-                val namePtr = arena.allocate(nameBytes.size.toLong() + 1)
-                for (i in nameBytes.indices) namePtr.set(ValueLayout.JAVA_BYTE, i.toLong(), nameBytes[i])
-                namePtr.set(ValueLayout.JAVA_BYTE, nameBytes.size.toLong(), 0)
-                xStoreName?.invokeExact(displaySeg, xWindowId, namePtr) as? Int
-            }
-
             val window = X11Window(display, screen, xWindowId, attrs)
+            window.writeX11Title(attrs.title)
             attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()
             window.setMotifDecorations(attrs.decorations)
@@ -1097,6 +1122,9 @@ internal fun x11MotifMaximizableHints(maximizable: Boolean, existing: LongArray?
 
 private fun x11MotifHints(existing: LongArray?): LongArray =
     LongArray(X11_MOTIF_HINTS_ELEMENTS) { index -> existing?.getOrNull(index) ?: 0L }
+
+internal fun x11TitlePropertyBytes(title: String): ByteArray =
+    title.toByteArray(Charsets.UTF_8)
 
 internal fun x11NormalHints(
     position: PhysicalPosition<Int>?,

@@ -91,6 +91,12 @@ class X11WindowTest {
     }
 
     @Test
+    fun `X11 title property bytes are UTF-8 like winit NET_WM_NAME`() {
+        assertEquals("Kadre".toByteArray(Charsets.UTF_8).toList(), x11TitlePropertyBytes("Kadre").toList())
+        assertEquals("Fenetre é".toByteArray(Charsets.UTF_8).toList(), x11TitlePropertyBytes("Fenetre é").toList())
+    }
+
+    @Test
     fun `X11 motif decoration hints encode decorated and undecorated states`() {
         val decorated = x11MotifDecorationHints(decorated = true)
         assertEquals(X11_MOTIF_HINTS_ELEMENTS, decorated.size)
