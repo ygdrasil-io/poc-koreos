@@ -14,6 +14,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.WindowAttributes
@@ -181,6 +182,20 @@ class WaylandWindowTest {
 
         window.setTransparent(true)
         assertEquals(true, window.transparentHint)
+    }
+
+    @Test
+    fun `Wayland theme is initialized from attrs and mutable like winit`() {
+        val window = WaylandWindow.createForTest(
+            attrs = WindowAttributes(preferredTheme = Theme.Dark),
+        )
+        assertEquals(Theme.Dark, window.theme)
+
+        window.setTheme(Theme.Light)
+        assertEquals(Theme.Light, window.theme)
+
+        window.setTheme(null)
+        assertEquals(null, window.theme)
     }
 
     @Test

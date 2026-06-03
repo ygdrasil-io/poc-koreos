@@ -151,6 +151,9 @@ class WaylandWindow private constructor(
     internal var cursorVisible: Boolean = true
         private set
 
+    @Volatile
+    private var _theme: Theme? = attrs.preferredTheme
+
     /**
      * Requests a redraw.
      *
@@ -566,20 +569,11 @@ class WaylandWindow private constructor(
         }
     }
 
-    /**
-     * Returns null on Wayland.
-     *
-     * Theme detection via org.freedesktop.portal.Settings is not yet wired.
-     *
-     * TODO(R3-wayland-theme): query org.freedesktop.portal.Settings via D-Bus.
-     */
-    override val theme: Theme? get() = null
+    override val theme: Theme?
+        get() = _theme
 
-    /**
-     * No-op on Wayland — no standard per-window theme control.
-     */
     override fun setTheme(theme: Theme?) {
-        // No-op on Wayland: no standard per-window theme API.
+        _theme = theme
     }
 
     /**
