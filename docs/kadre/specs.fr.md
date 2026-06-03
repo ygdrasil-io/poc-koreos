@@ -929,7 +929,7 @@ Points résiduels clés :
 - **Event Occluded** : API définie ; AppKit et Web prévoient de l'émettre.
 - **ModifiersChanged** : émis sur AppKit/Win32/Web ; non câblé sur X11/Wayland/Android/UIKit.
 - **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : no-op sur tous les backends (impl interface par défaut).
-- **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow` et `dragResizeWindow` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; `requestUserAttention` et `setContentProtected` restent no-op quand aucun backend ne les implémente.
+- **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow` et `dragResizeWindow` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; Win32 et Wayland ont un support menu natif câblé localement ; `requestUserAttention` et `setContentProtected` restent no-op quand aucun backend ne les implémente.
 - **Couverture clavier** : le modèle public suit maintenant winit (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), mais `KeyCode` et `NamedKey` ne sont pas encore exhaustifs et les champs riches restent dépendants des backends.
 - **Stylet / tablette** : non supporté (MouseInput + Touch conservés au lieu du modèle unifié PointerButton/PointerKind).
 
@@ -1042,7 +1042,7 @@ Points résiduels clés :
 | `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean)` — partiel selon backend, no-op par défaut (cf. DEFERRED.md) |
 | `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit peut retourner `RequestError.Ignored`; Win32/X11/Wayland sont câblés localement (cf. DEFERRED.md) |
 | `Window::drag_resize_window()` | `Window.dragResizeWindow(direction: ResizeDirection): WindowRequestResult` — `RequestError.Unsupported` par défaut; Win32/X11/Wayland sont câblés localement (cf. DEFERRED.md) |
-| `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — `RequestError.Unsupported` par défaut (cf. DEFERRED.md) |
+| `Window::show_window_menu()` | `Window.showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult` — `RequestError.Unsupported` par défaut; Win32/Wayland sont câblés localement (cf. DEFERRED.md) |
 
 #### WindowAttributes (ajouts R3)
 

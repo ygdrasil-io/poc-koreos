@@ -114,6 +114,18 @@ internal class XdgToplevel private constructor(
         }.getOrDefault(false)
     }
 
+    /** Shows the compositor-managed window menu at a surface-local logical position. */
+    fun showWindowMenu(seatPtr: Long, serial: Int, x: Int, y: Int): Boolean {
+        val handle = wlProxyMarshalFlagsObjectUintTwoInt ?: return false
+        return runCatching {
+            handle.invokeExact(
+                MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_SHOW_WINDOW_MENU,
+                MemorySegment.NULL, version, 0, MemorySegment.ofAddress(seatPtr), serial, x, y,
+            )
+            true
+        }.getOrDefault(false)
+    }
+
     /** Starts compositor-managed interactive window resize. */
     fun resize(seatPtr: Long, serial: Int, edges: Int): Boolean {
         val handle = wlProxyMarshalFlagsObjectTwoUint ?: return false

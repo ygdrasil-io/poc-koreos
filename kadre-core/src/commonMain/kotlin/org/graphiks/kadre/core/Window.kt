@@ -507,12 +507,12 @@ interface Window {
      * Shows the platform window menu (system / title-bar context menu) at the given position.
      *
      * Platform behaviour:
-     * - Win32  : `TrackPopupMenu(GetSystemMenu(...))` when implemented.
+     * - Win32  : `TrackPopupMenu(GetSystemMenu(...))`.
+     * - Wayland: `xdg_toplevel.show_window_menu` when an active pointer serial is available.
      * - Others : [WindowRequestResult.Failure] with [RequestError.Unsupported].
      *
      * Default implementation returns [WindowRequestResult.Failure] with
      * [RequestError.Unsupported]. Never throws.
-     * TODO R5-MiscWindow: wire in Win32 backend.
      *
      * @param position Position in physical pixels (window-relative) at which to show the menu.
      */

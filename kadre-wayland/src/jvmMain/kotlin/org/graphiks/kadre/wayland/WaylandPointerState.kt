@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicLong
  * Minimal shared pointer state needed by xdg_toplevel interactive requests.
  *
  * Wayland requires the `wl_seat` and a recent button serial for
- * `xdg_toplevel.move` / `resize`. The pointer listener mirrors winit by
- * remembering the latest button serial from pointer button events.
+ * `xdg_toplevel.show_window_menu` / `move` / `resize`. The pointer listener
+ * mirrors winit by remembering the latest button serial from pointer button events.
  */
 internal object WaylandPointerState {
     private val seatPtr = AtomicLong(0L)

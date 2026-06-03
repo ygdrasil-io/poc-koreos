@@ -237,7 +237,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window show_window_menu",
                 kadreApi = "Window.showWindowMenu",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 system-menu support is wired, while other desktop backends remain deferred.",
+                note = "Kadre returns WindowRequestResult instead of Unit no-op; Win32 system-menu support is wired, Wayland sends xdg_toplevel.show_window_menu, while AppKit and X11 remain unsupported/no-op like local winit.",
             ),
             WinitWindowingApi(
                 winitApi = "Window.request_ime_update",

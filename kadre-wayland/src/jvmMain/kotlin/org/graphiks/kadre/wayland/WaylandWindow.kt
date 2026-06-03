@@ -37,6 +37,7 @@ import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import java.lang.foreign.MemorySegment
+import kotlin.math.roundToInt
 
 /** wl_compositor.create_surface opcode in the core Wayland protocol. */
 private const val WL_COMPOSITOR_CREATE_SURFACE_OPCODE: Int = 0
@@ -384,6 +385,11 @@ class WaylandWindow private constructor(
         }
     }
 
+    private fun physicalToWaylandCoordinate(value: Int): Int {
+        val scale = scaleFactor.takeIf { it > 0.0 } ?: 1.0
+        return (value / scale).roundToInt()
+    }
+
     /**
      * Updates the inner size upon receiving an xdg_surface.configure event.
      *
@@ -448,6 +454,24 @@ class WaylandWindow private constructor(
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Wayland input-region cursor hit-testing is not wired"))
+
+    /**
+     * Shows the compositor-managed window menu via xdg_toplevel.show_window_menu.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult {
+        val toplevel = xdg ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("Wayland xdg_toplevel is unavailable"),
+        )
+        val pointer = WaylandPointerState.current(surfacePtr) ?: return WindowRequestResult.Success
+        val x = physicalToWaylandCoordinate(position.x)
+        val y = physicalToWaylandCoordinate(position.y)
+        return if (toplevel.showWindowMenu(pointer.seatPtr, pointer.serial, x, y)) {
+            flushDisplay()
+            WindowRequestResult.Success
+        } else {
+            WindowRequestResult.Failure(RequestError.OsError("xdg_toplevel.show_window_menu failed"))
+        }
+    }
 
     /**
      * Starts compositor-managed interactive window movement via xdg_toplevel.move.
