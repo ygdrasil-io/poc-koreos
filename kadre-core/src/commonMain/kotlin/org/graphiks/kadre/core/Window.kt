@@ -312,6 +312,8 @@ interface Window {
      *
      * Backends that do not support a given mode return [WindowRequestResult.Failure]
      * with [RequestError.Unsupported]. Never throws.
+     * Wayland accepts [CursorGrabMode.None] as a success no-op like winit when
+     * pointer constraints are unavailable.
      *
      * @param mode New grab mode.
      */
