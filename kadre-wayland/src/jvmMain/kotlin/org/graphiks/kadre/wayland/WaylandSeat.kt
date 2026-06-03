@@ -109,6 +109,7 @@ private class WlOutputListener(
  */
 private class WlKeyboardListener(
     private val onEvent: RoutedWindowEventSink,
+    private val seatPtr: Long,
 ) {
     private var focusedSurfacePtr: Long = 0L
 
@@ -124,7 +125,9 @@ private class WlKeyboardListener(
         serial: Int, surface: MemorySegment, keys: MemorySegment,
     ) {
         focusedSurfacePtr = surface.address()
-        onEvent(focusedSurfacePtr, mapWaylandKeyboardFocused(true))
+        if (WaylandFocusState.addSeatFocus(focusedSurfacePtr, seatPtr)) {
+            onEvent(focusedSurfacePtr, mapWaylandKeyboardFocused(true))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -133,7 +136,9 @@ private class WlKeyboardListener(
         serial: Int, surface: MemorySegment,
     ) {
         val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
-        onEvent(surfacePtr, mapWaylandKeyboardFocused(false))
+        if (WaylandFocusState.removeSeatFocus(surfacePtr, seatPtr)) {
+            onEvent(surfacePtr, mapWaylandKeyboardFocused(false))
+        }
         if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
     }
 
@@ -466,7 +471,7 @@ internal fun installSeatListeners(
                         ) as MemorySegment
                     }.getOrNull()
                     if (kbSeg != null && kbSeg.address() != 0L) {
-                        installKeyboardListener(kbSeg, addListener, lookup, arena, onEvent)
+                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent)
                         anyListenerInstalled = true
                     }
                 }
@@ -533,9 +538,10 @@ private fun installKeyboardListener(
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
+    seatPtr: Long,
     onEvent: RoutedWindowEventSink,
 ) {
-    val listener = WlKeyboardListener(onEvent)
+    val listener = WlKeyboardListener(onEvent, seatPtr)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     // vtable: keymap, enter, leave, key, modifiers, repeat_info — 6 entries.

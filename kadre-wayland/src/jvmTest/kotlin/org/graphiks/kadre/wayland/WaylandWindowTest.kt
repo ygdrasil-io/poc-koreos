@@ -231,6 +231,32 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland hasFocus follows keyboard seat focus like winit`() {
+        val surface = 8_484L
+        val window = WaylandWindow.createForTest(surface = surface)
+        WaylandFocusState.clear(surface)
+
+        assertEquals(false, window.hasFocus)
+        assertEquals(true, WaylandFocusState.addSeatFocus(surface, seatPtr = 1L))
+        assertEquals(true, window.hasFocus)
+        assertEquals(false, WaylandFocusState.addSeatFocus(surface, seatPtr = 2L))
+        assertEquals(true, window.hasFocus)
+        assertEquals(false, WaylandFocusState.removeSeatFocus(surface, seatPtr = 1L))
+        assertEquals(true, window.hasFocus)
+        assertEquals(true, WaylandFocusState.removeSeatFocus(surface, seatPtr = 2L))
+        assertEquals(false, window.hasFocus)
+    }
+
+    @Test
+    fun `Wayland focus removal ignores unknown surfaces`() {
+        val surface = 9_595L
+        WaylandFocusState.clear(surface)
+
+        assertEquals(false, WaylandFocusState.removeSeatFocus(surface, seatPtr = 1L))
+        assertEquals(false, WaylandFocusState.hasFocus(surface))
+    }
+
+    @Test
     fun `Wayland fullscreen and maximized setters wait for compositor configure like winit`() {
         val window = WaylandWindow.createForTest()
 

@@ -340,6 +340,9 @@ class WaylandWindow private constructor(
     override val fullscreen: Fullscreen?
         get() = _fullscreen
 
+    override val hasFocus: Boolean
+        get() = WaylandFocusState.hasFocus(surfacePtr)
+
     /**
      * Enters or exits borderless fullscreen via xdg_toplevel.set_fullscreen / unset_fullscreen.
      *
