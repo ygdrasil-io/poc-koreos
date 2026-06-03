@@ -132,6 +132,10 @@ class WaylandWindow private constructor(
     internal var transparentHint: Boolean = false
         private set
 
+    @Volatile
+    internal var cursorVisible: Boolean = true
+        private set
+
     /**
      * Requests a redraw.
      *
@@ -448,13 +452,14 @@ class WaylandWindow private constructor(
         // No-op on Wayland: cursor theme requires libwayland-cursor integration.
     }
 
-    /**
-     * No-op on Wayland.
-     *
-     * TODO(R3-wayland-cursor-visible): hide via wl_pointer.set_cursor(null).
-     */
     override fun setCursorVisible(visible: Boolean) {
-        // No-op on Wayland: cursor visibility requires libwayland-cursor integration.
+        cursorVisible = visible
+        WaylandPointerState.setCursorVisible(surfacePtr, visible)
+        if (!visible) {
+            WaylandPointerState.hideCursorForSurface(surfacePtr)
+            flushDisplay()
+        }
+        // Restoring visibility requires a cursor theme surface, which is not wired yet.
     }
 
     /**

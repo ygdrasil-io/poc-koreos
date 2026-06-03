@@ -181,7 +181,10 @@ private class WlPointerListener(
     ) {
         WaylandPointerState.updateSeat(seatPtr)
         focusedSurfacePtr = surface.address()
-        WaylandPointerState.enterSurface(focusedSurfacePtr)
+        WaylandPointerState.enterPointer(pointer.address(), focusedSurfacePtr, serial)
+        if (!WaylandPointerState.isCursorVisible(focusedSurfacePtr)) {
+            WaylandPointerState.hideCursorForSurface(focusedSurfacePtr)
+        }
         lastPosition = PhysicalPosition(wlFixedToDouble(xFixed), wlFixedToDouble(yFixed))
         onEvent(focusedSurfacePtr, WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
     }

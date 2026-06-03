@@ -625,6 +625,27 @@ internal val wlProxyMarshalFlagsObjectUintTwoInt: MethodHandle? by lazy {
 }
 
 /**
+ * wl_proxy_marshal_flags variant with uint32, object and two int32 arguments.
+ * Used for wl_pointer.set_cursor(serial, surface, hotspot_x, hotspot_y).
+ *
+ * Signature: void wl_proxy_marshal_flags(proxy, opcode, NULL, version, flags, uint, object, int, int).
+ */
+internal val wlProxyMarshalFlagsUintObjectTwoInt: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy*
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // arg1: uint32
+            ValueLayout.ADDRESS,   // arg2: object*
+            ValueLayout.JAVA_INT,  // arg3: int32
+            ValueLayout.JAVA_INT,  // arg4: int32
+        ))
+}
+
+/**
  * wl_proxy_marshal_flags variant with one object and two uint32 arguments.
  * Used for xdg_toplevel.resize(seat, serial, edges).
  *

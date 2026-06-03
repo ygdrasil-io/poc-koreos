@@ -137,6 +137,37 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland cursor visibility state is mutable and hide is best effort`() {
+        val surface = 4_242L
+        val window = WaylandWindow.createForTest(surface = surface)
+
+        window.setCursorVisible(false)
+        assertEquals(false, window.cursorVisible)
+        assertEquals(false, WaylandPointerState.isCursorVisible(surface))
+
+        window.setCursorVisible(true)
+        assertEquals(true, window.cursorVisible)
+        assertEquals(true, WaylandPointerState.isCursorVisible(surface))
+
+        WaylandPointerState.leaveSurface(surface)
+    }
+
+    @Test
+    fun `Wayland pointer state exposes cursor request context from enter serial`() {
+        val surface = 6_363L
+        WaylandPointerState.enterPointer(ptr = 7_474L, surfacePtr = surface, serial = 11)
+
+        val context = WaylandPointerState.currentCursor(surface)
+
+        assertNotNull(context)
+        assertEquals(7_474L, context.pointerPtr)
+        assertEquals(11, context.enterSerial)
+
+        WaylandPointerState.leaveSurface(surface)
+        assertEquals(null, WaylandPointerState.currentCursor(surface))
+    }
+
+    @Test
     fun `Wayland decoration mode follows winit decorated flag`() {
         assertEquals(XDG_TOPLEVEL_DECORATION_MODE_SERVER_SIDE, waylandDecorationMode(decorated = true))
         assertEquals(XDG_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE, waylandDecorationMode(decorated = false))
