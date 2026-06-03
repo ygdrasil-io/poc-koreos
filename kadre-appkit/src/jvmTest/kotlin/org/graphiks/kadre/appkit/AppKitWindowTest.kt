@@ -159,6 +159,14 @@ class AppKitWindowTest {
     }
 
     @Test
+    fun `AppKit applies initial transparent and blur attributes only when requested`() {
+        assertTrue(appKitShouldApplyInitialTransparency(true))
+        assertTrue(!appKitShouldApplyInitialTransparency(false))
+        assertTrue(appKitShouldApplyInitialBlur(true))
+        assertTrue(!appKitShouldApplyInitialBlur(false))
+    }
+
+    @Test
     fun `AppKit enabled buttons update close and minimize style bits`() {
         val base = NSWindowStyleMask.NSWindowStyleMaskTitled +
             NSWindowStyleMask.NSWindowStyleMaskClosable +

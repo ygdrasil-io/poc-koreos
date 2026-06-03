@@ -151,6 +151,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         nsWindow.setTitle(attrs.title)
         applyEnabledButtons(attrs.enabledButtons)
         setWindowLevel(attrs.windowLevel)
+        applyInitialAppearance(attrs)
 
         // 7b. Apply R1 attrs: minSize / maxSize / position / maximized
         attrs.minSize?.let { min ->
@@ -225,6 +226,15 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             ObjCRuntime.sel("addTrackingArea:"),
             trackingArea,
         )
+    }
+
+    private fun applyInitialAppearance(attrs: WindowAttributes) {
+        if (appKitShouldApplyInitialTransparency(attrs.transparent)) {
+            setTransparent(true)
+        }
+        if (appKitShouldApplyInitialBlur(attrs.blur)) {
+            setBlur(true)
+        }
     }
 
     override val rawWindowHandle: RawWindowHandle
@@ -987,6 +997,10 @@ internal fun appKitStyleMaskWithEnabledButtons(
 
 internal fun appKitShouldFocusWindow(isVisible: Boolean, isMiniaturized: Boolean): Boolean =
     isVisible && !isMiniaturized
+
+internal fun appKitShouldApplyInitialTransparency(transparent: Boolean): Boolean = transparent
+
+internal fun appKitShouldApplyInitialBlur(blur: Boolean): Boolean = blur
 
 internal fun appKitWindowLevelValue(level: WindowLevel): Long =
     when (level) {
