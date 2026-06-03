@@ -150,6 +150,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         // 7. Initial title
         nsWindow.setTitle(attrs.title)
         applyEnabledButtons(attrs.enabledButtons)
+        setWindowLevel(attrs.windowLevel)
 
         // 7b. Apply R1 attrs: minSize / maxSize / position / maximized
         attrs.minSize?.let { min ->
@@ -771,14 +772,17 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
      * - [WindowLevel.AlwaysOnBottom]: NSWindowLevel.normal - 1 (-1)
      */
     override fun setWindowLevel(level: WindowLevel) {
-        try {
-            val nsLevel: Long = when (level) {
-                WindowLevel.AlwaysOnTop    -> 3L   // NSFloatingWindowLevel
-                WindowLevel.Normal         -> 0L   // NSNormalWindowLevel
-                WindowLevel.AlwaysOnBottom -> -1L  // below normal
+        AppKitMainThread.runSync {
+            try {
+                ObjCRuntime.msgSend(
+                    null,
+                    nsWindowPtr,
+                    ObjCRuntime.sel("setLevel:"),
+                    appKitWindowLevelValue(level),
+                )
+            } catch (_: Throwable) {
             }
-            ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setLevel:"), nsLevel)
-        } catch (_: Throwable) {}
+        }
     }
 
     /**
@@ -1002,6 +1006,13 @@ internal fun appKitStyleMaskWithEnabledButtons(
 
 internal fun appKitShouldFocusWindow(isVisible: Boolean, isMiniaturized: Boolean): Boolean =
     isVisible && !isMiniaturized
+
+internal fun appKitWindowLevelValue(level: WindowLevel): Long =
+    when (level) {
+        WindowLevel.AlwaysOnTop -> 3L
+        WindowLevel.Normal -> 0L
+        WindowLevel.AlwaysOnBottom -> -1L
+    }
 
 private fun NSWindowStyleMask.withStyleFlag(flag: NSWindowStyleMask, enabled: Boolean): NSWindowStyleMask =
     if (enabled) {

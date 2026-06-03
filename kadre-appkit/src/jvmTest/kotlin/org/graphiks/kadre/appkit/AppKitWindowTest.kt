@@ -13,6 +13,7 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -189,5 +190,12 @@ class AppKitWindowTest {
         assertTrue(!appKitShouldFocusWindow(isVisible = false, isMiniaturized = false))
         assertTrue(!appKitShouldFocusWindow(isVisible = true, isMiniaturized = true))
         assertTrue(!appKitShouldFocusWindow(isVisible = false, isMiniaturized = true))
+    }
+
+    @Test
+    fun `AppKit window levels match winit hardcoded NSWindow levels`() {
+        assertTrue(appKitWindowLevelValue(WindowLevel.AlwaysOnTop) == 3L)
+        assertTrue(appKitWindowLevelValue(WindowLevel.Normal) == 0L)
+        assertTrue(appKitWindowLevelValue(WindowLevel.AlwaysOnBottom) == -1L)
     }
 }
