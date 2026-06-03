@@ -19,6 +19,8 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.DeviceEvent
+import org.graphiks.kadre.core.DeviceId
 import org.graphiks.kadre.core.CursorImage
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.DeviceEvents
@@ -65,6 +67,7 @@ class WaylandEventLoop internal constructor(
     internal val displayPtr: Long,
     internal val compositorPtr: Long,
     internal val xdgWmBasePtr: Long,
+    internal val shmPtr: Long,
     internal val eventFd: Int,
     internal val decorationManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
@@ -115,6 +118,7 @@ class WaylandEventLoop internal constructor(
             display = displayPtr,
             compositor = compositorPtr,
             xdgWmBase = xdgWmBasePtr,
+            shmPtr = shmPtr,
             attrs = attributes,
             decorationManager = decorationManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
@@ -138,6 +142,7 @@ class WaylandEventLoop internal constructor(
             display = displayPtr,
             compositor = compositorPtr,
             xdgWmBase = xdgWmBasePtr,
+            shmPtr = shmPtr,
             attrs = attrs.core,
             decorationManager = decorationManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
@@ -324,12 +329,13 @@ private fun runAppInternal(handler: ApplicationHandler) {
     val globals = discoverGlobals(displayPtr)
 
     val eventLoop = WaylandEventLoop(
-        displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, eventFd, globals.decorationManagerPtr,
+        displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, eventFd, globals.decorationManagerPtr,
     )
 
     // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
     // Route all input events into the eventQueue by their source wl_surface.
     // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
+    // DeviceEvent.Key is dispatched directly to the handler for raw key events.
     installSeatListeners(
         displayPtr    = displayPtr,
         seatPtr       = globals.seatPtr,
@@ -338,6 +344,9 @@ private fun runAppInternal(handler: ApplicationHandler) {
         outputVersion = globals.outputVersion,
         onEvent = { surfacePtr, event ->
             routeWaylandInputEvent(surfacePtr, event, eventLoop.windows, eventLoop.eventQueue)
+        },
+        onDeviceEvent = { event ->
+            handler.deviceEvent(eventLoop, DeviceId(0L), event)
         },
         onScaleChanged = { scale ->
             val factor = scale.toDouble()

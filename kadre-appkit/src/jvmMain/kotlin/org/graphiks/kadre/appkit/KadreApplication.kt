@@ -276,7 +276,7 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 loop.handler.deviceEvent(
                     loop,
                     DeviceId(0L),
-                    DeviceEvent.Key(keyCode.toInt(), state),
+                    DeviceEvent.Key(AppKitKeyMapper.physicalKey(keyCode), state),
                 )
 
                 loop.handler.windowEvent(
@@ -292,7 +292,8 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                             repeat = isRepeat,
                             synthetic = false,
                             text = text ?: mappedCode?.defaultText(),
-                            keyWithoutModifiers = logicalKey,
+                            textWithAllModifiers = text,
+                            keyWithoutModifiers = mappedCode?.defaultText(),
                             native = native,
                         ),
                         deviceId = DeviceId(0L),

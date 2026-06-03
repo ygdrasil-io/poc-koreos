@@ -261,7 +261,8 @@ internal fun domKeyEvent(
         modifiers = domKeyboardModifiers(shiftKey, ctrlKey, altKey, metaKey),
         repeat = repeat,
         text = key.takeIf { it.length == 1 } ?: mappedCode?.defaultText(),
-        keyWithoutModifiers = mappedCode?.defaultLogicalKey(),
+        textWithAllModifiers = key.takeIf { it.length == 1 } ?: mappedCode?.defaultText(),
+        keyWithoutModifiers = mappedCode?.defaultText(),
         native = native,
     )
 }

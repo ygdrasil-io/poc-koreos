@@ -691,6 +691,112 @@ internal val wlProxyMarshalFlagsObjectTwoInt: MethodHandle? by lazy {
         ))
 }
 
+// ── wl_shm helpers ────────────────────────────────────────────────────────────
+
+/**
+ * wl_shm.create_pool (opcode 0) via wl_proxy_marshal_flags.
+ *
+ * Signature: wl_shm_pool* wl_proxy_marshal_flags(shm, 0, &wl_shm_pool_interface, version, flags, fd, size, NULL).
+ */
+internal val wlShmCreatePool: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // wl_shm*
+            ValueLayout.JAVA_INT,  // opcode = 0
+            ValueLayout.ADDRESS,   // &wl_shm_pool_interface
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // fd
+            ValueLayout.JAVA_INT,  // size
+            ValueLayout.ADDRESS,   // new_id = NULL
+        ))
+}
+
+/**
+ * wl_shm_pool.create_buffer (opcode 0) via wl_proxy_marshal_flags.
+ *
+ * Signature: wl_buffer* wl_proxy_marshal_flags(pool, 0, &wl_buffer_interface, version, flags, offset, width, height, stride, format, NULL).
+ */
+internal val wlShmPoolCreateBuffer: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // wl_shm_pool*
+            ValueLayout.JAVA_INT,  // opcode = 0
+            ValueLayout.ADDRESS,   // &wl_buffer_interface
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // offset
+            ValueLayout.JAVA_INT,  // width
+            ValueLayout.JAVA_INT,  // height
+            ValueLayout.JAVA_INT,  // stride
+            ValueLayout.JAVA_INT,  // format (uint32)
+            ValueLayout.ADDRESS,   // new_id = NULL
+        ))
+}
+
+// ── libwayland-cursor (cursor theme) ───────────────────────────────────────────
+
+/**
+ * Lookup of libwayland-cursor.so.0 — null on non-Linux or if absent.
+ * Used for cursor theme loading (setCursor with CursorIcon).
+ */
+internal val libWaylandCursor: SymbolLookup? by lazy {
+    if (waylandNativeDisabled()) return@lazy null
+    try { SymbolLookup.libraryLookup("libwayland-cursor.so.0", Arena.global()) }
+    catch (_: Throwable) { null }
+}
+
+/**
+ * struct wl_cursor_theme *wl_cursor_theme_load(const char *name, int size, struct wl_shm *shm);
+ *
+ * Loads a cursor theme with the given name and size (pixels). Returns NULL on failure.
+ */
+internal val wlCursorThemeLoad: MethodHandle? by lazy {
+    libWaylandCursor.downcall("wl_cursor_theme_load",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // const char *name
+            ValueLayout.JAVA_INT,  // int size
+            ValueLayout.ADDRESS,   // struct wl_shm *shm
+        ))
+}
+
+/**
+ * struct wl_cursor *wl_cursor_theme_get_cursor(struct wl_cursor_theme *theme, const char *name);
+ *
+ * Returns the cursor with the given name from the theme, or NULL.
+ */
+internal val wlCursorThemeGetCursor: MethodHandle? by lazy {
+    libWaylandCursor.downcall("wl_cursor_theme_get_cursor",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // struct wl_cursor_theme *
+            ValueLayout.ADDRESS,   // const char *name
+        ))
+}
+
+/**
+ * struct wl_buffer *wl_cursor_image_get_buffer(struct wl_cursor_image *image);
+ *
+ * Returns the wl_buffer associated with a wl_cursor_image.
+ */
+internal val wlCursorImageGetBuffer: MethodHandle? by lazy {
+    libWaylandCursor.downcall("wl_cursor_image_get_buffer",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // struct wl_cursor_image *
+        ))
+}
+
+/**
+ * void wl_cursor_theme_destroy(struct wl_cursor_theme *theme);
+ *
+ * Destroys a cursor theme and all associated cursors and images.
+ */
+internal val wlCursorThemeDestroy: MethodHandle? by lazy {
+    libWaylandCursor.downcall("wl_cursor_theme_destroy",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // struct wl_cursor_theme *
+        ))
+}
+
 // ── zwp_text_input_v3 protocol (protocol extension interface symbols) ────────
 //
 // The `zwp_text_input_manager_v3_interface` and `zwp_text_input_v3_interface`
@@ -898,6 +1004,247 @@ internal val nativeClose: MethodHandle? by lazy {
     ))
 }
 
+// ── libc : memfd_create ───────────────────────────────────────────────────────
+
+/**
+ * int memfd_create(const char *name, unsigned int flags);
+ *
+ * Creates an anonymous file descriptor for shared memory buffers (Wayland cursors).
+ * Returns fd on success, -1 on error. Falls back to shm_open if unavailable.
+ */
+internal val nativeMemfdCreate: MethodHandle? by lazy {
+    libC.downcall("memfd_create", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.ADDRESS,   // const char *name
+        ValueLayout.JAVA_INT,  // unsigned int flags
+    ))
+}
+
+// ── libc : ftruncate ──────────────────────────────────────────────────────────
+
+/**
+ * int ftruncate(int fd, off_t length);
+ *
+ * Sets the size of the file referenced by fd to length bytes.
+ * Returns 0 on success, -1 on error.
+ */
+internal val nativeFtruncate: MethodHandle? by lazy {
+    libC.downcall("ftruncate", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.JAVA_INT,  // int fd
+        ValueLayout.JAVA_LONG, // off_t length
+    ))
+}
+
+// ── libc : mmap ───────────────────────────────────────────────────────────────
+
+/**
+ * void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+ *
+ * Maps the file descriptor fd into the process address space.
+ * Returns a pointer to the mapped area on success, MAP_FAILED ((void*)-1) on error.
+ */
+internal val nativeMmap: MethodHandle? by lazy {
+    libC.downcall("mmap", FunctionDescriptor.of(
+        ValueLayout.ADDRESS,
+        ValueLayout.ADDRESS,   // void *addr
+        ValueLayout.JAVA_LONG, // size_t length
+        ValueLayout.JAVA_INT,  // int prot
+        ValueLayout.JAVA_INT,  // int flags
+        ValueLayout.JAVA_INT,  // int fd
+        ValueLayout.JAVA_LONG, // off_t offset
+    ))
+}
+
+// ── libc : munmap ─────────────────────────────────────────────────────────────
+
+/**
+ * int munmap(void *addr, size_t length);
+ *
+ * Unmaps the memory region previously mapped by mmap.
+ * Returns 0 on success, -1 on error.
+ */
+internal val nativeMunmap: MethodHandle? by lazy {
+    libC.downcall("munmap", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.ADDRESS,   // void *addr
+        ValueLayout.JAVA_LONG, // size_t length
+    ))
+}
+
+// ── libxkbcommon : context, keymap, state, compose ─────────────────────────────
+
+/**
+ * struct xkb_context *xkb_context_new(enum xkb_context_flags flags);
+ *
+ * Creates a new xkb_context. Pass 0 for default flags.
+ */
+internal val xkbContextNew: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_context_new",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+/**
+ * struct xkb_keymap *xkb_keymap_new_from_string(struct xkb_context *ctx,
+ *     const char *keymap, enum xkb_keymap_format format, enum xkb_keymap_compile_flags flags);
+ *
+ * Creates a keymap from a keymap string (as received from wl_keyboard.keymap).
+ * format = 0 (XKB_KEYMAP_FORMAT_TEXT_V1), flags = 0.
+ */
+internal val xkbKeymapNewFromString: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_keymap_new_from_string",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // context
+            ValueLayout.ADDRESS,   // string
+            ValueLayout.JAVA_INT,  // format
+            ValueLayout.JAVA_INT,  // flags
+        ))
+}
+
+/**
+ * struct xkb_state *xkb_state_new(struct xkb_keymap *keymap);
+ *
+ * Creates a mutable keyboard state from a keymap.
+ */
+internal val xkbStateNew: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_state_new",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+/**
+ * void xkb_keymap_unref(struct xkb_keymap *keymap);
+ *
+ * Decrements the keymap refcount and frees it when it reaches zero.
+ */
+internal val xkbKeymapUnref: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_keymap_unref",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+/**
+ * void xkb_state_unref(struct xkb_state *state);
+ *
+ * Decrements the state refcount and frees it when it reaches zero.
+ */
+internal val xkbStateUnref: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_state_unref",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+/**
+ * struct xkb_compose_table *xkb_compose_table_new_from_locale(
+ *     struct xkb_context *ctx, const char *locale, enum xkb_compose_compile_flags flags);
+ *
+ * Loads the Compose table for the given locale.
+ */
+internal val xkbComposeTableNewFromLocale: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_compose_table_new_from_locale",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // context
+            ValueLayout.ADDRESS,   // locale
+            ValueLayout.JAVA_INT,  // flags
+        ))
+}
+
+/**
+ * struct xkb_compose_state *xkb_compose_state_new(struct xkb_compose_table *table,
+ *     enum xkb_compose_state_flags flags);
+ *
+ * Creates a compose state object for processing compose sequences.
+ */
+internal val xkbComposeStateNew: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_compose_state_new",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,   // table
+            ValueLayout.JAVA_INT,  // flags
+        ))
+}
+
+/**
+ * void xkb_compose_state_reset(struct xkb_compose_state *state);
+ *
+ * Resets the compose state (clears any in-progress compose sequence).
+ */
+internal val xkbComposeStateReset: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_compose_state_reset",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+/**
+ * void xkb_compose_state_unref(struct xkb_compose_state *state);
+ *
+ * Decrements the compose state refcount and frees it when it reaches zero.
+ */
+internal val xkbComposeStateUnref: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_compose_state_unref",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+/**
+ * void xkb_compose_table_unref(struct xkb_compose_table *table);
+ *
+ * Decrements the compose table refcount and frees it when it reaches zero.
+ */
+internal val xkbComposeTableUnref: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_compose_table_unref",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+/**
+ * void xkb_context_unref(struct xkb_context *ctx);
+ *
+ * Decrements the context refcount and frees it when it reaches zero.
+ */
+internal val xkbContextUnref: MethodHandle? by lazy {
+    libXkbCommon.downcall("xkb_context_unref",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
+
+// ── libc : shm_open ───────────────────────────────────────────────────────────
+
+/**
+ * int shm_open(const char *name, int oflag, mode_t mode);
+ *
+ * Creates/opens a POSIX shared memory object.
+ * Returns fd on success, -1 on error. Used as fallback when memfd_create is unavailable.
+ */
+internal val nativeShmOpen: MethodHandle? by lazy {
+    libC.downcall("shm_open", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.ADDRESS,   // const char *name
+        ValueLayout.JAVA_INT,  // int oflag
+        ValueLayout.JAVA_INT,  // mode_t mode
+    ))
+}
+
+// ── libc : shm_unlink ─────────────────────────────────────────────────────────
+
+/**
+ * int shm_unlink(const char *name);
+ *
+ * Removes a POSIX shared memory object. The memory is freed when all fds are closed.
+ * Returns 0 on success, -1 on error.
+ */
+internal val nativeShmUnlink: MethodHandle? by lazy {
+    libC.downcall("shm_unlink", FunctionDescriptor.of(
+        ValueLayout.JAVA_INT,
+        ValueLayout.ADDRESS,   // const char *name
+    ))
+}
+
+// ── mmap constants ────────────────────────────────────────────────────────────
+
+internal const val PROT_READ: Int = 1
+internal const val PROT_WRITE: Int = 2
+internal const val MAP_SHARED: Int = 1
+internal const val MAP_FAILED_PTR: Long = -1L  // (void*)-1 cast to Long
+
+// ── shm_open constants ────────────────────────────────────────────────────────
+
+internal const val O_RDWR: Int = 2
+internal const val O_CREAT: Int = 64
+internal const val O_EXCL: Int = 128
+
 // ── Input device interfaces (exported by libwayland-client.so.0) ─────────────
 
 /** &wl_seat_interface — required by bind(wl_seat). */
@@ -914,6 +1261,15 @@ internal val wlTouchInterface: MemorySegment? by lazy { libWaylandClient.symbol(
 
 /** &wl_output_interface — required by bind(wl_output). */
 internal val wlOutputInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_output_interface") }
+
+/** &wl_shm_interface — required by bind(wl_shm) for cursor buffer pool creation. */
+internal val wlShmInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_shm_interface") }
+
+/** &wl_shm_pool_interface — required by wl_shm.create_pool (new_id) and wl_shm_pool.destroy. */
+internal val wlShmPoolInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_shm_pool_interface") }
+
+/** &wl_buffer_interface — required by wl_shm_pool.create_buffer (new_id) and wl_buffer.destroy. */
+internal val wlBufferInterface: MemorySegment? by lazy { libWaylandClient.symbol("wl_buffer_interface") }
 
 // ── wl_seat_get_pointer / wl_seat_get_keyboard / wl_seat_get_touch ────────────
 
