@@ -194,10 +194,7 @@ class X11Window private constructor(
 
     override fun setResizable(resizable: Boolean) {
         _isResizable = resizable
-        // Update _NET_WM_NORMAL_HINTS: set min/max size equal to current size when not resizable.
-        // The simplest approach is to use WM_NORMAL_HINTS (XSetWMNormalHints equivalent) via
-        // XChangeProperty. We just update our tracked state here; the event loop may re-apply.
-        // (Full XSizeHints implementation deferred — flagged for future ticket.)
+        applyNormalHints()
     }
 
     override fun setMinimized(minimized: Boolean) {
@@ -231,17 +228,27 @@ class X11Window private constructor(
     }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
-        // Store for potential use in _NET_WM_NORMAL_HINTS / WM_NORMAL_HINTS.
-        // Full XSetWMNormalHints would require the XSizeHints struct — deferred.
         _minSurfaceSize = size
+        applyNormalHints()
     }
 
     override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
         _maxSurfaceSize = size
+        applyNormalHints()
     }
 
     @Volatile private var _minSurfaceSize: PhysicalSize<Int>? = attrs.minSize
     @Volatile private var _maxSurfaceSize: PhysicalSize<Int>? = attrs.maxSize
+    @Volatile private var _surfaceResizeIncrements: PhysicalSize<Int>? = attrs.resizeIncrements
+    @Volatile private var _initialPosition: PhysicalPosition<Int>? = attrs.position
+
+    override val surfaceResizeIncrements: PhysicalSize<Int>?
+        get() = _surfaceResizeIncrements
+
+    override fun setSurfaceResizeIncrements(increments: PhysicalSize<Int>?) {
+        _surfaceResizeIncrements = increments
+        applyNormalHints()
+    }
 
     override val outerPosition: PhysicalPosition<Int>
         get() {
@@ -933,6 +940,7 @@ class X11Window private constructor(
             }
 
             val window = X11Window(display, screen, xWindowId, attrs)
+            window.applyNormalHints()
 
             // ── 6. XMapWindow (if visible) ────────────────────────────────────
             if (attrs.visible) {
@@ -950,6 +958,216 @@ class X11Window private constructor(
 
             return window
         }
+    }
+
+    private fun applyNormalHints() {
+        val wmNormalHints = internAtom(displayPtr, "WM_NORMAL_HINTS")
+        val wmSizeHints = internAtom(displayPtr, "WM_SIZE_HINTS")
+        if (wmNormalHints == 0L || wmSizeHints == 0L) return
+        val hints = x11NormalHints(
+            position = _initialPosition,
+            size = _innerSize,
+            minSize = _minSurfaceSize,
+            maxSize = _maxSurfaceSize,
+            resizeIncrements = _surfaceResizeIncrements,
+            resizable = _isResizable,
+            avoidNonResizablePin = isXfwm4WindowManager(),
+        )
+        val display = MemorySegment.ofAddress(displayPtr)
+        try {
+            Arena.ofConfined().use { arena ->
+                val data = arena.allocate(X11_NORMAL_HINTS_ELEMENTS * 8L, 8L)
+                hints.elements.forEachIndexed { index, value ->
+                    data.setAtIndex(ValueLayout.JAVA_LONG, index.toLong(), value)
+                }
+                xChangeProperty?.invokeExact(
+                    display,
+                    xWindowId,
+                    wmNormalHints,
+                    wmSizeHints,
+                    32,
+                    0 /* PropModeReplace */,
+                    data,
+                    X11_NORMAL_HINTS_ELEMENTS,
+                ) as? Int
+                xFlush?.invokeExact(display) as? Int
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun isXfwm4WindowManager(): Boolean =
+        currentX11WindowManagerName(displayPtr, screen) == "Xfwm4"
+}
+
+internal const val X11_NORMAL_HINTS_ELEMENTS: Int = 18
+internal const val X11_US_POSITION: Long = 1L shl 0
+internal const val X11_US_SIZE: Long = 1L shl 1
+internal const val X11_P_MIN_SIZE: Long = 1L shl 4
+internal const val X11_P_MAX_SIZE: Long = 1L shl 5
+internal const val X11_P_RESIZE_INC: Long = 1L shl 6
+
+internal data class X11NormalHints(
+    val elements: LongArray,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is X11NormalHints && elements.contentEquals(other.elements)
+
+    override fun hashCode(): Int =
+        elements.contentHashCode()
+}
+
+internal fun x11NormalHints(
+    position: PhysicalPosition<Int>?,
+    size: PhysicalSize<Int>,
+    minSize: PhysicalSize<Int>?,
+    maxSize: PhysicalSize<Int>?,
+    resizeIncrements: PhysicalSize<Int>?,
+    resizable: Boolean,
+    avoidNonResizablePin: Boolean = false,
+): X11NormalHints {
+    val elements = LongArray(X11_NORMAL_HINTS_ELEMENTS)
+    var flags = X11_US_SIZE
+    elements[3] = size.width.toLong()
+    elements[4] = size.height.toLong()
+
+    if (position != null) {
+        flags = flags or X11_US_POSITION
+        elements[1] = position.x.toLong()
+        elements[2] = position.y.toLong()
+    }
+
+    val pinToCurrentSize = !resizable && !avoidNonResizablePin
+    val effectiveMin = if (pinToCurrentSize) size else minSize
+    val effectiveMax = if (pinToCurrentSize) size else maxSize
+    if (effectiveMin != null) {
+        flags = flags or X11_P_MIN_SIZE
+        elements[5] = effectiveMin.width.toLong()
+        elements[6] = effectiveMin.height.toLong()
+    }
+    if (effectiveMax != null) {
+        flags = flags or X11_P_MAX_SIZE
+        elements[7] = effectiveMax.width.toLong()
+        elements[8] = effectiveMax.height.toLong()
+    }
+    if (resizeIncrements != null) {
+        flags = flags or X11_P_RESIZE_INC
+        elements[9] = resizeIncrements.width.toLong()
+        elements[10] = resizeIncrements.height.toLong()
+    }
+
+    elements[0] = flags
+    return X11NormalHints(elements)
+}
+
+internal fun currentX11WindowManagerName(displayPtr: Long, screen: Int): String? {
+    val getProperty = xGetWindowProperty ?: return null
+    val display = MemorySegment.ofAddress(displayPtr)
+    val root = try {
+        xRootWindow?.invokeExact(display, screen) as? Long ?: return null
+    } catch (_: Throwable) {
+        return null
+    }
+    val supportingWmCheck = x11InternAtom(displayPtr, "_NET_SUPPORTING_WM_CHECK")
+    val wmName = x11InternAtom(displayPtr, "_NET_WM_NAME")
+    val utf8String = x11InternAtom(displayPtr, "UTF8_STRING")
+    if (supportingWmCheck == 0L || wmName == 0L || utf8String == 0L) return null
+    val wmWindow = readX11WindowPropertyLong(getProperty, display, root, supportingWmCheck) ?: return null
+    return readX11StringProperty(getProperty, display, wmWindow, wmName, utf8String)
+}
+
+private fun readX11WindowPropertyLong(
+    getProperty: java.lang.invoke.MethodHandle,
+    display: MemorySegment,
+    window: Long,
+    property: Long,
+): Long? =
+    readX11Property(getProperty, display, window, property, reqType = 0L, length = 1L) { ptr, nitems ->
+        if (nitems <= 0L) null else ptr.getAtIndex(ValueLayout.JAVA_LONG, 0L)
+    }
+
+private fun readX11StringProperty(
+    getProperty: java.lang.invoke.MethodHandle,
+    display: MemorySegment,
+    window: Long,
+    property: Long,
+    reqType: Long,
+): String? =
+    readX11Property(getProperty, display, window, property, reqType, length = 1024L) { ptr, nitems ->
+        if (nitems <= 0L) return@readX11Property null
+        val bytes = ByteArray(nitems.toInt())
+        for (index in bytes.indices) {
+            bytes[index] = ptr.getAtIndex(ValueLayout.JAVA_BYTE, index.toLong())
+        }
+        bytes.toString(Charsets.UTF_8).trimEnd('\u0000')
+    }
+
+private inline fun <T> readX11Property(
+    getProperty: java.lang.invoke.MethodHandle,
+    display: MemorySegment,
+    window: Long,
+    property: Long,
+    reqType: Long,
+    length: Long,
+    read: (MemorySegment, Long) -> T?,
+): T? =
+    try {
+        Arena.ofConfined().use { arena ->
+            val actualType = arena.allocate(ValueLayout.JAVA_LONG)
+            val actualFormat = arena.allocate(ValueLayout.JAVA_INT)
+            val nitems = arena.allocate(ValueLayout.JAVA_LONG)
+            val bytesAfter = arena.allocate(ValueLayout.JAVA_LONG)
+            val propReturn = arena.allocate(ValueLayout.ADDRESS)
+            val status = getProperty.invokeExact(
+                display,
+                window,
+                property,
+                0L,
+                length,
+                0,
+                reqType,
+                actualType,
+                actualFormat,
+                nitems,
+                bytesAfter,
+                propReturn,
+            ) as Int
+            if (status != 0) return@use null
+            val ptr = propReturn.get(ValueLayout.ADDRESS, 0L)
+            if (ptr == MemorySegment.NULL) return@use null
+            try {
+                val itemCount = nitems.get(ValueLayout.JAVA_LONG, 0L)
+                val format = actualFormat.get(ValueLayout.JAVA_INT, 0L)
+                val byteSize = when (format) {
+                    8 -> itemCount
+                    16 -> itemCount * 2L
+                    32 -> itemCount * 8L
+                    else -> 0L
+                }
+                if (byteSize <= 0L) return@use null
+                read(ptr.reinterpret(byteSize), itemCount)
+            } finally {
+                xFree?.invokeExact(ptr) as? Int
+            }
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+private fun x11InternAtom(displayPtr: Long, name: String): Long {
+    val handle = xInternAtom ?: return 0L
+    val display = MemorySegment.ofAddress(displayPtr)
+    return try {
+        Arena.ofConfined().use { arena ->
+            val bytes = name.toByteArray(Charsets.US_ASCII)
+            val ptr = arena.allocate(bytes.size.toLong() + 1)
+            for (index in bytes.indices) {
+                ptr.set(ValueLayout.JAVA_BYTE, index.toLong(), bytes[index])
+            }
+            ptr.set(ValueLayout.JAVA_BYTE, bytes.size.toLong(), 0)
+            handle.invokeExact(display, ptr, 0) as Long
+        }
+    } catch (_: Throwable) {
+        0L
     }
 }
 

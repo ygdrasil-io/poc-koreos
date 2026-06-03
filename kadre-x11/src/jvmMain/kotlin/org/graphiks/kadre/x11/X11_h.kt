@@ -436,6 +436,49 @@ internal val xChangeProperty: MethodHandle? by lazy {
     )
 }
 
+// ── XGetWindowProperty / XFree ───────────────────────────────────────────────
+
+/**
+ * int XGetWindowProperty(Display *display, Window w, Atom property,
+ *     long long_offset, long long_length, Bool delete, Atom req_type,
+ *     Atom *actual_type_return, int *actual_format_return,
+ *     unsigned long *nitems_return, unsigned long *bytes_after_return,
+ *     unsigned char **prop_return);
+ */
+internal val xGetWindowProperty: MethodHandle? by lazy {
+    libX11.downcall(
+        "XGetWindowProperty",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_INT,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        )
+    )
+}
+
+/**
+ * int XFree(void *data);
+ */
+internal val xFree: MethodHandle? by lazy {
+    libX11.downcall(
+        "XFree",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+        )
+    )
+}
+
 // ── XGetGeometry ──────────────────────────────────────────────────────────────
 
 /**
