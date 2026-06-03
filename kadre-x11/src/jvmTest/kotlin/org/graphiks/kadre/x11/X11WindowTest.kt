@@ -2,6 +2,7 @@ package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowLevel
+import org.graphiks.kadre.core.PhysicalPosition
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -72,6 +73,12 @@ class X11WindowTest {
         assertEquals(X11WindowLevelState(above = true, below = false), x11WindowLevelState(WindowLevel.AlwaysOnTop))
         assertEquals(X11WindowLevelState(above = false, below = false), x11WindowLevelState(WindowLevel.Normal))
         assertEquals(X11WindowLevelState(above = false, below = true), x11WindowLevelState(WindowLevel.AlwaysOnBottom))
+    }
+
+    @Test
+    fun `X11 initial position uses attributes or zero fallback`() {
+        assertEquals(PhysicalPosition(12, 34), x11InitialPosition(PhysicalPosition(12, 34)))
+        assertEquals(PhysicalPosition(0, 0), x11InitialPosition(null))
     }
 
     @Test

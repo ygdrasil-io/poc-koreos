@@ -882,13 +882,14 @@ class X11Window private constructor(
 
             val width = attrs.size?.width ?: 800
             val height = attrs.size?.height ?: 600
+            val position = x11InitialPosition(attrs.position)
 
             // ── 2. XCreateSimpleWindow ────────────────────────────────────────
             val xWindowId: Long = createHandle.invokeExact(
                 displaySeg,     // Display*
                 rootWindow,     // Window parent
-                0,              // int x
-                0,              // int y
+                position.x,      // int x
+                position.y,      // int y
                 width,          // unsigned int width
                 height,         // unsigned int height
                 1,              // unsigned int border_width
@@ -963,3 +964,6 @@ internal fun x11WindowLevelState(level: WindowLevel): X11WindowLevelState =
         WindowLevel.Normal -> X11WindowLevelState(above = false, below = false)
         WindowLevel.AlwaysOnBottom -> X11WindowLevelState(above = false, below = true)
     }
+
+internal fun x11InitialPosition(position: PhysicalPosition<Int>?): PhysicalPosition<Int> =
+    position ?: PhysicalPosition(0, 0)
