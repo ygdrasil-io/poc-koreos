@@ -110,8 +110,17 @@ class GamepadTypesTest {
 
     @Test
     fun `PowerInfo Unknown is data object`() {
-        val info: PowerInfo = PowerInfo.Unknown
-        assertNotNull(info)
+        assertTrue(PowerInfo.Unknown is PowerInfo)
+    }
+
+    @Test
+    fun `PowerInfo Wired is data object`() {
+        assertTrue(PowerInfo.Wired is PowerInfo)
+    }
+
+    @Test
+    fun `PowerInfo Charged is data object`() {
+        assertTrue(PowerInfo.Charged is PowerInfo)
     }
 
     @Test
