@@ -140,8 +140,9 @@ class AppKitScreenCapturer : ScreenCapturer {
                 System.err.println("[AppKitScreenCapturer] Timeout waiting for SCShareableContent callback")
                 return null
             }
-            if (callback.error != null && callback.error != MemorySegment.NULL) {
-                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (NSError* @ 0x%x)".format(callback.error.address()))
+            val err = callback.error
+            if (err != null && err != MemorySegment.NULL) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (NSError* @ 0x%x)".format(err.address()))
                 return null
             }
             if (callback.result == null || callback.result == MemorySegment.NULL) {
