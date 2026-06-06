@@ -1,5 +1,7 @@
 package org.graphiks.kadre.samples.simulation
 
+import org.graphiks.kadre.samples.simulation.platform.PlatformCapabilities
+
 object ScenarioRegistry {
     private val _scenarios = mutableListOf<ScenarioMetadata>()
     private var _initialized = false
@@ -41,8 +43,7 @@ object ScenarioRegistry {
     fun getAvailableFor(platform: Platform): List<ScenarioMetadata> {
         if (!_initialized) initialize()
         return _scenarios.filter { metadata ->
-            metadata.availableOn.contains(platform) ||
-            metadata.availableOn.containsAll(Platform.ALL)
+            metadata.availableOn.contains(platform)
         }.filter { metadata ->
             metadata.platformSupport.getOrDefault(platform, SupportLevel.FULL) != SupportLevel.NOT_AVAILABLE &&
             metadata.scenario.requiredCapabilities.all { capability ->

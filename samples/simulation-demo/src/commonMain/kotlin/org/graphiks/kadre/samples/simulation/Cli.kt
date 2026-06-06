@@ -54,12 +54,15 @@ object Cli {
                 }
                 "--info" -> result = result.copy(info = true)
                 "--interactive" -> result = result.copy(action = Action.INTERACTIVE)
-                "-h", "--help" -> printHelp()
+                "-h", "--help" -> {
+                    printHelp()
+                    return CliArgs(action = Action.LIST)
+                }
             }
             i++
         }
 
-        if (result.all && result.action == Action.RUN) {
+        if (result.all) {
             result = result.copy(action = Action.RUN_ALL)
         }
 

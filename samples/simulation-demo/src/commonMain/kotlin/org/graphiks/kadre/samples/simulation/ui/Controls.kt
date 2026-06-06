@@ -15,12 +15,7 @@ fun BackButton(
         onClick = onClick,
         modifier = modifier
     ) {
-        Icon(
-            imageVector = Icons.Default.ArrowBack,
-            contentDescription = "Retour"
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("Retour")
+        Text("\u2190 Retour")
     }
 }
 
@@ -37,11 +32,6 @@ fun StartButton(
         ),
         modifier = modifier
     ) {
-        Icon(
-            imageVector = Icons.Default.PlayArrow,
-            contentDescription = "Démarrer"
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("Démarrer le scénario")
+        Text("\u25B6 Démarrer le scénario")
     }
 }

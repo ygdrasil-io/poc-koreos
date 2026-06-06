@@ -1,5 +1,6 @@
 package org.graphiks.kadre.samples.simulation.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
@@ -91,9 +92,9 @@ fun ScenarioCard(
 @Composable
 fun SupportBadge(supportLevel: SupportLevel) {
     val (color, text) = when (supportLevel) {
-        SupportLevel.FULL -> Pair(MaterialTheme.colors.green, "✓")
-        SupportLevel.PARTIAL -> Pair(MaterialTheme.colors.yellow, "⚠")
-        SupportLevel.STUB -> Pair(MaterialTheme.colors.orange, "△")
+        SupportLevel.FULL -> Pair(Color(0xFF4CAF50), "✓")
+        SupportLevel.PARTIAL -> Pair(Color(0xFFFFC107), "⚠")
+        SupportLevel.STUB -> Pair(Color(0xFFFF9800), "△")
         SupportLevel.NOT_AVAILABLE -> Pair(MaterialTheme.colors.error, "✗")
     }
 
