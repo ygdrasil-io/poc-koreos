@@ -1,5 +1,7 @@
 package org.graphiks.kadre.x11.capture
 
+import org.graphiks.kadre.x11.libX11
+import org.graphiks.kadre.x11.libXext
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
