@@ -55,10 +55,11 @@ object ObjCRuntime {
 
     private val ARCH: String = System.getProperty("os.arch", "")
 
-    /** Address of objc_msgSend_stret — only valid on x86-64; null on ARM64. */
-    val objcMsgSendStretAddr: MemorySegment? = if (ARCH == "x86_64")
-        objcLib.find("objc_msgSend_stret").orElse(null)
-    else null
+    private val objcObjectGetClassAddr: MemorySegment =
+        objcLib.find("object_getClass").orElseThrow { UnsatisfiedLinkError("object_getClass not found in libobjc") }
+
+    private val objcClassGetMethodImplAddr: MemorySegment =
+        objcLib.find("class_getMethodImplementation").orElseThrow { UnsatisfiedLinkError("class_getMethodImplementation not found in libobjc") }
 
     private val selRegisterNameHandle = linker.downcallHandle(
         selRegisterNameAddr,
@@ -68,6 +69,16 @@ object ObjCRuntime {
     private val objcGetClassHandle = linker.downcallHandle(
         objcGetClassAddr,
         FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+    )
+
+    private val objectGetClassHandle = linker.downcallHandle(
+        objcObjectGetClassAddr,
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+    )
+
+    private val classGetMethodImplHandle = linker.downcallHandle(
+        objcClassGetMethodImplAddr,
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
     )
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -166,23 +177,28 @@ object ObjCRuntime {
         val unwrapped = args.map { unwrap(it) }.toTypedArray()
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
 
-        // macOS 26 no longer exports objc_msgSend_stret — everything goes
-        // through objc_msgSend.  On ARM64 this is transparent (buffer in x8).
+        // macOS 26 no longer exports objc_msgSend_stret.  On ARM64
+        // objc_msgSend handles struct returns transparently (buffer in x8).
         // On x86_64 Panama's struct-return ABI (System V) puts the hidden
-        // buffer in RDI, but objc_msgSend expects self in RDI and the buffer
-        // (if any) in RDX.
+        // buffer in RDI, but objc_msgSend expects self there — the registers
+        // collide.
         //
-        // For small structs (≤ 16 bytes, register-return) no buffer is needed
-        // — Panama reads from XMM0:XMM1 / RAX:RDX directly — so the standard
-        // struct-return descriptor works fine.
-        // For large structs (> 16 bytes) we must explicitly pass the buffer
-        // as a third ADDRESS argument so it lands in RDX.
-        val useHiddenBuffer = ARCH == "x86_64" && byteSize > MAX_REGISTER_RETURN_SIZE
-        if (useHiddenBuffer) {
-            val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-            val desc = FunctionDescriptor.ofVoid(*baseLayouts, *argLayouts)
-            val handle = linker.downcallHandle(objcMsgSendAddr, desc)
-            handle.invokeWithArguments(receiver, selector, nativeSeg, *unwrapped)
+        // For small structs (≤ 16 bytes, register-return) Panama reads the
+        // result from XMM0:XMM1 / RAX:RDX so no buffer is involved, and
+        // objc_msgSend works with self in RDI as expected.
+        //
+        // For large structs (> 16 bytes, memory-return) we bypass objc_msgSend
+        // and call the IMP directly via class_getMethodImplementation.  With
+        // Panama's struct-return descriptor the ABI (System V) puts buffer=RDI,
+        // self=RSI, _cmd=RDX — exactly what the memory-return IMP expects.
+        if (ARCH == "x86_64" && byteSize > MAX_REGISTER_RETURN_SIZE) {
+            val cls = objectGetClassHandle.invokeExact(receiver) as MemorySegment
+            val imp = classGetMethodImplHandle.invokeExact(cls, selector) as MemorySegment
+            val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
+            val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
+            val handle = linker.downcallHandle(imp, desc)
+            handle.invokeWithArguments(allocator, receiver, selector, *unwrapped)
         } else {
             val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
