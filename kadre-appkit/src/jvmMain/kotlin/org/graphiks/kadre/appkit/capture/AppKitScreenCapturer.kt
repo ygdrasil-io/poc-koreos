@@ -139,8 +139,9 @@ class AppKitScreenCapturer : ScreenCapturer {
                 System.err.println("[AppKitScreenCapturer] Timeout waiting for SCShareableContent callback")
                 return null
             }
-            if (callback.error != null && callback.error != MemorySegment.NULL) {
-                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (pointer @ 0x%x)".format(callback.error.address()))
+            val cbErr = callback.error
+            if (cbErr != null && cbErr != MemorySegment.NULL) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (pointer @ 0x%x)".format(cbErr.address()))
                 System.err.println("[AppKitScreenCapturer] Hint: grant Screen Recording permission in System Settings > Privacy & Security")
                 return null
             }

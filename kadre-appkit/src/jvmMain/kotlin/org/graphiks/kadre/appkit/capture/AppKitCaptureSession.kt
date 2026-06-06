@@ -122,7 +122,7 @@ constructor(
 
     private fun startCapture() {
         val callback = ObjCCallback1()
-        val blockArena = Arena.ofConfined()
+        val blockArena = Arena.ofShared()
         try {
             val upcallStub = linker.upcallStub(callback.methodHandle, callback.fnDescriptor, blockArena)
             val block = ObjCBlocks.create(upcallStub, blockArena)
