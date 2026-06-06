@@ -161,23 +161,38 @@ object ObjCRuntime {
      */
     fun msgSendStret(returnLayout: GroupLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): MemorySegment {
         val addr = objcMsgSendStretAddr ?: objcMsgSendAddr
-        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
-        val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-        val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
-        val handle = linker.downcallHandle(addr, desc)
-        // JDK 24+ rejects heap segments (MemorySegment.ofArray) in downcall allocators.
-        // Native memory from a confined arena is safe: the arena outlives the call
-        // and is closed after the struct bytes are read.
         val byteSize = returnLayout.byteSize()
         val arena = Arena.ofConfined()
         val nativeSeg = arena.allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
-        val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
         val unwrapped = args.map { unwrap(it) }.toTypedArray()
-        val result = handle.invokeWithArguments(allocator, receiver, selector, *unwrapped) as MemorySegment
-        // Copy the result into a new segment backed by the global arena so the
-        // confined arena can be closed immediately.
+        val argLayouts = args.map { layoutFor(it) }.toTypedArray()
+
+        if (ARCH == "x86_64") {
+            // On x86-64 Apple, objc_msgSend_stret expects:
+            //   RDI = self, RSI = _cmd, RDX = hidden struct return buffer
+            // Panama's struct-return convention (System V AMD64) puts:
+            //   RDI = buffer, RSI = self, RDX = _cmd
+            // — the wrong register for self, causing a SIGSEGV in the
+            // cache lookup when the buffer address is dereferenced as isa.
+            //
+            // Workaround: declare the function as void and pass the buffer
+            // as a regular pointer argument in the 3rd position (RDX).
+            val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            val desc = FunctionDescriptor.ofVoid(*baseLayouts, *argLayouts)
+            val handle = linker.downcallHandle(addr, desc)
+            handle.invokeWithArguments(receiver, selector, nativeSeg, *unwrapped)
+        } else {
+            // ARM64: buffer in x8, self in x0, _cmd in x1 — Panama's
+            // struct-return convention matches Apple's ARM64 ABI.
+            val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
+            val handle = linker.downcallHandle(addr, desc)
+            val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
+            handle.invokeWithArguments(allocator, receiver, selector, *unwrapped)
+        }
+
         val copy = Arena.global().allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
-        copy.copyFrom(result)
+        copy.copyFrom(nativeSeg)
         arena.close()
         return copy
     }
