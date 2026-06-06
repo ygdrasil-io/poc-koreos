@@ -2,10 +2,11 @@
 
 package org.graphiks.kadre.uikit.capture
 
+import kotlinx.cinterop.ByteVarOf
+import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.memcpy
-import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.get
+import kotlinx.cinterop.reinterpret
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ import platform.CoreVideo.CVPixelBufferGetWidth
 import platform.CoreVideo.CVPixelBufferLockBaseAddress
 import platform.CoreVideo.CVPixelBufferUnlockBaseAddress
 import platform.CoreVideo.kCVPixelBufferLock_ReadOnly
+import platform.Foundation.NSDate
 import platform.Foundation.NSError
 import platform.ReplayKit.RPScreenRecorder
 import kotlin.coroutines.resume
@@ -82,8 +84,9 @@ class UIKitCaptureSession(
             val dataSize = height * stride
 
             val data = ByteArray(dataSize)
-            data.usePinned { pinned ->
-                memcpy(pinned.addressOf(0), baseAddress, dataSize.toULong())
+            val src = baseAddress.reinterpret<ByteVarOf<Byte>>()
+            for (i in 0 until dataSize) {
+                data[i] = src[i]
             }
 
             val frame = CaptureFrame(
@@ -91,7 +94,7 @@ class UIKitCaptureSession(
                 format = PixelFormat.BGRA8,
                 stride = stride,
                 data = data,
-                timestampNanos = System.nanoTime(),
+                timestampNanos = (NSDate().timeIntervalSince1970 * 1_000_000_000).toLong(),
             )
             _frames.tryEmit(frame)
         } finally {
