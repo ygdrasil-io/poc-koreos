@@ -13,17 +13,33 @@ import java.lang.foreign.ValueLayout.JAVA_LONG
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 internal object ObjCBlocks {
 
     private val NSConcreteGlobalBlock: MemorySegment
+    private val blockCopyFn: MethodHandle?
 
     init {
         val libobjc = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", Arena.global())
         NSConcreteGlobalBlock = libobjc.find("_NSConcreteGlobalBlock")
             .orElseThrow { UnsatisfiedLinkError("_NSConcreteGlobalBlock not found") }
+        val linker = Linker.nativeLinker()
+        blockCopyFn = try {
+            val libSystem = SymbolLookup.libraryLookup("/usr/lib/libSystem.B.dylib", Arena.global())
+            libSystem.find("_Block_copy").map { addr ->
+                linker.downcallHandle(addr, FunctionDescriptor.of(ADDRESS, ADDRESS))
+            }.orElse(null)
+        } catch (_: Throwable) { null }
+    }
+
+    /** Copies a block to the heap for async use. Returns same block if copy unavailable. */
+    fun copy(block: MemorySegment): MemorySegment {
+        val fn = blockCopyFn ?: return block
+        return try { fn.invokeExact(block) as MemorySegment } catch (_: Throwable) { block }
     }
 
     private val blockStruct = MemoryLayout.structLayout(

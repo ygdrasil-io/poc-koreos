@@ -207,7 +207,7 @@ class AppKitScreenCapturer : ScreenCapturer {
         val blockArena = Arena.ofShared()
         try {
             val upcallStub = linker.upcallStub(callback.methodHandle, callback.fnDescriptor, blockArena)
-            val block = ObjCBlocks.create(upcallStub, blockArena)
+            val block = ObjCBlocks.copy(ObjCBlocks.create(upcallStub, blockArena))
             val sel = ObjCRuntime.sel("getShareableContentWithCompletionHandler:")
             ObjCRuntime.msgSend(null, scShareableContentClass, sel, block)
 
