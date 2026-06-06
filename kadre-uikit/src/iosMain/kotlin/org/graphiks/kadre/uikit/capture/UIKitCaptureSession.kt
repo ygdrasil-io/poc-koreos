@@ -32,9 +32,11 @@ import platform.CoreVideo.CVPixelBufferUnlockBaseAddress
 import platform.CoreVideo.kCVPixelBufferLock_ReadOnly
 import platform.Foundation.NSDate
 import platform.Foundation.NSError
+import platform.Foundation.NSTimeInterval
 import platform.ReplayKit.RPScreenRecorder
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import platform.Foundation.NSProcessInfo
 
 class UIKitCaptureSession(
     source: CaptureSource.Display,
@@ -94,7 +96,7 @@ class UIKitCaptureSession(
                 format = PixelFormat.BGRA8,
                 stride = stride,
                 data = data,
-                timestampNanos = (NSDate().timeIntervalSince1970 * 1_000_000_000).toLong(),
+                timestampNanos = (NSProcessInfo.processInfo.systemUptime * 1_000_000_000).toLong(),
             )
             _frames.tryEmit(frame)
         } finally {

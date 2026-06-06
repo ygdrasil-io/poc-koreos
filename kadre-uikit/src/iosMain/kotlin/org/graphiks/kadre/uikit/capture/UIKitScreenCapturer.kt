@@ -21,22 +21,26 @@ class UIKitScreenCapturer : ScreenCapturer {
 
     override suspend fun enumerateDisplays(): List<DisplayInfo> {
         val screen = UIScreen.mainScreen
-        val bounds: CValue<CGRect> = screen.bounds
         val scale = screen.scale
-        return bounds.useContents { rect ->
-            listOf(
-                DisplayInfo(
-                    id = 0L,
-                    name = "Main",
-                    position = PhysicalPosition(rect.origin.x.toInt(), rect.origin.y.toInt()),
-                    resolution = PhysicalSize(
-                        (rect.size.width * scale).toInt(),
-                        (rect.size.height * scale).toInt(),
-                    ),
-                    scaleFactor = scale.toDouble(),
-                )
-            )
+        var ox = 0; var oy = 0; var w = 0; var h = 0
+        screen.bounds.useContents {
+            ox = this.origin.x.toInt()
+            oy = this.origin.y.toInt()
+            w = this.size.width.toInt()
+            h = this.size.height.toInt()
         }
+        return listOf(
+            DisplayInfo(
+                id = 0L,
+                name = "Main",
+                position = PhysicalPosition(ox, oy),
+                resolution = PhysicalSize(
+                    (w * scale).toInt(),
+                    (h * scale).toInt(),
+                ),
+                scaleFactor = scale.toDouble(),
+            )
+        )
     }
 
     override suspend fun enumerateWindows(): List<WindowInfo> = emptyList()
