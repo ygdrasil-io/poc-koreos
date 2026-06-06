@@ -135,7 +135,6 @@ class AppKitScreenCapturer : ScreenCapturer {
         ObjCRuntime.getClass("NSScreen")
     }
     private val selScreens = ObjCRuntime.sel("screens")
-    private val selFrame = ObjCRuntime.sel("frame")
     private val selBackingScaleFactor = ObjCRuntime.sel("backingScaleFactor")
 
     private fun enumerateDisplaysCG(): List<DisplayInfo> {
