@@ -19,6 +19,7 @@ import java.lang.foreign.GroupLayout
 import java.lang.foreign.Linker
 import java.lang.foreign.MemoryLayout
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SegmentAllocator
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.foreign.ValueLayout.ADDRESS
@@ -137,7 +138,18 @@ class AppKitScreenCapturer : ScreenCapturer {
     private val selScreens = ObjCRuntime.sel("screens")
     private val selBackingScaleFactor = ObjCRuntime.sel("backingScaleFactor")
 
+    private val selFrameOrigin = ObjCRuntime.sel("frameOrigin")
+    private val selFrameSize = ObjCRuntime.sel("frameSize")
+
+    private val objcMsgSendStretFixed: MethodHandle? by lazy {
+        val libObjc = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", Arena.global())
+        val addr = libObjc.find("objc_msgSend_stret").orElse(null)
+            ?: libObjc.find("objc_msgSend").orElse(null)
+        addr?.let { linker.downcallHandle(it, FunctionDescriptor.of(rectLayout, ADDRESS, ADDRESS)) }
+    }
+
     private fun enumerateDisplaysCG(): List<DisplayInfo> {
+        val stret = objcMsgSendStretFixed ?: return emptyList()
         return ObjCRuntime.autoreleasePool {
             val screensArray = ObjCRuntime.msgSend(ADDRESS, nsScreenClass, selScreens) as MemorySegment
             if (screensArray == MemorySegment.NULL) return@autoreleasePool emptyList()
@@ -146,14 +158,21 @@ class AppKitScreenCapturer : ScreenCapturer {
 
             (0 until count).map { i ->
                 val screen = ObjCRuntime.msgSend(ADDRESS, screensArray, selObjectAtIndex, i.toLong()) as MemorySegment
-                val rect = ObjCRuntime.msgSendStret(rectLayout, screen, selFrame)
-                val ox = rectOriginX.get(rect) as Double
-                val oy = rectOriginY.get(rect) as Double
-                val sw = rectSizeWidth.get(rect) as Double
-                val sh = rectSizeHeight.get(rect) as Double
+
+                // Get NSRect via direct objc_msgSend on native arena
+                var ox = 0.0; var oy = 0.0; var sw = 0.0; var sh = 0.0
+                Arena.ofConfined().use { rectArena ->
+                    val allocator = SegmentAllocator.prefixAllocator(rectArena.allocate(32L))
+                    val rectSeg = stret.invokeWithArguments(allocator, screen, selFrame) as MemorySegment
+                    ox = rectSeg.get(JAVA_DOUBLE, 0L)
+                    oy = rectSeg.get(JAVA_DOUBLE, 8L)
+                    sw = rectSeg.get(JAVA_DOUBLE, 16L)
+                    sh = rectSeg.get(JAVA_DOUBLE, 24L)
+                }
+
                 val scaleFactor = ObjCRuntime.msgSend(JAVA_DOUBLE, screen, selBackingScaleFactor) as Double
 
-                // Use NSScreen's deviceDescription to get the display ID
+                // Device description for display ID
                 val desc = ObjCRuntime.msgSend(ADDRESS, screen, ObjCRuntime.sel("deviceDescription")) as MemorySegment
                 val displayIdKey = ObjCRuntime.msgSend(ADDRESS, ObjCRuntime.getClass("NSString"), ObjCRuntime.sel("stringWithUTF8String:"), arena.allocateFrom("NSScreenNumber")) as MemorySegment
                 val displayIdNum = ObjCRuntime.msgSend(ADDRESS, desc, ObjCRuntime.sel("objectForKey:"), displayIdKey) as MemorySegment
