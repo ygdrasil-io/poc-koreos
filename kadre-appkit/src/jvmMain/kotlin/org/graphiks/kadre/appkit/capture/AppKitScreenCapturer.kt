@@ -142,7 +142,12 @@ class AppKitScreenCapturer : ScreenCapturer {
             }
             val err = callback.error
             if (err != null && err != MemorySegment.NULL) {
-                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (NSError* @ 0x%x)".format(err.address()))
+                val errorCode = ObjCRuntime.msgSend(JAVA_INT, err, ObjCRuntime.sel("code")) as Int
+                val domain = ObjCRuntime.msgSend(ADDRESS, err, ObjCRuntime.sel("domain")) as MemorySegment
+                val domainStr = if (domain != MemorySegment.NULL) ObjCRuntime.toJavaString(domain) else "?"
+                val desc = ObjCRuntime.msgSend(ADDRESS, err, ObjCRuntime.sel("localizedDescription")) as MemorySegment
+                val descStr = if (desc != MemorySegment.NULL) ObjCRuntime.toJavaString(desc) else "?"
+                System.err.println("[AppKitScreenCapturer] SCShareableContent error: domain=$domainStr code=$errorCode description=$descStr")
                 return null
             }
             if (callback.result == null || callback.result == MemorySegment.NULL) {
