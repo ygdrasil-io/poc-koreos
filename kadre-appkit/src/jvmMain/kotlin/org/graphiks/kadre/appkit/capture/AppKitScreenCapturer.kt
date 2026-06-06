@@ -181,8 +181,10 @@ class AppKitScreenCapturer : ScreenCapturer {
                 val error = countFn.invokeExact(
                     maxDisplays, listPtr, countPtr
                 ) as Int
+                System.err.println("[AppKitScreenCapturer] CGGetActiveDisplayList error=$error")
                 if (error != 0) return@use emptyList()
                 val count = countPtr.get(JAVA_INT, 0L)
+                System.err.println("[AppKitScreenCapturer] CGGetActiveDisplayList count=$count")
                 if (count <= 0) return@use emptyList()
 
                 (0 until count).map { i ->
