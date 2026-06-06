@@ -146,12 +146,12 @@ object ObjCRuntime {
         val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
         val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(addr, desc)
-        // Allocate struct-return storage. DoubleArray guarantees 8-byte alignment so that
-        // structs containing `double` fields (NSRect, NSPoint, …) pass Panama's alignment check.
-        val byteSize = returnLayout.byteSize().toInt()
-        val heapDoubles = DoubleArray((byteSize + 7) / Double.SIZE_BYTES)
-        val heapSeg = MemorySegment.ofArray(heapDoubles).asSlice(0, byteSize.toLong())
-        val allocator = SegmentAllocator.prefixAllocator(heapSeg)
+        // JDK 24+ rejects heap segments (MemorySegment.ofArray) in downcall allocators.
+        // Use a native allocation with 8-byte alignment for double-containing structs.
+        val byteSize = returnLayout.byteSize()
+        val arena = Arena.ofAuto()
+        val nativeSeg = arena.allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
+        val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
         val unwrapped = args.map { unwrap(it) }.toTypedArray()
         // Panama inserts the allocator as the implicit first argument for GroupLayout returns.
         return handle.invokeWithArguments(allocator, receiver, selector, *unwrapped) as MemorySegment
