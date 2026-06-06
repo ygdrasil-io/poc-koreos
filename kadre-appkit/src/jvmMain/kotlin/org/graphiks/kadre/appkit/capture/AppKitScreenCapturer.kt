@@ -26,6 +26,7 @@ import java.lang.foreign.ValueLayout.JAVA_BOOLEAN
 import java.lang.foreign.ValueLayout.JAVA_DOUBLE
 import java.lang.foreign.ValueLayout.JAVA_INT
 import java.lang.foreign.ValueLayout.JAVA_LONG
+import java.lang.invoke.MethodHandle
 
 class AppKitScreenCapturer : ScreenCapturer {
 
