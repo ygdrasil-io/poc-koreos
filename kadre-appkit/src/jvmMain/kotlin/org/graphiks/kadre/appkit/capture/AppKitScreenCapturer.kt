@@ -85,13 +85,17 @@ class AppKitScreenCapturer : ScreenCapturer {
     }
 
     override suspend fun enumerateDisplays(): List<DisplayInfo> {
-        val content = getShareableContent() ?: return emptyList()
-        return extractDisplays(content)
+        return ObjCRuntime.autoreleasePool {
+            val displaysArray = enumerateDisplaysCG()
+            if (displaysArray.isEmpty()) return emptyList()
+            displaysArray
+        }
     }
 
     override suspend fun enumerateWindows(): List<WindowInfo> {
-        val content = getShareableContent() ?: return emptyList()
-        return extractWindows(content)
+        return ObjCRuntime.autoreleasePool {
+            enumerateWindowsCG()
+        }
     }
 
     override suspend fun createSession(source: CaptureSource, config: CaptureConfig): CaptureSession {
@@ -122,6 +126,87 @@ class AppKitScreenCapturer : ScreenCapturer {
     override fun permissionStatus(): CapturePermission {
         val granted = preflightHandle?.get() ?: return CapturePermission.Pending
         return if (granted) CapturePermission.Granted else CapturePermission.Pending
+    }
+
+    // ── CoreGraphics-based enumeration (no TCC permission required) ─────
+
+    private val cgDisplayCount: MethodHandle? by lazy {
+        val cg = SymbolLookup.libraryLookup(
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", Arena.global()
+        )
+        try {
+            val linker = Linker.nativeLinker()
+            linker.downcallHandle(
+                cg.find("CGGetActiveDisplayList").orElseThrow(),
+                FunctionDescriptor.of(
+                    JAVA_INT,                          // CGError return
+                    JAVA_INT,                          // uint32_t maxDisplays
+                    ADDRESS,                           // CGDirectDisplayID* displayList
+                    ADDRESS,                           // uint32_t* displayCount
+                )
+            )
+        } catch (_: Throwable) { null }
+    }
+
+    private val cgDisplayBounds: MethodHandle? by lazy {
+        try {
+            val cg = SymbolLookup.libraryLookup(
+                "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", Arena.global()
+            )
+            val linker = Linker.nativeLinker()
+            linker.downcallHandle(
+                cg.find("CGDisplayBounds").orElseThrow(),
+                FunctionDescriptor.of(
+                    MemoryLayout.structLayout(
+                        JAVA_DOUBLE.withName("origin_x"),
+                        JAVA_DOUBLE.withName("origin_y"),
+                        JAVA_DOUBLE.withName("size_width"),
+                        JAVA_DOUBLE.withName("size_height"),
+                    ),
+                    JAVA_INT,                          // CGDirectDisplayID display
+                )
+            )
+        } catch (_: Throwable) { null }
+    }
+
+    private fun enumerateDisplaysCG(): List<DisplayInfo> {
+        val countFn = cgDisplayCount ?: return emptyList()
+        val boundsFn = cgDisplayBounds ?: return emptyList()
+        return try {
+            Arena.ofConfined().use { arena ->
+                val maxDisplays = 32
+                val listPtr = arena.allocate(JAVA_INT.byteSize() * maxDisplays)
+                val countPtr = arena.allocate(JAVA_INT)
+                val error = countFn.invokeExact(
+                    maxDisplays, listPtr, countPtr
+                ) as Int
+                if (error != 0) return@use emptyList()
+                val count = countPtr.get(JAVA_INT, 0L)
+                if (count <= 0) return@use emptyList()
+
+                (0 until count).map { i ->
+                    val displayId = listPtr.get(JAVA_INT, i.toLong() * JAVA_INT.byteSize()).toLong()
+                    val rectSeg = boundsFn.invokeExact(displayId.toInt()) as MemorySegment
+                    val ox = rectSeg.get(JAVA_DOUBLE, 0L)
+                    val oy = rectSeg.get(JAVA_DOUBLE, 8L)
+                    val sw = rectSeg.get(JAVA_DOUBLE, 16L)
+                    val sh = rectSeg.get(JAVA_DOUBLE, 24L)
+                    DisplayInfo(
+                        id = displayId,
+                        name = "Display $i",
+                        position = PhysicalPosition(ox.toInt(), oy.toInt()),
+                        resolution = PhysicalSize(sw.toInt(), sh.toInt()),
+                        scaleFactor = 2.0,
+                    )
+                }
+            }
+        } catch (_: Throwable) { emptyList() }
+    }
+
+    private fun enumerateWindowsCG(): List<WindowInfo> {
+        // Window enumeration via CoreGraphics window list: TCC permission required.
+        // Return empty list for now — users can specify window by ID if known.
+        return emptyList()
     }
 
     // ── Private helpers ────────────────────────────────────────────────
