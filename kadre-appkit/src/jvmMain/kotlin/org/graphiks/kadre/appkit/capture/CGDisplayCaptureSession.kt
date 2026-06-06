@@ -120,15 +120,11 @@ class CGDisplayCaptureSession(
                 val pixelData = ByteArray(dataLen)
                 MemorySegment.copy(bytePtr.reinterpret(dataLen.toLong()), ValueLayout.JAVA_BYTE, 0, pixelData, 0, dataLen)
 
-                val finalData = if (config.pixelFormat == PixelFormat.RGBA8) {
-                    bgraToRgba(pixelData)
-                } else pixelData
-
                 _frames.tryEmit(CaptureFrame(
                     size = PhysicalSize(width, height),
-                    format = if (finalData !== pixelData) config.pixelFormat else PixelFormat.BGRA8,
+                    format = PixelFormat.BGRA8,
                     stride = bytesPerRow,
-                    data = finalData,
+                    data = pixelData,
                     timestampNanos = System.nanoTime(),
                 ))
             } finally {

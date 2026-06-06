@@ -3,6 +3,7 @@ package org.graphiks.kadre.samples.hellotriangle
 import org.graphiks.kadre.core.capture.CaptureConfig
 import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.CaptureSource
+import org.graphiks.kadre.core.capture.PixelFormat
 import org.graphiks.kadre.core.capture.ScreenCapturer
 import kotlinx.coroutines.runBlocking
 import java.awt.image.BufferedImage
@@ -29,7 +30,7 @@ fun nativeCapture(path: String) = runBlocking {
 
     val session = capturer.createSession(
         CaptureSource.Display(primary.id),
-        CaptureConfig(frameRate = 1, captureCursor = false),
+        CaptureConfig(frameRate = 1, captureCursor = false, pixelFormat = PixelFormat.BGRA8),
     )
 
     val frame = session.captureSingle()
@@ -43,24 +44,42 @@ fun nativeCapture(path: String) = runBlocking {
     session.close()
 }
 
-private fun writePng(frame: CaptureFrame, path: String) {
-    val file = File(path)
-    val width = frame.size.width
-    val height = frame.size.height
-    val rawData = frame.data
+    private fun writePng(frame: CaptureFrame, path: String) {
+        val file = File(path)
+        val width = frame.size.width
+        val height = frame.size.height
+        val rawData = frame.data
 
-    val bufferedImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
-    val pixels = IntArray(width * height)
-    for (y in 0 until height) {
-        for (x in 0 until width) {
-            val i = y * frame.stride + x * 4
-            val b = rawData[i].toInt() and 0xFF
-            val g = rawData[i + 1].toInt() and 0xFF
-            val r = rawData[i + 2].toInt() and 0xFF
-            val a = rawData[i + 3].toInt() and 0xFF
-            pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        val bufferedImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val i = y * frame.stride + x * 4
+                when (frame.format) {
+                    PixelFormat.RGBA8 -> {
+                        val r = rawData[i].toInt() and 0xFF
+                        val g = rawData[i + 1].toInt() and 0xFF
+                        val b = rawData[i + 2].toInt() and 0xFF
+                        val a = rawData[i + 3].toInt() and 0xFF
+                        pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                    PixelFormat.BGRA8, PixelFormat.BGRX8 -> {
+                        val b = rawData[i].toInt() and 0xFF
+                        val g = rawData[i + 1].toInt() and 0xFF
+                        val r = rawData[i + 2].toInt() and 0xFF
+                        val a = rawData[i + 3].toInt() and 0xFF
+                        pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                    else -> {
+                        val b = rawData[i].toInt() and 0xFF
+                        val g = rawData[i + 1].toInt() and 0xFF
+                        val r = rawData[i + 2].toInt() and 0xFF
+                        val a = rawData[i + 3].toInt() and 0xFF
+                        pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                }
+            }
         }
+        bufferedImage.setRGB(0, 0, width, height, pixels, 0, width)
+        ImageIO.write(bufferedImage, "png", file)
     }
-    bufferedImage.setRGB(0, 0, width, height, pixels, 0, width)
-    ImageIO.write(bufferedImage, "png", file)
-}
