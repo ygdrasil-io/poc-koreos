@@ -13,8 +13,6 @@ import java.lang.foreign.ValueLayout.JAVA_LONG
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
-import java.lang.foreign.FunctionDescriptor
-import java.lang.foreign.Linker
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
