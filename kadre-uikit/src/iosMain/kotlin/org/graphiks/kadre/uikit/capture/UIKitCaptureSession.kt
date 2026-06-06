@@ -48,7 +48,7 @@ class UIKitCaptureSession(
 
     private suspend fun startCapture() = suspendCancellableCoroutine<Unit> { cont ->
         RPScreenRecorder.sharedRecorder().startCaptureWithHandler(
-            handler = { sampleBuffer, _, error ->
+            handler = { sampleBuffer: CMSampleBufferRef?, _: RPVideoSampleOrientation?, error: NSError? ->
                 if (error != null) {
                     println("[UIKitCaptureSession] Capture error: ${error.localizedDescription}")
                     return@startCaptureWithHandler
