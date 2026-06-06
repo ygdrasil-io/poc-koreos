@@ -37,11 +37,11 @@ internal object ObjCBlocks {
     fun create(invokeFn: MemorySegment, arena: Arena): MemorySegment {
         val descriptor = arena.allocate(16L)
         descriptor.set(JAVA_LONG, 0L, 0L)
-        descriptor.set(JAVA_LONG, 8L, 40L)
+        descriptor.set(JAVA_LONG, 8L, 32L)
 
-        val block = arena.allocate(40L)
+        val block = arena.allocate(32L)
         block.set(ADDRESS, 0L, NSConcreteGlobalBlock)
-        block.set(JAVA_INT, 8L, 0)
+        block.set(JAVA_INT, 8L, 0x10000000) // BLOCK_IS_GLOBAL
         block.set(JAVA_INT, 12L, 0)
         block.set(ADDRESS, 16L, invokeFn)
         block.set(ADDRESS, 24L, descriptor)

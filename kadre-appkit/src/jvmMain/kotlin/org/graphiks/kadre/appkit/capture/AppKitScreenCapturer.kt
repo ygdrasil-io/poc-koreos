@@ -135,8 +135,19 @@ class AppKitScreenCapturer : ScreenCapturer {
             val sel = ObjCRuntime.sel("getShareableContentWithCompletionHandler:")
             ObjCRuntime.msgSend(null, scShareableContentClass, sel, block)
 
-            if (!callback.await(5000)) return null
-            if (callback.error != null) return null
+            val completed = callback.await(10000)
+            if (!completed) {
+                System.err.println("[AppKitScreenCapturer] Timeout waiting for SCShareableContent callback")
+                return null
+            }
+            if (callback.error != null && callback.error != MemorySegment.NULL) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (NSError* @ 0x%x)".format(callback.error.address()))
+                return null
+            }
+            if (callback.result == null || callback.result == MemorySegment.NULL) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent returned null content")
+                return null
+            }
             return callback.result
         } finally {
             blockArena.close()
