@@ -2,8 +2,6 @@
 
 package org.graphiks.kadre.uikit.capture
 
-import kotlinx.cinterop.ByteVarOf
-import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.memcpy
@@ -31,7 +29,6 @@ import platform.CoreVideo.CVPixelBufferGetWidth
 import platform.CoreVideo.CVPixelBufferLockBaseAddress
 import platform.CoreVideo.CVPixelBufferUnlockBaseAddress
 import platform.CoreVideo.kCVPixelBufferLock_ReadOnly
-import platform.Foundation.NSDate
 import platform.Foundation.NSError
 import platform.ReplayKit.RPScreenRecorder
 import kotlin.coroutines.resume
@@ -52,7 +49,7 @@ class UIKitCaptureSession(
 
     private suspend fun startCapture() = suspendCancellableCoroutine<Unit> { cont ->
         RPScreenRecorder.sharedRecorder().startCaptureWithHandler(
-            captureHandler = { sampleBuffer: CMSampleBufferRef?, _: CPointer<*>?, error: NSError? ->
+            captureHandler = { sampleBuffer: CMSampleBufferRef?, _: Long, error: NSError? ->
                 if (error != null) {
                     println("[UIKitCaptureSession] Capture error: ${error.localizedDescription}")
                     return@startCaptureWithHandler
@@ -94,7 +91,7 @@ class UIKitCaptureSession(
                 format = PixelFormat.BGRA8,
                 stride = stride,
                 data = data,
-                timestampNanos = (NSDate().timeIntervalSince1970 * 1_000_000_000).toLong(),
+                timestampNanos = System.nanoTime(),
             )
             _frames.tryEmit(frame)
         } finally {
