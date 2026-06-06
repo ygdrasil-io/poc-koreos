@@ -9,18 +9,23 @@ import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
-/** CLI tool: captures one frame from the primary display and saves as PNG. */
-fun main() = runBlocking {
+/**
+ * Native screen capture mode using the ScreenCapturer API.
+ *
+ * Captures one frame from the primary display and saves it as PNG.
+ * Supports macOS (ScreenCaptureKit), Windows (DXGI/GDI), X11 (XComposite+XShm).
+ */
+fun nativeCapture(path: String) = runBlocking {
     val capturer = ScreenCapturer.resolve()
         ?: error("No screen capturer available on this platform")
 
-    println("Enumerating displays...")
+    println("[native-capture] Enumerating displays...")
     val displays = capturer.enumerateDisplays()
-    println("Found ${displays.size} display(s):")
+    println("[native-capture] Found ${displays.size} display(s):")
     displays.forEach { println("  ${it.name}: ${it.resolution} @ ${it.position}") }
 
     val primary = displays.firstOrNull() ?: error("No displays found")
-    println("Capturing from: ${primary.name}")
+    println("[native-capture] Capturing from: ${primary.name}")
 
     val session = capturer.createSession(
         CaptureSource.Display(primary.id),
@@ -28,10 +33,12 @@ fun main() = runBlocking {
     )
 
     val frame = session.captureSingle()
-    println("Captured frame: ${frame.size.width}x${frame.size.height}, format=${frame.format}")
+    println("[native-capture] Captured frame: ${frame.size.width}x${frame.size.height}, format=${frame.format}")
 
-    writePng(frame, "capture-output.png")
-    println("Saved to capture-output.png")
+    val outFile = File(path)
+    outFile.parentFile?.mkdirs()
+    writePng(frame, path)
+    println("[native-capture] Saved to ${outFile.absolutePath} (${outFile.length()} octets)")
 
     session.close()
 }
