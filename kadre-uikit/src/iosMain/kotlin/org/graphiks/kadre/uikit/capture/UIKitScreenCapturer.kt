@@ -9,13 +9,14 @@ import org.graphiks.kadre.core.capture.CaptureSource
 import org.graphiks.kadre.core.capture.DisplayInfo
 import org.graphiks.kadre.core.capture.ScreenCapturer
 import org.graphiks.kadre.core.capture.WindowInfo
+import platform.CoreGraphics.CGRect
 import platform.UIKit.UIScreen
 
 class UIKitScreenCapturer : ScreenCapturer {
 
     override suspend fun enumerateDisplays(): List<DisplayInfo> {
         val screen = UIScreen.mainScreen
-        val bounds = screen.bounds
+        val bounds: CGRect = screen.bounds
         val scale = screen.scale
         return listOf(
             DisplayInfo(

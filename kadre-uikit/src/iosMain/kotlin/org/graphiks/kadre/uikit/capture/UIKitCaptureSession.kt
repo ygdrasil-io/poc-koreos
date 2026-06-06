@@ -2,8 +2,11 @@
 
 package org.graphiks.kadre.uikit.capture
 
+import kotlinx.cinterop.ByteVarOf
+import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.memcpy
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,10 +36,6 @@ import platform.Foundation.NSError
 import platform.ReplayKit.RPScreenRecorder
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.allocArray
 
 class UIKitCaptureSession(
     source: CaptureSource.Display,
@@ -53,7 +52,7 @@ class UIKitCaptureSession(
 
     private suspend fun startCapture() = suspendCancellableCoroutine<Unit> { cont ->
         RPScreenRecorder.sharedRecorder().startCaptureWithHandler(
-            captureHandler = { sampleBuffer: CPointer<*>, _: CPointer<*>?, error: NSError? ->
+            captureHandler = { sampleBuffer: CMSampleBufferRef?, _: CPointer<*>?, error: NSError? ->
                 if (error != null) {
                     println("[UIKitCaptureSession] Capture error: ${error.localizedDescription}")
                     return@startCaptureWithHandler
@@ -87,15 +86,7 @@ class UIKitCaptureSession(
 
             val data = ByteArray(dataSize)
             data.usePinned { pinned ->
-                memScoped {
-                    val src = allocArray<ByteVar>(dataSize)
-                    for (i in 0 until dataSize) {
-                        src[i] = baseAddress.reinterpret<ByteVar>()[i]
-                    }
-                    for (i in 0 until dataSize) {
-                        pinned.addressOf(i)[0] = src[i]
-                    }
-                }
+                memcpy(pinned.addressOf(0), baseAddress, dataSize.toULong())
             }
 
             val frame = CaptureFrame(
@@ -103,7 +94,7 @@ class UIKitCaptureSession(
                 format = PixelFormat.BGRA8,
                 stride = stride,
                 data = data,
-                timestampNanos = (NSDate().timeIntervalSince1970 * 1_000_000_000L).toLong(),
+                timestampNanos = (NSDate().timeIntervalSince1970 * 1_000_000_000).toLong(),
             )
             _frames.tryEmit(frame)
         } finally {
