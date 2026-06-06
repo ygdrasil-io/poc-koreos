@@ -160,33 +160,33 @@ object ObjCRuntime {
      *   valid for the lifetime of [structReturnArena].
      */
     fun msgSendStret(returnLayout: GroupLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): MemorySegment {
-        val addr = objcMsgSendStretAddr ?: objcMsgSendAddr
         val byteSize = returnLayout.byteSize()
         val arena = Arena.ofConfined()
         val nativeSeg = arena.allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
         val unwrapped = args.map { unwrap(it) }.toTypedArray()
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
 
-        if (ARCH == "x86_64") {
-            // On x86-64 Apple, objc_msgSend_stret expects:
-            //   RDI = self, RSI = _cmd, RDX = hidden struct return buffer
-            // Panama's struct-return convention (System V AMD64) puts:
-            //   RDI = buffer, RSI = self, RDX = _cmd
-            // — the wrong register for self, causing a SIGSEGV in the
-            // cache lookup when the buffer address is dereferenced as isa.
-            //
-            // Workaround: declare the function as void and pass the buffer
-            // as a regular pointer argument in the 3rd position (RDX).
+        // macOS 26 no longer exports objc_msgSend_stret — everything goes
+        // through objc_msgSend.  On ARM64 this is transparent (buffer in x8).
+        // On x86_64 Panama's struct-return ABI (System V) puts the hidden
+        // buffer in RDI, but objc_msgSend expects self in RDI and the buffer
+        // (if any) in RDX.
+        //
+        // For small structs (≤ 16 bytes, register-return) no buffer is needed
+        // — Panama reads from XMM0:XMM1 / RAX:RDX directly — so the standard
+        // struct-return descriptor works fine.
+        // For large structs (> 16 bytes) we must explicitly pass the buffer
+        // as a third ADDRESS argument so it lands in RDX.
+        val useHiddenBuffer = ARCH == "x86_64" && byteSize > MAX_REGISTER_RETURN_SIZE
+        if (useHiddenBuffer) {
             val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             val desc = FunctionDescriptor.ofVoid(*baseLayouts, *argLayouts)
-            val handle = linker.downcallHandle(addr, desc)
+            val handle = linker.downcallHandle(objcMsgSendAddr, desc)
             handle.invokeWithArguments(receiver, selector, nativeSeg, *unwrapped)
         } else {
-            // ARM64: buffer in x8, self in x0, _cmd in x1 — Panama's
-            // struct-return convention matches Apple's ARM64 ABI.
             val baseLayouts = arrayOf<MemoryLayout>(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
-            val handle = linker.downcallHandle(addr, desc)
+            val handle = linker.downcallHandle(objcMsgSendAddr, desc)
             val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
             handle.invokeWithArguments(allocator, receiver, selector, *unwrapped)
         }
