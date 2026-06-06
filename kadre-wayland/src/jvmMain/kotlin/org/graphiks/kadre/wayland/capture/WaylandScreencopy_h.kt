@@ -447,13 +447,13 @@ internal fun createMemFd(name: String, size: Int): Int {
     val memfd = org.graphiks.kadre.wayland.nativeMemfdCreate ?: return -1
     val ftruncate = org.graphiks.kadre.wayland.nativeFtruncate ?: return -1
     return try {
-        val arena = Arena.ofConfined()
-        val nameSeg = arena.allocateFrom(name)
-        val fd = memfd.invokeExact(nameSeg, 0) as Int
-        if (fd < 0) return -1
-        ftruncate.invokeExact(fd, size.toLong()) as Int
-        arena.close()
-        fd
+        Arena.ofConfined().use { arena ->
+            val nameSeg = arena.allocateFrom(name)
+            val fd = memfd.invokeExact(nameSeg, 0) as Int
+            if (fd < 0) return -1
+            ftruncate.invokeExact(fd, size.toLong()) as Int
+            fd
+        }
     } catch (_: Throwable) { -1 }
 }
 

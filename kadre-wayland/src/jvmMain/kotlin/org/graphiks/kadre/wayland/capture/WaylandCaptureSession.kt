@@ -34,8 +34,9 @@ class WaylandCaptureSession(
         displayPtr = ptr
         try {
             discoverGlobals()
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             disconnectWayland(displayPtr)
+            scope.cancel()
             throw e
         }
 
@@ -43,14 +44,7 @@ class WaylandCaptureSession(
             try {
                 captureLoop()
             } catch (_: CancellationException) {
-            } catch (e: Throwable) {
-                _frames.tryEmit(CaptureFrame(
-                    size = PhysicalSize(0, 0),
-                    format = config.pixelFormat,
-                    stride = 0,
-                    data = ByteArray(0),
-                    timestampNanos = System.nanoTime(),
-                ))
+            } catch (_: Exception) {
             }
         }
     }
@@ -133,7 +127,7 @@ class WaylandCaptureSession(
             throw CaptureError.Internal(RuntimeException("wl_output bind returned null"))
     }
 
-    private fun captureLoop() {
+    private suspend fun captureLoop() {
         while (isActive()) {
             val framePtr = requestFrame()
             if (framePtr == 0L) {
@@ -193,10 +187,10 @@ class WaylandCaptureSession(
         }
     }
 
-    private fun isActive(): Boolean =
-        !Thread.currentThread().isInterrupted && scope.isActive
+    private suspend fun isActive(): Boolean =
+        scope.isActive
 
-    private fun requestFrame(): Long {
+    private suspend fun requestFrame(): Long {
         val captureFn = zwlrScreencopyManagerCaptureOutput ?: return 0L
         return try {
             val overlayCursor = if (config.captureCursor) 1 else 0
@@ -317,9 +311,9 @@ class WaylandCaptureSession(
         } catch (_: Throwable) {}
     }
 
-    private fun sleepDelay() {
+    private suspend fun sleepDelay() {
         val delayMs = if (config.frameRate > 0) 1000L / config.frameRate else 33L
-        try { Thread.sleep(delayMs) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        delay(delayMs)
     }
 
     private fun flushDisplay() {
@@ -354,14 +348,14 @@ class WaylandCaptureSession(
     }
 
     override fun close() {
+        scope.cancel()
         cleanupFrameResources()
-        arena.close()
         if (registryPtr != 0L) proxyDestroy(registryPtr)
         if (shmPtr != 0L) proxyDestroy(shmPtr)
         if (screencopyManagerPtr != 0L) proxyDestroy(screencopyManagerPtr)
         if (outputPtr != 0L) proxyDestroy(outputPtr)
         if (displayPtr != 0L) disconnectWayland(displayPtr)
-        scope.cancel()
+        arena.close()
     }
 }
 
