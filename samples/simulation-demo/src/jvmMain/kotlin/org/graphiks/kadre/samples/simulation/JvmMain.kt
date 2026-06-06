@@ -41,6 +41,7 @@ private fun runComposeApp() = kadreApplication {
     renderer.setContent { SimulationDemoMain(appHandler) }
 
     win.window.focusWindow()
+    win.window.requestRedraw()
 
     println("[simulation-demo] Ready — ${inner.width}×${inner.height} @ ${win.window.scaleFactor}x (${renderer::class.simpleName})")
 
