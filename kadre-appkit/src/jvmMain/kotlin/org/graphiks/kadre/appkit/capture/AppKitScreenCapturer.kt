@@ -126,8 +126,22 @@ class AppKitScreenCapturer : ScreenCapturer {
 
     // ── Private helpers ────────────────────────────────────────────────
 
+    private var captureErrorDescription: String? = null
+
     private fun getShareableContent(): MemorySegment? {
-        val callback = ObjCCallback2()
+        captureErrorDescription = null
+        val callback = ObjCCallback2 { result, error ->
+            if (error != null && error != MemorySegment.NULL) {
+                ObjCRuntime.autoreleasePool {
+                    val errorCode = ObjCRuntime.msgSend(JAVA_INT, error, ObjCRuntime.sel("code")) as Int
+                    val domain = ObjCRuntime.msgSend(ADDRESS, error, ObjCRuntime.sel("domain")) as MemorySegment
+                    val domainStr = if (domain != MemorySegment.NULL) ObjCRuntime.toJavaString(domain) else "?"
+                    val desc = ObjCRuntime.msgSend(ADDRESS, error, ObjCRuntime.sel("localizedDescription")) as MemorySegment
+                    val descStr = if (desc != MemorySegment.NULL) ObjCRuntime.toJavaString(desc) else "?"
+                    captureErrorDescription = "[$domainStr] code=$errorCode: $descStr"
+                }
+            }
+        }
         val blockArena = Arena.ofConfined()
         try {
             val upcallStub = linker.upcallStub(callback.methodHandle, callback.fnDescriptor, blockArena)
@@ -140,16 +154,9 @@ class AppKitScreenCapturer : ScreenCapturer {
                 System.err.println("[AppKitScreenCapturer] Timeout waiting for SCShareableContent callback")
                 return null
             }
-            val err = callback.error
-            if (err != null && err != MemorySegment.NULL) {
-                ObjCRuntime.autoreleasePool {
-                    val errorCode = ObjCRuntime.msgSend(JAVA_INT, err, ObjCRuntime.sel("code")) as Int
-                    val domain = ObjCRuntime.msgSend(ADDRESS, err, ObjCRuntime.sel("domain")) as MemorySegment
-                    val domainStr = if (domain != MemorySegment.NULL) ObjCRuntime.toJavaString(domain) else "?"
-                    val desc = ObjCRuntime.msgSend(ADDRESS, err, ObjCRuntime.sel("localizedDescription")) as MemorySegment
-                    val descStr = if (desc != MemorySegment.NULL) ObjCRuntime.toJavaString(desc) else "?"
-                    System.err.println("[AppKitScreenCapturer] SCShareableContent error: domain=$domainStr code=$errorCode description=$descStr")
-                }
+            val errDesc = captureErrorDescription
+            if (errDesc != null) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent error: $errDesc")
                 return null
             }
             if (callback.result == null || callback.result == MemorySegment.NULL) {
