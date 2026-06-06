@@ -19,32 +19,59 @@ class ImeScenario : KeyboardScenario(
     }
 
     override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        super.onKeyEvent(event)
+        val ke = event.event
+        if (!ke.isPressed) return
 
-        if (event.pressed) {
-            val text = event.text ?: ""
-            if (text.isNotBlank()) {
-                inputBuffer.append(text)
-            }
+        val text = ke.text ?: ""
+        if (text.isNotBlank()) {
+            inputBuffer.append(text)
+        }
 
-            if (event.key == Key.ENTER) {
+        when (ke.physicalKey) {
+            PhysicalKey.Code(KeyCode.Enter) -> {
                 onEvent?.invoke(ScenarioEvent.Result(inputBuffer.toString()))
                 inputBuffer.clear()
             }
+            PhysicalKey.Code(KeyCode.Backspace) -> {
+                if (inputBuffer.isNotEmpty()) {
+                    inputBuffer.deleteCharAt(inputBuffer.length - 1)
+                }
+            }
+            else -> {}
+        }
 
-            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                isRunning = true,
-                message = "Buffer: \"$inputBuffer\"",
-                data = mapOf("buffer" to inputBuffer.toString())
-            )))
+        onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+            isRunning = true,
+            message = "Buffer: \"$inputBuffer\"",
+            data = mapOf("buffer" to inputBuffer.toString())
+        )))
+    }
+
+    override fun onWindowEvent(event: WindowEvent) {
+        super.onWindowEvent(event)
+        if (event is WindowEvent.Ime) {
+            onImeEvent(event)
         }
     }
 
-    override fun onImeEvent(event: WindowEvent.Ime) {
-        onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-            isRunning = true,
-            message = "IME: preedit='${event.preedit}' cursor=${event.cursorAnchor}",
-            data = mapOf("preedit" to event.preedit, "cursorAnchor" to event.cursorAnchor)
-        )))
+    private fun onImeEvent(event: WindowEvent.Ime) {
+        when (val ime = event.ime) {
+            is WindowEvent.Ime.ImeEvent.Preedit -> {
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "IME: preedit='${ime.text}' cursor=${ime.cursorRange?.let { "${it.first}-${it.second}" } ?: "?"}",
+                    data = mapOf("preedit" to ime.text, "cursorRange" to (ime.cursorRange?.toString() ?: "none"))
+                )))
+            }
+            is WindowEvent.Ime.ImeEvent.Commit -> {
+                inputBuffer.append(ime.text)
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "IME commit: '${ime.text}' | Buffer: \"$inputBuffer\"",
+                    data = mapOf("commit" to ime.text, "buffer" to inputBuffer.toString())
+                )))
+            }
+            else -> {}
+        }
     }
 }

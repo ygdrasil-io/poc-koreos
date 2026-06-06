@@ -1,6 +1,15 @@
 package org.graphiks.kadre.samples.simulation
 
-import org.graphiks.kadre.core.*
+import org.graphiks.kadre.ActiveEventLoop
+import org.graphiks.kadre.ApplicationHandler
+import org.graphiks.kadre.DeviceEvent
+import org.graphiks.kadre.DeviceId
+import org.graphiks.kadre.EventLoop
+import org.graphiks.kadre.PhysicalSize
+import org.graphiks.kadre.Window
+import org.graphiks.kadre.WindowAttributes
+import org.graphiks.kadre.WindowId
+import org.graphiks.kadre.core.WindowEvent
 
 class SimulationAppHandler : ApplicationHandler {
     private var activeWindow: Window? = null
@@ -17,30 +26,21 @@ class SimulationAppHandler : ApplicationHandler {
 
     private var scenarioEventCallback: (ScenarioEvent) -> Unit = {}
 
-    override fun resumed(eventLoop: ActiveEventLoop) {
-        this.eventLoop = eventLoop
-    }
-
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         if (activeWindow != null) return
+
+        this.eventLoop = eventLoop
 
         activeWindow = eventLoop.createWindow(
             WindowAttributes(
                 title = "Kadre Simulation Demo",
-                width = 1200,
-                height = 800,
+                size = PhysicalSize(1200, 800),
                 resizable = true,
-                visible = true
+                visible = true,
             )
         )
 
         registerScenarios()
-    }
-
-    override fun suspended(eventLoop: ActiveEventLoop) {
-        activeScenario?.stop()
-        activeScenario = null
-        isInScenario = false
     }
 
     override fun windowEvent(
@@ -49,10 +49,6 @@ class SimulationAppHandler : ApplicationHandler {
         event: WindowEvent
     ) {
         when (event) {
-            is WindowEvent.KeyInput -> activeScenario?.onKeyEvent(event)
-            is WindowEvent.Mouse -> activeScenario?.onMouseEvent(event)
-            is WindowEvent.Touch -> activeScenario?.onTouchEvent(event)
-            is WindowEvent.Ime -> activeScenario?.onImeEvent(event)
             is WindowEvent.CloseRequested -> {
                 activeScenario?.stop()
                 activeScenario = null
@@ -62,12 +58,13 @@ class SimulationAppHandler : ApplicationHandler {
             is WindowEvent.Destroyed -> {
                 if (windowId == activeWindow?.id) activeWindow = null
             }
-            else -> {}
+            else -> {
+                activeScenario?.onWindowEvent(event)
+            }
         }
     }
 
     override fun deviceEvent(eventLoop: ActiveEventLoop, deviceId: DeviceId, event: DeviceEvent) {
-        // TODO: Handle gamepad events (P1)
     }
 
     fun launchScenario(scenario: Scenario, onEvent: (ScenarioEvent) -> Unit) {

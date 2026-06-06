@@ -12,12 +12,7 @@ interface Scenario {
 
     fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit)
     fun stop()
-    fun pause() {}
-    fun resume() {}
-    fun onKeyEvent(event: WindowEvent.KeyInput) {}
-    fun onMouseEvent(event: WindowEvent.Mouse) {}
-    fun onTouchEvent(event: WindowEvent.Touch) {}
-    fun onImeEvent(event: WindowEvent.Ime) {}
+    fun onWindowEvent(event: WindowEvent) {}
     fun runHeadless(args: List<String>): ScenarioResult
 }
 

@@ -35,6 +35,9 @@ abstract class TouchScenario(
         isRunning = false
     }
 
+    override fun onWindowEvent(event: WindowEvent) {
+    }
+
     override fun runHeadless(args: List<String>): ScenarioResult {
         return ScenarioResult(
             success = true,

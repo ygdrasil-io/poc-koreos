@@ -2,13 +2,6 @@ plugins {
     kotlin("multiplatform")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
-    id("org.jetbrains.kotlin.plugin.allopen") version "2.0.0"
-    `maven-publish`
-}
-
-repositories {
-    mavenCentral()
-    maven("https://repo.graphiks.org/repository/maven-public")
 }
 
 kotlin {
@@ -19,14 +12,19 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(project(":kadre"))
-                implementation(project(":kadre-appkit"))
-                implementation(project(":kadre-test"))
                 implementation(compose.runtime)
                 implementation(compose.ui)
                 implementation(compose.foundation)
                 implementation(compose.material)
                 implementation(compose.material3)
                 implementation(compose.desktop.currentOs)
+            }
+        }
+        jvmMain {
+            dependencies {
+                implementation(project(":kadre-win32"))
+                implementation(project(":kadre-x11"))
+                implementation(project(":kadre-wayland"))
             }
         }
         commonTest {

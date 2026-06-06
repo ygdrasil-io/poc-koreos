@@ -7,6 +7,7 @@ class ScenarioRegistryTest {
     @BeforeTest
     fun setUp() {
         ScenarioRegistry.clear()
+        ScenarioRegistry.markInitialized()
     }
 
     @AfterTest
@@ -15,12 +16,8 @@ class ScenarioRegistryTest {
     }
 
     @Test
-    fun `registry should be empty before initialization`() {
-        assertTrue(ScenarioRegistry.all().isEmpty())
-    }
-
-    @Test
     fun `register scenario should add to registry`() {
+        assertTrue(ScenarioRegistry.all().isEmpty())
         ScenarioRegistry.register(SimpleScenario(id = "test-1", title = "Test Scenario"))
 
         assertEquals(1, ScenarioRegistry.all().size)
@@ -71,6 +68,7 @@ class ScenarioRegistryTest {
         assertEquals(1, ScenarioRegistry.all().size)
 
         ScenarioRegistry.clear()
+        ScenarioRegistry.markInitialized()
         assertTrue(ScenarioRegistry.all().isEmpty())
     }
 
@@ -100,6 +98,10 @@ class ScenarioRegistryTest {
     fun `getAvailableFor should respect platform availability`() {
         val macOnly = ScenarioMetadata(
             scenario = SimpleScenario(id = "mac-only", title = "Mac Only"),
+            platformSupport = mapOf(
+                Platform.MACOS to SupportLevel.FULL,
+                Platform.LINUX_X11 to SupportLevel.NOT_AVAILABLE
+            ),
             availableOn = setOf(Platform.MACOS)
         )
         ScenarioRegistry.register(macOnly)

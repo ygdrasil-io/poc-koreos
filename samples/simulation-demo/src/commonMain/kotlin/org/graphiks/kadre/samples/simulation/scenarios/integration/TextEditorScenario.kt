@@ -42,23 +42,32 @@ class TextEditorScenario : Scenario {
         isRunning = false
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        if (!isRunning || !event.pressed) return
+    override fun onWindowEvent(event: WindowEvent) {
+        when (event) {
+            is WindowEvent.KeyInput -> onKeyEvent(event)
+            is WindowEvent.Ime -> onImeEvent(event)
+            else -> {}
+        }
+    }
+
+    private fun onKeyEvent(event: WindowEvent.KeyInput) {
+        if (!isRunning) return
+        val ke = event.event
+
+        if (!ke.isPressed) return
 
         keystrokeCount++
 
-        val text = event.text ?: ""
-        val isCtrl = event.modifiers.any { it == KeyModifier.CTRL }
+        val text = ke.text ?: ""
+        val isCtrl = ke.modifiers.ctrl
 
         if (isCtrl) {
-            when (event.key) {
-                Key.S -> {
-                    // Save action
+            when (ke.physicalKey) {
+                PhysicalKey.Code(KeyCode.KeyS) -> {
                     onEvent?.invoke(ScenarioEvent.Message("💾 Texte sauvegardé (${textContent.length} caractères)", MessageSeverity.INFO))
                     onEvent?.invoke(ScenarioEvent.Result(textContent.toString()))
                 }
-                Key.Z -> {
-                    // Undo placeholder
+                PhysicalKey.Code(KeyCode.KeyZ) -> {
                     onEvent?.invoke(ScenarioEvent.Message("↩️ Annulation (simulée)", MessageSeverity.INFO))
                 }
                 else -> {}
@@ -66,19 +75,19 @@ class TextEditorScenario : Scenario {
             return
         }
 
-        when (event.key) {
-            Key.BACKSPACE -> {
+        when (ke.physicalKey) {
+            PhysicalKey.Code(KeyCode.Backspace) -> {
                 if (cursorPosition > 0) {
                     textContent.deleteCharAt(cursorPosition - 1)
                     cursorPosition--
                 }
             }
-            Key.ENTER -> {
+            PhysicalKey.Code(KeyCode.Enter) -> {
                 textContent.insert(cursorPosition, '\n')
                 cursorPosition++
             }
-            Key.LEFT -> cursorPosition = (cursorPosition - 1).coerceAtLeast(0)
-            Key.RIGHT -> cursorPosition = cursorPosition.coerceAtMost(textContent.length)
+            PhysicalKey.Code(KeyCode.ArrowLeft) -> cursorPosition = (cursorPosition - 1).coerceAtLeast(0)
+            PhysicalKey.Code(KeyCode.ArrowRight) -> cursorPosition = cursorPosition.coerceAtMost(textContent.length)
             else -> {
                 if (text.isNotBlank()) {
                     textContent.insert(cursorPosition, text)
@@ -107,12 +116,17 @@ class TextEditorScenario : Scenario {
         )))
     }
 
-    override fun onImeEvent(event: WindowEvent.Ime) {
-        onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-            isRunning = true,
-            message = "🈳 IME: '${event.preedit}'",
-            data = mapOf("ime_preedit" to event.preedit)
-        )))
+    private fun onImeEvent(event: WindowEvent.Ime) {
+        when (val ime = event.ime) {
+            is WindowEvent.Ime.ImeEvent.Preedit -> {
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "🈳 IME: '${ime.text}'",
+                    data = mapOf("ime_preedit" to ime.text)
+                )))
+            }
+            else -> {}
+        }
     }
 
     override fun runHeadless(args: List<String>): ScenarioResult {

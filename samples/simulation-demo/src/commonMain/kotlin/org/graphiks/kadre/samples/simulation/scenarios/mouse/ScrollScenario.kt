@@ -17,10 +17,8 @@ class ScrollScenario : MouseScenario(
         onEvent(ScenarioEvent.Message("Utilisez la molette de la souris pour voir les événements de scroll", MessageSeverity.INFO))
     }
 
-    override fun onMouseEvent(event: WindowEvent.Mouse) {
-        super.onMouseEvent(event)
-
-        if (event is WindowEvent.Mouse.Scrolled) {
+    override fun onWindowEvent(event: WindowEvent) {
+        if (event is WindowEvent.MouseWheel) {
             mouseEventsReceived++
             scrollY += event.deltaY
             scrollX += event.deltaX

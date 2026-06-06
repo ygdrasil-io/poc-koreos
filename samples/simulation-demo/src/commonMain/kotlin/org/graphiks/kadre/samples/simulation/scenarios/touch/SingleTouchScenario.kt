@@ -14,20 +14,38 @@ class SingleTouchScenario : TouchScenario(
         onEvent(ScenarioEvent.Message("Touchez l'écran pour voir les événements", MessageSeverity.INFO))
     }
 
-    override fun onTouchEvent(event: WindowEvent.Touch) {
-        eventsReceived++
-
-        val action = event.phase?.name?.lowercase() ?: "unknown"
-        val pos = "${event.x.toInt()},${event.y.toInt()}"
-
-        onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-            isRunning = true,
-            message = "👆 Touch: $action à ($pos)",
-            data = mapOf(
-                "phase" to action,
-                "x" to event.x.toInt(),
-                "y" to event.y.toInt()
-            )
-        )))
+    override fun onWindowEvent(event: WindowEvent) {
+        when (event) {
+            is WindowEvent.PointerButton -> {
+                val touch = event.button as? ButtonSource.Touch ?: return
+                eventsReceived++
+                val action = if (event.state == KeyState.Pressed) "touch_start" else "touch_end"
+                val pos = "${event.position.x.toInt()},${event.position.y.toInt()}"
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "👆 Touch: $action à ($pos)",
+                    data = mapOf(
+                        "phase" to action,
+                        "x" to event.position.x.toInt(),
+                        "y" to event.position.y.toInt()
+                    )
+                )))
+            }
+            is WindowEvent.PointerMoved -> {
+                val touch = event.source as? PointerSource.Touch ?: return
+                eventsReceived++
+                val pos = "${event.position.x.toInt()},${event.position.y.toInt()}"
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "👆 Touch: moved à ($pos)",
+                    data = mapOf(
+                        "phase" to "moved",
+                        "x" to event.position.x.toInt(),
+                        "y" to event.position.y.toInt()
+                    )
+                )))
+            }
+            else -> {}
+        }
     }
 }

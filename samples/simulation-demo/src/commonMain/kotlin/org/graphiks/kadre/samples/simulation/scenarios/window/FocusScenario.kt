@@ -13,29 +13,40 @@ class FocusScenario : WindowScenario(
 
     override fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit) {
         super.start(window, eventLoop, onEvent)
-        onEvent(ScenarioEvent.Message("Déplacez la fenêtre, changez de focus, minimisez-la", MessageSeverity.INFO))
+        onEvent(ScenarioEvent.Message("Déplacez la fenêtre, changez de focus, minimisez-la (touche M)", MessageSeverity.INFO))
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        super.onKeyEvent(event)
-        if (event.pressed) {
-            when (event.key) {
-                Key.M -> {
-                    window?.update(WindowAttributes(minimized = true))
+    override fun onWindowEvent(event: WindowEvent) {
+        when (event) {
+            is WindowEvent.Focused -> {
+                eventsReceived++
+                focusCount++
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = if (event.gained) "🔵 Fenêtre focus gagné" else "⚫ Fenêtre focus perdu",
+                    data = mapOf("focused" to event.gained, "focus_count" to focusCount)
+                )))
+            }
+            is WindowEvent.Moved -> {
+                eventsReceived++
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "📦 Fenêtre déplacée à (${event.position.x}, ${event.position.y})",
+                    data = mapOf("x" to event.position.x, "y" to event.position.y)
+                )))
+            }
+            is WindowEvent.KeyInput -> {
+                val ke = event.event
+                if (ke.isPressed && ke.physicalKey == PhysicalKey.Code(KeyCode.KeyM)) {
+                    window?.setMinimized(true)
+                    eventsReceived++
                     onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                         isRunning = true,
                         message = "🗕️ Fenêtre minimisée"
                     )))
                 }
-                Key.P -> {
-                    window?.focus()
-                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                        isRunning = true,
-                        message = "🔲 Focus réclamé"
-                    )))
-                }
-                else -> {}
             }
+            else -> {}
         }
     }
 }

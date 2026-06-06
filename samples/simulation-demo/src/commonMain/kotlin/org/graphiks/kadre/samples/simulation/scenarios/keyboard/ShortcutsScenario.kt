@@ -18,7 +18,6 @@ class ShortcutsScenario : KeyboardScenario(
         "ctrl+a" to "Tout sélectionner",
         "shift+ctrl+c" to "Ouvrir les outils développeur"
     )
-    private val currentModifiers = mutableSetOf<KeyModifier>()
 
     override fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit) {
         super.start(window, eventLoop, onEvent)
@@ -26,39 +25,43 @@ class ShortcutsScenario : KeyboardScenario(
     }
 
     override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        super.onKeyEvent(event)
+        val ke = event.event
+        if (!ke.isPressed) return
 
-        if (event.pressed) {
-            val isCtrl = event.modifiers.any { it == KeyModifier.CTRL }
-            val isShift = event.modifiers.any { it == KeyModifier.SHIFT }
+        val isCtrl = ke.modifiers.ctrl
+        val isShift = ke.modifiers.shift
 
-            if (isCtrl) {
-                val shortcutKey = buildString {
-                    if (isShift) append("shift+")
-                    append("ctrl+")
-                    append(event.key.name.lowercase())
-                }
+        if (isCtrl) {
+            val keyName = when (val lk = ke.logicalKey) {
+                is LogicalKey.Character -> lk.text.lowercase()
+                is LogicalKey.Named -> lk.key.name.lowercase()
+                else -> "?"
+            }
+            val shortcutKey = buildString {
+                if (isShift) append("shift+")
+                append("ctrl+")
+                append(keyName)
+            }
 
-                val action = knownShortcuts[shortcutKey]
-                if (action != null) {
-                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                        isRunning = true,
-                        message = "✅ Raccourci détecté : $shortcutKey → $action",
-                        data = mapOf("shortcut" to shortcutKey, "action" to action)
-                    )))
-                } else {
-                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                        isRunning = true,
-                        message = "Raccourci non reconnu : $shortcutKey",
-                        data = mapOf("shortcut" to shortcutKey)
-                    )))
-                }
+            val action = knownShortcuts[shortcutKey]
+            if (action != null) {
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "✅ Raccourci détecté : $shortcutKey → $action",
+                    data = mapOf("shortcut" to shortcutKey, "action" to action)
+                )))
             } else {
                 onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                     isRunning = true,
-                    message = "Utilisez un modifieur (Ctrl/Shift) pour tester les raccourcis"
+                    message = "Raccourci non reconnu : $shortcutKey",
+                    data = mapOf("shortcut" to shortcutKey)
                 )))
             }
+        } else {
+            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                isRunning = true,
+                message = "Utilisez un modifieur (Ctrl/Shift) pour tester les raccourcis"
+            )))
         }
     }
 }

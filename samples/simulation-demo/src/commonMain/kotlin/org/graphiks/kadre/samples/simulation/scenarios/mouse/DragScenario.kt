@@ -19,25 +19,41 @@ class DragScenario : MouseScenario(
         onEvent(ScenarioEvent.Message("Appuyez et maintenez le bouton, déplacez la souris, puis relâchez", MessageSeverity.INFO))
     }
 
-    override fun onMouseEvent(event: WindowEvent.Mouse) {
-        super.onMouseEvent(event)
-
+    override fun onWindowEvent(event: WindowEvent) {
         when (event) {
-            is WindowEvent.Mouse.Pressed -> {
-                isDragging = true
-                startX = event.x
-                startY = event.y
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "🟢 Début du glissement à (${startX.toInt()}, ${startY.toInt()})",
-                    data = mapOf("drag_start_x" to startX.toInt(), "drag_start_y" to startY.toInt())
-                )))
+            is WindowEvent.PointerButton -> {
+                val isMouseButton = event.button is ButtonSource.Mouse
+                if (!isMouseButton) return
+                if (event.state == KeyState.Pressed) {
+                    isDragging = true
+                    startX = event.position.x
+                    startY = event.position.y
+                    mouseEventsReceived++
+                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                        isRunning = true,
+                        message = "🟢 Début du glissement à (${startX.toInt()}, ${startY.toInt()})",
+                        data = mapOf("drag_start_x" to startX.toInt(), "drag_start_y" to startY.toInt())
+                    )))
+                } else {
+                    if (isDragging) {
+                        isDragging = false
+                        val dx = event.position.x - startX
+                        val dy = event.position.y - startY
+                        mouseEventsReceived++
+                        onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                            isRunning = true,
+                            message = "🔴 Fin du glissement — déplacement total: (${dx.toInt()}, ${dy.toInt()})",
+                            data = mapOf("total_dx" to dx.toInt(), "total_dy" to dy.toInt(), "total_steps" to dragCount)
+                        )))
+                    }
+                }
             }
-            is WindowEvent.Mouse.Moved -> {
+            is WindowEvent.PointerMoved -> {
                 if (isDragging) {
                     dragCount++
-                    val dx = event.x - startX
-                    val dy = event.y - startY
+                    val dx = event.position.x - startX
+                    val dy = event.position.y - startY
+                    mouseEventsReceived++
                     onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                         isRunning = true,
                         message = "📐 Drag #$dragCount — déplacement: (${dx.toInt()}, ${dy.toInt()})",
@@ -45,19 +61,7 @@ class DragScenario : MouseScenario(
                     )))
                 }
             }
-            is WindowEvent.Mouse.Released -> {
-                if (isDragging) {
-                    isDragging = false
-                    val dx = event.x - startX
-                    val dy = event.y - startY
-                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                        isRunning = true,
-                        message = "🔴 Fin du glissement — déplacement total: (${dx.toInt()}, ${dy.toInt()})",
-                        data = mapOf("total_dx" to dx.toInt(), "total_dy" to dy.toInt(), "total_steps" to dragCount)
-                    )))
-                }
-            }
-            is WindowEvent.Mouse.Scrolled -> {}
+            else -> {}
         }
     }
 }

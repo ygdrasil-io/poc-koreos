@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material.ExperimentalMaterialApi::class)
 package org.graphiks.kadre.samples.simulation.ui
 
 import androidx.compose.foundation.background

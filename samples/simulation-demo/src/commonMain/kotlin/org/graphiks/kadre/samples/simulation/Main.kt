@@ -1,8 +1,6 @@
-@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-
 package org.graphiks.kadre.samples.simulation
 
-import org.graphiks.kadre.core.*
+import org.graphiks.kadre.*
 
 fun main(args: Array<String>) {
     if (args.isNotEmpty()) {
@@ -11,8 +9,5 @@ fun main(args: Array<String>) {
         System.exit(exitCode)
     }
 
-    registerScenarios()
-    ActiveEventLoop.run(SimulationApp())
+    EventLoop().runApp(SimulationAppHandler())
 }
-
-class SimulationApp : ApplicationHandler by SimulationAppHandler()

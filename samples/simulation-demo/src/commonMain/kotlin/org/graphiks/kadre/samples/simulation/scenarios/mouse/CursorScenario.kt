@@ -19,15 +19,13 @@ class CursorScenario : MouseScenario(
         onEvent(ScenarioEvent.Message("Déplacez la souris pour voir la position en temps réel", MessageSeverity.INFO))
     }
 
-    override fun onMouseEvent(event: WindowEvent.Mouse) {
-        super.onMouseEvent(event)
-
-        if (event is WindowEvent.Mouse.Moved) {
+    override fun onWindowEvent(event: WindowEvent) {
+        if (event is WindowEvent.PointerMoved) {
             mouseEventsReceived++
             onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                 isRunning = true,
-                message = "📍 Position: (${event.x.toInt()}, ${event.y.toInt()})",
-                data = mapOf("x" to event.x.toInt(), "y" to event.y.toInt())
+                message = "📍 Position: (${event.position.x.toInt()}, ${event.position.y.toInt()})",
+                data = mapOf("x" to event.position.x.toInt(), "y" to event.position.y.toInt())
             )))
         }
     }

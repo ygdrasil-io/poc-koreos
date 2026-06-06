@@ -11,23 +11,36 @@ class ResizeScenario : WindowScenario(
 ) {
     override fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit) {
         super.start(window, eventLoop, onEvent)
-        val size = window.attributes
+        val size = window.innerSize
         onEvent(ScenarioEvent.Message(
             "Redimensionnez la fenêtre. Taille initiale: ${size.width}x${size.height}",
             MessageSeverity.INFO
         ))
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        super.onKeyEvent(event)
-        // Press R to reset to default size
-        if (event.pressed && event.key == Key.R) {
-            window?.update(WindowAttributes(width = 1200, height = 800))
-            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                isRunning = true,
-                message = "🔄 Taille réinitialisée à 1200x800",
-                data = mapOf("width" to 1200, "height" to 800)
-            )))
+    override fun onWindowEvent(event: WindowEvent) {
+        when (event) {
+            is WindowEvent.Resized -> {
+                eventsReceived++
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = "📐 Fenêtre redimensionnée: ${event.size.width}x${event.size.height}",
+                    data = mapOf("width" to event.size.width, "height" to event.size.height)
+                )))
+            }
+            is WindowEvent.KeyInput -> {
+                val ke = event.event
+                if (ke.isPressed && ke.physicalKey == PhysicalKey.Code(KeyCode.KeyR)) {
+                    window?.requestSurfaceSize(PhysicalSize(1200, 800))
+                    eventsReceived++
+                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                        isRunning = true,
+                        message = "🔄 Taille demandée: 1200x800",
+                        data = mapOf("width" to 1200, "height" to 800)
+                    )))
+                }
+            }
+            else -> {}
         }
     }
 }

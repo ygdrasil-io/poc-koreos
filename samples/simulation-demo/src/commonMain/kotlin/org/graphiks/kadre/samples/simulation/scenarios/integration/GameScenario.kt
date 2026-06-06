@@ -16,7 +16,6 @@ class GameScenario : Scenario {
     private var onEvent: ((ScenarioEvent) -> Unit)? = null
     private var isRunning = false
 
-    // Player state
     private var playerX = 400f
     private var playerY = 300f
     private val playerSpeed = 5f
@@ -41,7 +40,6 @@ class GameScenario : Scenario {
         this.totalShots = 0
         this.hits = 0
 
-        // Generate random targets
         val rng = kotlin.random.Random
         for (i in 0 until 5) {
             targets.add(Target(
@@ -62,15 +60,25 @@ class GameScenario : Scenario {
         isRunning = false
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        if (!isRunning || !event.pressed) return
+    override fun onWindowEvent(event: WindowEvent) {
+        when (event) {
+            is WindowEvent.KeyInput -> onKeyEvent(event)
+            is WindowEvent.PointerButton -> onPointerButton(event)
+            else -> {}
+        }
+    }
 
-        when (event.key) {
-            Key.Z, Key.W -> playerY -= playerSpeed
-            Key.S -> playerY += playerSpeed
-            Key.Q, Key.A -> playerX -= playerSpeed
-            Key.D -> playerX += playerSpeed
-            Key.R -> {
+    private fun onKeyEvent(event: WindowEvent.KeyInput) {
+        if (!isRunning) return
+        val ke = event.event
+        if (!ke.isPressed) return
+
+        when (ke.physicalKey) {
+            PhysicalKey.Code(KeyCode.KeyZ), PhysicalKey.Code(KeyCode.KeyW) -> playerY -= playerSpeed
+            PhysicalKey.Code(KeyCode.KeyS) -> playerY += playerSpeed
+            PhysicalKey.Code(KeyCode.KeyQ), PhysicalKey.Code(KeyCode.KeyA) -> playerX -= playerSpeed
+            PhysicalKey.Code(KeyCode.KeyD) -> playerX += playerSpeed
+            PhysicalKey.Code(KeyCode.KeyR) -> {
                 score = 0
                 targets.clear()
                 val rng = kotlin.random.Random
@@ -85,7 +93,6 @@ class GameScenario : Scenario {
             else -> {}
         }
 
-        // Clamp player position
         playerX = playerX.coerceIn(0f, 800f)
         playerY = playerY.coerceIn(0f, 600f)
 
@@ -96,45 +103,47 @@ class GameScenario : Scenario {
         )))
     }
 
-    override fun onMouseEvent(event: WindowEvent.Mouse) {
+    private fun onPointerButton(event: WindowEvent.PointerButton) {
         if (!isRunning) return
+        val isMouseLeft = event.button is ButtonSource.Mouse &&
+            (event.button as ButtonSource.Mouse).button == MouseButton.Left
+        if (!isMouseLeft) return
 
-        if (event is WindowEvent.Mouse.Pressed) {
-            totalShots++
-            val mouseX = event.x
-            val mouseY = event.y
+        if (event.state != KeyState.Pressed) return
 
-            val hit = targets.find { target ->
-                val dx = mouseX - target.x
-                val dy = mouseY - target.y
-                kotlin.math.sqrt(dx * dx + dy * dy) < 30f
-            }
+        totalShots++
+        val mouseX = event.position.x.toFloat()
+        val mouseY = event.position.y.toFloat()
 
-            if (hit != null) {
-                hits++
-                score += 10
-                targets.remove(hit)
+        val hit = targets.find { target ->
+            val dx = mouseX - target.x
+            val dy = mouseY - target.y
+            kotlin.math.sqrt(dx * dx + dy * dy) < 30f
+        }
 
-                // Add new target
-                val rng = kotlin.random.Random
-                targets.add(Target(
-                    x = rng.nextFloat() * 700f + 50f,
-                    y = rng.nextFloat() * 500f + 50f,
-                    id = targets.size + 1
-                ))
+        if (hit != null) {
+            hits++
+            score += 10
+            targets.remove(hit)
 
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "🎯 Cible touchée! +10 points (Score: $score)",
-                    data = mapOf("score" to score, "hit" to true)
-                )))
-            } else {
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "💨 Tir raté... (Score: $score)",
-                    data = mapOf("score" to score, "hit" to false)
-                )))
-            }
+            val rng = kotlin.random.Random
+            targets.add(Target(
+                x = rng.nextFloat() * 700f + 50f,
+                y = rng.nextFloat() * 500f + 50f,
+                id = targets.size + 1
+            ))
+
+            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                isRunning = true,
+                message = "🎯 Cible touchée! +10 points (Score: $score)",
+                data = mapOf("score" to score, "hit" to true)
+            )))
+        } else {
+            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                isRunning = true,
+                message = "💨 Tir raté... (Score: $score)",
+                data = mapOf("score" to score, "hit" to false)
+            )))
         }
     }
 

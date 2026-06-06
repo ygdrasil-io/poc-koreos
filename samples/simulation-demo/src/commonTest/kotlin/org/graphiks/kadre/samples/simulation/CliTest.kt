@@ -44,9 +44,9 @@ class CliTest {
     }
 
     @Test
-    fun `parse --all without --scenario keeps INTERACTIVE action`() {
+    fun `parse --all without --scenario sets RUN_ALL action`() {
         val args = Cli.parse(listOf("--all"))
-        assertEquals(Cli.Action.INTERACTIVE, args.action)
+        assertEquals(Cli.Action.RUN_ALL, args.action)
         assertTrue(args.all)
     }
 
@@ -114,14 +114,14 @@ class CliTest {
     }
 
     @Test
-    fun `parse --list takes precedence over --scenario when ordered first`() {
+    fun `parse --scenario overrides --list when ordered after`() {
         val args = Cli.parse(listOf("--list", "--scenario", "test"))
-        assertEquals(Cli.Action.LIST, args.action)
+        assertEquals(Cli.Action.RUN, args.action)
         assertEquals("test", args.scenarioId)
     }
 
     @Test
-    fun `parse --scenario followed by --list results in LIST action`() {
+    fun `parse --list overrides --scenario when ordered after`() {
         val args = Cli.parse(listOf("--scenario", "test", "--list"))
         assertEquals(Cli.Action.LIST, args.action)
     }

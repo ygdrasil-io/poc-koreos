@@ -176,6 +176,7 @@ fun FlowRow(
         modifier = modifier
     ) { measurables, constraints ->
         val placeables = measurables.map { it.measure(constraints) }
+        val spacingPx = with(density) { horizontalArrangement.spacing.toPx().toInt() }
 
         var y = 0
         var x = 0
@@ -191,7 +192,7 @@ fun FlowRow(
 
                 placeable.place(x, y)
 
-                x += placeable.width + horizontalArrangement.spacing
+                x += placeable.width + spacingPx
                 maxHeightInRow = maxOf(maxHeightInRow, placeable.height)
             }
         }

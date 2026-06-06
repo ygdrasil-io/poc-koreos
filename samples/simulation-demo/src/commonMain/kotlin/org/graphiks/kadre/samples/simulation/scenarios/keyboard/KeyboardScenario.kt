@@ -17,7 +17,6 @@ abstract class KeyboardScenario(
     protected var onEvent: ((ScenarioEvent) -> Unit)? = null
     protected var isRunning: Boolean = false
 
-    // Stats for headless mode
     protected var keyEventsReceived: Int = 0
     protected var keyEventsExpected: Int = 100
 
@@ -38,10 +37,14 @@ abstract class KeyboardScenario(
         isRunning = false
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        if (!isRunning) return
-        keyEventsReceived++
+    override fun onWindowEvent(event: WindowEvent) {
+        if (event is WindowEvent.KeyInput) {
+            keyEventsReceived++
+            onKeyEvent(event)
+        }
     }
+
+    protected open fun onKeyEvent(event: WindowEvent.KeyInput) {}
 
     override fun runHeadless(args: List<String>): ScenarioResult {
         return ScenarioResult(

@@ -76,9 +76,20 @@ object ScenarioRegistry {
         ))
     }
 
+    /**
+     * Clears all registered scenarios and resets initialization state.
+     */
     internal fun clear() {
         _scenarios.clear()
         _initialized = false
+    }
+
+    /**
+     * Marks the registry as initialized without loading scenarios.
+     * Used in tests to prevent reflection-based initialization from adding real scenarios.
+     */
+    internal fun markInitialized() {
+        _initialized = true
     }
 }
 

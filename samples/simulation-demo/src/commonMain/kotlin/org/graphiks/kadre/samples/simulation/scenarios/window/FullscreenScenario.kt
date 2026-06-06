@@ -9,22 +9,26 @@ class FullscreenScenario : WindowScenario(
     description = "Teste le passage en plein écran. Appuyez sur F pour basculer, Échap pour quitter.",
     priority = 90
 ) {
-    private var isFullscreen = false
+    private var isMaximized = false
 
     override fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit) {
         super.start(window, eventLoop, onEvent)
-        onEvent(ScenarioEvent.Message("Appuyez sur F pour le plein écran, Échap pour quitter", MessageSeverity.INFO))
+        onEvent(ScenarioEvent.Message("Appuyez sur F pour basculer en plein écran (maximisé)", MessageSeverity.INFO))
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        if (event.pressed && event.key == Key.F) {
-            isFullscreen = !isFullscreen
-            window?.update(WindowAttributes(fullscreen = isFullscreen))
-            onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                isRunning = true,
-                message = if (isFullscreen) "🖥️ Plein écran activé" else "🖥️ Plein écran désactivé",
-                data = mapOf("fullscreen" to isFullscreen)
-            )))
+    override fun onWindowEvent(event: WindowEvent) {
+        if (event is WindowEvent.KeyInput) {
+            val ke = event.event
+            if (ke.isPressed && ke.physicalKey == PhysicalKey.Code(KeyCode.KeyF)) {
+                isMaximized = !isMaximized
+                window?.setMaximized(isMaximized)
+                eventsReceived++
+                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                    isRunning = true,
+                    message = if (isMaximized) "🖥️ Plein écran activé (maximisé)" else "🖥️ Plein écran désactivé",
+                    data = mapOf("maximized" to isMaximized)
+                )))
+            }
         }
     }
 }

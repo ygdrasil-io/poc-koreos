@@ -10,45 +10,53 @@ class ClicksScenario : MouseScenario(
     priority = 100
 ) {
     private var clickCount = 0
-    private var lastClickTime = 0L
 
     override fun start(window: Window, eventLoop: ActiveEventLoop, onEvent: (ScenarioEvent) -> Unit) {
         super.start(window, eventLoop, onEvent)
         onEvent(ScenarioEvent.Message("Cliquez n'importe où pour tester les événements de clic", MessageSeverity.INFO))
     }
 
-    override fun onMouseEvent(event: WindowEvent.Mouse) {
-        super.onMouseEvent(event)
-
+    override fun onWindowEvent(event: WindowEvent) {
         when (event) {
-            is WindowEvent.Mouse.Moved -> {}
-            is WindowEvent.Mouse.Pressed -> {
+            is WindowEvent.PointerButton -> {
                 mouseEventsReceived++
-                clickCount++
-                val button = event.button?.name?.lowercase() ?: "inconnu"
-                val pos = "${event.x.toInt()},${event.y.toInt()}"
+                val btn = event.button
+                val buttonName = when (btn) {
+                    is ButtonSource.Mouse -> mouseButtonLabel(btn.button)
+                    is ButtonSource.Touch -> "touch#${btn.fingerId.value}"
+                    is ButtonSource.TabletTool -> "tablet:${btn.kind}"
+                    is ButtonSource.Unknown -> "code:${btn.code}"
+                }
+                val pos = "${event.position.x.toInt()},${event.position.y.toInt()}"
 
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "🖱️ Clic #$clickCount — bouton: $button à ($pos)",
-                    data = mapOf(
-                        "click_count" to clickCount,
-                        "button" to button,
-                        "x" to event.x.toInt(),
-                        "y" to event.y.toInt()
-                    )
-                )))
-            }
-            is WindowEvent.Mouse.Released -> {
-                mouseEventsReceived++
-                val button = event.button?.name?.lowercase() ?: "inconnu"
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "🔄 Relâché: $button",
-                    data = mapOf("released" to button)
-                )))
+                if (event.state == KeyState.Pressed) {
+                    clickCount++
+                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                        isRunning = true,
+                        message = "🖱️ Clic #$clickCount — bouton: $buttonName à ($pos)",
+                        data = mapOf(
+                            "click_count" to clickCount,
+                            "button" to buttonName,
+                            "x" to event.position.x.toInt(),
+                            "y" to event.position.y.toInt()
+                        )
+                    )))
+                } else {
+                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                        isRunning = true,
+                        message = "🔄 Relâché: $buttonName",
+                        data = mapOf("released" to buttonName)
+                    )))
+                }
             }
             else -> {}
         }
     }
+}
+
+private fun mouseButtonLabel(button: MouseButton): String = when (button) {
+    is MouseButton.Left -> "left"
+    is MouseButton.Right -> "right"
+    is MouseButton.Middle -> "middle"
+    is MouseButton.Other -> "other(${button.button})"
 }

@@ -22,28 +22,30 @@ class MultiWindowScenario : WindowScenario(
 
     override fun stop() {
         super.stop()
-        extraWindows.forEach { it.destroy() }
+        extraWindows.forEach { it.close() }
         extraWindows.clear()
     }
 
-    override fun onKeyEvent(event: WindowEvent.KeyInput) {
-        if (event.pressed && event.key == Key.N) {
-            windowCount++
-            val newWindow = eventLoop?.createWindow(WindowAttributes(
-                title = "Fenêtre #$windowCount - Simulation Demo",
-                width = 400,
-                height = 300,
-                resizable = true,
-                visible = true
-            ))
-            if (newWindow != null) {
-                extraWindows.add(newWindow)
-                eventsReceived++
-                onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
-                    isRunning = true,
-                    message = "🪟 Fenêtre #$windowCount créée (${extraWindows.size} au total)",
-                    data = mapOf("windows" to extraWindows.size, "new_window" to windowCount)
-                )))
+    override fun onWindowEvent(event: WindowEvent) {
+        if (event is WindowEvent.KeyInput) {
+            val ke = event.event
+            if (ke.isPressed && ke.physicalKey == PhysicalKey.Code(KeyCode.KeyN)) {
+                windowCount++
+                val newWindow = eventLoop?.createWindow(WindowAttributes(
+                    title = "Fenêtre #$windowCount - Simulation Demo",
+                    size = PhysicalSize(400, 300),
+                    resizable = true,
+                    visible = true,
+                ))
+                if (newWindow != null) {
+                    extraWindows.add(newWindow)
+                    eventsReceived++
+                    onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
+                        isRunning = true,
+                        message = "🪟 Fenêtre #$windowCount créée (${extraWindows.size} au total)",
+                        data = mapOf("windows" to extraWindows.size, "new_window" to windowCount)
+                    )))
+                }
             }
         }
     }
