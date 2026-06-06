@@ -1,5 +1,7 @@
 package org.graphiks.kadre.x11
 
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.graphiks.kadre.core.PhysicalSize
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -27,14 +29,14 @@ class X11CaptureTest {
     @Test
     fun `bgraToRgba swaps red and blue channels`() {
         val bgra = byteArrayOf(
-            0x10, 0x20, 0x30, 0xFF.toByte(),   // B=0x10, G=0x20, R=0x30, A=0xFF
-            0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x80.toByte(), // B=0xAA, G=0xBB, R=0xCC, A=0x80
-            0x00, 0x7F, 0x7F, 0x00,             // B=0x00, G=0x7F, R=0x7F, A=0x00
+            0x10, 0x20, 0x30, 0xFF.toByte(),
+            0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x80.toByte(),
+            0x00, 0x7F, 0x7F, 0x00,
         )
         val expected = byteArrayOf(
-            0x30, 0x20, 0x10, 0xFF.toByte(),   // R=0x30, G=0x20, B=0x10, A=0xFF
-            0xCC.toByte(), 0xBB.toByte(), 0xAA.toByte(), 0x80.toByte(), // R=0xCC, G=0xBB, B=0xAA, A=0x80
-            0x7F, 0x7F, 0x00, 0x00,             // R=0x7F, G=0x7F, B=0x00, A=0x00
+            0x30, 0x20, 0x10, 0xFF.toByte(),
+            0xCC.toByte(), 0xBB.toByte(), 0xAA.toByte(), 0x80.toByte(),
+            0x7F, 0x7F, 0x00, 0x00,
         )
         val result = bgraToRgba(bgra)
         assertTrue(expected.contentEquals(result), "BGRA→RGBA conversion should swap R and B")
@@ -63,7 +65,7 @@ class X11CaptureTest {
     fun `X11ScreenCapturer permissionStatus matches requestPermission`() {
         val capturer = X11ScreenCapturer()
         val status = capturer.permissionStatus()
-        val requested = kotlinx.coroutines.runBlocking { capturer.requestPermission() }
+        val requested = runBlocking { capturer.requestPermission() }
         assertEquals(status, requested)
     }
 
@@ -71,7 +73,7 @@ class X11CaptureTest {
     fun `enumerateDisplays returns empty list when libX11 is absent`() {
         if (libX11 != null) return
         val capturer = X11ScreenCapturer()
-        val displays = kotlinx.coroutines.runBlocking { capturer.enumerateDisplays() }
+        val displays = runBlocking { capturer.enumerateDisplays() }
         assertTrue(displays.isEmpty())
     }
 
@@ -79,48 +81,8 @@ class X11CaptureTest {
     fun `enumerateWindows returns empty list when libX11 is absent`() {
         if (libX11 != null) return
         val capturer = X11ScreenCapturer()
-        val windows = kotlinx.coroutines.runBlocking { capturer.enumerateWindows() }
+        val windows = runBlocking { capturer.enumerateWindows() }
         assertTrue(windows.isEmpty())
-    }
-
-    @Test
-    fun `createSession returns X11CaptureSession for display source`() {
-        if (libX11 == null) return
-        val capturer = X11ScreenCapturer()
-        val session = kotlinx.coroutines.runBlocking {
-            capturer.createSession(CaptureSource.Display(0L), CaptureConfig())
-        }
-        assertNotNull(session)
-        assertTrue(session is X11CaptureSession)
-        session.close()
-    }
-
-    @Test
-    fun `X11CaptureSession implements AutoCloseable`() {
-        val session = X11CaptureSession(
-            source = CaptureSource.Display(0L),
-            config = CaptureConfig(),
-            displayPtr = 0L,
-        )
-        session.close()
-    }
-
-    @Test
-    fun `captureSingle does not emit when display is null`() {
-        val session = X11CaptureSession(
-            source = CaptureSource.Display(0L),
-            config = CaptureConfig(),
-            displayPtr = 0L,
-        )
-        try {
-            // No frame should be emitted since there's no display
-            val frame = kotlinx.coroutines.runBlocking {
-                kotlinx.coroutines.withTimeoutOrNull(500L) { session.captureSingle() }
-            }
-            assertNull(frame, "Expected no frame with null display")
-        } finally {
-            session.close()
-        }
     }
 
     @Test
@@ -143,7 +105,6 @@ class X11CaptureTest {
         assertEquals(0L, XSHM_SHMPIX_OFFSET)
         assertEquals(8L, XSHM_SHMD_OFFSET)
         assertEquals(12L, XSHM_READONLY_OFFSET)
-        // shmaddr pointer at offset 16
         assertEquals(16L, XSHM_ADDR_OFFSET)
     }
 

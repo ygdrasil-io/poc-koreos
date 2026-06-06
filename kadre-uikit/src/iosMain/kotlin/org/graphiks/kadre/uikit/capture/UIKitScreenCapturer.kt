@@ -1,12 +1,8 @@
-@file:OptIn(ExperimentalForeignApi::class)
-
 package org.graphiks.kadre.uikit.capture
 
-import kotlinx.cinterop.ExperimentalForeignApi
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.CaptureConfig
-import org.graphiks.kadre.core.capture.CaptureError
 import org.graphiks.kadre.core.capture.CapturePermission
 import org.graphiks.kadre.core.capture.CaptureSession
 import org.graphiks.kadre.core.capture.CaptureSource
@@ -18,23 +14,21 @@ import platform.UIKit.UIScreen
 class UIKitScreenCapturer : ScreenCapturer {
 
     override suspend fun enumerateDisplays(): List<DisplayInfo> {
-        val screen = UIScreen.main
+        val screen = UIScreen.mainScreen
         val bounds = screen.bounds
-        val scale = screen.nativeScale
-        return bounds.use { rect ->
-            listOf(
-                DisplayInfo(
-                    id = 0L,
-                    name = "Main Screen",
-                    position = PhysicalPosition(0, 0),
-                    resolution = PhysicalSize(
-                        rect.size.width.toInt(),
-                        rect.size.height.toInt(),
-                    ),
-                    scaleFactor = scale.toDouble(),
-                )
+        val scale = screen.scale
+        return listOf(
+            DisplayInfo(
+                id = 0L,
+                name = "Main",
+                position = PhysicalPosition(bounds.origin.x.toInt(), bounds.origin.y.toInt()),
+                resolution = PhysicalSize(
+                    (bounds.size.width * scale).toInt(),
+                    (bounds.size.height * scale).toInt(),
+                ),
+                scaleFactor = scale.toDouble(),
             )
-        }
+        )
     }
 
     override suspend fun enumerateWindows(): List<WindowInfo> = emptyList()
@@ -42,16 +36,14 @@ class UIKitScreenCapturer : ScreenCapturer {
     override suspend fun createSession(
         source: CaptureSource,
         config: CaptureConfig,
-    ): CaptureSession = when (source) {
-        is CaptureSource.Display -> UIKitCaptureSession(source, config)
-        is CaptureSource.Window -> throw CaptureError.Unsupported(
-            "Window capture not supported on iOS"
-        )
+    ): CaptureSession {
+        require(source is CaptureSource.Display) {
+            "iOS supports display capture only"
+        }
+        return UIKitCaptureSession(source as CaptureSource.Display, config)
     }
 
-    override suspend fun requestPermission(): CapturePermission {
-        return CapturePermission.Pending
-    }
+    override suspend fun requestPermission(): CapturePermission = CapturePermission.Pending
 
     override fun permissionStatus(): CapturePermission = CapturePermission.Pending
 }

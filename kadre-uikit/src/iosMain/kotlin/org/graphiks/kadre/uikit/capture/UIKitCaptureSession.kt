@@ -3,11 +3,12 @@
 package org.graphiks.kadre.uikit.capture
 
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.memcpy
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.graphiks.kadre.core.PhysicalSize
@@ -17,9 +18,9 @@ import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.CaptureSession
 import org.graphiks.kadre.core.capture.CaptureSource
 import org.graphiks.kadre.core.capture.PixelFormat
-import platform.CoreMedia.CMSampleBuffer
+import platform.CoreMedia.CMSampleBufferRef
 import platform.CoreMedia.CMSampleBufferGetImageBuffer
-import platform.CoreVideo.CVPixelBuffer
+import platform.CoreVideo.CVPixelBufferRef
 import platform.CoreVideo.CVPixelBufferGetBaseAddress
 import platform.CoreVideo.CVPixelBufferGetBytesPerRow
 import platform.CoreVideo.CVPixelBufferGetHeight
@@ -32,6 +33,10 @@ import platform.Foundation.NSError
 import platform.ReplayKit.RPScreenRecorder
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.cinterop.ByteVar
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.allocArray
 
 class UIKitCaptureSession(
     source: CaptureSource.Display,
@@ -48,21 +53,21 @@ class UIKitCaptureSession(
 
     private suspend fun startCapture() = suspendCancellableCoroutine<Unit> { cont ->
         RPScreenRecorder.sharedRecorder().startCaptureWithHandler(
-            handler = { sampleBuffer: CMSampleBufferRef?, _: RPVideoSampleOrientation?, error: NSError? ->
+            captureHandler = { sampleBuffer: CPointer<*>, _: CPointer<*>?, error: NSError? ->
                 if (error != null) {
                     println("[UIKitCaptureSession] Capture error: ${error.localizedDescription}")
                     return@startCaptureWithHandler
                 }
                 val buffer = sampleBuffer ?: return@startCaptureWithHandler
-                val pixelBuffer = CMSampleBufferGetImageBuffer(buffer) ?: return@startCaptureWithHandler
-                processFrame(pixelBuffer)
+                val pixelBuffer = CMSampleBufferGetImageBuffer(buffer)
+                if (pixelBuffer != null) {
+                    processFrame(pixelBuffer)
+                }
             },
-            completionHandler = { error ->
+            completionHandler = { error: NSError? ->
                 if (error != null) {
                     cont.resumeWithException(
-                        CaptureError.Internal(
-                            Exception(error.localizedDescription)
-                        )
+                        CaptureError.Internal(Exception(error.localizedDescription))
                     )
                 } else {
                     cont.resume(Unit)
@@ -71,7 +76,7 @@ class UIKitCaptureSession(
         )
     }
 
-    private fun processFrame(pixelBuffer: CVPixelBuffer) {
+    private fun processFrame(pixelBuffer: CVPixelBufferRef) {
         CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly)
         try {
             val baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) ?: return
@@ -82,7 +87,15 @@ class UIKitCaptureSession(
 
             val data = ByteArray(dataSize)
             data.usePinned { pinned ->
-                memcpy(pinned.addressOf(0), baseAddress, dataSize.toLong())
+                memScoped {
+                    val src = allocArray<ByteVar>(dataSize)
+                    for (i in 0 until dataSize) {
+                        src[i] = baseAddress.reinterpret<ByteVar>()[i]
+                    }
+                    for (i in 0 until dataSize) {
+                        pinned.addressOf(i)[0] = src[i]
+                    }
+                }
             }
 
             val frame = CaptureFrame(
