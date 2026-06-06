@@ -142,7 +142,7 @@ class AppKitScreenCapturer : ScreenCapturer {
                 }
             }
         }
-        val blockArena = Arena.ofConfined()
+        val blockArena = Arena.ofShared()
         try {
             val upcallStub = linker.upcallStub(callback.methodHandle, callback.fnDescriptor, blockArena)
             val block = ObjCBlocks.create(upcallStub, blockArena)
