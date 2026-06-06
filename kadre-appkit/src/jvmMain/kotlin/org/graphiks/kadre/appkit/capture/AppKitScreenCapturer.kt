@@ -107,21 +107,21 @@ class AppKitScreenCapturer : ScreenCapturer {
         }
     }
 
-    override fun permissionStatus(): CapturePermission {
+    private val preflightHandle: java.util.function.Supplier<Boolean>? by lazy {
         try {
-            val cgFramework = SymbolLookup.libraryLookup(
+            val framework = SymbolLookup.libraryLookup(
                 "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
-                Arena.global(),
+                arena,
             )
-            val preflight = cgFramework.find("CGPreflightScreenCaptureAccess").orElse(null)
-            if (preflight != null) {
-                val handle = linker.downcallHandle(preflight, FunctionDescriptor.of(JAVA_BOOLEAN))
-                val granted = handle.invokeExact() as Boolean
-                return if (granted) CapturePermission.Granted else CapturePermission.Pending
-            }
-        } catch (_: Throwable) {
-        }
-        return CapturePermission.Pending
+            val preflight = framework.find("CGPreflightScreenCaptureAccess").orElse(null) ?: return@lazy null
+            val handle = linker.downcallHandle(preflight, FunctionDescriptor.of(JAVA_BOOLEAN))
+            java.util.function.Supplier { handle.invokeExact() as Boolean }
+        } catch (_: Throwable) { null }
+    }
+
+    override fun permissionStatus(): CapturePermission {
+        val granted = preflightHandle?.get() ?: return CapturePermission.Pending
+        return if (granted) CapturePermission.Granted else CapturePermission.Pending
     }
 
     // ── Private helpers ────────────────────────────────────────────────
@@ -310,6 +310,14 @@ class AppKitScreenCapturer : ScreenCapturer {
             ObjCRuntime.msgSend(null, scConfig, setWidthSel, region.size.width.toLong())
             ObjCRuntime.msgSend(null, scConfig, setHeightSel, region.size.height.toLong())
         }
+
+        val setMinIntervalSel = ObjCRuntime.sel("setMinimumFrameInterval:")
+        val cmTime = ObjCRuntime.msgSend(ADDRESS, ObjCRuntime.getClass("CMTime"), ObjCRuntime.sel("CMTimeMakeWithSeconds:"),
+            1.0 / config.frameRate, 600) as MemorySegment
+        ObjCRuntime.msgSend(null, scConfig, setMinIntervalSel, cmTime)
+
+        val setPixelFormatSel = ObjCRuntime.sel("setPixelFormat:")
+        ObjCRuntime.msgSend(null, scConfig, setPixelFormatSel, 0x42475241) // kCVPixelFormatType_32BGRA 'BGRA'
 
         return scConfig
     }

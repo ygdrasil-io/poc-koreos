@@ -16,6 +16,7 @@ import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout.ADDRESS
 import java.lang.foreign.ValueLayout.JAVA_INT
 import java.lang.foreign.ValueLayout.JAVA_LONG
+import java.util.concurrent.CountDownLatch
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 
@@ -165,9 +166,19 @@ constructor(
 
     override fun close() {
         if (started) {
-            ObjCRuntime.msgSend(null, nativeStream, ObjCRuntime.sel("stopCaptureWithCompletionHandler:"), MemorySegment.NULL)
             started = false
+            val stopArena = Arena.ofShared()
+            val handler = ObjCCallback1 { _ ->
+                delegateArena.close()
+                stopArena.close()
+            }
+            val upcallStub = linker.upcallStub(handler.methodHandle, handler.fnDescriptor, stopArena)
+            val block = ObjCBlocks.create(upcallStub, stopArena)
+            ObjCRuntime.msgSend(null, nativeStream, ObjCRuntime.sel("stopCaptureWithCompletionHandler:"), block)
+            ObjCRuntime.msgSend(null, nativeStream, ObjCRuntime.sel("release"))
+            handler.await(5000)
+        } else {
+            delegateArena.close()
         }
-        delegateArena.close()
     }
 }
