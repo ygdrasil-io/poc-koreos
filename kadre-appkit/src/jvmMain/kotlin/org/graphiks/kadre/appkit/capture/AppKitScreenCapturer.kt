@@ -101,8 +101,17 @@ class AppKitScreenCapturer : ScreenCapturer {
     }
 
     override suspend fun createSession(source: CaptureSource, config: CaptureConfig): CaptureSession {
-        val nativeStream = buildStream(source, config)
-        return AppKitCaptureSession(source, config, nativeStream)
+        return when (source) {
+            is CaptureSource.Display -> {
+                // Use CGDisplayCreateImage (no TCC permission required)
+                CGDisplayCaptureSession(source, config, source.id)
+            }
+            is CaptureSource.Window -> {
+                // ScreenCaptureKit-based window capture
+                val nativeStream = buildStream(source, config)
+                AppKitCaptureSession(source, config, nativeStream)
+            }
+        }
     }
 
     override suspend fun requestPermission(): CapturePermission {
