@@ -8,6 +8,13 @@ kotlin {
     jvm()
     jvmToolchain(25)
 
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.ui.InternalComposeUiApi",
+            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
+        )
+    }
+
     sourceSets {
         commonMain {
             dependencies {
@@ -22,6 +29,8 @@ kotlin {
         }
         jvmMain {
             dependencies {
+                implementation(project(":kadre"))
+                implementation(project(":kadre-coroutines"))
                 implementation(project(":kadre-win32"))
                 implementation(project(":kadre-x11"))
                 implementation(project(":kadre-wayland"))
@@ -40,7 +49,7 @@ tasks.register<JavaExec>("run") {
     group = "application"
     description = "Runs Simulation Demo on JVM"
     dependsOn("jvmJar")
-    mainClass.set("org.graphiks.kadre.samples.simulation.MainKt")
+    mainClass.set("org.graphiks.kadre.samples.simulation.JvmMainKt")
     classpath = files(
         kotlin.targets.getByName("jvm").compilations.getByName("main").output.allOutputs,
         configurations.getByName("jvmRuntimeClasspath"),
