@@ -34,27 +34,17 @@ internal object ObjCBlocks {
         ADDRESS.withName("descriptor"),
     )
 
-    private val descriptorStruct = MemoryLayout.structLayout(
-        JAVA_LONG.withName("reserved"),
-        JAVA_LONG.withName("size"),
-    )
-
     fun create(invokeFn: MemorySegment, arena: Arena): MemorySegment {
-        val descriptor = arena.allocate(descriptorStruct)
-        descriptorStruct.varHandle(MemoryLayout.PathElement.groupElement("reserved"))
-            .set(descriptor, 0L)
-        descriptorStruct.varHandle(MemoryLayout.PathElement.groupElement("size"))
-            .set(descriptor, blockStruct.byteSize())
+        val descriptor = arena.allocate(16L)
+        descriptor.set(JAVA_LONG, 0L, 0L)
+        descriptor.set(JAVA_LONG, 8L, 40L)
 
-        val block = arena.allocate(blockStruct)
-        blockStruct.varHandle(MemoryLayout.PathElement.groupElement("isa"))
-            .set(block, NSConcreteGlobalBlock)
-        blockStruct.varHandle(MemoryLayout.PathElement.groupElement("flags"))
-            .set(block, 0)
-        blockStruct.varHandle(MemoryLayout.PathElement.groupElement("invoke"))
-            .set(block, invokeFn)
-        blockStruct.varHandle(MemoryLayout.PathElement.groupElement("descriptor"))
-            .set(block, descriptor)
+        val block = arena.allocate(40L)
+        block.set(ADDRESS, 0L, NSConcreteGlobalBlock)
+        block.set(JAVA_INT, 8L, 0)
+        block.set(JAVA_INT, 12L, 0)
+        block.set(ADDRESS, 16L, invokeFn)
+        block.set(ADDRESS, 24L, descriptor)
         return block
     }
 }
