@@ -140,6 +140,25 @@ object ObjCRuntime {
      * [ByteArray] to satisfy Panama's alignment constraints for `double`-containing structs such
      * as [NSRect].
      */
+    /**
+     * The maximum struct size (in bytes) that the System V AMD64 ABI and Apple
+     * ARM64 ABI return via registers rather than hidden-pointer + `objc_msgSend_stret`.
+     *
+     * On x86-64 macOS structs ≤ 16 bytes (two 8-byte registers or XMM0:XMM1)
+     * are returned via `objc_msgSend`.  Larger structs require `objc_msgSend_stret`.
+     * ARM64 has no `objc_msgSend_stret` — the caller always passes a hidden
+     * buffer pointer, but the entry point is still `objc_msgSend`.
+     */
+    private val MAX_REGISTER_RETURN_SIZE: Long = 16L
+
+    /**
+     * Each call to [msgSendStret] allocates a struct-return buffer from this
+     * shared arena.  A single global arena is safe because:
+     * - [SegmentAllocator.prefixAllocator] returns slices of the pre-allocated
+     *   segment so no new native allocations happen — just slicing.
+     * - The returned segment is a view over the global arena's memory and is
+     *   valid for the lifetime of [structReturnArena].
+     */
     fun msgSendStret(returnLayout: GroupLayout, receiver: MemorySegment, selector: MemorySegment, vararg args: Any): MemorySegment {
         val addr = objcMsgSendStretAddr ?: objcMsgSendAddr
         val argLayouts = args.map { layoutFor(it) }.toTypedArray()
@@ -147,14 +166,20 @@ object ObjCRuntime {
         val desc = FunctionDescriptor.of(returnLayout, *baseLayouts, *argLayouts)
         val handle = linker.downcallHandle(addr, desc)
         // JDK 24+ rejects heap segments (MemorySegment.ofArray) in downcall allocators.
-        // Use a native allocation with 8-byte alignment for double-containing structs.
+        // Native memory from a confined arena is safe: the arena outlives the call
+        // and is closed after the struct bytes are read.
         val byteSize = returnLayout.byteSize()
-        val arena = Arena.ofAuto()
+        val arena = Arena.ofConfined()
         val nativeSeg = arena.allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
         val allocator = SegmentAllocator.prefixAllocator(nativeSeg)
         val unwrapped = args.map { unwrap(it) }.toTypedArray()
-        // Panama inserts the allocator as the implicit first argument for GroupLayout returns.
-        return handle.invokeWithArguments(allocator, receiver, selector, *unwrapped) as MemorySegment
+        val result = handle.invokeWithArguments(allocator, receiver, selector, *unwrapped) as MemorySegment
+        // Copy the result into a new segment backed by the global arena so the
+        // confined arena can be closed immediately.
+        val copy = Arena.global().allocate(byteSize, ValueLayout.JAVA_DOUBLE.byteAlignment())
+        copy.copyFrom(result)
+        arena.close()
+        return copy
     }
 
     // ── Autorelease pool ──────────────────────────────────────────────────────
