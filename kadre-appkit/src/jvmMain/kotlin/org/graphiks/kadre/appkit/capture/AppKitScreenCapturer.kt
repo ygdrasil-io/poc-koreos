@@ -126,22 +126,8 @@ class AppKitScreenCapturer : ScreenCapturer {
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private var captureErrorDescription: String? = null
-
     private fun getShareableContent(): MemorySegment? {
-        captureErrorDescription = null
-        val callback = ObjCCallback2 { result, error ->
-            if (error != null && error != MemorySegment.NULL) {
-                ObjCRuntime.autoreleasePool {
-                    val errorCode = ObjCRuntime.msgSend(JAVA_INT, error, ObjCRuntime.sel("code")) as Int
-                    val domain = ObjCRuntime.msgSend(ADDRESS, error, ObjCRuntime.sel("domain")) as MemorySegment
-                    val domainStr = if (domain != MemorySegment.NULL) ObjCRuntime.toJavaString(domain) else "?"
-                    val desc = ObjCRuntime.msgSend(ADDRESS, error, ObjCRuntime.sel("localizedDescription")) as MemorySegment
-                    val descStr = if (desc != MemorySegment.NULL) ObjCRuntime.toJavaString(desc) else "?"
-                    captureErrorDescription = "[$domainStr] code=$errorCode: $descStr"
-                }
-            }
-        }
+        val callback = ObjCCallback2()
         val blockArena = Arena.ofShared()
         try {
             val upcallStub = linker.upcallStub(callback.methodHandle, callback.fnDescriptor, blockArena)
@@ -149,14 +135,13 @@ class AppKitScreenCapturer : ScreenCapturer {
             val sel = ObjCRuntime.sel("getShareableContentWithCompletionHandler:")
             ObjCRuntime.msgSend(null, scShareableContentClass, sel, block)
 
-            val completed = callback.await(10000)
-            if (!completed) {
+            if (!callback.await(10000)) {
                 System.err.println("[AppKitScreenCapturer] Timeout waiting for SCShareableContent callback")
                 return null
             }
-            val errDesc = captureErrorDescription
-            if (errDesc != null) {
-                System.err.println("[AppKitScreenCapturer] SCShareableContent error: $errDesc")
+            if (callback.error != null && callback.error != MemorySegment.NULL) {
+                System.err.println("[AppKitScreenCapturer] SCShareableContent returned error (pointer @ 0x%x)".format(callback.error.address()))
+                System.err.println("[AppKitScreenCapturer] Hint: grant Screen Recording permission in System Settings > Privacy & Security")
                 return null
             }
             if (callback.result == null || callback.result == MemorySegment.NULL) {
