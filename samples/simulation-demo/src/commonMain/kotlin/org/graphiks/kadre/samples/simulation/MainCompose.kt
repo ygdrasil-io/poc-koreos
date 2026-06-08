@@ -217,6 +217,15 @@ class CliDisplayState {
     var eventLog by mutableStateOf(listOf<String>())
 
     fun logEvent(entry: String) {
+        val last = eventLog.lastOrNull()
+        if (last != null) {
+            val base = last.replace(Regex(" \\(\\d+\\)$"), "")
+            if (base == entry) {
+                val count = Regex("\\((\\d+)\\)$").find(last)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                eventLog = eventLog.dropLast(1) + "$entry (${count + 1})"
+                return
+            }
+        }
         eventLog = (eventLog + entry).takeLast(200)
     }
 
