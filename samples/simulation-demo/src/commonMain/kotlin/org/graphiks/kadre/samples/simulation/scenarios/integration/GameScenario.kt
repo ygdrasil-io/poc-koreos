@@ -147,10 +147,10 @@ class GameScenario : Scenario {
         }
     }
 
-    override fun runHeadless(args: List<String>): ScenarioResult {
+    override fun collectResult(durationMs: Long): ScenarioResult {
         return ScenarioResult(
             success = true,
-            durationMs = 2000,
+            durationMs = durationMs,
             eventsReceived = totalShots,
             eventsExpected = 10,
             errors = if (targets.isNotEmpty()) listOf("${targets.size} targets remaining") else emptyList(),
