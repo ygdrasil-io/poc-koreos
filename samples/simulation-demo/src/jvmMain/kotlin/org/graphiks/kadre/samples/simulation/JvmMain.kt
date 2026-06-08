@@ -46,6 +46,8 @@ private fun runComposeApp() = kadreApplication {
         )
     )
 
+    appHandler.setEventLoopAndWindow(eventLoop, win.window)
+
     val renderer = ComposeWindowRenderer.create(win.window.rawWindowHandle, win.window.scaleFactor, dispatcher).getOrElse {
         println("[simulation-demo] Cannot create renderer: ${it.message}")
         exit(); return@kadreApplication
@@ -68,6 +70,7 @@ private fun runComposeApp() = kadreApplication {
             }
             else -> {
                 renderer.applyWindowEvent(event, win.window, keys)
+                appHandler.windowEvent(eventLoop, win.window.id, event)
             }
         }
     }

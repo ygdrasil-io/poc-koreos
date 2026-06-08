@@ -26,6 +26,12 @@ class SimulationAppHandler : ApplicationHandler {
 
     private var scenarioEventCallback: (ScenarioEvent) -> Unit = {}
 
+    fun setEventLoopAndWindow(eventLoop: ActiveEventLoop, window: Window) {
+        this.eventLoop = eventLoop
+        this.activeWindow = window
+        registerScenarios()
+    }
+
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         if (activeWindow != null) return
 
