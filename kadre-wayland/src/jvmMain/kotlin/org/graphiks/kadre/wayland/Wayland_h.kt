@@ -906,6 +906,37 @@ internal val wlPointerConstraintsConfinePointer: MethodHandle? by lazy {
         ))
 }
 
+// ── xdg_toplevel_icon_manager_v1 protocol (protocol extension interface symbols) ──
+
+/** &xdg_toplevel_icon_manager_v1_interface (minimal, for bind + icon operations). */
+internal val xdgToplevelIconManagerV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("xdg_toplevel_icon_manager_v1", methodCount = 3, eventCount = 0)
+}
+
+/** &xdg_toplevel_icon_v1_interface (minimal, for proxy creation). */
+internal val xdgToplevelIconV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("xdg_toplevel_icon_v1", methodCount = 4, eventCount = 0)
+}
+
+/**
+ * wl_proxy_marshal_flags variant with two trailing object arguments and no new_id.
+ * Used for xdg_toplevel_icon_manager_v1.set_icon(toplevel, icon).
+ *
+ * Signature: void wl_proxy_marshal_flags(proxy, opcode, NULL, version, flags, obj1, obj2).
+ */
+internal val wlProxyMarshalFlagsTwoObjects: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy*
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.ADDRESS,   // arg1: object*
+            ValueLayout.ADDRESS,   // arg2: object*
+        ))
+}
+
 /**
  * wl_proxy_marshal_flags for zwp_text_input_manager_v3.create_text_input (opcode 1).
  *

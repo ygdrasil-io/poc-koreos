@@ -9,6 +9,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.CursorGrabMode
+import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.RawDisplayHandle
@@ -25,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class WaylandWindowTest {
 
@@ -501,6 +503,51 @@ class WaylandWindowTest {
         val window = WaylandWindow.createForTest(surface = 4_242L)
         window.setVisible(true)
         window.setVisible(false)
+    }
+
+    @Test
+    fun `Wayland setWindowIcon is a silent no-op when iconManager is unavailable`() {
+        val window = WaylandWindow.createForTest(iconManagerPtr = 0L)
+        // Must not throw — protocol extension is optional
+        window.setWindowIcon(null)
+        window.setWindowIcon(Icon(ByteArray(16), 2, 2))
+    }
+
+    @Test
+    fun `Wayland setWindowIcon is a silent no-op without xdg toplevel`() {
+        val window = WaylandWindow.createForTest(iconManagerPtr = 1L)
+        // xdgToplevelPtr returns 0 when xdg is null → no-op
+        window.setWindowIcon(null)
+        window.setWindowIcon(Icon(ByteArray(16), 2, 2))
+    }
+
+    @Test
+    fun `WaylandIconManager creation with zero iconManagerPtr produces null manager`() {
+        val window = WaylandWindow.createForTest(iconManagerPtr = 0L)
+        assertNull(window.iconManager)
+    }
+
+    @Test
+    fun `WaylandIconManager creation with valid iconManagerPtr produces non-null manager`() {
+        val shm = 42L
+        val window = WaylandWindow.createForTest(
+            iconManagerPtr = 100L,
+            shmPtr = shm,
+        )
+        assertNotNull(window.iconManager)
+    }
+
+    @Test
+    fun `WaylandIconManager createShmBuffer returns 0 when shmPtr is 0`() {
+        val buf = WaylandIconManager.createShmBuffer(0L, 16, 16, ByteArray(256))
+        assertEquals(0L, buf)
+    }
+
+    @Test
+    fun `WaylandIconManager createShmBuffer returns 0 with invalid dimensions`() {
+        assertEquals(0L, WaylandIconManager.createShmBuffer(1L, 0, 16, ByteArray(64)))
+        assertEquals(0L, WaylandIconManager.createShmBuffer(1L, 16, 0, ByteArray(64)))
+        assertEquals(0L, WaylandIconManager.createShmBuffer(1L, -1, 16, ByteArray(64)))
     }
 
     @Test

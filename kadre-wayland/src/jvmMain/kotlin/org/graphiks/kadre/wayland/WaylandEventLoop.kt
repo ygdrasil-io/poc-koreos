@@ -71,6 +71,7 @@ class WaylandEventLoop internal constructor(
     internal val eventFd: Int,
     internal val decorationManagerPtr: Long = 0L,
     internal val pointerConstraintsPtr: Long = 0L,
+    internal val iconManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
 
     /** Active windows indexed by the address of their wl_surface*. */
@@ -123,6 +124,7 @@ class WaylandEventLoop internal constructor(
             attrs = attributes,
             decorationManager = decorationManagerPtr,
             pointerConstraintsPtr = pointerConstraintsPtr,
+            iconManagerPtr = iconManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
@@ -148,6 +150,7 @@ class WaylandEventLoop internal constructor(
             attrs = attrs.core,
             decorationManager = decorationManagerPtr,
             pointerConstraintsPtr = pointerConstraintsPtr,
+            iconManagerPtr = iconManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
         windows[window.id.value] = window
@@ -333,7 +336,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
 
     val eventLoop = WaylandEventLoop(
         displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, eventFd,
-        globals.decorationManagerPtr, globals.pointerConstraintsPtr,
+        globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
     )
 
     // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─

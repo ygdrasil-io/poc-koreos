@@ -42,6 +42,7 @@ internal data class WaylandGlobals(
     val shmPtr: Long = 0L,
     val shmVersion: Int = 0,
     val pointerConstraintsPtr: Long = 0L,
+    val iconManagerPtr: Long = 0L,
 )
 
 /**
@@ -65,6 +66,8 @@ private class GlobalsCollector {
     var shmVersion: Int = 0
     var pointerConstraintsName: Int = -1
     var pointerConstraintsVersion: Int = 0
+    var iconManagerName: Int = -1
+    var iconManagerVersion: Int = 0
 
     /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
     @Suppress("UNUSED_PARAMETER")
@@ -86,6 +89,8 @@ private class GlobalsCollector {
             "wl_shm" -> if (shmName < 0) { shmName = name; shmVersion = version }
             "zwp_pointer_constraints_v1" ->
                 if (pointerConstraintsName < 0) { pointerConstraintsName = name; pointerConstraintsVersion = version }
+            "xdg_toplevel_icon_manager_v1" ->
+                if (iconManagerName < 0) { iconManagerName = name; iconManagerVersion = version }
         }
     }
 
@@ -296,6 +301,19 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             }.getOrDefault(0L)
         }
 
+        // 12. wl_registry.bind(xdg_toplevel_icon_manager_v1) for window icons.
+        var iconManagerPtr = 0L
+        if (collector.iconManagerName >= 0) {
+            val iface = xdgToplevelIconManagerV1Interface
+            val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+            iconManagerPtr = runCatching {
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.iconManagerVersion, 0,
+                    collector.iconManagerName, namePtr, collector.iconManagerVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
         WaylandGlobals(
             compositorPtr        = compositor.address(),
             xdgWmBasePtr         = xdgWmBasePtr,
@@ -308,6 +326,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             shmPtr               = shmPtr,
             shmVersion           = shmVersion,
             pointerConstraintsPtr = pointerConstraintsPtr,
+            iconManagerPtr       = iconManagerPtr,
         )
     } catch (_: Throwable) {
         WaylandGlobals(0L, 0L)

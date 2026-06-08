@@ -79,10 +79,15 @@ class WaylandWindow private constructor(
     private val shmPtr: Long,
     private val attrs: WindowAttributes,
     pointerConstraintsPtr: Long = 0L,
+    iconManagerPtr: Long = 0L,
 ) : Window {
     @JvmField
     internal val pointerConstraints: WaylandPointerConstraints? =
         if (pointerConstraintsPtr != 0L) WaylandPointerConstraints(pointerConstraintsPtr) else null
+
+    @JvmField
+    internal val iconManager: WaylandIconManager? =
+        if (iconManagerPtr != 0L && shmPtr != 0L) WaylandIconManager(iconManagerPtr, shmPtr, displayPtr) else null
 
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
@@ -875,14 +880,17 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Deferred optional-protocol support on Wayland.
+     * Sets the window icon via `xdg_toplevel_icon_manager_v1` when available.
      *
-     * winit can use `xdg_toplevel_icon_manager_v1` when the compositor exposes
-     * it. Kadre has not generated or bound that protocol yet, so this remains a
-     * documented no-op instead of claiming Wayland cannot support it.
+     * Delegates to [WaylandIconManager] which creates a wl_shm buffer from the
+     * RGBA pixel data and sets it on the xdg_toplevel. Silent no-op when the
+     * compositor does not expose the protocol extension.
      */
     override fun setWindowIcon(icon: Icon?) {
-        // No-op until xdg_toplevel_icon_manager_v1 is bound.
+        val mgr = iconManager ?: return
+        val toplevelPtr = xdgToplevelPtr()
+        if (toplevelPtr == 0L) return
+        mgr.setWindowIcon(icon, toplevelPtr)
     }
 
     /**
@@ -970,6 +978,7 @@ class WaylandWindow private constructor(
             attrs: WindowAttributes,
             decorationManager: Long = 0L,
             pointerConstraintsPtr: Long = 0L,
+            iconManagerPtr: Long = 0L,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -999,7 +1008,7 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr)
+            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr)
             window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
@@ -1055,8 +1064,9 @@ class WaylandWindow private constructor(
             shmPtr: Long = 0L,
             attrs: WindowAttributes = WindowAttributes(),
             pointerConstraintsPtr: Long = 0L,
+            iconManagerPtr: Long = 0L,
         ): WaylandWindow =
-            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr).also {
+            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr).also {
                 it.setTransparent(attrs.transparent)
             }
     }
