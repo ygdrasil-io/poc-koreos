@@ -153,7 +153,12 @@ fun ScenarioScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (appHandler.currentScenarioState.message != null) {
+        if (appHandler.activeScenarioId == "game-simple" && appHandler.currentScenarioState.isRunning) {
+            GameView(
+                appHandler = appHandler,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        } else if (appHandler.currentScenarioState.message != null) {
             Text(
                 text = appHandler.currentScenarioState.message ?: "",
                 style = MaterialTheme.typography.body1
@@ -215,6 +220,7 @@ class CliDisplayState {
     var isRunning by mutableStateOf(false)
     var isAllDone by mutableStateOf(false)
     var eventLog by mutableStateOf(listOf<String>())
+    var gameData by mutableStateOf<Map<String, Any>>(emptyMap())
 
     fun logEvent(entry: String) {
         val last = eventLog.lastOrNull()
@@ -311,7 +317,13 @@ fun CliScenarioDisplay(state: CliDisplayState) {
 
                         Spacer(Modifier.height(16.dp))
 
-                        if (state.eventLog.isNotEmpty()) {
+                        if (state.currentScenario?.scenario?.id == "game-simple" && state.isRunning) {
+                            GameView(
+                                data = state.gameData,
+                                message = state.scenarioMessage,
+                                modifier = Modifier.weight(1f).fillMaxWidth()
+                            )
+                        } else if (state.eventLog.isNotEmpty()) {
                             Text(
                                 text = "Événements:",
                                 style = MaterialTheme.typography.h6,

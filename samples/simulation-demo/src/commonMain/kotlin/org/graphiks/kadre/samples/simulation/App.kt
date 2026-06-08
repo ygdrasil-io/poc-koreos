@@ -24,6 +24,9 @@ class SimulationAppHandler : ApplicationHandler {
     var isInScenario: Boolean = false
         private set
 
+    val activeScenarioId: String?
+        get() = activeScenario?.id
+
     private var scenarioEventCallback: (ScenarioEvent) -> Unit = {}
 
     fun setEventLoopAndWindow(eventLoop: ActiveEventLoop, window: Window) {

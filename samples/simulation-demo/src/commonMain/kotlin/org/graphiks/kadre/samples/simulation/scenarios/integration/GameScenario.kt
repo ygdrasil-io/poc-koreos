@@ -48,8 +48,20 @@ class GameScenario : Scenario {
         onEvent(ScenarioEvent.StateChanged(ScenarioState(
             isRunning = true,
             message = "🎮 ZQSD/WASD: déplacement | Clic gauche: tirer sur les cibles",
-            data = mapOf("score" to 0, "player_x" to playerX.toInt(), "player_y" to playerY.toInt())
+            data = stateData()
         )))
+    }
+
+    private fun stateData(extra: Map<String, Any> = emptyMap()): Map<String, Any> {
+        val targetsX = targets.joinToString(",") { it.x.toInt().toString() }
+        val targetsY = targets.joinToString(",") { it.y.toInt().toString() }
+        return mapOf(
+            "player_x" to playerX.toInt(),
+            "player_y" to playerY.toInt(),
+            "score" to score,
+            "targets_x" to targetsX,
+            "targets_y" to targetsY,
+        ) + extra
     }
 
     override fun stop() {
@@ -91,7 +103,7 @@ class GameScenario : Scenario {
         onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
             isRunning = true,
             message = "🎮 Position: (${playerX.toInt()}, ${playerY.toInt()}) | Score: $score",
-            data = mapOf("player_x" to playerX.toInt(), "player_y" to playerY.toInt(), "score" to score)
+            data = stateData()
         )))
     }
 
@@ -128,13 +140,13 @@ class GameScenario : Scenario {
             onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                 isRunning = true,
                 message = "🎯 Cible touchée! +10 points (Score: $score)",
-                data = mapOf("score" to score, "hit" to true)
+                data = stateData(mapOf("hit" to true))
             )))
         } else {
             onEvent?.invoke(ScenarioEvent.StateChanged(ScenarioState(
                 isRunning = true,
                 message = "💨 Tir raté... (Score: $score)",
-                data = mapOf("score" to score, "hit" to false)
+                data = stateData(mapOf("hit" to false))
             )))
         }
     }

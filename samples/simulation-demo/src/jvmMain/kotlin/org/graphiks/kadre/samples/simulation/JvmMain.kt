@@ -160,7 +160,12 @@ private fun runCliDemo(cliArgs: Cli.CliArgs) = kadreApplication {
 
             meta.scenario.start(win.window, eventLoop) { event ->
                 when (event) {
-                    is ScenarioEvent.StateChanged -> displayState.scenarioMessage = event.state.message ?: ""
+                    is ScenarioEvent.StateChanged -> {
+                        displayState.scenarioMessage = event.state.message ?: ""
+                        if (event.state.data.isNotEmpty()) {
+                            displayState.gameData = event.state.data
+                        }
+                    }
                     is ScenarioEvent.Message -> println("[${event.severity}] ${event.text}")
                     else -> {}
                 }

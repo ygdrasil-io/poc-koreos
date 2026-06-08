@@ -111,20 +111,71 @@ suspend fun simulateEvents(meta: ScenarioMetadata, window: Window, state: CliDis
             delay(300)
         }
         "game-simple" -> {
-            state.scenarioMessage = "Mini-jeu : déplacement et tir..."
-            delay(300)
-            // Move player toward targets
-            pressKey(scenario, KeyCode.KeyW, 'w'); sleep(50)
-            pressKey(scenario, KeyCode.KeyA, 'a'); sleep(50)
-            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(50)
-            pressKey(scenario, KeyCode.KeyS, 's'); sleep(50)
-            // Shoot at fixed target positions
-            click(scenario, PhysicalPosition(200.0, 200.0)); sleep(200)
-            click(scenario, PhysicalPosition(600.0, 200.0)); sleep(200)
-            click(scenario, PhysicalPosition(400.0, 400.0)); sleep(200)
-            click(scenario, PhysicalPosition(200.0, 500.0)); sleep(200)
-            click(scenario, PhysicalPosition(600.0, 500.0)); sleep(200)
-            delay(200)
+            state.scenarioMessage = "🎮 DÉPLACEMENT VERS LA CIBLE 1..."
+            delay(1500)
+            pressKey(scenario, KeyCode.KeyW, 'w'); sleep(200)
+            pressKey(scenario, KeyCode.KeyI, 'i'); sleep(200)
+            pressKey(scenario, KeyCode.KeyW, 'w'); sleep(200)
+            pressKey(scenario, KeyCode.KeyI, 'i'); sleep(200)
+            pressKey(scenario, KeyCode.KeyA, 'a'); sleep(200)
+            pressKey(scenario, KeyCode.KeyJ, 'j'); sleep(200)
+
+            state.scenarioMessage = "🎯 TIR SUR CIBLE 1..."
+            delay(800)
+            click(scenario, PhysicalPosition(200.0, 200.0)); sleep(600)
+            delay(600)
+
+            state.scenarioMessage = "🎮 DÉPLACEMENT VERS LA CIBLE 2..."
+            delay(1000)
+            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(200)
+            pressKey(scenario, KeyCode.KeyL, 'l'); sleep(200)
+            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(200)
+            pressKey(scenario, KeyCode.KeyL, 'l'); sleep(200)
+
+            state.scenarioMessage = "🎯 TIR SUR CIBLE 2..."
+            delay(800)
+            click(scenario, PhysicalPosition(600.0, 200.0)); sleep(600)
+            delay(600)
+
+            state.scenarioMessage = "🎮 DÉPLACEMENT VERS LA CIBLE 3..."
+            delay(1000)
+            pressKey(scenario, KeyCode.KeyS, 's'); sleep(200)
+            pressKey(scenario, KeyCode.KeyK, 'k'); sleep(200)
+            pressKey(scenario, KeyCode.KeyS, 's'); sleep(200)
+            pressKey(scenario, KeyCode.KeyK, 'k'); sleep(200)
+
+            state.scenarioMessage = "🎯 TIR SUR CIBLE 3..."
+            delay(800)
+            click(scenario, PhysicalPosition(400.0, 400.0)); sleep(600)
+            delay(600)
+
+            state.scenarioMessage = "🎮 DÉPLACEMENT VERS LA CIBLE 4..."
+            delay(1000)
+            pressKey(scenario, KeyCode.KeyA, 'a'); sleep(200)
+            pressKey(scenario, KeyCode.KeyJ, 'j'); sleep(200)
+            pressKey(scenario, KeyCode.KeyA, 'a'); sleep(200)
+            pressKey(scenario, KeyCode.KeyJ, 'j'); sleep(200)
+            pressKey(scenario, KeyCode.KeyS, 's'); sleep(200)
+            pressKey(scenario, KeyCode.KeyK, 'k'); sleep(200)
+
+            state.scenarioMessage = "🎯 TIR SUR CIBLE 4..."
+            delay(800)
+            click(scenario, PhysicalPosition(200.0, 500.0)); sleep(600)
+            delay(600)
+
+            state.scenarioMessage = "🎮 DÉPLACEMENT VERS LA CIBLE 5..."
+            delay(1000)
+            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(200)
+            pressKey(scenario, KeyCode.KeyL, 'l'); sleep(200)
+            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(200)
+            pressKey(scenario, KeyCode.KeyL, 'l'); sleep(200)
+            pressKey(scenario, KeyCode.KeyW, 'w'); sleep(200)
+            pressKey(scenario, KeyCode.KeyI, 'i'); sleep(200)
+
+            state.scenarioMessage = "🎯 TIR SUR CIBLE 5..."
+            delay(800)
+            click(scenario, PhysicalPosition(600.0, 500.0)); sleep(600)
+            delay(1000)
         }
     }
 
