@@ -40,13 +40,9 @@ class GameScenario : Scenario {
         this.totalShots = 0
         this.hits = 0
 
-        val rng = kotlin.random.Random
+        val pos = listOf(200f, 200f, 600f, 200f, 400f, 400f, 200f, 500f, 600f, 500f)
         for (i in 0 until 5) {
-            targets.add(Target(
-                x = rng.nextFloat() * 700f + 50f,
-                y = rng.nextFloat() * 500f + 50f,
-                id = i
-            ))
+            targets.add(Target(x = pos[i * 2], y = pos[i * 2 + 1], id = i))
         }
 
         onEvent(ScenarioEvent.StateChanged(ScenarioState(
@@ -81,13 +77,9 @@ class GameScenario : Scenario {
             PhysicalKey.Code(KeyCode.KeyR) -> {
                 score = 0
                 targets.clear()
-                val rng = kotlin.random.Random
+                val pos = listOf(200f, 200f, 600f, 200f, 400f, 400f, 200f, 500f, 600f, 500f)
                 for (i in 0 until 5) {
-                    targets.add(Target(
-                        x = rng.nextFloat() * 700f + 50f,
-                        y = rng.nextFloat() * 500f + 50f,
-                        id = i
-                    ))
+                    targets.add(Target(x = pos[i * 2], y = pos[i * 2 + 1], id = i))
                 }
             }
             else -> {}

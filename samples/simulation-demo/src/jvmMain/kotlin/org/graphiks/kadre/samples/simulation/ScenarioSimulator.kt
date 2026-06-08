@@ -63,14 +63,20 @@ suspend fun simulateEvents(meta: ScenarioMetadata, window: Window, state: CliDis
         simulateMouse(scenario, state)
     }
 
+    if (Capability.TOUCH in caps || Capability.MULTI_TOUCH in caps) {
+        simulateTouch(scenario, meta.scenario.id, state)
+    }
+
     // Window-level scenarios use the Window API to trigger events naturally
     when (meta.scenario.id) {
         "window-resize" -> {
             state.scenarioMessage = "Redimensionnement..."
             delay(200)
             window.requestSurfaceSize(PhysicalSize(800, 600))
+            scenario.onWindowEvent(WindowEvent.Resized(PhysicalSize(800, 600)))
             delay(300)
             window.requestSurfaceSize(PhysicalSize(1000, 700))
+            scenario.onWindowEvent(WindowEvent.Resized(PhysicalSize(1000, 700)))
             delay(300)
         }
         "window-fullscreen" -> {
@@ -85,11 +91,40 @@ suspend fun simulateEvents(meta: ScenarioMetadata, window: Window, state: CliDis
             state.scenarioMessage = "Manipulation fenêtre..."
             delay(200)
             window.setMinimized(true)
+            scenario.onWindowEvent(WindowEvent.Focused(false))
             delay(600)
             window.setMinimized(false)
+            scenario.onWindowEvent(WindowEvent.Focused(true))
             delay(400)
             window.requestSurfaceSize(PhysicalSize(900, 650))
+            scenario.onWindowEvent(WindowEvent.Resized(PhysicalSize(900, 650)))
             delay(300)
+        }
+        "window-multi" -> {
+            state.scenarioMessage = "Création fenêtres..."
+            delay(200)
+            pressKey(scenario, KeyCode.KeyN, 'N')
+            sleep(200)
+            pressKey(scenario, KeyCode.KeyN, 'N')
+            sleep(200)
+            pressKey(scenario, KeyCode.KeyN, 'N')
+            delay(300)
+        }
+        "game-simple" -> {
+            state.scenarioMessage = "Mini-jeu : déplacement et tir..."
+            delay(300)
+            // Move player toward targets
+            pressKey(scenario, KeyCode.KeyW, 'w'); sleep(50)
+            pressKey(scenario, KeyCode.KeyA, 'a'); sleep(50)
+            pressKey(scenario, KeyCode.KeyD, 'd'); sleep(50)
+            pressKey(scenario, KeyCode.KeyS, 's'); sleep(50)
+            // Shoot at fixed target positions
+            click(scenario, PhysicalPosition(200.0, 200.0)); sleep(200)
+            click(scenario, PhysicalPosition(600.0, 200.0)); sleep(200)
+            click(scenario, PhysicalPosition(400.0, 400.0)); sleep(200)
+            click(scenario, PhysicalPosition(200.0, 500.0)); sleep(200)
+            click(scenario, PhysicalPosition(600.0, 500.0)); sleep(200)
+            delay(200)
         }
     }
 
@@ -143,7 +178,18 @@ private fun modifierSequence(s: Scenario) {
 
 private fun repeatSequence(s: Scenario) {
     keyDown(s, KeyCode.KeyA, "a")
-    sleep(800)
+    sleep(100)
+    for (i in 0 until 20) {
+        s.onWindowEvent(WindowEvent.KeyInput(KeyEvent(
+            PhysicalKey.Code(KeyCode.KeyA),
+            LogicalKey.Character("a"),
+            KeyState.Pressed,
+            KeyboardModifiers.NONE,
+            repeat = true,
+            text = "a"
+        )))
+        sleep(30)
+    }
     keyUp(s, KeyCode.KeyA, "a")
     sleep(100)
 }
@@ -181,6 +227,86 @@ private fun simulateMouse(scenario: Scenario, state: CliDisplayState) {
     // Drag
     state.scenarioMessage = "Glisser-déposer..."
     dragBetween(scenario, pos2, PhysicalPosition(600.0, 400.0))
+}
+
+// ── Touch simulation ──────────────────────────────────────────────────
+
+private fun simulateTouch(scenario: Scenario, id: String, state: CliDisplayState) {
+    when (id) {
+        "touch-single" -> singleTouchSequence(scenario)
+        "touch-multi" -> multiTouchSequence(scenario)
+        "touch-gestures" -> gestureSequence(scenario)
+    }
+}
+
+private fun singleTouchSequence(s: Scenario) {
+    sleep(100)
+    touchPress(s, PhysicalPosition(400.0, 300.0), FingerId(1L))
+    sleep(80)
+    touchMove(s, PhysicalPosition(450.0, 300.0), FingerId(1L))
+    sleep(80)
+    touchMove(s, PhysicalPosition(450.0, 350.0), FingerId(1L))
+    sleep(80)
+    touchMove(s, PhysicalPosition(400.0, 350.0), FingerId(1L))
+    sleep(80)
+    touchRelease(s, PhysicalPosition(400.0, 350.0), FingerId(1L))
+    sleep(100)
+}
+
+private fun multiTouchSequence(s: Scenario) {
+    sleep(100)
+    touchPress(s, PhysicalPosition(300.0, 300.0), FingerId(1L))
+    sleep(60)
+    touchPress(s, PhysicalPosition(500.0, 300.0), FingerId(2L))
+    sleep(80)
+    touchMove(s, PhysicalPosition(350.0, 350.0), FingerId(1L))
+    sleep(60)
+    touchMove(s, PhysicalPosition(450.0, 350.0), FingerId(2L))
+    sleep(80)
+    touchRelease(s, PhysicalPosition(350.0, 350.0), FingerId(1L))
+    sleep(60)
+    touchRelease(s, PhysicalPosition(450.0, 350.0), FingerId(2L))
+    sleep(100)
+}
+
+private fun gestureSequence(s: Scenario) {
+    sleep(100)
+    touchPress(s, PhysicalPosition(400.0, 300.0), FingerId(1L))
+    sleep(50)
+    touchRelease(s, PhysicalPosition(400.0, 300.0), FingerId(1L))
+    sleep(200)
+    touchPress(s, PhysicalPosition(150.0, 300.0), FingerId(1L))
+    sleep(50)
+    touchSwipe(s, PhysicalPosition(150.0, 300.0), PhysicalPosition(450.0, 300.0), FingerId(1L))
+    touchRelease(s, PhysicalPosition(450.0, 300.0), FingerId(1L))
+    sleep(200)
+    touchPress(s, PhysicalPosition(400.0, 150.0), FingerId(1L))
+    sleep(50)
+    touchSwipe(s, PhysicalPosition(400.0, 150.0), PhysicalPosition(400.0, 450.0), FingerId(1L))
+    touchRelease(s, PhysicalPosition(400.0, 450.0), FingerId(1L))
+    sleep(100)
+}
+
+private fun touchPress(s: Scenario, pos: PhysicalPosition<Double>, finger: FingerId) {
+    s.onWindowEvent(WindowEvent.PointerButton(null, KeyState.Pressed, pos, true, ButtonSource.Touch(finger)))
+}
+
+private fun touchRelease(s: Scenario, pos: PhysicalPosition<Double>, finger: FingerId) {
+    s.onWindowEvent(WindowEvent.PointerButton(null, KeyState.Released, pos, true, ButtonSource.Touch(finger)))
+}
+
+private fun touchMove(s: Scenario, pos: PhysicalPosition<Double>, finger: FingerId) {
+    s.onWindowEvent(WindowEvent.PointerMoved(null, pos, true, PointerSource.Touch(finger)))
+}
+
+private fun touchSwipe(s: Scenario, from: PhysicalPosition<Double>, to: PhysicalPosition<Double>, finger: FingerId) {
+    val steps = 5
+    for (i in 1..steps) {
+        val x = from.x + (to.x - from.x) * i / steps
+        val y = from.y + (to.y - from.y) * i / steps
+        touchMove(s, PhysicalPosition(x, y), finger)
+        sleep(30)
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
