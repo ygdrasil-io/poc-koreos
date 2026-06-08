@@ -78,7 +78,11 @@ class WaylandWindow private constructor(
     private val surfacePtr: Long,
     private val shmPtr: Long,
     private val attrs: WindowAttributes,
+    pointerConstraintsPtr: Long = 0L,
 ) : Window {
+    @JvmField
+    internal val pointerConstraints: WaylandPointerConstraints? =
+        if (pointerConstraintsPtr != 0L) WaylandPointerConstraints(pointerConstraintsPtr) else null
 
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
@@ -724,17 +728,35 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Releases pointer grabs as a success no-op, matching winit.
+     * Initiates or releases pointer grabs via zwp_pointer_constraints_v1.
      *
-     * Pointer confinement/locking requires zwp_pointer_constraints_v1, which is
-     * an optional Wayland protocol extension not yet wired in this backend.
+     * When the protocol extension is available (the compositor announced it and
+     * [pointerConstraints] is non-null), delegates to [WaylandPointerConstraints].
+     * Otherwise only [CursorGrabMode.None] succeeds.
      */
-    override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        if (mode == CursorGrabMode.None) {
-            WindowRequestResult.Success
-        } else {
-            WindowRequestResult.Failure(RequestError.Unsupported("Wayland pointer constraints are not wired"))
+    override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult {
+        val pc = pointerConstraints
+        if (pc == null) {
+            return if (mode == CursorGrabMode.None) {
+                WindowRequestResult.Success
+            } else {
+                WindowRequestResult.Failure(
+                    RequestError.Unsupported("Wayland pointer constraints are not available"),
+                )
+            }
         }
+        if (mode == CursorGrabMode.None) {
+            pc.release()
+            return WindowRequestResult.Success
+        }
+        val cursorCtx = WaylandPointerState.currentCursor(surfacePtr)
+        if (cursorCtx == null) {
+            return WindowRequestResult.Failure(
+                RequestError.Unsupported("wl_pointer not focused on this surface"),
+            )
+        }
+        return pc.grab(surfacePtr, cursorCtx.pointerPtr, mode)
+    }
 
     /**
      * No-op on Wayland.
@@ -947,6 +969,7 @@ class WaylandWindow private constructor(
             shmPtr: Long,
             attrs: WindowAttributes,
             decorationManager: Long = 0L,
+            pointerConstraintsPtr: Long = 0L,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -976,7 +999,7 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs)
+            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr)
             window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
@@ -1031,8 +1054,9 @@ class WaylandWindow private constructor(
             surface: Long = 0L,
             shmPtr: Long = 0L,
             attrs: WindowAttributes = WindowAttributes(),
+            pointerConstraintsPtr: Long = 0L,
         ): WaylandWindow =
-            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs).also {
+            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr).also {
                 it.setTransparent(attrs.transparent)
             }
     }

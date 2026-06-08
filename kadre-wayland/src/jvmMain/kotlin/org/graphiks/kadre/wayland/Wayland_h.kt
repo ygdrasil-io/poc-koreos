@@ -837,6 +837,75 @@ internal val zwpTextInputV3Interface: MemorySegment by lazy {
     buildWaylandInterface("zwp_text_input_v3", methodCount = 6, eventCount = 6)
 }
 
+// ── zwp_pointer_constraints_v1 protocol (protocol extension interface symbols) ──
+
+/** &zwp_pointer_constraints_v1_interface (minimal, for bind + lock/confine). */
+internal val zwpPointerConstraintsV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("zwp_pointer_constraints_v1", methodCount = 3, eventCount = 0)
+}
+
+/** &zwp_locked_pointer_v1_interface (minimal, for lock_pointer new_id). */
+internal val zwpLockedPointerV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("zwp_locked_pointer_v1", methodCount = 3, eventCount = 2)
+}
+
+/** &zwp_confined_pointer_v1_interface (minimal, for confine_pointer new_id). */
+internal val zwpConfinedPointerV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("zwp_confined_pointer_v1", methodCount = 2, eventCount = 2)
+}
+
+/** Lifetime value: the constraint is released once the next pointer button event is received. */
+internal const val ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT: Int = 0
+
+/** Lifetime value: the constraint persists until the client destroys it or the compositor revokes it. */
+internal const val ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT: Int = 1
+
+/**
+ * wl_proxy_marshal_flags for zwp_pointer_constraints_v1.lock_pointer (opcode 1).
+ *
+ * Signature: zwp_locked_pointer_v1* wl_proxy_marshal_flags(
+ *     constraints, 1, &zwp_locked_pointer_v1_interface, version, flags,
+ *     surface, pointer, region, lifetime, NULL).
+ */
+internal val wlPointerConstraintsLockPointer: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,  // wl_proxy* (constraints)
+            ValueLayout.JAVA_INT, // opcode = 1
+            ValueLayout.ADDRESS,  // wl_interface* (&zwp_locked_pointer_v1_interface)
+            ValueLayout.JAVA_INT, // version
+            ValueLayout.JAVA_INT, // flags
+            ValueLayout.ADDRESS,  // wl_surface*
+            ValueLayout.ADDRESS,  // wl_pointer*
+            ValueLayout.ADDRESS,  // wl_region* (nullable)
+            ValueLayout.JAVA_INT, // lifetime (uint32)
+            ValueLayout.ADDRESS,  // new_id = NULL
+        ))
+}
+
+/**
+ * wl_proxy_marshal_flags for zwp_pointer_constraints_v1.confine_pointer (opcode 2).
+ *
+ * Signature: zwp_confined_pointer_v1* wl_proxy_marshal_flags(
+ *     constraints, 2, &zwp_confined_pointer_v1_interface, version, flags,
+ *     surface, pointer, region, lifetime, NULL).
+ */
+internal val wlPointerConstraintsConfinePointer: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,  // wl_proxy* (constraints)
+            ValueLayout.JAVA_INT, // opcode = 2
+            ValueLayout.ADDRESS,  // wl_interface* (&zwp_confined_pointer_v1_interface)
+            ValueLayout.JAVA_INT, // version
+            ValueLayout.JAVA_INT, // flags
+            ValueLayout.ADDRESS,  // wl_surface*
+            ValueLayout.ADDRESS,  // wl_pointer*
+            ValueLayout.ADDRESS,  // wl_region* (nullable)
+            ValueLayout.JAVA_INT, // lifetime (uint32)
+            ValueLayout.ADDRESS,  // new_id = NULL
+        ))
+}
+
 /**
  * wl_proxy_marshal_flags for zwp_text_input_manager_v3.create_text_input (opcode 1).
  *

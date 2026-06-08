@@ -253,6 +253,44 @@ class WaylandWindowTest {
         val confined = window.setCursorGrab(CursorGrabMode.Confined)
         assertIs<WindowRequestResult.Failure>(confined)
         assertIs<RequestError.Unsupported>(confined.error)
+        assertEquals("Wayland pointer constraints are not available", confined.error.message)
+    }
+
+    @Test
+    fun `Wayland cursor grab with zero pointerConstraintsPtr still succeeds for None`() {
+        val window = WaylandWindow.createForTest(pointerConstraintsPtr = 0L)
+
+        // None should succeed
+        assertEquals(WindowRequestResult.Success, window.setCursorGrab(CursorGrabMode.None))
+
+        // Confined should fail since constraintsPtr is 0
+        val confined = window.setCursorGrab(CursorGrabMode.Confined)
+        assertIs<WindowRequestResult.Failure>(confined)
+        assertIs<RequestError.Unsupported>(confined.error)
+    }
+
+    @Test
+    fun `WaylandPointerConstraints grab with zero constraintsPtr returns Unsupported`() {
+        val pc = WaylandPointerConstraints(0L)
+        // No FFM calls needed — the code path checks constraintsPtr first
+        val locked = pc.grab(surfacePtr = 1L, pointerPtr = 2L, mode = CursorGrabMode.Locked)
+        assertIs<WindowRequestResult.Failure>(locked)
+        assertIs<RequestError.Unsupported>(locked.error)
+
+        val confined = pc.grab(surfacePtr = 1L, pointerPtr = 2L, mode = CursorGrabMode.Confined)
+        assertIs<WindowRequestResult.Failure>(confined)
+        assertIs<RequestError.Unsupported>(confined.error)
+
+        val none = pc.grab(surfacePtr = 1L, pointerPtr = 2L, mode = CursorGrabMode.None)
+        assertIs<WindowRequestResult.Success>(none)
+    }
+
+    @Test
+    fun `WaylandPointerConstraints release does not crash without FFM bindings`() {
+        val pc = WaylandPointerConstraints(0L)
+        pc.release() // Must not throw
+        pc.grab(surfacePtr = 0L, pointerPtr = 0L, mode = CursorGrabMode.None)
+        pc.release() // Must not throw (idempotent)
     }
 
     @Test

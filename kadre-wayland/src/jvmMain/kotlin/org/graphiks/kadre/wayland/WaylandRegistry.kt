@@ -41,6 +41,7 @@ internal data class WaylandGlobals(
     val textInputManagerPtr: Long = 0L,
     val shmPtr: Long = 0L,
     val shmVersion: Int = 0,
+    val pointerConstraintsPtr: Long = 0L,
 )
 
 /**
@@ -62,6 +63,8 @@ private class GlobalsCollector {
     var textInputManagerVersion: Int = 0
     var shmName: Int = -1
     var shmVersion: Int = 0
+    var pointerConstraintsName: Int = -1
+    var pointerConstraintsVersion: Int = 0
 
     /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
     @Suppress("UNUSED_PARAMETER")
@@ -81,6 +84,8 @@ private class GlobalsCollector {
             "zwp_text_input_manager_v3" ->
                 if (textInputManagerName < 0) { textInputManagerName = name; textInputManagerVersion = version }
             "wl_shm" -> if (shmName < 0) { shmName = name; shmVersion = version }
+            "zwp_pointer_constraints_v1" ->
+                if (pointerConstraintsName < 0) { pointerConstraintsName = name; pointerConstraintsVersion = version }
         }
     }
 
@@ -278,6 +283,19 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             }
         }
 
+        // 11. wl_registry.bind(zwp_pointer_constraints_v1) for pointer confinement/locking.
+        var pointerConstraintsPtr = 0L
+        if (collector.pointerConstraintsName >= 0) {
+            val iface = zwpPointerConstraintsV1Interface
+            val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+            pointerConstraintsPtr = runCatching {
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.pointerConstraintsVersion, 0,
+                    collector.pointerConstraintsName, namePtr, collector.pointerConstraintsVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
         WaylandGlobals(
             compositorPtr        = compositor.address(),
             xdgWmBasePtr         = xdgWmBasePtr,
@@ -289,6 +307,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             textInputManagerPtr  = textInputManagerPtr,
             shmPtr               = shmPtr,
             shmVersion           = shmVersion,
+            pointerConstraintsPtr = pointerConstraintsPtr,
         )
     } catch (_: Throwable) {
         WaylandGlobals(0L, 0L)
