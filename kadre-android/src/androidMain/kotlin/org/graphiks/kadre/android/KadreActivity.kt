@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.DragEvent
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.SurfaceHolder
 import android.view.View
 import android.view.WindowManager
@@ -115,6 +116,9 @@ abstract class KadreActivity : ComponentActivity() {
     /** Last observed keyboard modifier state, used to suppress duplicate notifications. */
     private var lastKeyboardModifierState = AndroidKeyMapper.initialModifierState()
 
+    /** Scale gesture detector for pinch-zoom support. */
+    private var scaleGestureDetector: ScaleGestureDetector? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -205,6 +209,44 @@ abstract class KadreActivity : ComponentActivity() {
         eventLoop = AndroidEventLoop(this)
         lastScaleFactor = resources.displayMetrics.density.toDouble()
 
+        // ── Scale gesture detector (pinch-zoom) ─────────────────────────────────
+        scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                eventLoop.pendingWindow?.let { window ->
+                    handler.windowEvent(eventLoop, window.id,
+                        WindowEvent.PinchGesture(
+                            deviceId = DeviceId(0),
+                            delta = detector.scaleFactor.toDouble(),
+                            phase = TouchPhase.Started,
+                        ))
+                }
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                eventLoop.pendingWindow?.let { window ->
+                    handler.windowEvent(eventLoop, window.id,
+                        WindowEvent.PinchGesture(
+                            deviceId = DeviceId(0),
+                            delta = detector.scaleFactor.toDouble(),
+                            phase = TouchPhase.Moved,
+                        ))
+                }
+                return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                eventLoop.pendingWindow?.let { window ->
+                    handler.windowEvent(eventLoop, window.id,
+                        WindowEvent.PinchGesture(
+                            deviceId = DeviceId(0),
+                            delta = detector.scaleFactor.toDouble(),
+                            phase = TouchPhase.Ended,
+                        ))
+                }
+            }
+        })
+
         // ── SurfaceHolder callbacks (surface lifecycle) ────────────────────────
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -261,6 +303,7 @@ abstract class KadreActivity : ComponentActivity() {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val window = eventLoop.pendingWindow
         if (destroyed || window == null) return super.onTouchEvent(event)
+        scaleGestureDetector?.onTouchEvent(event)
         dispatchMotionEvent(event, window)
         return true
     }
