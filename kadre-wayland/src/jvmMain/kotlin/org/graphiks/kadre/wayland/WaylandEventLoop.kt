@@ -395,6 +395,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
             }
         },
         deviceFilter = eventLoop.deviceEventFilter,
+        dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
     )
 
     // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
