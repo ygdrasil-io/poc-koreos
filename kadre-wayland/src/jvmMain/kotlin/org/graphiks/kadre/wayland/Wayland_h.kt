@@ -691,6 +691,64 @@ internal val wlProxyMarshalFlagsObjectTwoInt: MethodHandle? by lazy {
         ))
 }
 
+/**
+ * wl_proxy_marshal_flags variant with a string then an object argument and no new_id.
+ * Used for xdg_activation_v1.activate(token, surface) — opcode 2.
+ *
+ * Signature: void wl_proxy_marshal_flags(proxy, opcode, NULL, version, flags, const char*, object*).
+ */
+internal val wlProxyMarshalFlagsStringObject: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy*
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.ADDRESS,   // arg1: const char*
+            ValueLayout.ADDRESS,   // arg2: object*
+        ))
+}
+
+/**
+ * wl_proxy_marshal_flags variant with a uint then an object argument and no new_id.
+ * Used for xdg_activation_token_v1.set_serial(serial, seat) — opcode 1.
+ *
+ * Signature: void wl_proxy_marshal_flags(proxy, opcode, NULL, version, flags, uint, object*).
+ */
+internal val wlProxyMarshalFlagsUintObject: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy*
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // arg1: uint32
+            ValueLayout.ADDRESS,   // arg2: object*
+        ))
+}
+
+/**
+ * wl_proxy_marshal_flags variant with a uint then two object arguments and no new_id.
+ * Used for xdg_activation_v1.activate_full(serial, seat, surface) — opcode 3.
+ *
+ * Signature: void wl_proxy_marshal_flags(proxy, opcode, NULL, version, flags, uint, object*, object*).
+ */
+internal val wlProxyMarshalFlagsUintTwoObjects: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.ofVoid(
+            ValueLayout.ADDRESS,   // wl_proxy*
+            ValueLayout.JAVA_INT,  // opcode
+            ValueLayout.ADDRESS,   // wl_interface* (NULL)
+            ValueLayout.JAVA_INT,  // version
+            ValueLayout.JAVA_INT,  // flags
+            ValueLayout.JAVA_INT,  // arg1: uint32
+            ValueLayout.ADDRESS,   // arg2: object*
+            ValueLayout.ADDRESS,   // arg3: object*
+        ))
+}
+
 // ── wl_shm helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -825,6 +883,16 @@ internal fun buildWaylandInterface(
     iface.set(ValueLayout.JAVA_INT, ptr + 8 + ptr, eventCount)  // event_count
     iface.set(ValueLayout.ADDRESS, ptr + 8 + ptr + 8, MemorySegment.NULL) // events = NULL
     return iface
+}
+
+/** &xdg_activation_v1_interface (minimal, for bind + get_activation_token). */
+internal val xdgActivationV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("xdg_activation_v1", methodCount = 4, eventCount = 1)
+}
+
+/** &xdg_activation_token_v1_interface (minimal, for get_activation_token new_id). */
+internal val xdgActivationTokenV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("xdg_activation_token_v1", methodCount = 4, eventCount = 1)
 }
 
 /** &zwp_text_input_manager_v3_interface (minimal, for bind + create_text_input). */

@@ -72,6 +72,8 @@ class WaylandEventLoop internal constructor(
     internal val decorationManagerPtr: Long = 0L,
     internal val pointerConstraintsPtr: Long = 0L,
     internal val iconManagerPtr: Long = 0L,
+    internal val activationManagerPtr: Long = 0L,
+    internal val seatPtr: Long = 0L,
     internal val extBackgroundEffectManagerPtr: Long = 0L,
     internal val kwinBlurManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
@@ -127,6 +129,8 @@ class WaylandEventLoop internal constructor(
             decorationManager = decorationManagerPtr,
             pointerConstraintsPtr = pointerConstraintsPtr,
             iconManagerPtr = iconManagerPtr,
+            activationManagerPtr = activationManagerPtr,
+            seatPtr = seatPtr,
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
@@ -155,6 +159,8 @@ class WaylandEventLoop internal constructor(
             decorationManager = decorationManagerPtr,
             pointerConstraintsPtr = pointerConstraintsPtr,
             iconManagerPtr = iconManagerPtr,
+            activationManagerPtr = activationManagerPtr,
+            seatPtr = seatPtr,
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
@@ -343,6 +349,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
     val eventLoop = WaylandEventLoop(
         displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, eventFd,
         globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
+        globals.activationManagerPtr, globals.seatPtr,
         globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
     )
 

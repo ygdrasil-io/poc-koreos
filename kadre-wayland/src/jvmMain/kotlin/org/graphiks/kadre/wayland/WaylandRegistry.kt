@@ -43,6 +43,7 @@ internal data class WaylandGlobals(
     val shmVersion: Int = 0,
     val pointerConstraintsPtr: Long = 0L,
     val iconManagerPtr: Long = 0L,
+    val activationManagerPtr: Long = 0L,
     val extBackgroundEffectManagerPtr: Long = 0L,
     val kwinBlurManagerPtr: Long = 0L,
 )
@@ -70,6 +71,8 @@ private class GlobalsCollector {
     var pointerConstraintsVersion: Int = 0
     var iconManagerName: Int = -1
     var iconManagerVersion: Int = 0
+    var activationManagerName: Int = -1
+    var activationManagerVersion: Int = 0
     var extBackgroundEffectManagerName: Int = -1
     var extBackgroundEffectManagerVersion: Int = 0
     var kwinBlurManagerName: Int = -1
@@ -97,6 +100,8 @@ private class GlobalsCollector {
                 if (pointerConstraintsName < 0) { pointerConstraintsName = name; pointerConstraintsVersion = version }
             "xdg_toplevel_icon_manager_v1" ->
                 if (iconManagerName < 0) { iconManagerName = name; iconManagerVersion = version }
+            "xdg_activation_v1" ->
+                if (activationManagerName < 0) { activationManagerName = name; activationManagerVersion = version }
             "ext_background_effect_v1" ->
                 if (extBackgroundEffectManagerName < 0) { extBackgroundEffectManagerName = name; extBackgroundEffectManagerVersion = version }
             "org_kde_kwin_blur_manager" ->
@@ -324,7 +329,20 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             }.getOrDefault(0L)
         }
 
-        // 13. wl_registry.bind(ext_background_effect_v1) for Wayland blur (wlroots, KWin 6+).
+        // 13. wl_registry.bind(xdg_activation_v1) for activation tokens.
+        var activationManagerPtr = 0L
+        if (collector.activationManagerName >= 0) {
+            val iface = xdgActivationV1Interface
+            val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+            activationManagerPtr = runCatching {
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.activationManagerVersion, 0,
+                    collector.activationManagerName, namePtr, collector.activationManagerVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
+        // 15. wl_registry.bind(ext_background_effect_v1) for Wayland blur (wlroots, KWin 6+).
         var extBackgroundEffectManagerPtr = 0L
         if (collector.extBackgroundEffectManagerName >= 0) {
             val iface = extBackgroundEffectV1Interface
@@ -337,7 +355,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             }.getOrDefault(0L)
         }
 
-        // 14. wl_registry.bind(org_kde_kwin_blur_manager) for Wayland blur (KWin 5.x).
+        // 16. wl_registry.bind(org_kde_kwin_blur_manager) for Wayland blur (KWin 5.x).
         var kwinBlurManagerPtr = 0L
         if (collector.kwinBlurManagerName >= 0) {
             val iface = orgKdeKwinBlurManagerInterface
@@ -363,6 +381,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             shmVersion              = shmVersion,
             pointerConstraintsPtr   = pointerConstraintsPtr,
             iconManagerPtr          = iconManagerPtr,
+            activationManagerPtr    = activationManagerPtr,
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr      = kwinBlurManagerPtr,
         )

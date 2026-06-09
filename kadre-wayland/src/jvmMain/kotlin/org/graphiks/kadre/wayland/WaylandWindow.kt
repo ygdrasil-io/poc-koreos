@@ -80,6 +80,8 @@ class WaylandWindow private constructor(
     private val attrs: WindowAttributes,
     pointerConstraintsPtr: Long = 0L,
     iconManagerPtr: Long = 0L,
+    activationManagerPtr: Long = 0L,
+    seatPtr: Long = 0L,
     extBackgroundEffectManagerPtr: Long = 0L,
     kwinBlurManagerPtr: Long = 0L,
 ) : Window {
@@ -95,6 +97,11 @@ class WaylandWindow private constructor(
     internal val blurManager: WaylandBlur? =
         if (extBackgroundEffectManagerPtr != 0L || kwinBlurManagerPtr != 0L)
             WaylandBlur(extBackgroundEffectManagerPtr, kwinBlurManagerPtr, surfacePtr) else null
+
+    @JvmField
+    internal val activationManager: WaylandActivationToken? =
+        if (activationManagerPtr != 0L && surfacePtr != 0L)
+            WaylandActivationToken(activationManagerPtr, seatPtr, displayPtr) else null
 
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
@@ -986,6 +993,8 @@ class WaylandWindow private constructor(
             decorationManager: Long = 0L,
             pointerConstraintsPtr: Long = 0L,
             iconManagerPtr: Long = 0L,
+            activationManagerPtr: Long = 0L,
+            seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
         ): WaylandWindow? {
@@ -1017,7 +1026,7 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr)
+            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, activationManagerPtr, seatPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr)
             window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
@@ -1074,10 +1083,12 @@ class WaylandWindow private constructor(
             attrs: WindowAttributes = WindowAttributes(),
             pointerConstraintsPtr: Long = 0L,
             iconManagerPtr: Long = 0L,
+            activationManagerPtr: Long = 0L,
+            seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
         ): WaylandWindow =
-            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr).also {
+            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, activationManagerPtr, seatPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr).also {
                 it.setTransparent(attrs.transparent)
             }
     }
@@ -1139,10 +1150,12 @@ class WaylandWindow private constructor(
 
     /**
      * Sets the xdg_activation_v1 activation token for this window.
-     * Stub: xdg_activation_v1 protocol not yet wired in Kadre.
+     * When [token] is non-null, passes it to xdg_activation_v1.activate().
      */
     internal fun setActivationToken(token: String?) {
-        // no-op: xdg_activation_v1 is not yet bound.
+        if (token != null && surfacePtr != 0L) {
+            activationManager?.activate(token, surfacePtr)
+        }
     }
 
     internal fun applyWaylandInputRegionHittest(hittest: Boolean): Boolean {

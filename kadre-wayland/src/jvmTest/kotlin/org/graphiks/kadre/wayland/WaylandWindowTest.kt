@@ -612,6 +612,53 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `WaylandActivationToken is a silent no-op when activationManagerPtr is zero`() {
+        val act = WaylandActivationToken(activationManagerPtr = 0L)
+        // Must not throw — protocol extension is optional
+        act.activate("test-token", surfacePtr = 100L)
+    }
+
+    @Test
+    fun `WaylandActivationToken activate does not crash with mock pointers`() {
+        val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 300L)
+        // FFM calls will gracefully return without libwayland
+        act.activate("test-token", surfacePtr = 100L)
+    }
+
+    @Test
+    fun `WaylandActivationToken activate with zero seat is a no-op`() {
+        val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 0L)
+        act.activate("test-token", surfacePtr = 100L)
+    }
+
+    @Test
+    fun `WaylandActivationToken activate with zero surface is a no-op`() {
+        val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 300L)
+        act.activate("test-token", surfacePtr = 0L)
+    }
+
+    @Test
+    fun `WaylandWindow createForTest accepts activationManagerPtr`() {
+        val window = WaylandWindow.createForTest(
+            activationManagerPtr = 100L,
+            seatPtr = 200L,
+        )
+        assertNotNull(window)
+    }
+
+    @Test
+    fun `WaylandWindow setActivationToken is a silent no-op when activationManager is unavailable`() {
+        val window = WaylandWindow.createForTest(activationManagerPtr = 0L)
+        window.setActivationToken("test-token")
+    }
+
+    @Test
+    fun `WaylandWindow setActivationToken with null token is a silent no-op`() {
+        val window = WaylandWindow.createForTest(activationManagerPtr = 100L, seatPtr = 200L)
+        window.setActivationToken(null)
+    }
+
+    @Test
     fun `WaylandWindow create returns null when libwayland is not available`() {
         // On macOS/Windows, wlCompositorCreateSurface is null
         // → create() returns null gracefully
