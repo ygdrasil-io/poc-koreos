@@ -2,6 +2,7 @@ package org.graphiks.kadre.android
 
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.DragEvent
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -141,6 +142,63 @@ abstract class KadreActivity : ComponentActivity() {
             )
         }
         setContentView(surfaceView)
+
+        // ── Drag & Drop (R5-DnD) ─────────────────────────────────────────────
+        surfaceView.setOnDragListener { _, dragEvent ->
+            val window = eventLoop.pendingWindow
+            if (destroyed || window == null) return@setOnDragListener false
+            when (dragEvent.action) {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    dragEvent.clipDescription != null
+                }
+                DragEvent.ACTION_DRAG_ENTERED -> {
+                    handler.windowEvent(
+                        eventLoop, window.id,
+                        WindowEvent.DragEntered(
+                            PhysicalPosition(
+                                dragEvent.x.toDouble(),
+                                dragEvent.y.toDouble(),
+                            ),
+                            readDragPaths(dragEvent),
+                        ),
+                    )
+                    true
+                }
+                DragEvent.ACTION_DRAG_LOCATION -> {
+                    handler.windowEvent(
+                        eventLoop, window.id,
+                        WindowEvent.DragMoved(
+                            PhysicalPosition(
+                                dragEvent.x.toDouble(),
+                                dragEvent.y.toDouble(),
+                            ),
+                        ),
+                    )
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    handler.windowEvent(
+                        eventLoop, window.id,
+                        WindowEvent.DragDropped(
+                            PhysicalPosition(
+                                dragEvent.x.toDouble(),
+                                dragEvent.y.toDouble(),
+                            ),
+                            readDragPaths(dragEvent),
+                        ),
+                    )
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    handler.windowEvent(
+                        eventLoop, window.id,
+                        WindowEvent.DragLeft,
+                    )
+                    true
+                }
+                else -> false
+            }
+        }
 
         // ── Handler + EventLoop ────────────────────────────────────────────────
         handler = createHandler()
@@ -355,6 +413,19 @@ abstract class KadreActivity : ComponentActivity() {
             window.id,
             WindowEvent.ModifiersChanged(modifierState),
         )
+    }
+
+    // ── Drag & Drop helpers (R5-DnD) ──────────────────────────────────────────
+
+    private fun readDragPaths(event: DragEvent): List<String> {
+        val paths = mutableListOf<String>()
+        val clipData = event.clipData ?: return paths
+        for (i in 0 until clipData.itemCount) {
+            val item = clipData.getItemAt(i)
+            item.uri?.let { uri -> paths.add(uri.toString()) }
+            item.text?.let { text -> paths.add(text.toString()) }
+        }
+        return paths
     }
 
     // ── Display density (scale factor) ────────────────────────────────────────

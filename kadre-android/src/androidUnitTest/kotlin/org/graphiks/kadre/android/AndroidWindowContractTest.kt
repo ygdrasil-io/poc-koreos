@@ -161,4 +161,14 @@ class AndroidWindowContractTest {
         // The throw contract is in the implementation (surface == null → throw).
         // Only verifiable on an emulator with a real SurfaceView.
     }
+
+    // ── Drag & Drop (R5-DnD) ────────────────────────────────────────────
+
+    @Test
+    fun `KadreActivity provides readDragPaths for DragEvent path extraction`() {
+        val method = KadreActivity::class.java.declaredMethods
+            .firstOrNull { it.name.startsWith("readDragPaths") }
+        assertNotNull(method, "KadreActivity must have readDragPaths method")
+        assertEquals(1, method.parameterCount)
+    }
 }
