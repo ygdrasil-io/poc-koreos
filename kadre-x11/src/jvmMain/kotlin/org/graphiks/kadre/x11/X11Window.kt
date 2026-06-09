@@ -1866,7 +1866,24 @@ class X11Window private constructor(
                 if (flush != null) flush.invokeExact(displaySeg) as Int
             }
 
-            // ── 7. Apply initial fullscreen from attrs ────────────────────────
+            // ── 7. XdndAware (drag-and-drop support) ──────────────────────────
+            try {
+                val xdndAwareAtom = x11DnDAtom(displaySeg, "XdndAware")
+                val atomAtom = x11DnDAtom(displaySeg, "ATOM")
+                if (xdndAwareAtom != 0L && atomAtom != 0L) {
+                    Arena.ofConfined().use { a ->
+                        val data = a.allocate(ValueLayout.JAVA_LONG, 1L)
+                        data.set(ValueLayout.JAVA_LONG, 0L, 5L)
+                        xChangeProperty?.invokeExact(
+                            displaySeg, xWindowId,
+                            xdndAwareAtom, atomAtom,
+                            32, 0, data, 1,
+                        ) as? Int
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            // ── 8. Apply initial fullscreen from attrs ────────────────────────
             if (attrs.fullscreen != null) {
                 window.setFullscreen(attrs.fullscreen)
             }
