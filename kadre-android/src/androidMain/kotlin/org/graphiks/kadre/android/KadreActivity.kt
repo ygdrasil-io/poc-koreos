@@ -185,13 +185,19 @@ abstract class KadreActivity : ComponentActivity() {
         super.onResume()
         if (destroyed) return
         handler.resumed(eventLoop)
-        eventLoop.pendingWindow?.let { eventLoop.scheduleFrameIfNeeded(it) }
+        eventLoop.pendingWindow?.let { window ->
+            handler.windowEvent(eventLoop, window.id, WindowEvent.Occluded(false))
+            eventLoop.scheduleFrameIfNeeded(window)
+        }
     }
 
     override fun onPause() {
         super.onPause()
         if (destroyed) return
         handler.suspended(eventLoop)
+        eventLoop.pendingWindow?.let { window ->
+            handler.windowEvent(eventLoop, window.id, WindowEvent.Occluded(true))
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
