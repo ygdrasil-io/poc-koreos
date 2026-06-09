@@ -21,6 +21,7 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.Insets
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -175,6 +176,11 @@ class X11Window private constructor(
      * ScaleFactorChanged is not emitted dynamically (no RRNotify subscription yet).
      */
     override val scaleFactor: Double = readXftDpi(displayPtr)
+
+    /**
+     * X11 has no platform safe-area concept — window managers handle decorations.
+     */
+    override val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
     override fun requestRedraw() {
         // No direct action needed: the event loop picks up the Expose events.

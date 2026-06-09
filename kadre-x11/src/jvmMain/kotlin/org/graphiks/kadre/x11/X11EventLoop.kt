@@ -26,6 +26,8 @@ import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.KeyCode
+import org.graphiks.kadre.core.OwnedDisplayHandle
+import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
@@ -260,6 +262,13 @@ class X11EventLoop internal constructor(
      */
     override fun createProxy(): EventLoopProxy =
         X11EventLoopProxy(this, displayPtr)
+
+    /**
+     * Returns a persistent X11 display handle usable independently from a window.
+     */
+    override fun ownedDisplayHandle(): OwnedDisplayHandle? {
+        return OwnedDisplayHandle(RawDisplayHandle.Xlib(display = displayPtr))
+    }
 
     // ── R2: monitor enumeration ───────────────────────────────────────────────
 
