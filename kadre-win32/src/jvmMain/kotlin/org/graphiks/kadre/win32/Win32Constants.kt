@@ -91,6 +91,19 @@ internal const val WM_XBUTTONUP: Int = 0x020C
  */
 internal const val WM_MOUSELEAVE: Int = 0x02A3
 
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+
+/**
+ * WM_DROPFILES — files were dropped onto the window.
+ *
+ * Sent to a window that was registered via DragAcceptFiles(hwnd, TRUE).
+ * wParam = HDROP handle, to be queried with DragQueryFileW / DragQueryPoint
+ * and freed with DragFinish.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/shell/wm-dropfiles
+ */
+internal const val WM_DROPFILES: Int = 0x0233
+
 // ── Touch messages ────────────────────────────────────────────────────────────
 
 /**

@@ -1104,10 +1104,33 @@ class Win32Window private constructor(
     /**
      * Hints the IME about the intended purpose of the text field.
      *
-     * No-op on Win32: Imm32 does not expose a purpose API. TSF would be
-     * required for finer-grained IME control.
+     * Sets the IME conversion status via ImmSetConversionStatus:
+     *   - [ImePurpose.Normal]   → native IME conversion (IME_CMODE_NATIVE)
+     *   - [ImePurpose.Password] → alphanumeric only, effectively disabling IME
+     *   - [ImePurpose.Terminal] → alphanumeric only, same as Password
      */
-    override fun setImePurpose(purpose: ImePurpose) { /* no-op on Win32 */ }
+    override fun setImePurpose(purpose: ImePurpose) {
+        val setConversion = immSetConversionStatus ?: return
+        val getCtx = immGetContext ?: return
+        val relCtx = immReleaseContext ?: return
+        val hwndSeg = hwnd
+        val himc: MemorySegment = try {
+            getCtx.invokeExact(hwndSeg) as MemorySegment
+        } catch (_: Throwable) { MemorySegment.NULL }
+        if (himc == MemorySegment.NULL) return
+        try {
+            val (conversion, sentence) = when (purpose) {
+                ImePurpose.Normal    -> IME_CMODE_NATIVE to IME_SMODE_NONE
+                ImePurpose.Password  -> IME_CMODE_ALPHANUMERIC to IME_SMODE_NONE
+                ImePurpose.Terminal  -> IME_CMODE_ALPHANUMERIC to IME_SMODE_NONE
+            }
+            setConversion.invokeExact(himc, conversion, sentence) as Int
+        } catch (_: Throwable) {
+            // IME purpose is best-effort
+        } finally {
+            try { relCtx.invokeExact(hwndSeg, himc) as Int } catch (_: Throwable) {}
+        }
+    }
 
     // ── Companion ─────────────────────────────────────────────────────────────
 
@@ -1324,6 +1347,11 @@ class Win32Window private constructor(
             // instead of being emulated as mouse input. Best-effort: ignored on
             // platforms/devices without touch support.
             registerTouchWindow?.let { it.invokeExact(hwnd, 0) as Int }
+
+            // Register for file drag-and-drop via DragAcceptFiles (WM_DROPFILES).
+            // This enables the window to receive WM_DROPFILES when the user drops
+            // files onto the client area.
+            dragAcceptFiles?.let { it.invokeExact(hwnd, 1) }
 
             // Initial display.
             // ShowWindow/UpdateWindow return BOOL (int) — invokeExact requires the exact

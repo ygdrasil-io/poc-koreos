@@ -300,6 +300,12 @@ object KadreWndProc {
                 0L
             }
 
+            // ── Drag & Drop (WM_DROPFILES) ────────────────────────────────────
+            WM_DROPFILES.toUInt() -> {
+                handleFileDrop(hwnd, wParam)
+                0L
+            }
+
             // ── Touch ─────────────────────────────────────────────────────────
             WM_TOUCH.toUInt() -> {
                 handleTouch(hwnd, wParam, lParam)
@@ -788,4 +794,49 @@ object KadreWndProc {
             x = (lParam and 0xFFFF).toShort().toDouble(),
             y = ((lParam ushr 16) and 0xFFFF).toShort().toDouble(),
         )
+
+    /**
+     * Handles a WM_DROPFILES message.
+     *
+     * Reads the dropped file paths and position from the HDROP handle,
+     * then emits [WindowEvent.DragDropped]. The HDROP handle is freed
+     * via DragFinish before returning.
+     *
+     * No-op if shell32.dll bindings are unavailable (macOS/Linux).
+     */
+    private fun handleFileDrop(hwnd: Long, wParam: Long) {
+        val dragQueryFile = dragQueryFileW ?: return
+        val dragQueryPt = dragQueryPoint ?: return
+        val dragFin = dragFinish ?: return
+        val hDrop = MemorySegment.ofAddress(wParam)
+        try {
+            java.lang.foreign.Arena.ofConfined().use { arena ->
+                // Get drop point in client coordinates
+                val pt = arena.allocate(POINT_SIZE, POINT_ALIGN)
+                dragQueryPt.invokeExact(hDrop, pt) as Int
+                val x = pt.get(ValueLayout.JAVA_INT, POINT_OFFSET_X)
+                val y = pt.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
+
+                // Count files (iFile = 0xFFFFFFFF = -1 as signed int)
+                val fileCount = dragQueryFile.invokeExact(hDrop, -1, MemorySegment.NULL, 0) as Int
+
+                // Read each file path
+                val files = mutableListOf<String>()
+                for (i in 0 until fileCount) {
+                    val charCount = dragQueryFile.invokeExact(hDrop, i, MemorySegment.NULL, 0) as Int
+                    val buffer = arena.allocate((charCount + 1) * 2L, 2L)
+                    dragQueryFile.invokeExact(hDrop, i, buffer, charCount + 1) as Int
+                    val chars = CharArray(charCount) { j ->
+                        buffer.getAtIndex(ValueLayout.JAVA_SHORT, j.toLong()).toInt().toChar()
+                    }
+                    files.add(String(chars))
+                }
+
+                dragFin.invokeExact(hDrop)
+                emit(hwnd, WindowEvent.DragDropped(PhysicalPosition(x.toDouble(), y.toDouble()), files))
+            }
+        } catch (_: Throwable) {
+            try { dragFin.invokeExact(hDrop) } catch (_: Throwable) {}
+        }
+    }
 }
