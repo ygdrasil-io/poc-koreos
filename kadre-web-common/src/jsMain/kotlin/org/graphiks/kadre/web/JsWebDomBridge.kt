@@ -14,7 +14,9 @@ package org.graphiks.kadre.web
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.Element
+import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
+import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.WheelEvent
 import kotlin.math.roundToInt
@@ -81,6 +83,9 @@ class JsWebDomBridge : WebDomBridge {
     private val documentListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private val windowListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private var resizeObserver: dynamic = null
+
+    /** Hidden <input> used for IME composition events. */
+    private var imeInput: HTMLInputElement? = null
 
     /** `false` once [detach] runs — stops the re-arming devicePixelRatio chain. */
     private var attached = false
@@ -201,22 +206,6 @@ class JsWebDomBridge : WebDomBridge {
             addListener(canvas, type) { e -> dispatchTouches(e) }
         }
 
-        // --- IME composition events (R5-IME) ---
-        addListener(canvas, "compositionstart") { _ ->
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Enabled))
-        }
-
-        addListener(canvas, "compositionupdate") { e ->
-            val data = e.asDynamic().data as? String ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Preedit(text = data, cursorRange = null)))
-        }
-
-        addListener(canvas, "compositionend") { e ->
-            val data = e.asDynamic().data as? String ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Commit(text = data)))
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Disabled))
-        }
-
         // --- Page visibility → Suspended/Resumed via Focused ---
         addDocumentListener("visibilitychange") { _ ->
             val hidden: Boolean = js("document.hidden")
@@ -305,6 +294,73 @@ class JsWebDomBridge : WebDomBridge {
         dispatch(WebWindowEvent.Resized(width = width, height = height))
     }
 
+    // ── R5-IME: hidden input overlay ─────────────────────────────────────────
+
+    override fun setImeAllowed(allowed: Boolean) {
+        if (allowed) {
+            val input = imeInput ?: createImeInputBox().also { imeInput = it }
+            input.focus()
+        } else {
+            imeInput?.blur()
+        }
+    }
+
+    override fun setImePurpose(purpose: String) {
+        imeInput?.let { it.asDynamic().inputMode = purpose }
+    }
+
+    override fun setImeCursorArea(x: Int, y: Int, width: Int, height: Int) {
+        val input = imeInput ?: return
+        val s = input.style
+        s.left = "${x}px"
+        s.top = "${y}px"
+        s.width = "${width}px"
+        s.height = "${height}px"
+    }
+
+    /**
+     * Creates the hidden <input> element and wires IME composition event
+     * listeners. Appends it to the canvas parent (or document.body as fallback).
+     */
+    private fun createImeInputBox(): HTMLInputElement {
+        val input = document.createElement("input").unsafeCast<HTMLInputElement>().apply {
+            style.position = "absolute"
+            style.opacity = "0"
+            style.height = "0px"
+            style.width = "0px"
+            style.left = "0px"
+            style.top = "0px"
+            style.zIndex = "-1"
+        }
+        input.style.asDynamic().pointerEvents = "none"
+        // Suppress browser auto-correction / auto-fill on the hidden input
+        input.asDynamic().autocapitalize = "off"
+        input.asDynamic().autocomplete = "off"
+        input.asDynamic().autocorrect = "off"
+        input.asDynamic().spellcheck = false
+
+        canvasElement?.let { it.parentElement?.appendChild(input) }
+            ?: document.body?.appendChild(input)
+
+        input.addEventListener("compositionstart", EventListener {
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Enabled))
+        })
+
+        input.addEventListener("compositionupdate", EventListener { event ->
+            val data = event.asDynamic().data as? String ?: ""
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Preedit(text = data, cursorRange = null)))
+        })
+
+        input.addEventListener("compositionend", EventListener { event ->
+            val data = event.asDynamic().data as? String ?: ""
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Commit(text = data)))
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Disabled))
+            input.value = ""
+        })
+
+        return input
+    }
+
     override fun getCanvasElement(): Any? = canvasElement
 
     override fun detach() {
@@ -334,6 +390,10 @@ class JsWebDomBridge : WebDomBridge {
 
         resizeObserver?.disconnect()
         resizeObserver = null
+
+        imeInput?.remove()
+        imeInput = null
+
         targetElement = null
     }
 

@@ -131,6 +131,56 @@ private external fun wrapDoubleCallback(fn: (Double) -> Unit): JsAny
 @JsFun("(fn) => fn")
 private external fun wrapBoolSupplier(fn: () -> Boolean): JsAny
 
+// ── R5-IME: hidden input overlay ──────────────────────────────────────────
+
+/**
+ * Creates a hidden <input> element for IME composition with all the
+ * required styling and attribute configuration.
+ */
+@JsFun("""() => {
+    const input = document.createElement('input');
+    input.style.position = 'absolute';
+    input.style.opacity = '0';
+    input.style.height = '0px';
+    input.style.width = '0px';
+    input.style.pointerEvents = 'none';
+    input.style.left = '0px';
+    input.style.top = '0px';
+    input.style.zIndex = '-1';
+    input.autocapitalize = 'off';
+    input.autocomplete = 'off';
+    input.autocorrect = 'off';
+    input.spellcheck = false;
+    return input;
+}""")
+private external fun createImeInputElement(): JsEventTarget
+
+@JsFun("(parent, child) => { parent.appendChild(child); }")
+private external fun jsAppendChild(parent: JsEventTarget, child: JsEventTarget)
+
+@JsFun("(el) => el.parentElement")
+private external fun jsGetParentElement(el: JsEventTarget): JsEventTarget?
+
+@JsFun("(el) => { el.focus(); }")
+private external fun jsFocusElement(el: JsEventTarget)
+
+@JsFun("(el) => { el.blur(); }")
+private external fun jsBlurElement(el: JsEventTarget)
+
+@JsFun("(el, value) => { el.inputMode = value; }")
+private external fun jsSetInputMode(el: JsEventTarget, value: String)
+
+@JsFun("(el, l, t, w, h) => { el.style.left = l + 'px'; el.style.top = t + 'px'; el.style.width = w + 'px'; el.style.height = h + 'px'; }")
+private external fun jsSetInputPosition(el: JsEventTarget, left: Int, top: Int, width: Int, height: Int)
+
+@JsFun("(el, value) => { el.value = value; }")
+private external fun jsSetInputValue(el: JsEventTarget, value: String)
+
+@JsFun("(el) => { el.remove(); }")
+private external fun jsRemoveElement(el: JsEventTarget)
+
+// ── R5-CustomCursor ───────────────────────────────────────────────────────
+
 /**
  * Creates a data URL from RGBA pixel data via an off-screen canvas.
  *
@@ -292,6 +342,9 @@ class WasmJsWebDomBridge : WebDomBridge {
     private val listenerRefs = mutableListOf<Triple<JsEventTarget, String, JsAny>>()
     private var resizeObserverRef: JsAny? = null
 
+    /** Hidden <input> used for IME composition events. */
+    private var imeInput: JsEventTarget? = null
+
     /** `false` once [detach] runs — stops the re-arming devicePixelRatio chain. */
     private var attached = false
 
@@ -416,24 +469,6 @@ class WasmJsWebDomBridge : WebDomBridge {
             addDomListener(canvas, type) { e -> dispatchTouches(e) }
         }
 
-        // --- IME composition events (R5-IME) ---
-        addDomListener(canvas, "compositionstart") { _ ->
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Enabled))
-        }
-
-        addDomListener(canvas, "compositionupdate") { e ->
-            val ce = e.unsafeCast<JsCompositionEvent>()
-            val text = ce.data?.toString() ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Preedit(text = text, cursorRange = null)))
-        }
-
-        addDomListener(canvas, "compositionend") { e ->
-            val ce = e.unsafeCast<JsCompositionEvent>()
-            val text = ce.data?.toString() ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Commit(text = text)))
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Disabled))
-        }
-
         // --- Visibility ---
         val doc = getDocument()
         addDomListener(doc, "visibilitychange") { _ ->
@@ -481,6 +516,55 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override fun getCanvasElement(): Any? = targetElement
 
+    // ── R5-IME: hidden input overlay ─────────────────────────────────────────
+
+    override fun setImeAllowed(allowed: Boolean) {
+        if (allowed) {
+            val input = imeInput ?: createImeInputBox().also { imeInput = it }
+            jsFocusElement(input)
+        } else {
+            imeInput?.let { jsBlurElement(it) }
+        }
+    }
+
+    override fun setImePurpose(purpose: String) {
+        imeInput?.let { jsSetInputMode(it, purpose) }
+    }
+
+    override fun setImeCursorArea(x: Int, y: Int, width: Int, height: Int) {
+        imeInput?.let { jsSetInputPosition(it, x, y, width, height) }
+    }
+
+    /**
+     * Creates the hidden <input> element and wires IME composition event
+     * listeners. Appends it to the canvas parent (or document as fallback).
+     */
+    private fun createImeInputBox(): JsEventTarget {
+        val input = createImeInputElement()
+        val parent = targetElement?.let { jsGetParentElement(it) } ?: getDocument()
+        jsAppendChild(parent, input)
+
+        addDomListener(input, "compositionstart") { _ ->
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Enabled))
+        }
+
+        addDomListener(input, "compositionupdate") { e ->
+            val ce = e.unsafeCast<JsCompositionEvent>()
+            val text = ce.data?.toString() ?: ""
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Preedit(text = text, cursorRange = null)))
+        }
+
+        addDomListener(input, "compositionend") { e ->
+            val ce = e.unsafeCast<JsCompositionEvent>()
+            val text = ce.data?.toString() ?: ""
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Commit(text = text)))
+            dispatch(WebWindowEvent.Ime(WebImeEvent.Disabled))
+            jsSetInputValue(input, "")
+        }
+
+        return input
+    }
+
     override fun detach() {
         // Stop the re-arming devicePixelRatio chain before tearing down listeners.
         attached = false
@@ -492,6 +576,10 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         resizeObserverRef?.let { disconnectResizeObserver(it) }
         resizeObserverRef = null
+
+        imeInput?.let { jsRemoveElement(it) }
+        imeInput = null
+
         targetElement = null
     }
 

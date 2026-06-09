@@ -109,6 +109,28 @@ interface WebDomBridge {
      */
     fun getImeCursorArea(): Any? = null
 
+    /**
+     * Hints the IME about the intended purpose of the focused text field.
+     *
+     * The bridge should set `inputMode` on the hidden IME input element
+     * to let the browser adapt its virtual keyboard or IME behaviour.
+     *
+     * Default: no-op (test / non-browser bridge).
+     *
+     * @param purpose Lowercase purpose string ("normal", "password", "terminal").
+     */
+    fun setImePurpose(purpose: String) { /* no-op by default */ }
+
+    /**
+     * Repositions the hidden IME input element to match the text cursor area.
+     *
+     * The browser uses this area to position the IME candidate window relative
+     * to the text cursor. Called by [WebWindow.setImeCursorArea].
+     *
+     * Default: no-op (test / non-browser bridge).
+     */
+    fun setImeCursorArea(x: Int, y: Int, width: Int, height: Int) { /* no-op by default */ }
+
     // ── R2: fullscreen API ─────────────────────────────────────────────────────
 
     /**
