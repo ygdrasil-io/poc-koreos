@@ -244,10 +244,11 @@ class JsWebDomBridge : WebDomBridge {
             addListener(canvas, type) { e -> dispatchTouches(e) }
         }
 
-        // --- Page visibility → Suspended/Resumed via Focused ---
+        // --- Page visibility → Focused + Occluded ---
         addDocumentListener("visibilitychange") { _ ->
             val hidden: Boolean = js("document.hidden")
             dispatch(WebWindowEvent.Focused(gained = !hidden))
+            dispatch(WebWindowEvent.WebOccluded(hidden))
         }
 
         // --- Unload: beforeunload → CloseRequested, pagehide → Destroyed ---

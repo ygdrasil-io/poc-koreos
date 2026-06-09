@@ -404,6 +404,7 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
     )
     is WebWindowEvent.MouseWheel -> WindowEvent.MouseWheel(null, deltaX, deltaY, TouchPhase.Moved)
     is WebWindowEvent.Focused -> WindowEvent.Focused(gained)
+    is WebWindowEvent.WebOccluded -> WindowEvent.Occluded(occluded)
     is WebWindowEvent.Touch -> {
         val location = PhysicalPosition(x, y)
         val fingerId = FingerId(id)

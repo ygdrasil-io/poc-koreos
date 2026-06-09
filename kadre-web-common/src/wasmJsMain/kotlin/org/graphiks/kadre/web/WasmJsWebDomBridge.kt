@@ -520,11 +520,12 @@ class WasmJsWebDomBridge : WebDomBridge {
             addDomListener(canvas, type) { e -> dispatchTouches(e) }
         }
 
-        // --- Visibility ---
+        // --- Visibility → Focused + Occluded ---
         val doc = getDocument()
         addDomListener(doc, "visibilitychange") { _ ->
             val hidden = isDocumentHidden().toBoolean()
             dispatch(WebWindowEvent.Focused(gained = !hidden))
+            dispatch(WebWindowEvent.WebOccluded(hidden))
         }
 
         // --- Unload: beforeunload → CloseRequested, pagehide → Destroyed ---

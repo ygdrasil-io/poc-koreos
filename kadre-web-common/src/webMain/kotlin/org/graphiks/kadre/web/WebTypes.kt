@@ -290,6 +290,9 @@ sealed interface WebWindowEvent {
     /** The window gained or lost focus. */
     data class Focused(val gained: Boolean) : WebWindowEvent
 
+    /** The window became occluded (hidden) or visible. */
+    data class WebOccluded(val occluded: Boolean) : WebWindowEvent
+
     /**
      * A touch contact changed state.
      *
