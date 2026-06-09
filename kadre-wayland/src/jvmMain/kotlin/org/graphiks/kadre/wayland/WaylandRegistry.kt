@@ -43,6 +43,8 @@ internal data class WaylandGlobals(
     val shmVersion: Int = 0,
     val pointerConstraintsPtr: Long = 0L,
     val iconManagerPtr: Long = 0L,
+    val extBackgroundEffectManagerPtr: Long = 0L,
+    val kwinBlurManagerPtr: Long = 0L,
 )
 
 /**
@@ -68,6 +70,10 @@ private class GlobalsCollector {
     var pointerConstraintsVersion: Int = 0
     var iconManagerName: Int = -1
     var iconManagerVersion: Int = 0
+    var extBackgroundEffectManagerName: Int = -1
+    var extBackgroundEffectManagerVersion: Int = 0
+    var kwinBlurManagerName: Int = -1
+    var kwinBlurManagerVersion: Int = 0
 
     /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
     @Suppress("UNUSED_PARAMETER")
@@ -91,6 +97,10 @@ private class GlobalsCollector {
                 if (pointerConstraintsName < 0) { pointerConstraintsName = name; pointerConstraintsVersion = version }
             "xdg_toplevel_icon_manager_v1" ->
                 if (iconManagerName < 0) { iconManagerName = name; iconManagerVersion = version }
+            "ext_background_effect_v1" ->
+                if (extBackgroundEffectManagerName < 0) { extBackgroundEffectManagerName = name; extBackgroundEffectManagerVersion = version }
+            "org_kde_kwin_blur_manager" ->
+                if (kwinBlurManagerName < 0) { kwinBlurManagerName = name; kwinBlurManagerVersion = version }
         }
     }
 
@@ -314,19 +324,47 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
             }.getOrDefault(0L)
         }
 
+        // 13. wl_registry.bind(ext_background_effect_v1) for Wayland blur (wlroots, KWin 6+).
+        var extBackgroundEffectManagerPtr = 0L
+        if (collector.extBackgroundEffectManagerName >= 0) {
+            val iface = extBackgroundEffectV1Interface
+            val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+            extBackgroundEffectManagerPtr = runCatching {
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.extBackgroundEffectManagerVersion, 0,
+                    collector.extBackgroundEffectManagerName, namePtr, collector.extBackgroundEffectManagerVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
+        // 14. wl_registry.bind(org_kde_kwin_blur_manager) for Wayland blur (KWin 5.x).
+        var kwinBlurManagerPtr = 0L
+        if (collector.kwinBlurManagerName >= 0) {
+            val iface = orgKdeKwinBlurManagerInterface
+            val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+            kwinBlurManagerPtr = runCatching {
+                (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, collector.kwinBlurManagerVersion, 0,
+                    collector.kwinBlurManagerName, namePtr, collector.kwinBlurManagerVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+            }.getOrDefault(0L)
+        }
+
         WaylandGlobals(
-            compositorPtr        = compositor.address(),
-            xdgWmBasePtr         = xdgWmBasePtr,
-            decorationManagerPtr = decorationManagerPtr,
-            seatPtr              = seatPtr,
-            seatVersion          = seatVersion,
-            outputPtr            = outputPtr,
-            outputVersion        = outputVersion,
-            textInputManagerPtr  = textInputManagerPtr,
-            shmPtr               = shmPtr,
-            shmVersion           = shmVersion,
-            pointerConstraintsPtr = pointerConstraintsPtr,
-            iconManagerPtr       = iconManagerPtr,
+            compositorPtr           = compositor.address(),
+            xdgWmBasePtr            = xdgWmBasePtr,
+            decorationManagerPtr    = decorationManagerPtr,
+            seatPtr                 = seatPtr,
+            seatVersion             = seatVersion,
+            outputPtr               = outputPtr,
+            outputVersion           = outputVersion,
+            textInputManagerPtr     = textInputManagerPtr,
+            shmPtr                  = shmPtr,
+            shmVersion              = shmVersion,
+            pointerConstraintsPtr   = pointerConstraintsPtr,
+            iconManagerPtr          = iconManagerPtr,
+            extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
+            kwinBlurManagerPtr      = kwinBlurManagerPtr,
         )
     } catch (_: Throwable) {
         WaylandGlobals(0L, 0L)

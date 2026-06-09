@@ -954,6 +954,68 @@ internal val zwpInputManagerV3CreateTextInput: MethodHandle? by lazy {
         ))
 }
 
+// ── ext_background_effect_v1 (wlroots, KWin 6+) blur protocol interface symbols ──
+
+/** &ext_background_effect_v1_interface (minimal, for bind + create). */
+internal val extBackgroundEffectV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("ext_background_effect_v1", methodCount = 2, eventCount = 0)
+}
+
+/** &ext_background_effect_surface_v1_interface (minimal, for create new_id). */
+internal val extBackgroundEffectSurfaceV1Interface: MemorySegment by lazy {
+    buildWaylandInterface("ext_background_effect_surface_v1", methodCount = 1, eventCount = 0)
+}
+
+/**
+ * wl_proxy_marshal_flags for ext_background_effect_v1.create (opcode 1).
+ *
+ * Signature: ext_background_effect_surface_v1* wl_proxy_marshal_flags(
+ *     manager, 1, &ext_background_effect_surface_v1_interface, version, flags, surface, NULL).
+ */
+internal val extBackgroundEffectV1Create: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,  // wl_proxy* (manager)
+            ValueLayout.JAVA_INT, // opcode = 1
+            ValueLayout.ADDRESS,  // wl_interface* (&ext_background_effect_surface_v1_interface)
+            ValueLayout.JAVA_INT, // version
+            ValueLayout.JAVA_INT, // flags
+            ValueLayout.ADDRESS,  // wl_surface*
+            ValueLayout.ADDRESS,  // new_id = NULL
+        ))
+}
+
+// ── org_kde_kwin_blur_manager (KWin 5.x) blur protocol interface symbols ──
+
+/** &org_kde_kwin_blur_manager_interface (minimal, for bind + create). */
+internal val orgKdeKwinBlurManagerInterface: MemorySegment by lazy {
+    buildWaylandInterface("org_kde_kwin_blur_manager", methodCount = 2, eventCount = 0)
+}
+
+/** &org_kde_kwin_blur_interface (minimal, for create new_id). */
+internal val orgKdeKwinBlurInterface: MemorySegment by lazy {
+    buildWaylandInterface("org_kde_kwin_blur", methodCount = 2, eventCount = 0)
+}
+
+/**
+ * wl_proxy_marshal_flags for org_kde_kwin_blur_manager.create (opcode 1).
+ *
+ * Signature: org_kde_kwin_blur* wl_proxy_marshal_flags(
+ *     manager, 1, &org_kde_kwin_blur_interface, version, flags, surface, NULL).
+ */
+internal val kwinBlurManagerCreate: MethodHandle? by lazy {
+    libWaylandClient.downcall("wl_proxy_marshal_flags",
+        FunctionDescriptor.of(ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,  // wl_proxy* (manager)
+            ValueLayout.JAVA_INT, // opcode = 1
+            ValueLayout.ADDRESS,  // wl_interface* (&org_kde_kwin_blur_interface)
+            ValueLayout.JAVA_INT, // version
+            ValueLayout.JAVA_INT, // flags
+            ValueLayout.ADDRESS,  // wl_surface*
+            ValueLayout.ADDRESS,  // new_id = NULL
+        ))
+}
+
 // ── wl_surface convenience helpers ────────────────────────────────────────────
 
 /**

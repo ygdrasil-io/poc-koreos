@@ -80,6 +80,8 @@ class WaylandWindow private constructor(
     private val attrs: WindowAttributes,
     pointerConstraintsPtr: Long = 0L,
     iconManagerPtr: Long = 0L,
+    extBackgroundEffectManagerPtr: Long = 0L,
+    kwinBlurManagerPtr: Long = 0L,
 ) : Window {
     @JvmField
     internal val pointerConstraints: WaylandPointerConstraints? =
@@ -88,6 +90,11 @@ class WaylandWindow private constructor(
     @JvmField
     internal val iconManager: WaylandIconManager? =
         if (iconManagerPtr != 0L && shmPtr != 0L) WaylandIconManager(iconManagerPtr, shmPtr, displayPtr) else null
+
+    @JvmField
+    internal val blurManager: WaylandBlur? =
+        if (extBackgroundEffectManagerPtr != 0L || kwinBlurManagerPtr != 0L)
+            WaylandBlur(extBackgroundEffectManagerPtr, kwinBlurManagerPtr, surfacePtr) else null
 
     /** Unique identifier based on the address of the wl_surface. */
     override val id: WindowId = WindowId(surfacePtr)
@@ -869,14 +876,14 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Deferred optional-protocol support on Wayland.
+     * Sets background blur via compositor-specific blur protocols.
      *
-     * winit can use compositor-specific blur protocols such as
-     * `ext_background_effect` or `org_kde_kwin_blur` when available. Kadre has
-     * not generated or bound those protocols yet, so this is a documented no-op.
+     * Delegates to [WaylandBlur] which tries `ext_background_effect_v1`
+     * (wlroots, KWin 6+) first and falls back to `org_kde_kwin_blur_manager`
+     * (KWin 5.x). Silent no-op when neither protocol is available.
      */
     override fun setBlur(blur: Boolean) {
-        // No-op until optional Wayland blur protocols are bound.
+        blurManager?.setBlur(blur)
     }
 
     /**
@@ -979,6 +986,8 @@ class WaylandWindow private constructor(
             decorationManager: Long = 0L,
             pointerConstraintsPtr: Long = 0L,
             iconManagerPtr: Long = 0L,
+            extBackgroundEffectManagerPtr: Long = 0L,
+            kwinBlurManagerPtr: Long = 0L,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -1008,7 +1017,7 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr)
+            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr)
             window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
@@ -1065,8 +1074,10 @@ class WaylandWindow private constructor(
             attrs: WindowAttributes = WindowAttributes(),
             pointerConstraintsPtr: Long = 0L,
             iconManagerPtr: Long = 0L,
+            extBackgroundEffectManagerPtr: Long = 0L,
+            kwinBlurManagerPtr: Long = 0L,
         ): WaylandWindow =
-            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr).also {
+            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr).also {
                 it.setTransparent(attrs.transparent)
             }
     }

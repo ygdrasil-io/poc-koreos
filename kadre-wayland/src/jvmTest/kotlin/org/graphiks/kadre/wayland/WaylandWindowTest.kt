@@ -551,6 +551,67 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `Wayland setBlur is a silent no-op when blurManager is unavailable`() {
+        val window = WaylandWindow.createForTest(extBackgroundEffectManagerPtr = 0L, kwinBlurManagerPtr = 0L)
+        assertNull(window.blurManager)
+        // Must not throw — protocol extension is optional
+        window.setBlur(true)
+        window.setBlur(false)
+    }
+
+    @Test
+    fun `Wayland blurManager is non-null when ext background effect ptr is non-zero`() {
+        val window = WaylandWindow.createForTest(
+            surface = 1L,
+            extBackgroundEffectManagerPtr = 100L,
+        )
+        assertNotNull(window.blurManager)
+    }
+
+    @Test
+    fun `Wayland blurManager is non-null when kwin blur ptr is non-zero`() {
+        val window = WaylandWindow.createForTest(
+            surface = 1L,
+            kwinBlurManagerPtr = 200L,
+        )
+        assertNotNull(window.blurManager)
+    }
+
+    @Test
+    fun `Wayland blurManager setBlur does not crash with mock pointers`() {
+        val window = WaylandWindow.createForTest(
+            surface = 1L,
+            extBackgroundEffectManagerPtr = 100L,
+        )
+        val blur = window.blurManager
+        assertNotNull(blur)
+        // Must not throw — FFM calls will gracefully fail without libwayland
+        blur.setBlur(true)
+        blur.setBlur(false)
+        blur.setBlur(true)
+    }
+
+    @Test
+    fun `Wayland blurManager kwin fallback setBlur does not crash with mock pointers`() {
+        val window = WaylandWindow.createForTest(
+            surface = 1L,
+            kwinBlurManagerPtr = 200L,
+        )
+        val blur = window.blurManager
+        assertNotNull(blur)
+        blur.setBlur(true)
+        blur.setBlur(false)
+    }
+
+    @Test
+    fun `Wayland blurManager with zero surface is a no-op`() {
+        val blur = WaylandBlur(extBackgroundEffectManagerPtr = 100L, kwinBlurManagerPtr = 0L, surfacePtr = 0L)
+        // Must not throw
+        blur.setBlur(true)
+        blur.setBlur(false)
+    }
+
+    @Test
     fun `WaylandWindow create returns null when libwayland is not available`() {
         // On macOS/Windows, wlCompositorCreateSurface is null
         // → create() returns null gracefully
