@@ -19,6 +19,7 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.Insets
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -334,6 +335,24 @@ class Win32WindowTest {
         window.setVisible(false)  // already hidden
         window.setVisible(true)   // show
         window.setVisible(false)  // hide again
+
+        window.close()
+    }
+
+    // ── Task 23: safeArea ─────────────────────────────────────────────────────
+
+    @Test
+    fun `Win32Window safeArea returns Insets with non-negative values on Windows`() {
+        if (!isWindows()) return
+
+        val attrs = WindowAttributes(title = "Test safeArea", visible = false)
+        val window = Win32Window.create(attrs) ?: return
+
+        val insets = window.safeArea
+        assertTrue(insets.top >= 0, "safeArea.top must be >= 0")
+        assertTrue(insets.bottom >= 0, "safeArea.bottom must be >= 0")
+        assertTrue(insets.left >= 0, "safeArea.left must be >= 0")
+        assertTrue(insets.right >= 0, "safeArea.right must be >= 0")
 
         window.close()
     }

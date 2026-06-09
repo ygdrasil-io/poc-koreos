@@ -24,6 +24,7 @@ import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.InputCapabilities
+import org.graphiks.kadre.core.Insets
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
@@ -174,6 +175,46 @@ class Win32Window private constructor(
             if (dpi > 0) dpi.toDouble() / 96.0 else 1.0
         } catch (_: Throwable) {
             1.0
+        }
+
+    override val safeArea: Insets<Int>
+        get() {
+            return try {
+                Arena.ofConfined().use { arena ->
+                    val windowRect = arena.allocate(RECT_SIZE, RECT_ALIGN)
+                    val wrOk = getWindowRect?.invokeExact(hwnd, windowRect) as? Int ?: 0
+                    if (wrOk == 0) return@use Insets(0, 0, 0, 0)
+
+                    val clientRect = arena.allocate(RECT_SIZE, RECT_ALIGN)
+                    val crOk = getClientRect?.invokeExact(hwnd, clientRect) as? Int ?: 0
+                    if (crOk == 0) return@use Insets(0, 0, 0, 0)
+
+                    val clientTopLeft = arena.allocate(POINT_SIZE, POINT_ALIGN)
+                    val cts = clientToScreen ?: return@use Insets(0, 0, 0, 0)
+                    val ctsOk = cts.invokeExact(hwnd, clientTopLeft) as? Int ?: 0
+                    if (ctsOk == 0) return@use Insets(0, 0, 0, 0)
+
+                    val clientLeft = clientTopLeft.get(ValueLayout.JAVA_INT, POINT_OFFSET_X)
+                    val clientTop = clientTopLeft.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
+                    val winLeft = windowRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
+                    val winTop = windowRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP)
+                    val winRight = windowRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_RIGHT)
+                    val winBottom = windowRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_BOTTOM)
+                    val clientWidth = clientRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_RIGHT) -
+                        clientRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
+                    val clientHeight = clientRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_BOTTOM) -
+                        clientRect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP)
+
+                    Insets(
+                        top = maxOf(0, clientTop - winTop),
+                        bottom = maxOf(0, winBottom - (clientTop + clientHeight)),
+                        left = maxOf(0, clientLeft - winLeft),
+                        right = maxOf(0, winRight - (clientLeft + clientWidth)),
+                    )
+                }
+            } catch (_: Throwable) {
+                Insets(0, 0, 0, 0)
+            }
         }
 
     override fun setVisible(visible: Boolean) {
