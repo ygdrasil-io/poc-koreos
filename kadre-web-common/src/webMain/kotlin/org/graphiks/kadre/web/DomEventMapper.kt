@@ -421,6 +421,18 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
         KeyboardModifierState(logical = modifiers.toKeyboardModifiers()),
     )
     is WebWindowEvent.Ime -> WindowEvent.Ime(ime.toCoreImeEvent())
+    is WebWindowEvent.DragEntered -> WindowEvent.DragEntered(
+        position = PhysicalPosition(x, y),
+        paths = files,
+    )
+    is WebWindowEvent.DragMoved -> WindowEvent.DragMoved(
+        position = PhysicalPosition(x, y),
+    )
+    is WebWindowEvent.DragDropped -> WindowEvent.DragDropped(
+        position = PhysicalPosition(x, y),
+        paths = files,
+    )
+    WebWindowEvent.DragLeft -> WindowEvent.DragLeft
 }
 
 private fun WebImeEvent.toCoreImeEvent(): WindowEvent.Ime.ImeEvent = when (this) {

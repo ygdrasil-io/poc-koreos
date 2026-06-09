@@ -123,6 +123,29 @@ private external fun canvasPhysicalWidth(canvas: JsEventTarget, dpr: Double): In
 @JsFun("(canvas, dpr) => Math.round(canvas.clientHeight * dpr)")
 private external fun canvasPhysicalHeight(canvas: JsEventTarget, dpr: Double): Int
 
+// --- DnD (Drag & Drop) helpers ---
+
+@JsFun("(e) => { e.preventDefault(); }")
+private external fun domPreventDefault(e: JsAny)
+
+@JsFun("(e) => e.clientX")
+private external fun dragClientX(e: JsAny): Double
+
+@JsFun("(e) => e.clientY")
+private external fun dragClientY(e: JsAny): Double
+
+@JsFun("(e) => e.dataTransfer.items.length")
+private external fun dragItemCount(e: JsAny): Int
+
+@JsFun("(e, i) => e.dataTransfer.items[i].type")
+private external fun dragItemType(e: JsAny, i: Int): String
+
+@JsFun("(e) => e.dataTransfer.files.length")
+private external fun dragFileCount(e: JsAny): Int
+
+@JsFun("(e, i) => e.dataTransfer.files[i].name")
+private external fun dragFileName(e: JsAny, i: Int): String
+
 /** Wraps a Kotlin `(Double) -> Unit` into a JS-callable closure (see [wrapCallback]). */
 @JsFun("(fn) => fn")
 private external fun wrapDoubleCallback(fn: (Double) -> Unit): JsAny
@@ -456,6 +479,34 @@ class WasmJsWebDomBridge : WebDomBridge {
                     deltaY = normalizeWheelDelta(we.deltaY.toDouble(), mode),
                 )
             )
+        }
+
+        // --- DnD ---
+        addDomListener(canvas, "dragenter") { e ->
+            domPreventDefault(e)
+            val x = dragClientX(e)
+            val y = dragClientY(e)
+            val count = dragItemCount(e)
+            val files = (0 until count).map { dragItemType(e, it) }
+            dispatch(WebWindowEvent.DragEntered(x = x, y = y, files = files))
+        }
+
+        addDomListener(canvas, "dragover") { e ->
+            domPreventDefault(e)
+            dispatch(WebWindowEvent.DragMoved(x = dragClientX(e), y = dragClientY(e)))
+        }
+
+        addDomListener(canvas, "drop") { e ->
+            domPreventDefault(e)
+            val x = dragClientX(e)
+            val y = dragClientY(e)
+            val count = dragFileCount(e)
+            val files = (0 until count).map { dragFileName(e, it) }
+            dispatch(WebWindowEvent.DragDropped(x = x, y = y, files = files))
+        }
+
+        addDomListener(canvas, "dragleave") { _ ->
+            dispatch(WebWindowEvent.DragLeft)
         }
 
         // --- ResizeObserver ---

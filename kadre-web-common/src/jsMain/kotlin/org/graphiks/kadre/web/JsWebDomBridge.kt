@@ -188,6 +188,44 @@ class JsWebDomBridge : WebDomBridge {
             )
         }
 
+        // --- DnD ---
+        addListener(canvas, "dragenter") { e ->
+            e.preventDefault()
+            val pe = e.unsafeCast<PointerEventData>()
+            val dt = e.asDynamic().dataTransfer
+            val files = if (dt != null) {
+                val items = dt.items
+                if (items != null && items.length > 0) {
+                    (0 until items.length).mapNotNull { i ->
+                        items[i].asDynamic().type as? String
+                    }
+                } else emptyList()
+            } else emptyList()
+            dispatch(WebWindowEvent.DragEntered(x = pe.clientX, y = pe.clientY, files = files))
+        }
+
+        addListener(canvas, "dragover") { e ->
+            e.preventDefault()
+            val pe = e.unsafeCast<PointerEventData>()
+            dispatch(WebWindowEvent.DragMoved(x = pe.clientX, y = pe.clientY))
+        }
+
+        addListener(canvas, "drop") { e ->
+            e.preventDefault()
+            val pe = e.unsafeCast<PointerEventData>()
+            val dt = e.asDynamic().dataTransfer
+            val files = if (dt != null && dt.files != null) {
+                (0 until dt.files.length).mapNotNull { i ->
+                    dt.files[i].asDynamic().name as? String
+                }
+            } else emptyList()
+            dispatch(WebWindowEvent.DragDropped(x = pe.clientX, y = pe.clientY, files = files))
+        }
+
+        addListener(canvas, "dragleave") { _ ->
+            dispatch(WebWindowEvent.DragLeft)
+        }
+
         // --- Resize via ResizeObserver ---
         resizeObserver = js("new ResizeObserver(function(entries) { return entries; })")
         val self = this

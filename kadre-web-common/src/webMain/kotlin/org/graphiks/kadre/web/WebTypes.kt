@@ -340,4 +340,45 @@ sealed interface WebWindowEvent {
      * @see WebImeEvent
      */
     data class Ime(val ime: WebImeEvent) : WebWindowEvent
+
+    // ── R5-DnD: drag & drop ─────────────────────────────────────────────────────
+
+    /**
+     * A drag operation entered the canvas, carrying files.
+     *
+     * Emitted from the DOM `dragenter` event on the canvas element.
+     *
+     * @property x     Pointer X position in CSS pixels.
+     * @property y     Pointer Y position in CSS pixels.
+     * @property files List of file MIME types (available during drag) or empty.
+     */
+    data class DragEntered(val x: Double, val y: Double, val files: List<String>) : WebWindowEvent
+
+    /**
+     * The drag cursor moved within the canvas while carrying files.
+     *
+     * Emitted from the DOM `dragover` event.
+     *
+     * @property x Pointer X position in CSS pixels.
+     * @property y Pointer Y position in CSS pixels.
+     */
+    data class DragMoved(val x: Double, val y: Double) : WebWindowEvent
+
+    /**
+     * Files were dropped onto the canvas.
+     *
+     * Emitted from the DOM `drop` event.
+     *
+     * @property x     Pointer X position in CSS pixels.
+     * @property y     Pointer Y position in CSS pixels.
+     * @property files List of dropped file names.
+     */
+    data class DragDropped(val x: Double, val y: Double, val files: List<String>) : WebWindowEvent
+
+    /**
+     * The drag cursor left the canvas without dropping.
+     *
+     * Emitted from the DOM `dragleave` event.
+     */
+    data object DragLeft : WebWindowEvent
 }
