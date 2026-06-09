@@ -236,12 +236,17 @@ class WaylandEventLoop internal constructor(
     // ── R4: device event filter ───────────────────────────────────────────────
 
     /**
-     * No-op on Wayland: device events are always dispatched.
+     * Device event filter controlling raw [DeviceEvent] dispatch.
      *
-     * TODO(R4-wayland-device-filter): use wl_seat capabilities to control dispatch.
+     * Defaults to [DeviceEvents.WhenFocused], which is the natural behavior on
+     * Wayland since keyboard/pointer events are already delivered per-surface.
+     * [DeviceEvents.Never] suppresses raw `DeviceEvent.Key` dispatch.
      */
+    @Volatile
+    internal var deviceEventFilter: DeviceEvents = DeviceEvents.WhenFocused
+
     override fun listenDeviceEvents(mode: DeviceEvents) {
-        // no-op on Wayland
+        deviceEventFilter = mode
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
@@ -389,6 +394,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 }
             }
         },
+        deviceFilter = eventLoop.deviceEventFilter,
     )
 
     // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──

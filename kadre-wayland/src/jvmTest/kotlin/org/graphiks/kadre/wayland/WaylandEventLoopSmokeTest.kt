@@ -9,6 +9,7 @@
  */
 package org.graphiks.kadre.wayland
 
+import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
@@ -201,5 +202,62 @@ class WaylandEventLoopSmokeTest {
         loop.systemTheme()
         // refreshTheme should not crash; on CI it may still be null
         loop.refreshTheme()
+    }
+
+    // ── R4: device event filter ───────────────────────────────────────────────
+
+    @Test
+    fun `deviceEventFilter defaults to WhenFocused`() {
+        val loop = WaylandEventLoop(
+            displayPtr = 77L,
+            compositorPtr = 0L,
+            xdgWmBasePtr = 0L,
+            shmPtr = 0L,
+            eventFd = -1,
+        )
+        assertEquals(DeviceEvents.WhenFocused, loop.deviceEventFilter)
+    }
+
+    @Test
+    fun `listenDeviceEvents stores Never`() {
+        val loop = WaylandEventLoop(
+            displayPtr = 77L,
+            compositorPtr = 0L,
+            xdgWmBasePtr = 0L,
+            shmPtr = 0L,
+            eventFd = -1,
+        )
+        loop.listenDeviceEvents(DeviceEvents.Never)
+        assertEquals(DeviceEvents.Never, loop.deviceEventFilter)
+    }
+
+    @Test
+    fun `listenDeviceEvents stores Always`() {
+        val loop = WaylandEventLoop(
+            displayPtr = 77L,
+            compositorPtr = 0L,
+            xdgWmBasePtr = 0L,
+            shmPtr = 0L,
+            eventFd = -1,
+        )
+        loop.listenDeviceEvents(DeviceEvents.Always)
+        assertEquals(DeviceEvents.Always, loop.deviceEventFilter)
+    }
+
+    @Test
+    fun `listenDeviceEvents toggles between modes`() {
+        val loop = WaylandEventLoop(
+            displayPtr = 77L,
+            compositorPtr = 0L,
+            xdgWmBasePtr = 0L,
+            shmPtr = 0L,
+            eventFd = -1,
+        )
+        loop.listenDeviceEvents(DeviceEvents.Never)
+        assertEquals(DeviceEvents.Never, loop.deviceEventFilter)
+        loop.listenDeviceEvents(DeviceEvents.WhenFocused)
+        assertEquals(DeviceEvents.WhenFocused, loop.deviceEventFilter)
+        loop.listenDeviceEvents(DeviceEvents.Always)
+        assertEquals(DeviceEvents.Always, loop.deviceEventFilter)
     }
 }

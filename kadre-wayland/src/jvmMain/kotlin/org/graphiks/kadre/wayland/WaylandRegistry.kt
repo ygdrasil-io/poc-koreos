@@ -143,7 +143,16 @@ private val pingers = mutableListOf<XdgWmBasePinger>()
  * @param displayPtr Address of the connected `wl_display*`.
  * @return Bound global addresses (0 where unavailable).
  */
-internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
+internal fun discoverGlobals(
+    displayPtr: Long,
+    protocolExtensions: Set<String> = setOf(
+        "zwp_pointer_constraints_v1",
+        "xdg_toplevel_icon_manager_v1",
+        "ext_background_effect_v1",
+        "org_kde_kwin_blur_manager",
+        "xdg_activation_v1",
+    ),
+): WaylandGlobals {
     val marshalNewId = wlProxyMarshalNewId ?: return WaylandGlobals(0L, 0L)
     val addListener = wlProxyAddListener ?: return WaylandGlobals(0L, 0L)
     val roundtrip = wlDisplayRoundtrip ?: return WaylandGlobals(0L, 0L)
@@ -305,7 +314,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
 
         // 11. wl_registry.bind(zwp_pointer_constraints_v1) for pointer confinement/locking.
         var pointerConstraintsPtr = 0L
-        if (collector.pointerConstraintsName >= 0) {
+        if (collector.pointerConstraintsName >= 0 && "zwp_pointer_constraints_v1" in protocolExtensions) {
             val iface = zwpPointerConstraintsV1Interface
             val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
             pointerConstraintsPtr = runCatching {
@@ -318,7 +327,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
 
         // 12. wl_registry.bind(xdg_toplevel_icon_manager_v1) for window icons.
         var iconManagerPtr = 0L
-        if (collector.iconManagerName >= 0) {
+        if (collector.iconManagerName >= 0 && "xdg_toplevel_icon_manager_v1" in protocolExtensions) {
             val iface = xdgToplevelIconManagerV1Interface
             val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
             iconManagerPtr = runCatching {
@@ -331,7 +340,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
 
         // 13. wl_registry.bind(xdg_activation_v1) for activation tokens.
         var activationManagerPtr = 0L
-        if (collector.activationManagerName >= 0) {
+        if (collector.activationManagerName >= 0 && "xdg_activation_v1" in protocolExtensions) {
             val iface = xdgActivationV1Interface
             val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
             activationManagerPtr = runCatching {
@@ -344,7 +353,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
 
         // 15. wl_registry.bind(ext_background_effect_v1) for Wayland blur (wlroots, KWin 6+).
         var extBackgroundEffectManagerPtr = 0L
-        if (collector.extBackgroundEffectManagerName >= 0) {
+        if (collector.extBackgroundEffectManagerName >= 0 && "ext_background_effect_v1" in protocolExtensions) {
             val iface = extBackgroundEffectV1Interface
             val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
             extBackgroundEffectManagerPtr = runCatching {
@@ -357,7 +366,7 @@ internal fun discoverGlobals(displayPtr: Long): WaylandGlobals {
 
         // 16. wl_registry.bind(org_kde_kwin_blur_manager) for Wayland blur (KWin 5.x).
         var kwinBlurManagerPtr = 0L
-        if (collector.kwinBlurManagerName >= 0) {
+        if (collector.kwinBlurManagerName >= 0 && "org_kde_kwin_blur_manager" in protocolExtensions) {
             val iface = orgKdeKwinBlurManagerInterface
             val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
             kwinBlurManagerPtr = runCatching {
