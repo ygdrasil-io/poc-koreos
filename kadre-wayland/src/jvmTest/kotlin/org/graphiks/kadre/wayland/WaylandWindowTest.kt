@@ -674,4 +674,17 @@ class WaylandWindowTest {
         // On non-Wayland, the binding is null and create() returns null
         assertEquals(null, result)
     }
+
+    @Test
+    fun `setAppId does not crash when xdg is unavailable`() {
+        val window = WaylandWindow.createForTest()
+        // xdg is null → setAppId is a silent no-op
+        window.setAppId("org.example.app")
+    }
+
+    @Test
+    fun `setAppId does not crash with blank app ID`() {
+        val window = WaylandWindow.createForTest()
+        window.setAppId("")
+    }
 }

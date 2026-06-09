@@ -1149,6 +1149,15 @@ class WaylandWindow private constructor(
     }
 
     /**
+     * Sets the xdg_toplevel app ID (app_id) for this window.
+     * The compositor uses this for grouping windows into application instances.
+     */
+    internal fun setAppId(appId: String) {
+        xdg?.setAppId(appId)
+        flushDisplay()
+    }
+
+    /**
      * Sets the xdg_activation_v1 activation token for this window.
      * When [token] is non-null, passes it to xdg_activation_v1.activate().
      */

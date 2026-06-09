@@ -171,7 +171,7 @@ class WaylandEventLoop internal constructor(
         // Apply platform extension settings
         attrs.preferCsd?.let { window.setPreferCsd(it) }
         attrs.activationToken?.let { window.setActivationToken(it) }
-        attrs.name?.let { /* TODO: set xdg_toplevel app_id */ }
+        attrs.name?.let { name -> window.setAppId(name) }
         eventQueue.add(window.id to org.graphiks.kadre.core.WindowEvent.RedrawRequested)
         return window
     }
