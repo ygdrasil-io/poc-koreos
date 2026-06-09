@@ -15,8 +15,12 @@ package org.graphiks.kadre.win32
 
 /** WM_CLOSE — window close request (× button, Alt+F4). */
 internal const val WM_CLOSE: Int = 0x0010
+/** WM_GETMINMAXINFO — the window size/position is about to change; lParam points to a MINMAXINFO struct. */
+
+internal const val WM_GETMINMAXINFO: Int = 0x0024
 
 /** WM_PAINT — the window must be redrawn. */
+
 internal const val WM_PAINT: Int = 0x000F
 
 /** WM_SIZE — the window size has changed. */
@@ -442,6 +446,62 @@ internal const val WAIT_TIMEOUT: Int = 0x00000102
  */
 @Suppress("INTEGER_OVERFLOW")
 internal const val INFINITE: Int = -1  // 0xFFFFFFFF unsigned
+
+// ── Gesture messages ────────────────────────────────────────────────────────────
+
+/**
+ * WM_GESTURE — a gesture has been recognized (Windows Touch Gesture API).
+ *
+ * lParam = HGESTUREINFO handle to pass to GetGestureInfo.
+ * wParam is not used.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/wintouch/wm-gesture
+ */
+internal const val WM_GESTURE: Int = 0x0119
+
+/**
+ * WM_GESTURENOTIFY — sent before a gesture is recognized, giving the application
+ * a chance to configure gesture settings via SetGestureConfig.
+ *
+ * lParam = PGESTURENOTIFYSTRUCT.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/wintouch/wm-gesturenotify
+ */
+internal const val WM_GESTURENOTIFY: Int = 0x011A
+
+// ── Gesture command IDs (GID_*) for GESTUREINFO.dwCommand ──────────────────────
+
+/** GID_BEGIN — a gesture is about to begin (per gesture lifetime). */
+internal const val GID_BEGIN: Int = 1
+
+/** GID_END — a gesture has ended (per gesture lifetime). */
+internal const val GID_END: Int = 2
+
+/** GID_ZOOM — pinch/zoom gesture. */
+internal const val GID_ZOOM: Int = 3
+
+/** GID_PAN — two-finger pan/scroll gesture. */
+internal const val GID_PAN: Int = 4
+
+/** GID_ROTATE — two-finger rotation gesture. */
+internal const val GID_ROTATE: Int = 5
+
+/** GID_TWOFINGERTAP — two-finger tap gesture. */
+internal const val GID_TWOFINGERTAP: Int = 6
+
+/** GID_ROLLOVER — rollover (mouse-over tracking). */
+internal const val GID_ROLLOVER: Int = 7
+
+// ── Gesture flags (GESTUREINFO.dwFlags) ─────────────────────────────────────────
+
+/** GF_BEGIN — the gesture is starting. */
+internal const val GF_BEGIN: Int = 0x0001
+
+/** GF_END — the gesture has ended. */
+internal const val GF_END: Int = 0x0002
+
+/** GF_INERTIA — the gesture is in inertia (deceleration) phase. */
+internal const val GF_INERTIA: Int = 0x0004
 
 // ── IME message constants ─────────────────────────────────────────────────────
 

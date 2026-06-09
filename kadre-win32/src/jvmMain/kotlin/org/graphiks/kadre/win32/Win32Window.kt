@@ -185,6 +185,7 @@ class Win32Window private constructor(
     override fun close() {
         val handle = destroyWindow ?: return
         setWindowIcon(null)
+        KadreWndProc.unregisterConstraints(hwnd.address())
         handle.invokeExact(hwnd) as Int
     }
 
@@ -309,17 +310,37 @@ class Win32Window private constructor(
     }
 
     override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
-        // Win32 min/max size is enforced via WM_GETMINMAXINFO in the WndProc.
-        // Store the constraint in a thread-safe field so KadreWndProc can read it.
         _minSurfaceSize = size
+        syncConstraints()
     }
 
     override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
         _maxSurfaceSize = size
+        syncConstraints()
+    }
+
+    override val surfaceResizeIncrements: PhysicalSize<Int>?
+        get() = _surfaceResizeIncrements
+
+    override fun setSurfaceResizeIncrements(increments: PhysicalSize<Int>?) {
+        _surfaceResizeIncrements = increments
+        syncConstraints()
+    }
+
+    private fun syncConstraints() {
+        KadreWndProc.registerConstraints(
+            hwnd = hwnd.address(),
+            constraints = KadreWndProc.WindowConstraints(
+                minSize = _minSurfaceSize,
+                maxSize = _maxSurfaceSize,
+                resizeIncrements = _surfaceResizeIncrements,
+            ),
+        )
     }
 
     @Volatile internal var _minSurfaceSize: PhysicalSize<Int>? = attrs.minSize
     @Volatile internal var _maxSurfaceSize: PhysicalSize<Int>? = attrs.maxSize
+    @Volatile internal var _surfaceResizeIncrements: PhysicalSize<Int>? = attrs.resizeIncrements
 
     override val outerPosition: PhysicalPosition<Int>
         get() = try {
@@ -1335,6 +1356,7 @@ class Win32Window private constructor(
 
             val window = Win32Window(hwnd, hInstance, attrs, currentWin32ThreadId())
             Win32FocusState.register(hwnd.address())
+            window.syncConstraints()
             window.applyEnabledButtons(attrs.enabledButtons)
             window.setWindowLevel(attrs.windowLevel)
             attrs.windowIcon?.let(window::setWindowIcon)

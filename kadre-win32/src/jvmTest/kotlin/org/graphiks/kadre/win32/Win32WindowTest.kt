@@ -15,6 +15,7 @@ package org.graphiks.kadre.win32
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowLevel
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.Icon
@@ -253,6 +254,28 @@ class Win32WindowTest {
     fun `Win32WndProcArena arena is accessible`() {
         // The arena itself can be created on any platform
         assertNotNull(Win32WndProcArena.arena)
+    }
+
+    @Test
+    fun `surfaceResizeIncrements is initialized from attrs and mutable`() {
+        if (!isWindows()) return
+
+        val attrs = WindowAttributes(
+            title = "Test surfaceResizeIncrements",
+            visible = false,
+            resizeIncrements = PhysicalSize(8, 16),
+        )
+        val window = Win32Window.create(attrs) ?: return
+
+        assertEquals(PhysicalSize(8, 16), window.surfaceResizeIncrements)
+
+        window.setSurfaceResizeIncrements(PhysicalSize(4, 6))
+        assertEquals(PhysicalSize(4, 6), window.surfaceResizeIncrements)
+
+        window.setSurfaceResizeIncrements(null)
+        assertEquals(null, window.surfaceResizeIncrements)
+
+        window.close()
     }
 
     // ── Tests run only on Windows ─────────────────────────────────────────────
