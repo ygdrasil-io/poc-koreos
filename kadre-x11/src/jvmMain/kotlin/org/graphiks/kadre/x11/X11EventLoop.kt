@@ -745,6 +745,15 @@ private fun dispatchEvent(
         ButtonPress -> {
             val button = eventBuf.get(ValueLayout.JAVA_INT, XBUTTON_BUTTON_OFFSET)
             val position = xButtonPosition(eventBuf)
+            if (button == X11_BUTTON4 || button == X11_BUTTON5) {
+                val state = eventBuf.get(ValueLayout.JAVA_INT, XKEY_STATE_OFFSET)
+                if (state and X11_CONTROL_MASK != 0) {
+                    val delta = if (button == X11_BUTTON4) 1.0 else -1.0
+                    handler.windowEvent(loop, windowId,
+                        WindowEvent.PinchGesture(null, delta, TouchPhase.Moved))
+                    return
+                }
+            }
             when (button) {
                 X11_BUTTON1 -> handler.windowEvent(loop, windowId,
                     pointerButton(MouseButton.Left, KeyState.Pressed, position))
