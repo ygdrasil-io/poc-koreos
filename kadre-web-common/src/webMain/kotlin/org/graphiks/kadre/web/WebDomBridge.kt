@@ -18,6 +18,8 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.Insets
+
 /**
  * Binding interface between the browser DOM and the Kadre engine.
  *
@@ -212,6 +214,23 @@ interface WebDomBridge {
      * Default: null (test / non-browser bridge).
      */
     fun getCanvasElement(): Any? = null
+
+    // ── Task 14: safeArea insets ─────────────────────────────────────────────
+
+    /**
+     * Returns the CSS `env(safe-area-inset-*)` values for the current viewport.
+     *
+     * On devices with a notch (iPhone X+) these values are non-zero. Default
+     * implementation returns zero insets (test / desktop browser bridge).
+     */
+    fun getSafeAreaInsets(): Insets<Int> = Insets(0, 0, 0, 0)
+
+    /**
+     * Returns a display handle derived from `window.screen` properties.
+     *
+     * Default implementation returns 0L (test / non-browser bridge).
+     */
+    fun getDisplayHandle(): Long = 0L
 
     /**
      * Whether [preventDefault][org.w3c.dom.events.Event.preventDefault] is

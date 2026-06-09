@@ -13,6 +13,7 @@ package org.graphiks.kadre.web
 
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.graphiks.kadre.core.Insets
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
@@ -497,6 +498,36 @@ class JsWebDomBridge : WebDomBridge {
 
     private fun dispatch(event: WebWindowEvent) {
         onWindowEvent?.invoke(event)
+    }
+
+    // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────
+
+    override fun getSafeAreaInsets(): Insets<Int> {
+        val body = document.body ?: return Insets(0, 0, 0, 0)
+        val div = document.createElement("div").asDynamic()
+        body.asDynamic().appendChild(div)
+        div.style.setProperty("padding-top", "env(safe-area-inset-top, 0px)")
+        div.style.setProperty("padding-bottom", "env(safe-area-inset-bottom, 0px)")
+        div.style.setProperty("padding-left", "env(safe-area-inset-left, 0px)")
+        div.style.setProperty("padding-right", "env(safe-area-inset-right, 0px)")
+        val cs = window.asDynamic().getComputedStyle(div)
+        fun parsePx(v: Any?): Int {
+            val s = v as? String ?: "0px"
+            return if (s.endsWith("px")) s.removeSuffix("px").trim().toIntOrNull() ?: 0 else 0
+        }
+        val insets = Insets(
+            top = parsePx(cs.paddingTop),
+            bottom = parsePx(cs.paddingBottom),
+            left = parsePx(cs.paddingLeft),
+            right = parsePx(cs.paddingRight),
+        )
+        body.asDynamic().removeChild(div)
+        return insets
+    }
+
+    override fun getDisplayHandle(): Long {
+        val screen = window.asDynamic().screen
+        return ((screen.availWidth as Int).toLong() shl 32) or (screen.availHeight as Int).toLong()
     }
 
     // ── R2: Fullscreen API ────────────────────────────────────────────────────

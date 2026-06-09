@@ -11,6 +11,8 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.Insets
+
 // ---------------------------------------------------------------------------
 // External interfaces — wasmJs-side DOM access
 // ---------------------------------------------------------------------------
@@ -300,6 +302,31 @@ private external fun jsRequestFullscreen(el: JsEventTarget)
 /** Calls document.exitFullscreen (handles vendor prefixes). */
 @JsFun("() => { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }")
 private external fun jsExitFullscreen()
+
+// ── Task 14: safeArea insets + ownedDisplayHandle ──────────────────────────
+
+@JsFun("""() => {
+    const div = document.createElement('div');
+    div.style.paddingTop = 'env(safe-area-inset-top, 0px)';
+    div.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
+    div.style.paddingLeft = 'env(safe-area-inset-left, 0px)';
+    div.style.paddingRight = 'env(safe-area-inset-right, 0px)';
+    document.body.appendChild(div);
+    const cs = getComputedStyle(div);
+    const r = (parseInt(cs.paddingTop) || 0) + ',' +
+              (parseInt(cs.paddingBottom) || 0) + ',' +
+              (parseInt(cs.paddingLeft) || 0) + ',' +
+              (parseInt(cs.paddingRight) || 0);
+    document.body.removeChild(div);
+    return r;
+}""")
+private external fun measureSafeAreaInsetsJs(): String
+
+@JsFun("() => window.screen.availWidth")
+private external fun screenAvailWidth(): Int
+
+@JsFun("() => window.screen.availHeight")
+private external fun screenAvailHeight(): Int
 
 /**
  * Creates a canvas (id + dimensions) and appends it to the parent (parentId or body).
@@ -615,6 +642,22 @@ class WasmJsWebDomBridge : WebDomBridge {
             )
         }
         if (preventDefaultEnabled) touchPreventDefault(e)
+    }
+
+    // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────
+
+    override fun getSafeAreaInsets(): Insets<Int> {
+        val parts = measureSafeAreaInsetsJs().split(',')
+        return Insets(
+            top = parts.getOrNull(0)?.toIntOrNull() ?: 0,
+            bottom = parts.getOrNull(1)?.toIntOrNull() ?: 0,
+            left = parts.getOrNull(2)?.toIntOrNull() ?: 0,
+            right = parts.getOrNull(3)?.toIntOrNull() ?: 0,
+        )
+    }
+
+    override fun getDisplayHandle(): Long {
+        return (screenAvailWidth().toLong() shl 32) or screenAvailHeight().toLong()
     }
 
     override fun getCanvasElement(): Any? = targetElement

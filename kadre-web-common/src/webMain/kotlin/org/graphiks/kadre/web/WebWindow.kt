@@ -29,6 +29,7 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.Insets
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -215,6 +216,14 @@ class WebWindow(
     override fun requestRedraw() {
         bridge.onWindowEvent?.invoke(WebWindowEvent.RedrawRequested)
     }
+
+    /**
+     * Safe-area insets queried from the DOM bridge.
+     *
+     * On devices with a notch (iPhone X+) these reflect CSS
+     * `env(safe-area-inset-*)`. Defaults to zero on desktop browsers.
+     */
+    override val safeArea: Insets<Int> get() = bridge.getSafeAreaInsets()
 
     /**
      * Handles canvas visibility via CSS (future) — no-op in this version.
