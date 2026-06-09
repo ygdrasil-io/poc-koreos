@@ -64,6 +64,9 @@ external interface JsWheelEvent : JsDomEvent {
     val deltaX: JsNumber
     val deltaY: JsNumber
     val deltaMode: JsNumber
+    val ctrlKey: JsBoolean
+    val clientX: JsNumber
+    val clientY: JsNumber
 }
 
 /**
@@ -228,6 +231,14 @@ private external fun jsRemoveElement(el: JsEventTarget)
     return canvas.toDataURL('image/png');
 }""")
 private external fun createCursorDataUrlJs(hex: String, width: Int, height: Int, hx: Int, hy: Int): String
+
+// --- Gesture field extraction ---
+
+@JsFun("(e) => e.scale")
+private external fun gestureScale(e: JsAny): Float
+
+@JsFun("(e) => e.rotation")
+private external fun gestureRotation(e: JsAny): Float
 
 // --- Touch field extraction (changedTouches is array-like) ---
 
@@ -472,13 +483,24 @@ class WasmJsWebDomBridge : WebDomBridge {
         // --- Wheel ---
         addDomListener(canvas, "wheel") { e ->
             val we = e.unsafeCast<JsWheelEvent>()
-            val mode = we.deltaMode.toDouble().toInt()
-            dispatch(
-                WebWindowEvent.MouseWheel(
-                    deltaX = normalizeWheelDelta(we.deltaX.toDouble(), mode),
-                    deltaY = normalizeWheelDelta(we.deltaY.toDouble(), mode),
+            // Ctrl+Wheel → pinch zoom (works across all browsers)
+            if (we.ctrlKey.toBoolean()) {
+                dispatch(
+                    WebWindowEvent.WebPinchZoom(
+                        delta = (-we.deltaY.toDouble() / 100f).toFloat(),
+                        centerX = we.clientX.toDouble(),
+                        centerY = we.clientY.toDouble(),
+                    )
                 )
-            )
+            } else {
+                val mode = we.deltaMode.toDouble().toInt()
+                dispatch(
+                    WebWindowEvent.MouseWheel(
+                        deltaX = normalizeWheelDelta(we.deltaX.toDouble(), mode),
+                        deltaY = normalizeWheelDelta(we.deltaY.toDouble(), mode),
+                    )
+                )
+            }
         }
 
         // --- DnD ---
@@ -507,6 +529,35 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         addDomListener(canvas, "dragleave") { _ ->
             dispatch(WebWindowEvent.DragLeft)
+        }
+
+        // --- Gesture (Safari trackpad: gesturestart/change/end) ---
+        addDomListener(canvas, "gesturestart") { e ->
+            domPreventDefault(e)
+            dispatch(
+                WebWindowEvent.WebGestureStart(
+                    scale = gestureScale(e),
+                    rotation = gestureRotation(e),
+                )
+            )
+        }
+        addDomListener(canvas, "gesturechange") { e ->
+            domPreventDefault(e)
+            dispatch(
+                WebWindowEvent.WebGestureChange(
+                    scale = gestureScale(e),
+                    rotation = gestureRotation(e),
+                )
+            )
+        }
+        addDomListener(canvas, "gestureend") { e ->
+            domPreventDefault(e)
+            dispatch(
+                WebWindowEvent.WebGestureEnd(
+                    scale = gestureScale(e),
+                    rotation = gestureRotation(e),
+                )
+            )
         }
 
         // --- ResizeObserver ---

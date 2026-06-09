@@ -384,4 +384,39 @@ sealed interface WebWindowEvent {
      * Emitted from the DOM `dragleave` event.
      */
     data object DragLeft : WebWindowEvent
+
+    // ── R5-Gestures: trackpad & touchscreen gestures ──────────────────────
+
+    /**
+     * A trackpad gesture started (Safari `gesturestart`).
+     *
+     * @property scale    Initial scale (1.0 = no zoom).
+     * @property rotation Initial rotation in degrees.
+     */
+    data class WebGestureStart(val scale: Float, val rotation: Float) : WebWindowEvent
+
+    /**
+     * A trackpad gesture changed (Safari `gesturechange`).
+     *
+     * @property scale    Current scale (1.0 = no zoom, >1 zoom in, <1 zoom out).
+     * @property rotation Current rotation in degrees.
+     */
+    data class WebGestureChange(val scale: Float, val rotation: Float) : WebWindowEvent
+
+    /**
+     * A trackpad gesture ended (Safari `gestureend`).
+     *
+     * @property scale    Final scale.
+     * @property rotation Final rotation in degrees.
+     */
+    data class WebGestureEnd(val scale: Float, val rotation: Float) : WebWindowEvent
+
+    /**
+     * Pinch zoom via Ctrl+Wheel (works across all browsers).
+     *
+     * @property delta   Normalised zoom delta (positive = zoom in).
+     * @property centerX Pointer X position in CSS pixels.
+     * @property centerY Pointer Y position in CSS pixels.
+     */
+    data class WebPinchZoom(val delta: Float, val centerX: Double, val centerY: Double) : WebWindowEvent
 }

@@ -180,12 +180,23 @@ class JsWebDomBridge : WebDomBridge {
         // --- Wheel ---
         addListener(canvas, "wheel") { e ->
             val we = e as WheelEvent
-            dispatch(
-                WebWindowEvent.MouseWheel(
-                    deltaX = normalizeWheelDelta(we.deltaX, we.deltaMode),
-                    deltaY = normalizeWheelDelta(we.deltaY, we.deltaMode),
+            // Ctrl+Wheel → pinch zoom (works across all browsers)
+            if (we.ctrlKey) {
+                dispatch(
+                    WebWindowEvent.WebPinchZoom(
+                        delta = (-we.deltaY / 100.0).toFloat(),
+                        centerX = we.clientX.toDouble(),
+                        centerY = we.clientY.toDouble(),
+                    )
                 )
-            )
+            } else {
+                dispatch(
+                    WebWindowEvent.MouseWheel(
+                        deltaX = normalizeWheelDelta(we.deltaX, we.deltaMode),
+                        deltaY = normalizeWheelDelta(we.deltaY, we.deltaMode),
+                    )
+                )
+            }
         }
 
         // --- DnD ---
@@ -224,6 +235,35 @@ class JsWebDomBridge : WebDomBridge {
 
         addListener(canvas, "dragleave") { _ ->
             dispatch(WebWindowEvent.DragLeft)
+        }
+
+        // --- Gesture (Safari trackpad: gesturestart/change/end) ---
+        addListener(canvas, "gesturestart") { e ->
+            e.preventDefault()
+            dispatch(
+                WebWindowEvent.WebGestureStart(
+                    scale = e.asDynamic().scale as? Float ?: 1.0f,
+                    rotation = e.asDynamic().rotation as? Float ?: 0.0f,
+                )
+            )
+        }
+        addListener(canvas, "gesturechange") { e ->
+            e.preventDefault()
+            dispatch(
+                WebWindowEvent.WebGestureChange(
+                    scale = e.asDynamic().scale as? Float ?: 1.0f,
+                    rotation = e.asDynamic().rotation as? Float ?: 0.0f,
+                )
+            )
+        }
+        addListener(canvas, "gestureend") { e ->
+            e.preventDefault()
+            dispatch(
+                WebWindowEvent.WebGestureEnd(
+                    scale = e.asDynamic().scale as? Float ?: 1.0f,
+                    rotation = e.asDynamic().rotation as? Float ?: 0.0f,
+                )
+            )
         }
 
         // --- Resize via ResizeObserver ---

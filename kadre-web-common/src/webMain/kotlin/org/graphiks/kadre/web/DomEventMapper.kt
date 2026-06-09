@@ -434,6 +434,26 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
         paths = files,
     )
     WebWindowEvent.DragLeft -> WindowEvent.DragLeft
+    is WebWindowEvent.WebGestureStart -> WindowEvent.PinchGesture(
+        deviceId = null,
+        delta = scale.toDouble(),
+        phase = TouchPhase.Started,
+    )
+    is WebWindowEvent.WebGestureChange -> WindowEvent.PinchGesture(
+        deviceId = null,
+        delta = scale.toDouble(),
+        phase = TouchPhase.Moved,
+    )
+    is WebWindowEvent.WebGestureEnd -> WindowEvent.PinchGesture(
+        deviceId = null,
+        delta = scale.toDouble(),
+        phase = TouchPhase.Ended,
+    )
+    is WebWindowEvent.WebPinchZoom -> WindowEvent.PinchGesture(
+        deviceId = null,
+        delta = delta.toDouble(),
+        phase = TouchPhase.Moved,
+    )
 }
 
 private fun WebImeEvent.toCoreImeEvent(): WindowEvent.Ime.ImeEvent = when (this) {
