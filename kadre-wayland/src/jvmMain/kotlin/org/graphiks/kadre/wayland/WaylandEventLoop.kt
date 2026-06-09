@@ -105,6 +105,8 @@ class WaylandEventLoop internal constructor(
     @Volatile private var _controlFlow: ControlFlow = ControlFlow.Wait
     override val controlFlow: ControlFlow get() = _controlFlow
 
+    private var _systemTheme: Theme? = null
+
     override fun setControlFlow(controlFlow: ControlFlow) {
         _controlFlow = controlFlow
     }
@@ -212,15 +214,24 @@ class WaylandEventLoop internal constructor(
 
     // ── R3: system theme ──────────────────────────────────────────────────────
 
-    /**
-     * Returns null on Wayland.
-     *
-     * Theme detection via org.freedesktop.portal.Settings (D-Bus) is not yet wired.
-     * Documented no-op.
-     *
-     * TODO(R3-wayland-theme): query org.freedesktop.portal.Settings via JVM D-Bus.
-     */
-    override fun systemTheme(): Theme? = null
+    override fun systemTheme(): Theme? {
+        if (_systemTheme == null) {
+            _systemTheme = WaylandThemePortal.queryColorScheme()
+        }
+        return _systemTheme
+    }
+
+    fun refreshTheme() {
+        WaylandThemePortal.resetCache()
+        val newTheme = WaylandThemePortal.queryColorScheme()
+        val oldTheme = _systemTheme
+        _systemTheme = newTheme
+        if (newTheme != null && newTheme != oldTheme) {
+            for (win in windows.values) {
+                eventQueue.add(win.id to WindowEvent.ThemeChanged(newTheme))
+            }
+        }
+    }
 
     // ── R4: device event filter ───────────────────────────────────────────────
 
