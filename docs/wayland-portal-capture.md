@@ -1,5 +1,7 @@
 # Wayland Screen Capture via xdg-desktop-portal
 
+> **Note:** All diagrams in this document use [Mermaid](https://mermaid.js.org/) syntax and are compatible with GitHub Markdown rendering.
+
 ## Overview
 
 This document explains the **xdg-desktop-portal** implementation for screen capture on Wayland, which enables capture support on GNOME (Mutter), KDE (KWin), and other desktop environments that don't support the `wlr-screencopy-unstable-v1` protocol.
@@ -34,78 +36,102 @@ By implementing xdg-desktop-portal support, Kadre now works on **all major Wayla
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    subgraph Kadre Application Layer
+        A[WaylandScreenCapturer.createSession] --> B{Backend Decision}
+        B -->|XdpPortal.isAvailable()| C[XdpPortalCaptureSession]
+        B -->|Fallback| D[WaylandCaptureSession]
+    end
+    
+    subgraph xdg-desktop-portal Layer
+        C --> E[XdpPortal.kt]
+        E --> E1[CreateSession → session_handle]
+        E --> E2[SelectSources → user prompt]
+        E --> E3[Start → stream_node_id]
+        E --> E4[OpenPipeWireRemote → fd]
+        
+        C --> F[XdpPipeWire.kt]
+        F --> F1[mmap fd → MemorySegment]
+        F1 --> F2[Read pixel data]
+        F2 --> F3[Convert to CaptureFrame]
+        F3 --> F4[Emit to SharedFlow]
+    end
+    
+    subgraph System Layer
+        E1 -->|D-Bus| G[org.freedesktop.portal.ScreenCast]
+        G -->|Methods| G1[CreateSession]
+        G -->|Methods| G2[SelectSources]
+        G -->|Methods| G3[Start]
+        G -->|Methods| G4[OpenPipeWireRemote]
+        G -->|Methods| G5[Close]
+        G -->|Signals| G6[SessionCreated]
+        G -->|Signals| G7[SourceSelected]
+        G -->|Signals| G8[Started]
+        G -->|Signals| G9[Closed]
+        
+        F4 -->|PipeWire| H[Video Streaming]
+        H -->|Supports| H1[DMA-BUF zero-copy GPU]
+        H -->|Supports| H2[SHM shared memory]
+    end
+    
+    style A fill:#f9f,stroke:#333
+    style C fill:#bbf,stroke:#333
+    style D fill:#9f9,stroke:#333
+    style G fill:#ff9,stroke:#333
+    style H fill:#ff9,stroke:#333
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Kadre Application Layer                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  WaylandScreenCapturer.createSession(source, config)                         │
-│         │                                                                     │
-│         ▼                                                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │ Decision: Which backend to use?                                       │ │
-│  │                                                                         │ │
-│  │  if (XdpPortal.isAvailable()) {                                        │ │
-│  │      return XdpPortalCaptureSession(...)  // ← NEW: Portal-based     │ │
-│  │  } else {                                                               │ │
-│  │      return WaylandCaptureSession(...)    // ← Existing: wlr-screencopy│ │
-│  │  }                                                                     │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        xdg-desktop-portal Layer                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  XdpPortal.kt (D-Bus communication)                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │ 1. CreateSession() → session_handle                                    │ │
-│  │ 2. SelectSources(session, types=["monitor"] or ["window"])              │ │
-│  │ 3. Start(session) → stream_node_id + metadata                           │ │
-│  │ 4. OpenPipeWireRemote(session, node_id) → file_descriptor               │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  XdpPipeWire.kt (Frame reception)                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │ 1. mmap(file_descriptor) → MemorySegment                               │ │
-│  │ 2. Read pixel data from shared memory                                   │ │
-│  │ 3. Convert to CaptureFrame format                                       │ │
-│  │ 4. Emit to SharedFlow<CaptureFrame>                                     │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      System Layer (D-Bus + PipeWire)                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  D-Bus: org.freedesktop.portal.ScreenCast interface                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │ Methods:                                                                  │ │
-│  │   CreateSession(app_id: string) → session_handle: object_path           │ │
-│  │   SelectSources(session: object_path, types: string[], options: dict)   │ │
-│  │   Start(session: object_path, parent_window: string, options: dict)     │ │
-│  │   OpenPipeWireRemote(session: object_path, node_id: uint32) → fd       │ │
-│  │   Close(session: object_path)                                          │ │
-│  │                                                                         │ │
-│  │ Signals:                                                                 │ │
-│  │   SessionCreated(session_handle)                                        │ │
-│  │   SourceSelected(session_handle, source_type, source_handle)           │ │
-│  │   Started(session_handle, stream_node_id)                              │ │
-│  │   Closed(session_handle)                                               │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  PipeWire: Video streaming protocol                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │ - Provides the actual frame data                                        │ │
-│  │ - Supports DMA-BUF (zero-copy GPU) and SHM (shared memory)             │ │
-│  │ - Used by the portal to stream frames to the client                    │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────┘
+
+### Class Diagram
+
+```mermaid
+classDiagram
+    class WaylandScreenCapturer {
+        +createSession(source, config) CaptureSession
+        +requestPermission() CapturePermission
+        -isPortalAvailable() Boolean
+    }
+    
+    class XdpPortalCaptureSession {
+        +start()
+        +stop()
+        +frames: SharedFlow~CaptureFrame~
+        -startPortalSession()
+        -captureLoop()
+    }
+    
+    class XdpPortal {
+        +isAvailable() Boolean
+        +checkPermissionStatus() CapturePermission
+        +createSession(appId) String?
+        +selectSources(sessionHandle, types, multiple, cursorMode) Boolean
+        +startSession(sessionHandle, parentWindow) StartResult?
+        +closeSession(sessionHandle) Boolean
+        +openPipeWireRemote(sessionHandle, nodeId) PipeWireRemoteResult?
+    }
+    
+    class XdpPipeWire {
+        +openPipeWireRemote(sessionHandle, nodeId) PipeWireRemoteResult?
+        +readFrameFromFd(fd, width, height, stride, format) Frame?
+        +toCaptureFrame(frame, targetFormat) CaptureFrame
+        +releaseFrame(frame)
+    }
+    
+    class WaylandCaptureSession {
+        <<Existing>>
+        +capture()
+    }
+    
+    WaylandScreenCapturer --> XdpPortalCaptureSession : uses (portal)
+    WaylandScreenCapturer --> WaylandCaptureSession : uses (fallback)
+    XdpPortalCaptureSession --> XdpPortal : uses
+    XdpPortalCaptureSession --> XdpPipeWire : uses
+    
+    style WaylandScreenCapturer fill:#f9f,stroke:#333
+    style XdpPortalCaptureSession fill:#bbf,stroke:#333
+    style XdpPortal fill:#bbf,stroke:#333
+    style XdpPipeWire fill:#bbf,stroke:#333
+    style WaylandCaptureSession fill:#9f9,stroke:#333
 ```
 
 ## Implementation Details
@@ -146,40 +172,25 @@ fun closeSession(sessionHandle: String): Boolean
 
 **D-Bus Message Flow:**
 
-```
-1. CreateSession
-   Request: dbus-send --dest=org.freedesktop.portal.Desktop \
-            /org/freedesktop/portal/desktop \
-            org.freedesktop.portal.ScreenCast.CreateSession string:"kadre"
-   
-   Response: object path "/org/freedesktop/portal/desktop/session/abc123"
-
-2. SelectSources
-   Request: dbus-send --dest=org.freedesktop.portal.Desktop \
-            /org/freedesktop/portal/desktop/session/abc123 \
-            org.freedesktop.portal.ScreenCast.SelectSources \
-            string:"monitor" a{sv}:...
-   
-   Response: (empty, but triggers user dialog)
-
-3. Start
-   Request: dbus-send --dest=org.freedesktop.portal.Desktop \
-            /org/freedesktop/portal/desktop/session/abc123 \
-            org.freedesktop.portal.ScreenCast.Start string:"" a{sv}:...
-   
-   Response: array [
-              dict entry(string "stream_node_id", variant uint32 42),
-              dict entry(string "types", variant uint32 1),
-              dict entry(string "cursor_mode", variant uint32 2)
-            ]
-
-4. OpenPipeWireRemote
-   Request: dbus-send --dest=org.freedesktop.portal.Desktop \
-            /org/freedesktop/portal/desktop/session/abc123 \
-            org.freedesktop.portal.ScreenCast.OpenPipeWireRemote h:42
-   
-   Response: h:5 (file descriptor), u:1920, u:1080, u:7680, u:2
-           (fd=5, width=1920, height=1080, stride=7680, format=ARGB8888)
+```mermaid
+sequenceDiagram
+    participant Kadre
+    participant Portal as xdg-desktop-portal
+    participant User
+    
+    Kadre->>Portal: CreateSession("kadre")
+    Portal-->>Kadre: session_handle: "/session/abc123"
+    
+    Kadre->>Portal: SelectSources(session, types=["monitor"])
+    Portal->>User: Show selection dialog
+    User-->>Portal: Select display/window
+    Portal-->>Kadre: (async: SourceSelected signal)
+    
+    Kadre->>Portal: Start(session, parent_window=null)
+    Portal-->>Kadre: results: {stream_node_id: 42, types: 1, cursor_mode: 2}
+    
+    Kadre->>Portal: OpenPipeWireRemote(session, node_id=42)
+    Portal-->>Kadre: fd=5, width=1920, height=1080, stride=7680, format=ARGB8888
 ```
 
 ### 2. XdpPipeWire.kt - Frame Reception
@@ -299,6 +310,31 @@ pw-cli list-objects | grep "screen cast"
 
 ## User Experience Flow
 
+```mermaid
+flowchart TD
+    subgraph GNOME/KDE with portal
+        A1[Create Session] --> B1[Portal shows dialog]
+        B1 -->|User selects| C1[Entire screen / Window / Region]
+        C1 --> D1[Start Session]
+        D1 --> E1[Receive PipeWire frames]
+        E1 --> F1[Convert to CaptureFrame]
+        F1 --> G1[Emit via SharedFlow]
+    end
+    
+    subgraph Sway/Hyprland fallback
+        A2[XdpPortal.isAvailable() = false] --> B2[Use wlr-screencopy]
+        B2 --> C2[Direct Wayland capture]
+        C2 --> D2[No user prompt]
+        D2 --> E2[Receive frames]
+    end
+    
+    style A1 fill:#bbf,stroke:#333
+    style B1 fill:#bbf,stroke:#333
+    style C1 fill:#bbf,stroke:#333
+    style A2 fill:#9f9,stroke:#333
+    style B2 fill:#9f9,stroke:#333
+```
+
 ### On GNOME/KDE (with portal)
 
 1. **Create Session**: Kadre requests a new screencast session
@@ -321,6 +357,21 @@ pw-cli list-objects | grep "screen cast"
 ### xdg-desktop-portal Permissions
 
 The portal uses a **user-mediated permission model**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: App requests capture
+    Pending --> Granted: User grants permission
+    Pending --> Denied: User denies
+    Granted --> Revoked: User revokes via settings
+    Revoked --> Pending: App requests again
+    Denied --> Pending: App requests again
+    
+    state Granted {
+        [*] --> Active
+        Active --> SessionEnd: Session closed
+    }
+```
 
 1. **First Request**: When an app requests screen capture, the portal shows a dialog
 2. **User Selection**: User must explicitly select what to share
@@ -378,6 +429,20 @@ sealed class CaptureError(message: String, cause: Throwable? = null) : Exception
 
 ### Frame Transfer Methods
 
+```mermaid
+quadrantChart
+    title Frame Transfer Methods Comparison
+    x-axis Memory Usage Low --> High
+    y-axis Performance Low --> High
+    quadrant-1 High Performance, Low Memory
+    quadrant-2 High Performance, High Memory
+    quadrant-3 Low Performance, Low Memory
+    quadrant-4 Low Performance, High Memory
+    
+    DMA-BUF: [0.1, 0.9]
+    SHM: [0.7, 0.5]
+```
+
 | Method | Performance | Memory Usage | GPU Support | Notes |
 |--------|-------------|---------------|--------------|-------|
 | SHM (Shared Memory) | Medium | High (CPU copy) | ❌ No | Works everywhere, simple |
@@ -420,6 +485,24 @@ delay(1000L / config.frameRate)
 ```
 
 ### Testing on Different Compositors
+
+```mermaid
+quadrantChart
+    title Wayland Compositor Support
+    x-axis Portal Available --> Not Available
+    y-axis Backend Used --> Fallback Used  
+    quadrant-1 xdg-desktop-portal
+    quadrant-2 wlr-screencopy
+    quadrant-3 Not Supported
+    quadrant-4 xdg-desktop-portal
+    
+    GNOME: [0.8, 0.9]
+    KDE: [0.8, 0.9]
+    Weston: [0.8, 0.9]
+    Sway: [0.8, 0.9]
+    Hyprland: [0.8, 0.9]
+    River: [0.1, 0.2]
+```
 
 | Composer | Portal Available | wlr-screencopy | Expected Backend |
 |----------|------------------|----------------|------------------|
