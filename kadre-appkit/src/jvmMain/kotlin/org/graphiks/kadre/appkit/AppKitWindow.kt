@@ -162,6 +162,17 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         contentViewPtr = imeViewPtr
         ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setContentView:"), imeViewPtr)
 
+        // 4b. Register for dragged types so NSDraggingDestination callbacks fire.
+        //     Without this, AppKit skips the view for drag operations entirely.
+        val filenamesType = ObjCRuntime.newNSString(arena, "NSFilenamesPboardType")
+        val array = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            ObjCRuntime.getClass("NSArray"),
+            ObjCRuntime.sel("arrayWithObject:"),
+            filenamesType,
+        ) as MemorySegment
+        ObjCRuntime.msgSend(null, imeViewPtr, ObjCRuntime.sel("registerForDraggedTypes:"), array)
+
         // 5. Correct AppKit Metal pattern: layer = CAMetalLayer() THEN wantsLayer = YES
         //    Apple docs: "If you want to use a custom layer, you must call setLayer: BEFORE
         //    calling setWantsLayer:YES". The reverse order makes AppKit first create a
