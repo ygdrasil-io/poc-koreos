@@ -247,6 +247,7 @@ class WaylandEventLoop internal constructor(
 
     override fun listenDeviceEvents(mode: DeviceEvents) {
         deviceEventFilter = mode
+        deviceEventFilterOverride = mode
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
@@ -394,7 +395,6 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 }
             }
         },
-        deviceFilter = eventLoop.deviceEventFilter,
         dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
     )
 

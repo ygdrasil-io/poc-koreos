@@ -48,8 +48,12 @@ import java.lang.invoke.MethodType
 private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
 private typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
 
-/** No-op device event sink used when [DeviceEvents.Never] is active. */
-private val noOpDeviceEventSink: RoutedDeviceEventSink = { }
+/**
+ * Shared device event filter checked dynamically by [WlKeyboardListener].
+ * Updated by [WaylandEventLoop.listenDeviceEvents] whenever the filter changes.
+ */
+@Volatile
+internal var deviceEventFilterOverride: DeviceEvents = DeviceEvents.WhenFocused
 
 /**
  * Global XKB compose state for dead-key reset, lazily initialized from
@@ -246,7 +250,9 @@ private class WlKeyboardListener(
         modifiers.mapKey(keycode = key, state = state).forEach { event ->
             onEvent(focusedSurfacePtr, event)
         }
-        onDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
+        if (deviceEventFilterOverride != DeviceEvents.Never) {
+            onDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -519,7 +525,6 @@ internal fun installSeatListeners(
     onEvent: RoutedWindowEventSink,
     onDeviceEvent: RoutedDeviceEventSink = {},
     onScaleChanged: (Int) -> Unit,
-    deviceFilter: DeviceEvents = DeviceEvents.WhenFocused,
     dataDeviceManagerPtr: Long = 0L,
 ) {
     val addListener = wlProxyAddListener ?: return
@@ -584,8 +589,7 @@ internal fun installSeatListeners(
                         ) as MemorySegment
                     }.getOrNull()
                     if (kbSeg != null && kbSeg.address() != 0L) {
-                        val sink = if (deviceFilter == DeviceEvents.Never) noOpDeviceEventSink else onDeviceEvent
-                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent, sink)
+                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent, onDeviceEvent)
                         anyListenerInstalled = true
                     }
                 }
