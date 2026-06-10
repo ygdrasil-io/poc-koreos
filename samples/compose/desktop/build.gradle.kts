@@ -27,5 +27,10 @@ application {
 
 dependencies {
     implementation(project(":samples:compose:shared"))
+    implementation(project(":kadre"))
+    implementation(project(":kadre-coroutines"))
+    implementation(project(":kadre-win32"))
+    implementation(project(":kadre-x11"))
+    implementation(project(":kadre-wayland"))
     implementation(compose.desktop.currentOs)
 }
