@@ -48,6 +48,9 @@ import java.lang.invoke.MethodType
 private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
 private typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
 
+/** No-op device event sink used when [DeviceEvents.Never] is active. */
+private val noOpDeviceEventSink: RoutedDeviceEventSink = { }
+
 /**
  * Shared device event filter checked dynamically by [WlKeyboardListener].
  * Updated by [WaylandEventLoop.listenDeviceEvents] whenever the filter changes.
@@ -526,6 +529,7 @@ internal fun installSeatListeners(
     onDeviceEvent: RoutedDeviceEventSink = {},
     onScaleChanged: (Int) -> Unit,
     dataDeviceManagerPtr: Long = 0L,
+    deviceFilter: DeviceEvents = DeviceEvents.WhenFocused,
 ) {
     val addListener = wlProxyAddListener ?: return
     val arena = Arena.ofShared()
@@ -589,7 +593,8 @@ internal fun installSeatListeners(
                         ) as MemorySegment
                     }.getOrNull()
                     if (kbSeg != null && kbSeg.address() != 0L) {
-                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent, onDeviceEvent)
+                        val sink = if (deviceFilter == DeviceEvents.Never) noOpDeviceEventSink else onDeviceEvent
+                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent, sink)
                         anyListenerInstalled = true
                     }
                 }

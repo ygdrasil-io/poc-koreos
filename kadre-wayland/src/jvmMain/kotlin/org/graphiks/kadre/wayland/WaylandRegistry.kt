@@ -396,7 +396,6 @@ internal fun discoverGlobals(
                 }.getOrDefault(0L)
             }
         }
-
         WaylandGlobals(
             compositorPtr           = compositor.address(),
             xdgWmBasePtr            = xdgWmBasePtr,
