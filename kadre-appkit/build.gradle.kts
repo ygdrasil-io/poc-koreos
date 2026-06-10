@@ -26,6 +26,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
+                api(project(":ffi:objc"))
             }
         }
         jvmTest {
