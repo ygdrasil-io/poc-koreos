@@ -22,6 +22,7 @@ KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
 SDK=$(xcrun --sdk macosx --show-sdk-path)
 APPKIT_H="$SDK/System/Library/Frameworks/AppKit.framework/Headers/AppKit.h"
 OUT=$(cd "$(dirname "$0")/.." && pwd)/kadre-appkit/src/jvmMain/kotlin
+OUT_PKG="$OUT/org/graphiks/kadre/appkit/bindings"
 
 echo "→ Regenerating AppKit bindings via kextract"
 echo "  SDK     = $SDK"
@@ -29,6 +30,7 @@ echo "  Output  = $OUT"
 
 "$KEXTRACT" \
     --objc \
+    --split-output \
     -A "-F$SDK/System/Library/Frameworks" \
     -A "-isysroot" -A "$SDK" \
     -o "$OUT" \
@@ -42,27 +44,37 @@ echo "  Output  = $OUT"
     --include-objc-protocol NSWindowDelegate \
     "$APPKIT_H"
 
-AKH="$OUT/org/graphiks/kadre/appkit/bindings/AppKit_h.kt"
-
 echo "→ Applying manual fixups"
 
-# 1. Escape Kotlin reserved keyword `object` in parameter positions.
-perl -i -pe 's/\bobject(?=: MemorySegment|, |\))/`object`/g' "$AKH"
+# Helper: apply pattern to all .kt files matching a glob
+fixup_glob() {
+    local glob="$1"
+    local pattern="$2"
+    for f in $OUT_PKG/$glob; do
+        [ -f "$f" ] && perl -i -pe "$pattern" "$f"
+    done
+}
 
-# 2. Add explicit `: Unit` to single-expression methods that throw — Kotlin can't
-#    infer `Nothing` as expression-body return type when it's the actual return.
-perl -i -pe 's/^(    fun \w+\([^)]*\)) =$/\1: Unit =/' "$AKH"
+# 1. Escape Kotlin reserved keyword `object` in parameter positions
+fixup_glob 'classes/*.kt' 's/\bobject(?=: MemorySegment|, |\))/`object`/g'
+fixup_glob 'protocols/*.kt' 's/\bobject(?=: MemorySegment|, |\))/`object`/g'
+fixup_glob 'enums/*.kt' 's/\bobject(?=: MemorySegment|, |\))/`object`/g'
+fixup_glob 'options/*.kt' 's/\bobject(?=: MemorySegment|, |\))/`object`/g'
 
-# 3. Strip evil shadowing typealiases that kextract v0.0.2 emits for CoreFoundation
-#    legacy types: `typealias Boolean = Any` and `typealias Byte = Any` hide the
-#    Kotlin builtins inside this package.
-#    Upstream tracking: https://github.com/klang-toolkit/kextract/issues/28
-perl -i -ne 'print unless /^typealias (Boolean|Byte) = Any\s*$/' "$AKH"
+# 2. Add explicit : Unit to single-expression methods that throw
+fixup_glob 'classes/*.kt' 's/^(    fun \w+\([^)]*\)) =$/\1: Unit =/'
+fixup_glob 'protocols/*.kt' 's/^(    fun \w+\([^)]*\)) =$/\1: Unit =/'
 
-# 4. Strip `typealias NSUInteger = Any` — the unsigned-long C type has no Kotlin
-#    primitive; we override it to Long in FoundationTypes.kt.
-#    Upstream tracking: https://github.com/klang-toolkit/kextract/issues/29
-perl -i -ne 'print unless /^typealias NSUInteger = Any\s*$/' "$AKH"
+# 3. Strip evil shadowing typealiases (types file only)
+if [ -f "$OUT_PKG/types/AppKitTypes.kt" ]; then
+    perl -i -ne 'print unless /^typealias (Boolean|Byte) = Any\s*$/' "$OUT_PKG/types/AppKitTypes.kt"
+fi
 
-echo "✓ Done. Regenerated bindings at $AKH"
-echo "  Don't forget to inspect the diff and run :kadre-appkit:jvmTest."
+# 4. Strip typealias NSUInteger = Any (types file only)
+if [ -f "$OUT_PKG/types/AppKitTypes.kt" ]; then
+    perl -i -ne 'print unless /^typealias NSUInteger = Any\s*$/' "$OUT_PKG/types/AppKitTypes.kt"
+fi
+
+echo "✓ Done. Regenerated split bindings at $OUT_PKG/"
+echo "  Files:"
+find "$OUT_PKG" -name "*.kt" -type f | sort
