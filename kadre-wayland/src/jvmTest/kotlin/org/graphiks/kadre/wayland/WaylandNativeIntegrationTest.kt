@@ -39,7 +39,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `core wayland method handles resolve on Linux`() {
-        if (!isLinux()) return
+        if (!nativeEnabled()) return
         assertNotNull(wlDisplayConnect)
         assertNotNull(wlCompositorCreateSurface)
         assertNotNull(wlProxyMarshalNewId)
@@ -48,7 +48,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `zwp pointer constraints v1 method handles resolve on Linux`() {
-        if (!isLinux()) return
+        if (!nativeEnabled()) return
         assertNotNull(wlPointerConstraintsLockPointer)
         assertNotNull(wlPointerConstraintsConfinePointer)
     }
