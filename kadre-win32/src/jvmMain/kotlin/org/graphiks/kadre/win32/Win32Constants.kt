@@ -503,6 +503,29 @@ internal const val GF_END: Int = 0x0002
 /** GF_INERTIA — the gesture is in inertia (deceleration) phase. */
 internal const val GF_INERTIA: Int = 0x0004
 
+// ── GESTUREINFO struct layout (Win64) ────────────────────────────────────────────
+
+/**
+ * Size of the GESTUREINFO structure in bytes on Win64.
+ *
+ * Layout (with natural alignment):
+ *   UINT       cbSize            (offset  0, 4 bytes)
+ *   DWORD      dwFlags           (offset  4, 4 bytes)
+ *   DWORD      dwCommand         (offset  8, 4 bytes)
+ *   POINT      ptCurrent         (offset 12, 8 bytes — LONG x, LONG y)
+ *   [4 bytes padding for ULONGLONG alignment]
+ *   ULONGLONG  ullArguments      (offset 24, 8 bytes)
+ *   UINT       cbExtraArgs       (offset 32, 4 bytes)
+ *   UINT       dwExtraArguments  (offset 36, 4 bytes)
+ *   [4 bytes trailing padding to 8-byte struct alignment]
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-gestureinfo
+ */
+internal const val GESTUREINFO_SIZE: Int = 48
+internal const val GESTUREINFO_OFFSET_FLAGS: Long = 4L
+internal const val GESTUREINFO_OFFSET_COMMAND: Long = 8L
+internal const val GESTUREINFO_OFFSET_ARGUMENTS: Long = 24L
+
 // ── IME message constants ─────────────────────────────────────────────────────
 
 /** WM_IME_STARTCOMPOSITION — IME started composing text. */

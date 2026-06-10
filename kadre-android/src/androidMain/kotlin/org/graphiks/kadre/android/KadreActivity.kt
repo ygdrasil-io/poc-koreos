@@ -193,11 +193,8 @@ abstract class KadreActivity : ComponentActivity() {
                     )
                     true
                 }
-                DragEvent.ACTION_DRAG_ENDED -> {
-                    handler.windowEvent(
-                        eventLoop, window.id,
-                        WindowEvent.DragLeft,
-                    )
+                DragEvent.ACTION_DRAG_EXITED -> {
+                    handler.windowEvent(eventLoop, window.id, WindowEvent.DragLeft)
                     true
                 }
                 else -> false
@@ -303,18 +300,20 @@ abstract class KadreActivity : ComponentActivity() {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val window = eventLoop.pendingWindow
         if (destroyed || window == null) return super.onTouchEvent(event)
-        scaleGestureDetector?.onTouchEvent(event)
-        dispatchMotionEvent(event, window)
-        return true
+        val handled = scaleGestureDetector?.onTouchEvent(event) ?: false
+        if (scaleGestureDetector?.isInProgress == true) {
+            return true
+        }
+        return dispatchMotionEvent(event, window) || handled
     }
 
-    private fun dispatchMotionEvent(event: MotionEvent, window: AndroidWindow) {
+    private fun dispatchMotionEvent(event: MotionEvent, window: AndroidWindow): Boolean {
         val phase = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> TouchPhase.Started
             MotionEvent.ACTION_MOVE -> TouchPhase.Moved
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> TouchPhase.Ended
             MotionEvent.ACTION_CANCEL -> TouchPhase.Cancelled
-            else -> return
+            else -> return false
         }
 
         if (event.actionMasked == MotionEvent.ACTION_MOVE || event.actionMasked == MotionEvent.ACTION_CANCEL) {
@@ -324,6 +323,7 @@ abstract class KadreActivity : ComponentActivity() {
         } else {
             dispatchTouchPointer(event, window, event.actionIndex, phase)
         }
+        return true
     }
 
     private fun dispatchTouchPointer(

@@ -207,22 +207,34 @@ internal class WaylandDnD(
     private fun acceptOffer(mimeType: String?) {
         val accept = wlDataOfferAccept ?: return
         if (currentOffer == 0L) return
-        val typeSeg = if (mimeType != null) {
-            Arena.ofConfined().use { it.allocateFrom(mimeType) }
+        if (mimeType != null) {
+            Arena.ofConfined().use { arena ->
+                val typeSeg = arena.allocateFrom(mimeType)
+                try {
+                    accept.invokeExact(
+                        MemorySegment.ofAddress(currentOffer),
+                        WL_DATA_OFFER_ACCEPT_OPCODE,
+                        MemorySegment.NULL,
+                        WL_DATA_DEVICE_MANAGER_VERSION,
+                        0,
+                        currentSerial,
+                        typeSeg,
+                    )
+                } catch (_: Throwable) { }
+            }
         } else {
-            MemorySegment.NULL
+            try {
+                accept.invokeExact(
+                    MemorySegment.ofAddress(currentOffer),
+                    WL_DATA_OFFER_ACCEPT_OPCODE,
+                    MemorySegment.NULL,
+                    WL_DATA_DEVICE_MANAGER_VERSION,
+                    0,
+                    currentSerial,
+                    MemorySegment.NULL,
+                )
+            } catch (_: Throwable) { }
         }
-        try {
-            accept.invokeExact(
-                MemorySegment.ofAddress(currentOffer),
-                WL_DATA_OFFER_ACCEPT_OPCODE,
-                MemorySegment.NULL,
-                WL_DATA_DEVICE_MANAGER_VERSION,
-                0,
-                currentSerial,
-                typeSeg,
-            )
-        } catch (_: Throwable) { }
     }
 
     private fun receivePaths(): List<String> {
