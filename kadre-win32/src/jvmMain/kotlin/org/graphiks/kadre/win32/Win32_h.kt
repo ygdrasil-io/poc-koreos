@@ -579,6 +579,50 @@ internal val closeTouchInputHandle: MethodHandle? by lazy {
     )
 }
 
+// ── GetGestureInfo ─────────────────────────────────────────────────────────────
+
+/**
+ * BOOL GetGestureInfo(HGESTUREINFO hGestureInfo, PGESTUREINFO pGestureInfo);
+ *
+ * Fills [pGestureInfo] with the GESTUREINFO for the current WM_GESTURE message.
+ * [hGestureInfo] is the WM_GESTURE lParam handle.
+ * The caller must allocate a GESTUREINFO buffer (GESTUREINFO_SIZE bytes) and set
+ * cbSize (the first DWORD) to GESTUREINFO_SIZE before calling.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getgestureinfo
+ */
+internal val getGestureInfo: MethodHandle? by lazy {
+    user32.downcall(
+        "GetGestureInfo",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HGESTUREINFO
+            ValueLayout.ADDRESS,    // PGESTUREINFO
+        )
+    )
+}
+
+// ── CloseGestureInfoHandle ─────────────────────────────────────────────────────
+
+/**
+ * BOOL CloseGestureInfoHandle(HGESTUREINFO hGestureInfo);
+ *
+ * Releases the gesture-info handle obtained from a WM_GESTURE message. Must be
+ * called exactly once per WM_GESTURE after GetGestureInfo, otherwise the
+ * handle leaks.
+ *
+ * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-closegestureinfohandle
+ */
+internal val closeGestureInfoHandle: MethodHandle? by lazy {
+    user32.downcall(
+        "CloseGestureInfoHandle",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // BOOL
+            ValueLayout.ADDRESS,    // HGESTUREINFO
+        )
+    )
+}
+
 // ── ScreenToClient ────────────────────────────────────────────────────────────
 
 /**
