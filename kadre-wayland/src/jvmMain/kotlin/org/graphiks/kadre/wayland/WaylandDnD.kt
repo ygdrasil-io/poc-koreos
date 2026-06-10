@@ -320,18 +320,19 @@ internal class WaylandDnD(
             var total = 0
             try {
                 while (true) {
-                    val arena = Arena.ofConfined()
-                    val bufSeg = arena.allocate(4096)
-                    val bytesRead = try {
-                        read.invokeExact(fd, bufSeg, 4096L) as Long
-                    } catch (_: Throwable) { -1L }
-                    arena.close()
-                    if (bytesRead <= 0) break
-                    val chunk = ByteArray(bytesRead.toInt())
-                    val srcSlice = bufSeg.asSlice(0L, bytesRead)
-                    for (i in 0 until bytesRead.toInt()) {
-                        chunk[i] = srcSlice.get(ValueLayout.JAVA_BYTE, i.toLong())
-                    }
+                    val chunk = Arena.ofConfined().use { arena ->
+                        val bufSeg = arena.allocate(4096)
+                        val bytesRead = try {
+                            read.invokeExact(fd, bufSeg, 4096L) as Long
+                        } catch (_: Throwable) { -1L }
+                        if (bytesRead <= 0) return@use null
+                        val result = ByteArray(bytesRead.toInt())
+                        val srcSlice = bufSeg.asSlice(0L, bytesRead)
+                        for (i in 0 until bytesRead.toInt()) {
+                            result[i] = srcSlice.get(ValueLayout.JAVA_BYTE, i.toLong())
+                        }
+                        result
+                    } ?: break
                     out.add(chunk)
                     total += chunk.size
                 }
