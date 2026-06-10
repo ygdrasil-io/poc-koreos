@@ -18,6 +18,9 @@ import kotlin.test.assertNotNull
 private fun isLinux(): Boolean =
     System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
 
+private fun nativeEnabled(): Boolean =
+    isLinux() && !waylandNativeDisabled()
+
 /** Reads the `const char *name` from a minimal `wl_interface` struct. */
 private fun interfaceName(segment: MemorySegment): String {
     val nameSeg = segment.get(ValueLayout.ADDRESS, 0L)
@@ -30,7 +33,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `libWaylandClient resolves on Linux`() {
-        if (!isLinux()) return
+        if (!nativeEnabled()) return
         assertNotNull(libWaylandClient, "libwayland-client.so.0 must load on Linux")
     }
 
@@ -105,7 +108,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `discoverGlobals returns empty globals when library is unavailable`() {
-        if (isLinux()) return // on Linux this would try to invoke FFM with null display
+        if (nativeEnabled()) return // on Linux with native libs this would invoke FFM with null display
         val globals = discoverGlobals(displayPtr = 0L)
         assertEquals(0L, globals.compositorPtr)
         assertEquals(0L, globals.xdgWmBasePtr)
@@ -113,7 +116,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `discoverGlobals accepts empty protocolExtensions set`() {
-        if (isLinux()) return // on Linux this would try to invoke FFM with null display
+        if (nativeEnabled()) return // on Linux with native libs this would invoke FFM with null display
         val globals = discoverGlobals(displayPtr = 0L, protocolExtensions = emptySet())
         assertEquals(0L, globals.compositorPtr)
     }
