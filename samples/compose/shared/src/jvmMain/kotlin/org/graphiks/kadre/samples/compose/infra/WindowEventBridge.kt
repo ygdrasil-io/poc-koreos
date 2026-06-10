@@ -90,7 +90,7 @@ class KeyForwarder {
             }
         }.onFailure {
             disabled = true
-            println("[hello-compose] keyboard forwarding disabled: ${it.message}")
+            println("[compose-infra] keyboard forwarding disabled: ${it.message}")
         }
     }
 }
