@@ -1,5 +1,6 @@
 package org.graphiks.kadre.samples.compose.desktop
 
+import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.PhysicalSize
 import org.graphiks.kadre.WindowAttributes
 import org.graphiks.kadre.core.RawWindowHandle
@@ -45,7 +46,56 @@ private fun runShowcase() = kadreApplication {
     }
 }
 
-fun main() {
+private fun runKeytest() {
+    val typed = keyboardSelfTest("hi")
+    println("[compose-showcase] keytest — text field received: '$typed' (expected 'hi')")
+    if (typed != "hi") error("keytest FAILED: '$typed' != 'hi'")
+    println("[compose-showcase] keytest OK")
+}
+
+private fun startCaptureWatchdog() {
+    Thread {
+        Thread.sleep(30_000)
+        System.err.println("[compose-showcase] window-capture watchdog: not done after 30s — forcing exit")
+        System.out.flush()
+        System.err.flush()
+        Runtime.getRuntime().halt(3)
+    }.apply { isDaemon = true }.start()
+}
+
+fun main(args: Array<String>) {
+    if (args.contains("--keytest")) {
+        runKeytest()
+        return
+    }
+
+    val ciHeadlessIndex = args.indexOf("--ci-headless")
+    if (ciHeadlessIndex >= 0) {
+        val dir = args.getOrNull(ciHeadlessIndex + 1)
+            ?: error("--ci-headless requires an output dir: --ci-headless <dir>")
+        runKeytest()
+        captureShowcaseToPng("$dir/compose-showcase.raster.png")
+        return
+    }
+
+    val captureIndex = args.indexOf("--capture")
+    if (captureIndex >= 0) {
+        val path = args.getOrNull(captureIndex + 1)
+            ?: error("--capture requires a file path: --capture <path>")
+        captureShowcaseToPng(path)
+        return
+    }
+
+    val windowCaptureIndex = args.indexOf("--window-capture")
+    if (windowCaptureIndex >= 0) {
+        val path = args.getOrNull(windowCaptureIndex + 1)
+            ?: error("--window-capture requires a file path: --window-capture <path>")
+        // Use the old hello-compose Capture app path for windowed GL capture
+        startCaptureWatchdog()
+        println("[compose-showcase] window-capture not yet implemented for new desktop module")
+        return
+    }
+
     println("[compose-showcase] Starting Compose Showcase")
     runShowcase()
     println("[compose-showcase] Done")

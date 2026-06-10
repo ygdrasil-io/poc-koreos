@@ -138,7 +138,7 @@ class ComposeSceneHost(scaleFactor: Double, private val dispatcher: EventLoopDis
  * the value class's underlying `InternalKeyEvent`; we reach it reflectively and re-box it into a
  * [KeyEvent] via the synthetic `box-impl`. Both are public at the bytecode level.
  */
-internal fun awtKeyToComposeKeyEvent(awtEvent: java.awt.event.KeyEvent): KeyEvent {
+fun awtKeyToComposeKeyEvent(awtEvent: java.awt.event.KeyEvent): KeyEvent {
     val internal = ComposeKeyEventBridge.toComposeEvent.invoke(null, awtEvent)
     return ComposeKeyEventBridge.box.invoke(null, internal) as KeyEvent
 }
