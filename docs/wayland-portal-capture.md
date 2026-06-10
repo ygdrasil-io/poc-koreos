@@ -1,7 +1,5 @@
 # Wayland Screen Capture via xdg-desktop-portal
 
-> **Note:** All diagrams in this document use [Mermaid](https://mermaid.js.org/) syntax and are compatible with GitHub Markdown rendering.
-
 ## Overview
 
 This document explains the **xdg-desktop-portal** implementation for screen capture on Wayland, which enables capture support on GNOME (Mutter), KDE (KWin), and other desktop environments that don't support the `wlr-screencopy-unstable-v1` protocol.
