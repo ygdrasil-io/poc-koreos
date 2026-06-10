@@ -5,7 +5,7 @@ import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
-internal object X11DnD {
+internal object X11DragAndDrop {
 
     private const val XDND_VERSION: Long = 5L
 
@@ -17,7 +17,7 @@ internal object X11DnD {
         x: Int,
         y: Int,
     ) {
-        val xdndStatusAtom = x11DnDAtom(display, "XdndStatus")
+        val xdndStatusAtom = x11DragAndDropAtom(display, "XdndStatus")
         if (xdndStatusAtom == 0L) return
         val xSendEvent = xSendEvent ?: return
         try {
@@ -47,7 +47,7 @@ internal object X11DnD {
         sourceWindow: Long,
         accept: Boolean,
     ) {
-        val xdndFinishedAtom = x11DnDAtom(display, "XdndFinished")
+        val xdndFinishedAtom = x11DragAndDropAtom(display, "XdndFinished")
         if (xdndFinishedAtom == 0L) return
         val xSendEvent = xSendEvent ?: return
         try {
@@ -189,7 +189,7 @@ internal object X11DnD {
     }
 }
 
-internal fun x11DnDAtom(display: MemorySegment, name: String): Long {
+internal fun x11DragAndDropAtom(display: MemorySegment, name: String): Long {
     val intern = xInternAtom ?: return 0L
     return try {
         Arena.ofConfined().use { arena ->

@@ -27,15 +27,15 @@ class X11NativeIntegrationTest {
         if (!isLinux() || !hasDisplay()) return
         val display = xOpenDisplay?.invokeExact(null as Any?) as? MemorySegment ?: return
         try {
-            assertTrue(x11DnDAtom(display, "XdndAware") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndEnter") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndPosition") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndDrop") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndLeave") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndSelection") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndStatus") != 0L)
-            assertTrue(x11DnDAtom(display, "XdndFinished") != 0L)
-            assertTrue(x11DnDAtom(display, "text/uri-list") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndAware") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndEnter") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndPosition") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndDrop") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndLeave") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndSelection") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndStatus") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "XdndFinished") != 0L)
+            assertTrue(x11DragAndDropAtom(display, "text/uri-list") != 0L)
         } finally {
             xCloseDisplay?.invokeExact(display) as? Int
         }

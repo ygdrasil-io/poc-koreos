@@ -69,7 +69,7 @@ private class WlDataDeviceListener(
  * @param displayPtr     Address of the `wl_display*` for flush.
  * @param onEvent        Sink for emitted [WindowEvent]s (routed to the event queue).
  */
-internal class WaylandDnD(
+internal class WaylandDragAndDrop(
     private val dataDevicePtr: Long,
     private val displayPtr: Long,
     private val onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,

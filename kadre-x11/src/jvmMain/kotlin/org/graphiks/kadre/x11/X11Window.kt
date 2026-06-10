@@ -1874,8 +1874,8 @@ class X11Window private constructor(
 
             // ── 7. XdndAware (drag-and-drop support) ──────────────────────────
             try {
-                val xdndAwareAtom = x11DnDAtom(displaySeg, "XdndAware")
-                val atomAtom = x11DnDAtom(displaySeg, "ATOM")
+                val xdndAwareAtom = x11DragAndDropAtom(displaySeg, "XdndAware")
+                val atomAtom = x11DragAndDropAtom(displaySeg, "ATOM")
                 if (xdndAwareAtom != 0L && atomAtom != 0L) {
                     Arena.ofConfined().use { a ->
                         val data = a.allocate(ValueLayout.JAVA_LONG, 1L)

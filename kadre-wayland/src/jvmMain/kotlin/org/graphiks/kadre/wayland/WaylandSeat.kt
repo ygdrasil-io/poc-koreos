@@ -660,7 +660,7 @@ internal fun installSeatListeners(
                     ) as MemorySegment
                 }.getOrNull()
                 if (dataDevice != null && dataDevice.address() != 0L) {
-                    val dnd = WaylandDnD(dataDevice.address(), displayPtr, onEvent)
+                    val dnd = WaylandDragAndDrop(dataDevice.address(), displayPtr, onEvent)
                     dnd.installListener(arena, addListener)
                     binding.dnd = dnd
                     anyListenerInstalled = true

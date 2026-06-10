@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-class WaylandDnDTest {
+class WaylandDragAndDropTest {
 
     @Test
     fun `wlFixedToDouble converts fixed-point to double`() {

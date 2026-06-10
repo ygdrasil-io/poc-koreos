@@ -907,7 +907,7 @@ private fun handleXdndClientMessage(
             val localPos = rootToWindowPosition(display, windowXid, rootX, rootY, loop.screen)
             loop.dragSourceWindows[windowXid] = sourceWindow
             val displayMs = MemorySegment.ofAddress(loop.displayPtr)
-            X11DnD.sendXdndStatus(displayMs, windowXid, sourceWindow, accept = true, rootX, rootY)
+            X11DragAndDrop.sendXdndStatus(displayMs, windowXid, sourceWindow, accept = true, rootX, rootY)
             handler.windowEvent(loop, windowId, WindowEvent.DragMoved(localPos))
         }
 
@@ -925,7 +925,7 @@ private fun handleXdndClientMessage(
             val rootY = (packedPos and 0xFFFFL).toInt()
             val localPos = rootToWindowPosition(display, windowXid, rootX, rootY, loop.screen)
             val displayMs = MemorySegment.ofAddress(loop.displayPtr)
-            val ok = X11DnD.requestDropData(
+            val ok = X11DragAndDrop.requestDropData(
                 display = displayMs,
                 targetWindow = windowXid,
                 xdndSelectionAtom = xdnd.xdndSelection,
@@ -961,25 +961,25 @@ private fun handleSelectionNotify(
     val property = eventBuf.get(ValueLayout.JAVA_LONG, XSELECTION_PROPERTY_OFFSET)
     val paths: List<String>
     if (property != 0L) {
-        val data = X11DnD.readSelectionProperty(
+        val data = X11DragAndDrop.readSelectionProperty(
             getProperty = xGetWindowProperty,
             free = xFree,
             display = display,
             window = windowXid,
             property = property,
         )
-        paths = if (data != null) X11DnD.parseUriList(data) else emptyList()
+        paths = if (data != null) X11DragAndDrop.parseUriList(data) else emptyList()
     } else {
         paths = emptyList()
     }
-    X11DnD.sendXdndFinished(display, windowXid, drop.sourceWindow, accept = true)
+    X11DragAndDrop.sendXdndFinished(display, windowXid, drop.sourceWindow, accept = true)
     loop.dragSourceWindows.remove(windowXid)
     handler.windowEvent(loop, windowId, WindowEvent.DragDropped(drop.position, paths))
 }
 
 private fun readXdndTypeList(display: MemorySegment, sourceWindow: Long, types: MutableList<Long>) {
     val getProperty = xGetWindowProperty ?: return
-    val xdndTypeListAtom = x11DnDAtom(display, "XdndTypeList")
+    val xdndTypeListAtom = x11DragAndDropAtom(display, "XdndTypeList")
     if (xdndTypeListAtom == 0L) return
     try {
         Arena.ofConfined().use { arena ->
@@ -1235,12 +1235,12 @@ fun runApp(handler: ApplicationHandler) {
         // Intern Xdnd atoms needed for drag-and-drop
         val xdnd: XdndAtoms? = Arena.ofConfined().use { arena ->
             val displayMs = MemorySegment.ofAddress(displayPtr)
-            val enter = x11DnDAtom(displayMs, "XdndEnter")
-            val position = x11DnDAtom(displayMs, "XdndPosition")
-            val leave = x11DnDAtom(displayMs, "XdndLeave")
-            val drop = x11DnDAtom(displayMs, "XdndDrop")
-            val selection = x11DnDAtom(displayMs, "XdndSelection")
-            val textUriList = x11DnDAtom(displayMs, "text/uri-list")
+            val enter = x11DragAndDropAtom(displayMs, "XdndEnter")
+            val position = x11DragAndDropAtom(displayMs, "XdndPosition")
+            val leave = x11DragAndDropAtom(displayMs, "XdndLeave")
+            val drop = x11DragAndDropAtom(displayMs, "XdndDrop")
+            val selection = x11DragAndDropAtom(displayMs, "XdndSelection")
+            val textUriList = x11DragAndDropAtom(displayMs, "text/uri-list")
             if (enter != 0L && position != 0L && leave != 0L && drop != 0L && selection != 0L && textUriList != 0L) {
                 XdndAtoms(enter, position, leave, drop, selection, textUriList)
             } else null
