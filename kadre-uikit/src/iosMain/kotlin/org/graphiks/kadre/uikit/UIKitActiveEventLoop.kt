@@ -87,6 +87,9 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
 
     override fun createProxy(): EventLoopProxy = UIKitEventLoopProxy(this)
 
+    override fun ownedDisplayHandle(): OwnedDisplayHandle? =
+        OwnedDisplayHandle(RawDisplayHandle.UiKit)
+
     // ── R2: monitor enumeration ───────────────────────────────────────────────
 
     /**
