@@ -25,7 +25,7 @@ private const val WL_DATA_OFFER_FINISH_OPCODE: Int = 3
  *   5: selection(data, device, id)
  */
 private class WlDataDeviceListener(
-    private val dnd: WaylandDnD,
+    private val dnd: WaylandDragAndDrop,
 ) {
     @Suppress("UNUSED_PARAMETER")
     fun onDataOffer(data: MemorySegment, device: MemorySegment, offer: MemorySegment) {

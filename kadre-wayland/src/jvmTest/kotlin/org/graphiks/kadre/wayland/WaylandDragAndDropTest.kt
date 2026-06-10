@@ -21,7 +21,7 @@ class WaylandDragAndDropTest {
     @Test
     fun `uri-list parsing extracts file paths from file URIs`() {
         val data = "file:///home/user/file.txt\r\nfile:///home/user/file2.txt\r\n".toByteArray()
-        val paths = WaylandDnD.parseUriList(data)
+        val paths = WaylandDragAndDrop.parseUriList(data)
         assertEquals(2, paths.size)
         assertTrue(paths[0].endsWith("file.txt"))
         assertTrue(paths[1].endsWith("file2.txt"))
@@ -30,21 +30,21 @@ class WaylandDragAndDropTest {
     @Test
     fun `uri-list parsing skips comments`() {
         val data = "# comment line\r\nfile:///home/user/file.txt\r\n".toByteArray()
-        val paths = WaylandDnD.parseUriList(data)
+        val paths = WaylandDragAndDrop.parseUriList(data)
         assertEquals(1, paths.size)
     }
 
     @Test
     fun `uri-list parsing handles percent-encoded paths`() {
         val data = "file:///home/user/file%20with%20spaces.txt\r\n".toByteArray()
-        val paths = WaylandDnD.parseUriList(data)
+        val paths = WaylandDragAndDrop.parseUriList(data)
         assertEquals(1, paths.size)
         assertEquals("/home/user/file with spaces.txt", paths[0])
     }
 
     @Test
     fun `uri-list parsing returns empty list for empty input`() {
-        assertTrue(WaylandDnD.parseUriList(ByteArray(0)).isEmpty())
+        assertTrue(WaylandDragAndDrop.parseUriList(ByteArray(0)).isEmpty())
     }
 
     @Test

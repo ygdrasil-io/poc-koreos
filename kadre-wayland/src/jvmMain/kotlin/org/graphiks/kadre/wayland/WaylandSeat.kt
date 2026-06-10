@@ -488,7 +488,7 @@ internal class WaylandSeatBinding internal constructor(
 ) {
     /** DnD handler, kept alive by the binding. */
     @JvmField
-    internal var dnd: WaylandDnD? = null
+    internal var dnd: WaylandDragAndDrop? = null
 }
 
 /** Keeps seat bindings alive for the process lifetime. */
