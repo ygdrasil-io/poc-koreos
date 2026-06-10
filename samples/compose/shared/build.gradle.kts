@@ -1,7 +1,14 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
 plugins {
     kotlin("multiplatform")
+    alias(libs.plugins.android.library)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+}
+
+android {
+    namespace = "org.graphiks.kadre.samples.compose.shared"
 }
 
 kotlin {
@@ -11,6 +18,7 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     js(IR) { browser() }
+    @OptIn(ExperimentalWasmDsl::class)
     wasmJs { browser() }
     jvmToolchain(25)
 
@@ -66,9 +74,6 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
             }
-        }
-        wasmJsMain {
-            dependsOn(jsMain)
         }
     }
 }
