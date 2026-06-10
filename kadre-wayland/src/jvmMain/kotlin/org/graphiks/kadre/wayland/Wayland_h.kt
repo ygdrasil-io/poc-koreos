@@ -37,7 +37,7 @@ import java.lang.invoke.MethodHandle
 
 // ── Lazy loading of the libraries ─────────────────────────────────────────────
 
-private fun waylandNativeDisabled(): Boolean =
+internal fun waylandNativeDisabled(): Boolean =
     System.getenv("KADRE_WAYLAND_DISABLE_NATIVE") == "1" ||
         System.getProperty("kadre.wayland.disableNative") == "true"
 
@@ -49,7 +49,6 @@ private fun waylandNativeDisabled(): Boolean =
  * and we want the build to stay green in all cases.
  */
 internal val libWaylandClient: SymbolLookup? by lazy {
-    if (waylandNativeDisabled()) return@lazy null
     try {
         SymbolLookup.libraryLookup("libwayland-client.so.0", Arena.global())
     } catch (e: Throwable) {
@@ -799,7 +798,6 @@ internal val wlShmPoolCreateBuffer: MethodHandle? by lazy {
  * Used for cursor theme loading (setCursor with CursorIcon).
  */
 internal val libWaylandCursor: SymbolLookup? by lazy {
-    if (waylandNativeDisabled()) return@lazy null
     try { SymbolLookup.libraryLookup("libwayland-cursor.so.0", Arena.global()) }
     catch (_: Throwable) { null }
 }
