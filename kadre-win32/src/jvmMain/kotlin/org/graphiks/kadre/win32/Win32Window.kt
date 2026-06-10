@@ -671,7 +671,7 @@ class Win32Window private constructor(
             val setStyle = setWindowLongPtrW ?: return WindowRequestResult.Failure(
                 RequestError.Unsupported("Win32 SetWindowLongPtrW is unavailable"),
             )
-            setLastError?.invokeExact(0)
+            setLastError?.invoke(0)
             val exStyle = getStyle.invokeExact(hwnd, GWL_EXSTYLE) as Long
             if (exStyle == 0L) {
                 val error = try { getLastError?.invokeExact() as? Int ?: 0 } catch (_: Throwable) { 0 }
@@ -682,7 +682,7 @@ class Win32Window private constructor(
             val transparentFlag = 0x00000020L // WS_EX_TRANSPARENT
             val newStyle = if (!hittest) exStyle or transparentFlag
                            else exStyle and transparentFlag.inv()
-            setLastError?.invokeExact(0)
+            setLastError?.invoke(0)
             val previous = setStyle.invokeExact(hwnd, GWL_EXSTYLE, newStyle) as Long
             if (previous == 0L) {
                 val error = try { getLastError?.invokeExact() as? Int ?: 0 } catch (_: Throwable) { 0 }
