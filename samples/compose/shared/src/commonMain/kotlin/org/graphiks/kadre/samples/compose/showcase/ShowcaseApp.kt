@@ -32,14 +32,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.IconButton
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.graphiks.kadre.samples.compose.showcase.features.CaptureDemo
+import org.graphiks.kadre.samples.compose.showcase.features.CoroutinesDemo
+import org.graphiks.kadre.samples.compose.showcase.features.KeyTestDemo
+import org.graphiks.kadre.samples.compose.showcase.features.NativeFfiDemo
 
 private val allFeatures: List<ShowcaseFeature> = listOf(
-    org.graphiks.kadre.samples.compose.showcase.features.KeyTestDemo,
-    org.graphiks.kadre.samples.compose.showcase.features.CoroutinesDemo,
-    org.graphiks.kadre.samples.compose.showcase.features.NativeFfiDemo,
-    org.graphiks.kadre.samples.compose.showcase.features.CaptureDemo,
+    KeyTestDemo,
+    CoroutinesDemo,
+    NativeFfiDemo,
+    CaptureDemo,
 )
 
 private val userFeatures = allFeatures.filter { !it.devOnly }
@@ -72,6 +77,7 @@ fun ShowcaseApp(platformContext: PlatformContext) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DesktopLayout(
     selectedCategory: FeatureCategory,
@@ -144,10 +150,9 @@ private fun MobileLayout(
                 TopAppBar(
                     title = { Text(selectedFeature.title) },
                     navigationIcon = {
-                        Text(
-                            "\u2190",
-                            modifier = Modifier.padding(16.dp).clickable { onFeatureSelected(null) },
-                        )
+                        IconButton(onClick = { onFeatureSelected(null) }) {
+                            Text("\u2190")
+                        }
                     },
                 )
             },
