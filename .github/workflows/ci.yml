@@ -294,12 +294,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build web modules (JS + Wasm)
+      # allTests runs jsTest and wasmJsTest under a Node.js environment.
+      - name: Build web modules (JS + Wasm) + run JS/Wasm tests
         run: |
           ./gradlew \
             :kadre-core:jvmTest \
             :kadre-js:compileKotlinJs \
             :kadre-wasm:compileKotlinWasmJs \
+            :kadre-web-common:allTests \
             --no-daemon \
             --stacktrace
 
