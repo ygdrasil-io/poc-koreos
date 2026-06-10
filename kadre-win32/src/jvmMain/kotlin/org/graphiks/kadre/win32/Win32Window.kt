@@ -1414,7 +1414,7 @@ class Win32Window private constructor(
             // Register for file drag-and-drop via DragAcceptFiles (WM_DROPFILES).
             // This enables the window to receive WM_DROPFILES when the user drops
             // files onto the client area.
-            dragAcceptFiles?.let { it.invokeExact(hwnd, 1) }
+            dragAcceptFiles?.invoke(hwnd, 1)
 
             // Initial display.
             // ShowWindow/UpdateWindow return BOOL (int) — invokeExact requires the exact

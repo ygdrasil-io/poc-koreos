@@ -25,7 +25,7 @@ class X11NativeIntegrationTest {
     @Test
     fun `Xdnd atoms are defined correctly`() {
         if (!isLinux() || !hasDisplay()) return
-        val display = xOpenDisplay?.invokeExact(null as Any?) as? MemorySegment ?: return
+        val display = xOpenDisplay?.invokeExact(MemorySegment.NULL) as? MemorySegment ?: return
         try {
             assertTrue(x11DragAndDropAtom(display, "XdndAware") != 0L)
             assertTrue(x11DragAndDropAtom(display, "XdndEnter") != 0L)
@@ -50,7 +50,7 @@ class X11NativeIntegrationTest {
     @Test
     fun `X11 display connection works when DISPLAY is set`() {
         if (!isLinux() || !hasDisplay()) return
-        val display = xOpenDisplay?.invokeExact(null as Any?) as? MemorySegment
+        val display = xOpenDisplay?.invokeExact(MemorySegment.NULL) as? MemorySegment
         assertNotNull(display)
         xCloseDisplay?.invokeExact(display) as? Int
     }
