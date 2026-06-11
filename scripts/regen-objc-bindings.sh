@@ -21,8 +21,9 @@ APPKIT_H="$SDK/System/Library/Frameworks/AppKit.framework/Headers/AppKit.h"
 OUT=$(cd "$(dirname "$0")/.." && pwd)/ffi/objc/src/jvmMain/kotlin
 
 FRAMEWORKS=(
-    Foundation AppKit CoreGraphics QuartzCore CoreImage
-    Metal AVFoundation GameController ModelIO SceneKit
+    Foundation CoreFoundation AppKit CoreGraphics
+    QuartzCore CoreImage Metal AVFoundation
+    GameController ModelIO SceneKit
     UniformTypeIdentifiers PDFKit QuickLook
 )
 
