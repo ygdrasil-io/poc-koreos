@@ -1,0 +1,43 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSDraggingDestination
+ * Inherits protocols: NSObject
+ */
+interface NSDraggingDestination : NSObject {
+    // @optional
+    fun draggingEntered(sender: MemorySegment): NSDragOperation =
+        throw UnsupportedOperationException("Optional ObjC method 'draggingEntered:' not implemented")
+    
+    // @optional
+    fun draggingUpdated(sender: MemorySegment): NSDragOperation =
+        throw UnsupportedOperationException("Optional ObjC method 'draggingUpdated:' not implemented")
+    
+    // @optional
+    fun draggingExited(sender: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'draggingExited:' not implemented")
+    
+    // @optional
+    fun prepareForDragOperation(sender: MemorySegment): BOOL =
+        throw UnsupportedOperationException("Optional ObjC method 'prepareForDragOperation:' not implemented")
+    
+    // @optional
+    fun performDragOperation(sender: MemorySegment): BOOL =
+        throw UnsupportedOperationException("Optional ObjC method 'performDragOperation:' not implemented")
+    
+    // @optional
+    fun concludeDragOperation(sender: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'concludeDragOperation:' not implemented")
+    
+    // @optional
+    fun draggingEnded(sender: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'draggingEnded:' not implemented")
+    
+    // @optional
+    fun wantsPeriodicDraggingUpdates(): BOOL =
+        throw UnsupportedOperationException("Optional ObjC method 'wantsPeriodicDraggingUpdates' not implemented")
+    
+    // @optional
+    fun updateDraggingItemsForDrag(sender: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'updateDraggingItemsForDrag:' not implemented")
+    
+}
+

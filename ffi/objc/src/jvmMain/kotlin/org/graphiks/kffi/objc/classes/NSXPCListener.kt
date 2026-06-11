@@ -1,0 +1,75 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSXPCListener
+ * Superclass: NSObject
+ */
+open class NSXPCListener(val ptr: MemorySegment) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSXPCListener") }
+        
+        fun serviceListener(): MemorySegment {
+            val sel = ObjCRuntime.sel("serviceListener")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun anonymousListener(): MemorySegment {
+            val sel = ObjCRuntime.sel("anonymousListener")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+    }
+    
+    fun initWithMachServiceName(name: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initWithMachServiceName:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
+    }
+    
+    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
+    fun initWithMachServiceName(name: String): MemorySegment = initWithMachServiceName(ObjCRuntime.newNSString(Arena.global(), name))
+    
+    fun resume(): Unit {
+        val sel = ObjCRuntime.sel("resume")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun suspend(): Unit {
+        val sel = ObjCRuntime.sel("suspend")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun activate(): Unit {
+        val sel = ObjCRuntime.sel("activate")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun invalidate(): Unit {
+        val sel = ObjCRuntime.sel("invalidate")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun setConnectionCodeSigningRequirement(requirement: MemorySegment): Unit {
+        val sel = ObjCRuntime.sel("setConnectionCodeSigningRequirement:")
+        ObjCRuntime.msgSend(null, ptr, sel, requirement)
+    }
+    
+    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
+    fun setConnectionCodeSigningRequirement(requirement: String): Unit = setConnectionCodeSigningRequirement(ObjCRuntime.newNSString(Arena.global(), requirement))
+    
+    // @property delegate
+    /** @return id<NSXPCListenerDelegate> */
+    fun delegate(): MemorySegment {
+        val sel = ObjCRuntime.sel("delegate")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    fun setDelegate(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setDelegate:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property endpoint
+    fun endpoint(): MemorySegment {
+        val sel = ObjCRuntime.sel("endpoint")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+}
+

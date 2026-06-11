@@ -1,0 +1,52 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSPortCoder
+ * Superclass: NSCoder
+ */
+open class NSPortCoder(ptr: MemorySegment) : NSCoder(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPortCoder") }
+        
+        fun portCoderWithReceivePort_sendPort_components(rcvPort: MemorySegment, sndPort: MemorySegment, comps: MemorySegment): MemorySegment {
+            val sel = ObjCRuntime.sel("portCoderWithReceivePort:sendPort:components:")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, rcvPort, sndPort, comps) as MemorySegment
+        }
+        
+    }
+    
+    fun isBycopy(): BOOL {
+        val sel = ObjCRuntime.sel("isBycopy")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    }
+    
+    fun isByref(): BOOL {
+        val sel = ObjCRuntime.sel("isByref")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    }
+    
+    fun encodePortObject(aport: MemorySegment): Unit {
+        val sel = ObjCRuntime.sel("encodePortObject:")
+        ObjCRuntime.msgSend(null, ptr, sel, aport)
+    }
+    
+    fun decodePortObject(): MemorySegment {
+        val sel = ObjCRuntime.sel("decodePortObject")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    fun connection(): MemorySegment {
+        val sel = ObjCRuntime.sel("connection")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    fun initWithReceivePort_sendPort_components(rcvPort: MemorySegment, sndPort: MemorySegment, comps: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initWithReceivePort:sendPort:components:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rcvPort, sndPort, comps) as MemorySegment
+    }
+    
+    fun dispatch(): Unit {
+        val sel = ObjCRuntime.sel("dispatch")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+}
+

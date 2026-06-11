@@ -1,0 +1,2 @@
+// ── Category: NSEditorAndEditorRegistrationConformance on NSManagedObjectContext ─────────────────────────────────────────
+

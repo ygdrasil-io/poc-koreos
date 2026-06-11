@@ -1,0 +1,18 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSCloseCommand
+ * Superclass: NSScriptCommand
+ */
+open class NSCloseCommand(ptr: MemorySegment) : NSScriptCommand(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCloseCommand") }
+        
+    }
+    
+    // @property saveOptions
+    fun saveOptions(): NSSaveOptions {
+        val sel = ObjCRuntime.sel("saveOptions")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSaveOptions
+    }
+    
+}
+

@@ -1,0 +1,134 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSUnitPower
+ * Superclass: NSDimension
+ * Protocols: NSSecureCoding
+ */
+open class NSUnitPower(ptr: MemorySegment) : NSDimension(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitPower") }
+        
+        fun terawatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("terawatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun gigawatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("gigawatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun megawatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("megawatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun kilowatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("kilowatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun watts(): MemorySegment {
+            val sel = ObjCRuntime.sel("watts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun milliwatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("milliwatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun microwatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("microwatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun nanowatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("nanowatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun picowatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("picowatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun femtowatts(): MemorySegment {
+            val sel = ObjCRuntime.sel("femtowatts")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun horsepower(): MemorySegment {
+            val sel = ObjCRuntime.sel("horsepower")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+    }
+    
+    // @property terawatts
+    fun terawatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("terawatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property gigawatts
+    fun gigawatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("gigawatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property megawatts
+    fun megawatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("megawatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property kilowatts
+    fun kilowatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("kilowatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property watts
+    fun watts(): MemorySegment {
+        val sel = ObjCRuntime.sel("watts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property milliwatts
+    fun milliwatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("milliwatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property microwatts
+    fun microwatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("microwatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property nanowatts
+    fun nanowatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("nanowatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property picowatts
+    fun picowatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("picowatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property femtowatts
+    fun femtowatts(): MemorySegment {
+        val sel = ObjCRuntime.sel("femtowatts")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property horsepower
+    fun horsepower(): MemorySegment {
+        val sel = ObjCRuntime.sel("horsepower")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+}
+

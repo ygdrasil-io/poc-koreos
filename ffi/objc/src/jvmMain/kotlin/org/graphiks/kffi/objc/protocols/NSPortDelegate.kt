@@ -1,0 +1,11 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSPortDelegate
+ * Inherits protocols: NSObject
+ */
+interface NSPortDelegate : NSObject {
+    // @optional
+    fun handlePortMessage(message: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'handlePortMessage:' not implemented")
+    
+}
+

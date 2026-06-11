@@ -1,0 +1,31 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSScrubberDelegate
+ * Inherits protocols: NSObject
+ */
+interface NSScrubberDelegate : NSObject {
+    // @optional
+    fun scrubber_didSelectItemAtIndex(scrubber: MemorySegment, selectedIndex: NSInteger): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'scrubber:didSelectItemAtIndex:' not implemented")
+    
+    // @optional
+    fun scrubber_didHighlightItemAtIndex(scrubber: MemorySegment, highlightedIndex: NSInteger): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'scrubber:didHighlightItemAtIndex:' not implemented")
+    
+    // @optional
+    fun scrubber_didChangeVisibleRange(scrubber: MemorySegment, visibleRange: NSRange): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'scrubber:didChangeVisibleRange:' not implemented")
+    
+    // @optional
+    fun didBeginInteractingWithScrubber(scrubber: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'didBeginInteractingWithScrubber:' not implemented")
+    
+    // @optional
+    fun didFinishInteractingWithScrubber(scrubber: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'didFinishInteractingWithScrubber:' not implemented")
+    
+    // @optional
+    fun didCancelInteractingWithScrubber(scrubber: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'didCancelInteractingWithScrubber:' not implemented")
+    
+}
+

@@ -1,0 +1,22 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSUnitConverter
+ * Superclass: NSObject
+ */
+open class NSUnitConverter(val ptr: MemorySegment) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitConverter") }
+        
+    }
+    
+    fun baseUnitValueFromValue(value: Double): Double {
+        val sel = ObjCRuntime.sel("baseUnitValueFromValue:")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, value) as Double
+    }
+    
+    fun valueFromBaseUnitValue(baseUnitValue: Double): Double {
+        val sel = ObjCRuntime.sel("valueFromBaseUnitValue:")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, baseUnitValue) as Double
+    }
+    
+}
+

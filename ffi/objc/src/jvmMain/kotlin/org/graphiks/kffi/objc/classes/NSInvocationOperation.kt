@@ -1,0 +1,34 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSInvocationOperation
+ * Superclass: NSOperation
+ */
+open class NSInvocationOperation(ptr: MemorySegment) : NSOperation(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSInvocationOperation") }
+        
+    }
+    
+    fun initWithTarget_selector_object(target: MemorySegment, sel: MemorySegment, arg: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initWithTarget:selector:object:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, sel, arg) as MemorySegment
+    }
+    
+    fun initWithInvocation(inv: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initWithInvocation:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, inv) as MemorySegment
+    }
+    
+    // @property invocation
+    fun invocation(): MemorySegment {
+        val sel = ObjCRuntime.sel("invocation")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property result
+    fun result(): MemorySegment {
+        val sel = ObjCRuntime.sel("result")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+}
+

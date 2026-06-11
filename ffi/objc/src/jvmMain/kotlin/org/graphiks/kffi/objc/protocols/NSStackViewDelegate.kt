@@ -1,0 +1,15 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSStackViewDelegate
+ * Inherits protocols: NSObject
+ */
+interface NSStackViewDelegate : NSObject {
+    // @optional
+    fun stackView_willDetachViews(stackView: MemorySegment, views: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'stackView:willDetachViews:' not implemented")
+    
+    // @optional
+    fun stackView_didReattachViews(stackView: MemorySegment, views: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'stackView:didReattachViews:' not implemented")
+    
+}
+

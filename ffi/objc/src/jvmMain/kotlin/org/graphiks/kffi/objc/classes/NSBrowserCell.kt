@@ -1,0 +1,107 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSBrowserCell
+ * Superclass: NSCell
+ */
+open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSBrowserCell") }
+        
+        fun branchImage(): MemorySegment {
+            val sel = ObjCRuntime.sel("branchImage")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+        fun highlightedBranchImage(): MemorySegment {
+            val sel = ObjCRuntime.sel("highlightedBranchImage")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+    }
+    
+    fun initTextCell(string: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initTextCell:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
+    }
+    
+    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
+    fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
+    
+    fun initImageCell(image: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initImageCell:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, image) as MemorySegment
+    }
+    
+    fun initWithCoder(coder: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("initWithCoder:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
+    }
+    
+    fun highlightColorInView(controlView: MemorySegment): MemorySegment {
+        val sel = ObjCRuntime.sel("highlightColorInView:")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, controlView) as MemorySegment
+    }
+    
+    fun reset(): Unit {
+        val sel = ObjCRuntime.sel("reset")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun `set`(): Unit {
+        val sel = ObjCRuntime.sel("set")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    // @property branchImage
+    fun branchImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("branchImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property highlightedBranchImage
+    fun highlightedBranchImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("highlightedBranchImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property leaf
+    fun isLeaf(): BOOL {
+        val sel = ObjCRuntime.sel("isLeaf")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    }
+    fun setLeaf(value: BOOL) {
+        val sel = ObjCRuntime.sel("setLeaf:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property loaded
+    fun isLoaded(): BOOL {
+        val sel = ObjCRuntime.sel("isLoaded")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    }
+    fun setLoaded(value: BOOL) {
+        val sel = ObjCRuntime.sel("setLoaded:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property image
+    fun image(): MemorySegment {
+        val sel = ObjCRuntime.sel("image")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    fun setImage(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setImage:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property alternateImage
+    fun alternateImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("alternateImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    fun setAlternateImage(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setAlternateImage:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+}
+

@@ -1,0 +1,11 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSTextContentStorageDelegate
+ * Inherits protocols: NSTextContentManagerDelegate
+ */
+interface NSTextContentStorageDelegate : NSTextContentManagerDelegate {
+    // @optional
+    fun textContentStorage_textParagraphWithRange(textContentStorage: MemorySegment, range: NSRange): MemorySegment =
+        throw UnsupportedOperationException("Optional ObjC method 'textContentStorage:textParagraphWithRange:' not implemented")
+    
+}
+

@@ -1,0 +1,27 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSTextDelegate
+ * Inherits protocols: NSObject
+ */
+interface NSTextDelegate : NSObject {
+    // @optional
+    fun textShouldBeginEditing(textObject: MemorySegment): BOOL =
+        throw UnsupportedOperationException("Optional ObjC method 'textShouldBeginEditing:' not implemented")
+    
+    // @optional
+    fun textShouldEndEditing(textObject: MemorySegment): BOOL =
+        throw UnsupportedOperationException("Optional ObjC method 'textShouldEndEditing:' not implemented")
+    
+    // @optional
+    fun textDidBeginEditing(notification: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'textDidBeginEditing:' not implemented")
+    
+    // @optional
+    fun textDidEndEditing(notification: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'textDidEndEditing:' not implemented")
+    
+    // @optional
+    fun textDidChange(notification: MemorySegment): Unit =
+        throw UnsupportedOperationException("Optional ObjC method 'textDidChange:' not implemented")
+    
+}
+

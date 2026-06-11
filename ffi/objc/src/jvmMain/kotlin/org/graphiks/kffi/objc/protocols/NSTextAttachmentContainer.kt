@@ -1,0 +1,11 @@
+/**
+ * Kotlin/JVM interface for Objective-C protocol: NSTextAttachmentContainer
+ * Inherits protocols: NSObject
+ */
+interface NSTextAttachmentContainer : NSObject {
+    fun imageForBounds_textContainer_characterIndex(imageBounds: CGRect, textContainer: MemorySegment, charIndex: NSUInteger): MemorySegment
+    
+    fun attachmentBoundsForTextContainer_proposedLineFragment_glyphPosition_characterIndex(textContainer: MemorySegment, lineFrag: CGRect, position: CGPoint, charIndex: NSUInteger): CGRect
+    
+}
+

@@ -1,0 +1,57 @@
+/**
+ * Kotlin/JVM wrapper for Objective-C class: NSURLSessionStreamTask
+ * Superclass: NSURLSessionTask
+ */
+open class NSURLSessionStreamTask(ptr: MemorySegment) : NSURLSessionTask(ptr) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionStreamTask") }
+        
+        fun new(): MemorySegment {
+            val sel = ObjCRuntime.sel("new")
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
+        }
+        
+    }
+    
+    fun readDataOfMinLength_maxLength_timeout_completionHandler(minBytes: NSUInteger, maxBytes: NSUInteger, timeout: NSTimeInterval, completionHandler: MemorySegment): Unit {
+        val sel = ObjCRuntime.sel("readDataOfMinLength:maxLength:timeout:completionHandler:")
+        ObjCRuntime.msgSend(null, ptr, sel, minBytes, maxBytes, timeout, completionHandler)
+    }
+    
+    fun writeData_timeout_completionHandler(`data`: MemorySegment, timeout: NSTimeInterval, completionHandler: MemorySegment): Unit {
+        val sel = ObjCRuntime.sel("writeData:timeout:completionHandler:")
+        ObjCRuntime.msgSend(null, ptr, sel, `data`, timeout, completionHandler)
+    }
+    
+    fun captureStreams(): Unit {
+        val sel = ObjCRuntime.sel("captureStreams")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun closeWrite(): Unit {
+        val sel = ObjCRuntime.sel("closeWrite")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun closeRead(): Unit {
+        val sel = ObjCRuntime.sel("closeRead")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun startSecureConnection(): Unit {
+        val sel = ObjCRuntime.sel("startSecureConnection")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun stopSecureConnection(): Unit {
+        val sel = ObjCRuntime.sel("stopSecureConnection")
+        ObjCRuntime.msgSend(null, ptr, sel)
+    }
+    
+    fun init(): MemorySegment {
+        val sel = ObjCRuntime.sel("init")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+}
+
