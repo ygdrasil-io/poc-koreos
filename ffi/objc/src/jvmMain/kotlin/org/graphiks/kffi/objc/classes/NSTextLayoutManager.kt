@@ -41,7 +41,7 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, range)
     }
     
-    open fun ensureLayoutForBounds(bounds: CGRect): Unit {
+    open fun ensureLayoutForBounds(bounds: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("ensureLayoutForBounds:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(bounds, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
@@ -51,7 +51,7 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, range)
     }
     
-    open fun textLayoutFragmentForPosition(position: CGPoint): MemorySegment {
+    open fun textLayoutFragmentForPosition(position: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("textLayoutFragmentForPosition:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(position, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
     }
@@ -181,9 +181,9 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     }
     
     // @property usageBoundsForTextContainer
-    open fun usageBoundsForTextContainer(): CGRect {
+    open fun usageBoundsForTextContainer(): MemorySegment {
         val sel = ObjCRuntime.sel("usageBoundsForTextContainer")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as CGRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property textViewportLayoutController

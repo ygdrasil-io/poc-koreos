@@ -22,7 +22,7 @@ interface NSTextSelectionDataSource : NSObject {
     
     fun enumerateCaretOffsetsInLineFragmentAtLocation_usingBlock(location: MemorySegment, block: MemorySegment)
     
-    fun lineFragmentRangeForPoint_inContainerAtLocation(point: CGPoint, location: MemorySegment): MemorySegment
+    fun lineFragmentRangeForPoint_inContainerAtLocation(point: MemorySegment, location: MemorySegment): MemorySegment
     
     // @optional
     fun enumerateContainerBoundariesFromLocation_reverse_usingBlock(location: MemorySegment, reverse: BOOL, block: MemorySegment): Unit =

@@ -38,12 +38,12 @@ open class CIVector(val ptr: MemorySegment) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, x, y, z, w) as MemorySegment
         }
         
-        open fun vectorWithCGPoint(p: CGPoint): MemorySegment {
+        open fun vectorWithCGPoint(p: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithCGPoint:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
         }
         
-        open fun vectorWithCGRect(r: CGRect): MemorySegment {
+        open fun vectorWithCGRect(r: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithCGRect:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
         }
@@ -88,12 +88,12 @@ open class CIVector(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, x, y, z, w) as MemorySegment
     }
     
-    open fun initWithCGPoint(p: CGPoint): MemorySegment {
+    open fun initWithCGPoint(p: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCGPoint:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
     }
     
-    open fun initWithCGRect(r: CGRect): MemorySegment {
+    open fun initWithCGRect(r: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCGRect:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -147,15 +147,15 @@ open class CIVector(val ptr: MemorySegment) {
     }
     
     // @property CGPointValue
-    open fun CGPointValue(): CGPoint {
+    open fun CGPointValue(): MemorySegment {
         val sel = ObjCRuntime.sel("CGPointValue")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as CGPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as MemorySegment
     }
     
     // @property CGRectValue
-    open fun CGRectValue(): CGRect {
+    open fun CGRectValue(): MemorySegment {
         val sel = ObjCRuntime.sel("CGRectValue")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as CGRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property CGAffineTransformValue

@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Inherits protocols: NSObject
  */
 interface NSTextViewportLayoutControllerDelegate : NSObject {
-    fun viewportBoundsForTextViewportLayoutController(textViewportLayoutController: MemorySegment): CGRect
+    fun viewportBoundsForTextViewportLayoutController(textViewportLayoutController: MemorySegment): MemorySegment
     
     fun textViewportLayoutController_configureRenderingSurfaceForTextLayoutFragment(textViewportLayoutController: MemorySegment, textLayoutFragment: MemorySegment)
     

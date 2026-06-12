@@ -40,7 +40,7 @@ open class NSTextSelectionNavigation(val ptr: MemorySegment) {
     }
     
     /** @return NSArray<NSTextSelection *> * */
-    open fun textSelectionsInteractingAtPoint_inContainerAtLocation_anchors_modifiers_selecting_bounds(point: CGPoint, containerLocation: MemorySegment, anchors: MemorySegment, modifiers: NSTextSelectionNavigationModifier, selecting: BOOL, bounds: CGRect): MemorySegment {
+    open fun textSelectionsInteractingAtPoint_inContainerAtLocation_anchors_modifiers_selecting_bounds(point: MemorySegment, containerLocation: MemorySegment, anchors: MemorySegment, modifiers: NSTextSelectionNavigationModifier, selecting: BOOL, bounds: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("textSelectionsInteractingAtPoint:inContainerAtLocation:anchors:modifiers:selecting:bounds:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), containerLocation, anchors, modifiers, selecting, ObjCRuntime.ObjCStructArg(bounds, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -50,7 +50,7 @@ open class NSTextSelectionNavigation(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, selectionGranularity, textSelection) as MemorySegment
     }
     
-    open fun textSelectionForSelectionGranularity_enclosingPoint_inContainerAtLocation(selectionGranularity: NSTextSelectionGranularity, point: CGPoint, location: MemorySegment): MemorySegment {
+    open fun textSelectionForSelectionGranularity_enclosingPoint_inContainerAtLocation(selectionGranularity: NSTextSelectionGranularity, point: MemorySegment, location: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("textSelectionForSelectionGranularity:enclosingPoint:inContainerAtLocation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, selectionGranularity, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), location) as MemorySegment
     }

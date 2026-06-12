@@ -38,22 +38,22 @@ open class NSTextLineFragment(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun drawAtPoint_inContext(point: CGPoint, context: MemorySegment): Unit {
+    open fun drawAtPoint_inContext(point: MemorySegment, context: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawAtPoint:inContext:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), context)
     }
     
-    open fun locationForCharacterAtIndex(index: NSInteger): CGPoint {
+    open fun locationForCharacterAtIndex(index: NSInteger): MemorySegment {
         val sel = ObjCRuntime.sel("locationForCharacterAtIndex:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, index) as CGPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, index) as MemorySegment
     }
     
-    open fun characterIndexForPoint(point: CGPoint): NSInteger {
+    open fun characterIndexForPoint(point: MemorySegment): NSInteger {
         val sel = ObjCRuntime.sel("characterIndexForPoint:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as NSInteger
     }
     
-    open fun fractionOfDistanceThroughGlyphForPoint(point: CGPoint): CGFloat {
+    open fun fractionOfDistanceThroughGlyphForPoint(point: MemorySegment): CGFloat {
         val sel = ObjCRuntime.sel("fractionOfDistanceThroughGlyphForPoint:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as CGFloat
     }
@@ -71,15 +71,15 @@ open class NSTextLineFragment(val ptr: MemorySegment) {
     }
     
     // @property typographicBounds
-    open fun typographicBounds(): CGRect {
+    open fun typographicBounds(): MemorySegment {
         val sel = ObjCRuntime.sel("typographicBounds")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as CGRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property glyphOrigin
-    open fun glyphOrigin(): CGPoint {
+    open fun glyphOrigin(): MemorySegment {
         val sel = ObjCRuntime.sel("glyphOrigin")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as CGPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as MemorySegment
     }
     
 }

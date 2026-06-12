@@ -1135,31 +1135,31 @@ fun NSString.enumerateLinguisticTagsInRange_scheme_options_orthography_usingBloc
 
 // ── Category: NSStringDrawing on NSString ─────────────────────────────────────────
 
-fun NSString.sizeWithAttributes(attrs: MemorySegment): CGSize {
+fun NSString.sizeWithAttributes(attrs: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sizeWithAttributes:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, attrs) as CGSize
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, attrs) as MemorySegment
 }
 
-fun NSString.drawAtPoint_withAttributes(point: CGPoint, attrs: MemorySegment): Unit {
+fun NSString.drawAtPoint_withAttributes(point: MemorySegment, attrs: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawAtPoint:withAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, point, attrs)
 }
 
-fun NSString.drawInRect_withAttributes(rect: CGRect, attrs: MemorySegment): Unit {
+fun NSString.drawInRect_withAttributes(rect: MemorySegment, attrs: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawInRect:withAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, rect, attrs)
 }
 
 // ── Category: NSExtendedStringDrawing on NSString ─────────────────────────────────────────
 
-fun NSString.drawWithRect_options_attributes_context(rect: CGRect, options: NSStringDrawingOptions, attributes: MemorySegment, context: MemorySegment): Unit {
+fun NSString.drawWithRect_options_attributes_context(rect: MemorySegment, options: NSStringDrawingOptions, attributes: MemorySegment, context: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawWithRect:options:attributes:context:")
     ObjCRuntime.msgSend(null, ptr, sel, rect, options, attributes, context)
 }
 
-fun NSString.boundingRectWithSize_options_attributes_context(size: CGSize, options: NSStringDrawingOptions, attributes: MemorySegment, context: MemorySegment): CGRect {
+fun NSString.boundingRectWithSize_options_attributes_context(size: MemorySegment, options: NSStringDrawingOptions, attributes: MemorySegment, context: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("boundingRectWithSize:options:attributes:context:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, size, options, attributes, context) as CGRect
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, size, options, attributes, context) as MemorySegment
 }
 
 // ── Category: NSStringDrawingDeprecated on NSString ─────────────────────────────────────────

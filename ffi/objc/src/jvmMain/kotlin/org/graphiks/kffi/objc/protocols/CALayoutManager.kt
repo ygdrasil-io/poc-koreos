@@ -10,7 +10,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  */
 interface CALayoutManager : NSObject {
     // @optional
-    fun preferredSizeOfLayer(layer: MemorySegment): CGSize =
+    fun preferredSizeOfLayer(layer: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'preferredSizeOfLayer:' not implemented")
     
     // @optional

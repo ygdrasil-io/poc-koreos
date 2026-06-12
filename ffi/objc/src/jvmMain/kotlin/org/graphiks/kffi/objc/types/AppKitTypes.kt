@@ -2261,9 +2261,9 @@ typealias CFCalendarRef = MemorySegment
 typealias CGFloat = Double
 
 /**
- * {@snippet lang=c : STRUCT CGPoint
+ * {@snippet lang=c : STRUCT MemorySegment
  */
-class CGPoint {
+class MemorySegment {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("x"),
@@ -2310,9 +2310,9 @@ class CGPoint {
 } // End class
 
 /**
- * {@snippet lang=c : STRUCT CGSize
+ * {@snippet lang=c : STRUCT MemorySegment
  */
-class CGSize {
+class MemorySegment {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("width"),
@@ -2408,9 +2408,9 @@ class CGVector {
 } // End class
 
 /**
- * {@snippet lang=c : STRUCT CGRect
+ * {@snippet lang=c : STRUCT MemorySegment
  */
-class CGRect {
+class MemorySegment {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             CGPoint.layout.withName("origin"),
@@ -2440,19 +2440,19 @@ class CGRect {
     val origin_VH: VarHandle = layout.varHandle(groupElement("origin"))
     
     @Suppress("UNCHECKED_CAST")
-    fun origin(segment: MemorySegment): CGPoint =
-        origin_VH.get(segment, 0L) as CGPoint
+    fun origin(segment: MemorySegment): MemorySegment =
+        origin_VH.get(segment, 0L) as MemorySegment
     
-    fun origin(segment: MemorySegment, value: CGPoint) =
+    fun origin(segment: MemorySegment, value: MemorySegment) =
         origin_VH.set(segment, 0L, value)
     
     val size_VH: VarHandle = layout.varHandle(groupElement("size"))
     
     @Suppress("UNCHECKED_CAST")
-    fun size(segment: MemorySegment): CGSize =
-        size_VH.get(segment, 0L) as CGSize
+    fun size(segment: MemorySegment): MemorySegment =
+        size_VH.get(segment, 0L) as MemorySegment
     
-    fun size(segment: MemorySegment, value: CGSize) =
+    fun size(segment: MemorySegment, value: MemorySegment) =
         size_VH.set(segment, 0L, value)
 } // End class
 
@@ -2580,10 +2580,10 @@ class CGAffineTransformComponents {
     val scale_VH: VarHandle = layout.varHandle(groupElement("scale"))
     
     @Suppress("UNCHECKED_CAST")
-    fun scale(segment: MemorySegment): CGSize =
-        scale_VH.get(segment, 0L) as CGSize
+    fun scale(segment: MemorySegment): MemorySegment =
+        scale_VH.get(segment, 0L) as MemorySegment
     
-    fun scale(segment: MemorySegment, value: CGSize) =
+    fun scale(segment: MemorySegment, value: MemorySegment) =
         scale_VH.set(segment, 0L, value)
     
     val horizontalShear_VH: VarHandle = layout.varHandle(groupElement("horizontalShear"))
@@ -5873,47 +5873,47 @@ typealias NSPropertyListWriteOptions = Any
 typealias IOSurfaceRef = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(CGPoint) NSPoint;}
+ * {@snippet lang=c : typedef Declared(MemorySegment) NSPoint;}
  */
 typealias NSPoint = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGPoint))* NSPointPointer;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSPointPointer;}
  */
 typealias NSPointPointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGPoint))* NSPointArray;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSPointArray;}
  */
 typealias NSPointArray = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(CGSize) NSSize;}
+ * {@snippet lang=c : typedef Declared(MemorySegment) NSSize;}
  */
 typealias NSSize = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGSize))* NSSizePointer;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSSizePointer;}
  */
 typealias NSSizePointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGSize))* NSSizeArray;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSSizeArray;}
  */
 typealias NSSizeArray = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(CGRect) NSRect;}
+ * {@snippet lang=c : typedef Declared(MemorySegment) NSRect;}
  */
 typealias NSRect = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGRect))* NSRectPointer;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSRectPointer;}
  */
 typealias NSRectPointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(CGRect))* NSRectArray;}
+ * {@snippet lang=c : typedef (Declared(MemorySegment))* NSRectArray;}
  */
 typealias NSRectArray = MemorySegment
 
@@ -10350,7 +10350,7 @@ typealias CGCharCode = Any
 typealias CGKeyCode = Any
 
 /**
- * {@snippet lang=c : typedef (Void(UNSIGNED = Int,(Declared(CGRect))*,(Void)*))* CGScreenRefreshCallback;}
+ * {@snippet lang=c : typedef (Void(UNSIGNED = Int,(Declared(MemorySegment))*,(Void)*))* CGScreenRefreshCallback;}
  */
 typealias CGScreenRefreshCallback = MemorySegment
 
@@ -10404,7 +10404,7 @@ class CGScreenUpdateMoveDelta {
 } // End class
 
 /**
- * {@snippet lang=c : typedef (Void(Declared(CGScreenUpdateMoveDelta),UNSIGNED = Long,(Declared(CGRect))*,(Void)*))* CGScreenUpdateMoveCallback;}
+ * {@snippet lang=c : typedef (Void(Declared(CGScreenUpdateMoveDelta),UNSIGNED = Long,(Declared(MemorySegment))*,(Void)*))* CGScreenUpdateMoveCallback;}
  */
 typealias CGScreenUpdateMoveCallback = MemorySegment
 
@@ -12021,9 +12021,9 @@ typealias NSOpenGLPixelFormatAttribute = Any
 typealias CAMediaTimingFillMode = MemorySegment
 
 /**
- * {@snippet lang=c : STRUCT CATransform3D
+ * {@snippet lang=c : STRUCT MemorySegment
  */
-class CATransform3D {
+class MemorySegment {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("m11"),

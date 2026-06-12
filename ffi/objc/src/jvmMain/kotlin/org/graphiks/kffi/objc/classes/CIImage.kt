@@ -38,17 +38,17 @@ open class CIImage(val ptr: MemorySegment) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layer, options) as MemorySegment
         }
         
-        open fun imageWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: CGSize, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
+        open fun imageWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: MemorySegment, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithBitmapData:bytesPerRow:size:format:colorSpace:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`, bytesPerRow, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), format, colorSpace) as MemorySegment
         }
         
-        open fun imageWithTexture_size_flipped_colorSpace(name: Any, size: CGSize, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
+        open fun imageWithTexture_size_flipped_colorSpace(name: Any, size: MemorySegment, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithTexture:size:flipped:colorSpace:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, colorSpace) as MemorySegment
         }
         
-        open fun imageWithTexture_size_flipped_options(name: Any, size: CGSize, flipped: BOOL, options: MemorySegment): MemorySegment {
+        open fun imageWithTexture_size_flipped_options(name: Any, size: MemorySegment, flipped: BOOL, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithTexture:size:flipped:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, options) as MemorySegment
         }
@@ -205,17 +205,17 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, options) as MemorySegment
     }
     
-    open fun initWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: CGSize, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
+    open fun initWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: MemorySegment, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithBitmapData:bytesPerRow:size:format:colorSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, bytesPerRow, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), format, colorSpace) as MemorySegment
     }
     
-    open fun initWithTexture_size_flipped_colorSpace(name: Any, size: CGSize, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
+    open fun initWithTexture_size_flipped_colorSpace(name: Any, size: MemorySegment, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTexture:size:flipped:colorSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, colorSpace) as MemorySegment
     }
     
-    open fun initWithTexture_size_flipped_options(name: Any, size: CGSize, flipped: BOOL, options: MemorySegment): MemorySegment {
+    open fun initWithTexture_size_flipped_options(name: Any, size: MemorySegment, flipped: BOOL, options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTexture:size:flipped:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, options) as MemorySegment
     }
@@ -310,7 +310,7 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dest) as MemorySegment
     }
     
-    open fun imageByCroppingToRect(rect: CGRect): MemorySegment {
+    open fun imageByCroppingToRect(rect: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByCroppingToRect:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -320,7 +320,7 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun imageByClampingToRect(rect: CGRect): MemorySegment {
+    open fun imageByClampingToRect(rect: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByClampingToRect:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -361,7 +361,7 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun imageBySettingAlphaOneInExtent(extent: CGRect): MemorySegment {
+    open fun imageBySettingAlphaOneInExtent(extent: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageBySettingAlphaOneInExtent:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(extent, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -416,9 +416,9 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, average) as MemorySegment
     }
     
-    open fun regionOfInterestForImage_inRect(image: MemorySegment, rect: CGRect): CGRect {
+    open fun regionOfInterestForImage_inRect(image: MemorySegment, rect: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("regionOfInterestForImage:inRect:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, image, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as CGRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, image, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
     // @property blackImage
@@ -482,9 +482,9 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     // @property extent
-    open fun extent(): CGRect {
+    open fun extent(): MemorySegment {
         val sel = ObjCRuntime.sel("extent")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as CGRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property opaque

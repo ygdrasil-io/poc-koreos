@@ -419,31 +419,31 @@ fun NSAttributedString_attributedStringWithAttachment_attributes(attachment: Mem
 
 // ── Category: NSStringDrawing on NSAttributedString ─────────────────────────────────────────
 
-fun NSAttributedString.size(): CGSize {
+fun NSAttributedString.size(): MemorySegment {
     val sel = ObjCRuntime.sel("size")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as CGSize
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
 }
 
-fun NSAttributedString.drawAtPoint(point: CGPoint): Unit {
+fun NSAttributedString.drawAtPoint(point: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawAtPoint:")
     ObjCRuntime.msgSend(null, ptr, sel, point)
 }
 
-fun NSAttributedString.drawInRect(rect: CGRect): Unit {
+fun NSAttributedString.drawInRect(rect: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawInRect:")
     ObjCRuntime.msgSend(null, ptr, sel, rect)
 }
 
 // ── Category: NSExtendedStringDrawing on NSAttributedString ─────────────────────────────────────────
 
-fun NSAttributedString.drawWithRect_options_context(rect: CGRect, options: NSStringDrawingOptions, context: MemorySegment): Unit {
+fun NSAttributedString.drawWithRect_options_context(rect: MemorySegment, options: NSStringDrawingOptions, context: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("drawWithRect:options:context:")
     ObjCRuntime.msgSend(null, ptr, sel, rect, options, context)
 }
 
-fun NSAttributedString.boundingRectWithSize_options_context(size: CGSize, options: NSStringDrawingOptions, context: MemorySegment): CGRect {
+fun NSAttributedString.boundingRectWithSize_options_context(size: MemorySegment, options: NSStringDrawingOptions, context: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("boundingRectWithSize:options:context:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, size, options, context) as CGRect
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, size, options, context) as MemorySegment
 }
 
 // ── Category: NSStringDrawingDeprecated on NSAttributedString ─────────────────────────────────────────

@@ -8,7 +8,8 @@ Fixes:
 3. Class method keyword escaping (`NSData_`data`` → `NSData_data`)
 4. Missing `override` for methods re-defined in subclasses
 5. Kotlin hard keywords used as function names (e.g. `object`, `null`, `class`)
-6. Conflicting overloads (dedup methods with same Kotlin signature)
+6. Struct value types (CGPoint/CGSize/CGRect/CATransform3D) → MemorySegment in method signatures
+7. Conflicting overloads (dedup methods with same Kotlin signature)
 """
 import os
 import re
@@ -87,6 +88,22 @@ def fix_keyword_function_names(content: str) -> str:
         content,
         flags=re.MULTILINE
     )
+
+
+STRUCT_TYPES = {"CGPoint", "CGSize", "CGRect", "CATransform3D"}
+
+
+def fix_struct_types(content: str) -> str:
+    """Replace CGPoint/CGSize/CGRect/CATransform3D with MemorySegment.
+
+    In ObjC method calls, struct value types must be passed/returned as
+    MemorySegment (wrapped in ObjCStructArg). The generated code incorrectly
+    uses the descriptor class names (CGPoint etc.) as parameter/return types.
+    """
+    for t in STRUCT_TYPES:
+        # Match t NOT preceded by dot/quote/word char, NOT followed by dot/quote/word char
+        content = re.sub(rf'(?<![.\w"]){re.escape(t)}(?![.\w"])', 'MemorySegment', content)
+    return content
 
 
 def build_class_map(class_dir: Path) -> dict:
@@ -247,7 +264,22 @@ def main():
         if count:
             print(f"  {subdir}/: fixed keyword function names in {count} files")
     
-    # 5. Make root class methods open, add override to subclasses
+    # 5. Fix struct value types (CGPoint/CGSize/CGRect/CATransform3D) → MemorySegment
+    for subdir in ["classes", "protocols", "enums", "options", "types", "functions"]:
+        d = OUT_PKG / subdir
+        if not d.exists():
+            continue
+        count = 0
+        for f in sorted(d.glob("*.kt")):
+            text = f.read_text()
+            new_text = fix_struct_types(text)
+            if new_text != text:
+                f.write_text(new_text)
+                count += 1
+        if count:
+            print(f"  {subdir}/: fixed struct types in {count} files")
+    
+    # 6. Make root class methods open, add override to subclasses
     class_dir = OUT_PKG / "classes"
     if class_dir.exists():
         count_before = len([m for m in re.finditer(
