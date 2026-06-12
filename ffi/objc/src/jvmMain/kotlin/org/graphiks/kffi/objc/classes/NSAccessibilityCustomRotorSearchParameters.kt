@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSAccessibilityCustomRotorSearchParameters
  * Superclass: NSObject
@@ -9,40 +15,40 @@ open class NSAccessibilityCustomRotorSearchParameters(val ptr: MemorySegment) {
     }
     
     // @property currentItem
-    fun currentItem(): MemorySegment {
+    open fun currentItem(): MemorySegment {
         val sel = ObjCRuntime.sel("currentItem")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrentItem(value: MemorySegment) {
+    open fun setCurrentItem(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrentItem:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property searchDirection
-    fun searchDirection(): NSAccessibilityCustomRotorSearchDirection {
+    open fun searchDirection(): NSAccessibilityCustomRotorSearchDirection {
         val sel = ObjCRuntime.sel("searchDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAccessibilityCustomRotorSearchDirection
     }
-    fun setSearchDirection(value: NSAccessibilityCustomRotorSearchDirection) {
+    open fun setSearchDirection(value: NSAccessibilityCustomRotorSearchDirection) {
         val sel = ObjCRuntime.sel("setSearchDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property filterString
-    fun filterString(): MemorySegment {
+    open fun filterString(): MemorySegment {
         val sel = ObjCRuntime.sel("filterString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFilterString(value: MemorySegment) {
+    open fun setFilterString(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFilterString:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun filterStringAsString(): String = ObjCRuntime.toJavaString(filterString())
+    open fun filterStringAsString(): String = ObjCRuntime.toJavaString(filterString())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setFilterString(value: String) = setFilterString(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setFilterString(value: String) = setFilterString(ObjCRuntime.newNSString(Arena.global(), value))
     
 }
 

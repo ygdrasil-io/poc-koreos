@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSlider
  * Superclass: NSControl
@@ -199,14 +205,14 @@ fun NSSlider.setAllowsTickMarkValuesOnly(value: BOOL) {
 
 // ── Category: NSSliderConvenience on NSSlider ─────────────────────────────────────────
 
-// Class method: +[NSSlider sliderWithTarget:action:]
+// Class<*> method: +[NSSlider sliderWithTarget:action:]
 fun NSSlider_sliderWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sliderWithTarget:action:")
     val cls = ObjCRuntime.getClass("NSSlider")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, target, action) as MemorySegment
 }
 
-// Class method: +[NSSlider sliderWithValue:minValue:maxValue:target:action:]
+// Class<*> method: +[NSSlider sliderWithValue:minValue:maxValue:target:action:]
 fun NSSlider_sliderWithValue_minValue_maxValue_target_action(value: Double, minValue: Double, maxValue: Double, target: MemorySegment, action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sliderWithValue:minValue:maxValue:target:action:")
     val cls = ObjCRuntime.getClass("NSSlider")

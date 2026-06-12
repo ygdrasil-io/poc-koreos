@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPathCell
  * Superclass: NSActionCell
@@ -7,9 +13,9 @@ open class NSPathCell(ptr: MemorySegment) : NSActionCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPathCell") }
         
-        fun pathComponentCellClass(): Class {
+        fun pathComponentCellClass(): Class<*> {
             val sel = ObjCRuntime.sel("pathComponentCellClass")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class<*>
         }
         
     }
@@ -82,9 +88,9 @@ open class NSPathCell(ptr: MemorySegment) : NSActionCell(ptr) {
     }
     
     // @property pathComponentCellClass
-    fun pathComponentCellClass(): Class {
+    fun pathComponentCellClass(): Class<*> {
         val sel = ObjCRuntime.sel("pathComponentCellClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
     
     // @property pathComponentCells

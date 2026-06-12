@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableDictionary
  * Superclass: NSDictionary
@@ -18,7 +24,7 @@ open class NSMutableDictionary(ptr: MemorySegment) : NSDictionary(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, anObject, aKey)
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -28,7 +34,7 @@ open class NSMutableDictionary(ptr: MemorySegment) : NSDictionary(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, numItems) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -76,21 +82,21 @@ fun NSMutableDictionary.initWithContentsOfURL(url: MemorySegment): MemorySegment
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
 }
 
-// Class method: +[NSMutableDictionary dictionaryWithCapacity:]
+// Class<*> method: +[NSMutableDictionary dictionaryWithCapacity:]
 fun NSMutableDictionary_dictionaryWithCapacity(numItems: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, numItems) as MemorySegment
 }
 
-// Class method: +[NSMutableDictionary dictionaryWithContentsOfFile:]
+// Class<*> method: +[NSMutableDictionary dictionaryWithContentsOfFile:]
 fun NSMutableDictionary_dictionaryWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSMutableDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSMutableDictionary dictionaryWithContentsOfURL:]
+// Class<*> method: +[NSMutableDictionary dictionaryWithContentsOfURL:]
 fun NSMutableDictionary_dictionaryWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSMutableDictionary")
@@ -99,7 +105,7 @@ fun NSMutableDictionary_dictionaryWithContentsOfURL(url: MemorySegment): MemoryS
 
 // ── Category: NSSharedKeySetDictionary on NSMutableDictionary ─────────────────────────────────────────
 
-// Class method: +[NSMutableDictionary dictionaryWithSharedKeySet:]
+// Class<*> method: +[NSMutableDictionary dictionaryWithSharedKeySet:]
 fun NSMutableDictionary_dictionaryWithSharedKeySet(keyset: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithSharedKeySet:")
     val cls = ObjCRuntime.getClass("NSMutableDictionary")

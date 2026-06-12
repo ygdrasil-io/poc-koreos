@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPersonNameComponentsFormatter
  * Superclass: NSFormatter
@@ -37,7 +43,7 @@ open class NSPersonNameComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun personNameComponentsFromString(string: String): MemorySegment = personNameComponentsFromString(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun getObjectValue_forString_errorDescription(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
+    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getObjectValue:forString:errorDescription:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as BOOL
     }

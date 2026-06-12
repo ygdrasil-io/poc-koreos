@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSProcessInfo
  * Superclass: NSObject
@@ -6,162 +12,162 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSProcessInfo") }
         
-        fun processInfo(): MemorySegment {
+        open fun processInfo(): MemorySegment {
             val sel = ObjCRuntime.sel("processInfo")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun operatingSystem(): NSUInteger {
+    open fun operatingSystem(): NSUInteger {
         val sel = ObjCRuntime.sel("operatingSystem")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
-    fun operatingSystemName(): MemorySegment {
+    open fun operatingSystemName(): MemorySegment {
         val sel = ObjCRuntime.sel("operatingSystemName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun operatingSystemNameAsString(): String = ObjCRuntime.toJavaString(operatingSystemName())
+    open fun operatingSystemNameAsString(): String = ObjCRuntime.toJavaString(operatingSystemName())
     
-    fun isOperatingSystemAtLeastVersion(version: NSOperatingSystemVersion): BOOL {
+    open fun isOperatingSystemAtLeastVersion(version: NSOperatingSystemVersion): BOOL {
         val sel = ObjCRuntime.sel("isOperatingSystemAtLeastVersion:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(version, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"))) as BOOL
     }
     
-    fun disableSuddenTermination(): Unit {
+    open fun disableSuddenTermination(): Unit {
         val sel = ObjCRuntime.sel("disableSuddenTermination")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun enableSuddenTermination(): Unit {
+    open fun enableSuddenTermination(): Unit {
         val sel = ObjCRuntime.sel("enableSuddenTermination")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun disableAutomaticTermination(reason: MemorySegment): Unit {
+    open fun disableAutomaticTermination(reason: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("disableAutomaticTermination:")
         ObjCRuntime.msgSend(null, ptr, sel, reason)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun disableAutomaticTermination(reason: String): Unit = disableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
+    open fun disableAutomaticTermination(reason: String): Unit = disableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
-    fun enableAutomaticTermination(reason: MemorySegment): Unit {
+    open fun enableAutomaticTermination(reason: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("enableAutomaticTermination:")
         ObjCRuntime.msgSend(null, ptr, sel, reason)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
+    open fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
     // @property processInfo
-    fun processInfo(): MemorySegment {
+    open fun processInfo(): MemorySegment {
         val sel = ObjCRuntime.sel("processInfo")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property environment
     /** @return NSDictionary<NSString *,NSString *> * */
-    fun environment(): MemorySegment {
+    open fun environment(): MemorySegment {
         val sel = ObjCRuntime.sel("environment")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property arguments
     /** @return NSArray<NSString *> * */
-    fun arguments(): MemorySegment {
+    open fun arguments(): MemorySegment {
         val sel = ObjCRuntime.sel("arguments")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property hostName
-    fun hostName(): MemorySegment {
+    open fun hostName(): MemorySegment {
         val sel = ObjCRuntime.sel("hostName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun hostNameAsString(): String = ObjCRuntime.toJavaString(hostName())
+    open fun hostNameAsString(): String = ObjCRuntime.toJavaString(hostName())
     
     // @property processName
-    fun processName(): MemorySegment {
+    open fun processName(): MemorySegment {
         val sel = ObjCRuntime.sel("processName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setProcessName(value: MemorySegment) {
+    open fun setProcessName(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setProcessName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun processNameAsString(): String = ObjCRuntime.toJavaString(processName())
+    open fun processNameAsString(): String = ObjCRuntime.toJavaString(processName())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setProcessName(value: String) = setProcessName(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setProcessName(value: String) = setProcessName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property processIdentifier
-    fun processIdentifier(): Int {
+    open fun processIdentifier(): Int {
         val sel = ObjCRuntime.sel("processIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property globallyUniqueString
-    fun globallyUniqueString(): MemorySegment {
+    open fun globallyUniqueString(): MemorySegment {
         val sel = ObjCRuntime.sel("globallyUniqueString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun globallyUniqueStringAsString(): String = ObjCRuntime.toJavaString(globallyUniqueString())
+    open fun globallyUniqueStringAsString(): String = ObjCRuntime.toJavaString(globallyUniqueString())
     
     // @property operatingSystemVersionString
-    fun operatingSystemVersionString(): MemorySegment {
+    open fun operatingSystemVersionString(): MemorySegment {
         val sel = ObjCRuntime.sel("operatingSystemVersionString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun operatingSystemVersionStringAsString(): String = ObjCRuntime.toJavaString(operatingSystemVersionString())
+    open fun operatingSystemVersionStringAsString(): String = ObjCRuntime.toJavaString(operatingSystemVersionString())
     
     // @property operatingSystemVersion
-    fun operatingSystemVersion(): NSOperatingSystemVersion {
+    open fun operatingSystemVersion(): NSOperatingSystemVersion {
         val sel = ObjCRuntime.sel("operatingSystemVersion")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"), ptr, sel) as NSOperatingSystemVersion
     }
     
     // @property processorCount
-    fun processorCount(): NSUInteger {
+    open fun processorCount(): NSUInteger {
         val sel = ObjCRuntime.sel("processorCount")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property activeProcessorCount
-    fun activeProcessorCount(): NSUInteger {
+    open fun activeProcessorCount(): NSUInteger {
         val sel = ObjCRuntime.sel("activeProcessorCount")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property physicalMemory
-    fun physicalMemory(): Any {
+    open fun physicalMemory(): Any {
         val sel = ObjCRuntime.sel("physicalMemory")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Any
     }
     
     // @property systemUptime
-    fun systemUptime(): NSTimeInterval {
+    open fun systemUptime(): NSTimeInterval {
         val sel = ObjCRuntime.sel("systemUptime")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
     // @property automaticTerminationSupportEnabled
-    fun automaticTerminationSupportEnabled(): BOOL {
+    open fun automaticTerminationSupportEnabled(): BOOL {
         val sel = ObjCRuntime.sel("automaticTerminationSupportEnabled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAutomaticTerminationSupportEnabled(value: BOOL) {
+    open fun setAutomaticTerminationSupportEnabled(value: BOOL) {
         val sel = ObjCRuntime.sel("setAutomaticTerminationSupportEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSFontPanel
  * Superclass: NSPanel
@@ -56,11 +62,11 @@ open class NSFontPanel(ptr: MemorySegment) : NSPanel(ptr) {
     }
     
     // @property worksWhenModal
-    fun worksWhenModal(): BOOL {
+    override fun `worksWhenModal`(): BOOL {
         val sel = ObjCRuntime.sel("worksWhenModal")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWorksWhenModal(value: BOOL) {
+    override fun `setWorksWhenModal`(value: BOOL) {
         val sel = ObjCRuntime.sel("setWorksWhenModal:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

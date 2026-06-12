@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTouchBarItem
  * Superclass: NSObject
@@ -9,60 +15,60 @@ open class NSTouchBarItem(val ptr: MemorySegment) {
         
     }
     
-    fun initWithIdentifier(identifier: NSTouchBarItemIdentifier): MemorySegment {
+    open fun initWithIdentifier(identifier: NSTouchBarItemIdentifier): MemorySegment {
         val sel = ObjCRuntime.sel("initWithIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, identifier) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property identifier
-    fun identifier(): NSTouchBarItemIdentifier {
+    open fun identifier(): NSTouchBarItemIdentifier {
         val sel = ObjCRuntime.sel("identifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchBarItemIdentifier
     }
     
     // @property visibilityPriority
-    fun visibilityPriority(): NSTouchBarItemPriority {
+    open fun visibilityPriority(): NSTouchBarItemPriority {
         val sel = ObjCRuntime.sel("visibilityPriority")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as NSTouchBarItemPriority
     }
-    fun setVisibilityPriority(value: NSTouchBarItemPriority) {
+    open fun setVisibilityPriority(value: NSTouchBarItemPriority) {
         val sel = ObjCRuntime.sel("setVisibilityPriority:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property view
-    fun view(): MemorySegment {
+    open fun view(): MemorySegment {
         val sel = ObjCRuntime.sel("view")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property viewController
-    fun viewController(): MemorySegment {
+    open fun viewController(): MemorySegment {
         val sel = ObjCRuntime.sel("viewController")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property customizationLabel
-    fun customizationLabel(): MemorySegment {
+    open fun customizationLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("customizationLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun customizationLabelAsString(): String = ObjCRuntime.toJavaString(customizationLabel())
+    open fun customizationLabelAsString(): String = ObjCRuntime.toJavaString(customizationLabel())
     
     // @property visible
-    fun isVisible(): BOOL {
+    open fun isVisible(): BOOL {
         val sel = ObjCRuntime.sel("isVisible")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

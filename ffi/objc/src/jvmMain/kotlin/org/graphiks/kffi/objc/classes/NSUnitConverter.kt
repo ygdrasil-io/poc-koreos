@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSUnitConverter
  * Superclass: NSObject
@@ -8,12 +14,12 @@ open class NSUnitConverter(val ptr: MemorySegment) {
         
     }
     
-    fun baseUnitValueFromValue(value: Double): Double {
+    open fun baseUnitValueFromValue(value: Double): Double {
         val sel = ObjCRuntime.sel("baseUnitValueFromValue:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, value) as Double
     }
     
-    fun valueFromBaseUnitValue(baseUnitValue: Double): Double {
+    open fun valueFromBaseUnitValue(baseUnitValue: Double): Double {
         val sel = ObjCRuntime.sel("valueFromBaseUnitValue:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, baseUnitValue) as Double
     }

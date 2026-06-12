@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSListFormatter
  * Superclass: NSFormatter
@@ -24,13 +30,13 @@ open class NSListFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromItemsAsString(items: MemorySegment): String = ObjCRuntime.toJavaString(stringFromItems(items))
     
-    fun stringForObjectValue(obj: MemorySegment): MemorySegment {
+    override fun `stringForObjectValue`(obj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForObjectValue:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, obj) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringForObjectValueAsString(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
+    override fun `stringForObjectValueAsString`(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
     
     // @property locale
     fun locale(): MemorySegment {

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSUserScriptTask
  * Superclass: NSObject
@@ -8,18 +14,18 @@ open class NSUserScriptTask(val ptr: MemorySegment) {
         
     }
     
-    fun initWithURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun initWithURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, error) as MemorySegment
     }
     
-    fun executeWithCompletionHandler(handler: MemorySegment): Unit {
+    open fun executeWithCompletionHandler(handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("executeWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, handler)
     }
     
     // @property scriptURL
-    fun scriptURL(): MemorySegment {
+    open fun scriptURL(): MemorySegment {
         val sel = ObjCRuntime.sel("scriptURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

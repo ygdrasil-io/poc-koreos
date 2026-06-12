@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSXMLElement
  * Superclass: NSXMLNode
@@ -40,7 +46,7 @@ open class NSXMLElement(ptr: MemorySegment) : NSXMLNode(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithXMLString_error(string: String, error: MemorySegment): MemorySegment = initWithXMLString_error(ObjCRuntime.newNSString(Arena.global(), string), error)
     
-    fun initWithKind_options(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
+    override fun `initWithKind_options`(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKind:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, kind, options) as MemorySegment
     }

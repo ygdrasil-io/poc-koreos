@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSRuleEditor
  * Superclass: NSControl
@@ -180,11 +186,11 @@ open class NSRuleEditor(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property rowClass
-    fun rowClass(): Class {
+    fun rowClass(): Class<*> {
         val sel = ObjCRuntime.sel("rowClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
-    fun setRowClass(value: Class) {
+    fun setRowClass(value: Class<*>) {
         val sel = ObjCRuntime.sel("setRowClass:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

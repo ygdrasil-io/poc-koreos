@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDataAsset
  * Superclass: NSObject
@@ -9,41 +15,41 @@ open class NSDataAsset(val ptr: MemorySegment) {
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithName(name: NSDataAssetName): MemorySegment {
+    open fun initWithName(name: NSDataAssetName): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
     
-    fun initWithName_bundle(name: NSDataAssetName, bundle: MemorySegment): MemorySegment {
+    open fun initWithName_bundle(name: NSDataAssetName, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, bundle) as MemorySegment
     }
     
     // @property name
-    fun name(): NSDataAssetName {
+    open fun name(): NSDataAssetName {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDataAssetName
     }
     
     // @property data
-    fun `data`(): MemorySegment {
+    open fun data(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property typeIdentifier
-    fun typeIdentifier(): MemorySegment {
+    open fun typeIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("typeIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun typeIdentifierAsString(): String = ObjCRuntime.toJavaString(typeIdentifier())
+    open fun typeIdentifierAsString(): String = ObjCRuntime.toJavaString(typeIdentifier())
     
 }
 

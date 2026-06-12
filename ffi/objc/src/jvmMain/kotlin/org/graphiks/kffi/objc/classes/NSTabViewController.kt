@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTabViewController
  * Superclass: NSViewController
@@ -29,7 +35,7 @@ open class NSTabViewController(ptr: MemorySegment) : NSViewController(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, viewController) as MemorySegment
     }
     
-    fun viewDidLoad(): Unit {
+    override fun `viewDidLoad`(): Unit {
         val sel = ObjCRuntime.sel("viewDidLoad")
         ObjCRuntime.msgSend(null, ptr, sel)
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataQueryAttributeValueTuple
  * Superclass: NSObject
@@ -9,22 +15,22 @@ open class NSMetadataQueryAttributeValueTuple(val ptr: MemorySegment) {
     }
     
     // @property attribute
-    fun attribute(): MemorySegment {
+    open fun attribute(): MemorySegment {
         val sel = ObjCRuntime.sel("attribute")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun attributeAsString(): String = ObjCRuntime.toJavaString(attribute())
+    open fun attributeAsString(): String = ObjCRuntime.toJavaString(attribute())
     
     // @property value
-    fun value(): MemorySegment {
+    open fun value(): MemorySegment {
         val sel = ObjCRuntime.sel("value")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property count
-    fun count(): NSUInteger {
+    open fun count(): NSUInteger {
         val sel = ObjCRuntime.sel("count")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }

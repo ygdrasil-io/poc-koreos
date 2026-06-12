@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSecureUnarchiveFromDataTransformer
  * Superclass: NSValueTransformer
@@ -6,7 +12,7 @@ open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTra
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSecureUnarchiveFromDataTransformer") }
         
-        /** @return NSArray<Class> * */
+        /** @return NSArray<Class<*>> * */
         fun allowedTopLevelClasses(): MemorySegment {
             val sel = ObjCRuntime.sel("allowedTopLevelClasses")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
@@ -15,7 +21,7 @@ open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTra
     }
     
     // @property allowedTopLevelClasses
-    /** @return NSArray<Class> * */
+    /** @return NSArray<Class<*>> * */
     fun allowedTopLevelClasses(): MemorySegment {
         val sel = ObjCRuntime.sel("allowedTopLevelClasses")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

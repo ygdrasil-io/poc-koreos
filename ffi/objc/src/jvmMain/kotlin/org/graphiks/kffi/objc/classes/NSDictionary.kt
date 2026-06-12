@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDictionary
  * Superclass: NSObject
@@ -9,34 +15,34 @@ open class NSDictionary(val ptr: MemorySegment) {
         
     }
     
-    fun objectForKey(aKey: MemorySegment): MemorySegment {
+    open fun objectForKey(aKey: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("objectForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aKey) as MemorySegment
     }
     
     /** @return NSEnumerator<KeyType> * */
-    fun keyEnumerator(): MemorySegment {
+    open fun keyEnumerator(): MemorySegment {
         val sel = ObjCRuntime.sel("keyEnumerator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithObjects_forKeys_count(objects: MemorySegment, keys: MemorySegment, cnt: NSUInteger): MemorySegment {
+    open fun initWithObjects_forKeys_count(objects: MemorySegment, keys: MemorySegment, cnt: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithObjects:forKeys:count:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objects, keys, cnt) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property count
-    fun count(): NSUInteger {
+    open fun count(): NSUInteger {
         val sel = ObjCRuntime.sel("count")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -210,14 +216,14 @@ fun NSDictionary.writeToURL_atomically(url: MemorySegment, atomically: BOOL): BO
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, atomically) as BOOL
 }
 
-// Class method: +[NSDictionary dictionaryWithContentsOfFile:]
+// Class<*> method: +[NSDictionary dictionaryWithContentsOfFile:]
 fun NSDictionary_dictionaryWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithContentsOfURL:]
+// Class<*> method: +[NSDictionary dictionaryWithContentsOfURL:]
 fun NSDictionary_dictionaryWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSDictionary")
@@ -252,49 +258,49 @@ fun NSDictionary.initWithContentsOfURL_error(url: MemorySegment, error: MemorySe
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, error) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionary]
+// Class<*> method: +[NSDictionary dictionary]
 fun NSDictionary_dictionary(): MemorySegment {
     val sel = ObjCRuntime.sel("dictionary")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithObject:forKey:]
+// Class<*> method: +[NSDictionary dictionaryWithObject:forKey:]
 fun NSDictionary_dictionaryWithObject_forKey(`object`: MemorySegment, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithObject:forKey:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `object`, key) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithObjects:forKeys:count:]
+// Class<*> method: +[NSDictionary dictionaryWithObjects:forKeys:count:]
 fun NSDictionary_dictionaryWithObjects_forKeys_count(objects: MemorySegment, keys: MemorySegment, cnt: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithObjects:forKeys:count:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, objects, keys, cnt) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithObjectsAndKeys:]
+// Class<*> method: +[NSDictionary dictionaryWithObjectsAndKeys:]
 fun NSDictionary_dictionaryWithObjectsAndKeys(firstObject: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithObjectsAndKeys:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, firstObject) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithDictionary:]
+// Class<*> method: +[NSDictionary dictionaryWithDictionary:]
 fun NSDictionary_dictionaryWithDictionary(dict: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithDictionary:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, dict) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithObjects:forKeys:]
+// Class<*> method: +[NSDictionary dictionaryWithObjects:forKeys:]
 fun NSDictionary_dictionaryWithObjects_forKeys(objects: MemorySegment, keys: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithObjects:forKeys:")
     val cls = ObjCRuntime.getClass("NSDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, objects, keys) as MemorySegment
 }
 
-// Class method: +[NSDictionary dictionaryWithContentsOfURL:error:]
+// Class<*> method: +[NSDictionary dictionaryWithContentsOfURL:error:]
 fun NSDictionary_dictionaryWithContentsOfURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithContentsOfURL:error:")
     val cls = ObjCRuntime.getClass("NSDictionary")
@@ -303,7 +309,7 @@ fun NSDictionary_dictionaryWithContentsOfURL_error(url: MemorySegment, error: Me
 
 // ── Category: NSSharedKeySetDictionary on NSDictionary ─────────────────────────────────────────
 
-// Class method: +[NSDictionary sharedKeySetForKeys:]
+// Class<*> method: +[NSDictionary sharedKeySetForKeys:]
 fun NSDictionary_sharedKeySetForKeys(keys: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sharedKeySetForKeys:")
     val cls = ObjCRuntime.getClass("NSDictionary")

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCoder
  * Superclass: NSObject
@@ -8,33 +14,33 @@ open class NSCoder(val ptr: MemorySegment) {
         
     }
     
-    fun encodeValueOfObjCType_at(type: MemorySegment, addr: MemorySegment): Unit {
+    open fun encodeValueOfObjCType_at(type: MemorySegment, addr: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeValueOfObjCType:at:")
         ObjCRuntime.msgSend(null, ptr, sel, type, addr)
     }
     
-    fun encodeDataObject(`data`: MemorySegment): Unit {
+    open fun encodeDataObject(`data`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeDataObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `data`)
     }
     
-    fun decodeDataObject(): MemorySegment {
+    open fun decodeDataObject(): MemorySegment {
         val sel = ObjCRuntime.sel("decodeDataObject")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun decodeValueOfObjCType_at_size(type: MemorySegment, `data`: MemorySegment, size: NSUInteger): Unit {
+    open fun decodeValueOfObjCType_at_size(type: MemorySegment, `data`: MemorySegment, size: NSUInteger): Unit {
         val sel = ObjCRuntime.sel("decodeValueOfObjCType:at:size:")
         ObjCRuntime.msgSend(null, ptr, sel, type, `data`, size)
     }
     
-    fun versionForClassName(className: MemorySegment): NSInteger {
+    open fun versionForClassName(className: MemorySegment): NSInteger {
         val sel = ObjCRuntime.sel("versionForClassName:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, className) as NSInteger
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun versionForClassName(className: String): NSInteger = versionForClassName(ObjCRuntime.newNSString(Arena.global(), className))
+    open fun versionForClassName(className: String): NSInteger = versionForClassName(ObjCRuntime.newNSString(Arena.global(), className))
     
 }
 
@@ -240,22 +246,22 @@ fun NSCoder.decodeIntegerForKey(key: MemorySegment): NSInteger {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, key) as NSInteger
 }
 
-fun NSCoder.decodeObjectOfClass_forKey(aClass: Class, key: MemorySegment): MemorySegment {
+fun NSCoder.decodeObjectOfClass_forKey(aClass: Class<*>, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("decodeObjectOfClass:forKey:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aClass, key) as MemorySegment
 }
 
-fun NSCoder.decodeTopLevelObjectOfClass_forKey_error(aClass: Class, key: MemorySegment, error: MemorySegment): MemorySegment {
+fun NSCoder.decodeTopLevelObjectOfClass_forKey_error(aClass: Class<*>, key: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("decodeTopLevelObjectOfClass:forKey:error:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aClass, key, error) as MemorySegment
 }
 
-fun NSCoder.decodeArrayOfObjectsOfClass_forKey(cls: Class, key: MemorySegment): MemorySegment {
+fun NSCoder.decodeArrayOfObjectsOfClass_forKey(cls: Class<*>, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("decodeArrayOfObjectsOfClass:forKey:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, cls, key) as MemorySegment
 }
 
-fun NSCoder.decodeDictionaryWithKeysOfClass_objectsOfClass_forKey(keyCls: Class, objectCls: Class, key: MemorySegment): MemorySegment {
+fun NSCoder.decodeDictionaryWithKeysOfClass_objectsOfClass_forKey(keyCls: Class<*>, objectCls: Class<*>, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("decodeDictionaryWithKeysOfClass:objectsOfClass:forKey:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyCls, objectCls, key) as MemorySegment
 }
@@ -305,7 +311,7 @@ fun NSCoder.requiresSecureCoding(): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
-/** @return NSSet<Class> * */
+/** @return NSSet<Class<*>> * */
 fun NSCoder.allowedClasses(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedClasses")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -340,7 +346,7 @@ fun NSCoder.requiresSecureCoding(): BOOL {
 }
 
 // @property allowedClasses
-/** @return NSSet<Class> * */
+/** @return NSSet<Class<*>> * */
 fun NSCoder.allowedClasses(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedClasses")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

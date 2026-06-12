@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSURLSession
  * Superclass: NSObject
@@ -6,176 +12,176 @@ open class NSURLSession(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSession") }
         
-        fun sessionWithConfiguration(configuration: MemorySegment): MemorySegment {
+        open fun sessionWithConfiguration(configuration: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sessionWithConfiguration:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, configuration) as MemorySegment
         }
         
-        fun sessionWithConfiguration_delegate_delegateQueue(configuration: MemorySegment, delegate: MemorySegment, queue: MemorySegment): MemorySegment {
+        open fun sessionWithConfiguration_delegate_delegateQueue(configuration: MemorySegment, delegate: MemorySegment, queue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sessionWithConfiguration:delegate:delegateQueue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, configuration, delegate, queue) as MemorySegment
         }
         
-        fun new(): MemorySegment {
+        open fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun sharedSession(): MemorySegment {
+        open fun sharedSession(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedSession")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun finishTasksAndInvalidate(): Unit {
+    open fun finishTasksAndInvalidate(): Unit {
         val sel = ObjCRuntime.sel("finishTasksAndInvalidate")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun invalidateAndCancel(): Unit {
+    open fun invalidateAndCancel(): Unit {
         val sel = ObjCRuntime.sel("invalidateAndCancel")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun resetWithCompletionHandler(completionHandler: MemorySegment): Unit {
+    open fun resetWithCompletionHandler(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("resetWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }
     
-    fun flushWithCompletionHandler(completionHandler: MemorySegment): Unit {
+    open fun flushWithCompletionHandler(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("flushWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }
     
-    fun getTasksWithCompletionHandler(completionHandler: MemorySegment): Unit {
+    open fun getTasksWithCompletionHandler(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getTasksWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }
     
-    fun getAllTasksWithCompletionHandler(completionHandler: MemorySegment): Unit {
+    open fun getAllTasksWithCompletionHandler(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getAllTasksWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }
     
-    fun dataTaskWithRequest(request: MemorySegment): MemorySegment {
+    open fun dataTaskWithRequest(request: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dataTaskWithRequest:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request) as MemorySegment
     }
     
-    fun dataTaskWithURL(url: MemorySegment): MemorySegment {
+    open fun dataTaskWithURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dataTaskWithURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun uploadTaskWithRequest_fromFile(request: MemorySegment, fileURL: MemorySegment): MemorySegment {
+    open fun uploadTaskWithRequest_fromFile(request: MemorySegment, fileURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("uploadTaskWithRequest:fromFile:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, fileURL) as MemorySegment
     }
     
-    fun uploadTaskWithRequest_fromData(request: MemorySegment, bodyData: MemorySegment): MemorySegment {
+    open fun uploadTaskWithRequest_fromData(request: MemorySegment, bodyData: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("uploadTaskWithRequest:fromData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, bodyData) as MemorySegment
     }
     
-    fun uploadTaskWithResumeData(resumeData: MemorySegment): MemorySegment {
+    open fun uploadTaskWithResumeData(resumeData: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("uploadTaskWithResumeData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, resumeData) as MemorySegment
     }
     
-    fun uploadTaskWithStreamedRequest(request: MemorySegment): MemorySegment {
+    open fun uploadTaskWithStreamedRequest(request: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("uploadTaskWithStreamedRequest:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request) as MemorySegment
     }
     
-    fun downloadTaskWithRequest(request: MemorySegment): MemorySegment {
+    open fun downloadTaskWithRequest(request: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("downloadTaskWithRequest:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request) as MemorySegment
     }
     
-    fun downloadTaskWithURL(url: MemorySegment): MemorySegment {
+    open fun downloadTaskWithURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("downloadTaskWithURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun downloadTaskWithResumeData(resumeData: MemorySegment): MemorySegment {
+    open fun downloadTaskWithResumeData(resumeData: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("downloadTaskWithResumeData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, resumeData) as MemorySegment
     }
     
-    fun streamTaskWithHostName_port(hostname: MemorySegment, port: NSInteger): MemorySegment {
+    open fun streamTaskWithHostName_port(hostname: MemorySegment, port: NSInteger): MemorySegment {
         val sel = ObjCRuntime.sel("streamTaskWithHostName:port:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, hostname, port) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun streamTaskWithHostName_port(hostname: String, port: NSInteger): MemorySegment = streamTaskWithHostName_port(ObjCRuntime.newNSString(Arena.global(), hostname), port)
+    open fun streamTaskWithHostName_port(hostname: String, port: NSInteger): MemorySegment = streamTaskWithHostName_port(ObjCRuntime.newNSString(Arena.global(), hostname), port)
     
-    fun streamTaskWithNetService(service: MemorySegment): MemorySegment {
+    open fun streamTaskWithNetService(service: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("streamTaskWithNetService:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, service) as MemorySegment
     }
     
-    fun webSocketTaskWithURL(url: MemorySegment): MemorySegment {
+    open fun webSocketTaskWithURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("webSocketTaskWithURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun webSocketTaskWithURL_protocols(url: MemorySegment, protocols: MemorySegment): MemorySegment {
+    open fun webSocketTaskWithURL_protocols(url: MemorySegment, protocols: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("webSocketTaskWithURL:protocols:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, protocols) as MemorySegment
     }
     
-    fun webSocketTaskWithRequest(request: MemorySegment): MemorySegment {
+    open fun webSocketTaskWithRequest(request: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("webSocketTaskWithRequest:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sharedSession
-    fun sharedSession(): MemorySegment {
+    open fun sharedSession(): MemorySegment {
         val sel = ObjCRuntime.sel("sharedSession")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property delegateQueue
-    fun delegateQueue(): MemorySegment {
+    open fun delegateQueue(): MemorySegment {
         val sel = ObjCRuntime.sel("delegateQueue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property delegate
     /** @return id<NSURLSessionDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property configuration
-    fun configuration(): MemorySegment {
+    open fun configuration(): MemorySegment {
         val sel = ObjCRuntime.sel("configuration")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sessionDescription
-    fun sessionDescription(): MemorySegment {
+    open fun sessionDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("sessionDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSessionDescription(value: MemorySegment) {
+    open fun setSessionDescription(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSessionDescription:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun sessionDescriptionAsString(): String = ObjCRuntime.toJavaString(sessionDescription())
+    open fun sessionDescriptionAsString(): String = ObjCRuntime.toJavaString(sessionDescription())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setSessionDescription(value: String) = setSessionDescription(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setSessionDescription(value: String) = setSessionDescription(ObjCRuntime.newNSString(Arena.global(), value))
     
 }
 

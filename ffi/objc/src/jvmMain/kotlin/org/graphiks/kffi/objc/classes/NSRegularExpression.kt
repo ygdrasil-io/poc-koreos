@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSRegularExpression
  * Superclass: NSObject
@@ -7,55 +13,55 @@ open class NSRegularExpression(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSRegularExpression") }
         
-        fun regularExpressionWithPattern_options_error(pattern: MemorySegment, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment {
+        open fun regularExpressionWithPattern_options_error(pattern: MemorySegment, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("regularExpressionWithPattern:options:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, pattern, options, error) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun regularExpressionWithPattern_options_error(pattern: String, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment = regularExpressionWithPattern_options_error(ObjCRuntime.newNSString(Arena.global(), pattern), options, error)
+        open fun regularExpressionWithPattern_options_error(pattern: String, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment = regularExpressionWithPattern_options_error(ObjCRuntime.newNSString(Arena.global(), pattern), options, error)
         
-        fun escapedPatternForString(string: MemorySegment): MemorySegment {
+        open fun escapedPatternForString(string: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("escapedPatternForString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, string) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun escapedPatternForStringAsString(string: MemorySegment): String = ObjCRuntime.toJavaString(escapedPatternForString(string))
+        open fun escapedPatternForStringAsString(string: MemorySegment): String = ObjCRuntime.toJavaString(escapedPatternForString(string))
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun escapedPatternForString(string: String): MemorySegment = escapedPatternForString(ObjCRuntime.newNSString(Arena.global(), string))
+        open fun escapedPatternForString(string: String): MemorySegment = escapedPatternForString(ObjCRuntime.newNSString(Arena.global(), string))
         
         /** Convenience overload — [String] parameters and [String] return type. */
-        fun escapedPatternForStringAsString(string: String): String = ObjCRuntime.toJavaString(escapedPatternForString(ObjCRuntime.newNSString(Arena.global(), string)))
+        open fun escapedPatternForStringAsString(string: String): String = ObjCRuntime.toJavaString(escapedPatternForString(ObjCRuntime.newNSString(Arena.global(), string)))
         
     }
     
-    fun initWithPattern_options_error(pattern: MemorySegment, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment {
+    open fun initWithPattern_options_error(pattern: MemorySegment, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithPattern:options:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pattern, options, error) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithPattern_options_error(pattern: String, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment = initWithPattern_options_error(ObjCRuntime.newNSString(Arena.global(), pattern), options, error)
+    open fun initWithPattern_options_error(pattern: String, options: NSRegularExpressionOptions, error: MemorySegment): MemorySegment = initWithPattern_options_error(ObjCRuntime.newNSString(Arena.global(), pattern), options, error)
     
     // @property pattern
-    fun pattern(): MemorySegment {
+    open fun pattern(): MemorySegment {
         val sel = ObjCRuntime.sel("pattern")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun patternAsString(): String = ObjCRuntime.toJavaString(pattern())
+    open fun patternAsString(): String = ObjCRuntime.toJavaString(pattern())
     
     // @property options
-    fun options(): NSRegularExpressionOptions {
+    open fun options(): NSRegularExpressionOptions {
         val sel = ObjCRuntime.sel("options")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRegularExpressionOptions
     }
     
     // @property numberOfCaptureGroups
-    fun numberOfCaptureGroups(): NSUInteger {
+    open fun numberOfCaptureGroups(): NSUInteger {
         val sel = ObjCRuntime.sel("numberOfCaptureGroups")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -113,7 +119,7 @@ fun NSRegularExpression.replacementStringForResult_inString_offset_template(resu
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, result, string, offset, templ) as MemorySegment
 }
 
-// Class method: +[NSRegularExpression escapedTemplateForString:]
+// Class<*> method: +[NSRegularExpression escapedTemplateForString:]
 fun NSRegularExpression_escapedTemplateForString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("escapedTemplateForString:")
     val cls = ObjCRuntime.getClass("NSRegularExpression")

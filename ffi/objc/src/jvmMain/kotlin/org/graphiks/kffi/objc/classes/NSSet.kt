@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSet
  * Superclass: NSObject
@@ -9,34 +15,34 @@ open class NSSet(val ptr: MemorySegment) {
         
     }
     
-    fun member(`object`: MemorySegment): MemorySegment {
+    open fun member(`object`: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("member:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `object`) as MemorySegment
     }
     
     /** @return NSEnumerator<ObjectType> * */
-    fun objectEnumerator(): MemorySegment {
+    open fun objectEnumerator(): MemorySegment {
         val sel = ObjCRuntime.sel("objectEnumerator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
+    open fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithObjects:count:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objects, cnt) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property count
-    fun count(): NSUInteger {
+    open fun count(): NSUInteger {
         val sel = ObjCRuntime.sel("count")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -171,42 +177,42 @@ fun NSSet.initWithArray(array: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, array) as MemorySegment
 }
 
-// Class method: +[NSSet set]
-fun NSSet_`set`(): MemorySegment {
+// Class<*> method: +[NSSet set]
+fun NSSet_set(): MemorySegment {
     val sel = ObjCRuntime.sel("set")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSSet setWithObject:]
+// Class<*> method: +[NSSet setWithObject:]
 fun NSSet_setWithObject(`object`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithObject:")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `object`) as MemorySegment
 }
 
-// Class method: +[NSSet setWithObjects:count:]
+// Class<*> method: +[NSSet setWithObjects:count:]
 fun NSSet_setWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("setWithObjects:count:")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, objects, cnt) as MemorySegment
 }
 
-// Class method: +[NSSet setWithObjects:]
+// Class<*> method: +[NSSet setWithObjects:]
 fun NSSet_setWithObjects(firstObj: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithObjects:")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, firstObj) as MemorySegment
 }
 
-// Class method: +[NSSet setWithSet:]
+// Class<*> method: +[NSSet setWithSet:]
 fun NSSet_setWithSet(`set`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithSet:")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `set`) as MemorySegment
 }
 
-// Class method: +[NSSet setWithArray:]
+// Class<*> method: +[NSSet setWithArray:]
 fun NSSet_setWithArray(array: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithArray:")
     val cls = ObjCRuntime.getClass("NSSet")
@@ -265,14 +271,14 @@ fun NSSet.enumerateIndexPathsWithOptions_usingBlock(opts: NSEnumerationOptions, 
     ObjCRuntime.msgSend(null, ptr, sel, opts, block)
 }
 
-// Class method: +[NSSet setWithCollectionViewIndexPath:]
+// Class<*> method: +[NSSet setWithCollectionViewIndexPath:]
 fun NSSet_setWithCollectionViewIndexPath(indexPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithCollectionViewIndexPath:")
     val cls = ObjCRuntime.getClass("NSSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, indexPath) as MemorySegment
 }
 
-// Class method: +[NSSet setWithCollectionViewIndexPaths:]
+// Class<*> method: +[NSSet setWithCollectionViewIndexPaths:]
 fun NSSet_setWithCollectionViewIndexPaths(indexPaths: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("setWithCollectionViewIndexPaths:")
     val cls = ObjCRuntime.getClass("NSSet")

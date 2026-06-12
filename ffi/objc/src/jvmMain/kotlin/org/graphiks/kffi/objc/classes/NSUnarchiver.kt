@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSUnarchiver
  * Superclass: NSCoder
@@ -48,12 +54,12 @@ open class NSUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`) as MemorySegment
     }
     
-    fun setObjectZone(zone: MemorySegment): Unit {
+    override fun `setObjectZone`(zone: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setObjectZone:")
         ObjCRuntime.msgSend(null, ptr, sel, zone)
     }
     
-    fun objectZone(): MemorySegment {
+    override fun `objectZone`(): MemorySegment {
         val sel = ObjCRuntime.sel("objectZone")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -92,7 +98,7 @@ open class NSUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     // @property systemVersion
-    fun systemVersion(): Any {
+    override fun `systemVersion`(): Any {
         val sel = ObjCRuntime.sel("systemVersion")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Any
     }

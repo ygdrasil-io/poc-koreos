@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * {@snippet lang=c : kCFCoreFoundationVersionNumber Double
  */
@@ -18679,13 +18685,13 @@ fun NSSelectorFromString(arg0: MemorySegment): MemorySegment {
 }
 
 /**
- * {@snippet lang=c : NSStringFromClass typedef NSString = (Void)*(typedef Class = typedef Class = (Void)*)
+ * {@snippet lang=c : NSStringFromClass typedef NSString = (Void)*(typedef Class<*> = typedef Class<*> = (Void)*)
  */
 private val NSStringFromClass_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
 private val NSStringFromClass_ADDR: MemorySegment = SymbolLookup.loaderLookup().find("NSStringFromClass").orElseThrow()
 private val NSStringFromClass_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(NSStringFromClass_ADDR, NSStringFromClass_DESC)
 
-fun NSStringFromClass(arg0: Class): MemorySegment {
+fun NSStringFromClass(arg0: Class<*>): MemorySegment {
     try {
         return NSStringFromClass_HANDLE.invokeExact(arg0) as MemorySegment
     } catch (ex: Error) {
@@ -18698,15 +18704,15 @@ fun NSStringFromClass(arg0: Class): MemorySegment {
 }
 
 /**
- * {@snippet lang=c : NSClassFromString typedef Class = typedef Class = (Void)*(typedef NSString = (Void)*)
+ * {@snippet lang=c : NSClassFromString typedef Class<*> = typedef Class<*> = (Void)*(typedef NSString = (Void)*)
  */
 private val NSClassFromString_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
 private val NSClassFromString_ADDR: MemorySegment = SymbolLookup.loaderLookup().find("NSClassFromString").orElseThrow()
 private val NSClassFromString_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(NSClassFromString_ADDR, NSClassFromString_DESC)
 
-fun NSClassFromString(arg0: MemorySegment): Class {
+fun NSClassFromString(arg0: MemorySegment): Class<*> {
     try {
-        return NSClassFromString_HANDLE.invokeExact(arg0) as Class
+        return NSClassFromString_HANDLE.invokeExact(arg0) as Class<*>
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -19192,13 +19198,13 @@ fun NSRealMemoryAvailable(): NSUInteger {
 }
 
 /**
- * {@snippet lang=c : NSAllocateObject typedef id = (Void)*(typedef Class = typedef Class = (Void)*,typedef NSUInteger = UNSIGNED = Long,(typedef NSZone = Declared(_NSZone))*)
+ * {@snippet lang=c : NSAllocateObject typedef id = (Void)*(typedef Class<*> = typedef Class<*> = (Void)*,typedef NSUInteger = UNSIGNED = Long,(typedef NSZone = Declared(_NSZone))*)
  */
 private val NSAllocateObject_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
 private val NSAllocateObject_ADDR: MemorySegment = SymbolLookup.loaderLookup().find("NSAllocateObject").orElseThrow()
 private val NSAllocateObject_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(NSAllocateObject_ADDR, NSAllocateObject_DESC)
 
-fun NSAllocateObject(arg0: Class, arg1: NSUInteger, arg2: MemorySegment): MemorySegment {
+fun NSAllocateObject(arg0: Class<*>, arg1: NSUInteger, arg2: MemorySegment): MemorySegment {
     try {
         return NSAllocateObject_HANDLE.invokeExact(arg0, arg1, arg2) as MemorySegment
     } catch (ex: Error) {

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSArray
  * Superclass: NSObject
@@ -9,28 +15,28 @@ open class NSArray(val ptr: MemorySegment) {
         
     }
     
-    fun objectAtIndex(index: NSUInteger): MemorySegment {
+    open fun objectAtIndex(index: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("objectAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
+    open fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithObjects:count:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objects, cnt) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property count
-    fun count(): NSUInteger {
+    open fun count(): NSUInteger {
         val sel = ObjCRuntime.sel("count")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -297,42 +303,42 @@ fun NSArray.initWithContentsOfURL_error(url: MemorySegment, error: MemorySegment
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, error) as MemorySegment
 }
 
-// Class method: +[NSArray array]
+// Class<*> method: +[NSArray array]
 fun NSArray_array(): MemorySegment {
     val sel = ObjCRuntime.sel("array")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithObject:]
+// Class<*> method: +[NSArray arrayWithObject:]
 fun NSArray_arrayWithObject(anObject: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithObject:")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, anObject) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithObjects:count:]
+// Class<*> method: +[NSArray arrayWithObjects:count:]
 fun NSArray_arrayWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithObjects:count:")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, objects, cnt) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithObjects:]
+// Class<*> method: +[NSArray arrayWithObjects:]
 fun NSArray_arrayWithObjects(firstObj: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithObjects:")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, firstObj) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithArray:]
+// Class<*> method: +[NSArray arrayWithArray:]
 fun NSArray_arrayWithArray(array: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithArray:")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, array) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithContentsOfURL:error:]
+// Class<*> method: +[NSArray arrayWithContentsOfURL:error:]
 fun NSArray_arrayWithContentsOfURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithContentsOfURL:error:")
     val cls = ObjCRuntime.getClass("NSArray")
@@ -394,14 +400,14 @@ fun NSArray.writeToURL_atomically(url: MemorySegment, atomically: BOOL): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, atomically) as BOOL
 }
 
-// Class method: +[NSArray arrayWithContentsOfFile:]
+// Class<*> method: +[NSArray arrayWithContentsOfFile:]
 fun NSArray_arrayWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSArray arrayWithContentsOfURL:]
+// Class<*> method: +[NSArray arrayWithContentsOfURL:]
 fun NSArray_arrayWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSArray")

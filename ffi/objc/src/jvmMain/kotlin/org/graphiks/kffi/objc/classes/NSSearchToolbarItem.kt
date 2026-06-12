@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSearchToolbarItem
  * Superclass: NSToolbarItem
@@ -29,11 +35,11 @@ open class NSSearchToolbarItem(ptr: MemorySegment) : NSToolbarItem(ptr) {
     }
     
     // @property view
-    fun view(): MemorySegment {
+    override fun `view`(): MemorySegment {
         val sel = ObjCRuntime.sel("view")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setView(value: MemorySegment) {
+    override fun `setView`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

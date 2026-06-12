@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSNumber
  * Superclass: NSValue
@@ -8,7 +14,7 @@ open class NSNumber(ptr: MemorySegment) : NSValue(ptr) {
         
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -209,105 +215,105 @@ open class NSNumber(ptr: MemorySegment) : NSValue(ptr) {
 
 // ── Category: NSNumberCreation on NSNumber ─────────────────────────────────────────
 
-// Class method: +[NSNumber numberWithChar:]
+// Class<*> method: +[NSNumber numberWithChar:]
 fun NSNumber_numberWithChar(value: Byte): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithChar:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedChar:]
+// Class<*> method: +[NSNumber numberWithUnsignedChar:]
 fun NSNumber_numberWithUnsignedChar(value: Any): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedChar:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithShort:]
+// Class<*> method: +[NSNumber numberWithShort:]
 fun NSNumber_numberWithShort(value: Short): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithShort:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedShort:]
+// Class<*> method: +[NSNumber numberWithUnsignedShort:]
 fun NSNumber_numberWithUnsignedShort(value: Any): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedShort:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithInt:]
+// Class<*> method: +[NSNumber numberWithInt:]
 fun NSNumber_numberWithInt(value: Int): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithInt:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedInt:]
+// Class<*> method: +[NSNumber numberWithUnsignedInt:]
 fun NSNumber_numberWithUnsignedInt(value: Any): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedInt:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithLong:]
+// Class<*> method: +[NSNumber numberWithLong:]
 fun NSNumber_numberWithLong(value: Long): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithLong:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedLong:]
+// Class<*> method: +[NSNumber numberWithUnsignedLong:]
 fun NSNumber_numberWithUnsignedLong(value: Any): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedLong:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithLongLong:]
+// Class<*> method: +[NSNumber numberWithLongLong:]
 fun NSNumber_numberWithLongLong(value: Long): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithLongLong:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedLongLong:]
+// Class<*> method: +[NSNumber numberWithUnsignedLongLong:]
 fun NSNumber_numberWithUnsignedLongLong(value: Any): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedLongLong:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithFloat:]
+// Class<*> method: +[NSNumber numberWithFloat:]
 fun NSNumber_numberWithFloat(value: Float): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithFloat:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithDouble:]
+// Class<*> method: +[NSNumber numberWithDouble:]
 fun NSNumber_numberWithDouble(value: Double): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithDouble:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithBool:]
+// Class<*> method: +[NSNumber numberWithBool:]
 fun NSNumber_numberWithBool(value: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithBool:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithInteger:]
+// Class<*> method: +[NSNumber numberWithInteger:]
 fun NSNumber_numberWithInteger(value: NSInteger): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithInteger:")
     val cls = ObjCRuntime.getClass("NSNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, value) as MemorySegment
 }
 
-// Class method: +[NSNumber numberWithUnsignedInteger:]
+// Class<*> method: +[NSNumber numberWithUnsignedInteger:]
 fun NSNumber_numberWithUnsignedInteger(value: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("numberWithUnsignedInteger:")
     val cls = ObjCRuntime.getClass("NSNumber")

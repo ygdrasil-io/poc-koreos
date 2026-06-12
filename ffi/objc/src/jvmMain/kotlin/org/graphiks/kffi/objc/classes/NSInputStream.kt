@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSInputStream
  * Superclass: NSStream
@@ -43,21 +49,21 @@ fun NSInputStream.initWithFileAtPath(path: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path) as MemorySegment
 }
 
-// Class method: +[NSInputStream inputStreamWithData:]
+// Class<*> method: +[NSInputStream inputStreamWithData:]
 fun NSInputStream_inputStreamWithData(`data`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("inputStreamWithData:")
     val cls = ObjCRuntime.getClass("NSInputStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `data`) as MemorySegment
 }
 
-// Class method: +[NSInputStream inputStreamWithFileAtPath:]
+// Class<*> method: +[NSInputStream inputStreamWithFileAtPath:]
 fun NSInputStream_inputStreamWithFileAtPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("inputStreamWithFileAtPath:")
     val cls = ObjCRuntime.getClass("NSInputStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSInputStream inputStreamWithURL:]
+// Class<*> method: +[NSInputStream inputStreamWithURL:]
 fun NSInputStream_inputStreamWithURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("inputStreamWithURL:")
     val cls = ObjCRuntime.getClass("NSInputStream")

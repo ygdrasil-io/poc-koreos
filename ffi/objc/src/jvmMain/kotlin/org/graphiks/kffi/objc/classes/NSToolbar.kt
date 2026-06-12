@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSToolbar
  * Superclass: NSObject
@@ -8,166 +14,166 @@ open class NSToolbar(val ptr: MemorySegment) {
         
     }
     
-    fun initWithIdentifier(identifier: NSToolbarIdentifier): MemorySegment {
+    open fun initWithIdentifier(identifier: NSToolbarIdentifier): MemorySegment {
         val sel = ObjCRuntime.sel("initWithIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, identifier) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun insertItemWithItemIdentifier_atIndex(itemIdentifier: NSToolbarItemIdentifier, index: NSInteger): Unit {
+    open fun insertItemWithItemIdentifier_atIndex(itemIdentifier: NSToolbarItemIdentifier, index: NSInteger): Unit {
         val sel = ObjCRuntime.sel("insertItemWithItemIdentifier:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, itemIdentifier, index)
     }
     
-    fun removeItemAtIndex(index: NSInteger): Unit {
+    open fun removeItemAtIndex(index: NSInteger): Unit {
         val sel = ObjCRuntime.sel("removeItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun removeItemWithItemIdentifier(itemIdentifier: NSToolbarItemIdentifier): Unit {
+    open fun removeItemWithItemIdentifier(itemIdentifier: NSToolbarItemIdentifier): Unit {
         val sel = ObjCRuntime.sel("removeItemWithItemIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, itemIdentifier)
     }
     
-    fun runCustomizationPalette(sender: MemorySegment): Unit {
+    open fun runCustomizationPalette(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("runCustomizationPalette:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun validateVisibleItems(): Unit {
+    open fun validateVisibleItems(): Unit {
         val sel = ObjCRuntime.sel("validateVisibleItems")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property delegate
     /** @return id<NSToolbarDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property visible
-    fun isVisible(): BOOL {
+    open fun isVisible(): BOOL {
         val sel = ObjCRuntime.sel("isVisible")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setVisible(value: BOOL) {
+    open fun setVisible(value: BOOL) {
         val sel = ObjCRuntime.sel("setVisible:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property customizationPaletteIsRunning
-    fun customizationPaletteIsRunning(): BOOL {
+    open fun customizationPaletteIsRunning(): BOOL {
         val sel = ObjCRuntime.sel("customizationPaletteIsRunning")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property displayMode
-    fun displayMode(): NSToolbarDisplayMode {
+    open fun displayMode(): NSToolbarDisplayMode {
         val sel = ObjCRuntime.sel("displayMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarDisplayMode
     }
-    fun setDisplayMode(value: NSToolbarDisplayMode) {
+    open fun setDisplayMode(value: NSToolbarDisplayMode) {
         val sel = ObjCRuntime.sel("setDisplayMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectedItemIdentifier
-    fun selectedItemIdentifier(): NSToolbarItemIdentifier {
+    open fun selectedItemIdentifier(): NSToolbarItemIdentifier {
         val sel = ObjCRuntime.sel("selectedItemIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarItemIdentifier
     }
-    fun setSelectedItemIdentifier(value: NSToolbarItemIdentifier) {
+    open fun setSelectedItemIdentifier(value: NSToolbarItemIdentifier) {
         val sel = ObjCRuntime.sel("setSelectedItemIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsUserCustomization
-    fun allowsUserCustomization(): BOOL {
+    open fun allowsUserCustomization(): BOOL {
         val sel = ObjCRuntime.sel("allowsUserCustomization")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAllowsUserCustomization(value: BOOL) {
+    open fun setAllowsUserCustomization(value: BOOL) {
         val sel = ObjCRuntime.sel("setAllowsUserCustomization:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsDisplayModeCustomization
-    fun allowsDisplayModeCustomization(): BOOL {
+    open fun allowsDisplayModeCustomization(): BOOL {
         val sel = ObjCRuntime.sel("allowsDisplayModeCustomization")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAllowsDisplayModeCustomization(value: BOOL) {
+    open fun setAllowsDisplayModeCustomization(value: BOOL) {
         val sel = ObjCRuntime.sel("setAllowsDisplayModeCustomization:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property identifier
-    fun identifier(): NSToolbarIdentifier {
+    open fun identifier(): NSToolbarIdentifier {
         val sel = ObjCRuntime.sel("identifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarIdentifier
     }
     
     // @property items
     /** @return NSArray<__kindof NSToolbarItem *> * */
-    fun items(): MemorySegment {
+    open fun items(): MemorySegment {
         val sel = ObjCRuntime.sel("items")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property visibleItems
     /** @return NSArray<__kindof NSToolbarItem *> * */
-    fun visibleItems(): MemorySegment {
+    open fun visibleItems(): MemorySegment {
         val sel = ObjCRuntime.sel("visibleItems")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property itemIdentifiers
     /** @return NSArray<NSToolbarItemIdentifier> * */
-    fun itemIdentifiers(): MemorySegment {
+    open fun itemIdentifiers(): MemorySegment {
         val sel = ObjCRuntime.sel("itemIdentifiers")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setItemIdentifiers(value: MemorySegment) {
+    open fun setItemIdentifiers(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setItemIdentifiers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property centeredItemIdentifiers
     /** @return NSSet<NSToolbarItemIdentifier> * */
-    fun centeredItemIdentifiers(): MemorySegment {
+    open fun centeredItemIdentifiers(): MemorySegment {
         val sel = ObjCRuntime.sel("centeredItemIdentifiers")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCenteredItemIdentifiers(value: MemorySegment) {
+    open fun setCenteredItemIdentifiers(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCenteredItemIdentifiers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autosavesConfiguration
-    fun autosavesConfiguration(): BOOL {
+    open fun autosavesConfiguration(): BOOL {
         val sel = ObjCRuntime.sel("autosavesConfiguration")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAutosavesConfiguration(value: BOOL) {
+    open fun setAutosavesConfiguration(value: BOOL) {
         val sel = ObjCRuntime.sel("setAutosavesConfiguration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsExtensionItems
-    fun allowsExtensionItems(): BOOL {
+    open fun allowsExtensionItems(): BOOL {
         val sel = ObjCRuntime.sel("allowsExtensionItems")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAllowsExtensionItems(value: BOOL) {
+    open fun setAllowsExtensionItems(value: BOOL) {
         val sel = ObjCRuntime.sel("setAllowsExtensionItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

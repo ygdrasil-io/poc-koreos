@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSGestureRecognizer
  * Superclass: NSObject
@@ -9,162 +15,162 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
         
     }
     
-    fun initWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
+    open fun initWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTarget:action:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, action) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun locationInView(view: MemorySegment): NSPoint {
+    open fun locationInView(view: MemorySegment): NSPoint {
         val sel = ObjCRuntime.sel("locationInView:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as NSPoint
     }
     
     // @property target
-    fun target(): MemorySegment {
+    open fun target(): MemorySegment {
         val sel = ObjCRuntime.sel("target")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTarget(value: MemorySegment) {
+    open fun setTarget(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTarget:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property action
-    fun action(): MemorySegment {
+    open fun action(): MemorySegment {
         val sel = ObjCRuntime.sel("action")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAction(value: MemorySegment) {
+    open fun setAction(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property state
-    fun state(): NSGestureRecognizerState {
+    open fun state(): NSGestureRecognizerState {
         val sel = ObjCRuntime.sel("state")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGestureRecognizerState
     }
     
     // @property delegate
     /** @return id<NSGestureRecognizerDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property enabled
-    fun isEnabled(): BOOL {
+    open fun isEnabled(): BOOL {
         val sel = ObjCRuntime.sel("isEnabled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: BOOL) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property view
-    fun view(): MemorySegment {
+    open fun view(): MemorySegment {
         val sel = ObjCRuntime.sel("view")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property pressureConfiguration
-    fun pressureConfiguration(): MemorySegment {
+    open fun pressureConfiguration(): MemorySegment {
         val sel = ObjCRuntime.sel("pressureConfiguration")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPressureConfiguration(value: MemorySegment) {
+    open fun setPressureConfiguration(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPressureConfiguration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysPrimaryMouseButtonEvents
-    fun delaysPrimaryMouseButtonEvents(): BOOL {
+    open fun delaysPrimaryMouseButtonEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysPrimaryMouseButtonEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysPrimaryMouseButtonEvents(value: BOOL) {
+    open fun setDelaysPrimaryMouseButtonEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysPrimaryMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysSecondaryMouseButtonEvents
-    fun delaysSecondaryMouseButtonEvents(): BOOL {
+    open fun delaysSecondaryMouseButtonEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysSecondaryMouseButtonEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysSecondaryMouseButtonEvents(value: BOOL) {
+    open fun setDelaysSecondaryMouseButtonEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysSecondaryMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysOtherMouseButtonEvents
-    fun delaysOtherMouseButtonEvents(): BOOL {
+    open fun delaysOtherMouseButtonEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysOtherMouseButtonEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysOtherMouseButtonEvents(value: BOOL) {
+    open fun setDelaysOtherMouseButtonEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysOtherMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysKeyEvents
-    fun delaysKeyEvents(): BOOL {
+    open fun delaysKeyEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysKeyEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysKeyEvents(value: BOOL) {
+    open fun setDelaysKeyEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysKeyEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysMagnificationEvents
-    fun delaysMagnificationEvents(): BOOL {
+    open fun delaysMagnificationEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysMagnificationEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysMagnificationEvents(value: BOOL) {
+    open fun setDelaysMagnificationEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysMagnificationEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysRotationEvents
-    fun delaysRotationEvents(): BOOL {
+    open fun delaysRotationEvents(): BOOL {
         val sel = ObjCRuntime.sel("delaysRotationEvents")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setDelaysRotationEvents(value: BOOL) {
+    open fun setDelaysRotationEvents(value: BOOL) {
         val sel = ObjCRuntime.sel("setDelaysRotationEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property name
-    fun name(): MemorySegment {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setName(value: MemorySegment) {
+    open fun setName(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameAsString(): String = ObjCRuntime.toJavaString(name())
+    open fun nameAsString(): String = ObjCRuntime.toJavaString(name())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property modifierFlags
-    fun modifierFlags(): NSEventModifierFlags {
+    open fun modifierFlags(): NSEventModifierFlags {
         val sel = ObjCRuntime.sel("modifierFlags")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventModifierFlags
     }

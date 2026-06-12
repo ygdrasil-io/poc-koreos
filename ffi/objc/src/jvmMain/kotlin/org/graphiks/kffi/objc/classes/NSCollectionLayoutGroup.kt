@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionLayoutGroup
  * Superclass: NSCollectionLayoutItem
@@ -32,14 +38,14 @@ open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, itemProvider) as MemorySegment
         }
         
-        fun new(): MemorySegment {
+        override fun `new`(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -54,7 +60,7 @@ open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(
     
     // @property supplementaryItems
     /** @return NSArray<NSCollectionLayoutSupplementaryItem *> * */
-    fun supplementaryItems(): MemorySegment {
+    override fun `supplementaryItems`(): MemorySegment {
         val sel = ObjCRuntime.sel("supplementaryItems")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

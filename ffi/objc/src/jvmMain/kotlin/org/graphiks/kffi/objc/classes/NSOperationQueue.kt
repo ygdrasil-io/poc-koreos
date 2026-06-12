@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOperationQueue
  * Superclass: NSObject
@@ -7,118 +13,118 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOperationQueue") }
         
-        fun currentQueue(): MemorySegment {
+        open fun currentQueue(): MemorySegment {
             val sel = ObjCRuntime.sel("currentQueue")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun mainQueue(): MemorySegment {
+        open fun mainQueue(): MemorySegment {
             val sel = ObjCRuntime.sel("mainQueue")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun addOperation(op: MemorySegment): Unit {
+    open fun addOperation(op: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addOperation:")
         ObjCRuntime.msgSend(null, ptr, sel, op)
     }
     
-    fun addOperations_waitUntilFinished(ops: MemorySegment, wait: BOOL): Unit {
+    open fun addOperations_waitUntilFinished(ops: MemorySegment, wait: BOOL): Unit {
         val sel = ObjCRuntime.sel("addOperations:waitUntilFinished:")
         ObjCRuntime.msgSend(null, ptr, sel, ops, wait)
     }
     
-    fun addOperationWithBlock(block: MemorySegment): Unit {
+    open fun addOperationWithBlock(block: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addOperationWithBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, block)
     }
     
-    fun addBarrierBlock(barrier: MemorySegment): Unit {
+    open fun addBarrierBlock(barrier: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addBarrierBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, barrier)
     }
     
-    fun cancelAllOperations(): Unit {
+    open fun cancelAllOperations(): Unit {
         val sel = ObjCRuntime.sel("cancelAllOperations")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun waitUntilAllOperationsAreFinished(): Unit {
+    open fun waitUntilAllOperationsAreFinished(): Unit {
         val sel = ObjCRuntime.sel("waitUntilAllOperationsAreFinished")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property progress
-    fun progress(): MemorySegment {
+    open fun progress(): MemorySegment {
         val sel = ObjCRuntime.sel("progress")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property maxConcurrentOperationCount
-    fun maxConcurrentOperationCount(): NSInteger {
+    open fun maxConcurrentOperationCount(): NSInteger {
         val sel = ObjCRuntime.sel("maxConcurrentOperationCount")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
-    fun setMaxConcurrentOperationCount(value: NSInteger) {
+    open fun setMaxConcurrentOperationCount(value: NSInteger) {
         val sel = ObjCRuntime.sel("setMaxConcurrentOperationCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property suspended
-    fun isSuspended(): BOOL {
+    open fun isSuspended(): BOOL {
         val sel = ObjCRuntime.sel("isSuspended")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setSuspended(value: BOOL) {
+    open fun setSuspended(value: BOOL) {
         val sel = ObjCRuntime.sel("setSuspended:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property name
-    fun name(): MemorySegment {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setName(value: MemorySegment) {
+    open fun setName(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameAsString(): String = ObjCRuntime.toJavaString(name())
+    open fun nameAsString(): String = ObjCRuntime.toJavaString(name())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property qualityOfService
-    fun qualityOfService(): NSQualityOfService {
+    open fun qualityOfService(): NSQualityOfService {
         val sel = ObjCRuntime.sel("qualityOfService")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
     }
-    fun setQualityOfService(value: NSQualityOfService) {
+    open fun setQualityOfService(value: NSQualityOfService) {
         val sel = ObjCRuntime.sel("setQualityOfService:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property underlyingQueue
-    fun underlyingQueue(): MemorySegment {
+    open fun underlyingQueue(): MemorySegment {
         val sel = ObjCRuntime.sel("underlyingQueue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setUnderlyingQueue(value: MemorySegment) {
+    open fun setUnderlyingQueue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUnderlyingQueue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currentQueue
-    fun currentQueue(): MemorySegment {
+    open fun currentQueue(): MemorySegment {
         val sel = ObjCRuntime.sel("currentQueue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property mainQueue
-    fun mainQueue(): MemorySegment {
+    open fun mainQueue(): MemorySegment {
         val sel = ObjCRuntime.sel("mainQueue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

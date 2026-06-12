@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableCharacterSet
  * Superclass: NSCharacterSet
@@ -7,87 +13,87 @@ open class NSMutableCharacterSet(ptr: MemorySegment) : NSCharacterSet(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMutableCharacterSet") }
         
-        fun controlCharacterSet(): MemorySegment {
+        override fun `controlCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("controlCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun whitespaceCharacterSet(): MemorySegment {
+        override fun `whitespaceCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("whitespaceCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun whitespaceAndNewlineCharacterSet(): MemorySegment {
+        override fun `whitespaceAndNewlineCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("whitespaceAndNewlineCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun decimalDigitCharacterSet(): MemorySegment {
+        override fun `decimalDigitCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("decimalDigitCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun letterCharacterSet(): MemorySegment {
+        override fun `letterCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("letterCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun lowercaseLetterCharacterSet(): MemorySegment {
+        override fun `lowercaseLetterCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("lowercaseLetterCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun uppercaseLetterCharacterSet(): MemorySegment {
+        override fun `uppercaseLetterCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("uppercaseLetterCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun nonBaseCharacterSet(): MemorySegment {
+        override fun `nonBaseCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("nonBaseCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun alphanumericCharacterSet(): MemorySegment {
+        override fun `alphanumericCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("alphanumericCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun decomposableCharacterSet(): MemorySegment {
+        override fun `decomposableCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("decomposableCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun illegalCharacterSet(): MemorySegment {
+        override fun `illegalCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("illegalCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun punctuationCharacterSet(): MemorySegment {
+        override fun `punctuationCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("punctuationCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun capitalizedLetterCharacterSet(): MemorySegment {
+        override fun `capitalizedLetterCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("capitalizedLetterCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun symbolCharacterSet(): MemorySegment {
+        override fun `symbolCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("symbolCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun newlineCharacterSet(): MemorySegment {
+        override fun `newlineCharacterSet`(): MemorySegment {
             val sel = ObjCRuntime.sel("newlineCharacterSet")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun characterSetWithRange(aRange: NSRange): MemorySegment {
+        override fun `characterSetWithRange`(aRange: NSRange): MemorySegment {
             val sel = ObjCRuntime.sel("characterSetWithRange:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(aRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"))) as MemorySegment
         }
         
-        fun characterSetWithCharactersInString(aString: MemorySegment): MemorySegment {
+        override fun `characterSetWithCharactersInString`(aString: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("characterSetWithCharactersInString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, aString) as MemorySegment
         }
@@ -95,12 +101,12 @@ open class NSMutableCharacterSet(ptr: MemorySegment) : NSCharacterSet(ptr) {
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun characterSetWithCharactersInString(aString: String): MemorySegment = characterSetWithCharactersInString(ObjCRuntime.newNSString(Arena.global(), aString))
         
-        fun characterSetWithBitmapRepresentation(`data`: MemorySegment): MemorySegment {
+        override fun `characterSetWithBitmapRepresentation`(`data`: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("characterSetWithBitmapRepresentation:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`) as MemorySegment
         }
         
-        fun characterSetWithContentsOfFile(fName: MemorySegment): MemorySegment {
+        override fun `characterSetWithContentsOfFile`(fName: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("characterSetWithContentsOfFile:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fName) as MemorySegment
         }

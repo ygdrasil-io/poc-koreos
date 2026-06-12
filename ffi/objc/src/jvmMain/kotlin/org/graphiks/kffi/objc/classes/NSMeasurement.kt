@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMeasurement
  * Superclass: NSObject
@@ -9,46 +15,46 @@ open class NSMeasurement(val ptr: MemorySegment) {
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithDoubleValue_unit(doubleValue: Double, unit: MemorySegment): MemorySegment {
+    open fun initWithDoubleValue_unit(doubleValue: Double, unit: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDoubleValue:unit:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, doubleValue, unit) as MemorySegment
     }
     
-    fun canBeConvertedToUnit(unit: MemorySegment): BOOL {
+    open fun canBeConvertedToUnit(unit: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("canBeConvertedToUnit:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, unit) as BOOL
     }
     
-    fun measurementByConvertingToUnit(unit: MemorySegment): MemorySegment {
+    open fun measurementByConvertingToUnit(unit: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("measurementByConvertingToUnit:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, unit) as MemorySegment
     }
     
     /** @return NSMeasurement<UnitType> * */
-    fun measurementByAddingMeasurement(measurement: MemorySegment): MemorySegment {
+    open fun measurementByAddingMeasurement(measurement: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("measurementByAddingMeasurement:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, measurement) as MemorySegment
     }
     
     /** @return NSMeasurement<UnitType> * */
-    fun measurementBySubtractingMeasurement(measurement: MemorySegment): MemorySegment {
+    open fun measurementBySubtractingMeasurement(measurement: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("measurementBySubtractingMeasurement:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, measurement) as MemorySegment
     }
     
     // @property unit
-    fun unit(): MemorySegment {
+    open fun unit(): MemorySegment {
         val sel = ObjCRuntime.sel("unit")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property doubleValue
-    fun doubleValue(): Double {
+    open fun doubleValue(): Double {
         val sel = ObjCRuntime.sel("doubleValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOrthography
  * Superclass: NSObject
@@ -9,31 +15,31 @@ open class NSOrthography(val ptr: MemorySegment) {
         
     }
     
-    fun initWithDominantScript_languageMap(script: MemorySegment, map: MemorySegment): MemorySegment {
+    open fun initWithDominantScript_languageMap(script: MemorySegment, map: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDominantScript:languageMap:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, script, map) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithDominantScript_languageMap(script: String, map: MemorySegment): MemorySegment = initWithDominantScript_languageMap(ObjCRuntime.newNSString(Arena.global(), script), map)
+    open fun initWithDominantScript_languageMap(script: String, map: MemorySegment): MemorySegment = initWithDominantScript_languageMap(ObjCRuntime.newNSString(Arena.global(), script), map)
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property dominantScript
-    fun dominantScript(): MemorySegment {
+    open fun dominantScript(): MemorySegment {
         val sel = ObjCRuntime.sel("dominantScript")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun dominantScriptAsString(): String = ObjCRuntime.toJavaString(dominantScript())
+    open fun dominantScriptAsString(): String = ObjCRuntime.toJavaString(dominantScript())
     
     // @property languageMap
     /** @return NSDictionary<NSString *,NSArray<NSString *> *> * */
-    fun languageMap(): MemorySegment {
+    open fun languageMap(): MemorySegment {
         val sel = ObjCRuntime.sel("languageMap")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -70,7 +76,7 @@ fun NSOrthography.allLanguages(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSOrthography defaultOrthographyForLanguage:]
+// Class<*> method: +[NSOrthography defaultOrthographyForLanguage:]
 fun NSOrthography_defaultOrthographyForLanguage(language: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("defaultOrthographyForLanguage:")
     val cls = ObjCRuntime.getClass("NSOrthography")
@@ -99,7 +105,7 @@ fun NSOrthography.allLanguages(): MemorySegment {
 
 // ── Category: NSOrthographyCreation on NSOrthography ─────────────────────────────────────────
 
-// Class method: +[NSOrthography orthographyWithDominantScript:languageMap:]
+// Class<*> method: +[NSOrthography orthographyWithDominantScript:languageMap:]
 fun NSOrthography_orthographyWithDominantScript_languageMap(script: MemorySegment, map: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orthographyWithDominantScript:languageMap:")
     val cls = ObjCRuntime.getClass("NSOrthography")

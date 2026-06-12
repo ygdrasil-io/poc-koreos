@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMenuItemCell
  * Superclass: NSButtonCell
@@ -8,7 +14,7 @@ open class NSMenuItemCell(ptr: MemorySegment) : NSButtonCell(ptr) {
         
     }
     
-    fun initTextCell(string: MemorySegment): MemorySegment {
+    override fun `initTextCell`(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initTextCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
@@ -16,7 +22,7 @@ open class NSMenuItemCell(ptr: MemorySegment) : NSButtonCell(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }

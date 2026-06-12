@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSXMLParser
  * Superclass: NSObject
@@ -8,95 +14,95 @@ open class NSXMLParser(val ptr: MemorySegment) {
         
     }
     
-    fun initWithContentsOfURL(url: MemorySegment): MemorySegment {
+    open fun initWithContentsOfURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithContentsOfURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun initWithData(`data`: MemorySegment): MemorySegment {
+    open fun initWithData(`data`: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`) as MemorySegment
     }
     
-    fun initWithStream(stream: MemorySegment): MemorySegment {
+    open fun initWithStream(stream: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithStream:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, stream) as MemorySegment
     }
     
-    fun parse(): BOOL {
+    open fun parse(): BOOL {
         val sel = ObjCRuntime.sel("parse")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
-    fun abortParsing(): Unit {
+    open fun abortParsing(): Unit {
         val sel = ObjCRuntime.sel("abortParsing")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property delegate
     /** @return id<NSXMLParserDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property shouldProcessNamespaces
-    fun shouldProcessNamespaces(): BOOL {
+    open fun shouldProcessNamespaces(): BOOL {
         val sel = ObjCRuntime.sel("shouldProcessNamespaces")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShouldProcessNamespaces(value: BOOL) {
+    open fun setShouldProcessNamespaces(value: BOOL) {
         val sel = ObjCRuntime.sel("setShouldProcessNamespaces:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property shouldReportNamespacePrefixes
-    fun shouldReportNamespacePrefixes(): BOOL {
+    open fun shouldReportNamespacePrefixes(): BOOL {
         val sel = ObjCRuntime.sel("shouldReportNamespacePrefixes")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShouldReportNamespacePrefixes(value: BOOL) {
+    open fun setShouldReportNamespacePrefixes(value: BOOL) {
         val sel = ObjCRuntime.sel("setShouldReportNamespacePrefixes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property externalEntityResolvingPolicy
-    fun externalEntityResolvingPolicy(): NSXMLParserExternalEntityResolvingPolicy {
+    open fun externalEntityResolvingPolicy(): NSXMLParserExternalEntityResolvingPolicy {
         val sel = ObjCRuntime.sel("externalEntityResolvingPolicy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSXMLParserExternalEntityResolvingPolicy
     }
-    fun setExternalEntityResolvingPolicy(value: NSXMLParserExternalEntityResolvingPolicy) {
+    open fun setExternalEntityResolvingPolicy(value: NSXMLParserExternalEntityResolvingPolicy) {
         val sel = ObjCRuntime.sel("setExternalEntityResolvingPolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowedExternalEntityURLs
     /** @return NSSet<NSURL *> * */
-    fun allowedExternalEntityURLs(): MemorySegment {
+    open fun allowedExternalEntityURLs(): MemorySegment {
         val sel = ObjCRuntime.sel("allowedExternalEntityURLs")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAllowedExternalEntityURLs(value: MemorySegment) {
+    open fun setAllowedExternalEntityURLs(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAllowedExternalEntityURLs:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property parserError
-    fun parserError(): MemorySegment {
+    open fun parserError(): MemorySegment {
         val sel = ObjCRuntime.sel("parserError")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property shouldResolveExternalEntities
-    fun shouldResolveExternalEntities(): BOOL {
+    open fun shouldResolveExternalEntities(): BOOL {
         val sel = ObjCRuntime.sel("shouldResolveExternalEntities")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShouldResolveExternalEntities(value: BOOL) {
+    open fun setShouldResolveExternalEntities(value: BOOL) {
         val sel = ObjCRuntime.sel("setShouldResolveExternalEntities:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

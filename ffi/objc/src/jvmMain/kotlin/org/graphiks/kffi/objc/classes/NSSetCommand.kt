@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSetCommand
  * Superclass: NSScriptCommand
@@ -8,7 +14,7 @@ open class NSSetCommand(ptr: MemorySegment) : NSScriptCommand(ptr) {
         
     }
     
-    fun setReceiversSpecifier(receiversRef: MemorySegment): Unit {
+    override fun `setReceiversSpecifier`(receiversRef: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setReceiversSpecifier:")
         ObjCRuntime.msgSend(null, ptr, sel, receiversRef)
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSScrollView
  * Superclass: NSView
@@ -7,12 +13,12 @@ open class NSScrollView(ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScrollView") }
         
-        fun frameSizeForContentSize_horizontalScrollerClass_verticalScrollerClass_borderType_controlSize_scrollerStyle(cSize: NSSize, horizontalScrollerClass: Class, verticalScrollerClass: Class, type: NSBorderType, controlSize: NSControlSize, scrollerStyle: NSScrollerStyle): NSSize {
+        fun frameSizeForContentSize_horizontalScrollerClass_verticalScrollerClass_borderType_controlSize_scrollerStyle(cSize: NSSize, horizontalScrollerClass: Class<*>, verticalScrollerClass: Class<*>, type: NSBorderType, controlSize: NSControlSize, scrollerStyle: NSScrollerStyle): NSSize {
             val sel = ObjCRuntime.sel("frameSizeForContentSize:horizontalScrollerClass:verticalScrollerClass:borderType:controlSize:scrollerStyle:")
             return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), _class, sel, ObjCRuntime.ObjCStructArg(cSize, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), horizontalScrollerClass, verticalScrollerClass, type, controlSize, scrollerStyle) as NSSize
         }
         
-        fun contentSizeForFrameSize_horizontalScrollerClass_verticalScrollerClass_borderType_controlSize_scrollerStyle(fSize: NSSize, horizontalScrollerClass: Class, verticalScrollerClass: Class, type: NSBorderType, controlSize: NSControlSize, scrollerStyle: NSScrollerStyle): NSSize {
+        fun contentSizeForFrameSize_horizontalScrollerClass_verticalScrollerClass_borderType_controlSize_scrollerStyle(fSize: NSSize, horizontalScrollerClass: Class<*>, verticalScrollerClass: Class<*>, type: NSBorderType, controlSize: NSControlSize, scrollerStyle: NSScrollerStyle): NSSize {
             val sel = ObjCRuntime.sel("contentSizeForFrameSize:horizontalScrollerClass:verticalScrollerClass:borderType:controlSize:scrollerStyle:")
             return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), _class, sel, ObjCRuntime.ObjCStructArg(fSize, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), horizontalScrollerClass, verticalScrollerClass, type, controlSize, scrollerStyle) as NSSize
         }
@@ -29,12 +35,12 @@ open class NSScrollView(ptr: MemorySegment) : NSView(ptr) {
         
     }
     
-    fun initWithFrame(frameRect: NSRect): MemorySegment {
+    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -44,7 +50,7 @@ open class NSScrollView(ptr: MemorySegment) : NSView(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun reflectScrolledClipView(cView: MemorySegment): Unit {
+    override fun `reflectScrolledClipView`(cView: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("reflectScrolledClipView:")
         ObjCRuntime.msgSend(null, ptr, sel, cView)
     }
@@ -440,26 +446,26 @@ fun NSScrollView.setVerticalRulerView(verticalRulerView: MemorySegment): Unit {
     ObjCRuntime.msgSend(null, ptr, sel, verticalRulerView)
 }
 
-// Class method: +[NSScrollView rulerViewClass]
-fun NSScrollView_rulerViewClass(): Class {
+// Class<*> method: +[NSScrollView rulerViewClass]
+fun NSScrollView_rulerViewClass(): Class<*> {
     val sel = ObjCRuntime.sel("rulerViewClass")
     val cls = ObjCRuntime.getClass("NSScrollView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class<*>
 }
 
-// Class method: +[NSScrollView setRulerViewClass:]
-fun NSScrollView_setRulerViewClass(rulerViewClass: Class): Unit {
+// Class<*> method: +[NSScrollView setRulerViewClass:]
+fun NSScrollView_setRulerViewClass(rulerViewClass: Class<*>): Unit {
     val sel = ObjCRuntime.sel("setRulerViewClass:")
     val cls = ObjCRuntime.getClass("NSScrollView")
     ObjCRuntime.msgSend(null, cls, sel, rulerViewClass)
 }
 
 // @property rulerViewClass
-fun NSScrollView.rulerViewClass(): Class {
+fun NSScrollView.rulerViewClass(): Class<*> {
     val sel = ObjCRuntime.sel("rulerViewClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
-fun NSScrollView.setRulerViewClass(value: Class) {
+fun NSScrollView.setRulerViewClass(value: Class<*>) {
     val sel = ObjCRuntime.sel("setRulerViewClass:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

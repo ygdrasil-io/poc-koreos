@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOpenGLPixelFormat
  * Superclass: NSObject
@@ -9,44 +15,44 @@ open class NSOpenGLPixelFormat(val ptr: MemorySegment) {
         
     }
     
-    fun initWithCGLPixelFormatObj(format: MemorySegment): MemorySegment {
+    open fun initWithCGLPixelFormatObj(format: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCGLPixelFormatObj:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, format) as MemorySegment
     }
     
-    fun initWithAttributes(attribs: MemorySegment): MemorySegment {
+    open fun initWithAttributes(attribs: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithAttributes:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribs) as MemorySegment
     }
     
-    fun initWithData(attribs: MemorySegment): MemorySegment {
+    open fun initWithData(attribs: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribs) as MemorySegment
     }
     
-    fun attributes(): MemorySegment {
+    open fun attributes(): MemorySegment {
         val sel = ObjCRuntime.sel("attributes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun setAttributes(attribs: MemorySegment): Unit {
+    open fun setAttributes(attribs: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setAttributes:")
         ObjCRuntime.msgSend(null, ptr, sel, attribs)
     }
     
-    fun getValues_forAttribute_forVirtualScreen(vals: MemorySegment, attrib: NSOpenGLPixelFormatAttribute, screen: GLint): Unit {
+    open fun getValues_forAttribute_forVirtualScreen(vals: MemorySegment, attrib: NSOpenGLPixelFormatAttribute, screen: GLint): Unit {
         val sel = ObjCRuntime.sel("getValues:forAttribute:forVirtualScreen:")
         ObjCRuntime.msgSend(null, ptr, sel, vals, attrib, screen)
     }
     
     // @property numberOfVirtualScreens
-    fun numberOfVirtualScreens(): GLint {
+    open fun numberOfVirtualScreens(): GLint {
         val sel = ObjCRuntime.sel("numberOfVirtualScreens")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint
     }
     
     // @property CGLPixelFormatObj
-    fun CGLPixelFormatObj(): MemorySegment {
+    open fun CGLPixelFormatObj(): MemorySegment {
         val sel = ObjCRuntime.sel("CGLPixelFormatObj")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

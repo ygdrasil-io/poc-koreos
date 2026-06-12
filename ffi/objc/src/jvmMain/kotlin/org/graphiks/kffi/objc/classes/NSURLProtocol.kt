@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSURLProtocol
  * Superclass: NSObject
@@ -6,87 +12,87 @@ open class NSURLProtocol(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLProtocol") }
         
-        fun canInitWithRequest(request: MemorySegment): BOOL {
+        open fun canInitWithRequest(request: MemorySegment): BOOL {
             val sel = ObjCRuntime.sel("canInitWithRequest:")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, request) as BOOL
         }
         
-        fun canonicalRequestForRequest(request: MemorySegment): MemorySegment {
+        open fun canonicalRequestForRequest(request: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("canonicalRequestForRequest:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, request) as MemorySegment
         }
         
-        fun requestIsCacheEquivalent_toRequest(a: MemorySegment, b: MemorySegment): BOOL {
+        open fun requestIsCacheEquivalent_toRequest(a: MemorySegment, b: MemorySegment): BOOL {
             val sel = ObjCRuntime.sel("requestIsCacheEquivalent:toRequest:")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, a, b) as BOOL
         }
         
-        fun propertyForKey_inRequest(key: MemorySegment, request: MemorySegment): MemorySegment {
+        open fun propertyForKey_inRequest(key: MemorySegment, request: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("propertyForKey:inRequest:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, key, request) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun propertyForKey_inRequest(key: String, request: MemorySegment): MemorySegment = propertyForKey_inRequest(ObjCRuntime.newNSString(Arena.global(), key), request)
+        open fun propertyForKey_inRequest(key: String, request: MemorySegment): MemorySegment = propertyForKey_inRequest(ObjCRuntime.newNSString(Arena.global(), key), request)
         
-        fun setProperty_forKey_inRequest(value: MemorySegment, key: MemorySegment, request: MemorySegment): Unit {
+        open fun setProperty_forKey_inRequest(value: MemorySegment, key: MemorySegment, request: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setProperty:forKey:inRequest:")
             ObjCRuntime.msgSend(null, _class, sel, value, key, request)
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun setProperty_forKey_inRequest(value: MemorySegment, key: String, request: MemorySegment): Unit = setProperty_forKey_inRequest(value, ObjCRuntime.newNSString(Arena.global(), key), request)
+        open fun setProperty_forKey_inRequest(value: MemorySegment, key: String, request: MemorySegment): Unit = setProperty_forKey_inRequest(value, ObjCRuntime.newNSString(Arena.global(), key), request)
         
-        fun removePropertyForKey_inRequest(key: MemorySegment, request: MemorySegment): Unit {
+        open fun removePropertyForKey_inRequest(key: MemorySegment, request: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("removePropertyForKey:inRequest:")
             ObjCRuntime.msgSend(null, _class, sel, key, request)
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun removePropertyForKey_inRequest(key: String, request: MemorySegment): Unit = removePropertyForKey_inRequest(ObjCRuntime.newNSString(Arena.global(), key), request)
+        open fun removePropertyForKey_inRequest(key: String, request: MemorySegment): Unit = removePropertyForKey_inRequest(ObjCRuntime.newNSString(Arena.global(), key), request)
         
-        fun registerClass(protocolClass: Class): BOOL {
+        open fun registerClass(protocolClass: Class<*>): BOOL {
             val sel = ObjCRuntime.sel("registerClass:")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, protocolClass) as BOOL
         }
         
-        fun unregisterClass(protocolClass: Class): Unit {
+        open fun unregisterClass(protocolClass: Class<*>): Unit {
             val sel = ObjCRuntime.sel("unregisterClass:")
             ObjCRuntime.msgSend(null, _class, sel, protocolClass)
         }
         
     }
     
-    fun initWithRequest_cachedResponse_client(request: MemorySegment, cachedResponse: MemorySegment, client: MemorySegment): MemorySegment {
+    open fun initWithRequest_cachedResponse_client(request: MemorySegment, cachedResponse: MemorySegment, client: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRequest:cachedResponse:client:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, cachedResponse, client) as MemorySegment
     }
     
-    fun startLoading(): Unit {
+    open fun startLoading(): Unit {
         val sel = ObjCRuntime.sel("startLoading")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun stopLoading(): Unit {
+    open fun stopLoading(): Unit {
         val sel = ObjCRuntime.sel("stopLoading")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property client
     /** @return id<NSURLProtocolClient> */
-    fun client(): MemorySegment {
+    open fun client(): MemorySegment {
         val sel = ObjCRuntime.sel("client")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property request
-    fun request(): MemorySegment {
+    open fun request(): MemorySegment {
         val sel = ObjCRuntime.sel("request")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property cachedResponse
-    fun cachedResponse(): MemorySegment {
+    open fun cachedResponse(): MemorySegment {
         val sel = ObjCRuntime.sel("cachedResponse")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -108,7 +114,7 @@ fun NSURLProtocol.task(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSURLProtocol canInitWithTask:]
+// Class<*> method: +[NSURLProtocol canInitWithTask:]
 fun NSURLProtocol_canInitWithTask(task: MemorySegment): BOOL {
     val sel = ObjCRuntime.sel("canInitWithTask:")
     val cls = ObjCRuntime.getClass("NSURLProtocol")

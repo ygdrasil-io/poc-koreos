@@ -13,12 +13,17 @@
 #
 set -euo pipefail
 
+_script_dir="$(cd "$(dirname "$0")" && pwd)"
+_PROJECT_ROOT="$(cd "$_script_dir/.." && pwd)"
+
 KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
 [ -x "$KEXTRACT" ] || { echo "kextract binary not executable: $KEXTRACT" >&2; exit 1; }
+# Resolve kextract binary to an absolute path so its internal lib/ lookup works
+KEXTRACT="$(cd "$(dirname "$KEXTRACT")" && pwd)/$(basename "$KEXTRACT")"
 
 SDK=$(xcrun --sdk macosx --show-sdk-path)
 APPKIT_H="$SDK/System/Library/Frameworks/AppKit.framework/Headers/AppKit.h"
-OUT=$(cd "$(dirname "$0")/.." && pwd)/ffi/objc/src/jvmMain/kotlin
+OUT="$_PROJECT_ROOT/ffi/objc/src/jvmMain/kotlin"
 
 FRAMEWORKS=(
     Foundation CoreFoundation AppKit CoreGraphics
@@ -35,6 +40,9 @@ done
 echo "→ Regenerating ObjC bindings for ${#FRAMEWORKS[@]} frameworks"
 echo "  SDK     = $SDK"
 echo "  Output  = $OUT"
+
+KEXTRACT_ROOT="$(dirname "$KEXTRACT")/.."
+export DYLD_LIBRARY_PATH="$KEXTRACT_ROOT/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 "$KEXTRACT" \
     --objc \

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDateComponentsFormatter
  * Superclass: NSFormatter
@@ -16,13 +22,13 @@ open class NSDateComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
         
     }
     
-    fun stringForObjectValue(obj: MemorySegment): MemorySegment {
+    override fun `stringForObjectValue`(obj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForObjectValue:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, obj) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringForObjectValueAsString(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
+    override fun `stringForObjectValueAsString`(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
     
     fun stringFromDateComponents(components: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromDateComponents:")
@@ -48,7 +54,7 @@ open class NSDateComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromTimeIntervalAsString(ti: NSTimeInterval): String = ObjCRuntime.toJavaString(stringFromTimeInterval(ti))
     
-    fun getObjectValue_forString_errorDescription(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
+    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getObjectValue:forString:errorDescription:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as BOOL
     }

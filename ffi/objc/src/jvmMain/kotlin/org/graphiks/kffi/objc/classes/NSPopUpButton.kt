@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPopUpButton
  * Superclass: NSButton
@@ -142,7 +148,7 @@ open class NSPopUpButton(ptr: MemorySegment) : NSButton(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, tag) as BOOL
     }
     
-    fun setTitle(string: MemorySegment): Unit {
+    override fun `setTitle`(string: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, string)
     }

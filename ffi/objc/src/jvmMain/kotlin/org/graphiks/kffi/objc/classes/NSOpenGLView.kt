@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOpenGLView
  * Superclass: NSView
@@ -59,21 +65,21 @@ open class NSOpenGLView(ptr: MemorySegment) : NSView(ptr) {
     }
     
     // @property wantsBestResolutionOpenGLSurface
-    fun wantsBestResolutionOpenGLSurface(): BOOL {
+    override fun `wantsBestResolutionOpenGLSurface`(): BOOL {
         val sel = ObjCRuntime.sel("wantsBestResolutionOpenGLSurface")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWantsBestResolutionOpenGLSurface(value: BOOL) {
+    override fun `setWantsBestResolutionOpenGLSurface`(value: BOOL) {
         val sel = ObjCRuntime.sel("setWantsBestResolutionOpenGLSurface:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property wantsExtendedDynamicRangeOpenGLSurface
-    fun wantsExtendedDynamicRangeOpenGLSurface(): BOOL {
+    override fun `wantsExtendedDynamicRangeOpenGLSurface`(): BOOL {
         val sel = ObjCRuntime.sel("wantsExtendedDynamicRangeOpenGLSurface")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWantsExtendedDynamicRangeOpenGLSurface(value: BOOL) {
+    override fun `setWantsExtendedDynamicRangeOpenGLSurface`(value: BOOL) {
         val sel = ObjCRuntime.sel("setWantsExtendedDynamicRangeOpenGLSurface:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

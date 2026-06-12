@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSXMLNode
  * Superclass: NSObject
@@ -7,385 +13,385 @@ open class NSXMLNode(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSXMLNode") }
         
-        fun document(): MemorySegment {
+        open fun document(): MemorySegment {
             val sel = ObjCRuntime.sel("document")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun documentWithRootElement(element: MemorySegment): MemorySegment {
+        open fun documentWithRootElement(element: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("documentWithRootElement:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, element) as MemorySegment
         }
         
-        fun elementWithName(name: MemorySegment): MemorySegment {
+        open fun elementWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("elementWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun elementWithName(name: String): MemorySegment = elementWithName(ObjCRuntime.newNSString(Arena.global(), name))
+        open fun elementWithName(name: String): MemorySegment = elementWithName(ObjCRuntime.newNSString(Arena.global(), name))
         
-        fun elementWithName_URI(name: MemorySegment, URI: MemorySegment): MemorySegment {
+        open fun elementWithName_URI(name: MemorySegment, URI: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("elementWithName:URI:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, URI) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun elementWithName_URI(name: String, URI: String): MemorySegment = elementWithName_URI(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), URI))
+        open fun elementWithName_URI(name: String, URI: String): MemorySegment = elementWithName_URI(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), URI))
         
-        fun elementWithName_stringValue(name: MemorySegment, string: MemorySegment): MemorySegment {
+        open fun elementWithName_stringValue(name: MemorySegment, string: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("elementWithName:stringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, string) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun elementWithName_stringValue(name: String, string: String): MemorySegment = elementWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), string))
+        open fun elementWithName_stringValue(name: String, string: String): MemorySegment = elementWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), string))
         
-        fun elementWithName_children_attributes(name: MemorySegment, children: MemorySegment, attributes: MemorySegment): MemorySegment {
+        open fun elementWithName_children_attributes(name: MemorySegment, children: MemorySegment, attributes: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("elementWithName:children:attributes:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, children, attributes) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun elementWithName_children_attributes(name: String, children: MemorySegment, attributes: MemorySegment): MemorySegment = elementWithName_children_attributes(ObjCRuntime.newNSString(Arena.global(), name), children, attributes)
+        open fun elementWithName_children_attributes(name: String, children: MemorySegment, attributes: MemorySegment): MemorySegment = elementWithName_children_attributes(ObjCRuntime.newNSString(Arena.global(), name), children, attributes)
         
-        fun attributeWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
+        open fun attributeWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("attributeWithName:stringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun attributeWithName_stringValue(name: String, stringValue: String): MemorySegment = attributeWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun attributeWithName_stringValue(name: String, stringValue: String): MemorySegment = attributeWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun attributeWithName_URI_stringValue(name: MemorySegment, URI: MemorySegment, stringValue: MemorySegment): MemorySegment {
+        open fun attributeWithName_URI_stringValue(name: MemorySegment, URI: MemorySegment, stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("attributeWithName:URI:stringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, URI, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun attributeWithName_URI_stringValue(name: String, URI: String, stringValue: String): MemorySegment = attributeWithName_URI_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), URI), ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun attributeWithName_URI_stringValue(name: String, URI: String, stringValue: String): MemorySegment = attributeWithName_URI_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), URI), ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun namespaceWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
+        open fun namespaceWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("namespaceWithName:stringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun namespaceWithName_stringValue(name: String, stringValue: String): MemorySegment = namespaceWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun namespaceWithName_stringValue(name: String, stringValue: String): MemorySegment = namespaceWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun processingInstructionWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
+        open fun processingInstructionWithName_stringValue(name: MemorySegment, stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("processingInstructionWithName:stringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun processingInstructionWithName_stringValue(name: String, stringValue: String): MemorySegment = processingInstructionWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun processingInstructionWithName_stringValue(name: String, stringValue: String): MemorySegment = processingInstructionWithName_stringValue(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun commentWithStringValue(stringValue: MemorySegment): MemorySegment {
+        open fun commentWithStringValue(stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("commentWithStringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun commentWithStringValue(stringValue: String): MemorySegment = commentWithStringValue(ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun commentWithStringValue(stringValue: String): MemorySegment = commentWithStringValue(ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun textWithStringValue(stringValue: MemorySegment): MemorySegment {
+        open fun textWithStringValue(stringValue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("textWithStringValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, stringValue) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun textWithStringValue(stringValue: String): MemorySegment = textWithStringValue(ObjCRuntime.newNSString(Arena.global(), stringValue))
+        open fun textWithStringValue(stringValue: String): MemorySegment = textWithStringValue(ObjCRuntime.newNSString(Arena.global(), stringValue))
         
-        fun DTDNodeWithXMLString(string: MemorySegment): MemorySegment {
+        open fun DTDNodeWithXMLString(string: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("DTDNodeWithXMLString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, string) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun DTDNodeWithXMLString(string: String): MemorySegment = DTDNodeWithXMLString(ObjCRuntime.newNSString(Arena.global(), string))
+        open fun DTDNodeWithXMLString(string: String): MemorySegment = DTDNodeWithXMLString(ObjCRuntime.newNSString(Arena.global(), string))
         
-        fun localNameForName(name: MemorySegment): MemorySegment {
+        open fun localNameForName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("localNameForName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun localNameForNameAsString(name: MemorySegment): String = ObjCRuntime.toJavaString(localNameForName(name))
+        open fun localNameForNameAsString(name: MemorySegment): String = ObjCRuntime.toJavaString(localNameForName(name))
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun localNameForName(name: String): MemorySegment = localNameForName(ObjCRuntime.newNSString(Arena.global(), name))
+        open fun localNameForName(name: String): MemorySegment = localNameForName(ObjCRuntime.newNSString(Arena.global(), name))
         
         /** Convenience overload — [String] parameters and [String] return type. */
-        fun localNameForNameAsString(name: String): String = ObjCRuntime.toJavaString(localNameForName(ObjCRuntime.newNSString(Arena.global(), name)))
+        open fun localNameForNameAsString(name: String): String = ObjCRuntime.toJavaString(localNameForName(ObjCRuntime.newNSString(Arena.global(), name)))
         
-        fun prefixForName(name: MemorySegment): MemorySegment {
+        open fun prefixForName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("prefixForName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun prefixForNameAsString(name: MemorySegment): String = ObjCRuntime.toJavaString(prefixForName(name))
+        open fun prefixForNameAsString(name: MemorySegment): String = ObjCRuntime.toJavaString(prefixForName(name))
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun prefixForName(name: String): MemorySegment = prefixForName(ObjCRuntime.newNSString(Arena.global(), name))
+        open fun prefixForName(name: String): MemorySegment = prefixForName(ObjCRuntime.newNSString(Arena.global(), name))
         
         /** Convenience overload — [String] parameters and [String] return type. */
-        fun prefixForNameAsString(name: String): String = ObjCRuntime.toJavaString(prefixForName(ObjCRuntime.newNSString(Arena.global(), name)))
+        open fun prefixForNameAsString(name: String): String = ObjCRuntime.toJavaString(prefixForName(ObjCRuntime.newNSString(Arena.global(), name)))
         
-        fun predefinedNamespaceForPrefix(name: MemorySegment): MemorySegment {
+        open fun predefinedNamespaceForPrefix(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predefinedNamespaceForPrefix:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun predefinedNamespaceForPrefix(name: String): MemorySegment = predefinedNamespaceForPrefix(ObjCRuntime.newNSString(Arena.global(), name))
+        open fun predefinedNamespaceForPrefix(name: String): MemorySegment = predefinedNamespaceForPrefix(ObjCRuntime.newNSString(Arena.global(), name))
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithKind(kind: NSXMLNodeKind): MemorySegment {
+    open fun initWithKind(kind: NSXMLNodeKind): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKind:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, kind) as MemorySegment
     }
     
-    fun initWithKind_options(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
+    open fun initWithKind_options(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKind:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, kind, options) as MemorySegment
     }
     
-    fun setStringValue_resolvingEntities(string: MemorySegment, resolve: BOOL): Unit {
+    open fun setStringValue_resolvingEntities(string: MemorySegment, resolve: BOOL): Unit {
         val sel = ObjCRuntime.sel("setStringValue:resolvingEntities:")
         ObjCRuntime.msgSend(null, ptr, sel, string, resolve)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setStringValue_resolvingEntities(string: String, resolve: BOOL): Unit = setStringValue_resolvingEntities(ObjCRuntime.newNSString(Arena.global(), string), resolve)
+    open fun setStringValue_resolvingEntities(string: String, resolve: BOOL): Unit = setStringValue_resolvingEntities(ObjCRuntime.newNSString(Arena.global(), string), resolve)
     
-    fun childAtIndex(index: NSUInteger): MemorySegment {
+    open fun childAtIndex(index: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("childAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun detach(): Unit {
+    open fun detach(): Unit {
         val sel = ObjCRuntime.sel("detach")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun XMLStringWithOptions(options: NSXMLNodeOptions): MemorySegment {
+    open fun XMLStringWithOptions(options: NSXMLNodeOptions): MemorySegment {
         val sel = ObjCRuntime.sel("XMLStringWithOptions:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun XMLStringWithOptionsAsString(options: NSXMLNodeOptions): String = ObjCRuntime.toJavaString(XMLStringWithOptions(options))
+    open fun XMLStringWithOptionsAsString(options: NSXMLNodeOptions): String = ObjCRuntime.toJavaString(XMLStringWithOptions(options))
     
-    fun canonicalXMLStringPreservingComments(comments: BOOL): MemorySegment {
+    open fun canonicalXMLStringPreservingComments(comments: BOOL): MemorySegment {
         val sel = ObjCRuntime.sel("canonicalXMLStringPreservingComments:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, comments) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun canonicalXMLStringPreservingCommentsAsString(comments: BOOL): String = ObjCRuntime.toJavaString(canonicalXMLStringPreservingComments(comments))
+    open fun canonicalXMLStringPreservingCommentsAsString(comments: BOOL): String = ObjCRuntime.toJavaString(canonicalXMLStringPreservingComments(comments))
     
     /** @return NSArray<__kindof NSXMLNode *> * */
-    fun nodesForXPath_error(xpath: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun nodesForXPath_error(xpath: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("nodesForXPath:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, xpath, error) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun nodesForXPath_error(xpath: String, error: MemorySegment): MemorySegment = nodesForXPath_error(ObjCRuntime.newNSString(Arena.global(), xpath), error)
+    open fun nodesForXPath_error(xpath: String, error: MemorySegment): MemorySegment = nodesForXPath_error(ObjCRuntime.newNSString(Arena.global(), xpath), error)
     
-    fun objectsForXQuery_constants_error(xquery: MemorySegment, constants: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun objectsForXQuery_constants_error(xquery: MemorySegment, constants: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("objectsForXQuery:constants:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, xquery, constants, error) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun objectsForXQuery_constants_error(xquery: String, constants: MemorySegment, error: MemorySegment): MemorySegment = objectsForXQuery_constants_error(ObjCRuntime.newNSString(Arena.global(), xquery), constants, error)
+    open fun objectsForXQuery_constants_error(xquery: String, constants: MemorySegment, error: MemorySegment): MemorySegment = objectsForXQuery_constants_error(ObjCRuntime.newNSString(Arena.global(), xquery), constants, error)
     
-    fun objectsForXQuery_error(xquery: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun objectsForXQuery_error(xquery: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("objectsForXQuery:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, xquery, error) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun objectsForXQuery_error(xquery: String, error: MemorySegment): MemorySegment = objectsForXQuery_error(ObjCRuntime.newNSString(Arena.global(), xquery), error)
+    open fun objectsForXQuery_error(xquery: String, error: MemorySegment): MemorySegment = objectsForXQuery_error(ObjCRuntime.newNSString(Arena.global(), xquery), error)
     
     // @property kind
-    fun kind(): NSXMLNodeKind {
+    open fun kind(): NSXMLNodeKind {
         val sel = ObjCRuntime.sel("kind")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSXMLNodeKind
     }
     
     // @property name
-    fun name(): MemorySegment {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setName(value: MemorySegment) {
+    open fun setName(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameAsString(): String = ObjCRuntime.toJavaString(name())
+    open fun nameAsString(): String = ObjCRuntime.toJavaString(name())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property objectValue
-    fun objectValue(): MemorySegment {
+    open fun objectValue(): MemorySegment {
         val sel = ObjCRuntime.sel("objectValue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setObjectValue(value: MemorySegment) {
+    open fun setObjectValue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setObjectValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property stringValue
-    fun stringValue(): MemorySegment {
+    open fun stringValue(): MemorySegment {
         val sel = ObjCRuntime.sel("stringValue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setStringValue(value: MemorySegment) {
+    open fun setStringValue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setStringValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringValueAsString(): String = ObjCRuntime.toJavaString(stringValue())
+    open fun stringValueAsString(): String = ObjCRuntime.toJavaString(stringValue())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setStringValue(value: String) = setStringValue(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setStringValue(value: String) = setStringValue(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property index
-    fun index(): NSUInteger {
+    open fun index(): NSUInteger {
         val sel = ObjCRuntime.sel("index")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property level
-    fun level(): NSUInteger {
+    open fun level(): NSUInteger {
         val sel = ObjCRuntime.sel("level")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property rootDocument
-    fun rootDocument(): MemorySegment {
+    open fun rootDocument(): MemorySegment {
         val sel = ObjCRuntime.sel("rootDocument")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property parent
-    fun parent(): MemorySegment {
+    open fun parent(): MemorySegment {
         val sel = ObjCRuntime.sel("parent")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property childCount
-    fun childCount(): NSUInteger {
+    open fun childCount(): NSUInteger {
         val sel = ObjCRuntime.sel("childCount")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property children
     /** @return NSArray<NSXMLNode *> * */
-    fun children(): MemorySegment {
+    open fun children(): MemorySegment {
         val sel = ObjCRuntime.sel("children")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property previousSibling
-    fun previousSibling(): MemorySegment {
+    open fun previousSibling(): MemorySegment {
         val sel = ObjCRuntime.sel("previousSibling")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property nextSibling
-    fun nextSibling(): MemorySegment {
+    open fun nextSibling(): MemorySegment {
         val sel = ObjCRuntime.sel("nextSibling")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property previousNode
-    fun previousNode(): MemorySegment {
+    open fun previousNode(): MemorySegment {
         val sel = ObjCRuntime.sel("previousNode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property nextNode
-    fun nextNode(): MemorySegment {
+    open fun nextNode(): MemorySegment {
         val sel = ObjCRuntime.sel("nextNode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property XPath
-    fun XPath(): MemorySegment {
+    open fun XPath(): MemorySegment {
         val sel = ObjCRuntime.sel("XPath")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun XPathAsString(): String = ObjCRuntime.toJavaString(XPath())
+    open fun XPathAsString(): String = ObjCRuntime.toJavaString(XPath())
     
     // @property localName
-    fun localName(): MemorySegment {
+    open fun localName(): MemorySegment {
         val sel = ObjCRuntime.sel("localName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localNameAsString(): String = ObjCRuntime.toJavaString(localName())
+    open fun localNameAsString(): String = ObjCRuntime.toJavaString(localName())
     
     // @property prefix
-    fun prefix(): MemorySegment {
+    open fun prefix(): MemorySegment {
         val sel = ObjCRuntime.sel("prefix")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun prefixAsString(): String = ObjCRuntime.toJavaString(prefix())
+    open fun prefixAsString(): String = ObjCRuntime.toJavaString(prefix())
     
     // @property URI
-    fun URI(): MemorySegment {
+    open fun URI(): MemorySegment {
         val sel = ObjCRuntime.sel("URI")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setURI(value: MemorySegment) {
+    open fun setURI(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setURI:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun URIAsString(): String = ObjCRuntime.toJavaString(URI())
+    open fun URIAsString(): String = ObjCRuntime.toJavaString(URI())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setURI(value: String) = setURI(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setURI(value: String) = setURI(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property description
-    fun description(): MemorySegment {
+    open fun description(): MemorySegment {
         val sel = ObjCRuntime.sel("description")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun descriptionAsString(): String = ObjCRuntime.toJavaString(description())
+    open fun descriptionAsString(): String = ObjCRuntime.toJavaString(description())
     
     // @property XMLString
-    fun XMLString(): MemorySegment {
+    open fun XMLString(): MemorySegment {
         val sel = ObjCRuntime.sel("XMLString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun XMLStringAsString(): String = ObjCRuntime.toJavaString(XMLString())
+    open fun XMLStringAsString(): String = ObjCRuntime.toJavaString(XMLString())
     
     
     // ── Instance variables (direct field access not supported via Panama) ──

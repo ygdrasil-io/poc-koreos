@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextTab
  * Superclass: NSObject
@@ -7,7 +13,7 @@ open class NSTextTab(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextTab") }
         
-        fun columnTerminatorsForLocale(aLocale: MemorySegment): MemorySegment {
+        open fun columnTerminatorsForLocale(aLocale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("columnTerminatorsForLocale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, aLocale) as MemorySegment
         }
@@ -15,14 +21,14 @@ open class NSTextTab(val ptr: MemorySegment) {
     }
     
     // @property location
-    fun location(): CGFloat {
+    open fun location(): CGFloat {
         val sel = ObjCRuntime.sel("location")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property options
     /** @return NSDictionary<NSTextTabOptionKey,id> * */
-    fun options(): MemorySegment {
+    open fun options(): MemorySegment {
         val sel = ObjCRuntime.sel("options")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

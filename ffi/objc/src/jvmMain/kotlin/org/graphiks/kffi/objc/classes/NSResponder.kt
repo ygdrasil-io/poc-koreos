@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSResponder
  * Superclass: NSObject
@@ -9,278 +15,278 @@ open class NSResponder(val ptr: MemorySegment) {
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun tryToPerform_with(action: MemorySegment, `object`: MemorySegment): BOOL {
+    open fun tryToPerform_with(action: MemorySegment, `object`: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("tryToPerform:with:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, action, `object`) as BOOL
     }
     
-    fun performKeyEquivalent(event: MemorySegment): BOOL {
+    open fun performKeyEquivalent(event: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("performKeyEquivalent:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
     }
     
-    fun validRequestorForSendType_returnType(sendType: NSPasteboardType, returnType: NSPasteboardType): MemorySegment {
+    open fun validRequestorForSendType_returnType(sendType: NSPasteboardType, returnType: NSPasteboardType): MemorySegment {
         val sel = ObjCRuntime.sel("validRequestorForSendType:returnType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sendType, returnType) as MemorySegment
     }
     
-    fun mouseDown(event: MemorySegment): Unit {
+    open fun mouseDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun rightMouseDown(event: MemorySegment): Unit {
+    open fun rightMouseDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("rightMouseDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun otherMouseDown(event: MemorySegment): Unit {
+    open fun otherMouseDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("otherMouseDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseUp(event: MemorySegment): Unit {
+    open fun mouseUp(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseUp:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun rightMouseUp(event: MemorySegment): Unit {
+    open fun rightMouseUp(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("rightMouseUp:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun otherMouseUp(event: MemorySegment): Unit {
+    open fun otherMouseUp(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("otherMouseUp:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseMoved(event: MemorySegment): Unit {
+    open fun mouseMoved(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseMoved:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseDragged(event: MemorySegment): Unit {
+    open fun mouseDragged(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseDragged:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseCancelled(event: MemorySegment): Unit {
+    open fun mouseCancelled(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseCancelled:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun scrollWheel(event: MemorySegment): Unit {
+    open fun scrollWheel(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("scrollWheel:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun rightMouseDragged(event: MemorySegment): Unit {
+    open fun rightMouseDragged(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("rightMouseDragged:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun otherMouseDragged(event: MemorySegment): Unit {
+    open fun otherMouseDragged(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("otherMouseDragged:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseEntered(event: MemorySegment): Unit {
+    open fun mouseEntered(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseEntered:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun mouseExited(event: MemorySegment): Unit {
+    open fun mouseExited(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseExited:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun keyDown(event: MemorySegment): Unit {
+    open fun keyDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("keyDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun keyUp(event: MemorySegment): Unit {
+    open fun keyUp(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("keyUp:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun flagsChanged(event: MemorySegment): Unit {
+    open fun flagsChanged(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("flagsChanged:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun tabletPoint(event: MemorySegment): Unit {
+    open fun tabletPoint(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("tabletPoint:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun tabletProximity(event: MemorySegment): Unit {
+    open fun tabletProximity(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("tabletProximity:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun cursorUpdate(event: MemorySegment): Unit {
+    open fun cursorUpdate(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("cursorUpdate:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun magnifyWithEvent(event: MemorySegment): Unit {
+    open fun magnifyWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("magnifyWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun rotateWithEvent(event: MemorySegment): Unit {
+    open fun rotateWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("rotateWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun swipeWithEvent(event: MemorySegment): Unit {
+    open fun swipeWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("swipeWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun beginGestureWithEvent(event: MemorySegment): Unit {
+    open fun beginGestureWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginGestureWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun endGestureWithEvent(event: MemorySegment): Unit {
+    open fun endGestureWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("endGestureWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun smartMagnifyWithEvent(event: MemorySegment): Unit {
+    open fun smartMagnifyWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("smartMagnifyWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun changeModeWithEvent(event: MemorySegment): Unit {
+    open fun changeModeWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("changeModeWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun touchesBeganWithEvent(event: MemorySegment): Unit {
+    open fun touchesBeganWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("touchesBeganWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun touchesMovedWithEvent(event: MemorySegment): Unit {
+    open fun touchesMovedWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("touchesMovedWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun touchesEndedWithEvent(event: MemorySegment): Unit {
+    open fun touchesEndedWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("touchesEndedWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun touchesCancelledWithEvent(event: MemorySegment): Unit {
+    open fun touchesCancelledWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("touchesCancelledWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun quickLookWithEvent(event: MemorySegment): Unit {
+    open fun quickLookWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("quickLookWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun pressureChangeWithEvent(event: MemorySegment): Unit {
+    open fun pressureChangeWithEvent(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("pressureChangeWithEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun contextMenuKeyDown(event: MemorySegment): Unit {
+    open fun contextMenuKeyDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("contextMenuKeyDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun noResponderFor(eventSelector: MemorySegment): Unit {
+    open fun noResponderFor(eventSelector: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("noResponderFor:")
         ObjCRuntime.msgSend(null, ptr, sel, eventSelector)
     }
     
-    fun becomeFirstResponder(): BOOL {
+    open fun becomeFirstResponder(): BOOL {
         val sel = ObjCRuntime.sel("becomeFirstResponder")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
-    fun resignFirstResponder(): BOOL {
+    open fun resignFirstResponder(): BOOL {
         val sel = ObjCRuntime.sel("resignFirstResponder")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
-    fun interpretKeyEvents(eventArray: MemorySegment): Unit {
+    open fun interpretKeyEvents(eventArray: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("interpretKeyEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, eventArray)
     }
     
-    fun flushBufferedKeyEvents(): Unit {
+    open fun flushBufferedKeyEvents(): Unit {
         val sel = ObjCRuntime.sel("flushBufferedKeyEvents")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun showContextHelp(sender: MemorySegment): Unit {
+    open fun showContextHelp(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("showContextHelp:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun helpRequested(eventPtr: MemorySegment): Unit {
+    open fun helpRequested(eventPtr: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("helpRequested:")
         ObjCRuntime.msgSend(null, ptr, sel, eventPtr)
     }
     
-    fun shouldBeTreatedAsInkEvent(event: MemorySegment): BOOL {
+    open fun shouldBeTreatedAsInkEvent(event: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("shouldBeTreatedAsInkEvent:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
     }
     
-    fun wantsScrollEventsForSwipeTrackingOnAxis(axis: NSEventGestureAxis): BOOL {
+    open fun wantsScrollEventsForSwipeTrackingOnAxis(axis: NSEventGestureAxis): BOOL {
         val sel = ObjCRuntime.sel("wantsScrollEventsForSwipeTrackingOnAxis:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, axis) as BOOL
     }
     
-    fun wantsForwardedScrollEventsForAxis(axis: NSEventGestureAxis): BOOL {
+    open fun wantsForwardedScrollEventsForAxis(axis: NSEventGestureAxis): BOOL {
         val sel = ObjCRuntime.sel("wantsForwardedScrollEventsForAxis:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, axis) as BOOL
     }
     
-    fun supplementalTargetForAction_sender(action: MemorySegment, sender: MemorySegment): MemorySegment {
+    open fun supplementalTargetForAction_sender(action: MemorySegment, sender: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("supplementalTargetForAction:sender:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, action, sender) as MemorySegment
     }
     
     // @property nextResponder
-    fun nextResponder(): MemorySegment {
+    open fun nextResponder(): MemorySegment {
         val sel = ObjCRuntime.sel("nextResponder")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNextResponder(value: MemorySegment) {
+    open fun setNextResponder(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNextResponder:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property acceptsFirstResponder
-    fun acceptsFirstResponder(): BOOL {
+    open fun acceptsFirstResponder(): BOOL {
         val sel = ObjCRuntime.sel("acceptsFirstResponder")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property menu
-    fun menu(): MemorySegment {
+    open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenu(value: MemorySegment) {
+    open fun setMenu(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenu:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -442,14 +448,14 @@ fun NSResponder.invalidateRestorableState(): Unit {
     ObjCRuntime.msgSend(null, ptr, sel)
 }
 
-// Class method: +[NSResponder allowedClassesForRestorableStateKeyPath:]
+// Class<*> method: +[NSResponder allowedClassesForRestorableStateKeyPath:]
 fun NSResponder_allowedClassesForRestorableStateKeyPath(keyPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("allowedClassesForRestorableStateKeyPath:")
     val cls = ObjCRuntime.getClass("NSResponder")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, keyPath) as MemorySegment
 }
 
-// Class method: +[NSResponder restorableStateKeyPaths]
+// Class<*> method: +[NSResponder restorableStateKeyPaths]
 fun NSResponder_restorableStateKeyPaths(): MemorySegment {
     val sel = ObjCRuntime.sel("restorableStateKeyPaths")
     val cls = ObjCRuntime.getClass("NSResponder")

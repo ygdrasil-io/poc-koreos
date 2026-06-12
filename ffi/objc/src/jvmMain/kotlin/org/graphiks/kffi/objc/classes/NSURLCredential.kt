@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSURLCredential
  * Superclass: NSObject
@@ -10,7 +16,7 @@ open class NSURLCredential(val ptr: MemorySegment) {
     }
     
     // @property persistence
-    fun persistence(): NSURLCredentialPersistence {
+    open fun persistence(): NSURLCredentialPersistence {
         val sel = ObjCRuntime.sel("persistence")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLCredentialPersistence
     }
@@ -42,7 +48,7 @@ fun NSURLCredential.hasPassword(): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
-// Class method: +[NSURLCredential credentialWithUser:password:persistence:]
+// Class<*> method: +[NSURLCredential credentialWithUser:password:persistence:]
 fun NSURLCredential_credentialWithUser_password_persistence(user: MemorySegment, password: MemorySegment, persistence: NSURLCredentialPersistence): MemorySegment {
     val sel = ObjCRuntime.sel("credentialWithUser:password:persistence:")
     val cls = ObjCRuntime.getClass("NSURLCredential")
@@ -84,7 +90,7 @@ fun NSURLCredential.certificates(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSURLCredential credentialWithIdentity:certificates:persistence:]
+// Class<*> method: +[NSURLCredential credentialWithIdentity:certificates:persistence:]
 fun NSURLCredential_credentialWithIdentity_certificates_persistence(identity: MemorySegment, certArray: MemorySegment, persistence: NSURLCredentialPersistence): MemorySegment {
     val sel = ObjCRuntime.sel("credentialWithIdentity:certificates:persistence:")
     val cls = ObjCRuntime.getClass("NSURLCredential")
@@ -110,7 +116,7 @@ fun NSURLCredential.initWithTrust(trust: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, trust) as MemorySegment
 }
 
-// Class method: +[NSURLCredential credentialForTrust:]
+// Class<*> method: +[NSURLCredential credentialForTrust:]
 fun NSURLCredential_credentialForTrust(trust: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("credentialForTrust:")
     val cls = ObjCRuntime.getClass("NSURLCredential")

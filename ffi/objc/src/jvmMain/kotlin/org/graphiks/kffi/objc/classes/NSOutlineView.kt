@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOutlineView
  * Superclass: NSTableView
@@ -119,39 +125,39 @@ open class NSOutlineView(ptr: MemorySegment) : NSTableView(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, fromIndex, oldParent, toIndex, newParent)
     }
     
-    fun insertRowsAtIndexes_withAnimation(indexes: MemorySegment, animationOptions: NSTableViewAnimationOptions): Unit {
+    override fun `insertRowsAtIndexes_withAnimation`(indexes: MemorySegment, animationOptions: NSTableViewAnimationOptions): Unit {
         val sel = ObjCRuntime.sel("insertRowsAtIndexes:withAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, indexes, animationOptions)
     }
     
-    fun removeRowsAtIndexes_withAnimation(indexes: MemorySegment, animationOptions: NSTableViewAnimationOptions): Unit {
+    override fun `removeRowsAtIndexes_withAnimation`(indexes: MemorySegment, animationOptions: NSTableViewAnimationOptions): Unit {
         val sel = ObjCRuntime.sel("removeRowsAtIndexes:withAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, indexes, animationOptions)
     }
     
-    fun moveRowAtIndex_toIndex(oldIndex: NSInteger, newIndex: NSInteger): Unit {
+    override fun `moveRowAtIndex_toIndex`(oldIndex: NSInteger, newIndex: NSInteger): Unit {
         val sel = ObjCRuntime.sel("moveRowAtIndex:toIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, oldIndex, newIndex)
     }
     
     // @property delegate
     /** @return id<NSOutlineViewDelegate> */
-    fun delegate(): MemorySegment {
+    override fun `delegate`(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    override fun `setDelegate`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property dataSource
     /** @return id<NSOutlineViewDataSource> */
-    fun dataSource(): MemorySegment {
+    override fun `dataSource`(): MemorySegment {
         val sel = ObjCRuntime.sel("dataSource")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDataSource(value: MemorySegment) {
+    override fun `setDataSource`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDataSource:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -207,11 +213,11 @@ open class NSOutlineView(ptr: MemorySegment) : NSTableView(ptr) {
     }
     
     // @property userInterfaceLayoutDirection
-    fun userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection {
+    override fun `userInterfaceLayoutDirection`(): NSUserInterfaceLayoutDirection {
         val sel = ObjCRuntime.sel("userInterfaceLayoutDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceLayoutDirection
     }
-    fun setUserInterfaceLayoutDirection(value: NSUserInterfaceLayoutDirection) {
+    override fun `setUserInterfaceLayoutDirection`(value: NSUserInterfaceLayoutDirection) {
         val sel = ObjCRuntime.sel("setUserInterfaceLayoutDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

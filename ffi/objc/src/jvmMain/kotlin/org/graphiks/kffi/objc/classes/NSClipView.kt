@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSClipView
  * Superclass: NSView
@@ -18,7 +24,7 @@ open class NSClipView(ptr: MemorySegment) : NSView(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, notification)
     }
     
-    fun autoscroll(event: MemorySegment): BOOL {
+    override fun `autoscroll`(event: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("autoscroll:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
     }

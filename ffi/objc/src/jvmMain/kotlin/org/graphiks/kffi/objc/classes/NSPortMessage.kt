@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPortMessage
  * Superclass: NSObject
@@ -8,40 +14,40 @@ open class NSPortMessage(val ptr: MemorySegment) {
         
     }
     
-    fun initWithSendPort_receivePort_components(sendPort: MemorySegment, replyPort: MemorySegment, components: MemorySegment): MemorySegment {
+    open fun initWithSendPort_receivePort_components(sendPort: MemorySegment, replyPort: MemorySegment, components: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithSendPort:receivePort:components:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sendPort, replyPort, components) as MemorySegment
     }
     
-    fun sendBeforeDate(date: MemorySegment): BOOL {
+    open fun sendBeforeDate(date: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("sendBeforeDate:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, date) as BOOL
     }
     
     // @property components
-    fun components(): MemorySegment {
+    open fun components(): MemorySegment {
         val sel = ObjCRuntime.sel("components")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property receivePort
-    fun receivePort(): MemorySegment {
+    open fun receivePort(): MemorySegment {
         val sel = ObjCRuntime.sel("receivePort")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sendPort
-    fun sendPort(): MemorySegment {
+    open fun sendPort(): MemorySegment {
         val sel = ObjCRuntime.sel("sendPort")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property msgid
-    fun msgid(): uint32_t {
+    open fun msgid(): uint32_t {
         val sel = ObjCRuntime.sel("msgid")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as uint32_t
     }
-    fun setMsgid(value: uint32_t) {
+    open fun setMsgid(value: uint32_t) {
         val sel = ObjCRuntime.sel("setMsgid:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

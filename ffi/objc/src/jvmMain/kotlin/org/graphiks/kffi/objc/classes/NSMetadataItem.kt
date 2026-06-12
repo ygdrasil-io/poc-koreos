@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataItem
  * Superclass: NSObject
@@ -8,28 +14,28 @@ open class NSMetadataItem(val ptr: MemorySegment) {
         
     }
     
-    fun initWithURL(url: MemorySegment): MemorySegment {
+    open fun initWithURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun valueForAttribute(key: MemorySegment): MemorySegment {
+    open fun valueForAttribute(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("valueForAttribute:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun valueForAttribute(key: String): MemorySegment = valueForAttribute(ObjCRuntime.newNSString(Arena.global(), key))
+    open fun valueForAttribute(key: String): MemorySegment = valueForAttribute(ObjCRuntime.newNSString(Arena.global(), key))
     
     /** @return NSDictionary<NSString *,id> * */
-    fun valuesForAttributes(keys: MemorySegment): MemorySegment {
+    open fun valuesForAttributes(keys: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("valuesForAttributes:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keys) as MemorySegment
     }
     
     // @property attributes
     /** @return NSArray<NSString *> * */
-    fun attributes(): MemorySegment {
+    open fun attributes(): MemorySegment {
         val sel = ObjCRuntime.sel("attributes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

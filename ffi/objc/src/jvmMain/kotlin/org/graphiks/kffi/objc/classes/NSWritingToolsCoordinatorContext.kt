@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSWritingToolsCoordinatorContext
  * Superclass: NSObject
@@ -8,36 +14,36 @@ open class NSWritingToolsCoordinatorContext(val ptr: MemorySegment) {
         
     }
     
-    fun initWithAttributedString_range(attributedString: MemorySegment, range: NSRange): MemorySegment {
+    open fun initWithAttributedString_range(attributedString: MemorySegment, range: NSRange): MemorySegment {
         val sel = ObjCRuntime.sel("initWithAttributedString:range:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attributedString, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"))) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property attributedString
-    fun attributedString(): MemorySegment {
+    open fun attributedString(): MemorySegment {
         val sel = ObjCRuntime.sel("attributedString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property range
-    fun range(): NSRange {
+    open fun range(): NSRange {
         val sel = ObjCRuntime.sel("range")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
     }
     
     // @property identifier
-    fun identifier(): MemorySegment {
+    open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property resolvedRange
-    fun resolvedRange(): NSRange {
+    open fun resolvedRange(): NSRange {
         val sel = ObjCRuntime.sel("resolvedRange")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
     }

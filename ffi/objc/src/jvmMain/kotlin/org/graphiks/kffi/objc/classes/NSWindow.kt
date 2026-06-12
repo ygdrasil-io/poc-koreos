@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSWindow
  * Superclass: NSResponder
@@ -93,7 +99,7 @@ open class NSWindow(ptr: MemorySegment) : NSResponder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(contentRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), style, backingStoreType, flag, screen) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -211,12 +217,12 @@ open class NSWindow(ptr: MemorySegment) : NSResponder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun tryToPerform_with(action: MemorySegment, `object`: MemorySegment): BOOL {
+    override fun `tryToPerform_with`(action: MemorySegment, `object`: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("tryToPerform:with:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, action, `object`) as BOOL
     }
     
-    fun validRequestorForSendType_returnType(sendType: NSPasteboardType, returnType: NSPasteboardType): MemorySegment {
+    override fun `validRequestorForSendType_returnType`(sendType: NSPasteboardType, returnType: NSPasteboardType): MemorySegment {
         val sel = ObjCRuntime.sel("validRequestorForSendType:returnType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sendType, returnType) as MemorySegment
     }
@@ -1739,7 +1745,7 @@ fun NSWindow.windowRef(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSWindow menuChanged:]
+// Class<*> method: +[NSWindow menuChanged:]
 fun NSWindow_menuChanged(menu: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("menuChanged:")
     val cls = ObjCRuntime.getClass("NSWindow")

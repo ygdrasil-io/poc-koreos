@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSURLRequest
  * Superclass: NSObject
@@ -7,125 +13,125 @@ open class NSURLRequest(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLRequest") }
         
-        fun requestWithURL(URL: MemorySegment): MemorySegment {
+        open fun requestWithURL(URL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("requestWithURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URL) as MemorySegment
         }
         
-        fun requestWithURL_cachePolicy_timeoutInterval(URL: MemorySegment, cachePolicy: NSURLRequestCachePolicy, timeoutInterval: NSTimeInterval): MemorySegment {
+        open fun requestWithURL_cachePolicy_timeoutInterval(URL: MemorySegment, cachePolicy: NSURLRequestCachePolicy, timeoutInterval: NSTimeInterval): MemorySegment {
             val sel = ObjCRuntime.sel("requestWithURL:cachePolicy:timeoutInterval:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URL, cachePolicy, timeoutInterval) as MemorySegment
         }
         
-        fun supportsSecureCoding(): BOOL {
+        open fun supportsSecureCoding(): BOOL {
             val sel = ObjCRuntime.sel("supportsSecureCoding")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
         }
         
     }
     
-    fun initWithURL(URL: MemorySegment): MemorySegment {
+    open fun initWithURL(URL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, URL) as MemorySegment
     }
     
-    fun initWithURL_cachePolicy_timeoutInterval(URL: MemorySegment, cachePolicy: NSURLRequestCachePolicy, timeoutInterval: NSTimeInterval): MemorySegment {
+    open fun initWithURL_cachePolicy_timeoutInterval(URL: MemorySegment, cachePolicy: NSURLRequestCachePolicy, timeoutInterval: NSTimeInterval): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:cachePolicy:timeoutInterval:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, URL, cachePolicy, timeoutInterval) as MemorySegment
     }
     
     // @property supportsSecureCoding
-    fun supportsSecureCoding(): BOOL {
+    open fun supportsSecureCoding(): BOOL {
         val sel = ObjCRuntime.sel("supportsSecureCoding")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property URL
-    fun URL(): MemorySegment {
+    open fun URL(): MemorySegment {
         val sel = ObjCRuntime.sel("URL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property cachePolicy
-    fun cachePolicy(): NSURLRequestCachePolicy {
+    open fun cachePolicy(): NSURLRequestCachePolicy {
         val sel = ObjCRuntime.sel("cachePolicy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestCachePolicy
     }
     
     // @property timeoutInterval
-    fun timeoutInterval(): NSTimeInterval {
+    open fun timeoutInterval(): NSTimeInterval {
         val sel = ObjCRuntime.sel("timeoutInterval")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
     // @property mainDocumentURL
-    fun mainDocumentURL(): MemorySegment {
+    open fun mainDocumentURL(): MemorySegment {
         val sel = ObjCRuntime.sel("mainDocumentURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property networkServiceType
-    fun networkServiceType(): NSURLRequestNetworkServiceType {
+    open fun networkServiceType(): NSURLRequestNetworkServiceType {
         val sel = ObjCRuntime.sel("networkServiceType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestNetworkServiceType
     }
     
     // @property allowsCellularAccess
-    fun allowsCellularAccess(): BOOL {
+    open fun allowsCellularAccess(): BOOL {
         val sel = ObjCRuntime.sel("allowsCellularAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property allowsExpensiveNetworkAccess
-    fun allowsExpensiveNetworkAccess(): BOOL {
+    open fun allowsExpensiveNetworkAccess(): BOOL {
         val sel = ObjCRuntime.sel("allowsExpensiveNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property allowsConstrainedNetworkAccess
-    fun allowsConstrainedNetworkAccess(): BOOL {
+    open fun allowsConstrainedNetworkAccess(): BOOL {
         val sel = ObjCRuntime.sel("allowsConstrainedNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property allowsUltraConstrainedNetworkAccess
-    fun allowsUltraConstrainedNetworkAccess(): BOOL {
+    open fun allowsUltraConstrainedNetworkAccess(): BOOL {
         val sel = ObjCRuntime.sel("allowsUltraConstrainedNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property assumesHTTP3Capable
-    fun assumesHTTP3Capable(): BOOL {
+    open fun assumesHTTP3Capable(): BOOL {
         val sel = ObjCRuntime.sel("assumesHTTP3Capable")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property attribution
-    fun attribution(): NSURLRequestAttribution {
+    open fun attribution(): NSURLRequestAttribution {
         val sel = ObjCRuntime.sel("attribution")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestAttribution
     }
     
     // @property requiresDNSSECValidation
-    fun requiresDNSSECValidation(): BOOL {
+    open fun requiresDNSSECValidation(): BOOL {
         val sel = ObjCRuntime.sel("requiresDNSSECValidation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property allowsPersistentDNS
-    fun allowsPersistentDNS(): BOOL {
+    open fun allowsPersistentDNS(): BOOL {
         val sel = ObjCRuntime.sel("allowsPersistentDNS")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property cookiePartitionIdentifier
-    fun cookiePartitionIdentifier(): MemorySegment {
+    open fun cookiePartitionIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("cookiePartitionIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun cookiePartitionIdentifierAsString(): String = ObjCRuntime.toJavaString(cookiePartitionIdentifier())
+    open fun cookiePartitionIdentifierAsString(): String = ObjCRuntime.toJavaString(cookiePartitionIdentifier())
     
     
     // ── Instance variables (direct field access not supported via Panama) ──

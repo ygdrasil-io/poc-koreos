@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableArray
  * Superclass: NSArray
@@ -33,7 +39,7 @@ open class NSMutableArray(ptr: MemorySegment) : NSArray(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, index, anObject)
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -43,7 +49,7 @@ open class NSMutableArray(ptr: MemorySegment) : NSArray(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, numItems) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -171,21 +177,21 @@ fun NSMutableArray.initWithContentsOfURL(url: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
 }
 
-// Class method: +[NSMutableArray arrayWithCapacity:]
+// Class<*> method: +[NSMutableArray arrayWithCapacity:]
 fun NSMutableArray_arrayWithCapacity(numItems: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, numItems) as MemorySegment
 }
 
-// Class method: +[NSMutableArray arrayWithContentsOfFile:]
+// Class<*> method: +[NSMutableArray arrayWithContentsOfFile:]
 fun NSMutableArray_arrayWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSMutableArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSMutableArray arrayWithContentsOfURL:]
+// Class<*> method: +[NSMutableArray arrayWithContentsOfURL:]
 fun NSMutableArray_arrayWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("arrayWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSMutableArray")

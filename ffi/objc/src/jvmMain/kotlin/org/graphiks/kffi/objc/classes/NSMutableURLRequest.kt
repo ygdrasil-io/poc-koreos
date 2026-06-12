@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableURLRequest
  * Superclass: NSURLRequest
@@ -9,7 +15,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property URL
-    fun URL(): MemorySegment {
+    override fun `URL`(): MemorySegment {
         val sel = ObjCRuntime.sel("URL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -19,7 +25,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property cachePolicy
-    fun cachePolicy(): NSURLRequestCachePolicy {
+    override fun `cachePolicy`(): NSURLRequestCachePolicy {
         val sel = ObjCRuntime.sel("cachePolicy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestCachePolicy
     }
@@ -29,7 +35,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property timeoutInterval
-    fun timeoutInterval(): NSTimeInterval {
+    override fun `timeoutInterval`(): NSTimeInterval {
         val sel = ObjCRuntime.sel("timeoutInterval")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
@@ -39,7 +45,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property mainDocumentURL
-    fun mainDocumentURL(): MemorySegment {
+    override fun `mainDocumentURL`(): MemorySegment {
         val sel = ObjCRuntime.sel("mainDocumentURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -49,7 +55,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property networkServiceType
-    fun networkServiceType(): NSURLRequestNetworkServiceType {
+    override fun `networkServiceType`(): NSURLRequestNetworkServiceType {
         val sel = ObjCRuntime.sel("networkServiceType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestNetworkServiceType
     }
@@ -59,7 +65,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property allowsCellularAccess
-    fun allowsCellularAccess(): BOOL {
+    override fun `allowsCellularAccess`(): BOOL {
         val sel = ObjCRuntime.sel("allowsCellularAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -69,7 +75,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property allowsExpensiveNetworkAccess
-    fun allowsExpensiveNetworkAccess(): BOOL {
+    override fun `allowsExpensiveNetworkAccess`(): BOOL {
         val sel = ObjCRuntime.sel("allowsExpensiveNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -79,7 +85,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property allowsConstrainedNetworkAccess
-    fun allowsConstrainedNetworkAccess(): BOOL {
+    override fun `allowsConstrainedNetworkAccess`(): BOOL {
         val sel = ObjCRuntime.sel("allowsConstrainedNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -89,7 +95,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property allowsUltraConstrainedNetworkAccess
-    fun allowsUltraConstrainedNetworkAccess(): BOOL {
+    override fun `allowsUltraConstrainedNetworkAccess`(): BOOL {
         val sel = ObjCRuntime.sel("allowsUltraConstrainedNetworkAccess")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -99,7 +105,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property assumesHTTP3Capable
-    fun assumesHTTP3Capable(): BOOL {
+    override fun `assumesHTTP3Capable`(): BOOL {
         val sel = ObjCRuntime.sel("assumesHTTP3Capable")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -109,7 +115,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property attribution
-    fun attribution(): NSURLRequestAttribution {
+    override fun `attribution`(): NSURLRequestAttribution {
         val sel = ObjCRuntime.sel("attribution")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestAttribution
     }
@@ -119,7 +125,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property requiresDNSSECValidation
-    fun requiresDNSSECValidation(): BOOL {
+    override fun `requiresDNSSECValidation`(): BOOL {
         val sel = ObjCRuntime.sel("requiresDNSSECValidation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -129,7 +135,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property allowsPersistentDNS
-    fun allowsPersistentDNS(): BOOL {
+    override fun `allowsPersistentDNS`(): BOOL {
         val sel = ObjCRuntime.sel("allowsPersistentDNS")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -139,7 +145,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     // @property cookiePartitionIdentifier
-    fun cookiePartitionIdentifier(): MemorySegment {
+    override fun `cookiePartitionIdentifier`(): MemorySegment {
         val sel = ObjCRuntime.sel("cookiePartitionIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -149,7 +155,7 @@ open class NSMutableURLRequest(ptr: MemorySegment) : NSURLRequest(ptr) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun cookiePartitionIdentifierAsString(): String = ObjCRuntime.toJavaString(cookiePartitionIdentifier())
+    override fun `cookiePartitionIdentifierAsString`(): String = ObjCRuntime.toJavaString(cookiePartitionIdentifier())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
     fun setCookiePartitionIdentifier(value: String) = setCookiePartitionIdentifier(ObjCRuntime.newNSString(Arena.global(), value))

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSEnergyFormatter
  * Superclass: NSFormatter
@@ -40,7 +46,7 @@ open class NSEnergyFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun unitStringFromJoules_usedUnitAsString(numberInJoules: Double, unitp: MemorySegment): String = ObjCRuntime.toJavaString(unitStringFromJoules_usedUnit(numberInJoules, unitp))
     
-    fun getObjectValue_forString_errorDescription(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
+    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getObjectValue:forString:errorDescription:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as BOOL
     }

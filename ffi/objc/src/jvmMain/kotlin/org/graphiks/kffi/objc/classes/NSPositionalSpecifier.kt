@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPositionalSpecifier
  * Superclass: NSObject
@@ -8,56 +14,56 @@ open class NSPositionalSpecifier(val ptr: MemorySegment) {
         
     }
     
-    fun initWithPosition_objectSpecifier(position: NSInsertionPosition, specifier: MemorySegment): MemorySegment {
+    open fun initWithPosition_objectSpecifier(position: NSInsertionPosition, specifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithPosition:objectSpecifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, position, specifier) as MemorySegment
     }
     
-    fun setInsertionClassDescription(classDescription: MemorySegment): Unit {
+    open fun setInsertionClassDescription(classDescription: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setInsertionClassDescription:")
         ObjCRuntime.msgSend(null, ptr, sel, classDescription)
     }
     
-    fun evaluate(): Unit {
+    open fun evaluate(): Unit {
         val sel = ObjCRuntime.sel("evaluate")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property position
-    fun position(): NSInsertionPosition {
+    open fun position(): NSInsertionPosition {
         val sel = ObjCRuntime.sel("position")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSInsertionPosition
     }
     
     // @property objectSpecifier
-    fun objectSpecifier(): MemorySegment {
+    open fun objectSpecifier(): MemorySegment {
         val sel = ObjCRuntime.sel("objectSpecifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property insertionContainer
-    fun insertionContainer(): MemorySegment {
+    open fun insertionContainer(): MemorySegment {
         val sel = ObjCRuntime.sel("insertionContainer")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property insertionKey
-    fun insertionKey(): MemorySegment {
+    open fun insertionKey(): MemorySegment {
         val sel = ObjCRuntime.sel("insertionKey")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun insertionKeyAsString(): String = ObjCRuntime.toJavaString(insertionKey())
+    open fun insertionKeyAsString(): String = ObjCRuntime.toJavaString(insertionKey())
     
     // @property insertionIndex
-    fun insertionIndex(): NSInteger {
+    open fun insertionIndex(): NSInteger {
         val sel = ObjCRuntime.sel("insertionIndex")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
     
     // @property insertionReplaces
-    fun insertionReplaces(): BOOL {
+    open fun insertionReplaces(): BOOL {
         val sel = ObjCRuntime.sel("insertionReplaces")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

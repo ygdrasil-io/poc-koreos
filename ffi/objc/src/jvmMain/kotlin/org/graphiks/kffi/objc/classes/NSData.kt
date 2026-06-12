@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSData
  * Superclass: NSObject
@@ -10,13 +16,13 @@ open class NSData(val ptr: MemorySegment) {
     }
     
     // @property length
-    fun length(): NSUInteger {
+    open fun length(): NSUInteger {
         val sel = ObjCRuntime.sel("length")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property bytes
-    fun bytes(): MemorySegment {
+    open fun bytes(): MemorySegment {
         val sel = ObjCRuntime.sel("bytes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -133,63 +139,63 @@ fun NSData.initWithData(`data`: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`) as MemorySegment
 }
 
-// Class method: +[NSData data]
-fun NSData_`data`(): MemorySegment {
+// Class<*> method: +[NSData data]
+fun NSData_data(): MemorySegment {
     val sel = ObjCRuntime.sel("data")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSData dataWithBytes:length:]
+// Class<*> method: +[NSData dataWithBytes:length:]
 fun NSData_dataWithBytes_length(bytes: MemorySegment, length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithBytes:length:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, bytes, length) as MemorySegment
 }
 
-// Class method: +[NSData dataWithBytesNoCopy:length:]
+// Class<*> method: +[NSData dataWithBytesNoCopy:length:]
 fun NSData_dataWithBytesNoCopy_length(bytes: MemorySegment, length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithBytesNoCopy:length:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, bytes, length) as MemorySegment
 }
 
-// Class method: +[NSData dataWithBytesNoCopy:length:freeWhenDone:]
+// Class<*> method: +[NSData dataWithBytesNoCopy:length:freeWhenDone:]
 fun NSData_dataWithBytesNoCopy_length_freeWhenDone(bytes: MemorySegment, length: NSUInteger, b: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithBytesNoCopy:length:freeWhenDone:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, bytes, length, b) as MemorySegment
 }
 
-// Class method: +[NSData dataWithContentsOfFile:options:error:]
+// Class<*> method: +[NSData dataWithContentsOfFile:options:error:]
 fun NSData_dataWithContentsOfFile_options_error(path: MemorySegment, readOptionsMask: NSDataReadingOptions, errorPtr: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithContentsOfFile:options:error:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path, readOptionsMask, errorPtr) as MemorySegment
 }
 
-// Class method: +[NSData dataWithContentsOfURL:options:error:]
+// Class<*> method: +[NSData dataWithContentsOfURL:options:error:]
 fun NSData_dataWithContentsOfURL_options_error(url: MemorySegment, readOptionsMask: NSDataReadingOptions, errorPtr: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithContentsOfURL:options:error:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, readOptionsMask, errorPtr) as MemorySegment
 }
 
-// Class method: +[NSData dataWithContentsOfFile:]
+// Class<*> method: +[NSData dataWithContentsOfFile:]
 fun NSData_dataWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSData dataWithContentsOfURL:]
+// Class<*> method: +[NSData dataWithContentsOfURL:]
 fun NSData_dataWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url) as MemorySegment
 }
 
-// Class method: +[NSData dataWithData:]
+// Class<*> method: +[NSData dataWithData:]
 fun NSData_dataWithData(`data`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithData:")
     val cls = ObjCRuntime.getClass("NSData")
@@ -252,7 +258,7 @@ fun NSData.base64Encoding(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSData dataWithContentsOfMappedFile:]
+// Class<*> method: +[NSData dataWithContentsOfMappedFile:]
 fun NSData_dataWithContentsOfMappedFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithContentsOfMappedFile:")
     val cls = ObjCRuntime.getClass("NSData")

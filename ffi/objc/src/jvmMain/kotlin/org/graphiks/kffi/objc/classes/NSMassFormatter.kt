@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMassFormatter
  * Superclass: NSFormatter
@@ -40,7 +46,7 @@ open class NSMassFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun unitStringFromKilograms_usedUnitAsString(numberInKilograms: Double, unitp: MemorySegment): String = ObjCRuntime.toJavaString(unitStringFromKilograms_usedUnit(numberInKilograms, unitp))
     
-    fun getObjectValue_forString_errorDescription(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
+    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getObjectValue:forString:errorDescription:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as BOOL
     }

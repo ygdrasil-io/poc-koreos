@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionLayoutBoundarySupplementaryItem
  * Superclass: NSCollectionLayoutSupplementaryItem
@@ -23,14 +29,14 @@ open class NSCollectionLayoutBoundarySupplementaryItem(ptr: MemorySegment) : NSC
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun boundarySupplementaryItemWithLayoutSize_elementKind_alignment_absoluteOffset(layoutSize: MemorySegment, elementKind: String, alignment: NSRectAlignment, absoluteOffset: NSPoint): MemorySegment = boundarySupplementaryItemWithLayoutSize_elementKind_alignment_absoluteOffset(layoutSize, ObjCRuntime.newNSString(Arena.global(), elementKind), alignment, absoluteOffset)
         
-        fun new(): MemorySegment {
+        override fun `new`(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

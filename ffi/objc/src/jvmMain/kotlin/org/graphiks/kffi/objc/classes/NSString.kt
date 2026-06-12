@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSString
  * Superclass: NSObject
@@ -9,23 +15,23 @@ open class NSString(val ptr: MemorySegment) {
         
     }
     
-    fun characterAtIndex(index: NSUInteger): unichar {
+    open fun characterAtIndex(index: NSUInteger): unichar {
         val sel = ObjCRuntime.sel("characterAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_SHORT, ptr, sel, index) as unichar
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property length
-    fun length(): NSUInteger {
+    open fun length(): NSUInteger {
         val sel = ObjCRuntime.sel("length")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -546,112 +552,112 @@ fun NSString.hash(): NSUInteger {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
 
-// Class method: +[NSString localizedNameOfStringEncoding:]
+// Class<*> method: +[NSString localizedNameOfStringEncoding:]
 fun NSString_localizedNameOfStringEncoding(encoding: NSStringEncoding): MemorySegment {
     val sel = ObjCRuntime.sel("localizedNameOfStringEncoding:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, encoding) as MemorySegment
 }
 
-// Class method: +[NSString string]
+// Class<*> method: +[NSString string]
 fun NSString_string(): MemorySegment {
     val sel = ObjCRuntime.sel("string")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSString stringWithString:]
+// Class<*> method: +[NSString stringWithString:]
 fun NSString_stringWithString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithString:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSString stringWithCharacters:length:]
+// Class<*> method: +[NSString stringWithCharacters:length:]
 fun NSString_stringWithCharacters_length(characters: MemorySegment, length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithCharacters:length:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, characters, length) as MemorySegment
 }
 
-// Class method: +[NSString stringWithUTF8String:]
+// Class<*> method: +[NSString stringWithUTF8String:]
 fun NSString_stringWithUTF8String(nullTerminatedCString: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithUTF8String:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, nullTerminatedCString) as MemorySegment
 }
 
-// Class method: +[NSString stringWithFormat:]
+// Class<*> method: +[NSString stringWithFormat:]
 fun NSString_stringWithFormat(format: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithFormat:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format) as MemorySegment
 }
 
-// Class method: +[NSString localizedStringWithFormat:]
+// Class<*> method: +[NSString localizedStringWithFormat:]
 fun NSString_localizedStringWithFormat(format: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedStringWithFormat:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format) as MemorySegment
 }
 
-// Class method: +[NSString stringWithValidatedFormat:validFormatSpecifiers:error:]
+// Class<*> method: +[NSString stringWithValidatedFormat:validFormatSpecifiers:error:]
 fun NSString_stringWithValidatedFormat_validFormatSpecifiers_error(format: MemorySegment, validFormatSpecifiers: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithValidatedFormat:validFormatSpecifiers:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format, validFormatSpecifiers, error) as MemorySegment
 }
 
-// Class method: +[NSString localizedStringWithValidatedFormat:validFormatSpecifiers:error:]
+// Class<*> method: +[NSString localizedStringWithValidatedFormat:validFormatSpecifiers:error:]
 fun NSString_localizedStringWithValidatedFormat_validFormatSpecifiers_error(format: MemorySegment, validFormatSpecifiers: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedStringWithValidatedFormat:validFormatSpecifiers:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format, validFormatSpecifiers, error) as MemorySegment
 }
 
-// Class method: +[NSString stringWithCString:encoding:]
+// Class<*> method: +[NSString stringWithCString:encoding:]
 fun NSString_stringWithCString_encoding(cString: MemorySegment, enc: NSStringEncoding): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithCString:encoding:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, cString, enc) as MemorySegment
 }
 
-// Class method: +[NSString stringWithContentsOfURL:encoding:error:]
+// Class<*> method: +[NSString stringWithContentsOfURL:encoding:error:]
 fun NSString_stringWithContentsOfURL_encoding_error(url: MemorySegment, enc: NSStringEncoding, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfURL:encoding:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, enc, error) as MemorySegment
 }
 
-// Class method: +[NSString stringWithContentsOfFile:encoding:error:]
+// Class<*> method: +[NSString stringWithContentsOfFile:encoding:error:]
 fun NSString_stringWithContentsOfFile_encoding_error(path: MemorySegment, enc: NSStringEncoding, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfFile:encoding:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path, enc, error) as MemorySegment
 }
 
-// Class method: +[NSString stringWithContentsOfURL:usedEncoding:error:]
+// Class<*> method: +[NSString stringWithContentsOfURL:usedEncoding:error:]
 fun NSString_stringWithContentsOfURL_usedEncoding_error(url: MemorySegment, enc: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfURL:usedEncoding:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, enc, error) as MemorySegment
 }
 
-// Class method: +[NSString stringWithContentsOfFile:usedEncoding:error:]
+// Class<*> method: +[NSString stringWithContentsOfFile:usedEncoding:error:]
 fun NSString_stringWithContentsOfFile_usedEncoding_error(path: MemorySegment, enc: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfFile:usedEncoding:error:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path, enc, error) as MemorySegment
 }
 
-// Class method: +[NSString availableStringEncodings]
+// Class<*> method: +[NSString availableStringEncodings]
 fun NSString_availableStringEncodings(): MemorySegment {
     val sel = ObjCRuntime.sel("availableStringEncodings")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSString defaultCStringEncoding]
+// Class<*> method: +[NSString defaultCStringEncoding]
 fun NSString_defaultCStringEncoding(): NSStringEncoding {
     val sel = ObjCRuntime.sel("defaultCStringEncoding")
     val cls = ObjCRuntime.getClass("NSString")
@@ -798,7 +804,7 @@ fun NSString.hash(): NSUInteger {
 
 // ── Category: NSStringEncodingDetection on NSString ─────────────────────────────────────────
 
-// Class method: +[NSString stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:]
+// Class<*> method: +[NSString stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:]
 fun NSString_stringEncodingForData_encodingOptions_convertedString_usedLossyConversion(`data`: MemorySegment, opts: MemorySegment, string: MemorySegment, usedLossyConversion: MemorySegment): NSStringEncoding {
     val sel = ObjCRuntime.sel("stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:")
     val cls = ObjCRuntime.getClass("NSString")
@@ -891,28 +897,28 @@ fun NSString.getCharacters(buffer: MemorySegment): Unit {
     ObjCRuntime.msgSend(null, ptr, sel, buffer)
 }
 
-// Class method: +[NSString stringWithContentsOfFile:]
+// Class<*> method: +[NSString stringWithContentsOfFile:]
 fun NSString_stringWithContentsOfFile(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfFile:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSString stringWithContentsOfURL:]
+// Class<*> method: +[NSString stringWithContentsOfURL:]
 fun NSString_stringWithContentsOfURL(url: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithContentsOfURL:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url) as MemorySegment
 }
 
-// Class method: +[NSString stringWithCString:length:]
+// Class<*> method: +[NSString stringWithCString:length:]
 fun NSString_stringWithCString_length(bytes: MemorySegment, length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithCString:length:")
     val cls = ObjCRuntime.getClass("NSString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, bytes, length) as MemorySegment
 }
 
-// Class method: +[NSString stringWithCString:]
+// Class<*> method: +[NSString stringWithCString:]
 fun NSString_stringWithCString(bytes: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithCString:")
     val cls = ObjCRuntime.getClass("NSString")
@@ -1010,7 +1016,7 @@ fun NSString.fileSystemRepresentation(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSString pathWithComponents:]
+// Class<*> method: +[NSString pathWithComponents:]
 fun NSString_pathWithComponents(components: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("pathWithComponents:")
     val cls = ObjCRuntime.getClass("NSString")

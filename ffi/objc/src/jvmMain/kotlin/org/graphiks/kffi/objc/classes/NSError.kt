@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSError
  * Superclass: NSObject
@@ -7,99 +13,99 @@ open class NSError(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSError") }
         
-        fun errorWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
+        open fun errorWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("errorWithDomain:code:userInfo:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, domain, code, dict) as MemorySegment
         }
         
-        fun setUserInfoValueProviderForDomain_provider(errorDomain: NSErrorDomain, provider: MemorySegment): Unit {
+        open fun setUserInfoValueProviderForDomain_provider(errorDomain: NSErrorDomain, provider: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setUserInfoValueProviderForDomain:provider:")
             ObjCRuntime.msgSend(null, _class, sel, errorDomain, provider)
         }
         
-        fun userInfoValueProviderForDomain(errorDomain: NSErrorDomain): MemorySegment {
+        open fun userInfoValueProviderForDomain(errorDomain: NSErrorDomain): MemorySegment {
             val sel = ObjCRuntime.sel("userInfoValueProviderForDomain:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, errorDomain) as MemorySegment
         }
         
     }
     
-    fun initWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
+    open fun initWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDomain:code:userInfo:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, domain, code, dict) as MemorySegment
     }
     
     // @property domain
-    fun domain(): NSErrorDomain {
+    open fun domain(): NSErrorDomain {
         val sel = ObjCRuntime.sel("domain")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSErrorDomain
     }
     
     // @property code
-    fun code(): NSInteger {
+    open fun code(): NSInteger {
         val sel = ObjCRuntime.sel("code")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
     
     // @property userInfo
     /** @return NSDictionary<NSErrorUserInfoKey,id> * */
-    fun userInfo(): MemorySegment {
+    open fun userInfo(): MemorySegment {
         val sel = ObjCRuntime.sel("userInfo")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property localizedDescription
-    fun localizedDescription(): MemorySegment {
+    open fun localizedDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedDescriptionAsString(): String = ObjCRuntime.toJavaString(localizedDescription())
+    open fun localizedDescriptionAsString(): String = ObjCRuntime.toJavaString(localizedDescription())
     
     // @property localizedFailureReason
-    fun localizedFailureReason(): MemorySegment {
+    open fun localizedFailureReason(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedFailureReason")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedFailureReasonAsString(): String = ObjCRuntime.toJavaString(localizedFailureReason())
+    open fun localizedFailureReasonAsString(): String = ObjCRuntime.toJavaString(localizedFailureReason())
     
     // @property localizedRecoverySuggestion
-    fun localizedRecoverySuggestion(): MemorySegment {
+    open fun localizedRecoverySuggestion(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedRecoverySuggestion")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedRecoverySuggestionAsString(): String = ObjCRuntime.toJavaString(localizedRecoverySuggestion())
+    open fun localizedRecoverySuggestionAsString(): String = ObjCRuntime.toJavaString(localizedRecoverySuggestion())
     
     // @property localizedRecoveryOptions
     /** @return NSArray<NSString *> * */
-    fun localizedRecoveryOptions(): MemorySegment {
+    open fun localizedRecoveryOptions(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedRecoveryOptions")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property recoveryAttempter
-    fun recoveryAttempter(): MemorySegment {
+    open fun recoveryAttempter(): MemorySegment {
         val sel = ObjCRuntime.sel("recoveryAttempter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property helpAnchor
-    fun helpAnchor(): MemorySegment {
+    open fun helpAnchor(): MemorySegment {
         val sel = ObjCRuntime.sel("helpAnchor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun helpAnchorAsString(): String = ObjCRuntime.toJavaString(helpAnchor())
+    open fun helpAnchorAsString(): String = ObjCRuntime.toJavaString(helpAnchor())
     
     // @property underlyingErrors
     /** @return NSArray<NSError *> * */
-    fun underlyingErrors(): MemorySegment {
+    open fun underlyingErrors(): MemorySegment {
         val sel = ObjCRuntime.sel("underlyingErrors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

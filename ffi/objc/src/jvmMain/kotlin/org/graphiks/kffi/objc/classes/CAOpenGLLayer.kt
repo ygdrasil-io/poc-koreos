@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: CAOpenGLLayer
  * Superclass: CALayer
@@ -59,11 +65,11 @@ open class CAOpenGLLayer(ptr: MemorySegment) : CALayer(ptr) {
     }
     
     // @property wantsExtendedDynamicRangeContent
-    fun wantsExtendedDynamicRangeContent(): BOOL {
+    override fun `wantsExtendedDynamicRangeContent`(): BOOL {
         val sel = ObjCRuntime.sel("wantsExtendedDynamicRangeContent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWantsExtendedDynamicRangeContent(value: BOOL) {
+    override fun `setWantsExtendedDynamicRangeContent`(value: BOOL) {
         val sel = ObjCRuntime.sel("setWantsExtendedDynamicRangeContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

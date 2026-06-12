@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSBrowserCell
  * Superclass: NSCell
@@ -18,7 +24,7 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
         
     }
     
-    fun initTextCell(string: MemorySegment): MemorySegment {
+    override fun `initTextCell`(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initTextCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
@@ -26,12 +32,12 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun initImageCell(image: MemorySegment): MemorySegment {
+    override fun `initImageCell`(image: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initImageCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, image) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -84,11 +90,11 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
     }
     
     // @property image
-    fun image(): MemorySegment {
+    override fun `image`(): MemorySegment {
         val sel = ObjCRuntime.sel("image")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImage(value: MemorySegment) {
+    override fun `setImage`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

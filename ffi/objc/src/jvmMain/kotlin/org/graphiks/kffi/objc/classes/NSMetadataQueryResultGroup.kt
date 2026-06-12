@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataQueryResultGroup
  * Superclass: NSObject
@@ -8,41 +14,41 @@ open class NSMetadataQueryResultGroup(val ptr: MemorySegment) {
         
     }
     
-    fun resultAtIndex(idx: NSUInteger): MemorySegment {
+    open fun resultAtIndex(idx: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("resultAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, idx) as MemorySegment
     }
     
     // @property attribute
-    fun attribute(): MemorySegment {
+    open fun attribute(): MemorySegment {
         val sel = ObjCRuntime.sel("attribute")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun attributeAsString(): String = ObjCRuntime.toJavaString(attribute())
+    open fun attributeAsString(): String = ObjCRuntime.toJavaString(attribute())
     
     // @property value
-    fun value(): MemorySegment {
+    open fun value(): MemorySegment {
         val sel = ObjCRuntime.sel("value")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property subgroups
     /** @return NSArray<NSMetadataQueryResultGroup *> * */
-    fun subgroups(): MemorySegment {
+    open fun subgroups(): MemorySegment {
         val sel = ObjCRuntime.sel("subgroups")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property resultCount
-    fun resultCount(): NSUInteger {
+    open fun resultCount(): NSUInteger {
         val sel = ObjCRuntime.sel("resultCount")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property results
-    fun results(): MemorySegment {
+    open fun results(): MemorySegment {
         val sel = ObjCRuntime.sel("results")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionLayoutDecorationItem
  * Superclass: NSCollectionLayoutItem
@@ -15,14 +21,14 @@ open class NSCollectionLayoutDecorationItem(ptr: MemorySegment) : NSCollectionLa
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun backgroundDecorationItemWithElementKind(elementKind: String): MemorySegment = backgroundDecorationItemWithElementKind(ObjCRuntime.newNSString(Arena.global(), elementKind))
         
-        fun new(): MemorySegment {
+        override fun `new`(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

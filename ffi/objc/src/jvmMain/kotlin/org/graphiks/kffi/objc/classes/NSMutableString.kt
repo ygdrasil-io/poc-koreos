@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableString
  * Superclass: NSString
@@ -60,7 +66,7 @@ fun NSMutableString.initWithCapacity(capacity: NSUInteger): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, capacity) as MemorySegment
 }
 
-// Class method: +[NSMutableString stringWithCapacity:]
+// Class<*> method: +[NSMutableString stringWithCapacity:]
 fun NSMutableString_stringWithCapacity(capacity: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("stringWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableString")

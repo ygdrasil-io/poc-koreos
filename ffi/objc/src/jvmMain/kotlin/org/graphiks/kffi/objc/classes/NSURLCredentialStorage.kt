@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSURLCredentialStorage
  * Superclass: NSObject
@@ -6,7 +12,7 @@ open class NSURLCredentialStorage(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLCredentialStorage") }
         
-        fun sharedCredentialStorage(): MemorySegment {
+        open fun sharedCredentialStorage(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedCredentialStorage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -14,45 +20,45 @@ open class NSURLCredentialStorage(val ptr: MemorySegment) {
     }
     
     /** @return NSDictionary<NSString *,NSURLCredential *> * */
-    fun credentialsForProtectionSpace(space: MemorySegment): MemorySegment {
+    open fun credentialsForProtectionSpace(space: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("credentialsForProtectionSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, space) as MemorySegment
     }
     
-    fun setCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
+    open fun setCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setCredential:forProtectionSpace:")
         ObjCRuntime.msgSend(null, ptr, sel, credential, space)
     }
     
-    fun removeCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
+    open fun removeCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeCredential:forProtectionSpace:")
         ObjCRuntime.msgSend(null, ptr, sel, credential, space)
     }
     
-    fun removeCredential_forProtectionSpace_options(credential: MemorySegment, space: MemorySegment, options: MemorySegment): Unit {
+    open fun removeCredential_forProtectionSpace_options(credential: MemorySegment, space: MemorySegment, options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeCredential:forProtectionSpace:options:")
         ObjCRuntime.msgSend(null, ptr, sel, credential, space, options)
     }
     
-    fun defaultCredentialForProtectionSpace(space: MemorySegment): MemorySegment {
+    open fun defaultCredentialForProtectionSpace(space: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("defaultCredentialForProtectionSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, space) as MemorySegment
     }
     
-    fun setDefaultCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
+    open fun setDefaultCredential_forProtectionSpace(credential: MemorySegment, space: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDefaultCredential:forProtectionSpace:")
         ObjCRuntime.msgSend(null, ptr, sel, credential, space)
     }
     
     // @property sharedCredentialStorage
-    fun sharedCredentialStorage(): MemorySegment {
+    open fun sharedCredentialStorage(): MemorySegment {
         val sel = ObjCRuntime.sel("sharedCredentialStorage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allCredentials
     /** @return NSDictionary<NSURLProtectionSpace *,NSDictionary<NSString *,NSURLCredential *> *> * */
-    fun allCredentials(): MemorySegment {
+    open fun allCredentials(): MemorySegment {
         val sel = ObjCRuntime.sel("allCredentials")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

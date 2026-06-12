@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTreeController
  * Superclass: NSObjectController
@@ -13,12 +19,12 @@ open class NSTreeController(ptr: MemorySegment) : NSObjectController(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun add(sender: MemorySegment): Unit {
+    override fun `add`(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("add:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun remove(sender: MemorySegment): Unit {
+    override fun `remove`(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("remove:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
@@ -178,11 +184,11 @@ open class NSTreeController(ptr: MemorySegment) : NSObjectController(ptr) {
     }
     
     // @property content
-    fun content(): MemorySegment {
+    override fun `content`(): MemorySegment {
         val sel = ObjCRuntime.sel("content")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setContent(value: MemorySegment) {
+    override fun `setContent`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -246,7 +252,7 @@ open class NSTreeController(ptr: MemorySegment) : NSObjectController(ptr) {
     }
     
     // @property selectedObjects
-    fun selectedObjects(): MemorySegment {
+    override fun `selectedObjects`(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedObjects")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

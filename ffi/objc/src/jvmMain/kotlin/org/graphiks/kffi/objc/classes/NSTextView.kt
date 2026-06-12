@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextView
  * Superclass: NSText
@@ -24,12 +30,12 @@ open class NSTextView(ptr: MemorySegment) : NSText(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), container) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun initWithFrame(frameRect: NSRect): MemorySegment {
+    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -441,7 +447,7 @@ fun NSTextView.readablePasteboardTypes(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSTextView registerForServices]
+// Class<*> method: +[NSTextView registerForServices]
 fun NSTextView_registerForServices(): Unit {
     val sel = ObjCRuntime.sel("registerForServices")
     val cls = ObjCRuntime.getClass("NSTextView")
@@ -1751,28 +1757,28 @@ fun NSTextView.candidateListTouchBarItem(): MemorySegment {
 
 // ── Category: NSTextView_Factory on NSTextView ─────────────────────────────────────────
 
-// Class method: +[NSTextView scrollableTextView]
+// Class<*> method: +[NSTextView scrollableTextView]
 fun NSTextView_scrollableTextView(): MemorySegment {
     val sel = ObjCRuntime.sel("scrollableTextView")
     val cls = ObjCRuntime.getClass("NSTextView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSTextView fieldEditor]
+// Class<*> method: +[NSTextView fieldEditor]
 fun NSTextView_fieldEditor(): MemorySegment {
     val sel = ObjCRuntime.sel("fieldEditor")
     val cls = ObjCRuntime.getClass("NSTextView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSTextView scrollableDocumentContentTextView]
+// Class<*> method: +[NSTextView scrollableDocumentContentTextView]
 fun NSTextView_scrollableDocumentContentTextView(): MemorySegment {
     val sel = ObjCRuntime.sel("scrollableDocumentContentTextView")
     val cls = ObjCRuntime.getClass("NSTextView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSTextView scrollablePlainDocumentContentTextView]
+// Class<*> method: +[NSTextView scrollablePlainDocumentContentTextView]
 fun NSTextView_scrollablePlainDocumentContentTextView(): MemorySegment {
     val sel = ObjCRuntime.sel("scrollablePlainDocumentContentTextView")
     val cls = ObjCRuntime.getClass("NSTextView")

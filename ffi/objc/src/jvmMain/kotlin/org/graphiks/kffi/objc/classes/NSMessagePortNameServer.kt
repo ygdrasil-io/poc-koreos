@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMessagePortNameServer
  * Superclass: NSPortNameServer
@@ -13,7 +19,7 @@ open class NSMessagePortNameServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
         
     }
     
-    fun portForName(name: MemorySegment): MemorySegment {
+    override fun `portForName`(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
@@ -21,7 +27,7 @@ open class NSMessagePortNameServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun portForName(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
     
-    fun portForName_host(name: MemorySegment, host: MemorySegment): MemorySegment {
+    override fun `portForName_host`(name: MemorySegment, host: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:host:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, host) as MemorySegment
     }

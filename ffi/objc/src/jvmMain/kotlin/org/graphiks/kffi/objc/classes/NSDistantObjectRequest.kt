@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDistantObjectRequest
  * Superclass: NSObject
@@ -8,25 +14,25 @@ open class NSDistantObjectRequest(val ptr: MemorySegment) {
         
     }
     
-    fun replyWithException(exception: MemorySegment): Unit {
+    open fun replyWithException(exception: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("replyWithException:")
         ObjCRuntime.msgSend(null, ptr, sel, exception)
     }
     
     // @property invocation
-    fun invocation(): MemorySegment {
+    open fun invocation(): MemorySegment {
         val sel = ObjCRuntime.sel("invocation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property connection
-    fun connection(): MemorySegment {
+    open fun connection(): MemorySegment {
         val sel = ObjCRuntime.sel("connection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property conversation
-    fun conversation(): MemorySegment {
+    open fun conversation(): MemorySegment {
         val sel = ObjCRuntime.sel("conversation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

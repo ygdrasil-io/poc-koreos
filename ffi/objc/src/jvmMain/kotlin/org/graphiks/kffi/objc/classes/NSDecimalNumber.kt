@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDecimalNumber
  * Superclass: NSNumber
@@ -96,13 +102,13 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithString_locale(numberValue: String, locale: MemorySegment): MemorySegment = initWithString_locale(ObjCRuntime.newNSString(Arena.global(), numberValue), locale)
     
-    fun descriptionWithLocale(locale: MemorySegment): MemorySegment {
+    override fun `descriptionWithLocale`(locale: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("descriptionWithLocale:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, locale) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun descriptionWithLocaleAsString(locale: MemorySegment): String = ObjCRuntime.toJavaString(descriptionWithLocale(locale))
+    override fun `descriptionWithLocaleAsString`(locale: MemorySegment): String = ObjCRuntime.toJavaString(descriptionWithLocale(locale))
     
     fun decimalNumberByAdding(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByAdding:")
@@ -169,13 +175,13 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, behavior) as MemorySegment
     }
     
-    fun compare(decimalNumber: MemorySegment): NSComparisonResult {
+    override fun `compare`(decimalNumber: MemorySegment): NSComparisonResult {
         val sel = ObjCRuntime.sel("compare:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as NSComparisonResult
     }
     
     // @property decimalValue
-    fun decimalValue(): NSDecimal {
+    override fun `decimalValue`(): NSDecimal {
         val sel = ObjCRuntime.sel("decimalValue")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"), ptr, sel) as NSDecimal
     }
@@ -228,7 +234,7 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     }
     
     // @property doubleValue
-    fun doubleValue(): Double {
+    override fun `doubleValue`(): Double {
         val sel = ObjCRuntime.sel("doubleValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }

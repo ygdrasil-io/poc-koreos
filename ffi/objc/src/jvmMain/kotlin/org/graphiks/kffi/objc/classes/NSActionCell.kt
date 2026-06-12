@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSActionCell
  * Superclass: NSCell
@@ -9,31 +15,31 @@ open class NSActionCell(ptr: MemorySegment) : NSCell(ptr) {
     }
     
     // @property target
-    fun target(): MemorySegment {
+    override fun `target`(): MemorySegment {
         val sel = ObjCRuntime.sel("target")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTarget(value: MemorySegment) {
+    override fun `setTarget`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTarget:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property action
-    fun action(): MemorySegment {
+    override fun `action`(): MemorySegment {
         val sel = ObjCRuntime.sel("action")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAction(value: MemorySegment) {
+    override fun `setAction`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tag
-    fun tag(): NSInteger {
+    override fun `tag`(): NSInteger {
         val sel = ObjCRuntime.sel("tag")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
-    fun setTag(value: NSInteger) {
+    override fun `setTag`(value: NSInteger) {
         val sel = ObjCRuntime.sel("setTag:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

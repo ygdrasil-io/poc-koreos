@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSToolbarItem
  * Superclass: NSObject
@@ -9,281 +15,281 @@ open class NSToolbarItem(val ptr: MemorySegment) {
         
     }
     
-    fun initWithItemIdentifier(itemIdentifier: NSToolbarItemIdentifier): MemorySegment {
+    open fun initWithItemIdentifier(itemIdentifier: NSToolbarItemIdentifier): MemorySegment {
         val sel = ObjCRuntime.sel("initWithItemIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, itemIdentifier) as MemorySegment
     }
     
-    fun validate(): Unit {
+    open fun validate(): Unit {
         val sel = ObjCRuntime.sel("validate")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property itemIdentifier
-    fun itemIdentifier(): NSToolbarItemIdentifier {
+    open fun itemIdentifier(): NSToolbarItemIdentifier {
         val sel = ObjCRuntime.sel("itemIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarItemIdentifier
     }
     
     // @property toolbar
-    fun toolbar(): MemorySegment {
+    open fun toolbar(): MemorySegment {
         val sel = ObjCRuntime.sel("toolbar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property label
-    fun label(): MemorySegment {
+    open fun label(): MemorySegment {
         val sel = ObjCRuntime.sel("label")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLabel(value: MemorySegment) {
+    open fun setLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun labelAsString(): String = ObjCRuntime.toJavaString(label())
+    open fun labelAsString(): String = ObjCRuntime.toJavaString(label())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setLabel(value: String) = setLabel(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setLabel(value: String) = setLabel(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property paletteLabel
-    fun paletteLabel(): MemorySegment {
+    open fun paletteLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("paletteLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPaletteLabel(value: MemorySegment) {
+    open fun setPaletteLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPaletteLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun paletteLabelAsString(): String = ObjCRuntime.toJavaString(paletteLabel())
+    open fun paletteLabelAsString(): String = ObjCRuntime.toJavaString(paletteLabel())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPaletteLabel(value: String) = setPaletteLabel(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPaletteLabel(value: String) = setPaletteLabel(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property possibleLabels
     /** @return NSSet<NSString *> * */
-    fun possibleLabels(): MemorySegment {
+    open fun possibleLabels(): MemorySegment {
         val sel = ObjCRuntime.sel("possibleLabels")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPossibleLabels(value: MemorySegment) {
+    open fun setPossibleLabels(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPossibleLabels:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property toolTip
-    fun toolTip(): MemorySegment {
+    open fun toolTip(): MemorySegment {
         val sel = ObjCRuntime.sel("toolTip")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setToolTip(value: MemorySegment) {
+    open fun setToolTip(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setToolTip:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun toolTipAsString(): String = ObjCRuntime.toJavaString(toolTip())
+    open fun toolTipAsString(): String = ObjCRuntime.toJavaString(toolTip())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setToolTip(value: String) = setToolTip(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setToolTip(value: String) = setToolTip(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property menuFormRepresentation
-    fun menuFormRepresentation(): MemorySegment {
+    open fun menuFormRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("menuFormRepresentation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenuFormRepresentation(value: MemorySegment) {
+    open fun setMenuFormRepresentation(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenuFormRepresentation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tag
-    fun tag(): NSInteger {
+    open fun tag(): NSInteger {
         val sel = ObjCRuntime.sel("tag")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
-    fun setTag(value: NSInteger) {
+    open fun setTag(value: NSInteger) {
         val sel = ObjCRuntime.sel("setTag:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property target
-    fun target(): MemorySegment {
+    open fun target(): MemorySegment {
         val sel = ObjCRuntime.sel("target")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTarget(value: MemorySegment) {
+    open fun setTarget(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTarget:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property action
-    fun action(): MemorySegment {
+    open fun action(): MemorySegment {
         val sel = ObjCRuntime.sel("action")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAction(value: MemorySegment) {
+    open fun setAction(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property enabled
-    fun isEnabled(): BOOL {
+    open fun isEnabled(): BOOL {
         val sel = ObjCRuntime.sel("isEnabled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: BOOL) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property image
-    fun image(): MemorySegment {
+    open fun image(): MemorySegment {
         val sel = ObjCRuntime.sel("image")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImage(value: MemorySegment) {
+    open fun setImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property title
-    fun title(): MemorySegment {
+    open fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    open fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
+    open fun titleAsString(): String = ObjCRuntime.toJavaString(title())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property bordered
-    fun isBordered(): BOOL {
+    open fun isBordered(): BOOL {
         val sel = ObjCRuntime.sel("isBordered")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setBordered(value: BOOL) {
+    open fun setBordered(value: BOOL) {
         val sel = ObjCRuntime.sel("setBordered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property backgroundTintColor
-    fun backgroundTintColor(): MemorySegment {
+    open fun backgroundTintColor(): MemorySegment {
         val sel = ObjCRuntime.sel("backgroundTintColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBackgroundTintColor(value: MemorySegment) {
+    open fun setBackgroundTintColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBackgroundTintColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property style
-    fun style(): NSToolbarItemStyle {
+    open fun style(): NSToolbarItemStyle {
         val sel = ObjCRuntime.sel("style")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarItemStyle
     }
-    fun setStyle(value: NSToolbarItemStyle) {
+    open fun setStyle(value: NSToolbarItemStyle) {
         val sel = ObjCRuntime.sel("setStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property navigational
-    fun isNavigational(): BOOL {
+    open fun isNavigational(): BOOL {
         val sel = ObjCRuntime.sel("isNavigational")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setNavigational(value: BOOL) {
+    open fun setNavigational(value: BOOL) {
         val sel = ObjCRuntime.sel("setNavigational:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property view
-    fun view(): MemorySegment {
+    open fun view(): MemorySegment {
         val sel = ObjCRuntime.sel("view")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setView(value: MemorySegment) {
+    open fun setView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property visible
-    fun isVisible(): BOOL {
+    open fun isVisible(): BOOL {
         val sel = ObjCRuntime.sel("isVisible")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property hidden
-    fun isHidden(): BOOL {
+    open fun isHidden(): BOOL {
         val sel = ObjCRuntime.sel("isHidden")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setHidden(value: BOOL) {
+    open fun setHidden(value: BOOL) {
         val sel = ObjCRuntime.sel("setHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minSize
-    fun minSize(): NSSize {
+    open fun minSize(): NSSize {
         val sel = ObjCRuntime.sel("minSize")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }
-    fun setMinSize(value: NSSize) {
+    open fun setMinSize(value: NSSize) {
         val sel = ObjCRuntime.sel("setMinSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property maxSize
-    fun maxSize(): NSSize {
+    open fun maxSize(): NSSize {
         val sel = ObjCRuntime.sel("maxSize")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }
-    fun setMaxSize(value: NSSize) {
+    open fun setMaxSize(value: NSSize) {
         val sel = ObjCRuntime.sel("setMaxSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property visibilityPriority
-    fun visibilityPriority(): NSToolbarItemVisibilityPriority {
+    open fun visibilityPriority(): NSToolbarItemVisibilityPriority {
         val sel = ObjCRuntime.sel("visibilityPriority")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSToolbarItemVisibilityPriority
     }
-    fun setVisibilityPriority(value: NSToolbarItemVisibilityPriority) {
+    open fun setVisibilityPriority(value: NSToolbarItemVisibilityPriority) {
         val sel = ObjCRuntime.sel("setVisibilityPriority:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property badge
-    fun badge(): MemorySegment {
+    open fun badge(): MemorySegment {
         val sel = ObjCRuntime.sel("badge")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBadge(value: MemorySegment) {
+    open fun setBadge(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBadge:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autovalidates
-    fun autovalidates(): BOOL {
+    open fun autovalidates(): BOOL {
         val sel = ObjCRuntime.sel("autovalidates")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAutovalidates(value: BOOL) {
+    open fun setAutovalidates(value: BOOL) {
         val sel = ObjCRuntime.sel("setAutovalidates:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsDuplicatesInToolbar
-    fun allowsDuplicatesInToolbar(): BOOL {
+    open fun allowsDuplicatesInToolbar(): BOOL {
         val sel = ObjCRuntime.sel("allowsDuplicatesInToolbar")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

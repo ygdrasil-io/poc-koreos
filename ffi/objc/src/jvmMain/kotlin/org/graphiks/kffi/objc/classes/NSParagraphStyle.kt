@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSParagraphStyle
  * Superclass: NSObject
@@ -7,15 +13,15 @@ open class NSParagraphStyle(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSParagraphStyle") }
         
-        fun defaultWritingDirectionForLanguage(languageName: MemorySegment): NSWritingDirection {
+        open fun defaultWritingDirectionForLanguage(languageName: MemorySegment): NSWritingDirection {
             val sel = ObjCRuntime.sel("defaultWritingDirectionForLanguage:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, languageName) as NSWritingDirection
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun defaultWritingDirectionForLanguage(languageName: String): NSWritingDirection = defaultWritingDirectionForLanguage(ObjCRuntime.newNSString(Arena.global(), languageName))
+        open fun defaultWritingDirectionForLanguage(languageName: String): NSWritingDirection = defaultWritingDirectionForLanguage(ObjCRuntime.newNSString(Arena.global(), languageName))
         
-        fun defaultParagraphStyle(): MemorySegment {
+        open fun defaultParagraphStyle(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultParagraphStyle")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -23,117 +29,117 @@ open class NSParagraphStyle(val ptr: MemorySegment) {
     }
     
     // @property defaultParagraphStyle
-    fun defaultParagraphStyle(): MemorySegment {
+    open fun defaultParagraphStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("defaultParagraphStyle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property lineSpacing
-    fun lineSpacing(): CGFloat {
+    open fun lineSpacing(): CGFloat {
         val sel = ObjCRuntime.sel("lineSpacing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property paragraphSpacing
-    fun paragraphSpacing(): CGFloat {
+    open fun paragraphSpacing(): CGFloat {
         val sel = ObjCRuntime.sel("paragraphSpacing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property headIndent
-    fun headIndent(): CGFloat {
+    open fun headIndent(): CGFloat {
         val sel = ObjCRuntime.sel("headIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property tailIndent
-    fun tailIndent(): CGFloat {
+    open fun tailIndent(): CGFloat {
         val sel = ObjCRuntime.sel("tailIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property firstLineHeadIndent
-    fun firstLineHeadIndent(): CGFloat {
+    open fun firstLineHeadIndent(): CGFloat {
         val sel = ObjCRuntime.sel("firstLineHeadIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property minimumLineHeight
-    fun minimumLineHeight(): CGFloat {
+    open fun minimumLineHeight(): CGFloat {
         val sel = ObjCRuntime.sel("minimumLineHeight")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property maximumLineHeight
-    fun maximumLineHeight(): CGFloat {
+    open fun maximumLineHeight(): CGFloat {
         val sel = ObjCRuntime.sel("maximumLineHeight")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property lineBreakMode
-    fun lineBreakMode(): NSLineBreakMode {
+    open fun lineBreakMode(): NSLineBreakMode {
         val sel = ObjCRuntime.sel("lineBreakMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakMode
     }
     
     // @property baseWritingDirection
-    fun baseWritingDirection(): NSWritingDirection {
+    open fun baseWritingDirection(): NSWritingDirection {
         val sel = ObjCRuntime.sel("baseWritingDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingDirection
     }
     
     // @property lineHeightMultiple
-    fun lineHeightMultiple(): CGFloat {
+    open fun lineHeightMultiple(): CGFloat {
         val sel = ObjCRuntime.sel("lineHeightMultiple")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property paragraphSpacingBefore
-    fun paragraphSpacingBefore(): CGFloat {
+    open fun paragraphSpacingBefore(): CGFloat {
         val sel = ObjCRuntime.sel("paragraphSpacingBefore")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property hyphenationFactor
-    fun hyphenationFactor(): Float {
+    open fun hyphenationFactor(): Float {
         val sel = ObjCRuntime.sel("hyphenationFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
     }
     
     // @property usesDefaultHyphenation
-    fun usesDefaultHyphenation(): BOOL {
+    open fun usesDefaultHyphenation(): BOOL {
         val sel = ObjCRuntime.sel("usesDefaultHyphenation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property tabStops
     /** @return NSArray<NSTextTab *> * */
-    fun tabStops(): MemorySegment {
+    open fun tabStops(): MemorySegment {
         val sel = ObjCRuntime.sel("tabStops")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property defaultTabInterval
-    fun defaultTabInterval(): CGFloat {
+    open fun defaultTabInterval(): CGFloat {
         val sel = ObjCRuntime.sel("defaultTabInterval")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property textLists
     /** @return NSArray<NSTextList *> * */
-    fun textLists(): MemorySegment {
+    open fun textLists(): MemorySegment {
         val sel = ObjCRuntime.sel("textLists")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allowsDefaultTighteningForTruncation
-    fun allowsDefaultTighteningForTruncation(): BOOL {
+    open fun allowsDefaultTighteningForTruncation(): BOOL {
         val sel = ObjCRuntime.sel("allowsDefaultTighteningForTruncation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property lineBreakStrategy
-    fun lineBreakStrategy(): NSLineBreakStrategy {
+    open fun lineBreakStrategy(): NSLineBreakStrategy {
         val sel = ObjCRuntime.sel("lineBreakStrategy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakStrategy
     }

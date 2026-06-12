@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSColorPickerTouchBarItem
  * Superclass: NSTouchBarItem
@@ -70,7 +76,7 @@ open class NSColorPickerTouchBarItem(ptr: MemorySegment) : NSTouchBarItem(ptr) {
     }
     
     // @property customizationLabel
-    fun customizationLabel(): MemorySegment {
+    override fun `customizationLabel`(): MemorySegment {
         val sel = ObjCRuntime.sel("customizationLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -80,7 +86,7 @@ open class NSColorPickerTouchBarItem(ptr: MemorySegment) : NSTouchBarItem(ptr) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun customizationLabelAsString(): String = ObjCRuntime.toJavaString(customizationLabel())
+    override fun `customizationLabelAsString`(): String = ObjCRuntime.toJavaString(customizationLabel())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
     fun setCustomizationLabel(value: String) = setCustomizationLabel(ObjCRuntime.newNSString(Arena.global(), value))

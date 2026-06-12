@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSStringDrawingContext
  * Superclass: NSObject
@@ -9,23 +15,23 @@ open class NSStringDrawingContext(val ptr: MemorySegment) {
     }
     
     // @property minimumScaleFactor
-    fun minimumScaleFactor(): CGFloat {
+    open fun minimumScaleFactor(): CGFloat {
         val sel = ObjCRuntime.sel("minimumScaleFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setMinimumScaleFactor(value: CGFloat) {
+    open fun setMinimumScaleFactor(value: CGFloat) {
         val sel = ObjCRuntime.sel("setMinimumScaleFactor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property actualScaleFactor
-    fun actualScaleFactor(): CGFloat {
+    open fun actualScaleFactor(): CGFloat {
         val sel = ObjCRuntime.sel("actualScaleFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property totalBounds
-    fun totalBounds(): CGRect {
+    open fun totalBounds(): CGRect {
         val sel = ObjCRuntime.sel("totalBounds")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as CGRect
     }

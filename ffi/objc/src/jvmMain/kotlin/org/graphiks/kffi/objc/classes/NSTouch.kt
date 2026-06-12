@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTouch
  * Superclass: NSObject
@@ -11,37 +17,37 @@ open class NSTouch(val ptr: MemorySegment) {
     
     // @property identity
     /** @return id<NSObject,NSCopying> */
-    fun identity(): MemorySegment {
+    open fun identity(): MemorySegment {
         val sel = ObjCRuntime.sel("identity")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property phase
-    fun phase(): NSTouchPhase {
+    open fun phase(): NSTouchPhase {
         val sel = ObjCRuntime.sel("phase")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchPhase
     }
     
     // @property normalizedPosition
-    fun normalizedPosition(): NSPoint {
+    open fun normalizedPosition(): NSPoint {
         val sel = ObjCRuntime.sel("normalizedPosition")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
     }
     
     // @property resting
-    fun isResting(): BOOL {
+    open fun isResting(): BOOL {
         val sel = ObjCRuntime.sel("isResting")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property device
-    fun device(): MemorySegment {
+    open fun device(): MemorySegment {
         val sel = ObjCRuntime.sel("device")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property deviceSize
-    fun deviceSize(): NSSize {
+    open fun deviceSize(): NSSize {
         val sel = ObjCRuntime.sel("deviceSize")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }

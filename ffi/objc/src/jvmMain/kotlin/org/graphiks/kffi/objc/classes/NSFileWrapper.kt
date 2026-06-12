@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSFileWrapper
  * Superclass: NSObject
@@ -9,168 +15,168 @@ open class NSFileWrapper(val ptr: MemorySegment) {
         
     }
     
-    fun initWithURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): MemorySegment {
+    open fun initWithURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:options:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, options, outError) as MemorySegment
     }
     
-    fun initDirectoryWithFileWrappers(childrenByPreferredName: MemorySegment): MemorySegment {
+    open fun initDirectoryWithFileWrappers(childrenByPreferredName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initDirectoryWithFileWrappers:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, childrenByPreferredName) as MemorySegment
     }
     
-    fun initRegularFileWithContents(contents: MemorySegment): MemorySegment {
+    open fun initRegularFileWithContents(contents: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initRegularFileWithContents:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, contents) as MemorySegment
     }
     
-    fun initSymbolicLinkWithDestinationURL(url: MemorySegment): MemorySegment {
+    open fun initSymbolicLinkWithDestinationURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initSymbolicLinkWithDestinationURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun initWithSerializedRepresentation(serializeRepresentation: MemorySegment): MemorySegment {
+    open fun initWithSerializedRepresentation(serializeRepresentation: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithSerializedRepresentation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, serializeRepresentation) as MemorySegment
     }
     
-    fun initWithCoder(inCoder: MemorySegment): MemorySegment {
+    open fun initWithCoder(inCoder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, inCoder) as MemorySegment
     }
     
-    fun matchesContentsOfURL(url: MemorySegment): BOOL {
+    open fun matchesContentsOfURL(url: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("matchesContentsOfURL:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url) as BOOL
     }
     
-    fun readFromURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): BOOL {
+    open fun readFromURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("readFromURL:options:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, outError) as BOOL
     }
     
-    fun writeToURL_options_originalContentsURL_error(url: MemorySegment, options: NSFileWrapperWritingOptions, originalContentsURL: MemorySegment, outError: MemorySegment): BOOL {
+    open fun writeToURL_options_originalContentsURL_error(url: MemorySegment, options: NSFileWrapperWritingOptions, originalContentsURL: MemorySegment, outError: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("writeToURL:options:originalContentsURL:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, originalContentsURL, outError) as BOOL
     }
     
-    fun addFileWrapper(child: MemorySegment): MemorySegment {
+    open fun addFileWrapper(child: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addFileWrapper:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, child) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun addFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(addFileWrapper(child))
+    open fun addFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(addFileWrapper(child))
     
-    fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: MemorySegment): MemorySegment {
+    open fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addRegularFileWithContents:preferredFilename:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, fileName) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: MemorySegment): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, fileName))
+    open fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: MemorySegment): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, fileName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: String): MemorySegment = addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName))
+    open fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: String): MemorySegment = addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: String): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName)))
+    open fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: String): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName)))
     
-    fun removeFileWrapper(child: MemorySegment): Unit {
+    open fun removeFileWrapper(child: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeFileWrapper:")
         ObjCRuntime.msgSend(null, ptr, sel, child)
     }
     
-    fun keyForFileWrapper(child: MemorySegment): MemorySegment {
+    open fun keyForFileWrapper(child: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("keyForFileWrapper:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, child) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun keyForFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(keyForFileWrapper(child))
+    open fun keyForFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(keyForFileWrapper(child))
     
     // @property directory
-    fun isDirectory(): BOOL {
+    open fun isDirectory(): BOOL {
         val sel = ObjCRuntime.sel("isDirectory")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property regularFile
-    fun isRegularFile(): BOOL {
+    open fun isRegularFile(): BOOL {
         val sel = ObjCRuntime.sel("isRegularFile")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property symbolicLink
-    fun isSymbolicLink(): BOOL {
+    open fun isSymbolicLink(): BOOL {
         val sel = ObjCRuntime.sel("isSymbolicLink")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property preferredFilename
-    fun preferredFilename(): MemorySegment {
+    open fun preferredFilename(): MemorySegment {
         val sel = ObjCRuntime.sel("preferredFilename")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPreferredFilename(value: MemorySegment) {
+    open fun setPreferredFilename(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPreferredFilename:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun preferredFilenameAsString(): String = ObjCRuntime.toJavaString(preferredFilename())
+    open fun preferredFilenameAsString(): String = ObjCRuntime.toJavaString(preferredFilename())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPreferredFilename(value: String) = setPreferredFilename(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPreferredFilename(value: String) = setPreferredFilename(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property filename
-    fun filename(): MemorySegment {
+    open fun filename(): MemorySegment {
         val sel = ObjCRuntime.sel("filename")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFilename(value: MemorySegment) {
+    open fun setFilename(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFilename:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun filenameAsString(): String = ObjCRuntime.toJavaString(filename())
+    open fun filenameAsString(): String = ObjCRuntime.toJavaString(filename())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setFilename(value: String) = setFilename(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setFilename(value: String) = setFilename(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property fileAttributes
     /** @return NSDictionary<NSString *,id> * */
-    fun fileAttributes(): MemorySegment {
+    open fun fileAttributes(): MemorySegment {
         val sel = ObjCRuntime.sel("fileAttributes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFileAttributes(value: MemorySegment) {
+    open fun setFileAttributes(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFileAttributes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property serializedRepresentation
-    fun serializedRepresentation(): MemorySegment {
+    open fun serializedRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("serializedRepresentation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property fileWrappers
     /** @return NSDictionary<NSString *,NSFileWrapper *> * */
-    fun fileWrappers(): MemorySegment {
+    open fun fileWrappers(): MemorySegment {
         val sel = ObjCRuntime.sel("fileWrappers")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property regularFileContents
-    fun regularFileContents(): MemorySegment {
+    open fun regularFileContents(): MemorySegment {
         val sel = ObjCRuntime.sel("regularFileContents")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property symbolicLinkDestinationURL
-    fun symbolicLinkDestinationURL(): MemorySegment {
+    open fun symbolicLinkDestinationURL(): MemorySegment {
         val sel = ObjCRuntime.sel("symbolicLinkDestinationURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSBitmapImageRep
  * Superclass: NSImageRep
@@ -228,7 +234,7 @@ fun NSBitmapImageRep.valueForProperty(property: NSBitmapImageRepPropertyKey): Me
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, property) as MemorySegment
 }
 
-// Class method: +[NSBitmapImageRep representationOfImageRepsInArray:usingType:properties:]
+// Class<*> method: +[NSBitmapImageRep representationOfImageRepsInArray:usingType:properties:]
 fun NSBitmapImageRep_representationOfImageRepsInArray_usingType_properties(imageReps: MemorySegment, storageType: NSBitmapImageFileType, properties: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("representationOfImageRepsInArray:usingType:properties:")
     val cls = ObjCRuntime.getClass("NSBitmapImageRep")

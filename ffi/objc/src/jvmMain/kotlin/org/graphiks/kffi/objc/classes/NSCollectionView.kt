@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionView
  * Superclass: NSView
@@ -59,7 +65,7 @@ open class NSCollectionView(ptr: MemorySegment) : NSView(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun registerClass_forItemWithIdentifier(itemClass: Class, identifier: NSUserInterfaceItemIdentifier): Unit {
+    fun registerClass_forItemWithIdentifier(itemClass: Class<*>, identifier: NSUserInterfaceItemIdentifier): Unit {
         val sel = ObjCRuntime.sel("registerClass:forItemWithIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, itemClass, identifier)
     }
@@ -69,7 +75,7 @@ open class NSCollectionView(ptr: MemorySegment) : NSView(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, nib, identifier)
     }
     
-    fun registerClass_forSupplementaryViewOfKind_withIdentifier(viewClass: Class, kind: NSCollectionViewSupplementaryElementKind, identifier: NSUserInterfaceItemIdentifier): Unit {
+    fun registerClass_forSupplementaryViewOfKind_withIdentifier(viewClass: Class<*>, kind: NSCollectionViewSupplementaryElementKind, identifier: NSUserInterfaceItemIdentifier): Unit {
         val sel = ObjCRuntime.sel("registerClass:forSupplementaryViewOfKind:withIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, viewClass, kind, identifier)
     }

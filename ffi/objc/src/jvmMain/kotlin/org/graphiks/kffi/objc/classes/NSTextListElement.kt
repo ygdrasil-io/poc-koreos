@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextListElement
  * Superclass: NSTextParagraph
@@ -23,7 +29,7 @@ open class NSTextListElement(ptr: MemorySegment) : NSTextParagraph(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, parent, textList, contents, markerAttributes, children) as MemorySegment
     }
     
-    fun initWithAttributedString(attributedString: MemorySegment): MemorySegment {
+    override fun `initWithAttributedString`(attributedString: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithAttributedString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attributedString) as MemorySegment
     }
@@ -48,7 +54,7 @@ open class NSTextListElement(ptr: MemorySegment) : NSTextParagraph(ptr) {
     }
     
     // @property attributedString
-    fun attributedString(): MemorySegment {
+    override fun `attributedString`(): MemorySegment {
         val sel = ObjCRuntime.sel("attributedString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

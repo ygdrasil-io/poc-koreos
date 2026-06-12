@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSScroller
  * Superclass: NSControl
@@ -92,11 +98,11 @@ open class NSScroller(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property controlSize
-    fun controlSize(): NSControlSize {
+    override fun `controlSize`(): NSControlSize {
         val sel = ObjCRuntime.sel("controlSize")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlSize
     }
-    fun setControlSize(value: NSControlSize) {
+    override fun `setControlSize`(value: NSControlSize) {
         val sel = ObjCRuntime.sel("setControlSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -166,14 +172,14 @@ fun NSScroller.setControlTint(controlTint: NSControlTint): Unit {
     ObjCRuntime.msgSend(null, ptr, sel, controlTint)
 }
 
-// Class method: +[NSScroller scrollerWidthForControlSize:]
+// Class<*> method: +[NSScroller scrollerWidthForControlSize:]
 fun NSScroller_scrollerWidthForControlSize(controlSize: NSControlSize): CGFloat {
     val sel = ObjCRuntime.sel("scrollerWidthForControlSize:")
     val cls = ObjCRuntime.getClass("NSScroller")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, cls, sel, controlSize) as CGFloat
 }
 
-// Class method: +[NSScroller scrollerWidth]
+// Class<*> method: +[NSScroller scrollerWidth]
 fun NSScroller_scrollerWidth(): CGFloat {
     val sel = ObjCRuntime.sel("scrollerWidth")
     val cls = ObjCRuntime.getClass("NSScroller")

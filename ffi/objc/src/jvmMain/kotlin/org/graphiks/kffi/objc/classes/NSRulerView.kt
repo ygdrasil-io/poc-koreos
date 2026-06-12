@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSRulerView
  * Superclass: NSView
@@ -16,7 +22,7 @@ open class NSRulerView(ptr: MemorySegment) : NSView(ptr) {
         
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -175,7 +181,7 @@ open class NSRulerView(ptr: MemorySegment) : NSView(ptr) {
     }
     
     // @property flipped
-    fun isFlipped(): BOOL {
+    override fun `isFlipped`(): BOOL {
         val sel = ObjCRuntime.sel("isFlipped")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

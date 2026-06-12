@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDockTile
  * Superclass: NSObject
@@ -8,55 +14,55 @@ open class NSDockTile(val ptr: MemorySegment) {
         
     }
     
-    fun display(): Unit {
+    open fun display(): Unit {
         val sel = ObjCRuntime.sel("display")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property size
-    fun size(): NSSize {
+    open fun size(): NSSize {
         val sel = ObjCRuntime.sel("size")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }
     
     // @property contentView
-    fun contentView(): MemorySegment {
+    open fun contentView(): MemorySegment {
         val sel = ObjCRuntime.sel("contentView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setContentView(value: MemorySegment) {
+    open fun setContentView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsApplicationBadge
-    fun showsApplicationBadge(): BOOL {
+    open fun showsApplicationBadge(): BOOL {
         val sel = ObjCRuntime.sel("showsApplicationBadge")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShowsApplicationBadge(value: BOOL) {
+    open fun setShowsApplicationBadge(value: BOOL) {
         val sel = ObjCRuntime.sel("setShowsApplicationBadge:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property badgeLabel
-    fun badgeLabel(): MemorySegment {
+    open fun badgeLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("badgeLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBadgeLabel(value: MemorySegment) {
+    open fun setBadgeLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBadgeLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun badgeLabelAsString(): String = ObjCRuntime.toJavaString(badgeLabel())
+    open fun badgeLabelAsString(): String = ObjCRuntime.toJavaString(badgeLabel())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setBadgeLabel(value: String) = setBadgeLabel(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setBadgeLabel(value: String) = setBadgeLabel(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property owner
-    fun owner(): MemorySegment {
+    open fun owner(): MemorySegment {
         val sel = ObjCRuntime.sel("owner")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

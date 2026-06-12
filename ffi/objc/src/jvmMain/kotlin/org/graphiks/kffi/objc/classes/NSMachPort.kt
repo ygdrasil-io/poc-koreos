@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMachPort
  * Superclass: NSPort
@@ -23,13 +29,13 @@ open class NSMachPort(ptr: MemorySegment) : NSPort(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, machPort) as MemorySegment
     }
     
-    fun setDelegate(anObject: MemorySegment): Unit {
+    override fun `setDelegate`(anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, anObject)
     }
     
     /** @return id<NSMachPortDelegate> */
-    fun delegate(): MemorySegment {
+    override fun `delegate`(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -39,12 +45,12 @@ open class NSMachPort(ptr: MemorySegment) : NSPort(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, machPort, f) as MemorySegment
     }
     
-    fun scheduleInRunLoop_forMode(runLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    override fun `scheduleInRunLoop_forMode`(runLoop: MemorySegment, mode: NSRunLoopMode): Unit {
         val sel = ObjCRuntime.sel("scheduleInRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, runLoop, mode)
     }
     
-    fun removeFromRunLoop_forMode(runLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    override fun `removeFromRunLoop_forMode`(runLoop: MemorySegment, mode: NSRunLoopMode): Unit {
         val sel = ObjCRuntime.sel("removeFromRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, runLoop, mode)
     }

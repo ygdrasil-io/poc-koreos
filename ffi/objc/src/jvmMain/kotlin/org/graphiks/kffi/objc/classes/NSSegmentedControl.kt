@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSegmentedControl
  * Superclass: NSControl
@@ -248,14 +254,14 @@ open class NSSegmentedControl(ptr: MemorySegment) : NSControl(ptr) {
 
 // ── Category: NSSegmentedControlConvenience on NSSegmentedControl ─────────────────────────────────────────
 
-// Class method: +[NSSegmentedControl segmentedControlWithLabels:trackingMode:target:action:]
+// Class<*> method: +[NSSegmentedControl segmentedControlWithLabels:trackingMode:target:action:]
 fun NSSegmentedControl_segmentedControlWithLabels_trackingMode_target_action(labels: MemorySegment, trackingMode: NSSegmentSwitchTracking, target: MemorySegment, action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("segmentedControlWithLabels:trackingMode:target:action:")
     val cls = ObjCRuntime.getClass("NSSegmentedControl")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, labels, trackingMode, target, action) as MemorySegment
 }
 
-// Class method: +[NSSegmentedControl segmentedControlWithImages:trackingMode:target:action:]
+// Class<*> method: +[NSSegmentedControl segmentedControlWithImages:trackingMode:target:action:]
 fun NSSegmentedControl_segmentedControlWithImages_trackingMode_target_action(images: MemorySegment, trackingMode: NSSegmentSwitchTracking, target: MemorySegment, action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("segmentedControlWithImages:trackingMode:target:action:")
     val cls = ObjCRuntime.getClass("NSSegmentedControl")

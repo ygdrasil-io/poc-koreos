@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionViewLayout
  * Superclass: NSObject
@@ -9,28 +15,28 @@ open class NSCollectionViewLayout(val ptr: MemorySegment) {
         
     }
     
-    fun invalidateLayout(): Unit {
+    open fun invalidateLayout(): Unit {
         val sel = ObjCRuntime.sel("invalidateLayout")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun invalidateLayoutWithContext(context: MemorySegment): Unit {
+    open fun invalidateLayoutWithContext(context: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("invalidateLayoutWithContext:")
         ObjCRuntime.msgSend(null, ptr, sel, context)
     }
     
-    fun registerClass_forDecorationViewOfKind(viewClass: Class, elementKind: NSCollectionViewDecorationElementKind): Unit {
+    open fun registerClass_forDecorationViewOfKind(viewClass: Class<*>, elementKind: NSCollectionViewDecorationElementKind): Unit {
         val sel = ObjCRuntime.sel("registerClass:forDecorationViewOfKind:")
         ObjCRuntime.msgSend(null, ptr, sel, viewClass, elementKind)
     }
     
-    fun registerNib_forDecorationViewOfKind(nib: MemorySegment, elementKind: NSCollectionViewDecorationElementKind): Unit {
+    open fun registerNib_forDecorationViewOfKind(nib: MemorySegment, elementKind: NSCollectionViewDecorationElementKind): Unit {
         val sel = ObjCRuntime.sel("registerNib:forDecorationViewOfKind:")
         ObjCRuntime.msgSend(null, ptr, sel, nib, elementKind)
     }
     
     // @property collectionView
-    fun collectionView(): MemorySegment {
+    open fun collectionView(): MemorySegment {
         val sel = ObjCRuntime.sel("collectionView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -110,30 +116,30 @@ fun NSCollectionViewLayout.collectionViewContentSize(): NSSize {
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }
 
-// Class method: +[NSCollectionViewLayout layoutAttributesClass]
-fun NSCollectionViewLayout_layoutAttributesClass(): Class {
+// Class<*> method: +[NSCollectionViewLayout layoutAttributesClass]
+fun NSCollectionViewLayout_layoutAttributesClass(): Class<*> {
     val sel = ObjCRuntime.sel("layoutAttributesClass")
     val cls = ObjCRuntime.getClass("NSCollectionViewLayout")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class<*>
 }
 
-// Class method: +[NSCollectionViewLayout invalidationContextClass]
-fun NSCollectionViewLayout_invalidationContextClass(): Class {
+// Class<*> method: +[NSCollectionViewLayout invalidationContextClass]
+fun NSCollectionViewLayout_invalidationContextClass(): Class<*> {
     val sel = ObjCRuntime.sel("invalidationContextClass")
     val cls = ObjCRuntime.getClass("NSCollectionViewLayout")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class<*>
 }
 
 // @property layoutAttributesClass
-fun NSCollectionViewLayout.layoutAttributesClass(): Class {
+fun NSCollectionViewLayout.layoutAttributesClass(): Class<*> {
     val sel = ObjCRuntime.sel("layoutAttributesClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
 
 // @property invalidationContextClass
-fun NSCollectionViewLayout.invalidationContextClass(): Class {
+fun NSCollectionViewLayout.invalidationContextClass(): Class<*> {
     val sel = ObjCRuntime.sel("invalidationContextClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
 
 // @property collectionViewContentSize

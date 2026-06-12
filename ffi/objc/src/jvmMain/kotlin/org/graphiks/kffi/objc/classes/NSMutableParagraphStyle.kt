@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableParagraphStyle
  * Superclass: NSParagraphStyle
@@ -24,7 +30,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property lineSpacing
-    fun lineSpacing(): CGFloat {
+    override fun `lineSpacing`(): CGFloat {
         val sel = ObjCRuntime.sel("lineSpacing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -34,7 +40,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property paragraphSpacing
-    fun paragraphSpacing(): CGFloat {
+    override fun `paragraphSpacing`(): CGFloat {
         val sel = ObjCRuntime.sel("paragraphSpacing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -44,7 +50,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property firstLineHeadIndent
-    fun firstLineHeadIndent(): CGFloat {
+    override fun `firstLineHeadIndent`(): CGFloat {
         val sel = ObjCRuntime.sel("firstLineHeadIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -54,7 +60,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property headIndent
-    fun headIndent(): CGFloat {
+    override fun `headIndent`(): CGFloat {
         val sel = ObjCRuntime.sel("headIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -64,7 +70,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property tailIndent
-    fun tailIndent(): CGFloat {
+    override fun `tailIndent`(): CGFloat {
         val sel = ObjCRuntime.sel("tailIndent")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -74,7 +80,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property lineBreakMode
-    fun lineBreakMode(): NSLineBreakMode {
+    override fun `lineBreakMode`(): NSLineBreakMode {
         val sel = ObjCRuntime.sel("lineBreakMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakMode
     }
@@ -84,7 +90,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property minimumLineHeight
-    fun minimumLineHeight(): CGFloat {
+    override fun `minimumLineHeight`(): CGFloat {
         val sel = ObjCRuntime.sel("minimumLineHeight")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -94,7 +100,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property maximumLineHeight
-    fun maximumLineHeight(): CGFloat {
+    override fun `maximumLineHeight`(): CGFloat {
         val sel = ObjCRuntime.sel("maximumLineHeight")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -104,7 +110,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property baseWritingDirection
-    fun baseWritingDirection(): NSWritingDirection {
+    override fun `baseWritingDirection`(): NSWritingDirection {
         val sel = ObjCRuntime.sel("baseWritingDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingDirection
     }
@@ -114,7 +120,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property lineHeightMultiple
-    fun lineHeightMultiple(): CGFloat {
+    override fun `lineHeightMultiple`(): CGFloat {
         val sel = ObjCRuntime.sel("lineHeightMultiple")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -124,7 +130,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property paragraphSpacingBefore
-    fun paragraphSpacingBefore(): CGFloat {
+    override fun `paragraphSpacingBefore`(): CGFloat {
         val sel = ObjCRuntime.sel("paragraphSpacingBefore")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -134,7 +140,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property hyphenationFactor
-    fun hyphenationFactor(): Float {
+    override fun `hyphenationFactor`(): Float {
         val sel = ObjCRuntime.sel("hyphenationFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
     }
@@ -144,7 +150,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property usesDefaultHyphenation
-    fun usesDefaultHyphenation(): BOOL {
+    override fun `usesDefaultHyphenation`(): BOOL {
         val sel = ObjCRuntime.sel("usesDefaultHyphenation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -155,7 +161,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     
     // @property tabStops
     /** @return NSArray<NSTextTab *> * */
-    fun tabStops(): MemorySegment {
+    override fun `tabStops`(): MemorySegment {
         val sel = ObjCRuntime.sel("tabStops")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -165,7 +171,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property defaultTabInterval
-    fun defaultTabInterval(): CGFloat {
+    override fun `defaultTabInterval`(): CGFloat {
         val sel = ObjCRuntime.sel("defaultTabInterval")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
@@ -175,7 +181,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property allowsDefaultTighteningForTruncation
-    fun allowsDefaultTighteningForTruncation(): BOOL {
+    override fun `allowsDefaultTighteningForTruncation`(): BOOL {
         val sel = ObjCRuntime.sel("allowsDefaultTighteningForTruncation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -185,7 +191,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     }
     
     // @property lineBreakStrategy
-    fun lineBreakStrategy(): NSLineBreakStrategy {
+    override fun `lineBreakStrategy`(): NSLineBreakStrategy {
         val sel = ObjCRuntime.sel("lineBreakStrategy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakStrategy
     }
@@ -196,7 +202,7 @@ open class NSMutableParagraphStyle(ptr: MemorySegment) : NSParagraphStyle(ptr) {
     
     // @property textLists
     /** @return NSArray<NSTextList *> * */
-    fun textLists(): MemorySegment {
+    override fun `textLists`(): MemorySegment {
         val sel = ObjCRuntime.sel("textLists")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

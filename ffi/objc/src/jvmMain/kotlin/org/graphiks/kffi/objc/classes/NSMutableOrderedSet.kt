@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableOrderedSet
  * Superclass: NSOrderedSet
@@ -23,12 +29,12 @@ open class NSMutableOrderedSet(ptr: MemorySegment) : NSOrderedSet(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, idx, `object`)
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -164,7 +170,7 @@ fun NSMutableOrderedSet.sortRange_options_usingComparator(range: NSRange, opts: 
 
 // ── Category: NSMutableOrderedSetCreation on NSMutableOrderedSet ─────────────────────────────────────────
 
-// Class method: +[NSMutableOrderedSet orderedSetWithCapacity:]
+// Class<*> method: +[NSMutableOrderedSet orderedSetWithCapacity:]
 fun NSMutableOrderedSet_orderedSetWithCapacity(numItems: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableOrderedSet")

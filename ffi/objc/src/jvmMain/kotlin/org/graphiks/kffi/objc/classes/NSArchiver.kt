@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSArchiver
  * Superclass: NSCoder
@@ -26,12 +32,12 @@ open class NSArchiver(ptr: MemorySegment) : NSCoder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mdata) as MemorySegment
     }
     
-    fun encodeRootObject(rootObject: MemorySegment): Unit {
+    override fun `encodeRootObject`(rootObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeRootObject:")
         ObjCRuntime.msgSend(null, ptr, sel, rootObject)
     }
     
-    fun encodeConditionalObject(`object`: MemorySegment): Unit {
+    override fun `encodeConditionalObject`(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeConditionalObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }

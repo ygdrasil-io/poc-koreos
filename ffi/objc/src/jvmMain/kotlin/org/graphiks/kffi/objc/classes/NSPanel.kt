@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPanel
  * Superclass: NSWindow
@@ -9,7 +15,7 @@ open class NSPanel(ptr: MemorySegment) : NSWindow(ptr) {
     }
     
     // @property floatingPanel
-    fun isFloatingPanel(): BOOL {
+    override fun `isFloatingPanel`(): BOOL {
         val sel = ObjCRuntime.sel("isFloatingPanel")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -29,7 +35,7 @@ open class NSPanel(ptr: MemorySegment) : NSWindow(ptr) {
     }
     
     // @property worksWhenModal
-    fun worksWhenModal(): BOOL {
+    override fun `worksWhenModal`(): BOOL {
         val sel = ObjCRuntime.sel("worksWhenModal")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

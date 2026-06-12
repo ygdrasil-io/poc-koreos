@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionLayoutSupplementaryItem
  * Superclass: NSCollectionLayoutItem
@@ -23,14 +29,14 @@ open class NSCollectionLayoutSupplementaryItem(ptr: MemorySegment) : NSCollectio
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun supplementaryItemWithLayoutSize_elementKind_containerAnchor_itemAnchor(layoutSize: MemorySegment, elementKind: String, containerAnchor: MemorySegment, itemAnchor: MemorySegment): MemorySegment = supplementaryItemWithLayoutSize_elementKind_containerAnchor_itemAnchor(layoutSize, ObjCRuntime.newNSString(Arena.global(), elementKind), containerAnchor, itemAnchor)
         
-        fun new(): MemorySegment {
+        override fun `new`(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

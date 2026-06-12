@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSArrayController
  * Superclass: NSObjectController
@@ -58,12 +64,12 @@ open class NSArrayController(ptr: MemorySegment) : NSObjectController(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as BOOL
     }
     
-    fun add(sender: MemorySegment): Unit {
+    override fun `add`(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("add:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun remove(sender: MemorySegment): Unit {
+    override fun `remove`(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("remove:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
@@ -83,7 +89,7 @@ open class NSArrayController(ptr: MemorySegment) : NSObjectController(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun addObject(`object`: MemorySegment): Unit {
+    override fun `addObject`(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
@@ -113,7 +119,7 @@ open class NSArrayController(ptr: MemorySegment) : NSObjectController(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, indexes)
     }
     
-    fun removeObject(`object`: MemorySegment): Unit {
+    override fun `removeObject`(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
@@ -230,7 +236,7 @@ open class NSArrayController(ptr: MemorySegment) : NSObjectController(ptr) {
     }
     
     // @property selectedObjects
-    fun selectedObjects(): MemorySegment {
+    override fun `selectedObjects`(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedObjects")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDistributedNotificationCenter
  * Superclass: NSNotificationCenter
@@ -11,7 +17,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, notificationCenterType) as MemorySegment
         }
         
-        fun defaultCenter(): MemorySegment {
+        override fun `defaultCenter`(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultCenter")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -42,7 +48,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun postNotificationName_object_userInfo_options(name: NSNotificationName, `object`: String, userInfo: MemorySegment, options: NSDistributedNotificationOptions): Unit = postNotificationName_object_userInfo_options(name, ObjCRuntime.newNSString(Arena.global(), `object`), userInfo, options)
     
-    fun addObserver_selector_name_object(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun `addObserver_selector_name_object`(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObserver:selector:name:object:")
         ObjCRuntime.msgSend(null, ptr, sel, observer, aSelector, aName, anObject)
     }
@@ -50,7 +56,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun addObserver_selector_name_object(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: String): Unit = addObserver_selector_name_object(observer, aSelector, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
     
-    fun postNotificationName_object(aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun `postNotificationName_object`(aName: NSNotificationName, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:")
         ObjCRuntime.msgSend(null, ptr, sel, aName, anObject)
     }
@@ -58,7 +64,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun postNotificationName_object(aName: NSNotificationName, anObject: String): Unit = postNotificationName_object(aName, ObjCRuntime.newNSString(Arena.global(), anObject))
     
-    fun postNotificationName_object_userInfo(aName: NSNotificationName, anObject: MemorySegment, aUserInfo: MemorySegment): Unit {
+    override fun `postNotificationName_object_userInfo`(aName: NSNotificationName, anObject: MemorySegment, aUserInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:userInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, aName, anObject, aUserInfo)
     }
@@ -66,7 +72,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun postNotificationName_object_userInfo(aName: NSNotificationName, anObject: String, aUserInfo: MemorySegment): Unit = postNotificationName_object_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), anObject), aUserInfo)
     
-    fun removeObserver_name_object(observer: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun `removeObserver_name_object`(observer: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObserver:name:object:")
         ObjCRuntime.msgSend(null, ptr, sel, observer, aName, anObject)
     }

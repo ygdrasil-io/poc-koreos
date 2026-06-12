@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSVisualEffectView
  * Superclass: NSView
@@ -8,12 +14,12 @@ open class NSVisualEffectView(ptr: MemorySegment) : NSView(ptr) {
         
     }
     
-    fun viewDidMoveToWindow(): Unit {
+    override fun `viewDidMoveToWindow`(): Unit {
         val sel = ObjCRuntime.sel("viewDidMoveToWindow")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun viewWillMoveToWindow(newWindow: MemorySegment): Unit {
+    override fun `viewWillMoveToWindow`(newWindow: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("viewWillMoveToWindow:")
         ObjCRuntime.msgSend(null, ptr, sel, newWindow)
     }

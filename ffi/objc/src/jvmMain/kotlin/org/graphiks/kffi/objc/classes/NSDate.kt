@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSDate
  * Superclass: NSObject
@@ -9,23 +15,23 @@ open class NSDate(val ptr: MemorySegment) {
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithTimeIntervalSinceReferenceDate(ti: NSTimeInterval): MemorySegment {
+    open fun initWithTimeIntervalSinceReferenceDate(ti: NSTimeInterval): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTimeIntervalSinceReferenceDate:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ti) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property timeIntervalSinceReferenceDate
-    fun timeIntervalSinceReferenceDate(): NSTimeInterval {
+    open fun timeIntervalSinceReferenceDate(): NSTimeInterval {
         val sel = ObjCRuntime.sel("timeIntervalSinceReferenceDate")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
@@ -89,7 +95,7 @@ fun NSDate.description(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSDate timeIntervalSinceReferenceDate]
+// Class<*> method: +[NSDate timeIntervalSinceReferenceDate]
 fun NSDate_timeIntervalSinceReferenceDate(): NSTimeInterval {
     val sel = ObjCRuntime.sel("timeIntervalSinceReferenceDate")
     val cls = ObjCRuntime.getClass("NSDate")
@@ -137,56 +143,56 @@ fun NSDate.initWithTimeInterval_sinceDate(secsToBeAdded: NSTimeInterval, date: M
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, secsToBeAdded, date) as MemorySegment
 }
 
-// Class method: +[NSDate date]
+// Class<*> method: +[NSDate date]
 fun NSDate_date(): MemorySegment {
     val sel = ObjCRuntime.sel("date")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithTimeIntervalSinceNow:]
+// Class<*> method: +[NSDate dateWithTimeIntervalSinceNow:]
 fun NSDate_dateWithTimeIntervalSinceNow(secs: NSTimeInterval): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithTimeIntervalSinceNow:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, secs) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithTimeIntervalSinceReferenceDate:]
+// Class<*> method: +[NSDate dateWithTimeIntervalSinceReferenceDate:]
 fun NSDate_dateWithTimeIntervalSinceReferenceDate(ti: NSTimeInterval): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithTimeIntervalSinceReferenceDate:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, ti) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithTimeIntervalSince1970:]
+// Class<*> method: +[NSDate dateWithTimeIntervalSince1970:]
 fun NSDate_dateWithTimeIntervalSince1970(secs: NSTimeInterval): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithTimeIntervalSince1970:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, secs) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithTimeInterval:sinceDate:]
+// Class<*> method: +[NSDate dateWithTimeInterval:sinceDate:]
 fun NSDate_dateWithTimeInterval_sinceDate(secsToBeAdded: NSTimeInterval, date: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithTimeInterval:sinceDate:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, secsToBeAdded, date) as MemorySegment
 }
 
-// Class method: +[NSDate distantFuture]
+// Class<*> method: +[NSDate distantFuture]
 fun NSDate_distantFuture(): MemorySegment {
     val sel = ObjCRuntime.sel("distantFuture")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSDate distantPast]
+// Class<*> method: +[NSDate distantPast]
 fun NSDate_distantPast(): MemorySegment {
     val sel = ObjCRuntime.sel("distantPast")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSDate now]
+// Class<*> method: +[NSDate now]
 fun NSDate_now(): MemorySegment {
     val sel = ObjCRuntime.sel("now")
     val cls = ObjCRuntime.getClass("NSDate")
@@ -228,21 +234,21 @@ fun NSDate.initWithString(description: MemorySegment): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, description) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithNaturalLanguageString:locale:]
+// Class<*> method: +[NSDate dateWithNaturalLanguageString:locale:]
 fun NSDate_dateWithNaturalLanguageString_locale(string: MemorySegment, locale: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithNaturalLanguageString:locale:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string, locale) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithNaturalLanguageString:]
+// Class<*> method: +[NSDate dateWithNaturalLanguageString:]
 fun NSDate_dateWithNaturalLanguageString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithNaturalLanguageString:")
     val cls = ObjCRuntime.getClass("NSDate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSDate dateWithString:]
+// Class<*> method: +[NSDate dateWithString:]
 fun NSDate_dateWithString(aString: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dateWithString:")
     val cls = ObjCRuntime.getClass("NSDate")

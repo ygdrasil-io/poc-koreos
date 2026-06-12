@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSKeyedUnarchiver
  * Superclass: NSCoder
@@ -6,17 +12,17 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSKeyedUnarchiver") }
         
-        fun unarchivedObjectOfClass_fromData_error(cls: Class, `data`: MemorySegment, error: MemorySegment): MemorySegment {
+        fun unarchivedObjectOfClass_fromData_error(cls: Class<*>, `data`: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("unarchivedObjectOfClass:fromData:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, cls, `data`, error) as MemorySegment
         }
         
-        fun unarchivedArrayOfObjectsOfClass_fromData_error(cls: Class, `data`: MemorySegment, error: MemorySegment): MemorySegment {
+        fun unarchivedArrayOfObjectsOfClass_fromData_error(cls: Class<*>, `data`: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("unarchivedArrayOfObjectsOfClass:fromData:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, cls, `data`, error) as MemorySegment
         }
         
-        fun unarchivedDictionaryWithKeysOfClass_objectsOfClass_fromData_error(keyCls: Class, valueCls: Class, `data`: MemorySegment, error: MemorySegment): MemorySegment {
+        fun unarchivedDictionaryWithKeysOfClass_objectsOfClass_fromData_error(keyCls: Class<*>, valueCls: Class<*>, `data`: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("unarchivedDictionaryWithKeysOfClass:objectsOfClass:fromData:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, keyCls, valueCls, `data`, error) as MemorySegment
         }
@@ -54,21 +60,21 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun unarchiveObjectWithFile(path: String): MemorySegment = unarchiveObjectWithFile(ObjCRuntime.newNSString(Arena.global(), path))
         
-        fun setClass_forClassName(cls: Class, codedName: MemorySegment): Unit {
+        fun setClass_forClassName(cls: Class<*>, codedName: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setClass:forClassName:")
             ObjCRuntime.msgSend(null, _class, sel, cls, codedName)
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun setClass_forClassName(cls: Class, codedName: String): Unit = setClass_forClassName(cls, ObjCRuntime.newNSString(Arena.global(), codedName))
+        fun setClass_forClassName(cls: Class<*>, codedName: String): Unit = setClass_forClassName(cls, ObjCRuntime.newNSString(Arena.global(), codedName))
         
-        fun classForClassName(codedName: MemorySegment): Class {
+        fun classForClassName(codedName: MemorySegment): Class<*> {
             val sel = ObjCRuntime.sel("classForClassName:")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, codedName) as Class
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, codedName) as Class<*>
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun classForClassName(codedName: String): Class = classForClassName(ObjCRuntime.newNSString(Arena.global(), codedName))
+        fun classForClassName(codedName: String): Class<*> = classForClassName(ObjCRuntime.newNSString(Arena.global(), codedName))
         
     }
     
@@ -92,23 +98,23 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setClass_forClassName(cls: Class, codedName: MemorySegment): Unit {
+    fun setClass_forClassName(cls: Class<*>, codedName: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setClass:forClassName:")
         ObjCRuntime.msgSend(null, ptr, sel, cls, codedName)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setClass_forClassName(cls: Class, codedName: String): Unit = setClass_forClassName(cls, ObjCRuntime.newNSString(Arena.global(), codedName))
+    fun setClass_forClassName(cls: Class<*>, codedName: String): Unit = setClass_forClassName(cls, ObjCRuntime.newNSString(Arena.global(), codedName))
     
-    fun classForClassName(codedName: MemorySegment): Class {
+    fun classForClassName(codedName: MemorySegment): Class<*> {
         val sel = ObjCRuntime.sel("classForClassName:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, codedName) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, codedName) as Class<*>
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun classForClassName(codedName: String): Class = classForClassName(ObjCRuntime.newNSString(Arena.global(), codedName))
+    fun classForClassName(codedName: String): Class<*> = classForClassName(ObjCRuntime.newNSString(Arena.global(), codedName))
     
-    fun containsValueForKey(key: MemorySegment): BOOL {
+    override fun `containsValueForKey`(key: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("containsValueForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as BOOL
     }
@@ -116,7 +122,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun containsValueForKey(key: String): BOOL = containsValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeObjectForKey(key: MemorySegment): MemorySegment {
+    override fun `decodeObjectForKey`(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decodeObjectForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
@@ -124,7 +130,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeObjectForKey(key: String): MemorySegment = decodeObjectForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeBoolForKey(key: MemorySegment): BOOL {
+    override fun `decodeBoolForKey`(key: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("decodeBoolForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as BOOL
     }
@@ -132,7 +138,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeBoolForKey(key: String): BOOL = decodeBoolForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeIntForKey(key: MemorySegment): Int {
+    override fun `decodeIntForKey`(key: MemorySegment): Int {
         val sel = ObjCRuntime.sel("decodeIntForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, key) as Int
     }
@@ -140,7 +146,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeIntForKey(key: String): Int = decodeIntForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeInt32ForKey(key: MemorySegment): int32_t {
+    override fun `decodeInt32ForKey`(key: MemorySegment): int32_t {
         val sel = ObjCRuntime.sel("decodeInt32ForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, key) as int32_t
     }
@@ -148,7 +154,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeInt32ForKey(key: String): int32_t = decodeInt32ForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeInt64ForKey(key: MemorySegment): int64_t {
+    override fun `decodeInt64ForKey`(key: MemorySegment): int64_t {
         val sel = ObjCRuntime.sel("decodeInt64ForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, key) as int64_t
     }
@@ -156,7 +162,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeInt64ForKey(key: String): int64_t = decodeInt64ForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeFloatForKey(key: MemorySegment): Float {
+    override fun `decodeFloatForKey`(key: MemorySegment): Float {
         val sel = ObjCRuntime.sel("decodeFloatForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel, key) as Float
     }
@@ -164,7 +170,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeFloatForKey(key: String): Float = decodeFloatForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeDoubleForKey(key: MemorySegment): Double {
+    override fun `decodeDoubleForKey`(key: MemorySegment): Double {
         val sel = ObjCRuntime.sel("decodeDoubleForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, key) as Double
     }
@@ -172,7 +178,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun decodeDoubleForKey(key: String): Double = decodeDoubleForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    fun decodeBytesForKey_returnedLength(key: MemorySegment, lengthp: MemorySegment): MemorySegment {
+    override fun `decodeBytesForKey_returnedLength`(key: MemorySegment, lengthp: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decodeBytesForKey:returnedLength:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key, lengthp) as MemorySegment
     }
@@ -192,7 +198,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     // @property requiresSecureCoding
-    fun requiresSecureCoding(): BOOL {
+    override fun `requiresSecureCoding`(): BOOL {
         val sel = ObjCRuntime.sel("requiresSecureCoding")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -202,7 +208,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     // @property decodingFailurePolicy
-    fun decodingFailurePolicy(): NSDecodingFailurePolicy {
+    override fun `decodingFailurePolicy`(): NSDecodingFailurePolicy {
         val sel = ObjCRuntime.sel("decodingFailurePolicy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDecodingFailurePolicy
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSScanner
  * Superclass: NSObject
@@ -9,59 +15,59 @@ open class NSScanner(val ptr: MemorySegment) {
         
     }
     
-    fun initWithString(string: MemorySegment): MemorySegment {
+    open fun initWithString(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
+    open fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
     
     // @property string
-    fun string(): MemorySegment {
+    open fun string(): MemorySegment {
         val sel = ObjCRuntime.sel("string")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringAsString(): String = ObjCRuntime.toJavaString(string())
+    open fun stringAsString(): String = ObjCRuntime.toJavaString(string())
     
     // @property scanLocation
-    fun scanLocation(): NSUInteger {
+    open fun scanLocation(): NSUInteger {
         val sel = ObjCRuntime.sel("scanLocation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
-    fun setScanLocation(value: NSUInteger) {
+    open fun setScanLocation(value: NSUInteger) {
         val sel = ObjCRuntime.sel("setScanLocation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property charactersToBeSkipped
-    fun charactersToBeSkipped(): MemorySegment {
+    open fun charactersToBeSkipped(): MemorySegment {
         val sel = ObjCRuntime.sel("charactersToBeSkipped")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCharactersToBeSkipped(value: MemorySegment) {
+    open fun setCharactersToBeSkipped(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCharactersToBeSkipped:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property caseSensitive
-    fun caseSensitive(): BOOL {
+    open fun caseSensitive(): BOOL {
         val sel = ObjCRuntime.sel("caseSensitive")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setCaseSensitive(value: BOOL) {
+    open fun setCaseSensitive(value: BOOL) {
         val sel = ObjCRuntime.sel("setCaseSensitive:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property locale
-    fun locale(): MemorySegment {
+    open fun locale(): MemorySegment {
         val sel = ObjCRuntime.sel("locale")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLocale(value: MemorySegment) {
+    open fun setLocale(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLocale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -145,14 +151,14 @@ fun NSScanner.isAtEnd(): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
-// Class method: +[NSScanner scannerWithString:]
+// Class<*> method: +[NSScanner scannerWithString:]
 fun NSScanner_scannerWithString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("scannerWithString:")
     val cls = ObjCRuntime.getClass("NSScanner")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSScanner localizedScannerWithString:]
+// Class<*> method: +[NSScanner localizedScannerWithString:]
 fun NSScanner_localizedScannerWithString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedScannerWithString:")
     val cls = ObjCRuntime.getClass("NSScanner")

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMovie
  * Superclass: NSObject
@@ -9,22 +15,22 @@ open class NSMovie(val ptr: MemorySegment) {
         
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithMovie(movie: MemorySegment): MemorySegment {
+    open fun initWithMovie(movie: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithMovie:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, movie) as MemorySegment
     }
     
-    fun QTMovie(): MemorySegment {
+    open fun QTMovie(): MemorySegment {
         val sel = ObjCRuntime.sel("QTMovie")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

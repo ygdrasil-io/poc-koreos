@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSProtocolChecker
  * Superclass: NSProxy
@@ -29,7 +35,7 @@ fun NSProtocolChecker.initWithTarget_protocol(anObject: MemorySegment, aProtocol
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, anObject, aProtocol) as MemorySegment
 }
 
-// Class method: +[NSProtocolChecker protocolCheckerWithTarget:protocol:]
+// Class<*> method: +[NSProtocolChecker protocolCheckerWithTarget:protocol:]
 fun NSProtocolChecker_protocolCheckerWithTarget_protocol(anObject: MemorySegment, aProtocol: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("protocolCheckerWithTarget:protocol:")
     val cls = ObjCRuntime.getClass("NSProtocolChecker")

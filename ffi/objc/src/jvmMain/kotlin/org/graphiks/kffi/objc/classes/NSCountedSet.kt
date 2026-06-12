@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCountedSet
  * Superclass: NSMutableSet
@@ -8,7 +14,7 @@ open class NSCountedSet(ptr: MemorySegment) : NSMutableSet(ptr) {
         
     }
     
-    fun initWithCapacity(numItems: NSUInteger): MemorySegment {
+    override fun `initWithCapacity`(numItems: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCapacity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, numItems) as MemorySegment
     }
@@ -34,12 +40,12 @@ open class NSCountedSet(ptr: MemorySegment) : NSMutableSet(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun addObject(`object`: MemorySegment): Unit {
+    override fun `addObject`(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun removeObject(`object`: MemorySegment): Unit {
+    override fun `removeObject`(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }

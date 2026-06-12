@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSView
  * Superclass: NSResponder
@@ -29,7 +35,7 @@ open class NSView(ptr: MemorySegment) : NSResponder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -404,7 +410,7 @@ open class NSView(ptr: MemorySegment) : NSResponder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, tag) as MemorySegment
     }
     
-    fun performKeyEquivalent(event: MemorySegment): BOOL {
+    override fun `performKeyEquivalent`(event: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("performKeyEquivalent:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
     }
@@ -1031,7 +1037,7 @@ fun NSView.focusRingMaskBounds(): NSRect {
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
 }
 
-// Class method: +[NSView defaultFocusRingType]
+// Class<*> method: +[NSView defaultFocusRingType]
 fun NSView_defaultFocusRingType(): NSFocusRingType {
     val sel = ObjCRuntime.sel("defaultFocusRingType")
     val cls = ObjCRuntime.getClass("NSView")
@@ -1873,7 +1879,7 @@ fun NSView.setTranslatesAutoresizingMaskIntoConstraints(translatesAutoresizingMa
     ObjCRuntime.msgSend(null, ptr, sel, translatesAutoresizingMaskIntoConstraints)
 }
 
-// Class method: +[NSView requiresConstraintBasedLayout]
+// Class<*> method: +[NSView requiresConstraintBasedLayout]
 fun NSView_requiresConstraintBasedLayout(): BOOL {
     val sel = ObjCRuntime.sel("requiresConstraintBasedLayout")
     val cls = ObjCRuntime.getClass("NSView")

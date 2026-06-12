@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSXMLDTDNode
  * Superclass: NSXMLNode
@@ -16,12 +22,12 @@ open class NSXMLDTDNode(ptr: MemorySegment) : NSXMLNode(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithXMLString(string: String): MemorySegment = initWithXMLString(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun initWithKind_options(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
+    override fun `initWithKind_options`(kind: NSXMLNodeKind, options: NSXMLNodeOptions): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKind:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, kind, options) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

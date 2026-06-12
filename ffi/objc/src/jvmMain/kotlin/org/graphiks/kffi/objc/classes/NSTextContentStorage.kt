@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextContentStorage
  * Superclass: NSTextContentManager
@@ -37,11 +43,11 @@ open class NSTextContentStorage(ptr: MemorySegment) : NSTextContentManager(ptr) 
     
     // @property delegate
     /** @return id<NSTextContentStorageDelegate> */
-    fun delegate(): MemorySegment {
+    override fun `delegate`(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    override fun `setDelegate`(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

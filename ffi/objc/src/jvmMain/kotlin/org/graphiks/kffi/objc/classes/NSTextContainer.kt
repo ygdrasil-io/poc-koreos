@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextContainer
  * Superclass: NSObject
@@ -9,89 +15,89 @@ open class NSTextContainer(val ptr: MemorySegment) {
         
     }
     
-    fun initWithSize(size: CGSize): MemorySegment {
+    open fun initWithSize(size: CGSize): MemorySegment {
         val sel = ObjCRuntime.sel("initWithSize:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"))) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun lineFragmentRectForProposedRect_atIndex_writingDirection_remainingRect(proposedRect: CGRect, characterIndex: NSUInteger, baseWritingDirection: NSWritingDirection, remainingRect: MemorySegment): CGRect {
+    open fun lineFragmentRectForProposedRect_atIndex_writingDirection_remainingRect(proposedRect: CGRect, characterIndex: NSUInteger, baseWritingDirection: NSWritingDirection, remainingRect: MemorySegment): CGRect {
         val sel = ObjCRuntime.sel("lineFragmentRectForProposedRect:atIndex:writingDirection:remainingRect:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(proposedRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), characterIndex, baseWritingDirection, remainingRect) as CGRect
     }
     
     // @property textLayoutManager
-    fun textLayoutManager(): MemorySegment {
+    open fun textLayoutManager(): MemorySegment {
         val sel = ObjCRuntime.sel("textLayoutManager")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property size
-    fun size(): CGSize {
+    open fun size(): CGSize {
         val sel = ObjCRuntime.sel("size")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as CGSize
     }
-    fun setSize(value: CGSize) {
+    open fun setSize(value: CGSize) {
         val sel = ObjCRuntime.sel("setSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property lineBreakMode
-    fun lineBreakMode(): NSLineBreakMode {
+    open fun lineBreakMode(): NSLineBreakMode {
         val sel = ObjCRuntime.sel("lineBreakMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakMode
     }
-    fun setLineBreakMode(value: NSLineBreakMode) {
+    open fun setLineBreakMode(value: NSLineBreakMode) {
         val sel = ObjCRuntime.sel("setLineBreakMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property lineFragmentPadding
-    fun lineFragmentPadding(): CGFloat {
+    open fun lineFragmentPadding(): CGFloat {
         val sel = ObjCRuntime.sel("lineFragmentPadding")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setLineFragmentPadding(value: CGFloat) {
+    open fun setLineFragmentPadding(value: CGFloat) {
         val sel = ObjCRuntime.sel("setLineFragmentPadding:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximumNumberOfLines
-    fun maximumNumberOfLines(): NSUInteger {
+    open fun maximumNumberOfLines(): NSUInteger {
         val sel = ObjCRuntime.sel("maximumNumberOfLines")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
-    fun setMaximumNumberOfLines(value: NSUInteger) {
+    open fun setMaximumNumberOfLines(value: NSUInteger) {
         val sel = ObjCRuntime.sel("setMaximumNumberOfLines:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property simpleRectangularTextContainer
-    fun isSimpleRectangularTextContainer(): BOOL {
+    open fun isSimpleRectangularTextContainer(): BOOL {
         val sel = ObjCRuntime.sel("isSimpleRectangularTextContainer")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property widthTracksTextView
-    fun widthTracksTextView(): BOOL {
+    open fun widthTracksTextView(): BOOL {
         val sel = ObjCRuntime.sel("widthTracksTextView")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWidthTracksTextView(value: BOOL) {
+    open fun setWidthTracksTextView(value: BOOL) {
         val sel = ObjCRuntime.sel("setWidthTracksTextView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property heightTracksTextView
-    fun heightTracksTextView(): BOOL {
+    open fun heightTracksTextView(): BOOL {
         val sel = ObjCRuntime.sel("heightTracksTextView")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setHeightTracksTextView(value: BOOL) {
+    open fun setHeightTracksTextView(value: BOOL) {
         val sel = ObjCRuntime.sel("setHeightTracksTextView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

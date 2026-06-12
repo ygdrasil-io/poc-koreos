@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSLocale
  * Superclass: NSObject
@@ -9,28 +15,28 @@ open class NSLocale(val ptr: MemorySegment) {
         
     }
     
-    fun objectForKey(key: NSLocaleKey): MemorySegment {
+    open fun objectForKey(key: NSLocaleKey): MemorySegment {
         val sel = ObjCRuntime.sel("objectForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
     
-    fun displayNameForKey_value(key: NSLocaleKey, value: MemorySegment): MemorySegment {
+    open fun displayNameForKey_value(key: NSLocaleKey, value: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("displayNameForKey:value:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key, value) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun displayNameForKey_valueAsString(key: NSLocaleKey, value: MemorySegment): String = ObjCRuntime.toJavaString(displayNameForKey_value(key, value))
+    open fun displayNameForKey_valueAsString(key: NSLocaleKey, value: MemorySegment): String = ObjCRuntime.toJavaString(displayNameForKey_value(key, value))
     
-    fun initWithLocaleIdentifier(string: MemorySegment): MemorySegment {
+    open fun initWithLocaleIdentifier(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLocaleIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithLocaleIdentifier(string: String): MemorySegment = initWithLocaleIdentifier(ObjCRuntime.newNSString(Arena.global(), string))
+    open fun initWithLocaleIdentifier(string: String): MemorySegment = initWithLocaleIdentifier(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -311,28 +317,28 @@ fun NSLocale.init(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale localeWithLocaleIdentifier:]
+// Class<*> method: +[NSLocale localeWithLocaleIdentifier:]
 fun NSLocale_localeWithLocaleIdentifier(ident: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localeWithLocaleIdentifier:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, ident) as MemorySegment
 }
 
-// Class method: +[NSLocale autoupdatingCurrentLocale]
+// Class<*> method: +[NSLocale autoupdatingCurrentLocale]
 fun NSLocale_autoupdatingCurrentLocale(): MemorySegment {
     val sel = ObjCRuntime.sel("autoupdatingCurrentLocale")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale currentLocale]
+// Class<*> method: +[NSLocale currentLocale]
 fun NSLocale_currentLocale(): MemorySegment {
     val sel = ObjCRuntime.sel("currentLocale")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale systemLocale]
+// Class<*> method: +[NSLocale systemLocale]
 fun NSLocale_systemLocale(): MemorySegment {
     val sel = ObjCRuntime.sel("systemLocale")
     val cls = ObjCRuntime.getClass("NSLocale")
@@ -359,98 +365,98 @@ fun NSLocale.systemLocale(): MemorySegment {
 
 // ── Category: NSLocaleGeneralInfo on NSLocale ─────────────────────────────────────────
 
-// Class method: +[NSLocale componentsFromLocaleIdentifier:]
+// Class<*> method: +[NSLocale componentsFromLocaleIdentifier:]
 fun NSLocale_componentsFromLocaleIdentifier(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("componentsFromLocaleIdentifier:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSLocale localeIdentifierFromComponents:]
+// Class<*> method: +[NSLocale localeIdentifierFromComponents:]
 fun NSLocale_localeIdentifierFromComponents(dict: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localeIdentifierFromComponents:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, dict) as MemorySegment
 }
 
-// Class method: +[NSLocale canonicalLocaleIdentifierFromString:]
+// Class<*> method: +[NSLocale canonicalLocaleIdentifierFromString:]
 fun NSLocale_canonicalLocaleIdentifierFromString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("canonicalLocaleIdentifierFromString:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSLocale canonicalLanguageIdentifierFromString:]
+// Class<*> method: +[NSLocale canonicalLanguageIdentifierFromString:]
 fun NSLocale_canonicalLanguageIdentifierFromString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("canonicalLanguageIdentifierFromString:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class method: +[NSLocale localeIdentifierFromWindowsLocaleCode:]
+// Class<*> method: +[NSLocale localeIdentifierFromWindowsLocaleCode:]
 fun NSLocale_localeIdentifierFromWindowsLocaleCode(lcid: uint32_t): MemorySegment {
     val sel = ObjCRuntime.sel("localeIdentifierFromWindowsLocaleCode:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, lcid) as MemorySegment
 }
 
-// Class method: +[NSLocale windowsLocaleCodeFromLocaleIdentifier:]
+// Class<*> method: +[NSLocale windowsLocaleCodeFromLocaleIdentifier:]
 fun NSLocale_windowsLocaleCodeFromLocaleIdentifier(localeIdentifier: MemorySegment): uint32_t {
     val sel = ObjCRuntime.sel("windowsLocaleCodeFromLocaleIdentifier:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, cls, sel, localeIdentifier) as uint32_t
 }
 
-// Class method: +[NSLocale characterDirectionForLanguage:]
+// Class<*> method: +[NSLocale characterDirectionForLanguage:]
 fun NSLocale_characterDirectionForLanguage(isoLangCode: MemorySegment): NSLocaleLanguageDirection {
     val sel = ObjCRuntime.sel("characterDirectionForLanguage:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, isoLangCode) as NSLocaleLanguageDirection
 }
 
-// Class method: +[NSLocale lineDirectionForLanguage:]
+// Class<*> method: +[NSLocale lineDirectionForLanguage:]
 fun NSLocale_lineDirectionForLanguage(isoLangCode: MemorySegment): NSLocaleLanguageDirection {
     val sel = ObjCRuntime.sel("lineDirectionForLanguage:")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, isoLangCode) as NSLocaleLanguageDirection
 }
 
-// Class method: +[NSLocale availableLocaleIdentifiers]
+// Class<*> method: +[NSLocale availableLocaleIdentifiers]
 fun NSLocale_availableLocaleIdentifiers(): MemorySegment {
     val sel = ObjCRuntime.sel("availableLocaleIdentifiers")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale ISOLanguageCodes]
+// Class<*> method: +[NSLocale ISOLanguageCodes]
 fun NSLocale_ISOLanguageCodes(): MemorySegment {
     val sel = ObjCRuntime.sel("ISOLanguageCodes")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale ISOCountryCodes]
+// Class<*> method: +[NSLocale ISOCountryCodes]
 fun NSLocale_ISOCountryCodes(): MemorySegment {
     val sel = ObjCRuntime.sel("ISOCountryCodes")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale ISOCurrencyCodes]
+// Class<*> method: +[NSLocale ISOCurrencyCodes]
 fun NSLocale_ISOCurrencyCodes(): MemorySegment {
     val sel = ObjCRuntime.sel("ISOCurrencyCodes")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale commonISOCurrencyCodes]
+// Class<*> method: +[NSLocale commonISOCurrencyCodes]
 fun NSLocale_commonISOCurrencyCodes(): MemorySegment {
     val sel = ObjCRuntime.sel("commonISOCurrencyCodes")
     val cls = ObjCRuntime.getClass("NSLocale")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSLocale preferredLanguages]
+// Class<*> method: +[NSLocale preferredLanguages]
 fun NSLocale_preferredLanguages(): MemorySegment {
     val sel = ObjCRuntime.sel("preferredLanguages")
     val cls = ObjCRuntime.getClass("NSLocale")

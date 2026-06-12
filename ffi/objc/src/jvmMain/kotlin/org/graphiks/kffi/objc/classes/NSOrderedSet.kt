@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOrderedSet
  * Superclass: NSObject
@@ -9,33 +15,33 @@ open class NSOrderedSet(val ptr: MemorySegment) {
         
     }
     
-    fun objectAtIndex(idx: NSUInteger): MemorySegment {
+    open fun objectAtIndex(idx: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("objectAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, idx) as MemorySegment
     }
     
-    fun indexOfObject(`object`: MemorySegment): NSUInteger {
+    open fun indexOfObject(`object`: MemorySegment): NSUInteger {
         val sel = ObjCRuntime.sel("indexOfObject:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, `object`) as NSUInteger
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
+    open fun initWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithObjects:count:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objects, cnt) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property count
-    fun count(): NSUInteger {
+    open fun count(): NSUInteger {
         val sel = ObjCRuntime.sel("count")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -298,70 +304,70 @@ fun NSOrderedSet.initWithSet_copyItems(`set`: MemorySegment, flag: BOOL): Memory
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `set`, flag) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSet]
+// Class<*> method: +[NSOrderedSet orderedSet]
 fun NSOrderedSet_orderedSet(): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSet")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithObject:]
+// Class<*> method: +[NSOrderedSet orderedSetWithObject:]
 fun NSOrderedSet_orderedSetWithObject(`object`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithObject:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `object`) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithObjects:count:]
+// Class<*> method: +[NSOrderedSet orderedSetWithObjects:count:]
 fun NSOrderedSet_orderedSetWithObjects_count(objects: MemorySegment, cnt: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithObjects:count:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, objects, cnt) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithObjects:]
+// Class<*> method: +[NSOrderedSet orderedSetWithObjects:]
 fun NSOrderedSet_orderedSetWithObjects(firstObj: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithObjects:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, firstObj) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithOrderedSet:]
+// Class<*> method: +[NSOrderedSet orderedSetWithOrderedSet:]
 fun NSOrderedSet_orderedSetWithOrderedSet(`set`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithOrderedSet:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `set`) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithOrderedSet:range:copyItems:]
+// Class<*> method: +[NSOrderedSet orderedSetWithOrderedSet:range:copyItems:]
 fun NSOrderedSet_orderedSetWithOrderedSet_range_copyItems(`set`: MemorySegment, range: NSRange, flag: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithOrderedSet:range:copyItems:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `set`, range, flag) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithArray:]
+// Class<*> method: +[NSOrderedSet orderedSetWithArray:]
 fun NSOrderedSet_orderedSetWithArray(array: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithArray:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, array) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithArray:range:copyItems:]
+// Class<*> method: +[NSOrderedSet orderedSetWithArray:range:copyItems:]
 fun NSOrderedSet_orderedSetWithArray_range_copyItems(array: MemorySegment, range: NSRange, flag: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithArray:range:copyItems:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, array, range, flag) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithSet:]
+// Class<*> method: +[NSOrderedSet orderedSetWithSet:]
 fun NSOrderedSet_orderedSetWithSet(`set`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithSet:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `set`) as MemorySegment
 }
 
-// Class method: +[NSOrderedSet orderedSetWithSet:copyItems:]
+// Class<*> method: +[NSOrderedSet orderedSetWithSet:copyItems:]
 fun NSOrderedSet_orderedSetWithSet_copyItems(`set`: MemorySegment, flag: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("orderedSetWithSet:copyItems:")
     val cls = ObjCRuntime.getClass("NSOrderedSet")

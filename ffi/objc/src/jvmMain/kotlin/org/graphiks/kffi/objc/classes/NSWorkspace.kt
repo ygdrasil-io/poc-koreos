@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSWorkspace
  * Superclass: NSObject
@@ -6,233 +12,233 @@ open class NSWorkspace(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSWorkspace") }
         
-        fun sharedWorkspace(): MemorySegment {
+        open fun sharedWorkspace(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedWorkspace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun openURL(url: MemorySegment): BOOL {
+    open fun openURL(url: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("openURL:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url) as BOOL
     }
     
-    fun openURL_configuration_completionHandler(url: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun openURL_configuration_completionHandler(url: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("openURL:configuration:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, url, configuration, completionHandler)
     }
     
-    fun openURLs_withApplicationAtURL_configuration_completionHandler(urls: MemorySegment, applicationURL: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun openURLs_withApplicationAtURL_configuration_completionHandler(urls: MemorySegment, applicationURL: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("openURLs:withApplicationAtURL:configuration:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, urls, applicationURL, configuration, completionHandler)
     }
     
-    fun openApplicationAtURL_configuration_completionHandler(applicationURL: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun openApplicationAtURL_configuration_completionHandler(applicationURL: MemorySegment, configuration: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("openApplicationAtURL:configuration:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, applicationURL, configuration, completionHandler)
     }
     
-    fun selectFile_inFileViewerRootedAtPath(fullPath: MemorySegment, rootFullPath: MemorySegment): BOOL {
+    open fun selectFile_inFileViewerRootedAtPath(fullPath: MemorySegment, rootFullPath: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("selectFile:inFileViewerRootedAtPath:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, fullPath, rootFullPath) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun selectFile_inFileViewerRootedAtPath(fullPath: String, rootFullPath: String): BOOL = selectFile_inFileViewerRootedAtPath(ObjCRuntime.newNSString(Arena.global(), fullPath), ObjCRuntime.newNSString(Arena.global(), rootFullPath))
+    open fun selectFile_inFileViewerRootedAtPath(fullPath: String, rootFullPath: String): BOOL = selectFile_inFileViewerRootedAtPath(ObjCRuntime.newNSString(Arena.global(), fullPath), ObjCRuntime.newNSString(Arena.global(), rootFullPath))
     
-    fun activateFileViewerSelectingURLs(fileURLs: MemorySegment): Unit {
+    open fun activateFileViewerSelectingURLs(fileURLs: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("activateFileViewerSelectingURLs:")
         ObjCRuntime.msgSend(null, ptr, sel, fileURLs)
     }
     
-    fun showSearchResultsForQueryString(queryString: MemorySegment): BOOL {
+    open fun showSearchResultsForQueryString(queryString: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("showSearchResultsForQueryString:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, queryString) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun showSearchResultsForQueryString(queryString: String): BOOL = showSearchResultsForQueryString(ObjCRuntime.newNSString(Arena.global(), queryString))
+    open fun showSearchResultsForQueryString(queryString: String): BOOL = showSearchResultsForQueryString(ObjCRuntime.newNSString(Arena.global(), queryString))
     
-    fun noteFileSystemChanged(path: MemorySegment): Unit {
+    open fun noteFileSystemChanged(path: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("noteFileSystemChanged:")
         ObjCRuntime.msgSend(null, ptr, sel, path)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun noteFileSystemChanged(path: String): Unit = noteFileSystemChanged(ObjCRuntime.newNSString(Arena.global(), path))
+    open fun noteFileSystemChanged(path: String): Unit = noteFileSystemChanged(ObjCRuntime.newNSString(Arena.global(), path))
     
-    fun isFilePackageAtPath(fullPath: MemorySegment): BOOL {
+    open fun isFilePackageAtPath(fullPath: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("isFilePackageAtPath:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, fullPath) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun isFilePackageAtPath(fullPath: String): BOOL = isFilePackageAtPath(ObjCRuntime.newNSString(Arena.global(), fullPath))
+    open fun isFilePackageAtPath(fullPath: String): BOOL = isFilePackageAtPath(ObjCRuntime.newNSString(Arena.global(), fullPath))
     
-    fun iconForFile(fullPath: MemorySegment): MemorySegment {
+    open fun iconForFile(fullPath: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("iconForFile:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fullPath) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun iconForFile(fullPath: String): MemorySegment = iconForFile(ObjCRuntime.newNSString(Arena.global(), fullPath))
+    open fun iconForFile(fullPath: String): MemorySegment = iconForFile(ObjCRuntime.newNSString(Arena.global(), fullPath))
     
-    fun iconForFiles(fullPaths: MemorySegment): MemorySegment {
+    open fun iconForFiles(fullPaths: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("iconForFiles:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fullPaths) as MemorySegment
     }
     
-    fun iconForContentType(contentType: MemorySegment): MemorySegment {
+    open fun iconForContentType(contentType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("iconForContentType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, contentType) as MemorySegment
     }
     
-    fun setIcon_forFile_options(image: MemorySegment, fullPath: MemorySegment, options: NSWorkspaceIconCreationOptions): BOOL {
+    open fun setIcon_forFile_options(image: MemorySegment, fullPath: MemorySegment, options: NSWorkspaceIconCreationOptions): BOOL {
         val sel = ObjCRuntime.sel("setIcon:forFile:options:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, image, fullPath, options) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setIcon_forFile_options(image: MemorySegment, fullPath: String, options: NSWorkspaceIconCreationOptions): BOOL = setIcon_forFile_options(image, ObjCRuntime.newNSString(Arena.global(), fullPath), options)
+    open fun setIcon_forFile_options(image: MemorySegment, fullPath: String, options: NSWorkspaceIconCreationOptions): BOOL = setIcon_forFile_options(image, ObjCRuntime.newNSString(Arena.global(), fullPath), options)
     
-    fun recycleURLs_completionHandler(URLs: MemorySegment, handler: MemorySegment): Unit {
+    open fun recycleURLs_completionHandler(URLs: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("recycleURLs:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, URLs, handler)
     }
     
-    fun duplicateURLs_completionHandler(URLs: MemorySegment, handler: MemorySegment): Unit {
+    open fun duplicateURLs_completionHandler(URLs: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("duplicateURLs:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, URLs, handler)
     }
     
-    fun getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(fullPath: MemorySegment, removableFlag: MemorySegment, writableFlag: MemorySegment, unmountableFlag: MemorySegment, description: MemorySegment, fileSystemType: MemorySegment): BOOL {
+    open fun getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(fullPath: MemorySegment, removableFlag: MemorySegment, writableFlag: MemorySegment, unmountableFlag: MemorySegment, description: MemorySegment, fileSystemType: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getFileSystemInfoForPath:isRemovable:isWritable:isUnmountable:description:type:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, fullPath, removableFlag, writableFlag, unmountableFlag, description, fileSystemType) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(fullPath: String, removableFlag: MemorySegment, writableFlag: MemorySegment, unmountableFlag: MemorySegment, description: String, fileSystemType: String): BOOL = getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(ObjCRuntime.newNSString(Arena.global(), fullPath), removableFlag, writableFlag, unmountableFlag, ObjCRuntime.newNSString(Arena.global(), description), ObjCRuntime.newNSString(Arena.global(), fileSystemType))
+    open fun getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(fullPath: String, removableFlag: MemorySegment, writableFlag: MemorySegment, unmountableFlag: MemorySegment, description: String, fileSystemType: String): BOOL = getFileSystemInfoForPath_isRemovable_isWritable_isUnmountable_description_type(ObjCRuntime.newNSString(Arena.global(), fullPath), removableFlag, writableFlag, unmountableFlag, ObjCRuntime.newNSString(Arena.global(), description), ObjCRuntime.newNSString(Arena.global(), fileSystemType))
     
-    fun unmountAndEjectDeviceAtPath(path: MemorySegment): BOOL {
+    open fun unmountAndEjectDeviceAtPath(path: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("unmountAndEjectDeviceAtPath:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path) as BOOL
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun unmountAndEjectDeviceAtPath(path: String): BOOL = unmountAndEjectDeviceAtPath(ObjCRuntime.newNSString(Arena.global(), path))
+    open fun unmountAndEjectDeviceAtPath(path: String): BOOL = unmountAndEjectDeviceAtPath(ObjCRuntime.newNSString(Arena.global(), path))
     
-    fun unmountAndEjectDeviceAtURL_error(url: MemorySegment, error: MemorySegment): BOOL {
+    open fun unmountAndEjectDeviceAtURL_error(url: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("unmountAndEjectDeviceAtURL:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, error) as BOOL
     }
     
-    fun extendPowerOffBy(requested: NSInteger): NSInteger {
+    open fun extendPowerOffBy(requested: NSInteger): NSInteger {
         val sel = ObjCRuntime.sel("extendPowerOffBy:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, requested) as NSInteger
     }
     
-    fun hideOtherApplications(): Unit {
+    open fun hideOtherApplications(): Unit {
         val sel = ObjCRuntime.sel("hideOtherApplications")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun URLForApplicationWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
+    open fun URLForApplicationWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLForApplicationWithBundleIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bundleIdentifier) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun URLForApplicationWithBundleIdentifier(bundleIdentifier: String): MemorySegment = URLForApplicationWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
+    open fun URLForApplicationWithBundleIdentifier(bundleIdentifier: String): MemorySegment = URLForApplicationWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
     
     /** @return NSArray<NSURL *> * */
-    fun URLsForApplicationsWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
+    open fun URLsForApplicationsWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLsForApplicationsWithBundleIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bundleIdentifier) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun URLsForApplicationsWithBundleIdentifier(bundleIdentifier: String): MemorySegment = URLsForApplicationsWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
+    open fun URLsForApplicationsWithBundleIdentifier(bundleIdentifier: String): MemorySegment = URLsForApplicationsWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
     
-    fun URLForApplicationToOpenURL(url: MemorySegment): MemorySegment {
+    open fun URLForApplicationToOpenURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLForApplicationToOpenURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
     /** @return NSArray<NSURL *> * */
-    fun URLsForApplicationsToOpenURL(url: MemorySegment): MemorySegment {
+    open fun URLsForApplicationsToOpenURL(url: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLsForApplicationsToOpenURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url) as MemorySegment
     }
     
-    fun setDefaultApplicationAtURL_toOpenContentTypeOfFileAtURL_completionHandler(applicationURL: MemorySegment, url: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun setDefaultApplicationAtURL_toOpenContentTypeOfFileAtURL_completionHandler(applicationURL: MemorySegment, url: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDefaultApplicationAtURL:toOpenContentTypeOfFileAtURL:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, applicationURL, url, completionHandler)
     }
     
-    fun setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL: MemorySegment, urlScheme: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL: MemorySegment, urlScheme: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, applicationURL, urlScheme, completionHandler)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL: MemorySegment, urlScheme: String, completionHandler: MemorySegment): Unit = setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL, ObjCRuntime.newNSString(Arena.global(), urlScheme), completionHandler)
+    open fun setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL: MemorySegment, urlScheme: String, completionHandler: MemorySegment): Unit = setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(applicationURL, ObjCRuntime.newNSString(Arena.global(), urlScheme), completionHandler)
     
-    fun setDefaultApplicationAtURL_toOpenFileAtURL_completionHandler(applicationURL: MemorySegment, url: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun setDefaultApplicationAtURL_toOpenFileAtURL_completionHandler(applicationURL: MemorySegment, url: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDefaultApplicationAtURL:toOpenFileAtURL:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, applicationURL, url, completionHandler)
     }
     
-    fun URLForApplicationToOpenContentType(contentType: MemorySegment): MemorySegment {
+    open fun URLForApplicationToOpenContentType(contentType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLForApplicationToOpenContentType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, contentType) as MemorySegment
     }
     
     /** @return NSArray<NSURL *> * */
-    fun URLsForApplicationsToOpenContentType(contentType: MemorySegment): MemorySegment {
+    open fun URLsForApplicationsToOpenContentType(contentType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLsForApplicationsToOpenContentType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, contentType) as MemorySegment
     }
     
-    fun setDefaultApplicationAtURL_toOpenContentType_completionHandler(applicationURL: MemorySegment, contentType: MemorySegment, completionHandler: MemorySegment): Unit {
+    open fun setDefaultApplicationAtURL_toOpenContentType_completionHandler(applicationURL: MemorySegment, contentType: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDefaultApplicationAtURL:toOpenContentType:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, applicationURL, contentType, completionHandler)
     }
     
     // @property sharedWorkspace
-    fun sharedWorkspace(): MemorySegment {
+    open fun sharedWorkspace(): MemorySegment {
         val sel = ObjCRuntime.sel("sharedWorkspace")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property notificationCenter
-    fun notificationCenter(): MemorySegment {
+    open fun notificationCenter(): MemorySegment {
         val sel = ObjCRuntime.sel("notificationCenter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property fileLabels
     /** @return NSArray<NSString *> * */
-    fun fileLabels(): MemorySegment {
+    open fun fileLabels(): MemorySegment {
         val sel = ObjCRuntime.sel("fileLabels")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property fileLabelColors
     /** @return NSArray<NSColor *> * */
-    fun fileLabelColors(): MemorySegment {
+    open fun fileLabelColors(): MemorySegment {
         val sel = ObjCRuntime.sel("fileLabelColors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property frontmostApplication
-    fun frontmostApplication(): MemorySegment {
+    open fun frontmostApplication(): MemorySegment {
         val sel = ObjCRuntime.sel("frontmostApplication")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property menuBarOwningApplication
-    fun menuBarOwningApplication(): MemorySegment {
+    open fun menuBarOwningApplication(): MemorySegment {
         val sel = ObjCRuntime.sel("menuBarOwningApplication")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

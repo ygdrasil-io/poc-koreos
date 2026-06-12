@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableSet
  * Superclass: NSSet
@@ -18,12 +24,12 @@ open class NSMutableSet(ptr: MemorySegment) : NSSet(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    override fun `init`(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -69,7 +75,7 @@ fun NSMutableSet.setSet(otherSet: MemorySegment): Unit {
 
 // ── Category: NSMutableSetCreation on NSMutableSet ─────────────────────────────────────────
 
-// Class method: +[NSMutableSet setWithCapacity:]
+// Class<*> method: +[NSMutableSet setWithCapacity:]
 fun NSMutableSet_setWithCapacity(numItems: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("setWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableSet")

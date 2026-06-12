@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSplitViewItemAccessoryViewController
  * Superclass: NSViewController
@@ -9,22 +15,22 @@ open class NSSplitViewItemAccessoryViewController(ptr: MemorySegment) : NSViewCo
         
     }
     
-    fun viewWillAppear(): Unit {
+    override fun `viewWillAppear`(): Unit {
         val sel = ObjCRuntime.sel("viewWillAppear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun viewDidAppear(): Unit {
+    override fun `viewDidAppear`(): Unit {
         val sel = ObjCRuntime.sel("viewDidAppear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun viewWillDisappear(): Unit {
+    override fun `viewWillDisappear`(): Unit {
         val sel = ObjCRuntime.sel("viewWillDisappear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun viewDidDisappear(): Unit {
+    override fun `viewDidDisappear`(): Unit {
         val sel = ObjCRuntime.sel("viewDidDisappear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }

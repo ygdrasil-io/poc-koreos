@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSGraphicsContext
  * Superclass: NSObject
@@ -6,94 +12,94 @@ open class NSGraphicsContext(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGraphicsContext") }
         
-        fun graphicsContextWithAttributes(attributes: MemorySegment): MemorySegment {
+        open fun graphicsContextWithAttributes(attributes: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("graphicsContextWithAttributes:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, attributes) as MemorySegment
         }
         
-        fun graphicsContextWithBitmapImageRep(bitmapRep: MemorySegment): MemorySegment {
+        open fun graphicsContextWithBitmapImageRep(bitmapRep: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("graphicsContextWithBitmapImageRep:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, bitmapRep) as MemorySegment
         }
         
-        fun graphicsContextWithCGContext_flipped(graphicsPort: MemorySegment, initialFlippedState: BOOL): MemorySegment {
+        open fun graphicsContextWithCGContext_flipped(graphicsPort: MemorySegment, initialFlippedState: BOOL): MemorySegment {
             val sel = ObjCRuntime.sel("graphicsContextWithCGContext:flipped:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, graphicsPort, initialFlippedState) as MemorySegment
         }
         
-        fun currentContextDrawingToScreen(): BOOL {
+        open fun currentContextDrawingToScreen(): BOOL {
             val sel = ObjCRuntime.sel("currentContextDrawingToScreen")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
         }
         
-        fun saveGraphicsState(): Unit {
+        open fun saveGraphicsState(): Unit {
             val sel = ObjCRuntime.sel("saveGraphicsState")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        fun restoreGraphicsState(): Unit {
+        open fun restoreGraphicsState(): Unit {
             val sel = ObjCRuntime.sel("restoreGraphicsState")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        fun currentContext(): MemorySegment {
+        open fun currentContext(): MemorySegment {
             val sel = ObjCRuntime.sel("currentContext")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun setCurrentContext(currentContext: MemorySegment): Unit {
+        open fun setCurrentContext(currentContext: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setCurrentContext:")
             ObjCRuntime.msgSend(null, _class, sel, currentContext)
         }
         
     }
     
-    fun saveGraphicsState(): Unit {
+    open fun saveGraphicsState(): Unit {
         val sel = ObjCRuntime.sel("saveGraphicsState")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun restoreGraphicsState(): Unit {
+    open fun restoreGraphicsState(): Unit {
         val sel = ObjCRuntime.sel("restoreGraphicsState")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun flushGraphics(): Unit {
+    open fun flushGraphics(): Unit {
         val sel = ObjCRuntime.sel("flushGraphics")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property currentContext
-    fun currentContext(): MemorySegment {
+    open fun currentContext(): MemorySegment {
         val sel = ObjCRuntime.sel("currentContext")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrentContext(value: MemorySegment) {
+    open fun setCurrentContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrentContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property attributes
     /** @return NSDictionary<NSGraphicsContextAttributeKey,id> * */
-    fun attributes(): MemorySegment {
+    open fun attributes(): MemorySegment {
         val sel = ObjCRuntime.sel("attributes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property drawingToScreen
-    fun isDrawingToScreen(): BOOL {
+    open fun isDrawingToScreen(): BOOL {
         val sel = ObjCRuntime.sel("isDrawingToScreen")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property CGContext
-    fun CGContext(): MemorySegment {
+    open fun CGContext(): MemorySegment {
         val sel = ObjCRuntime.sel("CGContext")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property flipped
-    fun isFlipped(): BOOL {
+    open fun isFlipped(): BOOL {
         val sel = ObjCRuntime.sel("isFlipped")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
@@ -232,21 +238,21 @@ fun NSGraphicsContext.graphicsPort(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSGraphicsContext setGraphicsState:]
+// Class<*> method: +[NSGraphicsContext setGraphicsState:]
 fun NSGraphicsContext_setGraphicsState(gState: NSInteger): Unit {
     val sel = ObjCRuntime.sel("setGraphicsState:")
     val cls = ObjCRuntime.getClass("NSGraphicsContext")
     ObjCRuntime.msgSend(null, cls, sel, gState)
 }
 
-// Class method: +[NSGraphicsContext graphicsContextWithGraphicsPort:flipped:]
+// Class<*> method: +[NSGraphicsContext graphicsContextWithGraphicsPort:flipped:]
 fun NSGraphicsContext_graphicsContextWithGraphicsPort_flipped(graphicsPort: MemorySegment, initialFlippedState: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("graphicsContextWithGraphicsPort:flipped:")
     val cls = ObjCRuntime.getClass("NSGraphicsContext")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, graphicsPort, initialFlippedState) as MemorySegment
 }
 
-// Class method: +[NSGraphicsContext graphicsContextWithWindow:]
+// Class<*> method: +[NSGraphicsContext graphicsContextWithWindow:]
 fun NSGraphicsContext_graphicsContextWithWindow(window: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("graphicsContextWithWindow:")
     val cls = ObjCRuntime.getClass("NSGraphicsContext")

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPopUpButtonCell
  * Superclass: NSMenuItemCell
@@ -17,7 +23,7 @@ open class NSPopUpButtonCell(ptr: MemorySegment) : NSMenuItemCell(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initTextCell_pullsDown(stringValue: String, pullDown: BOOL): MemorySegment = initTextCell_pullsDown(ObjCRuntime.newNSString(Arena.global(), stringValue), pullDown)
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSAppleScript
  * Superclass: NSObject
@@ -9,45 +15,45 @@ open class NSAppleScript(val ptr: MemorySegment) {
         
     }
     
-    fun initWithContentsOfURL_error(url: MemorySegment, errorInfo: MemorySegment): MemorySegment {
+    open fun initWithContentsOfURL_error(url: MemorySegment, errorInfo: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithContentsOfURL:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, errorInfo) as MemorySegment
     }
     
-    fun initWithSource(source: MemorySegment): MemorySegment {
+    open fun initWithSource(source: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithSource:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, source) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithSource(source: String): MemorySegment = initWithSource(ObjCRuntime.newNSString(Arena.global(), source))
+    open fun initWithSource(source: String): MemorySegment = initWithSource(ObjCRuntime.newNSString(Arena.global(), source))
     
-    fun compileAndReturnError(errorInfo: MemorySegment): BOOL {
+    open fun compileAndReturnError(errorInfo: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("compileAndReturnError:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, errorInfo) as BOOL
     }
     
-    fun executeAndReturnError(errorInfo: MemorySegment): MemorySegment {
+    open fun executeAndReturnError(errorInfo: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("executeAndReturnError:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, errorInfo) as MemorySegment
     }
     
-    fun executeAppleEvent_error(event: MemorySegment, errorInfo: MemorySegment): MemorySegment {
+    open fun executeAppleEvent_error(event: MemorySegment, errorInfo: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("executeAppleEvent:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, event, errorInfo) as MemorySegment
     }
     
     // @property source
-    fun source(): MemorySegment {
+    open fun source(): MemorySegment {
         val sel = ObjCRuntime.sel("source")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun sourceAsString(): String = ObjCRuntime.toJavaString(source())
+    open fun sourceAsString(): String = ObjCRuntime.toJavaString(source())
     
     // @property compiled
-    fun isCompiled(): BOOL {
+    open fun isCompiled(): BOOL {
         val sel = ObjCRuntime.sel("isCompiled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }

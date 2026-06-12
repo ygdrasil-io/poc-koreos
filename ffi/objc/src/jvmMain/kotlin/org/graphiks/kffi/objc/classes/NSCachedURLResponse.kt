@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCachedURLResponse
  * Superclass: NSObject
@@ -9,36 +15,36 @@ open class NSCachedURLResponse(val ptr: MemorySegment) {
         
     }
     
-    fun initWithResponse_data(response: MemorySegment, `data`: MemorySegment): MemorySegment {
+    open fun initWithResponse_data(response: MemorySegment, `data`: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithResponse:data:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, response, `data`) as MemorySegment
     }
     
-    fun initWithResponse_data_userInfo_storagePolicy(response: MemorySegment, `data`: MemorySegment, userInfo: MemorySegment, storagePolicy: NSURLCacheStoragePolicy): MemorySegment {
+    open fun initWithResponse_data_userInfo_storagePolicy(response: MemorySegment, `data`: MemorySegment, userInfo: MemorySegment, storagePolicy: NSURLCacheStoragePolicy): MemorySegment {
         val sel = ObjCRuntime.sel("initWithResponse:data:userInfo:storagePolicy:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, response, `data`, userInfo, storagePolicy) as MemorySegment
     }
     
     // @property response
-    fun response(): MemorySegment {
+    open fun response(): MemorySegment {
         val sel = ObjCRuntime.sel("response")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property data
-    fun `data`(): MemorySegment {
+    open fun data(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property userInfo
-    fun userInfo(): MemorySegment {
+    open fun userInfo(): MemorySegment {
         val sel = ObjCRuntime.sel("userInfo")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property storagePolicy
-    fun storagePolicy(): NSURLCacheStoragePolicy {
+    open fun storagePolicy(): NSURLCacheStoragePolicy {
         val sel = ObjCRuntime.sel("storagePolicy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLCacheStoragePolicy
     }

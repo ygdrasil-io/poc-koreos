@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPrintInfo
  * Superclass: NSObject
@@ -7,263 +13,263 @@ open class NSPrintInfo(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPrintInfo") }
         
-        fun sharedPrintInfo(): MemorySegment {
+        open fun sharedPrintInfo(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedPrintInfo")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun setSharedPrintInfo(sharedPrintInfo: MemorySegment): Unit {
+        open fun setSharedPrintInfo(sharedPrintInfo: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setSharedPrintInfo:")
             ObjCRuntime.msgSend(null, _class, sel, sharedPrintInfo)
         }
         
-        fun defaultPrinter(): MemorySegment {
+        open fun defaultPrinter(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultPrinter")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun initWithDictionary(attributes: MemorySegment): MemorySegment {
+    open fun initWithDictionary(attributes: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDictionary:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attributes) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** @return NSMutableDictionary<NSPrintInfoAttributeKey,id> * */
-    fun dictionary(): MemorySegment {
+    open fun dictionary(): MemorySegment {
         val sel = ObjCRuntime.sel("dictionary")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun setUpPrintOperationDefaultValues(): Unit {
+    open fun setUpPrintOperationDefaultValues(): Unit {
         val sel = ObjCRuntime.sel("setUpPrintOperationDefaultValues")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun PMPrintSession(): MemorySegment {
+    open fun PMPrintSession(): MemorySegment {
         val sel = ObjCRuntime.sel("PMPrintSession")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun PMPageFormat(): MemorySegment {
+    open fun PMPageFormat(): MemorySegment {
         val sel = ObjCRuntime.sel("PMPageFormat")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun PMPrintSettings(): MemorySegment {
+    open fun PMPrintSettings(): MemorySegment {
         val sel = ObjCRuntime.sel("PMPrintSettings")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun updateFromPMPageFormat(): Unit {
+    open fun updateFromPMPageFormat(): Unit {
         val sel = ObjCRuntime.sel("updateFromPMPageFormat")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun updateFromPMPrintSettings(): Unit {
+    open fun updateFromPMPrintSettings(): Unit {
         val sel = ObjCRuntime.sel("updateFromPMPrintSettings")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun takeSettingsFromPDFInfo(inPDFInfo: MemorySegment): Unit {
+    open fun takeSettingsFromPDFInfo(inPDFInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeSettingsFromPDFInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, inPDFInfo)
     }
     
     // @property sharedPrintInfo
-    fun sharedPrintInfo(): MemorySegment {
+    open fun sharedPrintInfo(): MemorySegment {
         val sel = ObjCRuntime.sel("sharedPrintInfo")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSharedPrintInfo(value: MemorySegment) {
+    open fun setSharedPrintInfo(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSharedPrintInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property paperName
-    fun paperName(): NSPrinterPaperName {
+    open fun paperName(): NSPrinterPaperName {
         val sel = ObjCRuntime.sel("paperName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrinterPaperName
     }
-    fun setPaperName(value: NSPrinterPaperName) {
+    open fun setPaperName(value: NSPrinterPaperName) {
         val sel = ObjCRuntime.sel("setPaperName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property paperSize
-    fun paperSize(): NSSize {
+    open fun paperSize(): NSSize {
         val sel = ObjCRuntime.sel("paperSize")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }
-    fun setPaperSize(value: NSSize) {
+    open fun setPaperSize(value: NSSize) {
         val sel = ObjCRuntime.sel("setPaperSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property orientation
-    fun orientation(): NSPaperOrientation {
+    open fun orientation(): NSPaperOrientation {
         val sel = ObjCRuntime.sel("orientation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPaperOrientation
     }
-    fun setOrientation(value: NSPaperOrientation) {
+    open fun setOrientation(value: NSPaperOrientation) {
         val sel = ObjCRuntime.sel("setOrientation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property scalingFactor
-    fun scalingFactor(): CGFloat {
+    open fun scalingFactor(): CGFloat {
         val sel = ObjCRuntime.sel("scalingFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setScalingFactor(value: CGFloat) {
+    open fun setScalingFactor(value: CGFloat) {
         val sel = ObjCRuntime.sel("setScalingFactor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property leftMargin
-    fun leftMargin(): CGFloat {
+    open fun leftMargin(): CGFloat {
         val sel = ObjCRuntime.sel("leftMargin")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setLeftMargin(value: CGFloat) {
+    open fun setLeftMargin(value: CGFloat) {
         val sel = ObjCRuntime.sel("setLeftMargin:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rightMargin
-    fun rightMargin(): CGFloat {
+    open fun rightMargin(): CGFloat {
         val sel = ObjCRuntime.sel("rightMargin")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setRightMargin(value: CGFloat) {
+    open fun setRightMargin(value: CGFloat) {
         val sel = ObjCRuntime.sel("setRightMargin:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property topMargin
-    fun topMargin(): CGFloat {
+    open fun topMargin(): CGFloat {
         val sel = ObjCRuntime.sel("topMargin")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setTopMargin(value: CGFloat) {
+    open fun setTopMargin(value: CGFloat) {
         val sel = ObjCRuntime.sel("setTopMargin:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bottomMargin
-    fun bottomMargin(): CGFloat {
+    open fun bottomMargin(): CGFloat {
         val sel = ObjCRuntime.sel("bottomMargin")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setBottomMargin(value: CGFloat) {
+    open fun setBottomMargin(value: CGFloat) {
         val sel = ObjCRuntime.sel("setBottomMargin:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property horizontallyCentered
-    fun isHorizontallyCentered(): BOOL {
+    open fun isHorizontallyCentered(): BOOL {
         val sel = ObjCRuntime.sel("isHorizontallyCentered")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setHorizontallyCentered(value: BOOL) {
+    open fun setHorizontallyCentered(value: BOOL) {
         val sel = ObjCRuntime.sel("setHorizontallyCentered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property verticallyCentered
-    fun isVerticallyCentered(): BOOL {
+    open fun isVerticallyCentered(): BOOL {
         val sel = ObjCRuntime.sel("isVerticallyCentered")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setVerticallyCentered(value: BOOL) {
+    open fun setVerticallyCentered(value: BOOL) {
         val sel = ObjCRuntime.sel("setVerticallyCentered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property horizontalPagination
-    fun horizontalPagination(): NSPrintingPaginationMode {
+    open fun horizontalPagination(): NSPrintingPaginationMode {
         val sel = ObjCRuntime.sel("horizontalPagination")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrintingPaginationMode
     }
-    fun setHorizontalPagination(value: NSPrintingPaginationMode) {
+    open fun setHorizontalPagination(value: NSPrintingPaginationMode) {
         val sel = ObjCRuntime.sel("setHorizontalPagination:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property verticalPagination
-    fun verticalPagination(): NSPrintingPaginationMode {
+    open fun verticalPagination(): NSPrintingPaginationMode {
         val sel = ObjCRuntime.sel("verticalPagination")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrintingPaginationMode
     }
-    fun setVerticalPagination(value: NSPrintingPaginationMode) {
+    open fun setVerticalPagination(value: NSPrintingPaginationMode) {
         val sel = ObjCRuntime.sel("setVerticalPagination:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property jobDisposition
-    fun jobDisposition(): NSPrintJobDispositionValue {
+    open fun jobDisposition(): NSPrintJobDispositionValue {
         val sel = ObjCRuntime.sel("jobDisposition")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrintJobDispositionValue
     }
-    fun setJobDisposition(value: NSPrintJobDispositionValue) {
+    open fun setJobDisposition(value: NSPrintJobDispositionValue) {
         val sel = ObjCRuntime.sel("setJobDisposition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property printer
-    fun printer(): MemorySegment {
+    open fun printer(): MemorySegment {
         val sel = ObjCRuntime.sel("printer")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPrinter(value: MemorySegment) {
+    open fun setPrinter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPrinter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageablePageBounds
-    fun imageablePageBounds(): NSRect {
+    open fun imageablePageBounds(): NSRect {
         val sel = ObjCRuntime.sel("imageablePageBounds")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
     }
     
     // @property localizedPaperName
-    fun localizedPaperName(): MemorySegment {
+    open fun localizedPaperName(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedPaperName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedPaperNameAsString(): String = ObjCRuntime.toJavaString(localizedPaperName())
+    open fun localizedPaperNameAsString(): String = ObjCRuntime.toJavaString(localizedPaperName())
     
     // @property defaultPrinter
-    fun defaultPrinter(): MemorySegment {
+    open fun defaultPrinter(): MemorySegment {
         val sel = ObjCRuntime.sel("defaultPrinter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property printSettings
     /** @return NSMutableDictionary<NSPrintInfoSettingKey,id> * */
-    fun printSettings(): MemorySegment {
+    open fun printSettings(): MemorySegment {
         val sel = ObjCRuntime.sel("printSettings")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectionOnly
-    fun isSelectionOnly(): BOOL {
+    open fun isSelectionOnly(): BOOL {
         val sel = ObjCRuntime.sel("isSelectionOnly")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setSelectionOnly(value: BOOL) {
+    open fun setSelectionOnly(value: BOOL) {
         val sel = ObjCRuntime.sel("setSelectionOnly:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -272,14 +278,14 @@ open class NSPrintInfo(val ptr: MemorySegment) {
 
 // ── Category: NSDeprecated on NSPrintInfo ─────────────────────────────────────────
 
-// Class method: +[NSPrintInfo setDefaultPrinter:]
+// Class<*> method: +[NSPrintInfo setDefaultPrinter:]
 fun NSPrintInfo_setDefaultPrinter(printer: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setDefaultPrinter:")
     val cls = ObjCRuntime.getClass("NSPrintInfo")
     ObjCRuntime.msgSend(null, cls, sel, printer)
 }
 
-// Class method: +[NSPrintInfo sizeForPaperName:]
+// Class<*> method: +[NSPrintInfo sizeForPaperName:]
 fun NSPrintInfo_sizeForPaperName(name: NSPrinterPaperName): NSSize {
     val sel = ObjCRuntime.sel("sizeForPaperName:")
     val cls = ObjCRuntime.getClass("NSPrintInfo")

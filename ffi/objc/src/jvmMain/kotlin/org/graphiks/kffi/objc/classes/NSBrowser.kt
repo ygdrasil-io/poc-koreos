@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSBrowser
  * Superclass: NSControl
@@ -11,9 +17,9 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
             ObjCRuntime.msgSend(null, _class, sel, name)
         }
         
-        fun cellClass(): Class {
+        override fun `cellClass`(): Class<*> {
             val sel = ObjCRuntime.sel("cellClass")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class<*>
         }
         
     }
@@ -23,7 +29,7 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setCellClass(factoryId: Class): Unit {
+    override fun `setCellClass`(factoryId: Class<*>): Unit {
         val sel = ObjCRuntime.sel("setCellClass:")
         ObjCRuntime.msgSend(null, ptr, sel, factoryId)
     }
@@ -274,9 +280,9 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property cellClass
-    fun cellClass(): Class {
+    fun cellClass(): Class<*> {
         val sel = ObjCRuntime.sel("cellClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
     
     // @property loaded
@@ -471,7 +477,7 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property selectedCell
-    fun selectedCell(): MemorySegment {
+    override fun `selectedCell`(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedCell")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -632,14 +638,14 @@ fun NSBrowser.updateScroller(): Unit {
     ObjCRuntime.msgSend(null, ptr, sel)
 }
 
-fun NSBrowser.setMatrixClass(factoryId: Class): Unit {
+fun NSBrowser.setMatrixClass(factoryId: Class<*>): Unit {
     val sel = ObjCRuntime.sel("setMatrixClass:")
     ObjCRuntime.msgSend(null, ptr, sel, factoryId)
 }
 
-fun NSBrowser.matrixClass(): Class {
+fun NSBrowser.matrixClass(): Class<*> {
     val sel = ObjCRuntime.sel("matrixClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
 
 fun NSBrowser.columnOfMatrix(matrix: MemorySegment): NSInteger {

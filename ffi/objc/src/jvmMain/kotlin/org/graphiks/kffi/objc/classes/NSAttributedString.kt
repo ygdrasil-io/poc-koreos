@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSAttributedString
  * Superclass: NSObject
@@ -10,19 +16,19 @@ open class NSAttributedString(val ptr: MemorySegment) {
     }
     
     /** @return NSDictionary<NSAttributedStringKey,id> * */
-    fun attributesAtIndex_effectiveRange(location: NSUInteger, range: MemorySegment): MemorySegment {
+    open fun attributesAtIndex_effectiveRange(location: NSUInteger, range: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("attributesAtIndex:effectiveRange:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, location, range) as MemorySegment
     }
     
     // @property string
-    fun string(): MemorySegment {
+    open fun string(): MemorySegment {
         val sel = ObjCRuntime.sel("string")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringAsString(): String = ObjCRuntime.toJavaString(string())
+    open fun stringAsString(): String = ObjCRuntime.toJavaString(string())
     
 }
 
@@ -129,28 +135,28 @@ fun NSAttributedString.initWithFormat_options_locale_context_arguments(format: M
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, format, options, locale, context, arguments) as MemorySegment
 }
 
-// Class method: +[NSAttributedString localizedAttributedStringWithFormat:]
+// Class<*> method: +[NSAttributedString localizedAttributedStringWithFormat:]
 fun NSAttributedString_localizedAttributedStringWithFormat(format: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedAttributedStringWithFormat:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format) as MemorySegment
 }
 
-// Class method: +[NSAttributedString localizedAttributedStringWithFormat:options:]
+// Class<*> method: +[NSAttributedString localizedAttributedStringWithFormat:options:]
 fun NSAttributedString_localizedAttributedStringWithFormat_options(format: MemorySegment, options: NSAttributedStringFormattingOptions): MemorySegment {
     val sel = ObjCRuntime.sel("localizedAttributedStringWithFormat:options:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format, options) as MemorySegment
 }
 
-// Class method: +[NSAttributedString localizedAttributedStringWithFormat:context:]
+// Class<*> method: +[NSAttributedString localizedAttributedStringWithFormat:context:]
 fun NSAttributedString_localizedAttributedStringWithFormat_context(format: MemorySegment, context: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedAttributedStringWithFormat:context:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, format, context) as MemorySegment
 }
 
-// Class method: +[NSAttributedString localizedAttributedStringWithFormat:options:context:]
+// Class<*> method: +[NSAttributedString localizedAttributedStringWithFormat:options:context:]
 fun NSAttributedString_localizedAttributedStringWithFormat_options_context(format: MemorySegment, options: NSAttributedStringFormattingOptions, context: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedAttributedStringWithFormat:options:context:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
@@ -311,14 +317,14 @@ fun NSAttributedString.itemNumberInTextList_atIndex(list: MemorySegment, locatio
 
 // ── Category: NSAttributedStringPasteboardAdditions on NSAttributedString ─────────────────────────────────────────
 
-// Class method: +[NSAttributedString textTypes]
+// Class<*> method: +[NSAttributedString textTypes]
 fun NSAttributedString_textTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSAttributedString textUnfilteredTypes]
+// Class<*> method: +[NSAttributedString textUnfilteredTypes]
 fun NSAttributedString_textUnfilteredTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textUnfilteredTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
@@ -361,28 +367,28 @@ fun NSAttributedString.containsAttachments(): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
-// Class method: +[NSAttributedString textFileTypes]
+// Class<*> method: +[NSAttributedString textFileTypes]
 fun NSAttributedString_textFileTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textFileTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSAttributedString textPasteboardTypes]
+// Class<*> method: +[NSAttributedString textPasteboardTypes]
 fun NSAttributedString_textPasteboardTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textPasteboardTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSAttributedString textUnfilteredFileTypes]
+// Class<*> method: +[NSAttributedString textUnfilteredFileTypes]
 fun NSAttributedString_textUnfilteredFileTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textUnfilteredFileTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSAttributedString textUnfilteredPasteboardTypes]
+// Class<*> method: +[NSAttributedString textUnfilteredPasteboardTypes]
 fun NSAttributedString_textUnfilteredPasteboardTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("textUnfilteredPasteboardTypes")
     val cls = ObjCRuntime.getClass("NSAttributedString")
@@ -397,14 +403,14 @@ fun NSAttributedString.containsAttachments(): BOOL {
 
 // ── Category: NSAttributedStringAttachmentConveniences on NSAttributedString ─────────────────────────────────────────
 
-// Class method: +[NSAttributedString attributedStringWithAttachment:]
+// Class<*> method: +[NSAttributedString attributedStringWithAttachment:]
 fun NSAttributedString_attributedStringWithAttachment(attachment: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringWithAttachment:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, attachment) as MemorySegment
 }
 
-// Class method: +[NSAttributedString attributedStringWithAttachment:attributes:]
+// Class<*> method: +[NSAttributedString attributedStringWithAttachment:attributes:]
 fun NSAttributedString_attributedStringWithAttachment_attributes(attachment: MemorySegment, attributes: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringWithAttachment:attributes:")
     val cls = ObjCRuntime.getClass("NSAttributedString")
@@ -454,7 +460,7 @@ fun NSAttributedString.boundingRectWithSize_options(size: NSSize, options: NSStr
 
 // ── Category: NSAttributedStringAdaptiveImageGlyphConveniences on NSAttributedString ─────────────────────────────────────────
 
-// Class method: +[NSAttributedString attributedStringWithAdaptiveImageGlyph:attributes:]
+// Class<*> method: +[NSAttributedString attributedStringWithAdaptiveImageGlyph:attributes:]
 fun NSAttributedString_attributedStringWithAdaptiveImageGlyph_attributes(adaptiveImageGlyph: MemorySegment, attributes: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringWithAdaptiveImageGlyph:attributes:")
     val cls = ObjCRuntime.getClass("NSAttributedString")

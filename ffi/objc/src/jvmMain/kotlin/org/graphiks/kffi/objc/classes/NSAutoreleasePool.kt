@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSAutoreleasePool
  * Superclass: NSObject
@@ -6,19 +12,19 @@ open class NSAutoreleasePool(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAutoreleasePool") }
         
-        fun addObject(anObject: MemorySegment): Unit {
+        open fun addObject(anObject: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("addObject:")
             ObjCRuntime.msgSend(null, _class, sel, anObject)
         }
         
     }
     
-    fun addObject(anObject: MemorySegment): Unit {
+    open fun addObject(anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObject:")
         ObjCRuntime.msgSend(null, ptr, sel, anObject)
     }
     
-    fun drain(): Unit {
+    open fun drain(): Unit {
         val sel = ObjCRuntime.sel("drain")
         ObjCRuntime.msgSend(null, ptr, sel)
     }

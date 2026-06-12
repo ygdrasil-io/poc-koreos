@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCell
  * Superclass: NSObject
@@ -7,629 +13,629 @@ open class NSCell(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCell") }
         
-        fun _bulletStringForString_bulletCharacter(string: MemorySegment, bulletChar: unichar): MemorySegment {
+        open fun _bulletStringForString_bulletCharacter(string: MemorySegment, bulletChar: unichar): MemorySegment {
             val sel = ObjCRuntime.sel("_bulletStringForString:bulletCharacter:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, string, bulletChar) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun _bulletStringForString_bulletCharacterAsString(string: MemorySegment, bulletChar: unichar): String = ObjCRuntime.toJavaString(_bulletStringForString_bulletCharacter(string, bulletChar))
+        open fun _bulletStringForString_bulletCharacterAsString(string: MemorySegment, bulletChar: unichar): String = ObjCRuntime.toJavaString(_bulletStringForString_bulletCharacter(string, bulletChar))
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun _bulletStringForString_bulletCharacter(string: String, bulletChar: unichar): MemorySegment = _bulletStringForString_bulletCharacter(ObjCRuntime.newNSString(Arena.global(), string), bulletChar)
+        open fun _bulletStringForString_bulletCharacter(string: String, bulletChar: unichar): MemorySegment = _bulletStringForString_bulletCharacter(ObjCRuntime.newNSString(Arena.global(), string), bulletChar)
         
         /** Convenience overload — [String] parameters and [String] return type. */
-        fun _bulletStringForString_bulletCharacterAsString(string: String, bulletChar: unichar): String = ObjCRuntime.toJavaString(_bulletStringForString_bulletCharacter(ObjCRuntime.newNSString(Arena.global(), string), bulletChar))
+        open fun _bulletStringForString_bulletCharacterAsString(string: String, bulletChar: unichar): String = ObjCRuntime.toJavaString(_bulletStringForString_bulletCharacter(ObjCRuntime.newNSString(Arena.global(), string), bulletChar))
         
-        fun prefersTrackingUntilMouseUp(): BOOL {
+        open fun prefersTrackingUntilMouseUp(): BOOL {
             val sel = ObjCRuntime.sel("prefersTrackingUntilMouseUp")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
         }
         
-        fun defaultMenu(): MemorySegment {
+        open fun defaultMenu(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultMenu")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initTextCell(string: MemorySegment): MemorySegment {
+    open fun initTextCell(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initTextCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
+    open fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
     
-    fun initImageCell(image: MemorySegment): MemorySegment {
+    open fun initImageCell(image: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initImageCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, image) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun sendActionOn(mask: NSEventMask): NSInteger {
+    open fun sendActionOn(mask: NSEventMask): NSInteger {
         val sel = ObjCRuntime.sel("sendActionOn:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, mask) as NSInteger
     }
     
-    fun compare(otherCell: MemorySegment): NSComparisonResult {
+    open fun compare(otherCell: MemorySegment): NSComparisonResult {
         val sel = ObjCRuntime.sel("compare:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, otherCell) as NSComparisonResult
     }
     
-    fun takeIntValueFrom(sender: MemorySegment): Unit {
+    open fun takeIntValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeIntValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeFloatValueFrom(sender: MemorySegment): Unit {
+    open fun takeFloatValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeFloatValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeDoubleValueFrom(sender: MemorySegment): Unit {
+    open fun takeDoubleValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeDoubleValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeStringValueFrom(sender: MemorySegment): Unit {
+    open fun takeStringValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeStringValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeObjectValueFrom(sender: MemorySegment): Unit {
+    open fun takeObjectValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeObjectValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeIntegerValueFrom(sender: MemorySegment): Unit {
+    open fun takeIntegerValueFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeIntegerValueFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun cellAttribute(parameter: NSCellAttribute): NSInteger {
+    open fun cellAttribute(parameter: NSCellAttribute): NSInteger {
         val sel = ObjCRuntime.sel("cellAttribute:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, parameter) as NSInteger
     }
     
-    fun setCellAttribute_to(parameter: NSCellAttribute, value: NSInteger): Unit {
+    open fun setCellAttribute_to(parameter: NSCellAttribute, value: NSInteger): Unit {
         val sel = ObjCRuntime.sel("setCellAttribute:to:")
         ObjCRuntime.msgSend(null, ptr, sel, parameter, value)
     }
     
-    fun imageRectForBounds(rect: NSRect): NSRect {
+    open fun imageRectForBounds(rect: NSRect): NSRect {
         val sel = ObjCRuntime.sel("imageRectForBounds:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSRect
     }
     
-    fun titleRectForBounds(rect: NSRect): NSRect {
+    open fun titleRectForBounds(rect: NSRect): NSRect {
         val sel = ObjCRuntime.sel("titleRectForBounds:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSRect
     }
     
-    fun drawingRectForBounds(rect: NSRect): NSRect {
+    open fun drawingRectForBounds(rect: NSRect): NSRect {
         val sel = ObjCRuntime.sel("drawingRectForBounds:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSRect
     }
     
-    fun cellSizeForBounds(rect: NSRect): NSSize {
+    open fun cellSizeForBounds(rect: NSRect): NSSize {
         val sel = ObjCRuntime.sel("cellSizeForBounds:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSSize
     }
     
-    fun highlightColorWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): MemorySegment {
+    open fun highlightColorWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("highlightColorWithFrame:inView:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView) as MemorySegment
     }
     
-    fun calcDrawInfo(rect: NSRect): Unit {
+    open fun calcDrawInfo(rect: NSRect): Unit {
         val sel = ObjCRuntime.sel("calcDrawInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun setUpFieldEditorAttributes(textObj: MemorySegment): MemorySegment {
+    open fun setUpFieldEditorAttributes(textObj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("setUpFieldEditorAttributes:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, textObj) as MemorySegment
     }
     
-    fun drawInteriorWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
+    open fun drawInteriorWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawInteriorWithFrame:inView:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView)
     }
     
-    fun drawWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
+    open fun drawWithFrame_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawWithFrame:inView:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView)
     }
     
-    fun highlight_withFrame_inView(flag: BOOL, cellFrame: NSRect, controlView: MemorySegment): Unit {
+    open fun highlight_withFrame_inView(flag: BOOL, cellFrame: NSRect, controlView: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("highlight:withFrame:inView:")
         ObjCRuntime.msgSend(null, ptr, sel, flag, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView)
     }
     
-    fun getPeriodicDelay_interval(delay: MemorySegment, interval: MemorySegment): Unit {
+    open fun getPeriodicDelay_interval(delay: MemorySegment, interval: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getPeriodicDelay:interval:")
         ObjCRuntime.msgSend(null, ptr, sel, delay, interval)
     }
     
-    fun startTrackingAt_inView(startPoint: NSPoint, controlView: MemorySegment): BOOL {
+    open fun startTrackingAt_inView(startPoint: NSPoint, controlView: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("startTrackingAt:inView:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(startPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), controlView) as BOOL
     }
     
-    fun continueTracking_at_inView(lastPoint: NSPoint, currentPoint: NSPoint, controlView: MemorySegment): BOOL {
+    open fun continueTracking_at_inView(lastPoint: NSPoint, currentPoint: NSPoint, controlView: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("continueTracking:at:inView:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(lastPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), ObjCRuntime.ObjCStructArg(currentPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), controlView) as BOOL
     }
     
-    fun stopTracking_at_inView_mouseIsUp(lastPoint: NSPoint, stopPoint: NSPoint, controlView: MemorySegment, flag: BOOL): Unit {
+    open fun stopTracking_at_inView_mouseIsUp(lastPoint: NSPoint, stopPoint: NSPoint, controlView: MemorySegment, flag: BOOL): Unit {
         val sel = ObjCRuntime.sel("stopTracking:at:inView:mouseIsUp:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(lastPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), ObjCRuntime.ObjCStructArg(stopPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), controlView, flag)
     }
     
-    fun trackMouse_inRect_ofView_untilMouseUp(event: MemorySegment, cellFrame: NSRect, controlView: MemorySegment, flag: BOOL): BOOL {
+    open fun trackMouse_inRect_ofView_untilMouseUp(event: MemorySegment, cellFrame: NSRect, controlView: MemorySegment, flag: BOOL): BOOL {
         val sel = ObjCRuntime.sel("trackMouse:inRect:ofView:untilMouseUp:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView, flag) as BOOL
     }
     
-    fun editWithFrame_inView_editor_delegate_event(rect: NSRect, controlView: MemorySegment, textObj: MemorySegment, delegate: MemorySegment, event: MemorySegment): Unit {
+    open fun editWithFrame_inView_editor_delegate_event(rect: NSRect, controlView: MemorySegment, textObj: MemorySegment, delegate: MemorySegment, event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("editWithFrame:inView:editor:delegate:event:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView, textObj, delegate, event)
     }
     
-    fun selectWithFrame_inView_editor_delegate_start_length(rect: NSRect, controlView: MemorySegment, textObj: MemorySegment, delegate: MemorySegment, selStart: NSInteger, selLength: NSInteger): Unit {
+    open fun selectWithFrame_inView_editor_delegate_start_length(rect: NSRect, controlView: MemorySegment, textObj: MemorySegment, delegate: MemorySegment, selStart: NSInteger, selLength: NSInteger): Unit {
         val sel = ObjCRuntime.sel("selectWithFrame:inView:editor:delegate:start:length:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView, textObj, delegate, selStart, selLength)
     }
     
-    fun endEditing(textObj: MemorySegment): Unit {
+    open fun endEditing(textObj: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("endEditing:")
         ObjCRuntime.msgSend(null, ptr, sel, textObj)
     }
     
-    fun resetCursorRect_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
+    open fun resetCursorRect_inView(cellFrame: NSRect, controlView: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("resetCursorRect:inView:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), controlView)
     }
     
-    fun menuForEvent_inRect_ofView(event: MemorySegment, cellFrame: NSRect, view: MemorySegment): MemorySegment {
+    open fun menuForEvent_inRect_ofView(event: MemorySegment, cellFrame: NSRect, view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("menuForEvent:inRect:ofView:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, event, ObjCRuntime.ObjCStructArg(cellFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), view) as MemorySegment
     }
     
-    fun fieldEditorForView(controlView: MemorySegment): MemorySegment {
+    open fun fieldEditorForView(controlView: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("fieldEditorForView:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, controlView) as MemorySegment
     }
     
     /** @return NSArray<NSDraggingImageComponent *> * */
-    fun draggingImageComponentsWithFrame_inView(frame: NSRect, view: MemorySegment): MemorySegment {
+    open fun draggingImageComponentsWithFrame_inView(frame: NSRect, view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("draggingImageComponentsWithFrame:inView:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), view) as MemorySegment
     }
     
     // @property prefersTrackingUntilMouseUp
-    fun prefersTrackingUntilMouseUp(): BOOL {
+    open fun prefersTrackingUntilMouseUp(): BOOL {
         val sel = ObjCRuntime.sel("prefersTrackingUntilMouseUp")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property controlView
-    fun controlView(): MemorySegment {
+    open fun controlView(): MemorySegment {
         val sel = ObjCRuntime.sel("controlView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setControlView(value: MemorySegment) {
+    open fun setControlView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setControlView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property type
-    fun type(): NSCellType {
+    open fun type(): NSCellType {
         val sel = ObjCRuntime.sel("type")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCellType
     }
-    fun setType(value: NSCellType) {
+    open fun setType(value: NSCellType) {
         val sel = ObjCRuntime.sel("setType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property state
-    fun state(): NSControlStateValue {
+    open fun state(): NSControlStateValue {
         val sel = ObjCRuntime.sel("state")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSControlStateValue
     }
-    fun setState(value: NSControlStateValue) {
+    open fun setState(value: NSControlStateValue) {
         val sel = ObjCRuntime.sel("setState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property target
-    fun target(): MemorySegment {
+    open fun target(): MemorySegment {
         val sel = ObjCRuntime.sel("target")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTarget(value: MemorySegment) {
+    open fun setTarget(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTarget:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property action
-    fun action(): MemorySegment {
+    open fun action(): MemorySegment {
         val sel = ObjCRuntime.sel("action")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAction(value: MemorySegment) {
+    open fun setAction(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tag
-    fun tag(): NSInteger {
+    open fun tag(): NSInteger {
         val sel = ObjCRuntime.sel("tag")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
-    fun setTag(value: NSInteger) {
+    open fun setTag(value: NSInteger) {
         val sel = ObjCRuntime.sel("setTag:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property title
-    fun title(): MemorySegment {
+    open fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    open fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
+    open fun titleAsString(): String = ObjCRuntime.toJavaString(title())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property opaque
-    fun isOpaque(): BOOL {
+    open fun isOpaque(): BOOL {
         val sel = ObjCRuntime.sel("isOpaque")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property enabled
-    fun isEnabled(): BOOL {
+    open fun isEnabled(): BOOL {
         val sel = ObjCRuntime.sel("isEnabled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: BOOL) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property continuous
-    fun isContinuous(): BOOL {
+    open fun isContinuous(): BOOL {
         val sel = ObjCRuntime.sel("isContinuous")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setContinuous(value: BOOL) {
+    open fun setContinuous(value: BOOL) {
         val sel = ObjCRuntime.sel("setContinuous:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property editable
-    fun isEditable(): BOOL {
+    open fun isEditable(): BOOL {
         val sel = ObjCRuntime.sel("isEditable")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setEditable(value: BOOL) {
+    open fun setEditable(value: BOOL) {
         val sel = ObjCRuntime.sel("setEditable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectable
-    fun isSelectable(): BOOL {
+    open fun isSelectable(): BOOL {
         val sel = ObjCRuntime.sel("isSelectable")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setSelectable(value: BOOL) {
+    open fun setSelectable(value: BOOL) {
         val sel = ObjCRuntime.sel("setSelectable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bordered
-    fun isBordered(): BOOL {
+    open fun isBordered(): BOOL {
         val sel = ObjCRuntime.sel("isBordered")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setBordered(value: BOOL) {
+    open fun setBordered(value: BOOL) {
         val sel = ObjCRuntime.sel("setBordered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bezeled
-    fun isBezeled(): BOOL {
+    open fun isBezeled(): BOOL {
         val sel = ObjCRuntime.sel("isBezeled")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setBezeled(value: BOOL) {
+    open fun setBezeled(value: BOOL) {
         val sel = ObjCRuntime.sel("setBezeled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property scrollable
-    fun isScrollable(): BOOL {
+    open fun isScrollable(): BOOL {
         val sel = ObjCRuntime.sel("isScrollable")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setScrollable(value: BOOL) {
+    open fun setScrollable(value: BOOL) {
         val sel = ObjCRuntime.sel("setScrollable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property highlighted
-    fun isHighlighted(): BOOL {
+    open fun isHighlighted(): BOOL {
         val sel = ObjCRuntime.sel("isHighlighted")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setHighlighted(value: BOOL) {
+    open fun setHighlighted(value: BOOL) {
         val sel = ObjCRuntime.sel("setHighlighted:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property alignment
-    fun alignment(): NSTextAlignment {
+    open fun alignment(): NSTextAlignment {
         val sel = ObjCRuntime.sel("alignment")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
     }
-    fun setAlignment(value: NSTextAlignment) {
+    open fun setAlignment(value: NSTextAlignment) {
         val sel = ObjCRuntime.sel("setAlignment:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property wraps
-    fun wraps(): BOOL {
+    open fun wraps(): BOOL {
         val sel = ObjCRuntime.sel("wraps")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setWraps(value: BOOL) {
+    open fun setWraps(value: BOOL) {
         val sel = ObjCRuntime.sel("setWraps:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property font
-    fun font(): MemorySegment {
+    open fun font(): MemorySegment {
         val sel = ObjCRuntime.sel("font")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFont(value: MemorySegment) {
+    open fun setFont(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFont:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property keyEquivalent
-    fun keyEquivalent(): MemorySegment {
+    open fun keyEquivalent(): MemorySegment {
         val sel = ObjCRuntime.sel("keyEquivalent")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun keyEquivalentAsString(): String = ObjCRuntime.toJavaString(keyEquivalent())
+    open fun keyEquivalentAsString(): String = ObjCRuntime.toJavaString(keyEquivalent())
     
     // @property formatter
-    fun formatter(): MemorySegment {
+    open fun formatter(): MemorySegment {
         val sel = ObjCRuntime.sel("formatter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormatter(value: MemorySegment) {
+    open fun setFormatter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormatter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property objectValue
-    fun objectValue(): MemorySegment {
+    open fun objectValue(): MemorySegment {
         val sel = ObjCRuntime.sel("objectValue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setObjectValue(value: MemorySegment) {
+    open fun setObjectValue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setObjectValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hasValidObjectValue
-    fun hasValidObjectValue(): BOOL {
+    open fun hasValidObjectValue(): BOOL {
         val sel = ObjCRuntime.sel("hasValidObjectValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property stringValue
-    fun stringValue(): MemorySegment {
+    open fun stringValue(): MemorySegment {
         val sel = ObjCRuntime.sel("stringValue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setStringValue(value: MemorySegment) {
+    open fun setStringValue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setStringValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringValueAsString(): String = ObjCRuntime.toJavaString(stringValue())
+    open fun stringValueAsString(): String = ObjCRuntime.toJavaString(stringValue())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setStringValue(value: String) = setStringValue(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setStringValue(value: String) = setStringValue(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property intValue
-    fun intValue(): Int {
+    open fun intValue(): Int {
         val sel = ObjCRuntime.sel("intValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
-    fun setIntValue(value: Int) {
+    open fun setIntValue(value: Int) {
         val sel = ObjCRuntime.sel("setIntValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property floatValue
-    fun floatValue(): Float {
+    open fun floatValue(): Float {
         val sel = ObjCRuntime.sel("floatValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
     }
-    fun setFloatValue(value: Float) {
+    open fun setFloatValue(value: Float) {
         val sel = ObjCRuntime.sel("setFloatValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property doubleValue
-    fun doubleValue(): Double {
+    open fun doubleValue(): Double {
         val sel = ObjCRuntime.sel("doubleValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setDoubleValue(value: Double) {
+    open fun setDoubleValue(value: Double) {
         val sel = ObjCRuntime.sel("setDoubleValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property integerValue
-    fun integerValue(): NSInteger {
+    open fun integerValue(): NSInteger {
         val sel = ObjCRuntime.sel("integerValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
-    fun setIntegerValue(value: NSInteger) {
+    open fun setIntegerValue(value: NSInteger) {
         val sel = ObjCRuntime.sel("setIntegerValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property image
-    fun image(): MemorySegment {
+    open fun image(): MemorySegment {
         val sel = ObjCRuntime.sel("image")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImage(value: MemorySegment) {
+    open fun setImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property controlSize
-    fun controlSize(): NSControlSize {
+    open fun controlSize(): NSControlSize {
         val sel = ObjCRuntime.sel("controlSize")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlSize
     }
-    fun setControlSize(value: NSControlSize) {
+    open fun setControlSize(value: NSControlSize) {
         val sel = ObjCRuntime.sel("setControlSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property representedObject
-    fun representedObject(): MemorySegment {
+    open fun representedObject(): MemorySegment {
         val sel = ObjCRuntime.sel("representedObject")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRepresentedObject(value: MemorySegment) {
+    open fun setRepresentedObject(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRepresentedObject:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cellSize
-    fun cellSize(): NSSize {
+    open fun cellSize(): NSSize {
         val sel = ObjCRuntime.sel("cellSize")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
     }
     
     // @property mouseDownFlags
-    fun mouseDownFlags(): NSInteger {
+    open fun mouseDownFlags(): NSInteger {
         val sel = ObjCRuntime.sel("mouseDownFlags")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
     
     // @property menu
-    fun menu(): MemorySegment {
+    open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenu(value: MemorySegment) {
+    open fun setMenu(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenu:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultMenu
-    fun defaultMenu(): MemorySegment {
+    open fun defaultMenu(): MemorySegment {
         val sel = ObjCRuntime.sel("defaultMenu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sendsActionOnEndEditing
-    fun sendsActionOnEndEditing(): BOOL {
+    open fun sendsActionOnEndEditing(): BOOL {
         val sel = ObjCRuntime.sel("sendsActionOnEndEditing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setSendsActionOnEndEditing(value: BOOL) {
+    open fun setSendsActionOnEndEditing(value: BOOL) {
         val sel = ObjCRuntime.sel("setSendsActionOnEndEditing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property baseWritingDirection
-    fun baseWritingDirection(): NSWritingDirection {
+    open fun baseWritingDirection(): NSWritingDirection {
         val sel = ObjCRuntime.sel("baseWritingDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingDirection
     }
-    fun setBaseWritingDirection(value: NSWritingDirection) {
+    open fun setBaseWritingDirection(value: NSWritingDirection) {
         val sel = ObjCRuntime.sel("setBaseWritingDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property lineBreakMode
-    fun lineBreakMode(): NSLineBreakMode {
+    open fun lineBreakMode(): NSLineBreakMode {
         val sel = ObjCRuntime.sel("lineBreakMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineBreakMode
     }
-    fun setLineBreakMode(value: NSLineBreakMode) {
+    open fun setLineBreakMode(value: NSLineBreakMode) {
         val sel = ObjCRuntime.sel("setLineBreakMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsUndo
-    fun allowsUndo(): BOOL {
+    open fun allowsUndo(): BOOL {
         val sel = ObjCRuntime.sel("allowsUndo")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setAllowsUndo(value: BOOL) {
+    open fun setAllowsUndo(value: BOOL) {
         val sel = ObjCRuntime.sel("setAllowsUndo:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property truncatesLastVisibleLine
-    fun truncatesLastVisibleLine(): BOOL {
+    open fun truncatesLastVisibleLine(): BOOL {
         val sel = ObjCRuntime.sel("truncatesLastVisibleLine")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setTruncatesLastVisibleLine(value: BOOL) {
+    open fun setTruncatesLastVisibleLine(value: BOOL) {
         val sel = ObjCRuntime.sel("setTruncatesLastVisibleLine:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property userInterfaceLayoutDirection
-    fun userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection {
+    open fun userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection {
         val sel = ObjCRuntime.sel("userInterfaceLayoutDirection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceLayoutDirection
     }
-    fun setUserInterfaceLayoutDirection(value: NSUserInterfaceLayoutDirection) {
+    open fun setUserInterfaceLayoutDirection(value: NSUserInterfaceLayoutDirection) {
         val sel = ObjCRuntime.sel("setUserInterfaceLayoutDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesSingleLineMode
-    fun usesSingleLineMode(): BOOL {
+    open fun usesSingleLineMode(): BOOL {
         val sel = ObjCRuntime.sel("usesSingleLineMode")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setUsesSingleLineMode(value: BOOL) {
+    open fun setUsesSingleLineMode(value: BOOL) {
         val sel = ObjCRuntime.sel("setUsesSingleLineMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -693,7 +699,7 @@ fun NSCell.wantsNotificationForMarkedText(): BOOL {
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
-// Class method: +[NSCell defaultFocusRingType]
+// Class<*> method: +[NSCell defaultFocusRingType]
 fun NSCell_defaultFocusRingType(): NSFocusRingType {
     val sel = ObjCRuntime.sel("defaultFocusRingType")
     val cls = ObjCRuntime.getClass("NSCell")

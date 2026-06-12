@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSScreen
  * Superclass: NSObject
@@ -7,145 +13,145 @@ open class NSScreen(val ptr: MemorySegment) {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScreen") }
         
         /** @return NSArray<NSScreen *> * */
-        fun screens(): MemorySegment {
+        open fun screens(): MemorySegment {
             val sel = ObjCRuntime.sel("screens")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun mainScreen(): MemorySegment {
+        open fun mainScreen(): MemorySegment {
             val sel = ObjCRuntime.sel("mainScreen")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun deepestScreen(): MemorySegment {
+        open fun deepestScreen(): MemorySegment {
             val sel = ObjCRuntime.sel("deepestScreen")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun screensHaveSeparateSpaces(): BOOL {
+        open fun screensHaveSeparateSpaces(): BOOL {
             val sel = ObjCRuntime.sel("screensHaveSeparateSpaces")
             return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
         }
         
     }
     
-    fun canRepresentDisplayGamut(displayGamut: NSDisplayGamut): BOOL {
+    open fun canRepresentDisplayGamut(displayGamut: NSDisplayGamut): BOOL {
         val sel = ObjCRuntime.sel("canRepresentDisplayGamut:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, displayGamut) as BOOL
     }
     
-    fun convertRectToBacking(rect: NSRect): NSRect {
+    open fun convertRectToBacking(rect: NSRect): NSRect {
         val sel = ObjCRuntime.sel("convertRectToBacking:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSRect
     }
     
-    fun convertRectFromBacking(rect: NSRect): NSRect {
+    open fun convertRectFromBacking(rect: NSRect): NSRect {
         val sel = ObjCRuntime.sel("convertRectFromBacking:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as NSRect
     }
     
-    fun backingAlignedRect_options(rect: NSRect, options: NSAlignmentOptions): NSRect {
+    open fun backingAlignedRect_options(rect: NSRect, options: NSAlignmentOptions): NSRect {
         val sel = ObjCRuntime.sel("backingAlignedRect:options:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), options) as NSRect
     }
     
     // @property screens
     /** @return NSArray<NSScreen *> * */
-    fun screens(): MemorySegment {
+    open fun screens(): MemorySegment {
         val sel = ObjCRuntime.sel("screens")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property mainScreen
-    fun mainScreen(): MemorySegment {
+    open fun mainScreen(): MemorySegment {
         val sel = ObjCRuntime.sel("mainScreen")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property deepestScreen
-    fun deepestScreen(): MemorySegment {
+    open fun deepestScreen(): MemorySegment {
         val sel = ObjCRuntime.sel("deepestScreen")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property screensHaveSeparateSpaces
-    fun screensHaveSeparateSpaces(): BOOL {
+    open fun screensHaveSeparateSpaces(): BOOL {
         val sel = ObjCRuntime.sel("screensHaveSeparateSpaces")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property depth
-    fun depth(): NSWindowDepth {
+    open fun depth(): NSWindowDepth {
         val sel = ObjCRuntime.sel("depth")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowDepth
     }
     
     // @property frame
-    fun frame(): NSRect {
+    open fun frame(): NSRect {
         val sel = ObjCRuntime.sel("frame")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
     }
     
     // @property visibleFrame
-    fun visibleFrame(): NSRect {
+    open fun visibleFrame(): NSRect {
         val sel = ObjCRuntime.sel("visibleFrame")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
     }
     
     // @property deviceDescription
     /** @return NSDictionary<NSDeviceDescriptionKey,id> * */
-    fun deviceDescription(): MemorySegment {
+    open fun deviceDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("deviceDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property colorSpace
-    fun colorSpace(): MemorySegment {
+    open fun colorSpace(): MemorySegment {
         val sel = ObjCRuntime.sel("colorSpace")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property supportedWindowDepths
-    fun supportedWindowDepths(): MemorySegment {
+    open fun supportedWindowDepths(): MemorySegment {
         val sel = ObjCRuntime.sel("supportedWindowDepths")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property backingScaleFactor
-    fun backingScaleFactor(): CGFloat {
+    open fun backingScaleFactor(): CGFloat {
         val sel = ObjCRuntime.sel("backingScaleFactor")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property localizedName
-    fun localizedName(): MemorySegment {
+    open fun localizedName(): MemorySegment {
         val sel = ObjCRuntime.sel("localizedName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedNameAsString(): String = ObjCRuntime.toJavaString(localizedName())
+    open fun localizedNameAsString(): String = ObjCRuntime.toJavaString(localizedName())
     
     // @property safeAreaInsets
-    fun safeAreaInsets(): NSEdgeInsets {
+    open fun safeAreaInsets(): NSEdgeInsets {
         val sel = ObjCRuntime.sel("safeAreaInsets")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("left"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("right")).withName("NSEdgeInsets"), ptr, sel) as NSEdgeInsets
     }
     
     // @property auxiliaryTopLeftArea
-    fun auxiliaryTopLeftArea(): NSRect {
+    open fun auxiliaryTopLeftArea(): NSRect {
         val sel = ObjCRuntime.sel("auxiliaryTopLeftArea")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
     }
     
     // @property auxiliaryTopRightArea
-    fun auxiliaryTopRightArea(): NSRect {
+    open fun auxiliaryTopRightArea(): NSRect {
         val sel = ObjCRuntime.sel("auxiliaryTopRightArea")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
     }
     
     // @property CGDirectDisplayID
-    fun CGDirectDisplayID(): CGDirectDisplayID {
+    open fun CGDirectDisplayID(): CGDirectDisplayID {
         val sel = ObjCRuntime.sel("CGDirectDisplayID")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as CGDirectDisplayID
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMatrix
  * Superclass: NSControl
@@ -9,7 +15,7 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
         
     }
     
-    fun initWithFrame(frameRect: NSRect): MemorySegment {
+    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
@@ -19,7 +25,7 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), mode, cell, rowsHigh, colsWide) as MemorySegment
     }
     
-    fun initWithFrame_mode_cellClass_numberOfRows_numberOfColumns(frameRect: NSRect, mode: NSMatrixMode, factoryId: Class, rowsHigh: NSInteger, colsWide: NSInteger): MemorySegment {
+    fun initWithFrame_mode_cellClass_numberOfRows_numberOfColumns(frameRect: NSRect, mode: NSMatrixMode, factoryId: Class<*>, rowsHigh: NSInteger, colsWide: NSInteger): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:mode:cellClass:numberOfRows:numberOfColumns:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), mode, factoryId, rowsHigh, colsWide) as MemorySegment
     }
@@ -281,11 +287,11 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
     fun toolTipForCellAsString(cell: MemorySegment): String = ObjCRuntime.toJavaString(toolTipForCell(cell))
     
     // @property cellClass
-    fun cellClass(): Class {
+    override fun `cellClass`(): Class<*> {
         val sel = ObjCRuntime.sel("cellClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
-    fun setCellClass(value: Class) {
+    override fun `setCellClass`(value: Class<*>) {
         val sel = ObjCRuntime.sel("setCellClass:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -328,7 +334,7 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property selectedCell
-    fun selectedCell(): MemorySegment {
+    override fun `selectedCell`(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedCell")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSFileProviderService
  * Superclass: NSObject
@@ -8,13 +14,13 @@ open class NSFileProviderService(val ptr: MemorySegment) {
         
     }
     
-    fun getFileProviderConnectionWithCompletionHandler(completionHandler: MemorySegment): Unit {
+    open fun getFileProviderConnectionWithCompletionHandler(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getFileProviderConnectionWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }
     
     // @property name
-    fun name(): NSFileProviderServiceName {
+    open fun name(): NSFileProviderServiceName {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFileProviderServiceName
     }

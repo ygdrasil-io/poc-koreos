@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSStatusItem
  * Superclass: NSObject
@@ -9,63 +15,63 @@ open class NSStatusItem(val ptr: MemorySegment) {
     }
     
     // @property statusBar
-    fun statusBar(): MemorySegment {
+    open fun statusBar(): MemorySegment {
         val sel = ObjCRuntime.sel("statusBar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property length
-    fun length(): CGFloat {
+    open fun length(): CGFloat {
         val sel = ObjCRuntime.sel("length")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    fun setLength(value: CGFloat) {
+    open fun setLength(value: CGFloat) {
         val sel = ObjCRuntime.sel("setLength:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property menu
-    fun menu(): MemorySegment {
+    open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenu(value: MemorySegment) {
+    open fun setMenu(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenu:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property button
-    fun button(): MemorySegment {
+    open fun button(): MemorySegment {
         val sel = ObjCRuntime.sel("button")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property behavior
-    fun behavior(): NSStatusItemBehavior {
+    open fun behavior(): NSStatusItemBehavior {
         val sel = ObjCRuntime.sel("behavior")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSStatusItemBehavior
     }
-    fun setBehavior(value: NSStatusItemBehavior) {
+    open fun setBehavior(value: NSStatusItemBehavior) {
         val sel = ObjCRuntime.sel("setBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property visible
-    fun isVisible(): BOOL {
+    open fun isVisible(): BOOL {
         val sel = ObjCRuntime.sel("isVisible")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setVisible(value: BOOL) {
+    open fun setVisible(value: BOOL) {
         val sel = ObjCRuntime.sel("setVisible:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autosaveName
-    fun autosaveName(): NSStatusItemAutosaveName {
+    open fun autosaveName(): NSStatusItemAutosaveName {
         val sel = ObjCRuntime.sel("autosaveName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSStatusItemAutosaveName
     }
-    fun setAutosaveName(value: NSStatusItemAutosaveName) {
+    open fun setAutosaveName(value: NSStatusItemAutosaveName) {
         val sel = ObjCRuntime.sel("setAutosaveName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

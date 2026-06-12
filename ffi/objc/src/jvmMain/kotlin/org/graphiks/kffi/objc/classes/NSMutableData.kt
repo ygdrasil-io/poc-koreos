@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSMutableData
  * Superclass: NSData
@@ -15,7 +21,7 @@ open class NSMutableData(ptr: MemorySegment) : NSData(ptr) {
     }
     
     // @property length
-    fun length(): NSUInteger {
+    override fun `length`(): NSUInteger {
         val sel = ObjCRuntime.sel("length")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
@@ -75,14 +81,14 @@ fun NSMutableData.initWithLength(length: NSUInteger): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, length) as MemorySegment
 }
 
-// Class method: +[NSMutableData dataWithCapacity:]
+// Class<*> method: +[NSMutableData dataWithCapacity:]
 fun NSMutableData_dataWithCapacity(aNumItems: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithCapacity:")
     val cls = ObjCRuntime.getClass("NSMutableData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, aNumItems) as MemorySegment
 }
 
-// Class method: +[NSMutableData dataWithLength:]
+// Class<*> method: +[NSMutableData dataWithLength:]
 fun NSMutableData_dataWithLength(length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("dataWithLength:")
     val cls = ObjCRuntime.getClass("NSMutableData")

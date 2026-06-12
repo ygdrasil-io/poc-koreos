@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPrinter
  * Superclass: NSObject
@@ -7,76 +13,76 @@ open class NSPrinter(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPrinter") }
         
-        fun printerWithName(name: MemorySegment): MemorySegment {
+        open fun printerWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("printerWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun printerWithName(name: String): MemorySegment = printerWithName(ObjCRuntime.newNSString(Arena.global(), name))
+        open fun printerWithName(name: String): MemorySegment = printerWithName(ObjCRuntime.newNSString(Arena.global(), name))
         
-        fun printerWithType(type: NSPrinterTypeName): MemorySegment {
+        open fun printerWithType(type: NSPrinterTypeName): MemorySegment {
             val sel = ObjCRuntime.sel("printerWithType:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, type) as MemorySegment
         }
         
         /** @return NSArray<NSString *> * */
-        fun printerNames(): MemorySegment {
+        open fun printerNames(): MemorySegment {
             val sel = ObjCRuntime.sel("printerNames")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
         /** @return NSArray<NSPrinterTypeName> * */
-        fun printerTypes(): MemorySegment {
+        open fun printerTypes(): MemorySegment {
             val sel = ObjCRuntime.sel("printerTypes")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun pageSizeForPaper(paperName: NSPrinterPaperName): NSSize {
+    open fun pageSizeForPaper(paperName: NSPrinterPaperName): NSSize {
         val sel = ObjCRuntime.sel("pageSizeForPaper:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, paperName) as NSSize
     }
     
     // @property printerNames
     /** @return NSArray<NSString *> * */
-    fun printerNames(): MemorySegment {
+    open fun printerNames(): MemorySegment {
         val sel = ObjCRuntime.sel("printerNames")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property printerTypes
     /** @return NSArray<NSPrinterTypeName> * */
-    fun printerTypes(): MemorySegment {
+    open fun printerTypes(): MemorySegment {
         val sel = ObjCRuntime.sel("printerTypes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property name
-    fun name(): MemorySegment {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameAsString(): String = ObjCRuntime.toJavaString(name())
+    open fun nameAsString(): String = ObjCRuntime.toJavaString(name())
     
     // @property type
-    fun type(): NSPrinterTypeName {
+    open fun type(): NSPrinterTypeName {
         val sel = ObjCRuntime.sel("type")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrinterTypeName
     }
     
     // @property languageLevel
-    fun languageLevel(): NSInteger {
+    open fun languageLevel(): NSInteger {
         val sel = ObjCRuntime.sel("languageLevel")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
     
     // @property deviceDescription
     /** @return NSDictionary<NSDeviceDescriptionKey,id> * */
-    fun deviceDescription(): MemorySegment {
+    open fun deviceDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("deviceDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -170,7 +176,7 @@ fun NSPrinter.note(): MemorySegment {
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
-// Class method: +[NSPrinter printerWithName:domain:includeUnavailable:]
+// Class<*> method: +[NSPrinter printerWithName:domain:includeUnavailable:]
 fun NSPrinter_printerWithName_domain_includeUnavailable(name: MemorySegment, domain: MemorySegment, flag: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("printerWithName:domain:includeUnavailable:")
     val cls = ObjCRuntime.getClass("NSPrinter")

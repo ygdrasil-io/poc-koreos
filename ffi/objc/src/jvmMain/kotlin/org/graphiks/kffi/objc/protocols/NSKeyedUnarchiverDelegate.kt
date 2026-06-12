@@ -1,10 +1,16 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM interface for Objective-C protocol: NSKeyedUnarchiverDelegate
  * Inherits protocols: NSObject
  */
 interface NSKeyedUnarchiverDelegate : NSObject {
     // @optional
-    fun unarchiver_cannotDecodeObjectOfClassName_originalClasses(unarchiver: MemorySegment, name: MemorySegment, classNames: MemorySegment): Class =
+    fun unarchiver_cannotDecodeObjectOfClassName_originalClasses(unarchiver: MemorySegment, name: MemorySegment, classNames: MemorySegment): Class<*> =
         throw UnsupportedOperationException("Optional ObjC method 'unarchiver:cannotDecodeObjectOfClassName:originalClasses:' not implemented")
     
     // @optional

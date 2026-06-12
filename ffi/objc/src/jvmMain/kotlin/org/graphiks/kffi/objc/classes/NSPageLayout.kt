@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSPageLayout
  * Superclass: NSObject
@@ -6,52 +12,52 @@ open class NSPageLayout(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPageLayout") }
         
-        fun pageLayout(): MemorySegment {
+        open fun pageLayout(): MemorySegment {
             val sel = ObjCRuntime.sel("pageLayout")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun addAccessoryController(accessoryController: MemorySegment): Unit {
+    open fun addAccessoryController(accessoryController: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addAccessoryController:")
         ObjCRuntime.msgSend(null, ptr, sel, accessoryController)
     }
     
-    fun removeAccessoryController(accessoryController: MemorySegment): Unit {
+    open fun removeAccessoryController(accessoryController: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeAccessoryController:")
         ObjCRuntime.msgSend(null, ptr, sel, accessoryController)
     }
     
-    fun beginSheetUsingPrintInfo_onWindow_completionHandler(printInfo: MemorySegment, parentWindow: MemorySegment, handler: MemorySegment): Unit {
+    open fun beginSheetUsingPrintInfo_onWindow_completionHandler(printInfo: MemorySegment, parentWindow: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginSheetUsingPrintInfo:onWindow:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, printInfo, parentWindow, handler)
     }
     
-    fun beginSheetWithPrintInfo_modalForWindow_delegate_didEndSelector_contextInfo(printInfo: MemorySegment, docWindow: MemorySegment, delegate: MemorySegment, didEndSelector: MemorySegment, contextInfo: MemorySegment): Unit {
+    open fun beginSheetWithPrintInfo_modalForWindow_delegate_didEndSelector_contextInfo(printInfo: MemorySegment, docWindow: MemorySegment, delegate: MemorySegment, didEndSelector: MemorySegment, contextInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginSheetWithPrintInfo:modalForWindow:delegate:didEndSelector:contextInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, printInfo, docWindow, delegate, didEndSelector, contextInfo)
     }
     
-    fun runModalWithPrintInfo(printInfo: MemorySegment): NSInteger {
+    open fun runModalWithPrintInfo(printInfo: MemorySegment): NSInteger {
         val sel = ObjCRuntime.sel("runModalWithPrintInfo:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, printInfo) as NSInteger
     }
     
-    fun runModal(): NSInteger {
+    open fun runModal(): NSInteger {
         val sel = ObjCRuntime.sel("runModal")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
     
     // @property accessoryControllers
     /** @return NSArray<__kindof NSViewController *> * */
-    fun accessoryControllers(): MemorySegment {
+    open fun accessoryControllers(): MemorySegment {
         val sel = ObjCRuntime.sel("accessoryControllers")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property printInfo
-    fun printInfo(): MemorySegment {
+    open fun printInfo(): MemorySegment {
         val sel = ObjCRuntime.sel("printInfo")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

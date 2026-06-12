@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSRunLoop
  * Superclass: NSObject
@@ -6,62 +12,62 @@ open class NSRunLoop(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSRunLoop") }
         
-        fun currentRunLoop(): MemorySegment {
+        open fun currentRunLoop(): MemorySegment {
             val sel = ObjCRuntime.sel("currentRunLoop")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun mainRunLoop(): MemorySegment {
+        open fun mainRunLoop(): MemorySegment {
             val sel = ObjCRuntime.sel("mainRunLoop")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun getCFRunLoop(): MemorySegment {
+    open fun getCFRunLoop(): MemorySegment {
         val sel = ObjCRuntime.sel("getCFRunLoop")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun addTimer_forMode(timer: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun addTimer_forMode(timer: MemorySegment, mode: NSRunLoopMode): Unit {
         val sel = ObjCRuntime.sel("addTimer:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, timer, mode)
     }
     
-    fun addPort_forMode(aPort: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun addPort_forMode(aPort: MemorySegment, mode: NSRunLoopMode): Unit {
         val sel = ObjCRuntime.sel("addPort:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aPort, mode)
     }
     
-    fun removePort_forMode(aPort: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun removePort_forMode(aPort: MemorySegment, mode: NSRunLoopMode): Unit {
         val sel = ObjCRuntime.sel("removePort:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aPort, mode)
     }
     
-    fun limitDateForMode(mode: NSRunLoopMode): MemorySegment {
+    open fun limitDateForMode(mode: NSRunLoopMode): MemorySegment {
         val sel = ObjCRuntime.sel("limitDateForMode:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mode) as MemorySegment
     }
     
-    fun acceptInputForMode_beforeDate(mode: NSRunLoopMode, limitDate: MemorySegment): Unit {
+    open fun acceptInputForMode_beforeDate(mode: NSRunLoopMode, limitDate: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("acceptInputForMode:beforeDate:")
         ObjCRuntime.msgSend(null, ptr, sel, mode, limitDate)
     }
     
     // @property currentRunLoop
-    fun currentRunLoop(): MemorySegment {
+    open fun currentRunLoop(): MemorySegment {
         val sel = ObjCRuntime.sel("currentRunLoop")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property mainRunLoop
-    fun mainRunLoop(): MemorySegment {
+    open fun mainRunLoop(): MemorySegment {
         val sel = ObjCRuntime.sel("mainRunLoop")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property currentMode
-    fun currentMode(): NSRunLoopMode {
+    open fun currentMode(): NSRunLoopMode {
         val sel = ObjCRuntime.sel("currentMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRunLoopMode
     }

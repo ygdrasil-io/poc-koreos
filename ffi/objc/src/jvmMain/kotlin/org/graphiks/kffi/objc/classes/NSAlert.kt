@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSAlert
  * Superclass: NSObject
@@ -6,154 +12,154 @@ open class NSAlert(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAlert") }
         
-        fun alertWithError(error: MemorySegment): MemorySegment {
+        open fun alertWithError(error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("alertWithError:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, error) as MemorySegment
         }
         
     }
     
-    fun addButtonWithTitle(title: MemorySegment): MemorySegment {
+    open fun addButtonWithTitle(title: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addButtonWithTitle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, title) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun addButtonWithTitle(title: String): MemorySegment = addButtonWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+    open fun addButtonWithTitle(title: String): MemorySegment = addButtonWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
     
-    fun layout(): Unit {
+    open fun layout(): Unit {
         val sel = ObjCRuntime.sel("layout")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun runModal(): NSModalResponse {
+    open fun runModal(): NSModalResponse {
         val sel = ObjCRuntime.sel("runModal")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSModalResponse
     }
     
-    fun beginSheetModalForWindow_completionHandler(sheetWindow: MemorySegment, handler: MemorySegment): Unit {
+    open fun beginSheetModalForWindow_completionHandler(sheetWindow: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginSheetModalForWindow:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, sheetWindow, handler)
     }
     
     // @property messageText
-    fun messageText(): MemorySegment {
+    open fun messageText(): MemorySegment {
         val sel = ObjCRuntime.sel("messageText")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMessageText(value: MemorySegment) {
+    open fun setMessageText(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMessageText:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun messageTextAsString(): String = ObjCRuntime.toJavaString(messageText())
+    open fun messageTextAsString(): String = ObjCRuntime.toJavaString(messageText())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setMessageText(value: String) = setMessageText(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setMessageText(value: String) = setMessageText(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property informativeText
-    fun informativeText(): MemorySegment {
+    open fun informativeText(): MemorySegment {
         val sel = ObjCRuntime.sel("informativeText")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setInformativeText(value: MemorySegment) {
+    open fun setInformativeText(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setInformativeText:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun informativeTextAsString(): String = ObjCRuntime.toJavaString(informativeText())
+    open fun informativeTextAsString(): String = ObjCRuntime.toJavaString(informativeText())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setInformativeText(value: String) = setInformativeText(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setInformativeText(value: String) = setInformativeText(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property icon
-    fun icon(): MemorySegment {
+    open fun icon(): MemorySegment {
         val sel = ObjCRuntime.sel("icon")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setIcon(value: MemorySegment) {
+    open fun setIcon(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setIcon:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property buttons
     /** @return NSArray<NSButton *> * */
-    fun buttons(): MemorySegment {
+    open fun buttons(): MemorySegment {
         val sel = ObjCRuntime.sel("buttons")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property alertStyle
-    fun alertStyle(): NSAlertStyle {
+    open fun alertStyle(): NSAlertStyle {
         val sel = ObjCRuntime.sel("alertStyle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAlertStyle
     }
-    fun setAlertStyle(value: NSAlertStyle) {
+    open fun setAlertStyle(value: NSAlertStyle) {
         val sel = ObjCRuntime.sel("setAlertStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsHelp
-    fun showsHelp(): BOOL {
+    open fun showsHelp(): BOOL {
         val sel = ObjCRuntime.sel("showsHelp")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShowsHelp(value: BOOL) {
+    open fun setShowsHelp(value: BOOL) {
         val sel = ObjCRuntime.sel("setShowsHelp:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property helpAnchor
-    fun helpAnchor(): NSHelpAnchorName {
+    open fun helpAnchor(): NSHelpAnchorName {
         val sel = ObjCRuntime.sel("helpAnchor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHelpAnchorName
     }
-    fun setHelpAnchor(value: NSHelpAnchorName) {
+    open fun setHelpAnchor(value: NSHelpAnchorName) {
         val sel = ObjCRuntime.sel("setHelpAnchor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delegate
     /** @return id<NSAlertDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property accessoryView
-    fun accessoryView(): MemorySegment {
+    open fun accessoryView(): MemorySegment {
         val sel = ObjCRuntime.sel("accessoryView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAccessoryView(value: MemorySegment) {
+    open fun setAccessoryView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAccessoryView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsSuppressionButton
-    fun showsSuppressionButton(): BOOL {
+    open fun showsSuppressionButton(): BOOL {
         val sel = ObjCRuntime.sel("showsSuppressionButton")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setShowsSuppressionButton(value: BOOL) {
+    open fun setShowsSuppressionButton(value: BOOL) {
         val sel = ObjCRuntime.sel("setShowsSuppressionButton:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property suppressionButton
-    fun suppressionButton(): MemorySegment {
+    open fun suppressionButton(): MemorySegment {
         val sel = ObjCRuntime.sel("suppressionButton")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property window
-    fun window(): MemorySegment {
+    open fun window(): MemorySegment {
         val sel = ObjCRuntime.sel("window")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -167,7 +173,7 @@ fun NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo(wi
     ObjCRuntime.msgSend(null, ptr, sel, window, delegate, didEndSelector, contextInfo)
 }
 
-// Class method: +[NSAlert alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:]
+// Class<*> method: +[NSAlert alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:]
 fun NSAlert_alertWithMessageText_defaultButton_alternateButton_otherButton_informativeTextWithFormat(message: MemorySegment, defaultButton: MemorySegment, alternateButton: MemorySegment, otherButton: MemorySegment, format: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:")
     val cls = ObjCRuntime.getClass("NSAlert")

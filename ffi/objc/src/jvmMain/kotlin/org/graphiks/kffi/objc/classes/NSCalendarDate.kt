@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSCalendarDate
  * Superclass: NSDate
@@ -32,12 +38,12 @@ open class NSCalendarDate(ptr: MemorySegment) : NSDate(ptr) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, year, month, day, hour, minute, second, aTimeZone) as MemorySegment
         }
         
-        fun distantFuture(): MemorySegment {
+        override fun `distantFuture`(): MemorySegment {
             val sel = ObjCRuntime.sel("distantFuture")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun distantPast(): MemorySegment {
+        override fun `distantPast`(): MemorySegment {
             val sel = ObjCRuntime.sel("distantPast")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -130,7 +136,7 @@ open class NSCalendarDate(ptr: MemorySegment) : NSDate(ptr) {
     /** Convenience overload — [String] parameters and [String] return type. */
     fun descriptionWithCalendarFormatAsString(format: String): String = ObjCRuntime.toJavaString(descriptionWithCalendarFormat(ObjCRuntime.newNSString(Arena.global(), format)))
     
-    fun descriptionWithLocale(locale: MemorySegment): MemorySegment {
+    override fun `descriptionWithLocale`(locale: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("descriptionWithLocale:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, locale) as MemorySegment
     }
@@ -159,7 +165,7 @@ open class NSCalendarDate(ptr: MemorySegment) : NSDate(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithString_calendarFormat(description: String, format: String): MemorySegment = initWithString_calendarFormat(ObjCRuntime.newNSString(Arena.global(), description), ObjCRuntime.newNSString(Arena.global(), format))
     
-    fun initWithString(description: MemorySegment): MemorySegment {
+    override fun `initWithString`(description: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, description) as MemorySegment
     }

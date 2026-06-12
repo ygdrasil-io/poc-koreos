@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSNib
  * Superclass: NSObject
@@ -9,17 +15,17 @@ open class NSNib(val ptr: MemorySegment) {
         
     }
     
-    fun initWithNibNamed_bundle(nibName: NSNibName, bundle: MemorySegment): MemorySegment {
+    open fun initWithNibNamed_bundle(nibName: NSNibName, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithNibNamed:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, nibName, bundle) as MemorySegment
     }
     
-    fun initWithNibData_bundle(nibData: MemorySegment, bundle: MemorySegment): MemorySegment {
+    open fun initWithNibData_bundle(nibData: MemorySegment, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithNibData:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, nibData, bundle) as MemorySegment
     }
     
-    fun instantiateWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): BOOL {
+    open fun instantiateWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("instantiateWithOwner:topLevelObjects:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, owner, topLevelObjects) as BOOL
     }

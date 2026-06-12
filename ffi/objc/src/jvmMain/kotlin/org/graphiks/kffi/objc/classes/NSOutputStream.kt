@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSOutputStream
  * Superclass: NSStream
@@ -43,28 +49,28 @@ fun NSOutputStream.initToFileAtPath_append(path: MemorySegment, shouldAppend: BO
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path, shouldAppend) as MemorySegment
 }
 
-// Class method: +[NSOutputStream outputStreamToMemory]
+// Class<*> method: +[NSOutputStream outputStreamToMemory]
 fun NSOutputStream_outputStreamToMemory(): MemorySegment {
     val sel = ObjCRuntime.sel("outputStreamToMemory")
     val cls = ObjCRuntime.getClass("NSOutputStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSOutputStream outputStreamToBuffer:capacity:]
+// Class<*> method: +[NSOutputStream outputStreamToBuffer:capacity:]
 fun NSOutputStream_outputStreamToBuffer_capacity(buffer: MemorySegment, capacity: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("outputStreamToBuffer:capacity:")
     val cls = ObjCRuntime.getClass("NSOutputStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, buffer, capacity) as MemorySegment
 }
 
-// Class method: +[NSOutputStream outputStreamToFileAtPath:append:]
+// Class<*> method: +[NSOutputStream outputStreamToFileAtPath:append:]
 fun NSOutputStream_outputStreamToFileAtPath_append(path: MemorySegment, shouldAppend: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("outputStreamToFileAtPath:append:")
     val cls = ObjCRuntime.getClass("NSOutputStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path, shouldAppend) as MemorySegment
 }
 
-// Class method: +[NSOutputStream outputStreamWithURL:append:]
+// Class<*> method: +[NSOutputStream outputStreamWithURL:append:]
 fun NSOutputStream_outputStreamWithURL_append(url: MemorySegment, shouldAppend: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("outputStreamWithURL:append:")
     val cls = ObjCRuntime.getClass("NSOutputStream")

@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSObjectController
  * Superclass: NSController
@@ -13,7 +19,7 @@ open class NSObjectController(ptr: MemorySegment) : NSController(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, content) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -86,11 +92,11 @@ open class NSObjectController(ptr: MemorySegment) : NSController(ptr) {
     }
     
     // @property objectClass
-    fun objectClass(): Class {
+    fun objectClass(): Class<*> {
         val sel = ObjCRuntime.sel("objectClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
-    fun setObjectClass(value: Class) {
+    fun setObjectClass(value: Class<*>) {
         val sel = ObjCRuntime.sel("setObjectClass:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

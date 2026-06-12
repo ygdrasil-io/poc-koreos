@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSSpeechRecognizer
  * Superclass: NSObject
@@ -8,75 +14,75 @@ open class NSSpeechRecognizer(val ptr: MemorySegment) {
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun startListening(): Unit {
+    open fun startListening(): Unit {
         val sel = ObjCRuntime.sel("startListening")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun stopListening(): Unit {
+    open fun stopListening(): Unit {
         val sel = ObjCRuntime.sel("stopListening")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property delegate
     /** @return id<NSSpeechRecognizerDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property commands
     /** @return NSArray<NSString *> * */
-    fun commands(): MemorySegment {
+    open fun commands(): MemorySegment {
         val sel = ObjCRuntime.sel("commands")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCommands(value: MemorySegment) {
+    open fun setCommands(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCommands:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property displayedCommandsTitle
-    fun displayedCommandsTitle(): MemorySegment {
+    open fun displayedCommandsTitle(): MemorySegment {
         val sel = ObjCRuntime.sel("displayedCommandsTitle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDisplayedCommandsTitle(value: MemorySegment) {
+    open fun setDisplayedCommandsTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDisplayedCommandsTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun displayedCommandsTitleAsString(): String = ObjCRuntime.toJavaString(displayedCommandsTitle())
+    open fun displayedCommandsTitleAsString(): String = ObjCRuntime.toJavaString(displayedCommandsTitle())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setDisplayedCommandsTitle(value: String) = setDisplayedCommandsTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setDisplayedCommandsTitle(value: String) = setDisplayedCommandsTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property listensInForegroundOnly
-    fun listensInForegroundOnly(): BOOL {
+    open fun listensInForegroundOnly(): BOOL {
         val sel = ObjCRuntime.sel("listensInForegroundOnly")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setListensInForegroundOnly(value: BOOL) {
+    open fun setListensInForegroundOnly(value: BOOL) {
         val sel = ObjCRuntime.sel("setListensInForegroundOnly:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property blocksOtherRecognizers
-    fun blocksOtherRecognizers(): BOOL {
+    open fun blocksOtherRecognizers(): BOOL {
         val sel = ObjCRuntime.sel("blocksOtherRecognizers")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    fun setBlocksOtherRecognizers(value: BOOL) {
+    open fun setBlocksOtherRecognizers(value: BOOL) {
         val sel = ObjCRuntime.sel("setBlocksOtherRecognizers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

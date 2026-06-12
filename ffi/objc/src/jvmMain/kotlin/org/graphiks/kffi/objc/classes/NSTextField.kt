@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSTextField
  * Superclass: NSControl
@@ -300,28 +306,28 @@ fun NSTextField.setAllowsCharacterPickerTouchBarItem(value: BOOL) {
 
 // ── Category: NSTextFieldConvenience on NSTextField ─────────────────────────────────────────
 
-// Class method: +[NSTextField labelWithString:]
+// Class<*> method: +[NSTextField labelWithString:]
 fun NSTextField_labelWithString(stringValue: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("labelWithString:")
     val cls = ObjCRuntime.getClass("NSTextField")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, stringValue) as MemorySegment
 }
 
-// Class method: +[NSTextField wrappingLabelWithString:]
+// Class<*> method: +[NSTextField wrappingLabelWithString:]
 fun NSTextField_wrappingLabelWithString(stringValue: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("wrappingLabelWithString:")
     val cls = ObjCRuntime.getClass("NSTextField")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, stringValue) as MemorySegment
 }
 
-// Class method: +[NSTextField labelWithAttributedString:]
+// Class<*> method: +[NSTextField labelWithAttributedString:]
 fun NSTextField_labelWithAttributedString(attributedStringValue: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("labelWithAttributedString:")
     val cls = ObjCRuntime.getClass("NSTextField")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, attributedStringValue) as MemorySegment
 }
 
-// Class method: +[NSTextField textFieldWithString:]
+// Class<*> method: +[NSTextField textFieldWithString:]
 fun NSTextField_textFieldWithString(stringValue: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("textFieldWithString:")
     val cls = ObjCRuntime.getClass("NSTextField")

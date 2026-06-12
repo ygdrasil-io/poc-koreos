@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSEnumerator
  * Superclass: NSObject
@@ -9,7 +15,7 @@ open class NSEnumerator(val ptr: MemorySegment) {
         
     }
     
-    fun nextObject(): MemorySegment {
+    open fun nextObject(): MemorySegment {
         val sel = ObjCRuntime.sel("nextObject")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

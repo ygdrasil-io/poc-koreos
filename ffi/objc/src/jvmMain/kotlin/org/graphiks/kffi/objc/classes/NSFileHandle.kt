@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSFileHandle
  * Superclass: NSObject
@@ -9,63 +15,63 @@ open class NSFileHandle(val ptr: MemorySegment) {
         
     }
     
-    fun initWithFileDescriptor_closeOnDealloc(fd: Int, closeopt: BOOL): MemorySegment {
+    open fun initWithFileDescriptor_closeOnDealloc(fd: Int, closeopt: BOOL): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFileDescriptor:closeOnDealloc:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fd, closeopt) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun readDataToEndOfFileAndReturnError(error: MemorySegment): MemorySegment {
+    open fun readDataToEndOfFileAndReturnError(error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("readDataToEndOfFileAndReturnError:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, error) as MemorySegment
     }
     
-    fun readDataUpToLength_error(length: NSUInteger, error: MemorySegment): MemorySegment {
+    open fun readDataUpToLength_error(length: NSUInteger, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("readDataUpToLength:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, length, error) as MemorySegment
     }
     
-    fun writeData_error(`data`: MemorySegment, error: MemorySegment): BOOL {
+    open fun writeData_error(`data`: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("writeData:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`, error) as BOOL
     }
     
-    fun getOffset_error(offsetInFile: MemorySegment, error: MemorySegment): BOOL {
+    open fun getOffset_error(offsetInFile: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("getOffset:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, offsetInFile, error) as BOOL
     }
     
-    fun seekToEndReturningOffset_error(offsetInFile: MemorySegment, error: MemorySegment): BOOL {
+    open fun seekToEndReturningOffset_error(offsetInFile: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("seekToEndReturningOffset:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, offsetInFile, error) as BOOL
     }
     
-    fun seekToOffset_error(offset: Any, error: MemorySegment): BOOL {
+    open fun seekToOffset_error(offset: Any, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("seekToOffset:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, offset, error) as BOOL
     }
     
-    fun truncateAtOffset_error(offset: Any, error: MemorySegment): BOOL {
+    open fun truncateAtOffset_error(offset: Any, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("truncateAtOffset:error:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, offset, error) as BOOL
     }
     
-    fun synchronizeAndReturnError(error: MemorySegment): BOOL {
+    open fun synchronizeAndReturnError(error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("synchronizeAndReturnError:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
     }
     
-    fun closeAndReturnError(error: MemorySegment): BOOL {
+    open fun closeAndReturnError(error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("closeAndReturnError:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
     }
     
     // @property availableData
-    fun availableData(): MemorySegment {
+    open fun availableData(): MemorySegment {
         val sel = ObjCRuntime.sel("availableData")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -74,70 +80,70 @@ open class NSFileHandle(val ptr: MemorySegment) {
 
 // ── Category: NSFileHandleCreation on NSFileHandle ─────────────────────────────────────────
 
-// Class method: +[NSFileHandle fileHandleForReadingAtPath:]
+// Class<*> method: +[NSFileHandle fileHandleForReadingAtPath:]
 fun NSFileHandle_fileHandleForReadingAtPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForReadingAtPath:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleForWritingAtPath:]
+// Class<*> method: +[NSFileHandle fileHandleForWritingAtPath:]
 fun NSFileHandle_fileHandleForWritingAtPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForWritingAtPath:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleForUpdatingAtPath:]
+// Class<*> method: +[NSFileHandle fileHandleForUpdatingAtPath:]
 fun NSFileHandle_fileHandleForUpdatingAtPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForUpdatingAtPath:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleForReadingFromURL:error:]
+// Class<*> method: +[NSFileHandle fileHandleForReadingFromURL:error:]
 fun NSFileHandle_fileHandleForReadingFromURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForReadingFromURL:error:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, error) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleForWritingToURL:error:]
+// Class<*> method: +[NSFileHandle fileHandleForWritingToURL:error:]
 fun NSFileHandle_fileHandleForWritingToURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForWritingToURL:error:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, error) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleForUpdatingURL:error:]
+// Class<*> method: +[NSFileHandle fileHandleForUpdatingURL:error:]
 fun NSFileHandle_fileHandleForUpdatingURL_error(url: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleForUpdatingURL:error:")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, url, error) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleWithStandardInput]
+// Class<*> method: +[NSFileHandle fileHandleWithStandardInput]
 fun NSFileHandle_fileHandleWithStandardInput(): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleWithStandardInput")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleWithStandardOutput]
+// Class<*> method: +[NSFileHandle fileHandleWithStandardOutput]
 fun NSFileHandle_fileHandleWithStandardOutput(): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleWithStandardOutput")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleWithStandardError]
+// Class<*> method: +[NSFileHandle fileHandleWithStandardError]
 fun NSFileHandle_fileHandleWithStandardError(): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleWithStandardError")
     val cls = ObjCRuntime.getClass("NSFileHandle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class method: +[NSFileHandle fileHandleWithNullDevice]
+// Class<*> method: +[NSFileHandle fileHandleWithNullDevice]
 fun NSFileHandle_fileHandleWithNullDevice(): MemorySegment {
     val sel = ObjCRuntime.sel("fileHandleWithNullDevice")
     val cls = ObjCRuntime.getClass("NSFileHandle")

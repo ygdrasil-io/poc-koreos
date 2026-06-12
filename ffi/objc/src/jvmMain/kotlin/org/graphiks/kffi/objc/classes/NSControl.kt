@@ -1,3 +1,9 @@
+package org.graphiks.kffi.objc
+
+import java.lang.invoke.*
+import java.lang.foreign.*
+import java.lang.foreign.MemoryLayout.PathElement.*
+
 /**
  * Kotlin/JVM wrapper for Objective-C class: NSControl
  * Superclass: NSView
@@ -8,12 +14,12 @@ open class NSControl(ptr: MemorySegment) : NSView(ptr) {
         
     }
     
-    fun initWithFrame(frameRect: NSRect): MemorySegment {
+    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
@@ -104,7 +110,7 @@ open class NSControl(ptr: MemorySegment) : NSView(ptr) {
     }
     
     // @property tag
-    fun tag(): NSInteger {
+    override fun `tag`(): NSInteger {
         val sel = ObjCRuntime.sel("tag")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
     }
@@ -415,26 +421,26 @@ fun NSControl.setCell(cell: MemorySegment): Unit {
     ObjCRuntime.msgSend(null, ptr, sel, cell)
 }
 
-// Class method: +[NSControl cellClass]
-fun NSControl_cellClass(): Class {
+// Class<*> method: +[NSControl cellClass]
+fun NSControl_cellClass(): Class<*> {
     val sel = ObjCRuntime.sel("cellClass")
     val cls = ObjCRuntime.getClass("NSControl")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class<*>
 }
 
-// Class method: +[NSControl setCellClass:]
-fun NSControl_setCellClass(cellClass: Class): Unit {
+// Class<*> method: +[NSControl setCellClass:]
+fun NSControl_setCellClass(cellClass: Class<*>): Unit {
     val sel = ObjCRuntime.sel("setCellClass:")
     val cls = ObjCRuntime.getClass("NSControl")
     ObjCRuntime.msgSend(null, cls, sel, cellClass)
 }
 
 // @property cellClass
-fun NSControl.cellClass(): Class {
+fun NSControl.cellClass(): Class<*> {
     val sel = ObjCRuntime.sel("cellClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
-fun NSControl.setCellClass(value: Class) {
+fun NSControl.setCellClass(value: Class<*>) {
     val sel = ObjCRuntime.sel("setCellClass:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
