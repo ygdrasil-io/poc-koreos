@@ -328,38 +328,32 @@ fun NSCoder.error(): MemorySegment {
 }
 
 // @property systemVersion
-fun NSCoder.systemVersion(): Any {
     val sel = ObjCRuntime.sel("systemVersion")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Any
 }
 
 // @property allowsKeyedCoding
-fun NSCoder.allowsKeyedCoding(): BOOL {
     val sel = ObjCRuntime.sel("allowsKeyedCoding")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property requiresSecureCoding
-fun NSCoder.requiresSecureCoding(): BOOL {
     val sel = ObjCRuntime.sel("requiresSecureCoding")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property allowedClasses
 /** @return NSSet<Class<*>> * */
-fun NSCoder.allowedClasses(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedClasses")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property decodingFailurePolicy
-fun NSCoder.decodingFailurePolicy(): NSDecodingFailurePolicy {
     val sel = ObjCRuntime.sel("decodingFailurePolicy")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDecodingFailurePolicy
 }
 
 // @property error
-fun NSCoder.error(): MemorySegment {
     val sel = ObjCRuntime.sel("error")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

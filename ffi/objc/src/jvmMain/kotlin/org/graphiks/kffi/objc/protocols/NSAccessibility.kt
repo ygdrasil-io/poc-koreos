@@ -565,507 +565,133 @@ interface NSAccessibility : NSObject {
     fun setAccessibilityCustomActions(accessibilityCustomActions: MemorySegment)
     
     // @property accessibilityElement
-    fun isAccessibilityElement(): BOOL
-    fun setAccessibilityElement(value: BOOL)
-    
     // @property accessibilityFrame
-    fun accessibilityFrame(): NSRect
-    fun setAccessibilityFrame(value: NSRect)
-    
     // @property accessibilityFocused
-    fun isAccessibilityFocused(): BOOL
-    fun setAccessibilityFocused(value: BOOL)
-    
     // @property accessibilityActivationPoint
-    fun accessibilityActivationPoint(): NSPoint
-    fun setAccessibilityActivationPoint(value: NSPoint)
-    
     // @property accessibilityTopLevelUIElement
-    fun accessibilityTopLevelUIElement(): MemorySegment
-    fun setAccessibilityTopLevelUIElement(value: MemorySegment)
-    
     // @property accessibilityURL
-    fun accessibilityURL(): MemorySegment
-    fun setAccessibilityURL(value: MemorySegment)
-    
     // @property accessibilityValue
-    fun accessibilityValue(): MemorySegment
-    fun setAccessibilityValue(value: MemorySegment)
-    
     // @property accessibilityValueDescription
-    fun accessibilityValueDescription(): MemorySegment
-    fun setAccessibilityValueDescription(value: MemorySegment)
-    
     // @property accessibilityVisibleChildren
-    fun accessibilityVisibleChildren(): MemorySegment
-    fun setAccessibilityVisibleChildren(value: MemorySegment)
-    
     // @property accessibilitySubrole
-    fun accessibilitySubrole(): NSAccessibilitySubrole
-    fun setAccessibilitySubrole(value: NSAccessibilitySubrole)
-    
     // @property accessibilityTitle
-    fun accessibilityTitle(): MemorySegment
-    fun setAccessibilityTitle(value: MemorySegment)
-    
     // @property accessibilityTitleUIElement
-    fun accessibilityTitleUIElement(): MemorySegment
-    fun setAccessibilityTitleUIElement(value: MemorySegment)
-    
     // @property accessibilityNextContents
-    fun accessibilityNextContents(): MemorySegment
-    fun setAccessibilityNextContents(value: MemorySegment)
-    
     // @property accessibilityOrientation
-    fun accessibilityOrientation(): NSAccessibilityOrientation
-    fun setAccessibilityOrientation(value: NSAccessibilityOrientation)
-    
     // @property accessibilityOverflowButton
-    fun accessibilityOverflowButton(): MemorySegment
-    fun setAccessibilityOverflowButton(value: MemorySegment)
-    
     // @property accessibilityParent
-    fun accessibilityParent(): MemorySegment
-    fun setAccessibilityParent(value: MemorySegment)
-    
     // @property accessibilityPlaceholderValue
-    fun accessibilityPlaceholderValue(): MemorySegment
-    fun setAccessibilityPlaceholderValue(value: MemorySegment)
-    
     // @property accessibilityPreviousContents
-    fun accessibilityPreviousContents(): MemorySegment
-    fun setAccessibilityPreviousContents(value: MemorySegment)
-    
     // @property accessibilityRole
-    fun accessibilityRole(): NSAccessibilityRole
-    fun setAccessibilityRole(value: NSAccessibilityRole)
-    
     // @property accessibilityRoleDescription
-    fun accessibilityRoleDescription(): MemorySegment
-    fun setAccessibilityRoleDescription(value: MemorySegment)
-    
     // @property accessibilitySearchButton
-    fun accessibilitySearchButton(): MemorySegment
-    fun setAccessibilitySearchButton(value: MemorySegment)
-    
     // @property accessibilitySearchMenu
-    fun accessibilitySearchMenu(): MemorySegment
-    fun setAccessibilitySearchMenu(value: MemorySegment)
-    
     // @property accessibilitySelected
-    fun isAccessibilitySelected(): BOOL
-    fun setAccessibilitySelected(value: BOOL)
-    
     // @property accessibilitySelectedChildren
-    fun accessibilitySelectedChildren(): MemorySegment
-    fun setAccessibilitySelectedChildren(value: MemorySegment)
-    
     // @property accessibilityServesAsTitleForUIElements
-    fun accessibilityServesAsTitleForUIElements(): MemorySegment
-    fun setAccessibilityServesAsTitleForUIElements(value: MemorySegment)
-    
     // @property accessibilityShownMenu
-    fun accessibilityShownMenu(): MemorySegment
-    fun setAccessibilityShownMenu(value: MemorySegment)
-    
     // @property accessibilityMinValue
-    fun accessibilityMinValue(): MemorySegment
-    fun setAccessibilityMinValue(value: MemorySegment)
-    
     // @property accessibilityMaxValue
-    fun accessibilityMaxValue(): MemorySegment
-    fun setAccessibilityMaxValue(value: MemorySegment)
-    
     // @property accessibilityLinkedUIElements
-    fun accessibilityLinkedUIElements(): MemorySegment
-    fun setAccessibilityLinkedUIElements(value: MemorySegment)
-    
     // @property accessibilityWindow
-    fun accessibilityWindow(): MemorySegment
-    fun setAccessibilityWindow(value: MemorySegment)
-    
     // @property accessibilityIdentifier
-    fun accessibilityIdentifier(): MemorySegment
-    fun setAccessibilityIdentifier(value: MemorySegment)
-    
     // @property accessibilityHelp
-    fun accessibilityHelp(): MemorySegment
-    fun setAccessibilityHelp(value: MemorySegment)
-    
     // @property accessibilityFilename
-    fun accessibilityFilename(): MemorySegment
-    fun setAccessibilityFilename(value: MemorySegment)
-    
     // @property accessibilityExpanded
-    fun isAccessibilityExpanded(): BOOL
-    fun setAccessibilityExpanded(value: BOOL)
-    
     // @property accessibilityEdited
-    fun isAccessibilityEdited(): BOOL
-    fun setAccessibilityEdited(value: BOOL)
-    
     // @property accessibilityEnabled
-    fun isAccessibilityEnabled(): BOOL
-    fun setAccessibilityEnabled(value: BOOL)
-    
     // @property accessibilityChildren
-    fun accessibilityChildren(): MemorySegment
-    fun setAccessibilityChildren(value: MemorySegment)
-    
     // @property accessibilityChildrenInNavigationOrder
     /** @return NSArray<id<NSAccessibilityElement>> * */
-    fun accessibilityChildrenInNavigationOrder(): MemorySegment
-    fun setAccessibilityChildrenInNavigationOrder(value: MemorySegment)
-    
     // @property accessibilityClearButton
-    fun accessibilityClearButton(): MemorySegment
-    fun setAccessibilityClearButton(value: MemorySegment)
-    
     // @property accessibilityCancelButton
-    fun accessibilityCancelButton(): MemorySegment
-    fun setAccessibilityCancelButton(value: MemorySegment)
-    
     // @property accessibilityProtectedContent
-    fun isAccessibilityProtectedContent(): BOOL
-    fun setAccessibilityProtectedContent(value: BOOL)
-    
     // @property accessibilityContents
-    fun accessibilityContents(): MemorySegment
-    fun setAccessibilityContents(value: MemorySegment)
-    
     // @property accessibilityLabel
-    fun accessibilityLabel(): MemorySegment
-    fun setAccessibilityLabel(value: MemorySegment)
-    
     // @property accessibilityAlternateUIVisible
-    fun isAccessibilityAlternateUIVisible(): BOOL
-    fun setAccessibilityAlternateUIVisible(value: BOOL)
-    
     // @property accessibilitySharedFocusElements
-    fun accessibilitySharedFocusElements(): MemorySegment
-    fun setAccessibilitySharedFocusElements(value: MemorySegment)
-    
     // @property accessibilityRequired
-    fun isAccessibilityRequired(): BOOL
-    fun setAccessibilityRequired(value: BOOL)
-    
     // @property accessibilityCustomRotors
     /** @return NSArray<NSAccessibilityCustomRotor *> * */
-    fun accessibilityCustomRotors(): MemorySegment
-    fun setAccessibilityCustomRotors(value: MemorySegment)
-    
     // @property accessibilityUserInputLabels
     /** @return NSArray<NSString *> * */
-    fun accessibilityUserInputLabels(): MemorySegment
-    fun setAccessibilityUserInputLabels(value: MemorySegment)
-    
     // @property accessibilityAttributedUserInputLabels
     /** @return NSArray<NSAttributedString *> * */
-    fun accessibilityAttributedUserInputLabels(): MemorySegment
-    fun setAccessibilityAttributedUserInputLabels(value: MemorySegment)
-    
     // @property accessibilityApplicationFocusedUIElement
-    fun accessibilityApplicationFocusedUIElement(): MemorySegment
-    fun setAccessibilityApplicationFocusedUIElement(value: MemorySegment)
-    
     // @property accessibilityMainWindow
-    fun accessibilityMainWindow(): MemorySegment
-    fun setAccessibilityMainWindow(value: MemorySegment)
-    
     // @property accessibilityHidden
-    fun isAccessibilityHidden(): BOOL
-    fun setAccessibilityHidden(value: BOOL)
-    
     // @property accessibilityFrontmost
-    fun isAccessibilityFrontmost(): BOOL
-    fun setAccessibilityFrontmost(value: BOOL)
-    
     // @property accessibilityFocusedWindow
-    fun accessibilityFocusedWindow(): MemorySegment
-    fun setAccessibilityFocusedWindow(value: MemorySegment)
-    
     // @property accessibilityWindows
-    fun accessibilityWindows(): MemorySegment
-    fun setAccessibilityWindows(value: MemorySegment)
-    
     // @property accessibilityExtrasMenuBar
-    fun accessibilityExtrasMenuBar(): MemorySegment
-    fun setAccessibilityExtrasMenuBar(value: MemorySegment)
-    
     // @property accessibilityMenuBar
-    fun accessibilityMenuBar(): MemorySegment
-    fun setAccessibilityMenuBar(value: MemorySegment)
-    
     // @property accessibilityColumnTitles
-    fun accessibilityColumnTitles(): MemorySegment
-    fun setAccessibilityColumnTitles(value: MemorySegment)
-    
     // @property accessibilityOrderedByRow
-    fun isAccessibilityOrderedByRow(): BOOL
-    fun setAccessibilityOrderedByRow(value: BOOL)
-    
     // @property accessibilityHorizontalUnits
-    fun accessibilityHorizontalUnits(): NSAccessibilityUnits
-    fun setAccessibilityHorizontalUnits(value: NSAccessibilityUnits)
-    
     // @property accessibilityVerticalUnits
-    fun accessibilityVerticalUnits(): NSAccessibilityUnits
-    fun setAccessibilityVerticalUnits(value: NSAccessibilityUnits)
-    
     // @property accessibilityHorizontalUnitDescription
-    fun accessibilityHorizontalUnitDescription(): MemorySegment
-    fun setAccessibilityHorizontalUnitDescription(value: MemorySegment)
-    
     // @property accessibilityVerticalUnitDescription
-    fun accessibilityVerticalUnitDescription(): MemorySegment
-    fun setAccessibilityVerticalUnitDescription(value: MemorySegment)
-    
     // @property accessibilityHandles
-    fun accessibilityHandles(): MemorySegment
-    fun setAccessibilityHandles(value: MemorySegment)
-    
     // @property accessibilityWarningValue
-    fun accessibilityWarningValue(): MemorySegment
-    fun setAccessibilityWarningValue(value: MemorySegment)
-    
     // @property accessibilityCriticalValue
-    fun accessibilityCriticalValue(): MemorySegment
-    fun setAccessibilityCriticalValue(value: MemorySegment)
-    
     // @property accessibilityDisclosed
-    fun isAccessibilityDisclosed(): BOOL
-    fun setAccessibilityDisclosed(value: BOOL)
-    
     // @property accessibilityDisclosedByRow
-    fun accessibilityDisclosedByRow(): MemorySegment
-    fun setAccessibilityDisclosedByRow(value: MemorySegment)
-    
     // @property accessibilityDisclosedRows
-    fun accessibilityDisclosedRows(): MemorySegment
-    fun setAccessibilityDisclosedRows(value: MemorySegment)
-    
     // @property accessibilityDisclosureLevel
-    fun accessibilityDisclosureLevel(): NSInteger
-    fun setAccessibilityDisclosureLevel(value: NSInteger)
-    
     // @property accessibilityMarkerUIElements
-    fun accessibilityMarkerUIElements(): MemorySegment
-    fun setAccessibilityMarkerUIElements(value: MemorySegment)
-    
     // @property accessibilityMarkerValues
-    fun accessibilityMarkerValues(): MemorySegment
-    fun setAccessibilityMarkerValues(value: MemorySegment)
-    
     // @property accessibilityMarkerGroupUIElement
-    fun accessibilityMarkerGroupUIElement(): MemorySegment
-    fun setAccessibilityMarkerGroupUIElement(value: MemorySegment)
-    
     // @property accessibilityUnits
-    fun accessibilityUnits(): NSAccessibilityUnits
-    fun setAccessibilityUnits(value: NSAccessibilityUnits)
-    
     // @property accessibilityUnitDescription
-    fun accessibilityUnitDescription(): MemorySegment
-    fun setAccessibilityUnitDescription(value: MemorySegment)
-    
     // @property accessibilityRulerMarkerType
-    fun accessibilityRulerMarkerType(): NSAccessibilityRulerMarkerType
-    fun setAccessibilityRulerMarkerType(value: NSAccessibilityRulerMarkerType)
-    
     // @property accessibilityMarkerTypeDescription
-    fun accessibilityMarkerTypeDescription(): MemorySegment
-    fun setAccessibilityMarkerTypeDescription(value: MemorySegment)
-    
     // @property accessibilityHorizontalScrollBar
-    fun accessibilityHorizontalScrollBar(): MemorySegment
-    fun setAccessibilityHorizontalScrollBar(value: MemorySegment)
-    
     // @property accessibilityVerticalScrollBar
-    fun accessibilityVerticalScrollBar(): MemorySegment
-    fun setAccessibilityVerticalScrollBar(value: MemorySegment)
-    
     // @property accessibilityAllowedValues
     /** @return NSArray<NSNumber *> * */
-    fun accessibilityAllowedValues(): MemorySegment
-    fun setAccessibilityAllowedValues(value: MemorySegment)
-    
     // @property accessibilityLabelUIElements
-    fun accessibilityLabelUIElements(): MemorySegment
-    fun setAccessibilityLabelUIElements(value: MemorySegment)
-    
     // @property accessibilityLabelValue
-    fun accessibilityLabelValue(): Float
-    fun setAccessibilityLabelValue(value: Float)
-    
     // @property accessibilitySplitters
-    fun accessibilitySplitters(): MemorySegment
-    fun setAccessibilitySplitters(value: MemorySegment)
-    
     // @property accessibilityDecrementButton
-    fun accessibilityDecrementButton(): MemorySegment
-    fun setAccessibilityDecrementButton(value: MemorySegment)
-    
     // @property accessibilityIncrementButton
-    fun accessibilityIncrementButton(): MemorySegment
-    fun setAccessibilityIncrementButton(value: MemorySegment)
-    
     // @property accessibilityTabs
-    fun accessibilityTabs(): MemorySegment
-    fun setAccessibilityTabs(value: MemorySegment)
-    
     // @property accessibilityHeader
-    fun accessibilityHeader(): MemorySegment
-    fun setAccessibilityHeader(value: MemorySegment)
-    
     // @property accessibilityColumnCount
-    fun accessibilityColumnCount(): NSInteger
-    fun setAccessibilityColumnCount(value: NSInteger)
-    
     // @property accessibilityRowCount
-    fun accessibilityRowCount(): NSInteger
-    fun setAccessibilityRowCount(value: NSInteger)
-    
     // @property accessibilityIndex
-    fun accessibilityIndex(): NSInteger
-    fun setAccessibilityIndex(value: NSInteger)
-    
     // @property accessibilityColumns
-    fun accessibilityColumns(): MemorySegment
-    fun setAccessibilityColumns(value: MemorySegment)
-    
     // @property accessibilityRows
-    fun accessibilityRows(): MemorySegment
-    fun setAccessibilityRows(value: MemorySegment)
-    
     // @property accessibilityVisibleRows
-    fun accessibilityVisibleRows(): MemorySegment
-    fun setAccessibilityVisibleRows(value: MemorySegment)
-    
     // @property accessibilitySelectedRows
-    fun accessibilitySelectedRows(): MemorySegment
-    fun setAccessibilitySelectedRows(value: MemorySegment)
-    
     // @property accessibilityVisibleColumns
-    fun accessibilityVisibleColumns(): MemorySegment
-    fun setAccessibilityVisibleColumns(value: MemorySegment)
-    
     // @property accessibilitySelectedColumns
-    fun accessibilitySelectedColumns(): MemorySegment
-    fun setAccessibilitySelectedColumns(value: MemorySegment)
-    
     // @property accessibilitySortDirection
-    fun accessibilitySortDirection(): NSAccessibilitySortDirection
-    fun setAccessibilitySortDirection(value: NSAccessibilitySortDirection)
-    
     // @property accessibilityRowHeaderUIElements
-    fun accessibilityRowHeaderUIElements(): MemorySegment
-    fun setAccessibilityRowHeaderUIElements(value: MemorySegment)
-    
     // @property accessibilitySelectedCells
-    fun accessibilitySelectedCells(): MemorySegment
-    fun setAccessibilitySelectedCells(value: MemorySegment)
-    
     // @property accessibilityVisibleCells
-    fun accessibilityVisibleCells(): MemorySegment
-    fun setAccessibilityVisibleCells(value: MemorySegment)
-    
     // @property accessibilityColumnHeaderUIElements
-    fun accessibilityColumnHeaderUIElements(): MemorySegment
-    fun setAccessibilityColumnHeaderUIElements(value: MemorySegment)
-    
     // @property accessibilityRowIndexRange
-    fun accessibilityRowIndexRange(): NSRange
-    fun setAccessibilityRowIndexRange(value: NSRange)
-    
     // @property accessibilityColumnIndexRange
-    fun accessibilityColumnIndexRange(): NSRange
-    fun setAccessibilityColumnIndexRange(value: NSRange)
-    
     // @property accessibilityInsertionPointLineNumber
-    fun accessibilityInsertionPointLineNumber(): NSInteger
-    fun setAccessibilityInsertionPointLineNumber(value: NSInteger)
-    
     // @property accessibilitySharedCharacterRange
-    fun accessibilitySharedCharacterRange(): NSRange
-    fun setAccessibilitySharedCharacterRange(value: NSRange)
-    
     // @property accessibilitySharedTextUIElements
-    fun accessibilitySharedTextUIElements(): MemorySegment
-    fun setAccessibilitySharedTextUIElements(value: MemorySegment)
-    
     // @property accessibilityVisibleCharacterRange
-    fun accessibilityVisibleCharacterRange(): NSRange
-    fun setAccessibilityVisibleCharacterRange(value: NSRange)
-    
     // @property accessibilityNumberOfCharacters
-    fun accessibilityNumberOfCharacters(): NSInteger
-    fun setAccessibilityNumberOfCharacters(value: NSInteger)
-    
     // @property accessibilitySelectedText
-    fun accessibilitySelectedText(): MemorySegment
-    fun setAccessibilitySelectedText(value: MemorySegment)
-    
     // @property accessibilitySelectedTextRange
-    fun accessibilitySelectedTextRange(): NSRange
-    fun setAccessibilitySelectedTextRange(value: NSRange)
-    
     // @property accessibilitySelectedTextRanges
     /** @return NSArray<NSValue *> * */
-    fun accessibilitySelectedTextRanges(): MemorySegment
-    fun setAccessibilitySelectedTextRanges(value: MemorySegment)
-    
     // @property accessibilityToolbarButton
-    fun accessibilityToolbarButton(): MemorySegment
-    fun setAccessibilityToolbarButton(value: MemorySegment)
-    
     // @property accessibilityModal
-    fun isAccessibilityModal(): BOOL
-    fun setAccessibilityModal(value: BOOL)
-    
     // @property accessibilityProxy
-    fun accessibilityProxy(): MemorySegment
-    fun setAccessibilityProxy(value: MemorySegment)
-    
     // @property accessibilityMain
-    fun isAccessibilityMain(): BOOL
-    fun setAccessibilityMain(value: BOOL)
-    
     // @property accessibilityFullScreenButton
-    fun accessibilityFullScreenButton(): MemorySegment
-    fun setAccessibilityFullScreenButton(value: MemorySegment)
-    
     // @property accessibilityGrowArea
-    fun accessibilityGrowArea(): MemorySegment
-    fun setAccessibilityGrowArea(value: MemorySegment)
-    
     // @property accessibilityDocument
-    fun accessibilityDocument(): MemorySegment
-    fun setAccessibilityDocument(value: MemorySegment)
-    
     // @property accessibilityDefaultButton
-    fun accessibilityDefaultButton(): MemorySegment
-    fun setAccessibilityDefaultButton(value: MemorySegment)
-    
     // @property accessibilityCloseButton
-    fun accessibilityCloseButton(): MemorySegment
-    fun setAccessibilityCloseButton(value: MemorySegment)
-    
     // @property accessibilityZoomButton
-    fun accessibilityZoomButton(): MemorySegment
-    fun setAccessibilityZoomButton(value: MemorySegment)
-    
     // @property accessibilityMinimizeButton
-    fun accessibilityMinimizeButton(): MemorySegment
-    fun setAccessibilityMinimizeButton(value: MemorySegment)
-    
     // @property accessibilityMinimized
-    fun isAccessibilityMinimized(): BOOL
-    fun setAccessibilityMinimized(value: BOOL)
-    
     // @property accessibilityCustomActions
     /** @return NSArray<NSAccessibilityCustomAction *> * */
-    fun accessibilityCustomActions(): MemorySegment
-    fun setAccessibilityCustomActions(value: MemorySegment)
-    
-}
-

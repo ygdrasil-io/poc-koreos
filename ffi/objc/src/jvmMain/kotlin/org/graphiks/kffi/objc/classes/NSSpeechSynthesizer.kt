@@ -164,22 +164,13 @@ open class NSSpeechSynthesizer(val ptr: MemorySegment) {
     }
     
     // @property anyApplicationSpeaking
-    open fun isAnyApplicationSpeaking(): BOOL {
-        val sel = ObjCRuntime.sel("isAnyApplicationSpeaking")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property defaultVoice
-    open fun defaultVoice(): NSSpeechSynthesizerVoiceName {
-        val sel = ObjCRuntime.sel("defaultVoice")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSpeechSynthesizerVoiceName
     }
     
     // @property availableVoices
     /** @return NSArray<NSSpeechSynthesizerVoiceName> * */
-    open fun availableVoices(): MemorySegment {
-        val sel = ObjCRuntime.sel("availableVoices")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

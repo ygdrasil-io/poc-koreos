@@ -62,19 +62,10 @@ open class NSAppearance(val ptr: MemorySegment) {
     }
     
     // @property currentAppearance
-    open fun currentAppearance(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentAppearance")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCurrentAppearance(value: MemorySegment) {
-        val sel = ObjCRuntime.sel("setCurrentAppearance:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currentDrawingAppearance
-    open fun currentDrawingAppearance(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentDrawingAppearance")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allowsVibrancy

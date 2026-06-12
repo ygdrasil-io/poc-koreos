@@ -36,9 +36,6 @@ open class NSAssertionHandler(val ptr: MemorySegment) {
     open fun handleFailureInFunction_file_lineNumber_description(functionName: String, fileName: String, line: NSInteger, format: String): Unit = handleFailureInFunction_file_lineNumber_description(ObjCRuntime.newNSString(Arena.global(), functionName), ObjCRuntime.newNSString(Arena.global(), fileName), line, ObjCRuntime.newNSString(Arena.global(), format))
     
     // @property currentHandler
-    open fun currentHandler(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentHandler")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

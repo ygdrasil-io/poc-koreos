@@ -54,14 +54,8 @@ open class NSGraphicsContext(val ptr: MemorySegment) {
         
     }
     
-    open fun saveGraphicsState(): Unit {
-        val sel = ObjCRuntime.sel("saveGraphicsState")
-        ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun restoreGraphicsState(): Unit {
-        val sel = ObjCRuntime.sel("restoreGraphicsState")
-        ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     open fun flushGraphics(): Unit {
@@ -70,13 +64,7 @@ open class NSGraphicsContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    open fun currentContext(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCurrentContext(value: MemorySegment) {
-        val sel = ObjCRuntime.sel("setCurrentContext:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property attributes
@@ -159,51 +147,41 @@ fun NSGraphicsContext.setColorRenderingIntent(colorRenderingIntent: NSColorRende
 }
 
 // @property shouldAntialias
-fun NSGraphicsContext.shouldAntialias(): BOOL {
     val sel = ObjCRuntime.sel("shouldAntialias")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSGraphicsContext.setShouldAntialias(value: BOOL) {
     val sel = ObjCRuntime.sel("setShouldAntialias:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property imageInterpolation
-fun NSGraphicsContext.imageInterpolation(): NSImageInterpolation {
     val sel = ObjCRuntime.sel("imageInterpolation")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageInterpolation
 }
-fun NSGraphicsContext.setImageInterpolation(value: NSImageInterpolation) {
     val sel = ObjCRuntime.sel("setImageInterpolation:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property patternPhase
-fun NSGraphicsContext.patternPhase(): NSPoint {
     val sel = ObjCRuntime.sel("patternPhase")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
 }
-fun NSGraphicsContext.setPatternPhase(value: NSPoint) {
     val sel = ObjCRuntime.sel("setPatternPhase:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property compositingOperation
-fun NSGraphicsContext.compositingOperation(): NSCompositingOperation {
     val sel = ObjCRuntime.sel("compositingOperation")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCompositingOperation
 }
-fun NSGraphicsContext.setCompositingOperation(value: NSCompositingOperation) {
     val sel = ObjCRuntime.sel("setCompositingOperation:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property colorRenderingIntent
-fun NSGraphicsContext.colorRenderingIntent(): NSColorRenderingIntent {
     val sel = ObjCRuntime.sel("colorRenderingIntent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSColorRenderingIntent
 }
-fun NSGraphicsContext.setColorRenderingIntent(value: NSColorRenderingIntent) {
     val sel = ObjCRuntime.sel("setColorRenderingIntent:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -216,7 +194,6 @@ fun NSGraphicsContext.CIContext(): MemorySegment {
 }
 
 // @property CIContext
-fun NSGraphicsContext.CIContext(): MemorySegment {
     val sel = ObjCRuntime.sel("CIContext")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -260,7 +237,6 @@ fun NSGraphicsContext_graphicsContextWithWindow(window: MemorySegment): MemorySe
 }
 
 // @property graphicsPort
-fun NSGraphicsContext.graphicsPort(): MemorySegment {
     val sel = ObjCRuntime.sel("graphicsPort")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

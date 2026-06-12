@@ -21,8 +21,3 @@ interface NSAnimatablePropertyContainer {
     
     // @property animations
     /** @return NSDictionary<NSAnimatablePropertyKey,id> * */
-    fun animations(): MemorySegment
-    fun setAnimations(value: MemorySegment)
-    
-}
-

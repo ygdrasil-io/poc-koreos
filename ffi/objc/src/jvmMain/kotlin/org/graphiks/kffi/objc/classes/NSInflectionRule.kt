@@ -26,9 +26,6 @@ open class NSInflectionRule(val ptr: MemorySegment) {
     }
     
     // @property automaticRule
-    open fun automaticRule(): MemorySegment {
-        val sel = ObjCRuntime.sel("automaticRule")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

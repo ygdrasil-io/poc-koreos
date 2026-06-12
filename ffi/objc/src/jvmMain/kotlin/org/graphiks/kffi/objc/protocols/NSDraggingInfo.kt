@@ -49,43 +49,14 @@ interface NSDraggingInfo : NSObject {
     fun springLoadingHighlight(): NSSpringLoadingHighlight
     
     // @property draggingDestinationWindow
-    fun draggingDestinationWindow(): MemorySegment
-    
     // @property draggingSourceOperationMask
-    fun draggingSourceOperationMask(): NSDragOperation
-    
     // @property draggingLocation
-    fun draggingLocation(): NSPoint
-    
     // @property draggedImageLocation
-    fun draggedImageLocation(): NSPoint
-    
     // @property draggedImage
-    fun draggedImage(): MemorySegment
-    
     // @property draggingPasteboard
-    fun draggingPasteboard(): MemorySegment
-    
     // @property draggingSource
-    fun draggingSource(): MemorySegment
-    
     // @property draggingSequenceNumber
-    fun draggingSequenceNumber(): NSInteger
-    
     // @property draggingFormation
-    fun draggingFormation(): NSDraggingFormation
-    fun setDraggingFormation(value: NSDraggingFormation)
-    
     // @property animatesToDestination
-    fun animatesToDestination(): BOOL
-    fun setAnimatesToDestination(value: BOOL)
-    
     // @property numberOfValidItemsForDrop
-    fun numberOfValidItemsForDrop(): NSInteger
-    fun setNumberOfValidItemsForDrop(value: NSInteger)
-    
     // @property springLoadingHighlight
-    fun springLoadingHighlight(): NSSpringLoadingHighlight
-    
-}
-

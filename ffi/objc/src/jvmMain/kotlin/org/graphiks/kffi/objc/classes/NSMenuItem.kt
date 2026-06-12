@@ -58,20 +58,11 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property usesUserKeyEquivalents
-    open fun usesUserKeyEquivalents(): BOOL {
-        val sel = ObjCRuntime.sel("usesUserKeyEquivalents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    open fun setUsesUserKeyEquivalents(value: BOOL) {
-        val sel = ObjCRuntime.sel("setUsesUserKeyEquivalents:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property writingToolsItems
     /** @return NSArray<NSMenuItem *> * */
-    open fun writingToolsItems(): MemorySegment {
-        val sel = ObjCRuntime.sel("writingToolsItems")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property menu

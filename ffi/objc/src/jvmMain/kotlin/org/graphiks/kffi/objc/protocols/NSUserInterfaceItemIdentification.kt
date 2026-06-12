@@ -13,8 +13,3 @@ interface NSUserInterfaceItemIdentification {
     fun setIdentifier(identifier: NSUserInterfaceItemIdentifier)
     
     // @property identifier
-    fun identifier(): NSUserInterfaceItemIdentifier
-    fun setIdentifier(value: NSUserInterfaceItemIdentifier)
-    
-}
-

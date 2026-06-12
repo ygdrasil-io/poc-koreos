@@ -143,18 +143,15 @@ fun NSSplitView.arrangedSubviews(): MemorySegment {
 }
 
 // @property arrangesAllSubviews
-fun NSSplitView.arrangesAllSubviews(): BOOL {
     val sel = ObjCRuntime.sel("arrangesAllSubviews")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSSplitView.setArrangesAllSubviews(value: BOOL) {
     val sel = ObjCRuntime.sel("setArrangesAllSubviews:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property arrangedSubviews
 /** @return NSArray<__kindof NSView *> * */
-fun NSSplitView.arrangedSubviews(): MemorySegment {
     val sel = ObjCRuntime.sel("arrangedSubviews")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

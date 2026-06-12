@@ -101,13 +101,7 @@ open class NSPrintOperation(val ptr: MemorySegment) {
     }
     
     // @property currentOperation
-    open fun currentOperation(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentOperation")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCurrentOperation(value: MemorySegment) {
-        val sel = ObjCRuntime.sel("setCurrentOperation:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property copyingOperation

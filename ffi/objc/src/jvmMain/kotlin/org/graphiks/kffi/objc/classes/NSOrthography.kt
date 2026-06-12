@@ -84,21 +84,18 @@ fun NSOrthography_defaultOrthographyForLanguage(language: MemorySegment): Memory
 }
 
 // @property dominantLanguage
-fun NSOrthography.dominantLanguage(): MemorySegment {
     val sel = ObjCRuntime.sel("dominantLanguage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property allScripts
 /** @return NSArray<NSString *> * */
-fun NSOrthography.allScripts(): MemorySegment {
     val sel = ObjCRuntime.sel("allScripts")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property allLanguages
 /** @return NSArray<NSString *> * */
-fun NSOrthography.allLanguages(): MemorySegment {
     val sel = ObjCRuntime.sel("allLanguages")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

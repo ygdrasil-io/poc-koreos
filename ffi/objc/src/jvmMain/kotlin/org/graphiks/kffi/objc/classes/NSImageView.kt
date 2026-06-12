@@ -121,13 +121,7 @@ open class NSImageView(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property defaultPreferredImageDynamicRange
-    fun defaultPreferredImageDynamicRange(): NSImageDynamicRange {
-        val sel = ObjCRuntime.sel("defaultPreferredImageDynamicRange")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageDynamicRange
     }
-    fun setDefaultPreferredImageDynamicRange(value: NSImageDynamicRange) {
-        val sel = ObjCRuntime.sel("setDefaultPreferredImageDynamicRange:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preferredImageDynamicRange

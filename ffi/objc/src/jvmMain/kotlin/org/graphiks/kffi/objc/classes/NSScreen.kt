@@ -57,27 +57,15 @@ open class NSScreen(val ptr: MemorySegment) {
     
     // @property screens
     /** @return NSArray<NSScreen *> * */
-    open fun screens(): MemorySegment {
-        val sel = ObjCRuntime.sel("screens")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property mainScreen
-    open fun mainScreen(): MemorySegment {
-        val sel = ObjCRuntime.sel("mainScreen")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property deepestScreen
-    open fun deepestScreen(): MemorySegment {
-        val sel = ObjCRuntime.sel("deepestScreen")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property screensHaveSeparateSpaces
-    open fun screensHaveSeparateSpaces(): BOOL {
-        val sel = ObjCRuntime.sel("screensHaveSeparateSpaces")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property depth
@@ -176,19 +164,16 @@ fun NSScreen.maximumReferenceExtendedDynamicRangeColorComponentValue(): CGFloat 
 }
 
 // @property maximumExtendedDynamicRangeColorComponentValue
-fun NSScreen.maximumExtendedDynamicRangeColorComponentValue(): CGFloat {
     val sel = ObjCRuntime.sel("maximumExtendedDynamicRangeColorComponentValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }
 
 // @property maximumPotentialExtendedDynamicRangeColorComponentValue
-fun NSScreen.maximumPotentialExtendedDynamicRangeColorComponentValue(): CGFloat {
     val sel = ObjCRuntime.sel("maximumPotentialExtendedDynamicRangeColorComponentValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }
 
 // @property maximumReferenceExtendedDynamicRangeColorComponentValue
-fun NSScreen.maximumReferenceExtendedDynamicRangeColorComponentValue(): CGFloat {
     val sel = ObjCRuntime.sel("maximumReferenceExtendedDynamicRangeColorComponentValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }

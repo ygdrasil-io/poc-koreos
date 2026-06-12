@@ -163,26 +163,22 @@ fun NSDictionary.descriptionInStringsFileFormat(): MemorySegment {
 
 // @property allKeys
 /** @return NSArray<KeyType> * */
-fun NSDictionary.allKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("allKeys")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property allValues
 /** @return NSArray<ObjectType> * */
-fun NSDictionary.allValues(): MemorySegment {
     val sel = ObjCRuntime.sel("allValues")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property description
-fun NSDictionary.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property descriptionInStringsFileFormat
-fun NSDictionary.descriptionInStringsFileFormat(): MemorySegment {
     val sel = ObjCRuntime.sel("descriptionInStringsFileFormat")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

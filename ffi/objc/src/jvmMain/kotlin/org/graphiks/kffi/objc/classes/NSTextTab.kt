@@ -48,7 +48,6 @@ fun NSTextTab.alignment(): NSTextAlignment {
 }
 
 // @property alignment
-fun NSTextTab.alignment(): NSTextAlignment {
     val sel = ObjCRuntime.sel("alignment")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
 }
@@ -66,7 +65,6 @@ fun NSTextTab.tabStopType(): NSTextTabType {
 }
 
 // @property tabStopType
-fun NSTextTab.tabStopType(): NSTextTabType {
     val sel = ObjCRuntime.sel("tabStopType")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextTabType
 }

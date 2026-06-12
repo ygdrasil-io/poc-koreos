@@ -192,13 +192,11 @@ fun NSViewController.presentingViewController(): MemorySegment {
 
 // @property presentedViewControllers
 /** @return NSArray<__kindof NSViewController *> * */
-fun NSViewController.presentedViewControllers(): MemorySegment {
     val sel = ObjCRuntime.sel("presentedViewControllers")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property presentingViewController
-fun NSViewController.presentingViewController(): MemorySegment {
     val sel = ObjCRuntime.sel("presentingViewController")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -279,18 +277,15 @@ fun NSViewController.setChildViewControllers(childViewControllers: MemorySegment
 }
 
 // @property parentViewController
-fun NSViewController.parentViewController(): MemorySegment {
     val sel = ObjCRuntime.sel("parentViewController")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property childViewControllers
 /** @return NSArray<__kindof NSViewController *> * */
-fun NSViewController.childViewControllers(): MemorySegment {
     val sel = ObjCRuntime.sel("childViewControllers")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSViewController.setChildViewControllers(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setChildViewControllers:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -303,7 +298,6 @@ fun NSViewController.storyboard(): MemorySegment {
 }
 
 // @property storyboard
-fun NSViewController.storyboard(): MemorySegment {
     val sel = ObjCRuntime.sel("storyboard")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -346,39 +340,32 @@ fun NSViewController.preferredMaximumSize(): NSSize {
 }
 
 // @property extensionContext
-fun NSViewController.extensionContext(): MemorySegment {
     val sel = ObjCRuntime.sel("extensionContext")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property sourceItemView
-fun NSViewController.sourceItemView(): MemorySegment {
     val sel = ObjCRuntime.sel("sourceItemView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSViewController.setSourceItemView(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setSourceItemView:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property preferredScreenOrigin
-fun NSViewController.preferredScreenOrigin(): NSPoint {
     val sel = ObjCRuntime.sel("preferredScreenOrigin")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
 }
-fun NSViewController.setPreferredScreenOrigin(value: NSPoint) {
     val sel = ObjCRuntime.sel("setPreferredScreenOrigin:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property preferredMinimumSize
-fun NSViewController.preferredMinimumSize(): NSSize {
     val sel = ObjCRuntime.sel("preferredMinimumSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }
 
 // @property preferredMaximumSize
-fun NSViewController.preferredMaximumSize(): NSSize {
     val sel = ObjCRuntime.sel("preferredMaximumSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }

@@ -25,9 +25,6 @@ open class NSMediaLibraryBrowserController(val ptr: MemorySegment) {
     }
     
     // @property sharedMediaLibraryBrowserController
-    open fun sharedMediaLibraryBrowserController(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedMediaLibraryBrowserController")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property visible

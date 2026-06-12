@@ -36,7 +36,6 @@ fun NSObject_setVersion(aVersion: NSInteger): Unit {
 }
 
 // @property classForCoder
-fun NSObject.classForCoder(): Class<*> {
     val sel = ObjCRuntime.sel("classForCoder")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
@@ -58,7 +57,6 @@ fun NSObject.autoContentAccessingProxy(): MemorySegment {
 }
 
 // @property autoContentAccessingProxy
-fun NSObject.autoContentAccessingProxy(): MemorySegment {
     val sel = ObjCRuntime.sel("autoContentAccessingProxy")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -373,11 +371,9 @@ fun NSObject_automaticallyNotifiesObserversForKey(key: MemorySegment): BOOL {
 }
 
 // @property observationInfo
-fun NSObject.observationInfo(): MemorySegment {
     val sel = ObjCRuntime.sel("observationInfo")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSObject.setObservationInfo(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setObservationInfo:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -418,7 +414,6 @@ fun NSObject_classFallbacksForKeyedArchiver(): MemorySegment {
 }
 
 // @property classForKeyedArchiver
-fun NSObject.classForKeyedArchiver(): Class<*> {
     val sel = ObjCRuntime.sel("classForKeyedArchiver")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
@@ -472,7 +467,6 @@ fun NSObject.classForArchiver(): Class<*> {
 }
 
 // @property classForArchiver
-fun NSObject.classForArchiver(): Class<*> {
     val sel = ObjCRuntime.sel("classForArchiver")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
@@ -490,7 +484,6 @@ fun NSObject.classForPortCoder(): Class<*> {
 }
 
 // @property classForPortCoder
-fun NSObject.classForPortCoder(): Class<*> {
     val sel = ObjCRuntime.sel("classForPortCoder")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
 }
@@ -526,28 +519,24 @@ fun NSObject.toManyRelationshipKeys(): MemorySegment {
 }
 
 // @property classDescription
-fun NSObject.classDescription(): MemorySegment {
     val sel = ObjCRuntime.sel("classDescription")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property attributeKeys
 /** @return NSArray<NSString *> * */
-fun NSObject.attributeKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("attributeKeys")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property toOneRelationshipKeys
 /** @return NSArray<NSString *> * */
-fun NSObject.toOneRelationshipKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("toOneRelationshipKeys")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property toManyRelationshipKeys
 /** @return NSArray<NSString *> * */
-fun NSObject.toManyRelationshipKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("toManyRelationshipKeys")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -582,11 +571,9 @@ fun NSObject.setScriptingProperties(scriptingProperties: MemorySegment): Unit {
 
 // @property scriptingProperties
 /** @return NSDictionary<NSString *,id> * */
-fun NSObject.scriptingProperties(): MemorySegment {
     val sel = ObjCRuntime.sel("scriptingProperties")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSObject.setScriptingProperties(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setScriptingProperties:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -604,13 +591,11 @@ fun NSObject.className(): MemorySegment {
 }
 
 // @property classCode
-fun NSObject.classCode(): FourCharCode {
     val sel = ObjCRuntime.sel("classCode")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
 }
 
 // @property className
-fun NSObject.className(): MemorySegment {
     val sel = ObjCRuntime.sel("className")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -671,7 +656,6 @@ fun NSObject.objectSpecifier(): MemorySegment {
 }
 
 // @property objectSpecifier
-fun NSObject.objectSpecifier(): MemorySegment {
     val sel = ObjCRuntime.sel("objectSpecifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -851,13 +835,11 @@ fun NSObject.accessibilityNotifiesWhenDestroyed(): BOOL {
 }
 
 // @property accessibilityFocusedUIElement
-fun NSObject.accessibilityFocusedUIElement(): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityFocusedUIElement")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property accessibilityNotifiesWhenDestroyed
-fun NSObject.accessibilityNotifiesWhenDestroyed(): BOOL {
     val sel = ObjCRuntime.sel("accessibilityNotifiesWhenDestroyed")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -984,7 +966,6 @@ fun NSObject_exposeBinding(binding: NSBindingName): Unit {
 
 // @property exposedBindings
 /** @return NSArray<NSBindingName> * */
-fun NSObject.exposedBindings(): MemorySegment {
     val sel = ObjCRuntime.sel("exposedBindings")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

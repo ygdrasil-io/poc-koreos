@@ -136,9 +136,6 @@ open class NSPasteboard(val ptr: MemorySegment) {
     }
     
     // @property generalPasteboard
-    open fun generalPasteboard(): MemorySegment {
-        val sel = ObjCRuntime.sel("generalPasteboard")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property name

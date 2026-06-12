@@ -32,7 +32,6 @@ fun NSEnumerator.allObjects(): MemorySegment {
 
 // @property allObjects
 /** @return NSArray<ObjectType> * */
-fun NSEnumerator.allObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("allObjects")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

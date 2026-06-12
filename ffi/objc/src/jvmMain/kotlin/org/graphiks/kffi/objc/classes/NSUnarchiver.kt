@@ -64,28 +64,14 @@ open class NSUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun decodeClassName_asClassName(inArchiveName: MemorySegment, trueName: MemorySegment): Unit {
-        val sel = ObjCRuntime.sel("decodeClassName:asClassName:")
-        ObjCRuntime.msgSend(null, ptr, sel, inArchiveName, trueName)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeClassName_asClassName(inArchiveName: String, trueName: String): Unit = decodeClassName_asClassName(ObjCRuntime.newNSString(Arena.global(), inArchiveName), ObjCRuntime.newNSString(Arena.global(), trueName))
-    
-    fun classNameDecodedForArchiveClassName(inArchiveName: MemorySegment): MemorySegment {
-        val sel = ObjCRuntime.sel("classNameDecodedForArchiveClassName:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, inArchiveName) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun classNameDecodedForArchiveClassNameAsString(inArchiveName: MemorySegment): String = ObjCRuntime.toJavaString(classNameDecodedForArchiveClassName(inArchiveName))
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun classNameDecodedForArchiveClassName(inArchiveName: String): MemorySegment = classNameDecodedForArchiveClassName(ObjCRuntime.newNSString(Arena.global(), inArchiveName))
-    
     /** Convenience overload — [String] parameters and [String] return type. */
-    fun classNameDecodedForArchiveClassNameAsString(inArchiveName: String): String = ObjCRuntime.toJavaString(classNameDecodedForArchiveClassName(ObjCRuntime.newNSString(Arena.global(), inArchiveName)))
-    
     fun replaceObject_withObject(`object`: MemorySegment, newObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("replaceObject:withObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`, newObject)

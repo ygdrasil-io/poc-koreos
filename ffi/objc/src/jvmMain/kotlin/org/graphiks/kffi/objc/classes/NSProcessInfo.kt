@@ -64,9 +64,6 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     open fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
     // @property processInfo
-    open fun processInfo(): MemorySegment {
-        val sel = ObjCRuntime.sel("processInfo")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property environment
@@ -217,13 +214,11 @@ fun NSProcessInfo.fullUserName(): MemorySegment {
 }
 
 // @property userName
-fun NSProcessInfo.userName(): MemorySegment {
     val sel = ObjCRuntime.sel("userName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property fullUserName
-fun NSProcessInfo.fullUserName(): MemorySegment {
     val sel = ObjCRuntime.sel("fullUserName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -236,7 +231,6 @@ fun NSProcessInfo.thermalState(): NSProcessInfoThermalState {
 }
 
 // @property thermalState
-fun NSProcessInfo.thermalState(): NSProcessInfoThermalState {
     val sel = ObjCRuntime.sel("thermalState")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProcessInfoThermalState
 }
@@ -249,7 +243,6 @@ fun NSProcessInfo.isLowPowerModeEnabled(): BOOL {
 }
 
 // @property lowPowerModeEnabled
-fun NSProcessInfo.isLowPowerModeEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isLowPowerModeEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -272,19 +265,16 @@ fun NSProcessInfo.isiOSAppOnVision(): BOOL {
 }
 
 // @property macCatalystApp
-fun NSProcessInfo.isMacCatalystApp(): BOOL {
     val sel = ObjCRuntime.sel("isMacCatalystApp")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property iOSAppOnMac
-fun NSProcessInfo.isiOSAppOnMac(): BOOL {
     val sel = ObjCRuntime.sel("isiOSAppOnMac")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property iOSAppOnVision
-fun NSProcessInfo.isiOSAppOnVision(): BOOL {
     val sel = ObjCRuntime.sel("isiOSAppOnVision")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

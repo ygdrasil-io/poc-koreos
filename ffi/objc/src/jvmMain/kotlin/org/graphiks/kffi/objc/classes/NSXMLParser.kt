@@ -132,25 +132,21 @@ fun NSXMLParser.columnNumber(): NSInteger {
 }
 
 // @property publicID
-fun NSXMLParser.publicID(): MemorySegment {
     val sel = ObjCRuntime.sel("publicID")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property systemID
-fun NSXMLParser.systemID(): MemorySegment {
     val sel = ObjCRuntime.sel("systemID")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property lineNumber
-fun NSXMLParser.lineNumber(): NSInteger {
     val sel = ObjCRuntime.sel("lineNumber")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
 
 // @property columnNumber
-fun NSXMLParser.columnNumber(): NSInteger {
     val sel = ObjCRuntime.sel("columnNumber")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }

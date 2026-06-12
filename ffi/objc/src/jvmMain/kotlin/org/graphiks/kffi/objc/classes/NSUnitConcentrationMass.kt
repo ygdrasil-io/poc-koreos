@@ -31,15 +31,9 @@ open class NSUnitConcentrationMass(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property gramsPerLiter
-    fun gramsPerLiter(): MemorySegment {
-        val sel = ObjCRuntime.sel("gramsPerLiter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milligramsPerDeciliter
-    fun milligramsPerDeciliter(): MemorySegment {
-        val sel = ObjCRuntime.sel("milligramsPerDeciliter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

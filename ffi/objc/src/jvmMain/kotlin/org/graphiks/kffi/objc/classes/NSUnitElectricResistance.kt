@@ -41,33 +41,18 @@ open class NSUnitElectricResistance(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property megaohms
-    fun megaohms(): MemorySegment {
-        val sel = ObjCRuntime.sel("megaohms")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kiloohms
-    fun kiloohms(): MemorySegment {
-        val sel = ObjCRuntime.sel("kiloohms")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property ohms
-    fun ohms(): MemorySegment {
-        val sel = ObjCRuntime.sel("ohms")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milliohms
-    fun milliohms(): MemorySegment {
-        val sel = ObjCRuntime.sel("milliohms")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property microohms
-    fun microohms(): MemorySegment {
-        val sel = ObjCRuntime.sel("microohms")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

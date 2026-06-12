@@ -41,33 +41,18 @@ open class NSUnitElectricCurrent(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property megaamperes
-    fun megaamperes(): MemorySegment {
-        val sel = ObjCRuntime.sel("megaamperes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kiloamperes
-    fun kiloamperes(): MemorySegment {
-        val sel = ObjCRuntime.sel("kiloamperes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property amperes
-    fun amperes(): MemorySegment {
-        val sel = ObjCRuntime.sel("amperes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milliamperes
-    fun milliamperes(): MemorySegment {
-        val sel = ObjCRuntime.sel("milliamperes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property microamperes
-    fun microamperes(): MemorySegment {
-        val sel = ObjCRuntime.sel("microamperes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

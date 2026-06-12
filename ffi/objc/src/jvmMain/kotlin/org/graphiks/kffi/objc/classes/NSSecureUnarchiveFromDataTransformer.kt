@@ -22,9 +22,6 @@ open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTra
     
     // @property allowedTopLevelClasses
     /** @return NSArray<Class<*>> * */
-    fun allowedTopLevelClasses(): MemorySegment {
-        val sel = ObjCRuntime.sel("allowedTopLevelClasses")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

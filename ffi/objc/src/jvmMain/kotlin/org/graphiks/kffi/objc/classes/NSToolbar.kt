@@ -254,68 +254,55 @@ fun NSToolbar.configurationDictionary(): MemorySegment {
 }
 
 // @property sizeMode
-fun NSToolbar.sizeMode(): NSToolbarSizeMode {
     val sel = ObjCRuntime.sel("sizeMode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarSizeMode
 }
-fun NSToolbar.setSizeMode(value: NSToolbarSizeMode) {
     val sel = ObjCRuntime.sel("setSizeMode:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property centeredItemIdentifier
-fun NSToolbar.centeredItemIdentifier(): NSToolbarItemIdentifier {
     val sel = ObjCRuntime.sel("centeredItemIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSToolbarItemIdentifier
 }
-fun NSToolbar.setCenteredItemIdentifier(value: NSToolbarItemIdentifier) {
     val sel = ObjCRuntime.sel("setCenteredItemIdentifier:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property fullScreenAccessoryView
-fun NSToolbar.fullScreenAccessoryView(): MemorySegment {
     val sel = ObjCRuntime.sel("fullScreenAccessoryView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSToolbar.setFullScreenAccessoryView(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setFullScreenAccessoryView:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property fullScreenAccessoryViewMinHeight
-fun NSToolbar.fullScreenAccessoryViewMinHeight(): CGFloat {
     val sel = ObjCRuntime.sel("fullScreenAccessoryViewMinHeight")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }
-fun NSToolbar.setFullScreenAccessoryViewMinHeight(value: CGFloat) {
     val sel = ObjCRuntime.sel("setFullScreenAccessoryViewMinHeight:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property fullScreenAccessoryViewMaxHeight
-fun NSToolbar.fullScreenAccessoryViewMaxHeight(): CGFloat {
     val sel = ObjCRuntime.sel("fullScreenAccessoryViewMaxHeight")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }
-fun NSToolbar.setFullScreenAccessoryViewMaxHeight(value: CGFloat) {
     val sel = ObjCRuntime.sel("setFullScreenAccessoryViewMaxHeight:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property showsBaselineSeparator
-fun NSToolbar.showsBaselineSeparator(): BOOL {
     val sel = ObjCRuntime.sel("showsBaselineSeparator")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSToolbar.setShowsBaselineSeparator(value: BOOL) {
     val sel = ObjCRuntime.sel("setShowsBaselineSeparator:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property configurationDictionary
 /** @return NSDictionary<NSString *,id> * */
-fun NSToolbar.configurationDictionary(): MemorySegment {
     val sel = ObjCRuntime.sel("configurationDictionary")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

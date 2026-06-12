@@ -157,11 +157,9 @@ fun NSFormCell.setAttributedTitle(attributedTitle: MemorySegment): Unit {
 }
 
 // @property attributedTitle
-fun NSFormCell.attributedTitle(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedTitle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSFormCell.setAttributedTitle(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributedTitle:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

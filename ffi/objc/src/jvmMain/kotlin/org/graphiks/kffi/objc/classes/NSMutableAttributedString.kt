@@ -87,7 +87,6 @@ fun NSMutableAttributedString.mutableString(): MemorySegment {
 }
 
 // @property mutableString
-fun NSMutableAttributedString.mutableString(): MemorySegment {
     val sel = ObjCRuntime.sel("mutableString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

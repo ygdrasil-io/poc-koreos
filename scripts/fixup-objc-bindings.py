@@ -106,6 +106,120 @@ def fix_struct_types(content: str) -> str:
     return content
 
 
+def extract_param_types(params_str: str) -> str:
+    """Extract type names from a function parameter list string.
+    
+    Returns a normalized signature string like 'MemorySegment,MemorySegment'.
+    Skips default values, parameter names.
+    """
+    if not params_str.strip():
+        return ""
+    types = []
+    depth = 0
+    current = ""
+    for ch in params_str:
+        if ch in '(<':
+            depth += 1
+        elif ch in ')>':
+            depth -= 1
+        if ch == ',' and depth == 0:
+            # Extract type from param segment like "p: MemorySegment = ..."
+            seg = current.strip()
+            if ':' in seg:
+                t = seg.split(':', 1)[1].strip()
+                # Remove default value
+                t = re.split(r'\s*=\s*', t)[0].strip()
+                types.append(t)
+            current = ""
+        else:
+            current += ch
+    # Last param
+    if current.strip():
+        seg = current.strip()
+        if ':' in seg:
+            t = seg.split(':', 1)[1].strip()
+            t = re.split(r'\s*=\s*', t)[0].strip()
+            types.append(t)
+    return ",".join(types)
+
+
+def dedup_functions(content: str) -> str:
+    """Remove duplicate function declarations with identical JVM signatures.
+    
+    Handles both class member functions and top-level extension functions.
+    For each group of duplicates, keeps only the first occurrence.
+    """
+    lines = content.split('\n')
+    # Collect all function declarations with their line numbers and signatures
+    # Member functions: class methods
+    member_fns = []
+    for i, line in enumerate(lines):
+        m = re.match(r'^(\s+)(?:open\s+)?(?:override\s+)?fun\s+`?(\w+)`?\(([^)]*)\)', line)
+        if m:
+            name = m.group(2)
+            params = extract_param_types(m.group(3))
+            member_fns.append((i, name, params, line))
+    
+    # Extension functions: top-level receiver.func
+    ext_fns = []
+    for i, line in enumerate(lines):
+        m = re.match(r'^fun\s+(\w+)\.`?(\w+)`?\(([^)]*)\)', line)
+        if m:
+            receiver = m.group(1)
+            name = m.group(2)
+            params = extract_param_types(m.group(3))
+            ext_fns.append((i, f"{receiver}.{name}", params, line))
+    
+    # Find duplicates and mark lines for removal
+    seen_member = set()
+    seen_ext = set()
+    remove_lines = set()
+    
+    for line_idx, sig_name, params, line in member_fns:
+        key = f"{sig_name}({params})"
+        if key in seen_member:
+            remove_lines.add(line_idx)
+        else:
+            seen_member.add(key)
+    
+    for line_idx, sig_name, params, line in ext_fns:
+        key = f"{sig_name}({params})"
+        if key in seen_ext:
+            remove_lines.add(line_idx)
+        else:
+            seen_ext.add(key)
+    
+    if not remove_lines:
+        return content
+    
+    # Remove duplicate lines and their following body (indented continuation)
+    result = []
+    skip = False
+    for i, line in enumerate(lines):
+        if i in remove_lines:
+            skip = True
+            continue
+        if skip:
+            # Check if this line is a continuation (starts with the same or more indent)
+            # or a blank line between functions
+            stripped = line.rstrip()
+            if stripped == "":
+                # Skip blank lines after removed function
+                continue
+            if line.startswith(' ' * 4) and not line.startswith(' ' * 8) and not stripped.startswith('//'):
+                # This is a new top-level item, stop skipping
+                skip = False
+                result.append(line)
+            elif stripped.startswith('fun ') or stripped.startswith('open ') or stripped.startswith('override '):
+                skip = False
+                result.append(line)
+            # else: continue skipping (body of removed function)
+        else:
+            result.append(line)
+    
+    return '\n'.join(result)
+
+
 def build_class_map(class_dir: Path) -> dict:
     """Build class_name → {super, methods} from all .kt files."""
     class_map = {}
@@ -279,7 +393,22 @@ def main():
         if count:
             print(f"  {subdir}/: fixed struct types in {count} files")
     
-    # 6. Make root class methods open, add override to subclasses
+    # 6. Dedup conflicting function overloads
+    for subdir in ["classes", "protocols"]:
+        d = OUT_PKG / subdir
+        if not d.exists():
+            continue
+        count = 0
+        for f in sorted(d.glob("*.kt")):
+            text = f.read_text()
+            new_text = dedup_functions(text)
+            if new_text != text:
+                f.write_text(new_text)
+                count += 1
+        if count:
+            print(f"  {subdir}/: deduped functions in {count} files")
+    
+    # 7. Make root class methods open, add override to subclasses
     class_dir = OUT_PKG / "classes"
     if class_dir.exists():
         count_before = len([m for m in re.finditer(

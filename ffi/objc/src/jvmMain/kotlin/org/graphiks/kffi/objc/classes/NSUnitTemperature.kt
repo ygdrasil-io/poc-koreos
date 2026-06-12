@@ -31,21 +31,12 @@ open class NSUnitTemperature(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kelvin
-    fun kelvin(): MemorySegment {
-        val sel = ObjCRuntime.sel("kelvin")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property celsius
-    fun celsius(): MemorySegment {
-        val sel = ObjCRuntime.sel("celsius")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property fahrenheit
-    fun fahrenheit(): MemorySegment {
-        val sel = ObjCRuntime.sel("fahrenheit")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

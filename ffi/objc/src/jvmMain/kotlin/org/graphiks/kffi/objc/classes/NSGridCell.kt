@@ -31,9 +31,6 @@ open class NSGridCell(val ptr: MemorySegment) {
     }
     
     // @property emptyContentView
-    open fun emptyContentView(): MemorySegment {
-        val sel = ObjCRuntime.sel("emptyContentView")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property row

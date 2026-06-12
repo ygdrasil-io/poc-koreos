@@ -121,60 +121,16 @@ interface NSTextInputTraits {
         throw UnsupportedOperationException("Optional ObjC method 'setAllowedWritingToolsResultOptions:' not implemented")
     
     // @property autocorrectionType
-    fun autocorrectionType(): NSTextInputTraitType
-    fun setAutocorrectionType(value: NSTextInputTraitType)
-    
     // @property spellCheckingType
-    fun spellCheckingType(): NSTextInputTraitType
-    fun setSpellCheckingType(value: NSTextInputTraitType)
-    
     // @property grammarCheckingType
-    fun grammarCheckingType(): NSTextInputTraitType
-    fun setGrammarCheckingType(value: NSTextInputTraitType)
-    
     // @property smartQuotesType
-    fun smartQuotesType(): NSTextInputTraitType
-    fun setSmartQuotesType(value: NSTextInputTraitType)
-    
     // @property smartDashesType
-    fun smartDashesType(): NSTextInputTraitType
-    fun setSmartDashesType(value: NSTextInputTraitType)
-    
     // @property smartInsertDeleteType
-    fun smartInsertDeleteType(): NSTextInputTraitType
-    fun setSmartInsertDeleteType(value: NSTextInputTraitType)
-    
     // @property textReplacementType
-    fun textReplacementType(): NSTextInputTraitType
-    fun setTextReplacementType(value: NSTextInputTraitType)
-    
     // @property dataDetectionType
-    fun dataDetectionType(): NSTextInputTraitType
-    fun setDataDetectionType(value: NSTextInputTraitType)
-    
     // @property linkDetectionType
-    fun linkDetectionType(): NSTextInputTraitType
-    fun setLinkDetectionType(value: NSTextInputTraitType)
-    
     // @property textCompletionType
-    fun textCompletionType(): NSTextInputTraitType
-    fun setTextCompletionType(value: NSTextInputTraitType)
-    
     // @property inlinePredictionType
-    fun inlinePredictionType(): NSTextInputTraitType
-    fun setInlinePredictionType(value: NSTextInputTraitType)
-    
     // @property mathExpressionCompletionType
-    fun mathExpressionCompletionType(): NSTextInputTraitType
-    fun setMathExpressionCompletionType(value: NSTextInputTraitType)
-    
     // @property writingToolsBehavior
-    fun writingToolsBehavior(): NSWritingToolsBehavior
-    fun setWritingToolsBehavior(value: NSWritingToolsBehavior)
-    
     // @property allowedWritingToolsResultOptions
-    fun allowedWritingToolsResultOptions(): NSWritingToolsResultOptions
-    fun setAllowedWritingToolsResultOptions(value: NSWritingToolsResultOptions)
-    
-}
-

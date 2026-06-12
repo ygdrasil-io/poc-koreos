@@ -22,9 +22,6 @@ open class NSHapticFeedbackManager(val ptr: MemorySegment) {
     
     // @property defaultPerformer
     /** @return id<NSHapticFeedbackPerformer> */
-    open fun defaultPerformer(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultPerformer")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

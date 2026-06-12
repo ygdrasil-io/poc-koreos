@@ -303,7 +303,6 @@ fun NSResponder.undoManager(): MemorySegment {
 }
 
 // @property undoManager
-fun NSResponder.undoManager(): MemorySegment {
     val sel = ObjCRuntime.sel("undoManager")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -378,11 +377,9 @@ fun NSResponder.setUserActivity(userActivity: MemorySegment): Unit {
 }
 
 // @property userActivity
-fun NSResponder.userActivity(): MemorySegment {
     val sel = ObjCRuntime.sel("userActivity")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSResponder.setUserActivity(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setUserActivity:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -405,11 +402,9 @@ fun NSResponder.setTouchBar(touchBar: MemorySegment): Unit {
 }
 
 // @property touchBar
-fun NSResponder.touchBar(): MemorySegment {
     val sel = ObjCRuntime.sel("touchBar")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSResponder.setTouchBar(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setTouchBar:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

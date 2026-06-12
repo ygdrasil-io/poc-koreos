@@ -217,9 +217,6 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     // @property sharedDocumentController
-    open fun sharedDocumentController(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedDocumentController")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property documents

@@ -72,9 +72,6 @@ open class NSTextList(val ptr: MemorySegment) {
     }
     
     // @property includesTextListMarkers
-    open fun includesTextListMarkers(): BOOL {
-        val sel = ObjCRuntime.sel("includesTextListMarkers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
 }

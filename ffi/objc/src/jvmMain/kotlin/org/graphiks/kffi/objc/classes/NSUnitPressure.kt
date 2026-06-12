@@ -66,63 +66,33 @@ open class NSUnitPressure(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property newtonsPerMetersSquared
-    fun newtonsPerMetersSquared(): MemorySegment {
-        val sel = ObjCRuntime.sel("newtonsPerMetersSquared")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property gigapascals
-    fun gigapascals(): MemorySegment {
-        val sel = ObjCRuntime.sel("gigapascals")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property megapascals
-    fun megapascals(): MemorySegment {
-        val sel = ObjCRuntime.sel("megapascals")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kilopascals
-    fun kilopascals(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilopascals")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property hectopascals
-    fun hectopascals(): MemorySegment {
-        val sel = ObjCRuntime.sel("hectopascals")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property inchesOfMercury
-    fun inchesOfMercury(): MemorySegment {
-        val sel = ObjCRuntime.sel("inchesOfMercury")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property bars
-    fun bars(): MemorySegment {
-        val sel = ObjCRuntime.sel("bars")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property millibars
-    fun millibars(): MemorySegment {
-        val sel = ObjCRuntime.sel("millibars")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property millimetersOfMercury
-    fun millimetersOfMercury(): MemorySegment {
-        val sel = ObjCRuntime.sel("millimetersOfMercury")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property poundsForcePerSquareInch
-    fun poundsForcePerSquareInch(): MemorySegment {
-        val sel = ObjCRuntime.sel("poundsForcePerSquareInch")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

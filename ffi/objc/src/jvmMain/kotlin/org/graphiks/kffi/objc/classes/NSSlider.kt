@@ -116,7 +116,6 @@ fun NSSlider.isVertical(): BOOL {
 }
 
 // @property vertical
-fun NSSlider.isVertical(): BOOL {
     val sel = ObjCRuntime.sel("isVertical")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -174,31 +173,25 @@ fun NSSlider.setAllowsTickMarkValuesOnly(allowsTickMarkValuesOnly: BOOL): Unit {
 }
 
 // @property numberOfTickMarks
-fun NSSlider.numberOfTickMarks(): NSInteger {
     val sel = ObjCRuntime.sel("numberOfTickMarks")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
-fun NSSlider.setNumberOfTickMarks(value: NSInteger) {
     val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property tickMarkPosition
-fun NSSlider.tickMarkPosition(): NSTickMarkPosition {
     val sel = ObjCRuntime.sel("tickMarkPosition")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
 }
-fun NSSlider.setTickMarkPosition(value: NSTickMarkPosition) {
     val sel = ObjCRuntime.sel("setTickMarkPosition:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowsTickMarkValuesOnly
-fun NSSlider.allowsTickMarkValuesOnly(): BOOL {
     val sel = ObjCRuntime.sel("allowsTickMarkValuesOnly")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSSlider.setAllowsTickMarkValuesOnly(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsTickMarkValuesOnly:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

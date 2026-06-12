@@ -109,7 +109,6 @@ fun NSURLProtectionSpace.distinguishedNames(): MemorySegment {
 
 // @property distinguishedNames
 /** @return NSArray<NSData *> * */
-fun NSURLProtectionSpace.distinguishedNames(): MemorySegment {
     val sel = ObjCRuntime.sel("distinguishedNames")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -122,7 +121,6 @@ fun NSURLProtectionSpace.serverTrust(): MemorySegment {
 }
 
 // @property serverTrust
-fun NSURLProtectionSpace.serverTrust(): MemorySegment {
     val sel = ObjCRuntime.sel("serverTrust")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

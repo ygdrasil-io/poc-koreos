@@ -347,9 +347,6 @@ open class NSTextView(ptr: MemorySegment) : NSText(ptr) {
     }
     
     // @property stronglyReferencesTextStorage
-    fun stronglyReferencesTextStorage(): BOOL {
-        val sel = ObjCRuntime.sel("stronglyReferencesTextStorage")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property usesAdaptiveColorMappingForDarkAppearance
@@ -388,7 +385,6 @@ fun NSTextView.rangeForUserCompletion(): NSRange {
 }
 
 // @property rangeForUserCompletion
-fun NSTextView.rangeForUserCompletion(): NSRange {
     val sel = ObjCRuntime.sel("rangeForUserCompletion")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
@@ -456,14 +452,12 @@ fun NSTextView_registerForServices(): Unit {
 
 // @property writablePasteboardTypes
 /** @return NSArray<NSPasteboardType> * */
-fun NSTextView.writablePasteboardTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("writablePasteboardTypes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property readablePasteboardTypes
 /** @return NSArray<NSPasteboardType> * */
-fun NSTextView.readablePasteboardTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("readablePasteboardTypes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -498,7 +492,6 @@ fun NSTextView.acceptableDragTypes(): MemorySegment {
 
 // @property acceptableDragTypes
 /** @return NSArray<NSPasteboardType> * */
-fun NSTextView.acceptableDragTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("acceptableDragTypes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -937,380 +930,308 @@ fun NSTextView.setAllowedWritingToolsResultOptions(allowedWritingToolsResultOpti
 
 // @property selectedRanges
 /** @return NSArray<NSValue *> * */
-fun NSTextView.selectedRanges(): MemorySegment {
     val sel = ObjCRuntime.sel("selectedRanges")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setSelectedRanges(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setSelectedRanges:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property selectionAffinity
-fun NSTextView.selectionAffinity(): NSSelectionAffinity {
     val sel = ObjCRuntime.sel("selectionAffinity")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSelectionAffinity
 }
 
 // @property selectionGranularity
-fun NSTextView.selectionGranularity(): NSSelectionGranularity {
     val sel = ObjCRuntime.sel("selectionGranularity")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSelectionGranularity
 }
-fun NSTextView.setSelectionGranularity(value: NSSelectionGranularity) {
     val sel = ObjCRuntime.sel("setSelectionGranularity:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property selectedTextAttributes
 /** @return NSDictionary<NSAttributedStringKey,id> * */
-fun NSTextView.selectedTextAttributes(): MemorySegment {
     val sel = ObjCRuntime.sel("selectedTextAttributes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setSelectedTextAttributes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setSelectedTextAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property insertionPointColor
-fun NSTextView.insertionPointColor(): MemorySegment {
     val sel = ObjCRuntime.sel("insertionPointColor")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setInsertionPointColor(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setInsertionPointColor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property markedTextAttributes
 /** @return NSDictionary<NSAttributedStringKey,id> * */
-fun NSTextView.markedTextAttributes(): MemorySegment {
     val sel = ObjCRuntime.sel("markedTextAttributes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setMarkedTextAttributes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setMarkedTextAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property linkTextAttributes
 /** @return NSDictionary<NSAttributedStringKey,id> * */
-fun NSTextView.linkTextAttributes(): MemorySegment {
     val sel = ObjCRuntime.sel("linkTextAttributes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setLinkTextAttributes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setLinkTextAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property displaysLinkToolTips
-fun NSTextView.displaysLinkToolTips(): BOOL {
     val sel = ObjCRuntime.sel("displaysLinkToolTips")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setDisplaysLinkToolTips(value: BOOL) {
     val sel = ObjCRuntime.sel("setDisplaysLinkToolTips:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property acceptsGlyphInfo
-fun NSTextView.acceptsGlyphInfo(): BOOL {
     val sel = ObjCRuntime.sel("acceptsGlyphInfo")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAcceptsGlyphInfo(value: BOOL) {
     val sel = ObjCRuntime.sel("setAcceptsGlyphInfo:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesRuler
-fun NSTextView.usesRuler(): BOOL {
     val sel = ObjCRuntime.sel("usesRuler")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesRuler(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesRuler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesInspectorBar
-fun NSTextView.usesInspectorBar(): BOOL {
     val sel = ObjCRuntime.sel("usesInspectorBar")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesInspectorBar(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesInspectorBar:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property continuousSpellCheckingEnabled
-fun NSTextView.isContinuousSpellCheckingEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isContinuousSpellCheckingEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setContinuousSpellCheckingEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setContinuousSpellCheckingEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property spellCheckerDocumentTag
-fun NSTextView.spellCheckerDocumentTag(): NSInteger {
     val sel = ObjCRuntime.sel("spellCheckerDocumentTag")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
 
 // @property grammarCheckingEnabled
-fun NSTextView.isGrammarCheckingEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isGrammarCheckingEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setGrammarCheckingEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setGrammarCheckingEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property typingAttributes
 /** @return NSDictionary<NSAttributedStringKey,id> * */
-fun NSTextView.typingAttributes(): MemorySegment {
     val sel = ObjCRuntime.sel("typingAttributes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setTypingAttributes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setTypingAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property rangesForUserTextChange
 /** @return NSArray<NSValue *> * */
-fun NSTextView.rangesForUserTextChange(): MemorySegment {
     val sel = ObjCRuntime.sel("rangesForUserTextChange")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property rangesForUserCharacterAttributeChange
 /** @return NSArray<NSValue *> * */
-fun NSTextView.rangesForUserCharacterAttributeChange(): MemorySegment {
     val sel = ObjCRuntime.sel("rangesForUserCharacterAttributeChange")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property rangesForUserParagraphAttributeChange
 /** @return NSArray<NSValue *> * */
-fun NSTextView.rangesForUserParagraphAttributeChange(): MemorySegment {
     val sel = ObjCRuntime.sel("rangesForUserParagraphAttributeChange")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property rangeForUserTextChange
-fun NSTextView.rangeForUserTextChange(): NSRange {
     val sel = ObjCRuntime.sel("rangeForUserTextChange")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
 
 // @property rangeForUserCharacterAttributeChange
-fun NSTextView.rangeForUserCharacterAttributeChange(): NSRange {
     val sel = ObjCRuntime.sel("rangeForUserCharacterAttributeChange")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
 
 // @property rangeForUserParagraphAttributeChange
-fun NSTextView.rangeForUserParagraphAttributeChange(): NSRange {
     val sel = ObjCRuntime.sel("rangeForUserParagraphAttributeChange")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
 
 // @property allowsDocumentBackgroundColorChange
-fun NSTextView.allowsDocumentBackgroundColorChange(): BOOL {
     val sel = ObjCRuntime.sel("allowsDocumentBackgroundColorChange")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAllowsDocumentBackgroundColorChange(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsDocumentBackgroundColorChange:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property defaultParagraphStyle
-fun NSTextView.defaultParagraphStyle(): MemorySegment {
     val sel = ObjCRuntime.sel("defaultParagraphStyle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setDefaultParagraphStyle(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setDefaultParagraphStyle:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowsUndo
-fun NSTextView.allowsUndo(): BOOL {
     val sel = ObjCRuntime.sel("allowsUndo")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAllowsUndo(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsUndo:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property coalescingUndo
-fun NSTextView.isCoalescingUndo(): BOOL {
     val sel = ObjCRuntime.sel("isCoalescingUndo")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property allowsImageEditing
-fun NSTextView.allowsImageEditing(): BOOL {
     val sel = ObjCRuntime.sel("allowsImageEditing")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAllowsImageEditing(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsImageEditing:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesRolloverButtonForSelection
-fun NSTextView.usesRolloverButtonForSelection(): BOOL {
     val sel = ObjCRuntime.sel("usesRolloverButtonForSelection")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesRolloverButtonForSelection(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesRolloverButtonForSelection:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property delegate
 /** @return id<NSTextViewDelegate> */
-fun NSTextView.delegate(): MemorySegment {
     val sel = ObjCRuntime.sel("delegate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setDelegate(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setDelegate:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property editable
-fun NSTextView.isEditable(): BOOL {
     val sel = ObjCRuntime.sel("isEditable")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setEditable(value: BOOL) {
     val sel = ObjCRuntime.sel("setEditable:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property selectable
-fun NSTextView.isSelectable(): BOOL {
     val sel = ObjCRuntime.sel("isSelectable")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setSelectable(value: BOOL) {
     val sel = ObjCRuntime.sel("setSelectable:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property richText
-fun NSTextView.isRichText(): BOOL {
     val sel = ObjCRuntime.sel("isRichText")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setRichText(value: BOOL) {
     val sel = ObjCRuntime.sel("setRichText:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property importsGraphics
-fun NSTextView.importsGraphics(): BOOL {
     val sel = ObjCRuntime.sel("importsGraphics")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setImportsGraphics(value: BOOL) {
     val sel = ObjCRuntime.sel("setImportsGraphics:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property drawsBackground
-fun NSTextView.drawsBackground(): BOOL {
     val sel = ObjCRuntime.sel("drawsBackground")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setDrawsBackground(value: BOOL) {
     val sel = ObjCRuntime.sel("setDrawsBackground:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property backgroundColor
-fun NSTextView.backgroundColor(): MemorySegment {
     val sel = ObjCRuntime.sel("backgroundColor")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setBackgroundColor(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setBackgroundColor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property fieldEditor
-fun NSTextView.isFieldEditor(): BOOL {
     val sel = ObjCRuntime.sel("isFieldEditor")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setFieldEditor(value: BOOL) {
     val sel = ObjCRuntime.sel("setFieldEditor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesFontPanel
-fun NSTextView.usesFontPanel(): BOOL {
     val sel = ObjCRuntime.sel("usesFontPanel")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesFontPanel(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesFontPanel:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property rulerVisible
-fun NSTextView.isRulerVisible(): BOOL {
     val sel = ObjCRuntime.sel("isRulerVisible")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setRulerVisible(value: BOOL) {
     val sel = ObjCRuntime.sel("setRulerVisible:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowedInputSourceLocales
 /** @return NSArray<NSString *> * */
-fun NSTextView.allowedInputSourceLocales(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedInputSourceLocales")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setAllowedInputSourceLocales(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAllowedInputSourceLocales:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property writingToolsActive
-fun NSTextView.isWritingToolsActive(): BOOL {
     val sel = ObjCRuntime.sel("isWritingToolsActive")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property writingToolsBehavior
-fun NSTextView.writingToolsBehavior(): NSWritingToolsBehavior {
     val sel = ObjCRuntime.sel("writingToolsBehavior")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingToolsBehavior
 }
-fun NSTextView.setWritingToolsBehavior(value: NSWritingToolsBehavior) {
     val sel = ObjCRuntime.sel("setWritingToolsBehavior:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowedWritingToolsResultOptions
-fun NSTextView.allowedWritingToolsResultOptions(): NSWritingToolsResultOptions {
     val sel = ObjCRuntime.sel("allowedWritingToolsResultOptions")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingToolsResultOptions
 }
-fun NSTextView.setAllowedWritingToolsResultOptions(value: NSWritingToolsResultOptions) {
     val sel = ObjCRuntime.sel("setAllowedWritingToolsResultOptions:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -1528,131 +1449,105 @@ fun NSTextView.setMathExpressionCompletionType(mathExpressionCompletionType: NST
 }
 
 // @property smartInsertDeleteEnabled
-fun NSTextView.smartInsertDeleteEnabled(): BOOL {
     val sel = ObjCRuntime.sel("smartInsertDeleteEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setSmartInsertDeleteEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setSmartInsertDeleteEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticQuoteSubstitutionEnabled
-fun NSTextView.isAutomaticQuoteSubstitutionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticQuoteSubstitutionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticQuoteSubstitutionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticQuoteSubstitutionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticLinkDetectionEnabled
-fun NSTextView.isAutomaticLinkDetectionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticLinkDetectionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticLinkDetectionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticLinkDetectionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticDataDetectionEnabled
-fun NSTextView.isAutomaticDataDetectionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticDataDetectionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticDataDetectionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticDataDetectionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticDashSubstitutionEnabled
-fun NSTextView.isAutomaticDashSubstitutionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticDashSubstitutionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticDashSubstitutionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticDashSubstitutionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticTextReplacementEnabled
-fun NSTextView.isAutomaticTextReplacementEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticTextReplacementEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticTextReplacementEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticTextReplacementEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property automaticSpellingCorrectionEnabled
-fun NSTextView.isAutomaticSpellingCorrectionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticSpellingCorrectionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticSpellingCorrectionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticSpellingCorrectionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property enabledTextCheckingTypes
-fun NSTextView.enabledTextCheckingTypes(): NSTextCheckingTypes {
     val sel = ObjCRuntime.sel("enabledTextCheckingTypes")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSTextCheckingTypes
 }
-fun NSTextView.setEnabledTextCheckingTypes(value: NSTextCheckingTypes) {
     val sel = ObjCRuntime.sel("setEnabledTextCheckingTypes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesFindPanel
-fun NSTextView.usesFindPanel(): BOOL {
     val sel = ObjCRuntime.sel("usesFindPanel")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesFindPanel(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesFindPanel:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesFindBar
-fun NSTextView.usesFindBar(): BOOL {
     val sel = ObjCRuntime.sel("usesFindBar")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setUsesFindBar(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesFindBar:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property incrementalSearchingEnabled
-fun NSTextView.isIncrementalSearchingEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isIncrementalSearchingEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setIncrementalSearchingEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setIncrementalSearchingEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property inlinePredictionType
-fun NSTextView.inlinePredictionType(): NSTextInputTraitType {
     val sel = ObjCRuntime.sel("inlinePredictionType")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextInputTraitType
 }
-fun NSTextView.setInlinePredictionType(value: NSTextInputTraitType) {
     val sel = ObjCRuntime.sel("setInlinePredictionType:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property mathExpressionCompletionType
-fun NSTextView.mathExpressionCompletionType(): NSTextInputTraitType {
     val sel = ObjCRuntime.sel("mathExpressionCompletionType")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextInputTraitType
 }
-fun NSTextView.setMathExpressionCompletionType(value: NSTextInputTraitType) {
     val sel = ObjCRuntime.sel("setMathExpressionCompletionType:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -1730,27 +1625,22 @@ fun NSTextView.candidateListTouchBarItem(): MemorySegment {
 }
 
 // @property automaticTextCompletionEnabled
-fun NSTextView.isAutomaticTextCompletionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticTextCompletionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAutomaticTextCompletionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticTextCompletionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowsCharacterPickerTouchBarItem
-fun NSTextView.allowsCharacterPickerTouchBarItem(): BOOL {
     val sel = ObjCRuntime.sel("allowsCharacterPickerTouchBarItem")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextView.setAllowsCharacterPickerTouchBarItem(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsCharacterPickerTouchBarItem:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property candidateListTouchBarItem
-fun NSTextView.candidateListTouchBarItem(): MemorySegment {
     val sel = ObjCRuntime.sel("candidateListTouchBarItem")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -1810,11 +1700,9 @@ fun NSTextView.setTextHighlightAttributes(textHighlightAttributes: MemorySegment
 
 // @property textHighlightAttributes
 /** @return NSDictionary<NSAttributedStringKey,id> * */
-fun NSTextView.textHighlightAttributes(): MemorySegment {
     val sel = ObjCRuntime.sel("textHighlightAttributes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextView.setTextHighlightAttributes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setTextHighlightAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

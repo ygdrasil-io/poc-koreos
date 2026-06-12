@@ -86,16 +86,10 @@ open class NSFontCollection(val ptr: MemorySegment) {
     open fun matchingDescriptorsForFamily_options(family: String, options: MemorySegment): MemorySegment = matchingDescriptorsForFamily_options(ObjCRuntime.newNSString(Arena.global(), family), options)
     
     // @property fontCollectionWithAllAvailableDescriptors
-    open fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
-        val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allFontCollectionNames
     /** @return NSArray<NSFontCollectionName> * */
-    open fun allFontCollectionNames(): MemorySegment {
-        val sel = ObjCRuntime.sel("allFontCollectionNames")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property queryDescriptors

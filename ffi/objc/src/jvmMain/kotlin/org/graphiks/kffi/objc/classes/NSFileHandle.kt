@@ -237,21 +237,17 @@ fun NSFileHandle.setWriteabilityHandler(writeabilityHandler: MemorySegment): Uni
 }
 
 // @property readabilityHandler
-fun NSFileHandle.readabilityHandler(): MemorySegment {
     val sel = ObjCRuntime.sel("readabilityHandler")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSFileHandle.setReadabilityHandler(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setReadabilityHandler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property writeabilityHandler
-fun NSFileHandle.writeabilityHandler(): MemorySegment {
     val sel = ObjCRuntime.sel("writeabilityHandler")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSFileHandle.setWriteabilityHandler(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setWriteabilityHandler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -269,7 +265,6 @@ fun NSFileHandle.fileDescriptor(): Int {
 }
 
 // @property fileDescriptor
-fun NSFileHandle.fileDescriptor(): Int {
     val sel = ObjCRuntime.sel("fileDescriptor")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
 }
@@ -322,7 +317,6 @@ fun NSFileHandle.closeFile(): Unit {
 }
 
 // @property offsetInFile
-fun NSFileHandle.offsetInFile(): Any {
     val sel = ObjCRuntime.sel("offsetInFile")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Any
 }

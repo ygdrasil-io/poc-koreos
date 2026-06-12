@@ -118,15 +118,9 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     }
     
     // @property currentQueue
-    open fun currentQueue(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentQueue")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property mainQueue
-    open fun mainQueue(): MemorySegment {
-        val sel = ObjCRuntime.sel("mainQueue")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }
@@ -146,13 +140,11 @@ fun NSOperationQueue.operationCount(): NSUInteger {
 
 // @property operations
 /** @return NSArray<__kindof NSOperation *> * */
-fun NSOperationQueue.operations(): MemorySegment {
     val sel = ObjCRuntime.sel("operations")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property operationCount
-fun NSOperationQueue.operationCount(): NSUInteger {
     val sel = ObjCRuntime.sel("operationCount")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }

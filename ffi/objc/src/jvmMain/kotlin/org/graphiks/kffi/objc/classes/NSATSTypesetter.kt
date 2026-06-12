@@ -20,9 +20,6 @@ open class NSATSTypesetter(ptr: MemorySegment) : NSTypesetter(ptr) {
     }
     
     // @property sharedTypesetter
-    fun sharedTypesetter(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedTypesetter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }
@@ -162,85 +159,69 @@ fun NSATSTypesetter.currentTextContainer(): MemorySegment {
 }
 
 // @property usesFontLeading
-fun NSATSTypesetter.usesFontLeading(): BOOL {
     val sel = ObjCRuntime.sel("usesFontLeading")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSATSTypesetter.setUsesFontLeading(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesFontLeading:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property typesetterBehavior
-fun NSATSTypesetter.typesetterBehavior(): NSTypesetterBehavior {
     val sel = ObjCRuntime.sel("typesetterBehavior")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTypesetterBehavior
 }
-fun NSATSTypesetter.setTypesetterBehavior(value: NSTypesetterBehavior) {
     val sel = ObjCRuntime.sel("setTypesetterBehavior:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property hyphenationFactor
-fun NSATSTypesetter.hyphenationFactor(): Float {
     val sel = ObjCRuntime.sel("hyphenationFactor")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
 }
-fun NSATSTypesetter.setHyphenationFactor(value: Float) {
     val sel = ObjCRuntime.sel("setHyphenationFactor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property lineFragmentPadding
-fun NSATSTypesetter.lineFragmentPadding(): CGFloat {
     val sel = ObjCRuntime.sel("lineFragmentPadding")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
 }
-fun NSATSTypesetter.setLineFragmentPadding(value: CGFloat) {
     val sel = ObjCRuntime.sel("setLineFragmentPadding:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property bidiProcessingEnabled
-fun NSATSTypesetter.bidiProcessingEnabled(): BOOL {
     val sel = ObjCRuntime.sel("bidiProcessingEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSATSTypesetter.setBidiProcessingEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setBidiProcessingEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property attributedString
-fun NSATSTypesetter.attributedString(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSATSTypesetter.setAttributedString(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributedString:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property paragraphGlyphRange
-fun NSATSTypesetter.paragraphGlyphRange(): NSRange {
     val sel = ObjCRuntime.sel("paragraphGlyphRange")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
 
 // @property paragraphSeparatorGlyphRange
-fun NSATSTypesetter.paragraphSeparatorGlyphRange(): NSRange {
     val sel = ObjCRuntime.sel("paragraphSeparatorGlyphRange")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
 }
 
 // @property layoutManager
-fun NSATSTypesetter.layoutManager(): MemorySegment {
     val sel = ObjCRuntime.sel("layoutManager")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property currentTextContainer
-fun NSATSTypesetter.currentTextContainer(): MemorySegment {
     val sel = ObjCRuntime.sel("currentTextContainer")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

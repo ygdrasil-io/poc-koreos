@@ -41,9 +41,6 @@ open class NSURLRequest(val ptr: MemorySegment) {
     }
     
     // @property supportsSecureCoding
-    open fun supportsSecureCoding(): BOOL {
-        val sel = ObjCRuntime.sel("supportsSecureCoding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property URL
@@ -177,38 +174,32 @@ fun NSURLRequest.HTTPShouldUsePipelining(): BOOL {
 }
 
 // @property HTTPMethod
-fun NSURLRequest.HTTPMethod(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPMethod")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property allHTTPHeaderFields
 /** @return NSDictionary<NSString *,NSString *> * */
-fun NSURLRequest.allHTTPHeaderFields(): MemorySegment {
     val sel = ObjCRuntime.sel("allHTTPHeaderFields")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property HTTPBody
-fun NSURLRequest.HTTPBody(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPBody")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property HTTPBodyStream
-fun NSURLRequest.HTTPBodyStream(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPBodyStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property HTTPShouldHandleCookies
-fun NSURLRequest.HTTPShouldHandleCookies(): BOOL {
     val sel = ObjCRuntime.sel("HTTPShouldHandleCookies")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property HTTPShouldUsePipelining
-fun NSURLRequest.HTTPShouldUsePipelining(): BOOL {
     val sel = ObjCRuntime.sel("HTTPShouldUsePipelining")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

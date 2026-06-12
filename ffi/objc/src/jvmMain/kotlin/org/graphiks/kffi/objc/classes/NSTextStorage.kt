@@ -168,64 +168,52 @@ fun NSTextStorage.setForegroundColor(foregroundColor: MemorySegment): Unit {
 
 // @property attributeRuns
 /** @return NSArray<NSTextStorage *> * */
-fun NSTextStorage.attributeRuns(): MemorySegment {
     val sel = ObjCRuntime.sel("attributeRuns")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setAttributeRuns(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributeRuns:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property paragraphs
 /** @return NSArray<NSTextStorage *> * */
-fun NSTextStorage.paragraphs(): MemorySegment {
     val sel = ObjCRuntime.sel("paragraphs")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setParagraphs(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setParagraphs:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property words
 /** @return NSArray<NSTextStorage *> * */
-fun NSTextStorage.words(): MemorySegment {
     val sel = ObjCRuntime.sel("words")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setWords(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setWords:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property characters
 /** @return NSArray<NSTextStorage *> * */
-fun NSTextStorage.characters(): MemorySegment {
     val sel = ObjCRuntime.sel("characters")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setCharacters(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setCharacters:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property font
-fun NSTextStorage.font(): MemorySegment {
     val sel = ObjCRuntime.sel("font")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setFont(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setFont:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property foregroundColor
-fun NSTextStorage.foregroundColor(): MemorySegment {
     val sel = ObjCRuntime.sel("foregroundColor")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextStorage.setForegroundColor(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setForegroundColor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

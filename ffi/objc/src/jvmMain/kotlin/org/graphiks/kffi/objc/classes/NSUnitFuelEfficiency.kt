@@ -31,21 +31,12 @@ open class NSUnitFuelEfficiency(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property litersPer100Kilometers
-    fun litersPer100Kilometers(): MemorySegment {
-        val sel = ObjCRuntime.sel("litersPer100Kilometers")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milesPerImperialGallon
-    fun milesPerImperialGallon(): MemorySegment {
-        val sel = ObjCRuntime.sel("milesPerImperialGallon")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milesPerGallon
-    fun milesPerGallon(): MemorySegment {
-        val sel = ObjCRuntime.sel("milesPerGallon")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

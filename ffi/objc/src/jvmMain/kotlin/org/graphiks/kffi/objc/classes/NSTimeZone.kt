@@ -212,37 +212,31 @@ fun NSTimeZone.timeZoneDataVersion(): MemorySegment {
 }
 
 // @property secondsFromGMT
-fun NSTimeZone.secondsFromGMT(): NSInteger {
     val sel = ObjCRuntime.sel("secondsFromGMT")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
 
 // @property abbreviation
-fun NSTimeZone.abbreviation(): MemorySegment {
     val sel = ObjCRuntime.sel("abbreviation")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property daylightSavingTime
-fun NSTimeZone.isDaylightSavingTime(): BOOL {
     val sel = ObjCRuntime.sel("isDaylightSavingTime")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property daylightSavingTimeOffset
-fun NSTimeZone.daylightSavingTimeOffset(): NSTimeInterval {
     val sel = ObjCRuntime.sel("daylightSavingTimeOffset")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
 }
 
 // @property nextDaylightSavingTimeTransition
-fun NSTimeZone.nextDaylightSavingTimeTransition(): MemorySegment {
     val sel = ObjCRuntime.sel("nextDaylightSavingTimeTransition")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property description
-fun NSTimeZone.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

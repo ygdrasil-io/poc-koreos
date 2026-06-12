@@ -165,21 +165,17 @@ fun NSProgressIndicator.setControlTint(controlTint: NSControlTint): Unit {
 }
 
 // @property bezeled
-fun NSProgressIndicator.isBezeled(): BOOL {
     val sel = ObjCRuntime.sel("isBezeled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSProgressIndicator.setBezeled(value: BOOL) {
     val sel = ObjCRuntime.sel("setBezeled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property controlTint
-fun NSProgressIndicator.controlTint(): NSControlTint {
     val sel = ObjCRuntime.sel("controlTint")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
 }
-fun NSProgressIndicator.setControlTint(value: NSControlTint) {
     val sel = ObjCRuntime.sel("setControlTint:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

@@ -519,43 +519,36 @@ fun NSURL_fileURLWithPathComponents(components: MemorySegment): MemorySegment {
 
 // @property pathComponents
 /** @return NSArray<NSString *> * */
-fun NSURL.pathComponents(): MemorySegment {
     val sel = ObjCRuntime.sel("pathComponents")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property lastPathComponent
-fun NSURL.lastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("lastPathComponent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property pathExtension
-fun NSURL.pathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("pathExtension")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property URLByDeletingLastPathComponent
-fun NSURL.URLByDeletingLastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByDeletingLastPathComponent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property URLByDeletingPathExtension
-fun NSURL.URLByDeletingPathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByDeletingPathExtension")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property URLByStandardizingPath
-fun NSURL.URLByStandardizingPath(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByStandardizingPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property URLByResolvingSymlinksInPath
-fun NSURL.URLByResolvingSymlinksInPath(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByResolvingSymlinksInPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

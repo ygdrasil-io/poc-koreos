@@ -131,11 +131,9 @@ fun NSClipView.setCopiesOnScroll(copiesOnScroll: BOOL): Unit {
 }
 
 // @property copiesOnScroll
-fun NSClipView.copiesOnScroll(): BOOL {
     val sel = ObjCRuntime.sel("copiesOnScroll")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSClipView.setCopiesOnScroll(value: BOOL) {
     val sel = ObjCRuntime.sel("setCopiesOnScroll:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

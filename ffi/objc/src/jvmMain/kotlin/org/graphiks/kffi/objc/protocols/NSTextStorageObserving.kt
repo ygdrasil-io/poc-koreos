@@ -18,8 +18,3 @@ interface NSTextStorageObserving : NSObject {
     fun setTextStorage(textStorage: MemorySegment)
     
     // @property textStorage
-    fun textStorage(): MemorySegment
-    fun setTextStorage(value: MemorySegment)
-    
-}
-

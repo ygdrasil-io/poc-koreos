@@ -86,87 +86,45 @@ open class NSUnitArea(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property squareMegameters
-    fun squareMegameters(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareMegameters")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareKilometers
-    fun squareKilometers(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareKilometers")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareMeters
-    fun squareMeters(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareMeters")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareCentimeters
-    fun squareCentimeters(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareCentimeters")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareMillimeters
-    fun squareMillimeters(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareMillimeters")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareMicrometers
-    fun squareMicrometers(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareMicrometers")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareNanometers
-    fun squareNanometers(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareNanometers")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareInches
-    fun squareInches(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareInches")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareFeet
-    fun squareFeet(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareFeet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareYards
-    fun squareYards(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareYards")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property squareMiles
-    fun squareMiles(): MemorySegment {
-        val sel = ObjCRuntime.sel("squareMiles")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property acres
-    fun acres(): MemorySegment {
-        val sel = ObjCRuntime.sel("acres")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property ares
-    fun ares(): MemorySegment {
-        val sel = ObjCRuntime.sel("ares")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property hectares
-    fun hectares(): MemorySegment {
-        val sel = ObjCRuntime.sel("hectares")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

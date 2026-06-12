@@ -29,9 +29,6 @@ open class NSParagraphStyle(val ptr: MemorySegment) {
     }
     
     // @property defaultParagraphStyle
-    open fun defaultParagraphStyle(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultParagraphStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property lineSpacing
@@ -170,26 +167,22 @@ fun NSParagraphStyle.headerLevel(): NSInteger {
 }
 
 // @property alignment
-fun NSParagraphStyle.alignment(): NSTextAlignment {
     val sel = ObjCRuntime.sel("alignment")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
 }
 
 // @property tighteningFactorForTruncation
-fun NSParagraphStyle.tighteningFactorForTruncation(): Float {
     val sel = ObjCRuntime.sel("tighteningFactorForTruncation")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
 }
 
 // @property textBlocks
 /** @return NSArray<__kindof NSTextBlock *> * */
-fun NSParagraphStyle.textBlocks(): MemorySegment {
     val sel = ObjCRuntime.sel("textBlocks")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property headerLevel
-fun NSParagraphStyle.headerLevel(): NSInteger {
     val sel = ObjCRuntime.sel("headerLevel")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }

@@ -16,11 +16,4 @@ interface NSAppearanceCustomization : NSObject {
     fun effectiveAppearance(): MemorySegment
     
     // @property appearance
-    fun appearance(): MemorySegment
-    fun setAppearance(value: MemorySegment)
-    
     // @property effectiveAppearance
-    fun effectiveAppearance(): MemorySegment
-    
-}
-

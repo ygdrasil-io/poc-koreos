@@ -41,33 +41,18 @@ open class NSUnitEnergy(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kilojoules
-    fun kilojoules(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilojoules")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property joules
-    fun joules(): MemorySegment {
-        val sel = ObjCRuntime.sel("joules")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kilocalories
-    fun kilocalories(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilocalories")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property calories
-    fun calories(): MemorySegment {
-        val sel = ObjCRuntime.sel("calories")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kilowattHours
-    fun kilowattHours(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilowattHours")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

@@ -159,9 +159,6 @@ open class NSRunningApplication(val ptr: MemorySegment) {
     }
     
     // @property currentApplication
-    open fun currentApplication(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentApplication")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

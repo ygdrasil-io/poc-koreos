@@ -95,13 +95,11 @@ fun NSIndexPath_indexPathForItem_inSection(item: NSInteger, section: NSInteger):
 }
 
 // @property item
-fun NSIndexPath.item(): NSInteger {
     val sel = ObjCRuntime.sel("item")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
 
 // @property section
-fun NSIndexPath.section(): NSInteger {
     val sel = ObjCRuntime.sel("section")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }

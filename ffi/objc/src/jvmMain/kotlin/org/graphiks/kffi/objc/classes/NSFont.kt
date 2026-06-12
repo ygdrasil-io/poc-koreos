@@ -187,21 +187,12 @@ open class NSFont(val ptr: MemorySegment) {
     }
     
     // @property systemFontSize
-    open fun systemFontSize(): CGFloat {
-        val sel = ObjCRuntime.sel("systemFontSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property smallSystemFontSize
-    open fun smallSystemFontSize(): CGFloat {
-        val sel = ObjCRuntime.sel("smallSystemFontSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property labelFontSize
-    open fun labelFontSize(): CGFloat {
-        val sel = ObjCRuntime.sel("labelFontSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
     
     // @property fontName
@@ -406,19 +397,16 @@ fun NSFont.renderingMode(): NSFontRenderingMode {
 }
 
 // @property printerFont
-fun NSFont.printerFont(): MemorySegment {
     val sel = ObjCRuntime.sel("printerFont")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property screenFont
-fun NSFont.screenFont(): MemorySegment {
     val sel = ObjCRuntime.sel("screenFont")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property renderingMode
-fun NSFont.renderingMode(): NSFontRenderingMode {
     val sel = ObjCRuntime.sel("renderingMode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFontRenderingMode
 }

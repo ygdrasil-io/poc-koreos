@@ -183,41 +183,33 @@ fun NSObjectController.setUsesLazyFetching(usesLazyFetching: BOOL): Unit {
 }
 
 // @property managedObjectContext
-fun NSObjectController.managedObjectContext(): MemorySegment {
     val sel = ObjCRuntime.sel("managedObjectContext")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSObjectController.setManagedObjectContext(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setManagedObjectContext:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property entityName
-fun NSObjectController.entityName(): MemorySegment {
     val sel = ObjCRuntime.sel("entityName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSObjectController.setEntityName(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setEntityName:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property fetchPredicate
-fun NSObjectController.fetchPredicate(): MemorySegment {
     val sel = ObjCRuntime.sel("fetchPredicate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSObjectController.setFetchPredicate(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setFetchPredicate:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property usesLazyFetching
-fun NSObjectController.usesLazyFetching(): BOOL {
     val sel = ObjCRuntime.sel("usesLazyFetching")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSObjectController.setUsesLazyFetching(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesLazyFetching:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

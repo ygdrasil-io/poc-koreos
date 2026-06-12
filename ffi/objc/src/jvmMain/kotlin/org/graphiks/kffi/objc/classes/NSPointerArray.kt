@@ -119,7 +119,6 @@ fun NSPointerArray_weakObjectsPointerArray(): MemorySegment {
 }
 
 // @property allObjects
-fun NSPointerArray.allObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("allObjects")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

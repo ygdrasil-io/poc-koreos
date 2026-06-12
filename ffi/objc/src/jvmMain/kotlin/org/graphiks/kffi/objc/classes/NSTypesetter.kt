@@ -231,15 +231,9 @@ open class NSTypesetter(val ptr: MemorySegment) {
     }
     
     // @property sharedSystemTypesetter
-    open fun sharedSystemTypesetter(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedSystemTypesetter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property defaultTypesetterBehavior
-    open fun defaultTypesetterBehavior(): NSTypesetterBehavior {
-        val sel = ObjCRuntime.sel("defaultTypesetterBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTypesetterBehavior
     }
     
 }

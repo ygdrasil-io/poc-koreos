@@ -143,32 +143,26 @@ fun NSTextContainer.setTextView(textView: MemorySegment): Unit {
 }
 
 // @property layoutManager
-fun NSTextContainer.layoutManager(): MemorySegment {
     val sel = ObjCRuntime.sel("layoutManager")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextContainer.setLayoutManager(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setLayoutManager:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property exclusionPaths
 /** @return NSArray<NSBezierPath *> * */
-fun NSTextContainer.exclusionPaths(): MemorySegment {
     val sel = ObjCRuntime.sel("exclusionPaths")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextContainer.setExclusionPaths(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setExclusionPaths:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property textView
-fun NSTextContainer.textView(): MemorySegment {
     val sel = ObjCRuntime.sel("textView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSTextContainer.setTextView(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setTextView:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -201,11 +195,9 @@ fun NSTextContainer.setContainerSize(containerSize: NSSize): Unit {
 }
 
 // @property containerSize
-fun NSTextContainer.containerSize(): NSSize {
     val sel = ObjCRuntime.sel("containerSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }
-fun NSTextContainer.setContainerSize(value: NSSize) {
     val sel = ObjCRuntime.sel("setContainerSize:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

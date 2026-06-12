@@ -60,15 +60,9 @@ open class NSColorPanel(ptr: MemorySegment) : NSPanel(ptr) {
     }
     
     // @property sharedColorPanel
-    fun sharedColorPanel(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedColorPanel")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sharedColorPanelExists
-    fun sharedColorPanelExists(): BOOL {
-        val sel = ObjCRuntime.sel("sharedColorPanelExists")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property accessoryView

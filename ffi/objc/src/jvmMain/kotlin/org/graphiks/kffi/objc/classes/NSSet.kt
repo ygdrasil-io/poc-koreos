@@ -144,13 +144,11 @@ fun NSSet.description(): MemorySegment {
 
 // @property allObjects
 /** @return NSArray<ObjectType> * */
-fun NSSet.allObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("allObjects")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property description
-fun NSSet.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

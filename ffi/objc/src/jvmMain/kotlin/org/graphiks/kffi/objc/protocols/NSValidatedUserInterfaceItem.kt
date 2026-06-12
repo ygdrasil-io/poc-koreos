@@ -13,10 +13,4 @@ interface NSValidatedUserInterfaceItem {
     fun tag(): NSInteger
     
     // @property action
-    fun action(): MemorySegment
-    
     // @property tag
-    fun tag(): NSInteger
-    
-}
-

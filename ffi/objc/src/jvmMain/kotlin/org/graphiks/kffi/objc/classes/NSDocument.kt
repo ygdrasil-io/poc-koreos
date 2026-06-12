@@ -683,15 +683,9 @@ open class NSDocument(val ptr: MemorySegment) {
     }
     
     // @property autosavesInPlace
-    open fun autosavesInPlace(): BOOL {
-        val sel = ObjCRuntime.sel("autosavesInPlace")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property preservesVersions
-    open fun preservesVersions(): BOOL {
-        val sel = ObjCRuntime.sel("preservesVersions")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property browsingVersions
@@ -701,9 +695,6 @@ open class NSDocument(val ptr: MemorySegment) {
     }
     
     // @property autosavesDrafts
-    open fun autosavesDrafts(): BOOL {
-        val sel = ObjCRuntime.sel("autosavesDrafts")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property autosavingFileType
@@ -833,22 +824,13 @@ open class NSDocument(val ptr: MemorySegment) {
     
     // @property readableTypes
     /** @return NSArray<NSString *> * */
-    open fun readableTypes(): MemorySegment {
-        val sel = ObjCRuntime.sel("readableTypes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property writableTypes
     /** @return NSArray<NSString *> * */
-    open fun writableTypes(): MemorySegment {
-        val sel = ObjCRuntime.sel("writableTypes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property usesUbiquitousStorage
-    open fun usesUbiquitousStorage(): BOOL {
-        val sel = ObjCRuntime.sel("usesUbiquitousStorage")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property presentedItemURL
@@ -979,7 +961,6 @@ fun NSDocument.shouldRunSavePanelWithAccessoryView(): BOOL {
 }
 
 // @property shouldRunSavePanelWithAccessoryView
-fun NSDocument.shouldRunSavePanelWithAccessoryView(): BOOL {
     val sel = ObjCRuntime.sel("shouldRunSavePanelWithAccessoryView")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -1002,11 +983,9 @@ fun NSDocument.setUserActivity(userActivity: MemorySegment): Unit {
 }
 
 // @property userActivity
-fun NSDocument.userActivity(): MemorySegment {
     val sel = ObjCRuntime.sel("userActivity")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSDocument.setUserActivity(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setUserActivity:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -1044,17 +1023,14 @@ fun NSDocument.objectSpecifier(): MemorySegment {
 }
 
 // @property lastComponentOfFileName
-fun NSDocument.lastComponentOfFileName(): MemorySegment {
     val sel = ObjCRuntime.sel("lastComponentOfFileName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSDocument.setLastComponentOfFileName(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setLastComponentOfFileName:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property objectSpecifier
-fun NSDocument.objectSpecifier(): MemorySegment {
     val sel = ObjCRuntime.sel("objectSpecifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

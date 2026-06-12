@@ -36,27 +36,15 @@ open class NSUnitSpeed(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property metersPerSecond
-    fun metersPerSecond(): MemorySegment {
-        val sel = ObjCRuntime.sel("metersPerSecond")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kilometersPerHour
-    fun kilometersPerHour(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilometersPerHour")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property milesPerHour
-    fun milesPerHour(): MemorySegment {
-        val sel = ObjCRuntime.sel("milesPerHour")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property knots
-    fun knots(): MemorySegment {
-        val sel = ObjCRuntime.sel("knots")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

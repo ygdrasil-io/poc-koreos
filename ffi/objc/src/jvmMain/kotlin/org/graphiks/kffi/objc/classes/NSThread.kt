@@ -112,9 +112,6 @@ open class NSThread(val ptr: MemorySegment) {
     }
     
     // @property currentThread
-    open fun currentThread(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentThread")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property threadDictionary
@@ -124,13 +121,7 @@ open class NSThread(val ptr: MemorySegment) {
     }
     
     // @property threadPriority
-    open fun threadPriority(): Double {
-        val sel = ObjCRuntime.sel("threadPriority")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setThreadPriority(value: Double) {
-        val sel = ObjCRuntime.sel("setThreadPriority:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property qualityOfService
@@ -145,16 +136,10 @@ open class NSThread(val ptr: MemorySegment) {
     
     // @property callStackReturnAddresses
     /** @return NSArray<NSNumber *> * */
-    open fun callStackReturnAddresses(): MemorySegment {
-        val sel = ObjCRuntime.sel("callStackReturnAddresses")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property callStackSymbols
     /** @return NSArray<NSString *> * */
-    open fun callStackSymbols(): MemorySegment {
-        val sel = ObjCRuntime.sel("callStackSymbols")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property name
@@ -184,15 +169,9 @@ open class NSThread(val ptr: MemorySegment) {
     }
     
     // @property isMainThread
-    open fun isMainThread(): BOOL {
-        val sel = ObjCRuntime.sel("isMainThread")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property mainThread
-    open fun mainThread(): MemorySegment {
-        val sel = ObjCRuntime.sel("mainThread")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property executing

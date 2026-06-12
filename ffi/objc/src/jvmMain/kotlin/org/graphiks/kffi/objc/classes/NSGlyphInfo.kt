@@ -79,19 +79,16 @@ fun NSGlyphInfo_glyphInfoWithCharacterIdentifier_collection_baseString(cid: NSUI
 }
 
 // @property glyphName
-fun NSGlyphInfo.glyphName(): MemorySegment {
     val sel = ObjCRuntime.sel("glyphName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property characterIdentifier
-fun NSGlyphInfo.characterIdentifier(): NSUInteger {
     val sel = ObjCRuntime.sel("characterIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
 
 // @property characterCollection
-fun NSGlyphInfo.characterCollection(): NSCharacterCollection {
     val sel = ObjCRuntime.sel("characterCollection")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCharacterCollection
 }

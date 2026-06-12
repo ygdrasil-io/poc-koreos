@@ -56,19 +56,16 @@ fun NSURLCredential_credentialWithUser_password_persistence(user: MemorySegment,
 }
 
 // @property user
-fun NSURLCredential.user(): MemorySegment {
     val sel = ObjCRuntime.sel("user")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property password
-fun NSURLCredential.password(): MemorySegment {
     val sel = ObjCRuntime.sel("password")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property hasPassword
-fun NSURLCredential.hasPassword(): BOOL {
     val sel = ObjCRuntime.sel("hasPassword")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -98,13 +95,11 @@ fun NSURLCredential_credentialWithIdentity_certificates_persistence(identity: Me
 }
 
 // @property identity
-fun NSURLCredential.identity(): MemorySegment {
     val sel = ObjCRuntime.sel("identity")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property certificates
-fun NSURLCredential.certificates(): MemorySegment {
     val sel = ObjCRuntime.sel("certificates")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

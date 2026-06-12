@@ -91,7 +91,6 @@ fun NSAttributedString.length(): NSUInteger {
 }
 
 // @property length
-fun NSAttributedString.length(): NSUInteger {
     val sel = ObjCRuntime.sel("length")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
@@ -396,7 +395,6 @@ fun NSAttributedString_textUnfilteredPasteboardTypes(): MemorySegment {
 }
 
 // @property containsAttachments
-fun NSAttributedString.containsAttachments(): BOOL {
     val sel = ObjCRuntime.sel("containsAttachments")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

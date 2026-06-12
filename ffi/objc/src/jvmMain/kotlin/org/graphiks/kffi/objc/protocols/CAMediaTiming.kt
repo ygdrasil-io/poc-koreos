@@ -41,36 +41,10 @@ interface CAMediaTiming {
     fun setFillMode(fillMode: CAMediaTimingFillMode)
     
     // @property beginTime
-    fun beginTime(): CFTimeInterval
-    fun setBeginTime(value: CFTimeInterval)
-    
     // @property duration
-    fun duration(): CFTimeInterval
-    fun setDuration(value: CFTimeInterval)
-    
     // @property speed
-    fun speed(): Float
-    fun setSpeed(value: Float)
-    
     // @property timeOffset
-    fun timeOffset(): CFTimeInterval
-    fun setTimeOffset(value: CFTimeInterval)
-    
     // @property repeatCount
-    fun repeatCount(): Float
-    fun setRepeatCount(value: Float)
-    
     // @property repeatDuration
-    fun repeatDuration(): CFTimeInterval
-    fun setRepeatDuration(value: CFTimeInterval)
-    
     // @property autoreverses
-    fun autoreverses(): BOOL
-    fun setAutoreverses(value: BOOL)
-    
     // @property fillMode
-    fun fillMode(): CAMediaTimingFillMode
-    fun setFillMode(value: CAMediaTimingFillMode)
-    
-}
-

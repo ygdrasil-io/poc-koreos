@@ -510,9 +510,6 @@ open class NSFileManager(val ptr: MemorySegment) {
     open fun containerURLForSecurityApplicationGroupIdentifier(groupIdentifier: String): MemorySegment = containerURLForSecurityApplicationGroupIdentifier(ObjCRuntime.newNSString(Arena.global(), groupIdentifier))
     
     // @property defaultManager
-    open fun defaultManager(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultManager")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property delegate
@@ -562,13 +559,11 @@ fun NSFileManager.temporaryDirectory(): MemorySegment {
 }
 
 // @property homeDirectoryForCurrentUser
-fun NSFileManager.homeDirectoryForCurrentUser(): MemorySegment {
     val sel = ObjCRuntime.sel("homeDirectoryForCurrentUser")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property temporaryDirectory
-fun NSFileManager.temporaryDirectory(): MemorySegment {
     val sel = ObjCRuntime.sel("temporaryDirectory")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

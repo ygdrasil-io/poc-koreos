@@ -162,9 +162,6 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property modifierFlags
-    open fun modifierFlags(): NSEventModifierFlags {
-        val sel = ObjCRuntime.sel("modifierFlags")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventModifierFlags
     }
     
     // @property timestamp
@@ -348,13 +345,7 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property mouseCoalescingEnabled
-    open fun isMouseCoalescingEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isMouseCoalescingEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    open fun setMouseCoalescingEnabled(value: BOOL) {
-        val sel = ObjCRuntime.sel("setMouseCoalescingEnabled:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property magnification
@@ -508,39 +499,21 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property swipeTrackingFromScrollEventsEnabled
-    open fun isSwipeTrackingFromScrollEventsEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isSwipeTrackingFromScrollEventsEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property mouseLocation
-    open fun mouseLocation(): NSPoint {
-        val sel = ObjCRuntime.sel("mouseLocation")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
     }
     
     // @property pressedMouseButtons
-    open fun pressedMouseButtons(): NSUInteger {
-        val sel = ObjCRuntime.sel("pressedMouseButtons")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
     }
     
     // @property doubleClickInterval
-    open fun doubleClickInterval(): NSTimeInterval {
-        val sel = ObjCRuntime.sel("doubleClickInterval")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
     // @property keyRepeatDelay
-    open fun keyRepeatDelay(): NSTimeInterval {
-        val sel = ObjCRuntime.sel("keyRepeatDelay")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
     // @property keyRepeatInterval
-    open fun keyRepeatInterval(): NSTimeInterval {
-        val sel = ObjCRuntime.sel("keyRepeatInterval")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
 }

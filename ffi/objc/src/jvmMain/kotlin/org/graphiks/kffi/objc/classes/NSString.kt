@@ -665,91 +665,76 @@ fun NSString_defaultCStringEncoding(): NSStringEncoding {
 }
 
 // @property doubleValue
-fun NSString.doubleValue(): Double {
     val sel = ObjCRuntime.sel("doubleValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
 }
 
 // @property floatValue
-fun NSString.floatValue(): Float {
     val sel = ObjCRuntime.sel("floatValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
 }
 
 // @property intValue
-fun NSString.intValue(): Int {
     val sel = ObjCRuntime.sel("intValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
 }
 
 // @property integerValue
-fun NSString.integerValue(): NSInteger {
     val sel = ObjCRuntime.sel("integerValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
 
 // @property longLongValue
-fun NSString.longLongValue(): Long {
     val sel = ObjCRuntime.sel("longLongValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
 }
 
 // @property boolValue
-fun NSString.boolValue(): BOOL {
     val sel = ObjCRuntime.sel("boolValue")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property uppercaseString
-fun NSString.uppercaseString(): MemorySegment {
     val sel = ObjCRuntime.sel("uppercaseString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property lowercaseString
-fun NSString.lowercaseString(): MemorySegment {
     val sel = ObjCRuntime.sel("lowercaseString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property capitalizedString
-fun NSString.capitalizedString(): MemorySegment {
     val sel = ObjCRuntime.sel("capitalizedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property localizedUppercaseString
-fun NSString.localizedUppercaseString(): MemorySegment {
     val sel = ObjCRuntime.sel("localizedUppercaseString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property localizedLowercaseString
-fun NSString.localizedLowercaseString(): MemorySegment {
     val sel = ObjCRuntime.sel("localizedLowercaseString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property localizedCapitalizedString
-fun NSString.localizedCapitalizedString(): MemorySegment {
     val sel = ObjCRuntime.sel("localizedCapitalizedString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property UTF8String
-fun NSString.UTF8String(): MemorySegment {
     val sel = ObjCRuntime.sel("UTF8String")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property fastestEncoding
-fun NSString.fastestEncoding(): NSStringEncoding {
     val sel = ObjCRuntime.sel("fastestEncoding")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSStringEncoding
 }
 
 // @property smallestEncoding
-fun NSString.smallestEncoding(): NSStringEncoding {
     val sel = ObjCRuntime.sel("smallestEncoding")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSStringEncoding
 }
@@ -767,37 +752,31 @@ fun NSString.defaultCStringEncoding(): NSStringEncoding {
 }
 
 // @property decomposedStringWithCanonicalMapping
-fun NSString.decomposedStringWithCanonicalMapping(): MemorySegment {
     val sel = ObjCRuntime.sel("decomposedStringWithCanonicalMapping")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property precomposedStringWithCanonicalMapping
-fun NSString.precomposedStringWithCanonicalMapping(): MemorySegment {
     val sel = ObjCRuntime.sel("precomposedStringWithCanonicalMapping")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property decomposedStringWithCompatibilityMapping
-fun NSString.decomposedStringWithCompatibilityMapping(): MemorySegment {
     val sel = ObjCRuntime.sel("decomposedStringWithCompatibilityMapping")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property precomposedStringWithCompatibilityMapping
-fun NSString.precomposedStringWithCompatibilityMapping(): MemorySegment {
     val sel = ObjCRuntime.sel("precomposedStringWithCompatibilityMapping")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property description
-fun NSString.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property hash
-fun NSString.hash(): NSUInteger {
     val sel = ObjCRuntime.sel("hash")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
@@ -1025,67 +1004,56 @@ fun NSString_pathWithComponents(components: MemorySegment): MemorySegment {
 
 // @property pathComponents
 /** @return NSArray<NSString *> * */
-fun NSString.pathComponents(): MemorySegment {
     val sel = ObjCRuntime.sel("pathComponents")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property absolutePath
-fun NSString.isAbsolutePath(): BOOL {
     val sel = ObjCRuntime.sel("isAbsolutePath")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property lastPathComponent
-fun NSString.lastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("lastPathComponent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByDeletingLastPathComponent
-fun NSString.stringByDeletingLastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByDeletingLastPathComponent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property pathExtension
-fun NSString.pathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("pathExtension")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByDeletingPathExtension
-fun NSString.stringByDeletingPathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByDeletingPathExtension")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByAbbreviatingWithTildeInPath
-fun NSString.stringByAbbreviatingWithTildeInPath(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByAbbreviatingWithTildeInPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByExpandingTildeInPath
-fun NSString.stringByExpandingTildeInPath(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByExpandingTildeInPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByStandardizingPath
-fun NSString.stringByStandardizingPath(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByStandardizingPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property stringByResolvingSymlinksInPath
-fun NSString.stringByResolvingSymlinksInPath(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByResolvingSymlinksInPath")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property fileSystemRepresentation
-fun NSString.fileSystemRepresentation(): MemorySegment {
     val sel = ObjCRuntime.sel("fileSystemRepresentation")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -1113,7 +1081,6 @@ fun NSString.stringByRemovingPercentEncoding(): MemorySegment {
 }
 
 // @property stringByRemovingPercentEncoding
-fun NSString.stringByRemovingPercentEncoding(): MemorySegment {
     val sel = ObjCRuntime.sel("stringByRemovingPercentEncoding")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

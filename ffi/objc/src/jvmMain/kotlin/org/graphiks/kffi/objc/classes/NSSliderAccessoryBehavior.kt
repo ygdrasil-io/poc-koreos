@@ -46,21 +46,12 @@ open class NSSliderAccessoryBehavior(val ptr: MemorySegment) {
     }
     
     // @property automaticBehavior
-    open fun automaticBehavior(): MemorySegment {
-        val sel = ObjCRuntime.sel("automaticBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property valueStepBehavior
-    open fun valueStepBehavior(): MemorySegment {
-        val sel = ObjCRuntime.sel("valueStepBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property valueResetBehavior
-    open fun valueResetBehavior(): MemorySegment {
-        val sel = ObjCRuntime.sel("valueResetBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

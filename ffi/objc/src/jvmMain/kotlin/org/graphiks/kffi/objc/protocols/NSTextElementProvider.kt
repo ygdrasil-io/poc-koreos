@@ -32,7 +32,3 @@ interface NSTextElementProvider : NSObject {
     fun documentRange(): MemorySegment
     
     // @property documentRange
-    fun documentRange(): MemorySegment
-    
-}
-

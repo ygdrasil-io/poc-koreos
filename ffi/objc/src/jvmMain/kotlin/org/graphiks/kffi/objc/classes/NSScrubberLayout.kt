@@ -57,9 +57,6 @@ open class NSScrubberLayout(val ptr: MemorySegment) {
     }
     
     // @property layoutAttributesClass
-    open fun layoutAttributesClass(): Class<*> {
-        val sel = ObjCRuntime.sel("layoutAttributesClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }
     
     // @property scrubber

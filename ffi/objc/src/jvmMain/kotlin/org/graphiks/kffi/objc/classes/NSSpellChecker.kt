@@ -325,15 +325,9 @@ open class NSSpellChecker(val ptr: MemorySegment) {
     open fun setLanguage(language: String): BOOL = setLanguage(ObjCRuntime.newNSString(Arena.global(), language))
     
     // @property sharedSpellChecker
-    open fun sharedSpellChecker(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedSpellChecker")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sharedSpellCheckerExists
-    open fun sharedSpellCheckerExists(): BOOL {
-        val sel = ObjCRuntime.sel("sharedSpellCheckerExists")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property userReplacementsDictionary
@@ -400,51 +394,27 @@ open class NSSpellChecker(val ptr: MemorySegment) {
     }
     
     // @property automaticTextReplacementEnabled
-    open fun isAutomaticTextReplacementEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticTextReplacementEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticSpellingCorrectionEnabled
-    open fun isAutomaticSpellingCorrectionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticSpellingCorrectionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticQuoteSubstitutionEnabled
-    open fun isAutomaticQuoteSubstitutionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticQuoteSubstitutionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticDashSubstitutionEnabled
-    open fun isAutomaticDashSubstitutionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticDashSubstitutionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticCapitalizationEnabled
-    open fun isAutomaticCapitalizationEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticCapitalizationEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticPeriodSubstitutionEnabled
-    open fun isAutomaticPeriodSubstitutionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticPeriodSubstitutionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticTextCompletionEnabled
-    open fun isAutomaticTextCompletionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticTextCompletionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property automaticInlinePredictionEnabled
-    open fun isAutomaticInlinePredictionEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticInlinePredictionEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
 }

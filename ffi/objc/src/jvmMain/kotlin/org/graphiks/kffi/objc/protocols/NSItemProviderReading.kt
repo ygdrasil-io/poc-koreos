@@ -16,7 +16,3 @@ interface NSItemProviderReading : NSObject {
     
     // @property readableTypeIdentifiersForItemProvider
     /** @return NSArray<NSString *> * */
-    fun readableTypeIdentifiersForItemProvider(): MemorySegment
-    
-}
-

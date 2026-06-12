@@ -102,9 +102,6 @@ open class NSSound(val ptr: MemorySegment) {
     
     // @property soundUnfilteredTypes
     /** @return NSArray<NSString *> * */
-    open fun soundUnfilteredTypes(): MemorySegment {
-        val sel = ObjCRuntime.sel("soundUnfilteredTypes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property playing

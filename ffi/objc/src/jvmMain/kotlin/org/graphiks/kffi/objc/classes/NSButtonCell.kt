@@ -326,21 +326,17 @@ fun NSButtonCell.setKeyEquivalentFont(keyEquivalentFont: MemorySegment): Unit {
 }
 
 // @property gradientType
-fun NSButtonCell.gradientType(): NSGradientType {
     val sel = ObjCRuntime.sel("gradientType")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGradientType
 }
-fun NSButtonCell.setGradientType(value: NSGradientType) {
     val sel = ObjCRuntime.sel("setGradientType:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property keyEquivalentFont
-fun NSButtonCell.keyEquivalentFont(): MemorySegment {
     val sel = ObjCRuntime.sel("keyEquivalentFont")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSButtonCell.setKeyEquivalentFont(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setKeyEquivalentFont:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

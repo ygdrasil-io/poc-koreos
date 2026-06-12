@@ -98,22 +98,12 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setClass_forClassName(cls: Class<*>, codedName: MemorySegment): Unit {
-        val sel = ObjCRuntime.sel("setClass:forClassName:")
-        ObjCRuntime.msgSend(null, ptr, sel, cls, codedName)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setClass_forClassName(cls: Class<*>, codedName: String): Unit = setClass_forClassName(cls, ObjCRuntime.newNSString(Arena.global(), codedName))
-    
-    fun classForClassName(codedName: MemorySegment): Class<*> {
-        val sel = ObjCRuntime.sel("classForClassName:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, codedName) as Class<*>
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun classForClassName(codedName: String): Class<*> = classForClassName(ObjCRuntime.newNSString(Arena.global(), codedName))
-    
     override fun `containsValueForKey`(key: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("containsValueForKey:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as BOOL

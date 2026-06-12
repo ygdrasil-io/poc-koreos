@@ -95,17 +95,7 @@ interface NSFilePresenter : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'observedPresentedItemUbiquityAttributes' not implemented")
     
     // @property presentedItemURL
-    fun presentedItemURL(): MemorySegment
-    
     // @property presentedItemOperationQueue
-    fun presentedItemOperationQueue(): MemorySegment
-    
     // @property primaryPresentedItemURL
-    fun primaryPresentedItemURL(): MemorySegment
-    
     // @property observedPresentedItemUbiquityAttributes
     /** @return NSSet<NSURLResourceKey> * */
-    fun observedPresentedItemUbiquityAttributes(): MemorySegment
-    
-}
-

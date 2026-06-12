@@ -58,15 +58,9 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
     }
     
     // @property branchImage
-    fun branchImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("branchImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property highlightedBranchImage
-    fun highlightedBranchImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("highlightedBranchImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property leaf

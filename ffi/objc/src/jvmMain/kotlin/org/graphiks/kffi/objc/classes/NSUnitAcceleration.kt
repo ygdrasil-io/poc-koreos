@@ -26,15 +26,9 @@ open class NSUnitAcceleration(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property metersPerSecondSquared
-    fun metersPerSecondSquared(): MemorySegment {
-        val sel = ObjCRuntime.sel("metersPerSecondSquared")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property gravity
-    fun gravity(): MemorySegment {
-        val sel = ObjCRuntime.sel("gravity")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

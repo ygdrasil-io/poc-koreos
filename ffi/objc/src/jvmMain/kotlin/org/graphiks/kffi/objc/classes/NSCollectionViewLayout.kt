@@ -143,7 +143,6 @@ fun NSCollectionViewLayout.invalidationContextClass(): Class<*> {
 }
 
 // @property collectionViewContentSize
-fun NSCollectionViewLayout.collectionViewContentSize(): NSSize {
     val sel = ObjCRuntime.sel("collectionViewContentSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }

@@ -291,63 +291,27 @@ open class NSBezierPath(val ptr: MemorySegment) {
     }
     
     // @property defaultMiterLimit
-    open fun defaultMiterLimit(): CGFloat {
-        val sel = ObjCRuntime.sel("defaultMiterLimit")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    open fun setDefaultMiterLimit(value: CGFloat) {
-        val sel = ObjCRuntime.sel("setDefaultMiterLimit:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultFlatness
-    open fun defaultFlatness(): CGFloat {
-        val sel = ObjCRuntime.sel("defaultFlatness")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    open fun setDefaultFlatness(value: CGFloat) {
-        val sel = ObjCRuntime.sel("setDefaultFlatness:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultWindingRule
-    open fun defaultWindingRule(): NSWindingRule {
-        val sel = ObjCRuntime.sel("defaultWindingRule")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindingRule
     }
-    open fun setDefaultWindingRule(value: NSWindingRule) {
-        val sel = ObjCRuntime.sel("setDefaultWindingRule:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultLineCapStyle
-    open fun defaultLineCapStyle(): NSLineCapStyle {
-        val sel = ObjCRuntime.sel("defaultLineCapStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineCapStyle
     }
-    open fun setDefaultLineCapStyle(value: NSLineCapStyle) {
-        val sel = ObjCRuntime.sel("setDefaultLineCapStyle:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultLineJoinStyle
-    open fun defaultLineJoinStyle(): NSLineJoinStyle {
-        val sel = ObjCRuntime.sel("defaultLineJoinStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLineJoinStyle
     }
-    open fun setDefaultLineJoinStyle(value: NSLineJoinStyle) {
-        val sel = ObjCRuntime.sel("setDefaultLineJoinStyle:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property defaultLineWidth
-    open fun defaultLineWidth(): CGFloat {
-        val sel = ObjCRuntime.sel("defaultLineWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
     }
-    open fun setDefaultLineWidth(value: CGFloat) {
-        val sel = ObjCRuntime.sel("setDefaultLineWidth:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property lineWidth

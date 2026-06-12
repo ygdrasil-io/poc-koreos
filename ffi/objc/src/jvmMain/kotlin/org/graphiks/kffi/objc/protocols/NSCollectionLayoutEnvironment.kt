@@ -14,7 +14,3 @@ interface NSCollectionLayoutEnvironment : NSObject {
     
     // @property container
     /** @return id<NSCollectionLayoutContainer> */
-    fun container(): MemorySegment
-    
-}
-

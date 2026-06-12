@@ -175,63 +175,33 @@ open class CIColor(val ptr: MemorySegment) {
     open fun stringRepresentationAsString(): String = ObjCRuntime.toJavaString(stringRepresentation())
     
     // @property blackColor
-    open fun blackColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("blackColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property whiteColor
-    open fun whiteColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("whiteColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property grayColor
-    open fun grayColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("grayColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property redColor
-    open fun redColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("redColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property greenColor
-    open fun greenColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("greenColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property blueColor
-    open fun blueColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("blueColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property cyanColor
-    open fun cyanColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("cyanColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property magentaColor
-    open fun magentaColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("magentaColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property yellowColor
-    open fun yellowColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("yellowColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property clearColor
-    open fun clearColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("clearColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     

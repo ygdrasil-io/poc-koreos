@@ -199,9 +199,6 @@ open class NSApplication(ptr: MemorySegment) : NSResponder(ptr) {
     }
     
     // @property sharedApplication
-    fun sharedApplication(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedApplication")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property delegate
@@ -348,17 +345,14 @@ fun NSApplication.effectiveAppearance(): MemorySegment {
 }
 
 // @property appearance
-fun NSApplication.appearance(): MemorySegment {
     val sel = ObjCRuntime.sel("appearance")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSApplication.setAppearance(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAppearance:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property effectiveAppearance
-fun NSApplication.effectiveAppearance(): MemorySegment {
     val sel = ObjCRuntime.sel("effectiveAppearance")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -391,7 +385,6 @@ fun NSApplication.currentEvent(): MemorySegment {
 }
 
 // @property currentEvent
-fun NSApplication.currentEvent(): MemorySegment {
     val sel = ObjCRuntime.sel("currentEvent")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -466,11 +459,9 @@ fun NSApplication.setWindowsMenu(windowsMenu: MemorySegment): Unit {
 }
 
 // @property windowsMenu
-fun NSApplication.windowsMenu(): MemorySegment {
     val sel = ObjCRuntime.sel("windowsMenu")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSApplication.setWindowsMenu(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setWindowsMenu:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -483,7 +474,6 @@ fun NSApplication.isFullKeyboardAccessEnabled(): BOOL {
 }
 
 // @property fullKeyboardAccessEnabled
-fun NSApplication.isFullKeyboardAccessEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isFullKeyboardAccessEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -506,11 +496,9 @@ fun NSApplication.setServicesMenu(servicesMenu: MemorySegment): Unit {
 }
 
 // @property servicesMenu
-fun NSApplication.servicesMenu(): MemorySegment {
     val sel = ObjCRuntime.sel("servicesMenu")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSApplication.setServicesMenu(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setServicesMenu:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -528,11 +516,9 @@ fun NSApplication.setServicesProvider(servicesProvider: MemorySegment): Unit {
 }
 
 // @property servicesProvider
-fun NSApplication.servicesProvider(): MemorySegment {
     val sel = ObjCRuntime.sel("servicesProvider")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSApplication.setServicesProvider(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setServicesProvider:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -557,7 +543,6 @@ fun NSApplication.userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection
 }
 
 // @property userInterfaceLayoutDirection
-fun NSApplication.userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection {
     val sel = ObjCRuntime.sel("userInterfaceLayoutDirection")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceLayoutDirection
 }
@@ -602,13 +587,11 @@ fun NSApplication.enabledRemoteNotificationTypes(): NSRemoteNotificationType {
 }
 
 // @property registeredForRemoteNotifications
-fun NSApplication.isRegisteredForRemoteNotifications(): BOOL {
     val sel = ObjCRuntime.sel("isRegisteredForRemoteNotifications")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property enabledRemoteNotificationTypes
-fun NSApplication.enabledRemoteNotificationTypes(): NSRemoteNotificationType {
     val sel = ObjCRuntime.sel("enabledRemoteNotificationTypes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRemoteNotificationType
 }
@@ -656,7 +639,6 @@ fun NSApplication.context(): MemorySegment {
 }
 
 // @property context
-fun NSApplication.context(): MemorySegment {
     val sel = ObjCRuntime.sel("context")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -691,11 +673,9 @@ fun NSApplication.setAutomaticCustomizeTouchBarMenuItemEnabled(automaticCustomiz
 }
 
 // @property automaticCustomizeTouchBarMenuItemEnabled
-fun NSApplication.isAutomaticCustomizeTouchBarMenuItemEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticCustomizeTouchBarMenuItemEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSApplication.setAutomaticCustomizeTouchBarMenuItemEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticCustomizeTouchBarMenuItemEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -730,14 +710,12 @@ fun NSApplication.orderedWindows(): MemorySegment {
 
 // @property orderedDocuments
 /** @return NSArray<NSDocument *> * */
-fun NSApplication.orderedDocuments(): MemorySegment {
     val sel = ObjCRuntime.sel("orderedDocuments")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property orderedWindows
 /** @return NSArray<NSWindow *> * */
-fun NSApplication.orderedWindows(): MemorySegment {
     val sel = ObjCRuntime.sel("orderedWindows")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

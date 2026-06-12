@@ -12,7 +12,3 @@ interface NSSecureCoding : NSCoding {
     fun supportsSecureCoding(): BOOL
     
     // @property supportsSecureCoding
-    fun supportsSecureCoding(): BOOL
-    
-}
-

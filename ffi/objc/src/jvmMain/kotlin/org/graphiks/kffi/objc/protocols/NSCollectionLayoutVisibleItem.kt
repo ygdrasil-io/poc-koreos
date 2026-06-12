@@ -38,38 +38,12 @@ interface NSCollectionLayoutVisibleItem : NSObject {
     fun representedElementKind(): MemorySegment
     
     // @property alpha
-    fun alpha(): CGFloat
-    fun setAlpha(value: CGFloat)
-    
     // @property zIndex
-    fun zIndex(): NSInteger
-    fun setZIndex(value: NSInteger)
-    
     // @property hidden
-    fun isHidden(): BOOL
-    fun setHidden(value: BOOL)
-    
     // @property center
-    fun center(): NSPoint
-    fun setCenter(value: NSPoint)
-    
     // @property name
-    fun name(): MemorySegment
-    
     // @property indexPath
-    fun indexPath(): MemorySegment
-    
     // @property frame
-    fun frame(): NSRect
-    
     // @property bounds
-    fun bounds(): NSRect
-    
     // @property representedElementCategory
-    fun representedElementCategory(): NSCollectionElementCategory
-    
     // @property representedElementKind
-    fun representedElementKind(): MemorySegment
-    
-}
-

@@ -79,9 +79,6 @@ open class NSColorList(val ptr: MemorySegment) {
     
     // @property availableColorLists
     /** @return NSArray<NSColorList *> * */
-    open fun availableColorLists(): MemorySegment {
-        val sel = ObjCRuntime.sel("availableColorLists")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property name

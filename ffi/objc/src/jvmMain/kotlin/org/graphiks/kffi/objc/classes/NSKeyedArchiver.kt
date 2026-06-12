@@ -68,22 +68,12 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setClassName_forClass(codedName: MemorySegment, cls: Class<*>): Unit {
-        val sel = ObjCRuntime.sel("setClassName:forClass:")
-        ObjCRuntime.msgSend(null, ptr, sel, codedName, cls)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setClassName_forClass(codedName: String, cls: Class<*>): Unit = setClassName_forClass(ObjCRuntime.newNSString(Arena.global(), codedName), cls)
-    
-    fun classNameForClass(cls: Class<*>): MemorySegment {
-        val sel = ObjCRuntime.sel("classNameForClass:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, cls) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun classNameForClassAsString(cls: Class<*>): String = ObjCRuntime.toJavaString(classNameForClass(cls))
-    
     override fun `encodeObject_forKey`(`object`: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeObject:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`, key)

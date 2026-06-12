@@ -235,9 +235,6 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     
     // @property linkRenderingAttributes
     /** @return NSDictionary<NSAttributedStringKey,id> * */
-    open fun linkRenderingAttributes(): MemorySegment {
-        val sel = ObjCRuntime.sel("linkRenderingAttributes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

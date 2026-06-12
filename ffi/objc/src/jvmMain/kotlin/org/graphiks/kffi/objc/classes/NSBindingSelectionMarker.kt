@@ -46,21 +46,12 @@ open class NSBindingSelectionMarker(val ptr: MemorySegment) {
     }
     
     // @property multipleValuesSelectionMarker
-    open fun multipleValuesSelectionMarker(): MemorySegment {
-        val sel = ObjCRuntime.sel("multipleValuesSelectionMarker")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property noSelectionMarker
-    open fun noSelectionMarker(): MemorySegment {
-        val sel = ObjCRuntime.sel("noSelectionMarker")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property notApplicableSelectionMarker
-    open fun notApplicableSelectionMarker(): MemorySegment {
-        val sel = ObjCRuntime.sel("notApplicableSelectionMarker")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

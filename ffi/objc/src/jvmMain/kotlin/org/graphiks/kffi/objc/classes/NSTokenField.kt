@@ -56,9 +56,6 @@ open class NSTokenField(ptr: MemorySegment) : NSTextField(ptr) {
     }
     
     // @property defaultCompletionDelay
-    fun defaultCompletionDelay(): NSTimeInterval {
-        val sel = ObjCRuntime.sel("defaultCompletionDelay")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
     }
     
     // @property tokenizingCharacterSet
@@ -72,9 +69,6 @@ open class NSTokenField(ptr: MemorySegment) : NSTextField(ptr) {
     }
     
     // @property defaultTokenizingCharacterSet
-    fun defaultTokenizingCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultTokenizingCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

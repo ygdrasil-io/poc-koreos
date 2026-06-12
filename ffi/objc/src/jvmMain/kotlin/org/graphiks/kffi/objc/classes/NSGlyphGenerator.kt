@@ -25,9 +25,6 @@ open class NSGlyphGenerator(val ptr: MemorySegment) {
     }
     
     // @property sharedGlyphGenerator
-    open fun sharedGlyphGenerator(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedGlyphGenerator")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

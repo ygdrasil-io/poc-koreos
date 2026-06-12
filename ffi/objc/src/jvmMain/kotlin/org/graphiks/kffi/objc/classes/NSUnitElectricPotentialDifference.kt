@@ -41,33 +41,18 @@ open class NSUnitElectricPotentialDifference(ptr: MemorySegment) : NSDimension(p
     }
     
     // @property megavolts
-    fun megavolts(): MemorySegment {
-        val sel = ObjCRuntime.sel("megavolts")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property kilovolts
-    fun kilovolts(): MemorySegment {
-        val sel = ObjCRuntime.sel("kilovolts")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property volts
-    fun volts(): MemorySegment {
-        val sel = ObjCRuntime.sel("volts")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property millivolts
-    fun millivolts(): MemorySegment {
-        val sel = ObjCRuntime.sel("millivolts")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property microvolts
-    fun microvolts(): MemorySegment {
-        val sel = ObjCRuntime.sel("microvolts")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

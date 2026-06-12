@@ -111,11 +111,9 @@ fun NSOpenPanel.setShowsContentTypes(showsContentTypes: BOOL): Unit {
 }
 
 // @property showsContentTypes
-fun NSOpenPanel.showsContentTypes(): BOOL {
     val sel = ObjCRuntime.sel("showsContentTypes")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSOpenPanel.setShowsContentTypes(value: BOOL) {
     val sel = ObjCRuntime.sel("setShowsContentTypes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

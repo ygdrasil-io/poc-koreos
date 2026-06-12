@@ -220,20 +220,11 @@ open class NSBundle(val ptr: MemorySegment) {
     /** Convenience overload — [String] parameters and [String] return type. */
     open fun pathForResource_ofTypeAsString(name: String, ext: String): String = ObjCRuntime.toJavaString(pathForResource_ofType(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext)))
     
-    open fun pathForResource_ofType_inDirectory(name: MemorySegment, ext: MemorySegment, subpath: MemorySegment): MemorySegment {
-        val sel = ObjCRuntime.sel("pathForResource:ofType:inDirectory:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ext, subpath) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun pathForResource_ofType_inDirectoryAsString(name: MemorySegment, ext: MemorySegment, subpath: MemorySegment): String = ObjCRuntime.toJavaString(pathForResource_ofType_inDirectory(name, ext, subpath))
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun pathForResource_ofType_inDirectory(name: String, ext: String, subpath: String): MemorySegment = pathForResource_ofType_inDirectory(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext), ObjCRuntime.newNSString(Arena.global(), subpath))
-    
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun pathForResource_ofType_inDirectoryAsString(name: String, ext: String, subpath: String): String = ObjCRuntime.toJavaString(pathForResource_ofType_inDirectory(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext), ObjCRuntime.newNSString(Arena.global(), subpath)))
-    
     open fun pathForResource_ofType_inDirectory_forLocalization(name: MemorySegment, ext: MemorySegment, subpath: MemorySegment, localizationName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("pathForResource:ofType:inDirectory:forLocalization:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ext, subpath, localizationName) as MemorySegment
@@ -249,14 +240,9 @@ open class NSBundle(val ptr: MemorySegment) {
     open fun pathForResource_ofType_inDirectory_forLocalizationAsString(name: String, ext: String, subpath: String, localizationName: String): String = ObjCRuntime.toJavaString(pathForResource_ofType_inDirectory_forLocalization(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext), ObjCRuntime.newNSString(Arena.global(), subpath), ObjCRuntime.newNSString(Arena.global(), localizationName)))
     
     /** @return NSArray<NSString *> * */
-    open fun pathsForResourcesOfType_inDirectory(ext: MemorySegment, subpath: MemorySegment): MemorySegment {
-        val sel = ObjCRuntime.sel("pathsForResourcesOfType:inDirectory:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ext, subpath) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun pathsForResourcesOfType_inDirectory(ext: String, subpath: String): MemorySegment = pathsForResourcesOfType_inDirectory(ObjCRuntime.newNSString(Arena.global(), ext), ObjCRuntime.newNSString(Arena.global(), subpath))
-    
     /** @return NSArray<NSString *> * */
     open fun pathsForResourcesOfType_inDirectory_forLocalization(ext: MemorySegment, subpath: MemorySegment, localizationName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("pathsForResourcesOfType:inDirectory:forLocalization:")
@@ -319,23 +305,14 @@ open class NSBundle(val ptr: MemorySegment) {
     open fun classNamed(className: String): Class<*> = classNamed(ObjCRuntime.newNSString(Arena.global(), className))
     
     // @property mainBundle
-    open fun mainBundle(): MemorySegment {
-        val sel = ObjCRuntime.sel("mainBundle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allBundles
     /** @return NSArray<NSBundle *> * */
-    open fun allBundles(): MemorySegment {
-        val sel = ObjCRuntime.sel("allBundles")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allFrameworks
     /** @return NSArray<NSBundle *> * */
-    open fun allFrameworks(): MemorySegment {
-        val sel = ObjCRuntime.sel("allFrameworks")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property loaded

@@ -56,9 +56,6 @@ open class NSNotificationCenter(val ptr: MemorySegment) {
     }
     
     // @property defaultCenter
-    open fun defaultCenter(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultCenter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

@@ -197,7 +197,6 @@ fun NSStackView.views(): MemorySegment {
 
 // @property views
 /** @return NSArray<__kindof NSView *> * */
-fun NSStackView.views(): MemorySegment {
     val sel = ObjCRuntime.sel("views")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -215,11 +214,9 @@ fun NSStackView.setHasEqualSpacing(hasEqualSpacing: BOOL): Unit {
 }
 
 // @property hasEqualSpacing
-fun NSStackView.hasEqualSpacing(): BOOL {
     val sel = ObjCRuntime.sel("hasEqualSpacing")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSStackView.setHasEqualSpacing(value: BOOL) {
     val sel = ObjCRuntime.sel("setHasEqualSpacing:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

@@ -40,9 +40,6 @@ open class NSSliderCell(ptr: MemorySegment) : NSActionCell(ptr) {
     }
     
     // @property prefersTrackingUntilMouseUp
-    fun prefersTrackingUntilMouseUp(): BOOL {
-        val sel = ObjCRuntime.sel("prefersTrackingUntilMouseUp")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property minValue
@@ -117,7 +114,6 @@ fun NSSliderCell.isVertical(): BOOL {
 }
 
 // @property vertical
-fun NSSliderCell.isVertical(): BOOL {
     val sel = ObjCRuntime.sel("isVertical")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
@@ -180,31 +176,25 @@ fun NSSliderCell.setAllowsTickMarkValuesOnly(allowsTickMarkValuesOnly: BOOL): Un
 }
 
 // @property numberOfTickMarks
-fun NSSliderCell.numberOfTickMarks(): NSInteger {
     val sel = ObjCRuntime.sel("numberOfTickMarks")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
 }
-fun NSSliderCell.setNumberOfTickMarks(value: NSInteger) {
     val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property tickMarkPosition
-fun NSSliderCell.tickMarkPosition(): NSTickMarkPosition {
     val sel = ObjCRuntime.sel("tickMarkPosition")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
 }
-fun NSSliderCell.setTickMarkPosition(value: NSTickMarkPosition) {
     val sel = ObjCRuntime.sel("setTickMarkPosition:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowsTickMarkValuesOnly
-fun NSSliderCell.allowsTickMarkValuesOnly(): BOOL {
     val sel = ObjCRuntime.sel("allowsTickMarkValuesOnly")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSSliderCell.setAllowsTickMarkValuesOnly(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsTickMarkValuesOnly:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

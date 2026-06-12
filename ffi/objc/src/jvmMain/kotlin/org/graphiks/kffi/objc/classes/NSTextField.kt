@@ -285,21 +285,17 @@ fun NSTextField.setAllowsCharacterPickerTouchBarItem(allowsCharacterPickerTouchB
 }
 
 // @property automaticTextCompletionEnabled
-fun NSTextField.isAutomaticTextCompletionEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isAutomaticTextCompletionEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextField.setAutomaticTextCompletionEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setAutomaticTextCompletionEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allowsCharacterPickerTouchBarItem
-fun NSTextField.allowsCharacterPickerTouchBarItem(): BOOL {
     val sel = ObjCRuntime.sel("allowsCharacterPickerTouchBarItem")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextField.setAllowsCharacterPickerTouchBarItem(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsCharacterPickerTouchBarItem:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -357,21 +353,17 @@ fun NSTextField.setImportsGraphics(importsGraphics: BOOL): Unit {
 }
 
 // @property allowsEditingTextAttributes
-fun NSTextField.allowsEditingTextAttributes(): BOOL {
     val sel = ObjCRuntime.sel("allowsEditingTextAttributes")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextField.setAllowsEditingTextAttributes(value: BOOL) {
     val sel = ObjCRuntime.sel("setAllowsEditingTextAttributes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property importsGraphics
-fun NSTextField.importsGraphics(): BOOL {
     val sel = ObjCRuntime.sel("importsGraphics")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSTextField.setImportsGraphics(value: BOOL) {
     val sel = ObjCRuntime.sel("setImportsGraphics:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

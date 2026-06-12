@@ -200,7 +200,6 @@ fun NSWindowController.storyboard(): MemorySegment {
 }
 
 // @property storyboard
-fun NSWindowController.storyboard(): MemorySegment {
     val sel = ObjCRuntime.sel("storyboard")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

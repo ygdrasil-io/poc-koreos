@@ -257,25 +257,21 @@ fun NSArray.sortedArrayHint(): MemorySegment {
 }
 
 // @property description
-fun NSArray.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property firstObject
-fun NSArray.firstObject(): MemorySegment {
     val sel = ObjCRuntime.sel("firstObject")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property lastObject
-fun NSArray.lastObject(): MemorySegment {
     val sel = ObjCRuntime.sel("lastObject")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property sortedArrayHint
-fun NSArray.sortedArrayHint(): MemorySegment {
     val sel = ObjCRuntime.sel("sortedArrayHint")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

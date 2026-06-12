@@ -142,93 +142,48 @@ open class NSCharacterSet(val ptr: MemorySegment) {
     }
     
     // @property controlCharacterSet
-    open fun controlCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("controlCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property whitespaceCharacterSet
-    open fun whitespaceCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("whitespaceCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property whitespaceAndNewlineCharacterSet
-    open fun whitespaceAndNewlineCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("whitespaceAndNewlineCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property decimalDigitCharacterSet
-    open fun decimalDigitCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("decimalDigitCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property letterCharacterSet
-    open fun letterCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("letterCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property lowercaseLetterCharacterSet
-    open fun lowercaseLetterCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("lowercaseLetterCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property uppercaseLetterCharacterSet
-    open fun uppercaseLetterCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("uppercaseLetterCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property nonBaseCharacterSet
-    open fun nonBaseCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("nonBaseCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property alphanumericCharacterSet
-    open fun alphanumericCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("alphanumericCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property decomposableCharacterSet
-    open fun decomposableCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("decomposableCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property illegalCharacterSet
-    open fun illegalCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("illegalCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property punctuationCharacterSet
-    open fun punctuationCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("punctuationCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property capitalizedLetterCharacterSet
-    open fun capitalizedLetterCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("capitalizedLetterCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property symbolCharacterSet
-    open fun symbolCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("symbolCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property newlineCharacterSet
-    open fun newlineCharacterSet(): MemorySegment {
-        val sel = ObjCRuntime.sel("newlineCharacterSet")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property bitmapRepresentation

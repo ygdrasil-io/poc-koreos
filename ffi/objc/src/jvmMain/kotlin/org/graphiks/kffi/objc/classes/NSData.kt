@@ -87,7 +87,6 @@ fun NSData.description(): MemorySegment {
 }
 
 // @property description
-fun NSData.description(): MemorySegment {
     val sel = ObjCRuntime.sel("description")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

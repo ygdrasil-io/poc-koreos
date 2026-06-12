@@ -83,9 +83,6 @@ open class NSTextInputContext(val ptr: MemorySegment) {
     }
     
     // @property currentInputContext
-    open fun currentInputContext(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentInputContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property client

@@ -446,11 +446,9 @@ fun NSControl.setCellClass(value: Class<*>) {
 }
 
 // @property cell
-fun NSControl.cell(): MemorySegment {
     val sel = ObjCRuntime.sel("cell")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSControl.setCell(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setCell:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

@@ -51,9 +51,6 @@ open class NSURLCredentialStorage(val ptr: MemorySegment) {
     }
     
     // @property sharedCredentialStorage
-    open fun sharedCredentialStorage(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedCredentialStorage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allCredentials

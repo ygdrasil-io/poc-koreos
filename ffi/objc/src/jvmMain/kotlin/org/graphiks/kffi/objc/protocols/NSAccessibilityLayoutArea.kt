@@ -18,7 +18,3 @@ interface NSAccessibilityLayoutArea : NSAccessibilityGroup {
     fun accessibilityFocusedUIElement(): MemorySegment
     
     // @property accessibilityFocusedUIElement
-    fun accessibilityFocusedUIElement(): MemorySegment
-    
-}
-

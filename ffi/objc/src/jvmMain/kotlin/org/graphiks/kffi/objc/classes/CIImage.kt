@@ -422,63 +422,33 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     // @property blackImage
-    open fun blackImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("blackImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property whiteImage
-    open fun whiteImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("whiteImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property grayImage
-    open fun grayImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("grayImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property redImage
-    open fun redImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("redImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property greenImage
-    open fun greenImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("greenImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property blueImage
-    open fun blueImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("blueImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property cyanImage
-    open fun cyanImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("cyanImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property magentaImage
-    open fun magentaImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("magentaImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property yellowImage
-    open fun yellowImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("yellowImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property clearImage
-    open fun clearImage(): MemorySegment {
-        val sel = ObjCRuntime.sel("clearImage")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property extent
@@ -613,7 +583,6 @@ fun CIImage_imageWithDepthData(`data`: MemorySegment): MemorySegment {
 }
 
 // @property depthData
-fun CIImage.depthData(): MemorySegment {
     val sel = ObjCRuntime.sel("depthData")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -650,7 +619,6 @@ fun CIImage_imageWithPortaitEffectsMatte(matte: MemorySegment): MemorySegment {
 }
 
 // @property portraitEffectsMatte
-fun CIImage.portraitEffectsMatte(): MemorySegment {
     val sel = ObjCRuntime.sel("portraitEffectsMatte")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -687,7 +655,6 @@ fun CIImage_imageWithSemanticSegmentationMatte(matte: MemorySegment): MemorySegm
 }
 
 // @property semanticSegmentationMatte
-fun CIImage.semanticSegmentationMatte(): MemorySegment {
     val sel = ObjCRuntime.sel("semanticSegmentationMatte")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

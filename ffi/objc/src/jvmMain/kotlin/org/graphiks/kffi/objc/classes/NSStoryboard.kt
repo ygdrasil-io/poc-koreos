@@ -45,9 +45,6 @@ open class NSStoryboard(val ptr: MemorySegment) {
     }
     
     // @property mainStoryboard
-    open fun mainStoryboard(): MemorySegment {
-        val sel = ObjCRuntime.sel("mainStoryboard")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

@@ -145,9 +145,6 @@ open class NSCursor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun pop(): Unit {
-        val sel = ObjCRuntime.sel("pop")
-        ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     open fun push(): Unit {
@@ -173,105 +170,54 @@ open class NSCursor(val ptr: MemorySegment) {
     }
     
     // @property currentCursor
-    open fun currentCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property arrowCursor
-    open fun arrowCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("arrowCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property crosshairCursor
-    open fun crosshairCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("crosshairCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property disappearingItemCursor
-    open fun disappearingItemCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("disappearingItemCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property operationNotAllowedCursor
-    open fun operationNotAllowedCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("operationNotAllowedCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property dragLinkCursor
-    open fun dragLinkCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("dragLinkCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property dragCopyCursor
-    open fun dragCopyCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("dragCopyCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property contextualMenuCursor
-    open fun contextualMenuCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("contextualMenuCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property pointingHandCursor
-    open fun pointingHandCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("pointingHandCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property closedHandCursor
-    open fun closedHandCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("closedHandCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property openHandCursor
-    open fun openHandCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("openHandCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property IBeamCursor
-    open fun IBeamCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("IBeamCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property IBeamCursorForVerticalLayout
-    open fun IBeamCursorForVerticalLayout(): MemorySegment {
-        val sel = ObjCRuntime.sel("IBeamCursorForVerticalLayout")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property zoomInCursor
-    open fun zoomInCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("zoomInCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property zoomOutCursor
-    open fun zoomOutCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("zoomOutCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property columnResizeCursor
-    open fun columnResizeCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("columnResizeCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property rowResizeCursor
-    open fun rowResizeCursor(): MemorySegment {
-        val sel = ObjCRuntime.sel("rowResizeCursor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }
@@ -407,13 +353,11 @@ fun NSCursor.isSetOnMouseEntered(): BOOL {
 }
 
 // @property setOnMouseExited
-fun NSCursor.isSetOnMouseExited(): BOOL {
     val sel = ObjCRuntime.sel("isSetOnMouseExited")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property setOnMouseEntered
-fun NSCursor.isSetOnMouseEntered(): BOOL {
     val sel = ObjCRuntime.sel("isSetOnMouseEntered")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

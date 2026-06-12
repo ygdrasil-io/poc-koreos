@@ -68,19 +68,10 @@ open class NSHelpManager(val ptr: MemorySegment) {
     }
     
     // @property sharedHelpManager
-    open fun sharedHelpManager(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedHelpManager")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property contextHelpModeActive
-    open fun isContextHelpModeActive(): BOOL {
-        val sel = ObjCRuntime.sel("isContextHelpModeActive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    open fun setContextHelpModeActive(value: BOOL) {
-        val sel = ObjCRuntime.sel("setContextHelpModeActive:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
 }

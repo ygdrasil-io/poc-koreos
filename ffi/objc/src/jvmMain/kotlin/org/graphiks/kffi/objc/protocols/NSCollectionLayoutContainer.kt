@@ -18,16 +18,6 @@ interface NSCollectionLayoutContainer : NSObject {
     fun effectiveContentInsets(): NSDirectionalEdgeInsets
     
     // @property contentSize
-    fun contentSize(): NSSize
-    
     // @property effectiveContentSize
-    fun effectiveContentSize(): NSSize
-    
     // @property contentInsets
-    fun contentInsets(): NSDirectionalEdgeInsets
-    
     // @property effectiveContentInsets
-    fun effectiveContentInsets(): NSDirectionalEdgeInsets
-    
-}
-

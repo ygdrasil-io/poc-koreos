@@ -522,21 +522,17 @@ fun NSMatrix.setKeyCell(keyCell: MemorySegment): Unit {
 }
 
 // @property tabKeyTraversesCells
-fun NSMatrix.tabKeyTraversesCells(): BOOL {
     val sel = ObjCRuntime.sel("tabKeyTraversesCells")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSMatrix.setTabKeyTraversesCells(value: BOOL) {
     val sel = ObjCRuntime.sel("setTabKeyTraversesCells:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property keyCell
-fun NSMatrix.keyCell(): MemorySegment {
     val sel = ObjCRuntime.sel("keyCell")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMatrix.setKeyCell(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setKeyCell:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

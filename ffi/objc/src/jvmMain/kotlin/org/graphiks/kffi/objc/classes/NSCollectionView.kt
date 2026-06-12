@@ -423,51 +423,41 @@ fun NSCollectionView.setMaxItemSize(maxItemSize: NSSize): Unit {
 }
 
 // @property itemPrototype
-fun NSCollectionView.itemPrototype(): MemorySegment {
     val sel = ObjCRuntime.sel("itemPrototype")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSCollectionView.setItemPrototype(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setItemPrototype:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property maxNumberOfRows
-fun NSCollectionView.maxNumberOfRows(): NSUInteger {
     val sel = ObjCRuntime.sel("maxNumberOfRows")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
-fun NSCollectionView.setMaxNumberOfRows(value: NSUInteger) {
     val sel = ObjCRuntime.sel("setMaxNumberOfRows:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property maxNumberOfColumns
-fun NSCollectionView.maxNumberOfColumns(): NSUInteger {
     val sel = ObjCRuntime.sel("maxNumberOfColumns")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
-fun NSCollectionView.setMaxNumberOfColumns(value: NSUInteger) {
     val sel = ObjCRuntime.sel("setMaxNumberOfColumns:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property minItemSize
-fun NSCollectionView.minItemSize(): NSSize {
     val sel = ObjCRuntime.sel("minItemSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }
-fun NSCollectionView.setMinItemSize(value: NSSize) {
     val sel = ObjCRuntime.sel("setMinItemSize:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property maxItemSize
-fun NSCollectionView.maxItemSize(): NSSize {
     val sel = ObjCRuntime.sel("maxItemSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }
-fun NSCollectionView.setMaxItemSize(value: NSSize) {
     val sel = ObjCRuntime.sel("setMaxItemSize:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

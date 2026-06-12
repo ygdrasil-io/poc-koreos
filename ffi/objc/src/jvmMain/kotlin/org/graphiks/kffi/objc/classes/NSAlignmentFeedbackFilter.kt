@@ -53,9 +53,6 @@ open class NSAlignmentFeedbackFilter(val ptr: MemorySegment) {
     }
     
     // @property inputEventMask
-    open fun inputEventMask(): NSEventMask {
-        val sel = ObjCRuntime.sel("inputEventMask")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventMask
     }
     
 }

@@ -179,11 +179,9 @@ fun NSItemProvider.setPreviewImageHandler(previewImageHandler: MemorySegment): U
 }
 
 // @property previewImageHandler
-fun NSItemProvider.previewImageHandler(): MemorySegment {
     val sel = ObjCRuntime.sel("previewImageHandler")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSItemProvider.setPreviewImageHandler(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setPreviewImageHandler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -218,19 +216,16 @@ fun NSItemProvider.preferredPresentationSize(): NSSize {
 }
 
 // @property sourceFrame
-fun NSItemProvider.sourceFrame(): NSRect {
     val sel = ObjCRuntime.sel("sourceFrame")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
 }
 
 // @property containerFrame
-fun NSItemProvider.containerFrame(): NSRect {
     val sel = ObjCRuntime.sel("containerFrame")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
 }
 
 // @property preferredPresentationSize
-fun NSItemProvider.preferredPresentationSize(): NSSize {
     val sel = ObjCRuntime.sel("preferredPresentationSize")
     return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
 }

@@ -134,11 +134,9 @@ fun NSSearchField.setCentersPlaceholder(centersPlaceholder: BOOL): Unit {
 }
 
 // @property centersPlaceholder
-fun NSSearchField.centersPlaceholder(): BOOL {
     val sel = ObjCRuntime.sel("centersPlaceholder")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSSearchField.setCentersPlaceholder(value: BOOL) {
     val sel = ObjCRuntime.sel("setCentersPlaceholder:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

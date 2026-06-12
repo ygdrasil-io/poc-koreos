@@ -199,9 +199,6 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     // @property sharedFontManager
-    open fun sharedFontManager(): MemorySegment {
-        val sel = ObjCRuntime.sel("sharedFontManager")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property multiple

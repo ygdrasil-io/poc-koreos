@@ -24,12 +24,4 @@ interface NSTextFinderBarContainer : NSObject {
     fun setFindBarVisible(findBarVisible: BOOL)
     
     // @property findBarView
-    fun findBarView(): MemorySegment
-    fun setFindBarView(value: MemorySegment)
-    
     // @property findBarVisible
-    fun isFindBarVisible(): BOOL
-    fun setFindBarVisible(value: BOOL)
-    
-}
-

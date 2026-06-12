@@ -21,9 +21,6 @@ open class NSUnitIlluminance(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property lux
-    fun lux(): MemorySegment {
-        val sel = ObjCRuntime.sel("lux")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

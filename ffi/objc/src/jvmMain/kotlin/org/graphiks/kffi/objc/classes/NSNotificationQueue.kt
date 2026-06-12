@@ -40,9 +40,6 @@ open class NSNotificationQueue(val ptr: MemorySegment) {
     }
     
     // @property defaultQueue
-    open fun defaultQueue(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultQueue")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

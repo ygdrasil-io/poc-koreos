@@ -351,11 +351,9 @@ fun NSSavePanel.setAllowedFileTypes(allowedFileTypes: MemorySegment): Unit {
 
 // @property allowedFileTypes
 /** @return NSArray<NSString *> * */
-fun NSSavePanel.allowedFileTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedFileTypes")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSSavePanel.setAllowedFileTypes(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAllowedFileTypes:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

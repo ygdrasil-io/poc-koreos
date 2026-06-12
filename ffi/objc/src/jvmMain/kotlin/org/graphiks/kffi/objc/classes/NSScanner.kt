@@ -166,7 +166,6 @@ fun NSScanner_localizedScannerWithString(string: MemorySegment): MemorySegment {
 }
 
 // @property atEnd
-fun NSScanner.isAtEnd(): BOOL {
     val sel = ObjCRuntime.sel("isAtEnd")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

@@ -139,13 +139,7 @@ open class NSTouchBar(val ptr: MemorySegment) {
     }
     
     // @property automaticCustomizeTouchBarMenuItemEnabled
-    open fun isAutomaticCustomizeTouchBarMenuItemEnabled(): BOOL {
-        val sel = ObjCRuntime.sel("isAutomaticCustomizeTouchBarMenuItemEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    open fun setAutomaticCustomizeTouchBarMenuItemEnabled(value: BOOL) {
-        val sel = ObjCRuntime.sel("setAutomaticCustomizeTouchBarMenuItemEnabled:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
 }

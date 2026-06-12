@@ -471,51 +471,41 @@ fun NSScrollView.setRulerViewClass(value: Class<*>) {
 }
 
 // @property rulersVisible
-fun NSScrollView.rulersVisible(): BOOL {
     val sel = ObjCRuntime.sel("rulersVisible")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSScrollView.setRulersVisible(value: BOOL) {
     val sel = ObjCRuntime.sel("setRulersVisible:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property hasHorizontalRuler
-fun NSScrollView.hasHorizontalRuler(): BOOL {
     val sel = ObjCRuntime.sel("hasHorizontalRuler")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSScrollView.setHasHorizontalRuler(value: BOOL) {
     val sel = ObjCRuntime.sel("setHasHorizontalRuler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property hasVerticalRuler
-fun NSScrollView.hasVerticalRuler(): BOOL {
     val sel = ObjCRuntime.sel("hasVerticalRuler")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSScrollView.setHasVerticalRuler(value: BOOL) {
     val sel = ObjCRuntime.sel("setHasVerticalRuler:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property horizontalRulerView
-fun NSScrollView.horizontalRulerView(): MemorySegment {
     val sel = ObjCRuntime.sel("horizontalRulerView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSScrollView.setHorizontalRulerView(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setHorizontalRulerView:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property verticalRulerView
-fun NSScrollView.verticalRulerView(): MemorySegment {
     val sel = ObjCRuntime.sel("verticalRulerView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSScrollView.setVerticalRulerView(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setVerticalRulerView:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -533,11 +523,9 @@ fun NSScrollView.setFindBarPosition(findBarPosition: NSScrollViewFindBarPosition
 }
 
 // @property findBarPosition
-fun NSScrollView.findBarPosition(): NSScrollViewFindBarPosition {
     val sel = ObjCRuntime.sel("findBarPosition")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSScrollViewFindBarPosition
 }
-fun NSScrollView.setFindBarPosition(value: NSScrollViewFindBarPosition) {
     val sel = ObjCRuntime.sel("setFindBarPosition:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

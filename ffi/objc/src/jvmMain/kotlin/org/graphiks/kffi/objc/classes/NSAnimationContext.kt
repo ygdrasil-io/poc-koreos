@@ -40,9 +40,6 @@ open class NSAnimationContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    open fun currentContext(): MemorySegment {
-        val sel = ObjCRuntime.sel("currentContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property duration

@@ -236,62 +236,50 @@ fun NSMutableURLRequest.setHTTPShouldUsePipelining(HTTPShouldUsePipelining: BOOL
 }
 
 // @property HTTPMethod
-fun NSMutableURLRequest.HTTPMethod(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPMethod")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMutableURLRequest.setHTTPMethod(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setHTTPMethod:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property allHTTPHeaderFields
 /** @return NSDictionary<NSString *,NSString *> * */
-fun NSMutableURLRequest.allHTTPHeaderFields(): MemorySegment {
     val sel = ObjCRuntime.sel("allHTTPHeaderFields")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMutableURLRequest.setAllHTTPHeaderFields(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAllHTTPHeaderFields:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property HTTPBody
-fun NSMutableURLRequest.HTTPBody(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPBody")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMutableURLRequest.setHTTPBody(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setHTTPBody:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property HTTPBodyStream
-fun NSMutableURLRequest.HTTPBodyStream(): MemorySegment {
     val sel = ObjCRuntime.sel("HTTPBodyStream")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMutableURLRequest.setHTTPBodyStream(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setHTTPBodyStream:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property HTTPShouldHandleCookies
-fun NSMutableURLRequest.HTTPShouldHandleCookies(): BOOL {
     val sel = ObjCRuntime.sel("HTTPShouldHandleCookies")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSMutableURLRequest.setHTTPShouldHandleCookies(value: BOOL) {
     val sel = ObjCRuntime.sel("setHTTPShouldHandleCookies:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property HTTPShouldUsePipelining
-fun NSMutableURLRequest.HTTPShouldUsePipelining(): BOOL {
     val sel = ObjCRuntime.sel("HTTPShouldUsePipelining")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSMutableURLRequest.setHTTPShouldUsePipelining(value: BOOL) {
     val sel = ObjCRuntime.sel("setHTTPShouldUsePipelining:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

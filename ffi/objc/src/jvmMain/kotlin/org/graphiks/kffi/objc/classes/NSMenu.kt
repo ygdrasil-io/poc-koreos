@@ -372,32 +372,26 @@ fun NSMenu_paletteMenuWithColors_titles_templateImage_selectionHandler(colors: M
 }
 
 // @property presentationStyle
-fun NSMenu.presentationStyle(): NSMenuPresentationStyle {
     val sel = ObjCRuntime.sel("presentationStyle")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuPresentationStyle
 }
-fun NSMenu.setPresentationStyle(value: NSMenuPresentationStyle) {
     val sel = ObjCRuntime.sel("setPresentationStyle:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property selectionMode
-fun NSMenu.selectionMode(): NSMenuSelectionMode {
     val sel = ObjCRuntime.sel("selectionMode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuSelectionMode
 }
-fun NSMenu.setSelectionMode(value: NSMenuSelectionMode) {
     val sel = ObjCRuntime.sel("setSelectionMode:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property selectedItems
 /** @return NSArray<NSMenuItem *> * */
-fun NSMenu.selectedItems(): MemorySegment {
     val sel = ObjCRuntime.sel("selectedItems")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSMenu.setSelectedItems(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setSelectedItems:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -417,7 +411,6 @@ fun NSMenu.propertiesToUpdate(): NSMenuProperties {
 }
 
 // @property propertiesToUpdate
-fun NSMenu.propertiesToUpdate(): NSMenuProperties {
     val sel = ObjCRuntime.sel("propertiesToUpdate")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuProperties
 }
@@ -509,17 +502,14 @@ fun NSMenu_setMenuZone(zone: MemorySegment): Unit {
 }
 
 // @property menuChangedMessagesEnabled
-fun NSMenu.menuChangedMessagesEnabled(): BOOL {
     val sel = ObjCRuntime.sel("menuChangedMessagesEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSMenu.setMenuChangedMessagesEnabled(value: BOOL) {
     val sel = ObjCRuntime.sel("setMenuChangedMessagesEnabled:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property tornOff
-fun NSMenu.isTornOff(): BOOL {
     val sel = ObjCRuntime.sel("isTornOff")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }

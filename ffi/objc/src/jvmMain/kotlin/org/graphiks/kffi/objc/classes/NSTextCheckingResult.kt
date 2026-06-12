@@ -116,83 +116,70 @@ fun NSTextCheckingResult.addressComponents(): MemorySegment {
 }
 
 // @property orthography
-fun NSTextCheckingResult.orthography(): MemorySegment {
     val sel = ObjCRuntime.sel("orthography")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property grammarDetails
 /** @return NSArray<NSDictionary<NSString *,id> *> * */
-fun NSTextCheckingResult.grammarDetails(): MemorySegment {
     val sel = ObjCRuntime.sel("grammarDetails")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property date
-fun NSTextCheckingResult.date(): MemorySegment {
     val sel = ObjCRuntime.sel("date")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property timeZone
-fun NSTextCheckingResult.timeZone(): MemorySegment {
     val sel = ObjCRuntime.sel("timeZone")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property duration
-fun NSTextCheckingResult.duration(): NSTimeInterval {
     val sel = ObjCRuntime.sel("duration")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
 }
 
 // @property components
 /** @return NSDictionary<NSTextCheckingKey,NSString *> * */
-fun NSTextCheckingResult.components(): MemorySegment {
     val sel = ObjCRuntime.sel("components")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property URL
-fun NSTextCheckingResult.URL(): MemorySegment {
     val sel = ObjCRuntime.sel("URL")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property replacementString
-fun NSTextCheckingResult.replacementString(): MemorySegment {
     val sel = ObjCRuntime.sel("replacementString")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property alternativeStrings
 /** @return NSArray<NSString *> * */
-fun NSTextCheckingResult.alternativeStrings(): MemorySegment {
     val sel = ObjCRuntime.sel("alternativeStrings")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property regularExpression
-fun NSTextCheckingResult.regularExpression(): MemorySegment {
     val sel = ObjCRuntime.sel("regularExpression")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property phoneNumber
-fun NSTextCheckingResult.phoneNumber(): MemorySegment {
     val sel = ObjCRuntime.sel("phoneNumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property numberOfRanges
-fun NSTextCheckingResult.numberOfRanges(): NSUInteger {
     val sel = ObjCRuntime.sel("numberOfRanges")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
 }
 
 // @property addressComponents
 /** @return NSDictionary<NSTextCheckingKey,NSString *> * */
-fun NSTextCheckingResult.addressComponents(): MemorySegment {
     val sel = ObjCRuntime.sel("addressComponents")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

@@ -40,9 +40,6 @@ open class NSWritingToolsCoordinator(val ptr: MemorySegment) {
     }
     
     // @property isWritingToolsAvailable
-    open fun isWritingToolsAvailable(): BOOL {
-        val sel = ObjCRuntime.sel("isWritingToolsAvailable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property delegate

@@ -46,39 +46,21 @@ open class NSUnitAngle(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property degrees
-    fun degrees(): MemorySegment {
-        val sel = ObjCRuntime.sel("degrees")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property arcMinutes
-    fun arcMinutes(): MemorySegment {
-        val sel = ObjCRuntime.sel("arcMinutes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property arcSeconds
-    fun arcSeconds(): MemorySegment {
-        val sel = ObjCRuntime.sel("arcSeconds")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property radians
-    fun radians(): MemorySegment {
-        val sel = ObjCRuntime.sel("radians")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property gradians
-    fun gradians(): MemorySegment {
-        val sel = ObjCRuntime.sel("gradians")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property revolutions
-    fun revolutions(): MemorySegment {
-        val sel = ObjCRuntime.sel("revolutions")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

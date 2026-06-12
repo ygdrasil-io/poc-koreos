@@ -646,13 +646,11 @@ fun NSLayoutManager.textViewForBeginningOfSelection(): MemorySegment {
 }
 
 // @property firstTextView
-fun NSLayoutManager.firstTextView(): MemorySegment {
     val sel = ObjCRuntime.sel("firstTextView")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property textViewForBeginningOfSelection
-fun NSLayoutManager.textViewForBeginningOfSelection(): MemorySegment {
     val sel = ObjCRuntime.sel("textViewForBeginningOfSelection")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
@@ -785,21 +783,17 @@ fun NSLayoutManager.setHyphenationFactor(hyphenationFactor: Float): Unit {
 }
 
 // @property usesScreenFonts
-fun NSLayoutManager.usesScreenFonts(): BOOL {
     val sel = ObjCRuntime.sel("usesScreenFonts")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSLayoutManager.setUsesScreenFonts(value: BOOL) {
     val sel = ObjCRuntime.sel("setUsesScreenFonts:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property hyphenationFactor
-fun NSLayoutManager.hyphenationFactor(): Float {
     val sel = ObjCRuntime.sel("hyphenationFactor")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
 }
-fun NSLayoutManager.setHyphenationFactor(value: Float) {
     val sel = ObjCRuntime.sel("setHyphenationFactor:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
@@ -817,11 +811,9 @@ fun NSLayoutManager.setGlyphGenerator(glyphGenerator: MemorySegment): Unit {
 }
 
 // @property glyphGenerator
-fun NSLayoutManager.glyphGenerator(): MemorySegment {
     val sel = ObjCRuntime.sel("glyphGenerator")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSLayoutManager.setGlyphGenerator(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setGlyphGenerator:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

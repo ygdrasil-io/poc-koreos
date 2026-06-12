@@ -619,430 +619,217 @@ open class NSColor(val ptr: MemorySegment) {
     }
     
     // @property blackColor
-    open fun blackColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("blackColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property darkGrayColor
-    open fun darkGrayColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("darkGrayColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property lightGrayColor
-    open fun lightGrayColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("lightGrayColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property whiteColor
-    open fun whiteColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("whiteColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property grayColor
-    open fun grayColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("grayColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property redColor
-    open fun redColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("redColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property greenColor
-    open fun greenColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("greenColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property blueColor
-    open fun blueColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("blueColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property cyanColor
-    open fun cyanColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("cyanColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property yellowColor
-    open fun yellowColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("yellowColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property magentaColor
-    open fun magentaColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("magentaColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property orangeColor
-    open fun orangeColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("orangeColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property purpleColor
-    open fun purpleColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("purpleColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property brownColor
-    open fun brownColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("brownColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property clearColor
-    open fun clearColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("clearColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property labelColor
-    open fun labelColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("labelColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property secondaryLabelColor
-    open fun secondaryLabelColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("secondaryLabelColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property tertiaryLabelColor
-    open fun tertiaryLabelColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("tertiaryLabelColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property quaternaryLabelColor
-    open fun quaternaryLabelColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("quaternaryLabelColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property quinaryLabelColor
-    open fun quinaryLabelColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("quinaryLabelColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property linkColor
-    open fun linkColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("linkColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property placeholderTextColor
-    open fun placeholderTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("placeholderTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property windowFrameTextColor
-    open fun windowFrameTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("windowFrameTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedMenuItemTextColor
-    open fun selectedMenuItemTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedMenuItemTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property alternateSelectedControlTextColor
-    open fun alternateSelectedControlTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("alternateSelectedControlTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property headerTextColor
-    open fun headerTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("headerTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property separatorColor
-    open fun separatorColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("separatorColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property gridColor
-    open fun gridColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("gridColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property windowBackgroundColor
-    open fun windowBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("windowBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property underPageBackgroundColor
-    open fun underPageBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("underPageBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property controlBackgroundColor
-    open fun controlBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("controlBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedContentBackgroundColor
-    open fun selectedContentBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedContentBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property unemphasizedSelectedContentBackgroundColor
-    open fun unemphasizedSelectedContentBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("unemphasizedSelectedContentBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property alternatingContentBackgroundColors
     /** @return NSArray<NSColor *> * */
-    open fun alternatingContentBackgroundColors(): MemorySegment {
-        val sel = ObjCRuntime.sel("alternatingContentBackgroundColors")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property findHighlightColor
-    open fun findHighlightColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("findHighlightColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property textColor
-    open fun textColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("textColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property textBackgroundColor
-    open fun textBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("textBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property textInsertionPointColor
-    open fun textInsertionPointColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("textInsertionPointColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedTextColor
-    open fun selectedTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedTextBackgroundColor
-    open fun selectedTextBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedTextBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property unemphasizedSelectedTextBackgroundColor
-    open fun unemphasizedSelectedTextBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("unemphasizedSelectedTextBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property unemphasizedSelectedTextColor
-    open fun unemphasizedSelectedTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("unemphasizedSelectedTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property controlColor
-    open fun controlColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("controlColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property controlTextColor
-    open fun controlTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("controlTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedControlColor
-    open fun selectedControlColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedControlColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedControlTextColor
-    open fun selectedControlTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("selectedControlTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property disabledControlTextColor
-    open fun disabledControlTextColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("disabledControlTextColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property keyboardFocusIndicatorColor
-    open fun keyboardFocusIndicatorColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("keyboardFocusIndicatorColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property scrubberTexturedBackgroundColor
-    open fun scrubberTexturedBackgroundColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("scrubberTexturedBackgroundColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemRedColor
-    open fun systemRedColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemRedColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemGreenColor
-    open fun systemGreenColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemGreenColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemBlueColor
-    open fun systemBlueColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemBlueColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemOrangeColor
-    open fun systemOrangeColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemOrangeColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemYellowColor
-    open fun systemYellowColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemYellowColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemBrownColor
-    open fun systemBrownColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemBrownColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemPinkColor
-    open fun systemPinkColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemPinkColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemPurpleColor
-    open fun systemPurpleColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemPurpleColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemGrayColor
-    open fun systemGrayColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemGrayColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemTealColor
-    open fun systemTealColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemTealColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemIndigoColor
-    open fun systemIndigoColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemIndigoColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemMintColor
-    open fun systemMintColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemMintColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemCyanColor
-    open fun systemCyanColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemCyanColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property systemFillColor
-    open fun systemFillColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("systemFillColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property secondarySystemFillColor
-    open fun secondarySystemFillColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("secondarySystemFillColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property tertiarySystemFillColor
-    open fun tertiarySystemFillColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("tertiarySystemFillColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property quaternarySystemFillColor
-    open fun quaternarySystemFillColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("quaternarySystemFillColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property quinarySystemFillColor
-    open fun quinarySystemFillColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("quinarySystemFillColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property controlAccentColor
-    open fun controlAccentColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("controlAccentColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property currentControlTint
-    open fun currentControlTint(): NSControlTint {
-        val sel = ObjCRuntime.sel("currentControlTint")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
     }
     
     // @property highlightColor
-    open fun highlightColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("highlightColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property shadowColor
-    open fun shadowColor(): MemorySegment {
-        val sel = ObjCRuntime.sel("shadowColor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property catalogNameComponent
@@ -1178,13 +965,7 @@ open class NSColor(val ptr: MemorySegment) {
     }
     
     // @property ignoresAlpha
-    open fun ignoresAlpha(): BOOL {
-        val sel = ObjCRuntime.sel("ignoresAlpha")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
-    open fun setIgnoresAlpha(value: BOOL) {
-        val sel = ObjCRuntime.sel("setIgnoresAlpha:")
-        ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
 }
@@ -1377,7 +1158,6 @@ fun NSColor.controlAlternatingRowBackgroundColors(): MemorySegment {
 }
 
 // @property colorSpaceName
-fun NSColor.colorSpaceName(): NSColorSpaceName {
     val sel = ObjCRuntime.sel("colorSpaceName")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSColorSpaceName
 }

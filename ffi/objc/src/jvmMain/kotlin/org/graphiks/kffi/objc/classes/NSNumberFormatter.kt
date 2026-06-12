@@ -872,81 +872,65 @@ fun NSNumberFormatter.setRoundingBehavior(roundingBehavior: MemorySegment): Unit
 }
 
 // @property hasThousandSeparators
-fun NSNumberFormatter.hasThousandSeparators(): BOOL {
     val sel = ObjCRuntime.sel("hasThousandSeparators")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSNumberFormatter.setHasThousandSeparators(value: BOOL) {
     val sel = ObjCRuntime.sel("setHasThousandSeparators:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property thousandSeparator
-fun NSNumberFormatter.thousandSeparator(): MemorySegment {
     val sel = ObjCRuntime.sel("thousandSeparator")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setThousandSeparator(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setThousandSeparator:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property localizesFormat
-fun NSNumberFormatter.localizesFormat(): BOOL {
     val sel = ObjCRuntime.sel("localizesFormat")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
-fun NSNumberFormatter.setLocalizesFormat(value: BOOL) {
     val sel = ObjCRuntime.sel("setLocalizesFormat:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property format
-fun NSNumberFormatter.format(): MemorySegment {
     val sel = ObjCRuntime.sel("format")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setFormat(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setFormat:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property attributedStringForZero
-fun NSNumberFormatter.attributedStringForZero(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForZero")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setAttributedStringForZero(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributedStringForZero:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property attributedStringForNil
-fun NSNumberFormatter.attributedStringForNil(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForNil")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setAttributedStringForNil(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributedStringForNil:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property attributedStringForNotANumber
-fun NSNumberFormatter.attributedStringForNotANumber(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForNotANumber")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setAttributedStringForNotANumber(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setAttributedStringForNotANumber:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }
 
 // @property roundingBehavior
-fun NSNumberFormatter.roundingBehavior(): MemorySegment {
     val sel = ObjCRuntime.sel("roundingBehavior")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
-fun NSNumberFormatter.setRoundingBehavior(value: MemorySegment) {
     val sel = ObjCRuntime.sel("setRoundingBehavior:")
     ObjCRuntime.msgSend(null, ptr, sel, value)
 }

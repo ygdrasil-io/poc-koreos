@@ -21,9 +21,6 @@ open class NSUnitDispersion(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property partsPerMillion
-    fun partsPerMillion(): MemorySegment {
-        val sel = ObjCRuntime.sel("partsPerMillion")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

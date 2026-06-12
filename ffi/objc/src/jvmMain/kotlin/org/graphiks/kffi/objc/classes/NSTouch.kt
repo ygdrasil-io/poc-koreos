@@ -72,7 +72,6 @@ fun NSTouch.type(): NSTouchType {
 }
 
 // @property type
-fun NSTouch.type(): NSTouchType {
     val sel = ObjCRuntime.sel("type")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchType
 }

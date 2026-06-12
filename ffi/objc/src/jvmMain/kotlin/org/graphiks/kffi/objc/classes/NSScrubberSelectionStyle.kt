@@ -41,15 +41,9 @@ open class NSScrubberSelectionStyle(val ptr: MemorySegment) {
     }
     
     // @property outlineOverlayStyle
-    open fun outlineOverlayStyle(): MemorySegment {
-        val sel = ObjCRuntime.sel("outlineOverlayStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property roundedBackgroundStyle
-    open fun roundedBackgroundStyle(): MemorySegment {
-        val sel = ObjCRuntime.sel("roundedBackgroundStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

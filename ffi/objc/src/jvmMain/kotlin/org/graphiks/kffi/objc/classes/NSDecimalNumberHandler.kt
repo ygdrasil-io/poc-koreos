@@ -31,9 +31,6 @@ open class NSDecimalNumberHandler(val ptr: MemorySegment) {
     }
     
     // @property defaultDecimalNumberHandler
-    open fun defaultDecimalNumberHandler(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultDecimalNumberHandler")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     

@@ -28,9 +28,6 @@ open class NSFilePromiseReceiver(val ptr: MemorySegment) {
     
     // @property readableDraggedTypes
     /** @return NSArray<NSString *> * */
-    open fun readableDraggedTypes(): MemorySegment {
-        val sel = ObjCRuntime.sel("readableDraggedTypes")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property fileTypes

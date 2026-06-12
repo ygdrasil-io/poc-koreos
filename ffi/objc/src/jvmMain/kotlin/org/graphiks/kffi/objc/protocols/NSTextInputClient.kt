@@ -72,13 +72,5 @@ interface NSTextInputClient {
         throw UnsupportedOperationException("Optional ObjC method 'supportsAdaptiveImageGlyph' not implemented")
     
     // @property unionRectInVisibleSelectedRange
-    fun unionRectInVisibleSelectedRange(): NSRect
-    
     // @property documentVisibleRect
-    fun documentVisibleRect(): NSRect
-    
     // @property supportsAdaptiveImageGlyph
-    fun supportsAdaptiveImageGlyph(): BOOL
-    
-}
-

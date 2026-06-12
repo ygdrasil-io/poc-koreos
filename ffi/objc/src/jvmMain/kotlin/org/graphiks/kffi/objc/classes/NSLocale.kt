@@ -191,121 +191,101 @@ fun NSLocale.alternateQuotationEndDelimiter(): MemorySegment {
 }
 
 // @property localeIdentifier
-fun NSLocale.localeIdentifier(): MemorySegment {
     val sel = ObjCRuntime.sel("localeIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property languageCode
-fun NSLocale.languageCode(): MemorySegment {
     val sel = ObjCRuntime.sel("languageCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property languageIdentifier
-fun NSLocale.languageIdentifier(): MemorySegment {
     val sel = ObjCRuntime.sel("languageIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property countryCode
-fun NSLocale.countryCode(): MemorySegment {
     val sel = ObjCRuntime.sel("countryCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property regionCode
-fun NSLocale.regionCode(): MemorySegment {
     val sel = ObjCRuntime.sel("regionCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property scriptCode
-fun NSLocale.scriptCode(): MemorySegment {
     val sel = ObjCRuntime.sel("scriptCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property variantCode
-fun NSLocale.variantCode(): MemorySegment {
     val sel = ObjCRuntime.sel("variantCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property exemplarCharacterSet
-fun NSLocale.exemplarCharacterSet(): MemorySegment {
     val sel = ObjCRuntime.sel("exemplarCharacterSet")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property calendarIdentifier
-fun NSLocale.calendarIdentifier(): MemorySegment {
     val sel = ObjCRuntime.sel("calendarIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property collationIdentifier
-fun NSLocale.collationIdentifier(): MemorySegment {
     val sel = ObjCRuntime.sel("collationIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property usesMetricSystem
-fun NSLocale.usesMetricSystem(): BOOL {
     val sel = ObjCRuntime.sel("usesMetricSystem")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property decimalSeparator
-fun NSLocale.decimalSeparator(): MemorySegment {
     val sel = ObjCRuntime.sel("decimalSeparator")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property groupingSeparator
-fun NSLocale.groupingSeparator(): MemorySegment {
     val sel = ObjCRuntime.sel("groupingSeparator")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property currencySymbol
-fun NSLocale.currencySymbol(): MemorySegment {
     val sel = ObjCRuntime.sel("currencySymbol")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property currencyCode
-fun NSLocale.currencyCode(): MemorySegment {
     val sel = ObjCRuntime.sel("currencyCode")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property collatorIdentifier
-fun NSLocale.collatorIdentifier(): MemorySegment {
     val sel = ObjCRuntime.sel("collatorIdentifier")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property quotationBeginDelimiter
-fun NSLocale.quotationBeginDelimiter(): MemorySegment {
     val sel = ObjCRuntime.sel("quotationBeginDelimiter")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property quotationEndDelimiter
-fun NSLocale.quotationEndDelimiter(): MemorySegment {
     val sel = ObjCRuntime.sel("quotationEndDelimiter")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property alternateQuotationBeginDelimiter
-fun NSLocale.alternateQuotationBeginDelimiter(): MemorySegment {
     val sel = ObjCRuntime.sel("alternateQuotationBeginDelimiter")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property alternateQuotationEndDelimiter
-fun NSLocale.alternateQuotationEndDelimiter(): MemorySegment {
     val sel = ObjCRuntime.sel("alternateQuotationEndDelimiter")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }

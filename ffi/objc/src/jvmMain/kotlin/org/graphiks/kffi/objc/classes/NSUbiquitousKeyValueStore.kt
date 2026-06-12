@@ -168,9 +168,6 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     // @property defaultStore
-    open fun defaultStore(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultStore")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property dictionaryRepresentation

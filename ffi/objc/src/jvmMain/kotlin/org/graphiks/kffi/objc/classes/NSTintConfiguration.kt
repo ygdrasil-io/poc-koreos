@@ -36,15 +36,9 @@ open class NSTintConfiguration(val ptr: MemorySegment) {
     }
     
     // @property defaultTintConfiguration
-    open fun defaultTintConfiguration(): MemorySegment {
-        val sel = ObjCRuntime.sel("defaultTintConfiguration")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property monochromeTintConfiguration
-    open fun monochromeTintConfiguration(): MemorySegment {
-        val sel = ObjCRuntime.sel("monochromeTintConfiguration")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property baseTintColor
