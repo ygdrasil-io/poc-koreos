@@ -51,25 +51,5 @@ open class NSUnitDuration(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property hours
-    }
-    
-    // @property minutes
-    }
-    
-    // @property seconds
-    }
-    
-    // @property milliseconds
-    }
-    
-    // @property microseconds
-    }
-    
-    // @property nanoseconds
-    }
-    
-    // @property picoseconds
-    }
-    
 }
 

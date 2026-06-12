@@ -35,3 +35,5 @@ interface NSTextSelectionDataSource : NSObject {
     fun documentRange(): MemorySegment
     
     // @property documentRange
+}
+

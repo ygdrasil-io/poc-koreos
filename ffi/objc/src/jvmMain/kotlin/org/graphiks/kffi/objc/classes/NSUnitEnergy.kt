@@ -41,19 +41,5 @@ open class NSUnitEnergy(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kilojoules
-    }
-    
-    // @property joules
-    }
-    
-    // @property kilocalories
-    }
-    
-    // @property calories
-    }
-    
-    // @property kilowattHours
-    }
-    
 }
 

@@ -14,3 +14,5 @@ interface NSViewContentSelectionInfo : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'selectionAnchorRect' not implemented")
     
     // @property selectionAnchorRect
+}
+

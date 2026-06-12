@@ -36,3 +36,5 @@ interface NSTextAttachmentCell : NSObject {
     fun setAttachment(attachment: MemorySegment)
     
     // @property attachment
+}
+

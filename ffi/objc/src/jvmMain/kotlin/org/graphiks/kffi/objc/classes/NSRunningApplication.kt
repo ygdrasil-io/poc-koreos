@@ -159,7 +159,5 @@ open class NSRunningApplication(val ptr: MemorySegment) {
     }
     
     // @property currentApplication
-    }
-    
 }
 

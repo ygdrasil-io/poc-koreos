@@ -280,9 +280,6 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property cellClass
-    }
-    
-    // @property loaded
     fun isLoaded(): BOOL {
         val sel = ObjCRuntime.sel("isLoaded")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

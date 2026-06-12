@@ -46,22 +46,5 @@ open class NSUnitElectricCharge(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property coulombs
-    }
-    
-    // @property megaampereHours
-    }
-    
-    // @property kiloampereHours
-    }
-    
-    // @property ampereHours
-    }
-    
-    // @property milliampereHours
-    }
-    
-    // @property microampereHours
-    }
-    
 }
 

@@ -74,7 +74,3 @@ fun NSAppleScript.richTextSource(): MemorySegment {
 }
 
 // @property richTextSource
-    val sel = ObjCRuntime.sel("richTextSource")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-

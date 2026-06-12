@@ -471,47 +471,6 @@ fun NSScrollView.setRulerViewClass(value: Class<*>) {
 }
 
 // @property rulersVisible
-    val sel = ObjCRuntime.sel("rulersVisible")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setRulersVisible:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property hasHorizontalRuler
-    val sel = ObjCRuntime.sel("hasHorizontalRuler")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setHasHorizontalRuler:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property hasVerticalRuler
-    val sel = ObjCRuntime.sel("hasVerticalRuler")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setHasVerticalRuler:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property horizontalRulerView
-    val sel = ObjCRuntime.sel("horizontalRulerView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setHorizontalRulerView:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property verticalRulerView
-    val sel = ObjCRuntime.sel("verticalRulerView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setVerticalRulerView:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSFindBarSupport on NSScrollView ─────────────────────────────────────────
-
 fun NSScrollView.findBarPosition(): NSScrollViewFindBarPosition {
     val sel = ObjCRuntime.sel("findBarPosition")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSScrollViewFindBarPosition
@@ -523,10 +482,3 @@ fun NSScrollView.setFindBarPosition(findBarPosition: NSScrollViewFindBarPosition
 }
 
 // @property findBarPosition
-    val sel = ObjCRuntime.sel("findBarPosition")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSScrollViewFindBarPosition
-}
-    val sel = ObjCRuntime.sel("setFindBarPosition:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

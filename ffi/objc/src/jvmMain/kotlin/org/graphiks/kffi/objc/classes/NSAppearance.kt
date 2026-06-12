@@ -62,13 +62,6 @@ open class NSAppearance(val ptr: MemorySegment) {
     }
     
     // @property currentAppearance
-    }
-    }
-    
-    // @property currentDrawingAppearance
-    }
-    
-    // @property allowsVibrancy
     open fun allowsVibrancy(): BOOL {
         val sel = ObjCRuntime.sel("allowsVibrancy")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

@@ -121,16 +121,5 @@ interface NSTextInputTraits {
         throw UnsupportedOperationException("Optional ObjC method 'setAllowedWritingToolsResultOptions:' not implemented")
     
     // @property autocorrectionType
-    // @property spellCheckingType
-    // @property grammarCheckingType
-    // @property smartQuotesType
-    // @property smartDashesType
-    // @property smartInsertDeleteType
-    // @property textReplacementType
-    // @property dataDetectionType
-    // @property linkDetectionType
-    // @property textCompletionType
-    // @property inlinePredictionType
-    // @property mathExpressionCompletionType
-    // @property writingToolsBehavior
-    // @property allowedWritingToolsResultOptions
+}
+

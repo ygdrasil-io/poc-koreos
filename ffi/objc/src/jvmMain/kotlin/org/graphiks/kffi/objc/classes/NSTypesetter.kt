@@ -231,11 +231,6 @@ open class NSTypesetter(val ptr: MemorySegment) {
     }
     
     // @property sharedSystemTypesetter
-    }
-    
-    // @property defaultTypesetterBehavior
-    }
-    
 }
 
 // ── Category: NSLayoutPhaseInterface on NSTypesetter ─────────────────────────────────────────

@@ -197,12 +197,6 @@ fun NSStackView.views(): MemorySegment {
 
 // @property views
 /** @return NSArray<__kindof NSView *> * */
-    val sel = ObjCRuntime.sel("views")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSStackViewDeprecated on NSStackView ─────────────────────────────────────────
-
 fun NSStackView.hasEqualSpacing(): BOOL {
     val sel = ObjCRuntime.sel("hasEqualSpacing")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
@@ -214,10 +208,3 @@ fun NSStackView.setHasEqualSpacing(hasEqualSpacing: BOOL): Unit {
 }
 
 // @property hasEqualSpacing
-    val sel = ObjCRuntime.sel("hasEqualSpacing")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setHasEqualSpacing:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

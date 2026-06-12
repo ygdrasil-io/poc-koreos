@@ -26,10 +26,5 @@ open class NSUnitAcceleration(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property metersPerSecondSquared
-    }
-    
-    // @property gravity
-    }
-    
 }
 

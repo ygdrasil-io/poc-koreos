@@ -48,12 +48,6 @@ fun NSTextTab.alignment(): NSTextAlignment {
 }
 
 // @property alignment
-    val sel = ObjCRuntime.sel("alignment")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
-}
-
-// ── Category: NSTextTabDeprecated on NSTextTab ─────────────────────────────────────────
-
 fun NSTextTab.initWithType_location(type: NSTextTabType, loc: CGFloat): MemorySegment {
     val sel = ObjCRuntime.sel("initWithType:location:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type, loc) as MemorySegment
@@ -65,7 +59,3 @@ fun NSTextTab.tabStopType(): NSTextTabType {
 }
 
 // @property tabStopType
-    val sel = ObjCRuntime.sel("tabStopType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextTabType
-}
-

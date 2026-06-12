@@ -61,31 +61,5 @@ open class NSUnitFrequency(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property terahertz
-    }
-    
-    // @property gigahertz
-    }
-    
-    // @property megahertz
-    }
-    
-    // @property kilohertz
-    }
-    
-    // @property hertz
-    }
-    
-    // @property millihertz
-    }
-    
-    // @property microhertz
-    }
-    
-    // @property nanohertz
-    }
-    
-    // @property framesPerSecond
-    }
-    
 }
 

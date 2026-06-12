@@ -22,7 +22,5 @@ open class NSHapticFeedbackManager(val ptr: MemorySegment) {
     
     // @property defaultPerformer
     /** @return id<NSHapticFeedbackPerformer> */
-    }
-    
 }
 

@@ -646,17 +646,6 @@ fun NSLayoutManager.textViewForBeginningOfSelection(): MemorySegment {
 }
 
 // @property firstTextView
-    val sel = ObjCRuntime.sel("firstTextView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property textViewForBeginningOfSelection
-    val sel = ObjCRuntime.sel("textViewForBeginningOfSelection")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSLayoutManagerDeprecated on NSLayoutManager ─────────────────────────────────────────
-
 fun NSLayoutManager.glyphAtIndex_isValidIndex(glyphIndex: NSUInteger, isValidIndex: MemorySegment): NSGlyph {
     val sel = ObjCRuntime.sel("glyphAtIndex:isValidIndex:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, glyphIndex, isValidIndex) as NSGlyph
@@ -783,23 +772,6 @@ fun NSLayoutManager.setHyphenationFactor(hyphenationFactor: Float): Unit {
 }
 
 // @property usesScreenFonts
-    val sel = ObjCRuntime.sel("usesScreenFonts")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setUsesScreenFonts:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property hyphenationFactor
-    val sel = ObjCRuntime.sel("hyphenationFactor")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
-}
-    val sel = ObjCRuntime.sel("setHyphenationFactor:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSGlyphGeneration on NSLayoutManager ─────────────────────────────────────────
-
 fun NSLayoutManager.glyphGenerator(): MemorySegment {
     val sel = ObjCRuntime.sel("glyphGenerator")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -811,10 +783,3 @@ fun NSLayoutManager.setGlyphGenerator(glyphGenerator: MemorySegment): Unit {
 }
 
 // @property glyphGenerator
-    val sel = ObjCRuntime.sel("glyphGenerator")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setGlyphGenerator:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

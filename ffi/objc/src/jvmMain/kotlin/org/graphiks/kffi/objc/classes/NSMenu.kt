@@ -372,32 +372,7 @@ fun NSMenu_paletteMenuWithColors_titles_templateImage_selectionHandler(colors: M
 }
 
 // @property presentationStyle
-    val sel = ObjCRuntime.sel("presentationStyle")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuPresentationStyle
-}
-    val sel = ObjCRuntime.sel("setPresentationStyle:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property selectionMode
-    val sel = ObjCRuntime.sel("selectionMode")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuSelectionMode
-}
-    val sel = ObjCRuntime.sel("setSelectionMode:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property selectedItems
 /** @return NSArray<NSMenuItem *> * */
-    val sel = ObjCRuntime.sel("selectedItems")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setSelectedItems:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSSubmenuAction on NSMenu ─────────────────────────────────────────
-
 fun NSMenu.submenuAction(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("submenuAction:")
     ObjCRuntime.msgSend(null, ptr, sel, sender)
@@ -411,12 +386,6 @@ fun NSMenu.propertiesToUpdate(): NSMenuProperties {
 }
 
 // @property propertiesToUpdate
-    val sel = ObjCRuntime.sel("propertiesToUpdate")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuProperties
-}
-
-// ── Category: NSDeprecated on NSMenu ─────────────────────────────────────────
-
 fun NSMenu.setMenuRepresentation(menuRep: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setMenuRepresentation:")
     ObjCRuntime.msgSend(null, ptr, sel, menuRep)
@@ -502,15 +471,3 @@ fun NSMenu_setMenuZone(zone: MemorySegment): Unit {
 }
 
 // @property menuChangedMessagesEnabled
-    val sel = ObjCRuntime.sel("menuChangedMessagesEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setMenuChangedMessagesEnabled:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property tornOff
-    val sel = ObjCRuntime.sel("isTornOff")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-

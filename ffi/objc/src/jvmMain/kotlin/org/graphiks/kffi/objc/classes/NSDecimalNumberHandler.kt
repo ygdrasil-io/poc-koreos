@@ -31,18 +31,5 @@ open class NSDecimalNumberHandler(val ptr: MemorySegment) {
     }
     
     // @property defaultDecimalNumberHandler
-    }
-    
-    
-    // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _scale: Int
-    // ivar: _roundingMode: Any
-    // ivar: _raiseOnExactness: Any
-    // ivar: _raiseOnOverflow: Any
-    // ivar: _raiseOnUnderflow: Any
-    // ivar: _raiseOnDivideByZero: Any
-    // ivar: _unused: Any
-    // ivar: _reserved2: MemorySegment
-    // ivar: _reserved: MemorySegment
 }
 

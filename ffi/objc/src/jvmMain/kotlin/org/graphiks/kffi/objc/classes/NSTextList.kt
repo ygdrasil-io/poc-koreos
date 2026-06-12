@@ -72,7 +72,5 @@ open class NSTextList(val ptr: MemorySegment) {
     }
     
     // @property includesTextListMarkers
-    }
-    
 }
 

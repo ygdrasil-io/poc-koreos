@@ -143,32 +143,7 @@ fun NSTextContainer.setTextView(textView: MemorySegment): Unit {
 }
 
 // @property layoutManager
-    val sel = ObjCRuntime.sel("layoutManager")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setLayoutManager:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property exclusionPaths
 /** @return NSArray<NSBezierPath *> * */
-    val sel = ObjCRuntime.sel("exclusionPaths")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setExclusionPaths:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property textView
-    val sel = ObjCRuntime.sel("textView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setTextView:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSTextContainerDeprecated on NSTextContainer ─────────────────────────────────────────
-
 fun NSTextContainer.initWithContainerSize(aContainerSize: NSSize): MemorySegment {
     val sel = ObjCRuntime.sel("initWithContainerSize:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aContainerSize) as MemorySegment
@@ -195,10 +170,3 @@ fun NSTextContainer.setContainerSize(containerSize: NSSize): Unit {
 }
 
 // @property containerSize
-    val sel = ObjCRuntime.sel("containerSize")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
-}
-    val sel = ObjCRuntime.sel("setContainerSize:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

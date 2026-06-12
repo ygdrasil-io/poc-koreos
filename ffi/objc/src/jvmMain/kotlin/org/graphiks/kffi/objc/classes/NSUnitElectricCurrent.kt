@@ -41,19 +41,5 @@ open class NSUnitElectricCurrent(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property megaamperes
-    }
-    
-    // @property kiloamperes
-    }
-    
-    // @property amperes
-    }
-    
-    // @property milliamperes
-    }
-    
-    // @property microamperes
-    }
-    
 }
 

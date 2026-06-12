@@ -519,42 +519,6 @@ fun NSURL_fileURLWithPathComponents(components: MemorySegment): MemorySegment {
 
 // @property pathComponents
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("pathComponents")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property lastPathComponent
-    val sel = ObjCRuntime.sel("lastPathComponent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property pathExtension
-    val sel = ObjCRuntime.sel("pathExtension")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property URLByDeletingLastPathComponent
-    val sel = ObjCRuntime.sel("URLByDeletingLastPathComponent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property URLByDeletingPathExtension
-    val sel = ObjCRuntime.sel("URLByDeletingPathExtension")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property URLByStandardizingPath
-    val sel = ObjCRuntime.sel("URLByStandardizingPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property URLByResolvingSymlinksInPath
-    val sel = ObjCRuntime.sel("URLByResolvingSymlinksInPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSURLLoading on NSURL ─────────────────────────────────────────
-
 fun NSURL.resourceDataUsingCache(shouldUseCache: BOOL): MemorySegment {
     val sel = ObjCRuntime.sel("resourceDataUsingCache:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, shouldUseCache) as MemorySegment

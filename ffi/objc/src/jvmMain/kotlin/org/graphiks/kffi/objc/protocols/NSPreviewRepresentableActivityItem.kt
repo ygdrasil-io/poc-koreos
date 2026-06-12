@@ -24,6 +24,5 @@ interface NSPreviewRepresentableActivityItem : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'iconProvider' not implemented")
     
     // @property item
-    // @property title
-    // @property imageProvider
-    // @property iconProvider
+}
+

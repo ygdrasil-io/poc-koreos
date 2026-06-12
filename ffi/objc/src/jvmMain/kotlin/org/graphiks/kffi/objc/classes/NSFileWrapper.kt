@@ -238,10 +238,3 @@ fun NSFileWrapper.setIcon(icon: MemorySegment): Unit {
 }
 
 // @property icon
-    val sel = ObjCRuntime.sel("icon")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setIcon:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

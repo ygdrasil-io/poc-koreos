@@ -325,12 +325,6 @@ open class NSSpellChecker(val ptr: MemorySegment) {
     open fun setLanguage(language: String): BOOL = setLanguage(ObjCRuntime.newNSString(Arena.global(), language))
     
     // @property sharedSpellChecker
-    }
-    
-    // @property sharedSpellCheckerExists
-    }
-    
-    // @property userReplacementsDictionary
     /** @return NSDictionary<NSString *,NSString *> * */
     open fun userReplacementsDictionary(): MemorySegment {
         val sel = ObjCRuntime.sel("userReplacementsDictionary")
@@ -394,29 +388,6 @@ open class NSSpellChecker(val ptr: MemorySegment) {
     }
     
     // @property automaticTextReplacementEnabled
-    }
-    
-    // @property automaticSpellingCorrectionEnabled
-    }
-    
-    // @property automaticQuoteSubstitutionEnabled
-    }
-    
-    // @property automaticDashSubstitutionEnabled
-    }
-    
-    // @property automaticCapitalizationEnabled
-    }
-    
-    // @property automaticPeriodSubstitutionEnabled
-    }
-    
-    // @property automaticTextCompletionEnabled
-    }
-    
-    // @property automaticInlinePredictionEnabled
-    }
-    
 }
 
 // ── Category: NSDeprecated on NSSpellChecker ─────────────────────────────────────────

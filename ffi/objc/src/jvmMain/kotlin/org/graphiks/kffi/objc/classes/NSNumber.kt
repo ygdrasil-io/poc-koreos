@@ -328,7 +328,3 @@ fun NSNumber.decimalValue(): NSDecimal {
 }
 
 // @property decimalValue
-    val sel = ObjCRuntime.sel("decimalValue")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"), ptr, sel) as NSDecimal
-}
-

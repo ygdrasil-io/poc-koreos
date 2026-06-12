@@ -13,3 +13,5 @@ interface NSTextContent {
     fun setContentType(contentType: NSTextContentType)
     
     // @property contentType
+}
+

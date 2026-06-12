@@ -683,21 +683,12 @@ open class NSDocument(val ptr: MemorySegment) {
     }
     
     // @property autosavesInPlace
-    }
-    
-    // @property preservesVersions
-    }
-    
-    // @property browsingVersions
     open fun isBrowsingVersions(): BOOL {
         val sel = ObjCRuntime.sel("isBrowsingVersions")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
     }
     
     // @property autosavesDrafts
-    }
-    
-    // @property autosavingFileType
     open fun autosavingFileType(): MemorySegment {
         val sel = ObjCRuntime.sel("autosavingFileType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -824,16 +815,7 @@ open class NSDocument(val ptr: MemorySegment) {
     
     // @property readableTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property writableTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property usesUbiquitousStorage
-    }
-    
-    // @property presentedItemURL
     open fun presentedItemURL(): MemorySegment {
         val sel = ObjCRuntime.sel("presentedItemURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -961,12 +943,6 @@ fun NSDocument.shouldRunSavePanelWithAccessoryView(): BOOL {
 }
 
 // @property shouldRunSavePanelWithAccessoryView
-    val sel = ObjCRuntime.sel("shouldRunSavePanelWithAccessoryView")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSUserActivity on NSDocument ─────────────────────────────────────────
-
 fun NSDocument.updateUserActivityState(activity: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("updateUserActivityState:")
     ObjCRuntime.msgSend(null, ptr, sel, activity)
@@ -983,15 +959,6 @@ fun NSDocument.setUserActivity(userActivity: MemorySegment): Unit {
 }
 
 // @property userActivity
-    val sel = ObjCRuntime.sel("userActivity")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setUserActivity:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSScripting on NSDocument ─────────────────────────────────────────
-
 fun NSDocument.handleSaveScriptCommand(command: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("handleSaveScriptCommand:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, command) as MemorySegment
@@ -1023,20 +990,6 @@ fun NSDocument.objectSpecifier(): MemorySegment {
 }
 
 // @property lastComponentOfFileName
-    val sel = ObjCRuntime.sel("lastComponentOfFileName")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setLastComponentOfFileName:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property objectSpecifier
-    val sel = ObjCRuntime.sel("objectSpecifier")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSRestorableState on NSDocument ─────────────────────────────────────────
-
 fun NSDocument.restoreDocumentWindowWithIdentifier_state_completionHandler(identifier: NSUserInterfaceItemIdentifier, state: MemorySegment, completionHandler: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("restoreDocumentWindowWithIdentifier:state:completionHandler:")
     ObjCRuntime.msgSend(null, ptr, sel, identifier, state, completionHandler)

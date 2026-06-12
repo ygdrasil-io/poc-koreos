@@ -40,7 +40,5 @@ open class NSNotificationQueue(val ptr: MemorySegment) {
     }
     
     // @property defaultQueue
-    }
-    
 }
 

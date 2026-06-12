@@ -55,12 +55,6 @@ open class NSRunLoop(val ptr: MemorySegment) {
     }
     
     // @property currentRunLoop
-    }
-    
-    // @property mainRunLoop
-    }
-    
-    // @property currentMode
     open fun currentMode(): NSRunLoopMode {
         val sel = ObjCRuntime.sel("currentMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRunLoopMode

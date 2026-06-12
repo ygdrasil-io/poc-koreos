@@ -103,21 +103,6 @@ fun NSDate_timeIntervalSinceReferenceDate(): NSTimeInterval {
 }
 
 // @property timeIntervalSinceNow
-    val sel = ObjCRuntime.sel("timeIntervalSinceNow")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
-}
-
-// @property timeIntervalSince1970
-    val sel = ObjCRuntime.sel("timeIntervalSince1970")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
-}
-
-// @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property timeIntervalSinceReferenceDate
 fun NSDate.timeIntervalSinceReferenceDate(): NSTimeInterval {
     val sel = ObjCRuntime.sel("timeIntervalSinceReferenceDate")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval

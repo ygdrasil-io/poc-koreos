@@ -168,53 +168,6 @@ fun NSTextStorage.setForegroundColor(foregroundColor: MemorySegment): Unit {
 
 // @property attributeRuns
 /** @return NSArray<NSTextStorage *> * */
-    val sel = ObjCRuntime.sel("attributeRuns")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setAttributeRuns:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property paragraphs
 /** @return NSArray<NSTextStorage *> * */
-    val sel = ObjCRuntime.sel("paragraphs")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setParagraphs:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property words
 /** @return NSArray<NSTextStorage *> * */
-    val sel = ObjCRuntime.sel("words")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setWords:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property characters
 /** @return NSArray<NSTextStorage *> * */
-    val sel = ObjCRuntime.sel("characters")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setCharacters:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property font
-    val sel = ObjCRuntime.sel("font")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setFont:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property foregroundColor
-    val sel = ObjCRuntime.sel("foregroundColor")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setForegroundColor:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

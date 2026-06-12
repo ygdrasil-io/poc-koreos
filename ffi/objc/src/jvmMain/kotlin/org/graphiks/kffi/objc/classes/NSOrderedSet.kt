@@ -214,40 +214,9 @@ fun NSOrderedSet.description(): MemorySegment {
 }
 
 // @property firstObject
-    val sel = ObjCRuntime.sel("firstObject")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property lastObject
-    val sel = ObjCRuntime.sel("lastObject")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property reversedOrderedSet
 /** @return NSOrderedSet<ObjectType> * */
-    val sel = ObjCRuntime.sel("reversedOrderedSet")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property array
 /** @return NSArray<ObjectType> * */
-    val sel = ObjCRuntime.sel("array")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property set
 /** @return NSSet<ObjectType> * */
-    val sel = ObjCRuntime.sel("set")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSOrderedSetCreation on NSOrderedSet ─────────────────────────────────────────
-
 fun NSOrderedSet.initWithObject(`object`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithObject:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `object`) as MemorySegment

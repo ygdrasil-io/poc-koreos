@@ -25,9 +25,6 @@ open class NSMediaLibraryBrowserController(val ptr: MemorySegment) {
     }
     
     // @property sharedMediaLibraryBrowserController
-    }
-    
-    // @property visible
     open fun isVisible(): BOOL {
         val sel = ObjCRuntime.sel("isVisible")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

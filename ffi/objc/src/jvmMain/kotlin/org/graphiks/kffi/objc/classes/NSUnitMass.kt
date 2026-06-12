@@ -96,52 +96,5 @@ open class NSUnitMass(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kilograms
-    }
-    
-    // @property grams
-    }
-    
-    // @property decigrams
-    }
-    
-    // @property centigrams
-    }
-    
-    // @property milligrams
-    }
-    
-    // @property micrograms
-    }
-    
-    // @property nanograms
-    }
-    
-    // @property picograms
-    }
-    
-    // @property ounces
-    }
-    
-    // @property poundsMass
-    }
-    
-    // @property stones
-    }
-    
-    // @property metricTons
-    }
-    
-    // @property shortTons
-    }
-    
-    // @property carats
-    }
-    
-    // @property ouncesTroy
-    }
-    
-    // @property slugs
-    }
-    
 }
 

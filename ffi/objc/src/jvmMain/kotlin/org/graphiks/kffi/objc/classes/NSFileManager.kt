@@ -510,9 +510,6 @@ open class NSFileManager(val ptr: MemorySegment) {
     open fun containerURLForSecurityApplicationGroupIdentifier(groupIdentifier: String): MemorySegment = containerURLForSecurityApplicationGroupIdentifier(ObjCRuntime.newNSString(Arena.global(), groupIdentifier))
     
     // @property defaultManager
-    }
-    
-    // @property delegate
     /** @return id<NSFileManagerDelegate> */
     open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
@@ -559,18 +556,6 @@ fun NSFileManager.temporaryDirectory(): MemorySegment {
 }
 
 // @property homeDirectoryForCurrentUser
-    val sel = ObjCRuntime.sel("homeDirectoryForCurrentUser")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property temporaryDirectory
-    val sel = ObjCRuntime.sel("temporaryDirectory")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSWorkspaceAuthorization on NSFileManager ─────────────────────────────────────────
-
-// Class<*> method: +[NSFileManager fileManagerWithAuthorization:]
 fun NSFileManager_fileManagerWithAuthorization(authorization: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileManagerWithAuthorization:")
     val cls = ObjCRuntime.getClass("NSFileManager")

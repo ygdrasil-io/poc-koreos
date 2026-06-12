@@ -179,15 +179,6 @@ fun NSItemProvider.setPreviewImageHandler(previewImageHandler: MemorySegment): U
 }
 
 // @property previewImageHandler
-    val sel = ObjCRuntime.sel("previewImageHandler")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setPreviewImageHandler:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSCloudKitSharing on NSItemProvider ─────────────────────────────────────────
-
 fun NSItemProvider.registerCloudKitShareWithPreparationHandler(preparationHandler: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("registerCloudKitShareWithPreparationHandler:")
     ObjCRuntime.msgSend(null, ptr, sel, preparationHandler)
@@ -216,17 +207,3 @@ fun NSItemProvider.preferredPresentationSize(): NSSize {
 }
 
 // @property sourceFrame
-    val sel = ObjCRuntime.sel("sourceFrame")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
-}
-
-// @property containerFrame
-    val sel = ObjCRuntime.sel("containerFrame")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
-}
-
-// @property preferredPresentationSize
-    val sel = ObjCRuntime.sel("preferredPresentationSize")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
-}
-

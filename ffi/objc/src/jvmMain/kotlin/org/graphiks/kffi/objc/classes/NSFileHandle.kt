@@ -237,23 +237,6 @@ fun NSFileHandle.setWriteabilityHandler(writeabilityHandler: MemorySegment): Uni
 }
 
 // @property readabilityHandler
-    val sel = ObjCRuntime.sel("readabilityHandler")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setReadabilityHandler:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property writeabilityHandler
-    val sel = ObjCRuntime.sel("writeabilityHandler")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setWriteabilityHandler:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSFileHandlePlatformSpecific on NSFileHandle ─────────────────────────────────────────
-
 fun NSFileHandle.initWithFileDescriptor(fd: Int): MemorySegment {
     val sel = ObjCRuntime.sel("initWithFileDescriptor:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fd) as MemorySegment
@@ -265,12 +248,6 @@ fun NSFileHandle.fileDescriptor(): Int {
 }
 
 // @property fileDescriptor
-    val sel = ObjCRuntime.sel("fileDescriptor")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
-}
-
-// ── Category:  on NSFileHandle ─────────────────────────────────────────
-
 fun NSFileHandle.readDataToEndOfFile(): MemorySegment {
     val sel = ObjCRuntime.sel("readDataToEndOfFile")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -317,7 +294,3 @@ fun NSFileHandle.closeFile(): Unit {
 }
 
 // @property offsetInFile
-    val sel = ObjCRuntime.sel("offsetInFile")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Any
-}
-

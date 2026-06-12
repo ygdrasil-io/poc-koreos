@@ -221,18 +221,3 @@ fun NSTask_launchedTaskWithLaunchPath_arguments(path: MemorySegment, arguments: 
 }
 
 // @property launchPath
-    val sel = ObjCRuntime.sel("launchPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setLaunchPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property currentDirectoryPath
-    val sel = ObjCRuntime.sel("currentDirectoryPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setCurrentDirectoryPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

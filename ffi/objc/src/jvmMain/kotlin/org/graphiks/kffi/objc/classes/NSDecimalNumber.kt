@@ -187,26 +187,7 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     }
     
     // @property zero
-    }
-    
-    // @property one
-    }
-    
-    // @property minimumDecimalNumber
-    }
-    
-    // @property maximumDecimalNumber
-    }
-    
-    // @property notANumber
-    }
-    
-    // @property defaultBehavior
     /** @return id<NSDecimalNumberBehaviors> */
-    }
-    }
-    
-    // @property objCType
     fun objCType(): MemorySegment {
         val sel = ObjCRuntime.sel("objCType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

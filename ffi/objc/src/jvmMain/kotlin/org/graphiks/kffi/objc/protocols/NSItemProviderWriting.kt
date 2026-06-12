@@ -14,6 +14,8 @@ interface NSItemProviderWriting : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'itemProviderVisibilityForRepresentationWithTypeIdentifier:' not implemented")
     
     // @optional
+        throw UnsupportedOperationException("Optional ObjC method 'itemProviderVisibilityForRepresentationWithTypeIdentifier:' not implemented")
+    
     fun loadDataWithTypeIdentifier_forItemProviderCompletionHandler(typeIdentifier: MemorySegment, completionHandler: MemorySegment): MemorySegment
     
     /** @return NSArray<NSString *> * */
@@ -21,7 +23,10 @@ interface NSItemProviderWriting : NSObject {
     
     /** @return NSArray<NSString *> * */
     // @optional
+        throw UnsupportedOperationException("Optional ObjC method 'writableTypeIdentifiersForItemProvider' not implemented")
+    
     // @property writableTypeIdentifiersForItemProvider
     /** @return NSArray<NSString *> * */
-    // @property writableTypeIdentifiersForItemProvider
     /** @return NSArray<NSString *> * */
+}
+

@@ -64,11 +64,7 @@ open class NSUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    }
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    }
-    
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     /** Convenience overload — [String] parameters and [String] return type. */

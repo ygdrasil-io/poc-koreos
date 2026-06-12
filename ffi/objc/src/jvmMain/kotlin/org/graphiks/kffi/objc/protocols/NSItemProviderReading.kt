@@ -16,3 +16,5 @@ interface NSItemProviderReading : NSObject {
     
     // @property readableTypeIdentifiersForItemProvider
     /** @return NSArray<NSString *> * */
+}
+

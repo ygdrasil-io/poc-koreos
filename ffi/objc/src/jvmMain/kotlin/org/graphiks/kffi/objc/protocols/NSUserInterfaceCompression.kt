@@ -15,3 +15,5 @@ interface NSUserInterfaceCompression {
     fun activeCompressionOptions(): MemorySegment
     
     // @property activeCompressionOptions
+}
+

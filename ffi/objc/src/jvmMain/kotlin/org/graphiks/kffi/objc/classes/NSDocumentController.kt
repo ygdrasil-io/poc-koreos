@@ -217,9 +217,6 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     // @property sharedDocumentController
-    }
-    
-    // @property documents
     /** @return NSArray<__kindof NSDocument *> * */
     open fun documents(): MemorySegment {
         val sel = ObjCRuntime.sel("documents")

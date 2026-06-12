@@ -56,9 +56,6 @@ open class NSTokenField(ptr: MemorySegment) : NSTextField(ptr) {
     }
     
     // @property defaultCompletionDelay
-    }
-    
-    // @property tokenizingCharacterSet
     fun tokenizingCharacterSet(): MemorySegment {
         val sel = ObjCRuntime.sel("tokenizingCharacterSet")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -69,7 +66,5 @@ open class NSTokenField(ptr: MemorySegment) : NSTextField(ptr) {
     }
     
     // @property defaultTokenizingCharacterSet
-    }
-    
 }
 

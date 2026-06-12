@@ -49,14 +49,5 @@ interface NSDraggingInfo : NSObject {
     fun springLoadingHighlight(): NSSpringLoadingHighlight
     
     // @property draggingDestinationWindow
-    // @property draggingSourceOperationMask
-    // @property draggingLocation
-    // @property draggedImageLocation
-    // @property draggedImage
-    // @property draggingPasteboard
-    // @property draggingSource
-    // @property draggingSequenceNumber
-    // @property draggingFormation
-    // @property animatesToDestination
-    // @property numberOfValidItemsForDrop
-    // @property springLoadingHighlight
+}
+

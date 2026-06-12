@@ -40,9 +40,6 @@ open class NSAnimationContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    }
-    
-    // @property duration
     open fun duration(): NSTimeInterval {
         val sel = ObjCRuntime.sel("duration")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval

@@ -162,9 +162,6 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property modifierFlags
-    }
-    
-    // @property timestamp
     open fun timestamp(): NSTimeInterval {
         val sel = ObjCRuntime.sel("timestamp")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
@@ -345,10 +342,6 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property mouseCoalescingEnabled
-    }
-    }
-    
-    // @property magnification
     open fun magnification(): CGFloat {
         val sel = ObjCRuntime.sel("magnification")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
@@ -499,22 +492,5 @@ open class NSEvent(val ptr: MemorySegment) {
     }
     
     // @property swipeTrackingFromScrollEventsEnabled
-    }
-    
-    // @property mouseLocation
-    }
-    
-    // @property pressedMouseButtons
-    }
-    
-    // @property doubleClickInterval
-    }
-    
-    // @property keyRepeatDelay
-    }
-    
-    // @property keyRepeatInterval
-    }
-    
 }
 

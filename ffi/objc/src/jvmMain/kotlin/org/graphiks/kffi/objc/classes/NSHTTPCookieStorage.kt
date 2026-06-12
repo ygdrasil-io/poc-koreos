@@ -60,9 +60,6 @@ open class NSHTTPCookieStorage(val ptr: MemorySegment) {
     }
     
     // @property sharedHTTPCookieStorage
-    }
-    
-    // @property cookies
     /** @return NSArray<NSHTTPCookie *> * */
     open fun cookies(): MemorySegment {
         val sel = ObjCRuntime.sel("cookies")

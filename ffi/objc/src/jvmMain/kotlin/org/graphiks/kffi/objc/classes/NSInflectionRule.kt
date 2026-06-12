@@ -26,8 +26,6 @@ open class NSInflectionRule(val ptr: MemorySegment) {
     }
     
     // @property automaticRule
-    }
-    
 }
 
 // ── Category: NSInflectionAvailability on NSInflectionRule ─────────────────────────────────────────

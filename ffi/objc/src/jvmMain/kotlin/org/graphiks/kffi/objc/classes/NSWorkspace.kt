@@ -206,9 +206,6 @@ open class NSWorkspace(val ptr: MemorySegment) {
     }
     
     // @property sharedWorkspace
-    }
-    
-    // @property notificationCenter
     open fun notificationCenter(): MemorySegment {
         val sel = ObjCRuntime.sel("notificationCenter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -467,32 +464,6 @@ fun NSWorkspace.accessibilityDisplayShouldInvertColors(): BOOL {
 }
 
 // @property accessibilityDisplayShouldIncreaseContrast
-    val sel = ObjCRuntime.sel("accessibilityDisplayShouldIncreaseContrast")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property accessibilityDisplayShouldDifferentiateWithoutColor
-    val sel = ObjCRuntime.sel("accessibilityDisplayShouldDifferentiateWithoutColor")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property accessibilityDisplayShouldReduceTransparency
-    val sel = ObjCRuntime.sel("accessibilityDisplayShouldReduceTransparency")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property accessibilityDisplayShouldReduceMotion
-    val sel = ObjCRuntime.sel("accessibilityDisplayShouldReduceMotion")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property accessibilityDisplayShouldInvertColors
-    val sel = ObjCRuntime.sel("accessibilityDisplayShouldInvertColors")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSWorkspaceAccessibility on NSWorkspace ─────────────────────────────────────────
-
 fun NSWorkspace.isVoiceOverEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isVoiceOverEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
@@ -504,17 +475,6 @@ fun NSWorkspace.isSwitchControlEnabled(): BOOL {
 }
 
 // @property voiceOverEnabled
-    val sel = ObjCRuntime.sel("isVoiceOverEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property switchControlEnabled
-    val sel = ObjCRuntime.sel("isSwitchControlEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSWorkspaceRunningApplications on NSWorkspace ─────────────────────────────────────────
-
 /** @return NSArray<NSRunningApplication *> * */
 fun NSWorkspace.runningApplications(): MemorySegment {
     val sel = ObjCRuntime.sel("runningApplications")
@@ -523,7 +483,3 @@ fun NSWorkspace.runningApplications(): MemorySegment {
 
 // @property runningApplications
 /** @return NSArray<NSRunningApplication *> * */
-    val sel = ObjCRuntime.sel("runningApplications")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-

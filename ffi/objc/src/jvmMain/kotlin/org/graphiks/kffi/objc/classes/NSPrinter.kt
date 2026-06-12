@@ -47,13 +47,7 @@ open class NSPrinter(val ptr: MemorySegment) {
     
     // @property printerNames
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property printerTypes
     /** @return NSArray<NSPrinterTypeName> * */
-    }
-    
-    // @property name
     open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

@@ -328,38 +328,7 @@ fun NSCoder.error(): MemorySegment {
 }
 
 // @property systemVersion
-    val sel = ObjCRuntime.sel("systemVersion")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Any
-}
-
-// @property allowsKeyedCoding
-    val sel = ObjCRuntime.sel("allowsKeyedCoding")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property requiresSecureCoding
-    val sel = ObjCRuntime.sel("requiresSecureCoding")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property allowedClasses
 /** @return NSSet<Class<*>> * */
-    val sel = ObjCRuntime.sel("allowedClasses")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property decodingFailurePolicy
-    val sel = ObjCRuntime.sel("decodingFailurePolicy")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDecodingFailurePolicy
-}
-
-// @property error
-    val sel = ObjCRuntime.sel("error")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSTypedstreamCompatibility on NSCoder ─────────────────────────────────────────
-
 fun NSCoder.encodeNXObject(`object`: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("encodeNXObject:")
     ObjCRuntime.msgSend(null, ptr, sel, `object`)

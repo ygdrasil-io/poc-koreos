@@ -190,15 +190,6 @@ fun NSGestureRecognizer.setAllowedTouchTypes(allowedTouchTypes: NSTouchTypeMask)
 }
 
 // @property allowedTouchTypes
-    val sel = ObjCRuntime.sel("allowedTouchTypes")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchTypeMask
-}
-    val sel = ObjCRuntime.sel("setAllowedTouchTypes:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSSubclassUse on NSGestureRecognizer ─────────────────────────────────────────
-
 fun NSGestureRecognizer.reset(): Unit {
     val sel = ObjCRuntime.sel("reset")
     ObjCRuntime.msgSend(null, ptr, sel)
@@ -340,10 +331,3 @@ fun NSGestureRecognizer.setState(state: NSGestureRecognizerState): Unit {
 }
 
 // @property state
-    val sel = ObjCRuntime.sel("state")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGestureRecognizerState
-}
-    val sel = ObjCRuntime.sel("setState:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

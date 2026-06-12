@@ -86,13 +86,7 @@ open class NSFontCollection(val ptr: MemorySegment) {
     open fun matchingDescriptorsForFamily_options(family: String, options: MemorySegment): MemorySegment = matchingDescriptorsForFamily_options(ObjCRuntime.newNSString(Arena.global(), family), options)
     
     // @property fontCollectionWithAllAvailableDescriptors
-    }
-    
-    // @property allFontCollectionNames
     /** @return NSArray<NSFontCollectionName> * */
-    }
-    
-    // @property queryDescriptors
     /** @return NSArray<NSFontDescriptor *> * */
     open fun queryDescriptors(): MemorySegment {
         val sel = ObjCRuntime.sel("queryDescriptors")

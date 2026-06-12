@@ -122,7 +122,3 @@ fun NSURLProtocol_canInitWithTask(task: MemorySegment): BOOL {
 }
 
 // @property task
-    val sel = ObjCRuntime.sel("task")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-

@@ -58,12 +58,6 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
     }
     
     // @property branchImage
-    }
-    
-    // @property highlightedBranchImage
-    }
-    
-    // @property leaf
     fun isLeaf(): BOOL {
         val sel = ObjCRuntime.sel("isLeaf")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

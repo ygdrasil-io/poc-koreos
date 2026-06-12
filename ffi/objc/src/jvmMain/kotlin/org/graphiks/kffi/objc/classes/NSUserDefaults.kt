@@ -301,9 +301,6 @@ open class NSUserDefaults(val ptr: MemorySegment) {
     open fun objectIsForcedForKey_inDomain(key: String, domain: String): BOOL = objectIsForcedForKey_inDomain(ObjCRuntime.newNSString(Arena.global(), key), ObjCRuntime.newNSString(Arena.global(), domain))
     
     // @property standardUserDefaults
-    }
-    
-    // @property volatileDomainNames
     /** @return NSArray<NSString *> * */
     open fun volatileDomainNames(): MemorySegment {
         val sel = ObjCRuntime.sel("volatileDomainNames")

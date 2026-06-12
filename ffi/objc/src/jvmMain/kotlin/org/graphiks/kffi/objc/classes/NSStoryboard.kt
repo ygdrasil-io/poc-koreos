@@ -45,7 +45,5 @@ open class NSStoryboard(val ptr: MemorySegment) {
     }
     
     // @property mainStoryboard
-    }
-    
 }
 

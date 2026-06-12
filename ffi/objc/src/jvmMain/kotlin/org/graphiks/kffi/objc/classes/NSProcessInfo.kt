@@ -64,9 +64,6 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     open fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
     // @property processInfo
-    }
-    
-    // @property environment
     /** @return NSDictionary<NSString *,NSString *> * */
     open fun environment(): MemorySegment {
         val sel = ObjCRuntime.sel("environment")
@@ -214,41 +211,18 @@ fun NSProcessInfo.fullUserName(): MemorySegment {
 }
 
 // @property userName
-    val sel = ObjCRuntime.sel("userName")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property fullUserName
-    val sel = ObjCRuntime.sel("fullUserName")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSProcessInfoThermalState on NSProcessInfo ─────────────────────────────────────────
-
 fun NSProcessInfo.thermalState(): NSProcessInfoThermalState {
     val sel = ObjCRuntime.sel("thermalState")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProcessInfoThermalState
 }
 
 // @property thermalState
-    val sel = ObjCRuntime.sel("thermalState")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProcessInfoThermalState
-}
-
-// ── Category: NSProcessInfoPowerState on NSProcessInfo ─────────────────────────────────────────
-
 fun NSProcessInfo.isLowPowerModeEnabled(): BOOL {
     val sel = ObjCRuntime.sel("isLowPowerModeEnabled")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
 }
 
 // @property lowPowerModeEnabled
-    val sel = ObjCRuntime.sel("isLowPowerModeEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSProcessInfoPlatform on NSProcessInfo ─────────────────────────────────────────
-
 fun NSProcessInfo.isMacCatalystApp(): BOOL {
     val sel = ObjCRuntime.sel("isMacCatalystApp")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
@@ -265,17 +239,3 @@ fun NSProcessInfo.isiOSAppOnVision(): BOOL {
 }
 
 // @property macCatalystApp
-    val sel = ObjCRuntime.sel("isMacCatalystApp")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property iOSAppOnMac
-    val sel = ObjCRuntime.sel("isiOSAppOnMac")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property iOSAppOnVision
-    val sel = ObjCRuntime.sel("isiOSAppOnVision")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-

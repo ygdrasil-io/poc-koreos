@@ -235,7 +235,5 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     
     // @property linkRenderingAttributes
     /** @return NSDictionary<NSAttributedStringKey,id> * */
-    }
-    
 }
 

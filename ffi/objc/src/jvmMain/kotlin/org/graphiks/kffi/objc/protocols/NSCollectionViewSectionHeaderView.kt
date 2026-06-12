@@ -18,3 +18,5 @@ interface NSCollectionViewSectionHeaderView : NSCollectionViewElement {
         throw UnsupportedOperationException("Optional ObjC method 'setSectionCollapseButton:' not implemented")
     
     // @property sectionCollapseButton
+}
+

@@ -38,12 +38,5 @@ interface NSCollectionLayoutVisibleItem : NSObject {
     fun representedElementKind(): MemorySegment
     
     // @property alpha
-    // @property zIndex
-    // @property hidden
-    // @property center
-    // @property name
-    // @property indexPath
-    // @property frame
-    // @property bounds
-    // @property representedElementCategory
-    // @property representedElementKind
+}
+

@@ -45,9 +45,6 @@ open class NSUserNotificationCenter(val ptr: MemorySegment) {
     }
     
     // @property defaultUserNotificationCenter
-    }
-    
-    // @property delegate
     /** @return id<NSUserNotificationCenterDelegate> */
     open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")

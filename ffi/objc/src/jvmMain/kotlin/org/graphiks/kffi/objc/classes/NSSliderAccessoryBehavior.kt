@@ -46,13 +46,5 @@ open class NSSliderAccessoryBehavior(val ptr: MemorySegment) {
     }
     
     // @property automaticBehavior
-    }
-    
-    // @property valueStepBehavior
-    }
-    
-    // @property valueResetBehavior
-    }
-    
 }
 

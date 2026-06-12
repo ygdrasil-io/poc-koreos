@@ -285,24 +285,6 @@ fun NSTextField.setAllowsCharacterPickerTouchBarItem(allowsCharacterPickerTouchB
 }
 
 // @property automaticTextCompletionEnabled
-    val sel = ObjCRuntime.sel("isAutomaticTextCompletionEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAutomaticTextCompletionEnabled:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property allowsCharacterPickerTouchBarItem
-    val sel = ObjCRuntime.sel("allowsCharacterPickerTouchBarItem")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAllowsCharacterPickerTouchBarItem:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSTextFieldConvenience on NSTextField ─────────────────────────────────────────
-
-// Class<*> method: +[NSTextField labelWithString:]
 fun NSTextField_labelWithString(stringValue: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("labelWithString:")
     val cls = ObjCRuntime.getClass("NSTextField")
@@ -353,23 +335,6 @@ fun NSTextField.setImportsGraphics(importsGraphics: BOOL): Unit {
 }
 
 // @property allowsEditingTextAttributes
-    val sel = ObjCRuntime.sel("allowsEditingTextAttributes")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAllowsEditingTextAttributes:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property importsGraphics
-    val sel = ObjCRuntime.sel("importsGraphics")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setImportsGraphics:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSDeprecated on NSTextField ─────────────────────────────────────────
-
 fun NSTextField.setTitleWithMnemonic(stringWithAmpersand: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleWithMnemonic:")
     ObjCRuntime.msgSend(null, ptr, sel, stringWithAmpersand)

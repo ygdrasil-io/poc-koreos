@@ -30,9 +30,6 @@ open class NSStatusBar(val ptr: MemorySegment) {
     }
     
     // @property systemStatusBar
-    }
-    
-    // @property vertical
     open fun isVertical(): BOOL {
         val sel = ObjCRuntime.sel("isVertical")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

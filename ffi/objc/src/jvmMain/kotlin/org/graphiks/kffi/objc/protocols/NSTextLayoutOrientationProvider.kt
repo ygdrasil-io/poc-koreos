@@ -11,3 +11,5 @@ interface NSTextLayoutOrientationProvider {
     fun layoutOrientation(): NSTextLayoutOrientation
     
     // @property layoutOrientation
+}
+

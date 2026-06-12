@@ -41,10 +41,5 @@ interface CAMediaTiming {
     fun setFillMode(fillMode: CAMediaTimingFillMode)
     
     // @property beginTime
-    // @property duration
-    // @property speed
-    // @property timeOffset
-    // @property repeatCount
-    // @property repeatDuration
-    // @property autoreverses
-    // @property fillMode
+}
+

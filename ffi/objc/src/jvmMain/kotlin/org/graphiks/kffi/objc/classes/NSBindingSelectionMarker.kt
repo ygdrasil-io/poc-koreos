@@ -46,13 +46,5 @@ open class NSBindingSelectionMarker(val ptr: MemorySegment) {
     }
     
     // @property multipleValuesSelectionMarker
-    }
-    
-    // @property noSelectionMarker
-    }
-    
-    // @property notApplicableSelectionMarker
-    }
-    
 }
 

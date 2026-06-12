@@ -102,9 +102,6 @@ open class NSSound(val ptr: MemorySegment) {
     
     // @property soundUnfilteredTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property playing
     open fun isPlaying(): BOOL {
         val sel = ObjCRuntime.sel("isPlaying")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

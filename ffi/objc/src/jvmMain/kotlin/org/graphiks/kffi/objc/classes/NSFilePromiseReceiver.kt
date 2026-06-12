@@ -28,9 +28,6 @@ open class NSFilePromiseReceiver(val ptr: MemorySegment) {
     
     // @property readableDraggedTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property fileTypes
     /** @return NSArray<NSString *> * */
     open fun fileTypes(): MemorySegment {
         val sel = ObjCRuntime.sel("fileTypes")

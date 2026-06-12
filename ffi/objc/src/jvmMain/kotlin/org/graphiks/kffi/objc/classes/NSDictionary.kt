@@ -163,28 +163,7 @@ fun NSDictionary.descriptionInStringsFileFormat(): MemorySegment {
 
 // @property allKeys
 /** @return NSArray<KeyType> * */
-    val sel = ObjCRuntime.sel("allKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property allValues
 /** @return NSArray<ObjectType> * */
-    val sel = ObjCRuntime.sel("allValues")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property descriptionInStringsFileFormat
-    val sel = ObjCRuntime.sel("descriptionInStringsFileFormat")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSDeprecated on NSDictionary ─────────────────────────────────────────
-
 fun NSDictionary.getObjects_andKeys(objects: MemorySegment, keys: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("getObjects:andKeys:")
     ObjCRuntime.msgSend(null, ptr, sel, objects, keys)

@@ -20,8 +20,6 @@ open class NSATSTypesetter(ptr: MemorySegment) : NSTypesetter(ptr) {
     }
     
     // @property sharedTypesetter
-    }
-    
 }
 
 // ── Category: NSPantherCompatibility on NSATSTypesetter ─────────────────────────────────────────
@@ -159,75 +157,6 @@ fun NSATSTypesetter.currentTextContainer(): MemorySegment {
 }
 
 // @property usesFontLeading
-    val sel = ObjCRuntime.sel("usesFontLeading")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setUsesFontLeading:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property typesetterBehavior
-    val sel = ObjCRuntime.sel("typesetterBehavior")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTypesetterBehavior
-}
-    val sel = ObjCRuntime.sel("setTypesetterBehavior:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property hyphenationFactor
-    val sel = ObjCRuntime.sel("hyphenationFactor")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
-}
-    val sel = ObjCRuntime.sel("setHyphenationFactor:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property lineFragmentPadding
-    val sel = ObjCRuntime.sel("lineFragmentPadding")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
-}
-    val sel = ObjCRuntime.sel("setLineFragmentPadding:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property bidiProcessingEnabled
-    val sel = ObjCRuntime.sel("bidiProcessingEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setBidiProcessingEnabled:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property attributedString
-    val sel = ObjCRuntime.sel("attributedString")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setAttributedString:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property paragraphGlyphRange
-    val sel = ObjCRuntime.sel("paragraphGlyphRange")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
-}
-
-// @property paragraphSeparatorGlyphRange
-    val sel = ObjCRuntime.sel("paragraphSeparatorGlyphRange")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
-}
-
-// @property layoutManager
-    val sel = ObjCRuntime.sel("layoutManager")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property currentTextContainer
-    val sel = ObjCRuntime.sel("currentTextContainer")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSLayoutPhaseInterface on NSATSTypesetter ─────────────────────────────────────────
-
 fun NSATSTypesetter.willSetLineFragmentRect_forGlyphRange_usedRect_baselineOffset(lineRect: MemorySegment, glyphRange: NSRange, usedRect: MemorySegment, baselineOffset: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("willSetLineFragmentRect:forGlyphRange:usedRect:baselineOffset:")
     ObjCRuntime.msgSend(null, ptr, sel, lineRect, glyphRange, usedRect, baselineOffset)

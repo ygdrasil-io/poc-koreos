@@ -164,14 +164,6 @@ open class NSSpeechSynthesizer(val ptr: MemorySegment) {
     }
     
     // @property anyApplicationSpeaking
-    }
-    
-    // @property defaultVoice
-    }
-    
-    // @property availableVoices
     /** @return NSArray<NSSpeechSynthesizerVoiceName> * */
-    }
-    
 }
 

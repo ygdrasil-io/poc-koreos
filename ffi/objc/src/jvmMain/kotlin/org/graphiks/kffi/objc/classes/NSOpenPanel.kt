@@ -111,15 +111,6 @@ fun NSOpenPanel.setShowsContentTypes(showsContentTypes: BOOL): Unit {
 }
 
 // @property showsContentTypes
-    val sel = ObjCRuntime.sel("showsContentTypes")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setShowsContentTypes:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSDeprecated on NSOpenPanel ─────────────────────────────────────────
-
 fun NSOpenPanel.filenames(): MemorySegment {
     val sel = ObjCRuntime.sel("filenames")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

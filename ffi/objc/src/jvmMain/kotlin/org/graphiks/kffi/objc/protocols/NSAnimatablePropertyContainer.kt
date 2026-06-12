@@ -21,3 +21,5 @@ interface NSAnimatablePropertyContainer {
     
     // @property animations
     /** @return NSDictionary<NSAnimatablePropertyKey,id> * */
+}
+

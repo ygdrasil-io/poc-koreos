@@ -143,12 +143,6 @@ fun NSCollectionViewLayout.invalidationContextClass(): Class<*> {
 }
 
 // @property collectionViewContentSize
-    val sel = ObjCRuntime.sel("collectionViewContentSize")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
-}
-
-// ── Category: NSUpdateSupportHooks on NSCollectionViewLayout ─────────────────────────────────────────
-
 fun NSCollectionViewLayout.prepareForCollectionViewUpdates(updateItems: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("prepareForCollectionViewUpdates:")
     ObjCRuntime.msgSend(null, ptr, sel, updateItems)

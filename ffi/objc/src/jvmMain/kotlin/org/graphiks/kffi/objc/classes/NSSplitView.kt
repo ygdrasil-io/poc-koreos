@@ -143,21 +143,7 @@ fun NSSplitView.arrangedSubviews(): MemorySegment {
 }
 
 // @property arrangesAllSubviews
-    val sel = ObjCRuntime.sel("arrangesAllSubviews")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setArrangesAllSubviews:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property arrangedSubviews
 /** @return NSArray<__kindof NSView *> * */
-    val sel = ObjCRuntime.sel("arrangedSubviews")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSDeprecated on NSSplitView ─────────────────────────────────────────
-
 fun NSSplitView.setIsPaneSplitter(flag: BOOL): Unit {
     val sel = ObjCRuntime.sel("setIsPaneSplitter:")
     ObjCRuntime.msgSend(null, ptr, sel, flag)

@@ -84,25 +84,8 @@ fun NSOrthography_defaultOrthographyForLanguage(language: MemorySegment): Memory
 }
 
 // @property dominantLanguage
-    val sel = ObjCRuntime.sel("dominantLanguage")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property allScripts
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("allScripts")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property allLanguages
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("allLanguages")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSOrthographyCreation on NSOrthography ─────────────────────────────────────────
-
-// Class<*> method: +[NSOrthography orthographyWithDominantScript:languageMap:]
 fun NSOrthography_orthographyWithDominantScript_languageMap(script: MemorySegment, map: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("orthographyWithDominantScript:languageMap:")
     val cls = ObjCRuntime.getClass("NSOrthography")

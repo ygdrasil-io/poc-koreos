@@ -142,51 +142,6 @@ open class NSCharacterSet(val ptr: MemorySegment) {
     }
     
     // @property controlCharacterSet
-    }
-    
-    // @property whitespaceCharacterSet
-    }
-    
-    // @property whitespaceAndNewlineCharacterSet
-    }
-    
-    // @property decimalDigitCharacterSet
-    }
-    
-    // @property letterCharacterSet
-    }
-    
-    // @property lowercaseLetterCharacterSet
-    }
-    
-    // @property uppercaseLetterCharacterSet
-    }
-    
-    // @property nonBaseCharacterSet
-    }
-    
-    // @property alphanumericCharacterSet
-    }
-    
-    // @property decomposableCharacterSet
-    }
-    
-    // @property illegalCharacterSet
-    }
-    
-    // @property punctuationCharacterSet
-    }
-    
-    // @property capitalizedLetterCharacterSet
-    }
-    
-    // @property symbolCharacterSet
-    }
-    
-    // @property newlineCharacterSet
-    }
-    
-    // @property bitmapRepresentation
     open fun bitmapRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("bitmapRepresentation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

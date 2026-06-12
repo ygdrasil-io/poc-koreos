@@ -51,9 +51,6 @@ open class NSURLCredentialStorage(val ptr: MemorySegment) {
     }
     
     // @property sharedCredentialStorage
-    }
-    
-    // @property allCredentials
     /** @return NSDictionary<NSURLProtectionSpace *,NSDictionary<NSString *,NSURLCredential *> *> * */
     open fun allCredentials(): MemorySegment {
         val sel = ObjCRuntime.sel("allCredentials")

@@ -257,35 +257,4 @@ fun NSMutableParagraphStyle.setHeaderLevel(headerLevel: NSInteger): Unit {
 }
 
 // @property alignment
-    val sel = ObjCRuntime.sel("alignment")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
-}
-    val sel = ObjCRuntime.sel("setAlignment:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property tighteningFactorForTruncation
-    val sel = ObjCRuntime.sel("tighteningFactorForTruncation")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
-}
-    val sel = ObjCRuntime.sel("setTighteningFactorForTruncation:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property textBlocks
 /** @return NSArray<__kindof NSTextBlock *> * */
-    val sel = ObjCRuntime.sel("textBlocks")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setTextBlocks:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property headerLevel
-    val sel = ObjCRuntime.sel("headerLevel")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
-}
-    val sel = ObjCRuntime.sel("setHeaderLevel:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

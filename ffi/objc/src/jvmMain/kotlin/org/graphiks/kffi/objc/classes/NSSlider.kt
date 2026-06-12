@@ -116,12 +116,6 @@ fun NSSlider.isVertical(): BOOL {
 }
 
 // @property vertical
-    val sel = ObjCRuntime.sel("isVertical")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSTickMarkSupport on NSSlider ─────────────────────────────────────────
-
 fun NSSlider.tickMarkValueAtIndex(index: NSInteger): Double {
     val sel = ObjCRuntime.sel("tickMarkValueAtIndex:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as Double
@@ -173,32 +167,6 @@ fun NSSlider.setAllowsTickMarkValuesOnly(allowsTickMarkValuesOnly: BOOL): Unit {
 }
 
 // @property numberOfTickMarks
-    val sel = ObjCRuntime.sel("numberOfTickMarks")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
-}
-    val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property tickMarkPosition
-    val sel = ObjCRuntime.sel("tickMarkPosition")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
-}
-    val sel = ObjCRuntime.sel("setTickMarkPosition:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property allowsTickMarkValuesOnly
-    val sel = ObjCRuntime.sel("allowsTickMarkValuesOnly")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAllowsTickMarkValuesOnly:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSSliderConvenience on NSSlider ─────────────────────────────────────────
-
-// Class<*> method: +[NSSlider sliderWithTarget:action:]
 fun NSSlider_sliderWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sliderWithTarget:action:")
     val cls = ObjCRuntime.getClass("NSSlider")

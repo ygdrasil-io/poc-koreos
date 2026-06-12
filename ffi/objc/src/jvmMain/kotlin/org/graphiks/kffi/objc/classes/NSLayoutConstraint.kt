@@ -141,12 +141,3 @@ fun NSLayoutConstraint.setIdentifier(identifier: MemorySegment): Unit {
 }
 
 // @property identifier
-    val sel = ObjCRuntime.sel("identifier")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setIdentifier:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category:  on NSLayoutConstraint ─────────────────────────────────────────
-

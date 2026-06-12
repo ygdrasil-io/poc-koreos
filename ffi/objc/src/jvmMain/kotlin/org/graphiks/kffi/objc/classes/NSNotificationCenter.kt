@@ -56,7 +56,5 @@ open class NSNotificationCenter(val ptr: MemorySegment) {
     }
     
     // @property defaultCenter
-    }
-    
 }
 

@@ -83,9 +83,6 @@ open class NSTextInputContext(val ptr: MemorySegment) {
     }
     
     // @property currentInputContext
-    }
-    
-    // @property client
     /** @return id<NSTextInputClient> */
     open fun client(): MemorySegment {
         val sel = ObjCRuntime.sel("client")

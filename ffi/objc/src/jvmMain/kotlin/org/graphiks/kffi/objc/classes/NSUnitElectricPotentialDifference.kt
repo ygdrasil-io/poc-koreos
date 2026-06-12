@@ -41,19 +41,5 @@ open class NSUnitElectricPotentialDifference(ptr: MemorySegment) : NSDimension(p
     }
     
     // @property megavolts
-    }
-    
-    // @property kilovolts
-    }
-    
-    // @property volts
-    }
-    
-    // @property millivolts
-    }
-    
-    // @property microvolts
-    }
-    
 }
 

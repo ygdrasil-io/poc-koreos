@@ -166,12 +166,6 @@ fun NSScanner_localizedScannerWithString(string: MemorySegment): MemorySegment {
 }
 
 // @property atEnd
-    val sel = ObjCRuntime.sel("isAtEnd")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSDecimalNumberScanning on NSScanner ─────────────────────────────────────────
-
 fun NSScanner.scanDecimal(dcm: MemorySegment): BOOL {
     val sel = ObjCRuntime.sel("scanDecimal:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dcm) as BOOL

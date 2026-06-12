@@ -11,3 +11,5 @@ interface NSAccessibilityColor {
     fun accessibilityName(): MemorySegment
     
     // @property accessibilityName
+}
+

@@ -136,40 +136,5 @@ open class NSColorSpace(val ptr: MemorySegment) {
     open fun localizedNameAsString(): String = ObjCRuntime.toJavaString(localizedName())
     
     // @property sRGBColorSpace
-    }
-    
-    // @property genericGamma22GrayColorSpace
-    }
-    
-    // @property extendedSRGBColorSpace
-    }
-    
-    // @property extendedGenericGamma22GrayColorSpace
-    }
-    
-    // @property displayP3ColorSpace
-    }
-    
-    // @property adobeRGB1998ColorSpace
-    }
-    
-    // @property genericRGBColorSpace
-    }
-    
-    // @property genericGrayColorSpace
-    }
-    
-    // @property genericCMYKColorSpace
-    }
-    
-    // @property deviceRGBColorSpace
-    }
-    
-    // @property deviceGrayColorSpace
-    }
-    
-    // @property deviceCMYKColorSpace
-    }
-    
 }
 

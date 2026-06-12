@@ -21,7 +21,5 @@ open class NSUnitDispersion(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property partsPerMillion
-    }
-    
 }
 

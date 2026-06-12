@@ -57,18 +57,6 @@ open class NSScreen(val ptr: MemorySegment) {
     
     // @property screens
     /** @return NSArray<NSScreen *> * */
-    }
-    
-    // @property mainScreen
-    }
-    
-    // @property deepestScreen
-    }
-    
-    // @property screensHaveSeparateSpaces
-    }
-    
-    // @property depth
     open fun depth(): NSWindowDepth {
         val sel = ObjCRuntime.sel("depth")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowDepth
@@ -164,22 +152,6 @@ fun NSScreen.maximumReferenceExtendedDynamicRangeColorComponentValue(): CGFloat 
 }
 
 // @property maximumExtendedDynamicRangeColorComponentValue
-    val sel = ObjCRuntime.sel("maximumExtendedDynamicRangeColorComponentValue")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
-}
-
-// @property maximumPotentialExtendedDynamicRangeColorComponentValue
-    val sel = ObjCRuntime.sel("maximumPotentialExtendedDynamicRangeColorComponentValue")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
-}
-
-// @property maximumReferenceExtendedDynamicRangeColorComponentValue
-    val sel = ObjCRuntime.sel("maximumReferenceExtendedDynamicRangeColorComponentValue")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
-}
-
-// ── Category: NSDisplayLink on NSScreen ─────────────────────────────────────────
-
 fun NSScreen.displayLinkWithTarget_selector(target: MemorySegment, selector: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("displayLinkWithTarget:selector:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, selector) as MemorySegment

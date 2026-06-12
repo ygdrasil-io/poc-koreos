@@ -187,15 +187,6 @@ open class NSFont(val ptr: MemorySegment) {
     }
     
     // @property systemFontSize
-    }
-    
-    // @property smallSystemFontSize
-    }
-    
-    // @property labelFontSize
-    }
-    
-    // @property fontName
     open fun fontName(): MemorySegment {
         val sel = ObjCRuntime.sel("fontName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -397,23 +388,6 @@ fun NSFont.renderingMode(): NSFontRenderingMode {
 }
 
 // @property printerFont
-    val sel = ObjCRuntime.sel("printerFont")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property screenFont
-    val sel = ObjCRuntime.sel("screenFont")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property renderingMode
-    val sel = ObjCRuntime.sel("renderingMode")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFontRenderingMode
-}
-
-// ── Category: NSFont_TextStyles on NSFont ─────────────────────────────────────────
-
-// Class<*> method: +[NSFont preferredFontForTextStyle:options:]
 fun NSFont_preferredFontForTextStyle_options(style: NSFontTextStyle, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("preferredFontForTextStyle:options:")
     val cls = ObjCRuntime.getClass("NSFont")

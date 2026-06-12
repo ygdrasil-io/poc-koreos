@@ -316,13 +316,7 @@ open class NSImage(val ptr: MemorySegment) {
     
     // @property imageTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property imageUnfilteredTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property cacheMode
     open fun cacheMode(): NSImageCacheMode {
         val sel = ObjCRuntime.sel("cacheMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageCacheMode

@@ -87,12 +87,6 @@ fun NSData.description(): MemorySegment {
 }
 
 // @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSDataCreation on NSData ─────────────────────────────────────────
-
 fun NSData.initWithBytes_length(bytes: MemorySegment, length: NSUInteger): MemorySegment {
     val sel = ObjCRuntime.sel("initWithBytes:length:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bytes, length) as MemorySegment

@@ -40,12 +40,6 @@ open class NSFontPanel(ptr: MemorySegment) : NSPanel(ptr) {
     }
     
     // @property sharedFontPanel
-    }
-    
-    // @property sharedFontPanelExists
-    }
-    
-    // @property accessoryView
     fun accessoryView(): MemorySegment {
         val sel = ObjCRuntime.sel("accessoryView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

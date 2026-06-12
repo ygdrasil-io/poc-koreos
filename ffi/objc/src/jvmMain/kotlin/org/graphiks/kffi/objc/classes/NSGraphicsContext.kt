@@ -54,20 +54,12 @@ open class NSGraphicsContext(val ptr: MemorySegment) {
         
     }
     
-    }
-    
-    }
-    
     open fun flushGraphics(): Unit {
         val sel = ObjCRuntime.sel("flushGraphics")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property currentContext
-    }
-    }
-    
-    // @property attributes
     /** @return NSDictionary<NSGraphicsContextAttributeKey,id> * */
     open fun attributes(): MemorySegment {
         val sel = ObjCRuntime.sel("attributes")
@@ -147,59 +139,12 @@ fun NSGraphicsContext.setColorRenderingIntent(colorRenderingIntent: NSColorRende
 }
 
 // @property shouldAntialias
-    val sel = ObjCRuntime.sel("shouldAntialias")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setShouldAntialias:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property imageInterpolation
-    val sel = ObjCRuntime.sel("imageInterpolation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageInterpolation
-}
-    val sel = ObjCRuntime.sel("setImageInterpolation:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property patternPhase
-    val sel = ObjCRuntime.sel("patternPhase")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
-}
-    val sel = ObjCRuntime.sel("setPatternPhase:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property compositingOperation
-    val sel = ObjCRuntime.sel("compositingOperation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCompositingOperation
-}
-    val sel = ObjCRuntime.sel("setCompositingOperation:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property colorRenderingIntent
-    val sel = ObjCRuntime.sel("colorRenderingIntent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSColorRenderingIntent
-}
-    val sel = ObjCRuntime.sel("setColorRenderingIntent:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSQuartzCoreAdditions on NSGraphicsContext ─────────────────────────────────────────
-
 fun NSGraphicsContext.CIContext(): MemorySegment {
     val sel = ObjCRuntime.sel("CIContext")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
 }
 
 // @property CIContext
-    val sel = ObjCRuntime.sel("CIContext")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSGraphicsContextDeprecated on NSGraphicsContext ─────────────────────────────────────────
-
 fun NSGraphicsContext.focusStack(): MemorySegment {
     val sel = ObjCRuntime.sel("focusStack")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -237,7 +182,3 @@ fun NSGraphicsContext_graphicsContextWithWindow(window: MemorySegment): MemorySe
 }
 
 // @property graphicsPort
-    val sel = ObjCRuntime.sel("graphicsPort")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-

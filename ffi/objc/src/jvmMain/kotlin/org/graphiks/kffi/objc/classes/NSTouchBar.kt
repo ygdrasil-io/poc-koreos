@@ -139,8 +139,5 @@ open class NSTouchBar(val ptr: MemorySegment) {
     }
     
     // @property automaticCustomizeTouchBarMenuItemEnabled
-    }
-    }
-    
 }
 

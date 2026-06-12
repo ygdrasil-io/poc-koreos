@@ -87,12 +87,6 @@ fun NSMutableAttributedString.mutableString(): MemorySegment {
 }
 
 // @property mutableString
-    val sel = ObjCRuntime.sel("mutableString")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSMutableAttributedStringFormatting on NSMutableAttributedString ─────────────────────────────────────────
-
 fun NSMutableAttributedString.appendLocalizedFormat(format: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("appendLocalizedFormat:")
     ObjCRuntime.msgSend(null, ptr, sel, format)

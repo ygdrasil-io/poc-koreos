@@ -25,7 +25,5 @@ open class NSGlyphGenerator(val ptr: MemorySegment) {
     }
     
     // @property sharedGlyphGenerator
-    }
-    
 }
 

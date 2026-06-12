@@ -220,8 +220,6 @@ open class NSBundle(val ptr: MemorySegment) {
     /** Convenience overload — [String] parameters and [String] return type. */
     open fun pathForResource_ofTypeAsString(name: String, ext: String): String = ObjCRuntime.toJavaString(pathForResource_ofType(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext)))
     
-    }
-    
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     /** Convenience overload — [String] parameters and [String] return type. */
@@ -240,8 +238,6 @@ open class NSBundle(val ptr: MemorySegment) {
     open fun pathForResource_ofType_inDirectory_forLocalizationAsString(name: String, ext: String, subpath: String, localizationName: String): String = ObjCRuntime.toJavaString(pathForResource_ofType_inDirectory_forLocalization(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), ext), ObjCRuntime.newNSString(Arena.global(), subpath), ObjCRuntime.newNSString(Arena.global(), localizationName)))
     
     /** @return NSArray<NSString *> * */
-    }
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     /** @return NSArray<NSString *> * */
     open fun pathsForResourcesOfType_inDirectory_forLocalization(ext: MemorySegment, subpath: MemorySegment, localizationName: MemorySegment): MemorySegment {
@@ -305,17 +301,8 @@ open class NSBundle(val ptr: MemorySegment) {
     open fun classNamed(className: String): Class<*> = classNamed(ObjCRuntime.newNSString(Arena.global(), className))
     
     // @property mainBundle
-    }
-    
-    // @property allBundles
     /** @return NSArray<NSBundle *> * */
-    }
-    
-    // @property allFrameworks
     /** @return NSArray<NSBundle *> * */
-    }
-    
-    // @property loaded
     open fun isLoaded(): BOOL {
         val sel = ObjCRuntime.sel("isLoaded")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

@@ -291,30 +291,6 @@ open class NSBezierPath(val ptr: MemorySegment) {
     }
     
     // @property defaultMiterLimit
-    }
-    }
-    
-    // @property defaultFlatness
-    }
-    }
-    
-    // @property defaultWindingRule
-    }
-    }
-    
-    // @property defaultLineCapStyle
-    }
-    }
-    
-    // @property defaultLineJoinStyle
-    }
-    }
-    
-    // @property defaultLineWidth
-    }
-    }
-    
-    // @property lineWidth
     open fun lineWidth(): CGFloat {
         val sel = ObjCRuntime.sel("lineWidth")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat

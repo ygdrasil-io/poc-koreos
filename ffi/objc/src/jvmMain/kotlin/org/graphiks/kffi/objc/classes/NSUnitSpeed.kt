@@ -36,16 +36,5 @@ open class NSUnitSpeed(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property metersPerSecond
-    }
-    
-    // @property kilometersPerHour
-    }
-    
-    // @property milesPerHour
-    }
-    
-    // @property knots
-    }
-    
 }
 

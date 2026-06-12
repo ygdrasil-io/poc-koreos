@@ -68,11 +68,5 @@ open class NSHelpManager(val ptr: MemorySegment) {
     }
     
     // @property sharedHelpManager
-    }
-    
-    // @property contextHelpModeActive
-    }
-    }
-    
 }
 

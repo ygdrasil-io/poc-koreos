@@ -12,3 +12,5 @@ interface NSProgressReporting : NSObject {
     fun progress(): MemorySegment
     
     // @property progress
+}
+

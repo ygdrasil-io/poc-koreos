@@ -60,12 +60,6 @@ open class NSScroller(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property compatibleWithOverlayScrollers
-    }
-    
-    // @property preferredScrollerStyle
-    }
-    
-    // @property scrollerStyle
     fun scrollerStyle(): NSScrollerStyle {
         val sel = ObjCRuntime.sel("scrollerStyle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSScrollerStyle
@@ -181,18 +175,3 @@ fun NSScroller_scrollerWidth(): CGFloat {
 }
 
 // @property arrowsPosition
-    val sel = ObjCRuntime.sel("arrowsPosition")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSScrollArrowPosition
-}
-    val sel = ObjCRuntime.sel("setArrowsPosition:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property controlTint
-    val sel = ObjCRuntime.sel("controlTint")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
-}
-    val sel = ObjCRuntime.sel("setControlTint:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

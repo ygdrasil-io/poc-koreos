@@ -40,9 +40,6 @@ open class NSWritingToolsCoordinator(val ptr: MemorySegment) {
     }
     
     // @property isWritingToolsAvailable
-    }
-    
-    // @property delegate
     /** @return id<NSWritingToolsCoordinatorDelegate> */
     open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")

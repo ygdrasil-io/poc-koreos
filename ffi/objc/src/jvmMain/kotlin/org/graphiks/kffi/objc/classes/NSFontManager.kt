@@ -199,9 +199,6 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     // @property sharedFontManager
-    }
-    
-    // @property multiple
     open fun isMultiple(): BOOL {
         val sel = ObjCRuntime.sel("isMultiple")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

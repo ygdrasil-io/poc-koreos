@@ -13,4 +13,5 @@ interface NSValidatedUserInterfaceItem {
     fun tag(): NSInteger
     
     // @property action
-    // @property tag
+}
+

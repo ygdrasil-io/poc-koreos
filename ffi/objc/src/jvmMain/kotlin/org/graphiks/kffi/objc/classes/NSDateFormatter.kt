@@ -89,10 +89,6 @@ open class NSDateFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     }
     
     // @property defaultFormatterBehavior
-    }
-    }
-    
-    // @property dateFormat
     fun dateFormat(): MemorySegment {
         val sel = ObjCRuntime.sel("dateFormat")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

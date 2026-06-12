@@ -63,10 +63,6 @@ open class NSURLCache(val ptr: MemorySegment) {
     }
     
     // @property sharedURLCache
-    }
-    }
-    
-    // @property memoryCapacity
     open fun memoryCapacity(): NSUInteger {
         val sel = ObjCRuntime.sel("memoryCapacity")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger

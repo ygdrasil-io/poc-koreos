@@ -19,8 +19,6 @@ open class NSAutoreleasePool(val ptr: MemorySegment) {
         
     }
     
-    }
-    
     open fun drain(): Unit {
         val sel = ObjCRuntime.sel("drain")
         ObjCRuntime.msgSend(null, ptr, sel)

@@ -216,12 +216,6 @@ open class NSCalendar(val ptr: MemorySegment) {
     }
     
     // @property currentCalendar
-    }
-    
-    // @property autoupdatingCurrentCalendar
-    }
-    
-    // @property calendarIdentifier
     open fun calendarIdentifier(): NSCalendarIdentifier {
         val sel = ObjCRuntime.sel("calendarIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCalendarIdentifier

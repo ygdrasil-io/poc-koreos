@@ -41,10 +41,5 @@ open class NSScrubberSelectionStyle(val ptr: MemorySegment) {
     }
     
     // @property outlineOverlayStyle
-    }
-    
-    // @property roundedBackgroundStyle
-    }
-    
 }
 

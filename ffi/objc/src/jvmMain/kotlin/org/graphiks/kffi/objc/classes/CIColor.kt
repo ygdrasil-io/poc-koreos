@@ -175,39 +175,6 @@ open class CIColor(val ptr: MemorySegment) {
     open fun stringRepresentationAsString(): String = ObjCRuntime.toJavaString(stringRepresentation())
     
     // @property blackColor
-    }
-    
-    // @property whiteColor
-    }
-    
-    // @property grayColor
-    }
-    
-    // @property redColor
-    }
-    
-    // @property greenColor
-    }
-    
-    // @property blueColor
-    }
-    
-    // @property cyanColor
-    }
-    
-    // @property magentaColor
-    }
-    
-    // @property yellowColor
-    }
-    
-    // @property clearColor
-    }
-    
-    
-    // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _priv: MemorySegment
-    // ivar: _pad: MemorySegment
 }
 
 // ── Category: NSAppKitAdditions on CIColor ─────────────────────────────────────────

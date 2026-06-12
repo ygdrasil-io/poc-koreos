@@ -101,10 +101,6 @@ open class NSPrintOperation(val ptr: MemorySegment) {
     }
     
     // @property currentOperation
-    }
-    }
-    
-    // @property copyingOperation
     open fun isCopyingOperation(): BOOL {
         val sel = ObjCRuntime.sel("isCopyingOperation")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

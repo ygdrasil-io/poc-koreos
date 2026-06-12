@@ -259,15 +259,7 @@ open class NSImageRep(val ptr: MemorySegment) {
     
     // @property registeredImageRepClasses
     /** @return NSArray<Class<*>> * */
-    }
-    
-    // @property imageUnfilteredTypes
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property imageTypes
     /** @return NSArray<NSString *> * */
-    }
-    
 }
 

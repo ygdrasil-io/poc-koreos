@@ -58,14 +58,7 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property usesUserKeyEquivalents
-    }
-    }
-    
-    // @property writingToolsItems
     /** @return NSArray<NSMenuItem *> * */
-    }
-    
-    // @property menu
     open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

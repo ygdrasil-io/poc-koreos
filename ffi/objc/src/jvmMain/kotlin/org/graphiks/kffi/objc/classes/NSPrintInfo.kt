@@ -87,10 +87,6 @@ open class NSPrintInfo(val ptr: MemorySegment) {
     }
     
     // @property sharedPrintInfo
-    }
-    }
-    
-    // @property paperName
     open fun paperName(): NSPrinterPaperName {
         val sel = ObjCRuntime.sel("paperName")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrinterPaperName
@@ -246,9 +242,6 @@ open class NSPrintInfo(val ptr: MemorySegment) {
     open fun localizedPaperNameAsString(): String = ObjCRuntime.toJavaString(localizedPaperName())
     
     // @property defaultPrinter
-    }
-    
-    // @property printSettings
     /** @return NSMutableDictionary<NSPrintInfoSettingKey,id> * */
     open fun printSettings(): MemorySegment {
         val sel = ObjCRuntime.sel("printSettings")

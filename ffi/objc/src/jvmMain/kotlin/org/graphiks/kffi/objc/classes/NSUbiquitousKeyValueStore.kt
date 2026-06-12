@@ -168,9 +168,6 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     // @property defaultStore
-    }
-    
-    // @property dictionaryRepresentation
     /** @return NSDictionary<NSString *,id> * */
     open fun dictionaryRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("dictionaryRepresentation")

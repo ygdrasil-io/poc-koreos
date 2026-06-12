@@ -21,7 +21,5 @@ open class NSUnitIlluminance(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property lux
-    }
-    
 }
 

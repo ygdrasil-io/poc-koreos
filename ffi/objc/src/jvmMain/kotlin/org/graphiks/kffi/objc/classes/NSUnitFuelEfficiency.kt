@@ -31,13 +31,5 @@ open class NSUnitFuelEfficiency(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property litersPer100Kilometers
-    }
-    
-    // @property milesPerImperialGallon
-    }
-    
-    // @property milesPerGallon
-    }
-    
 }
 

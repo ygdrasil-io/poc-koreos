@@ -66,34 +66,5 @@ open class NSUnitPressure(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property newtonsPerMetersSquared
-    }
-    
-    // @property gigapascals
-    }
-    
-    // @property megapascals
-    }
-    
-    // @property kilopascals
-    }
-    
-    // @property hectopascals
-    }
-    
-    // @property inchesOfMercury
-    }
-    
-    // @property bars
-    }
-    
-    // @property millibars
-    }
-    
-    // @property millimetersOfMercury
-    }
-    
-    // @property poundsForcePerSquareInch
-    }
-    
 }
 

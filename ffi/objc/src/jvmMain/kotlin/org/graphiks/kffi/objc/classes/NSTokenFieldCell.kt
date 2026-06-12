@@ -45,9 +45,6 @@ open class NSTokenFieldCell(ptr: MemorySegment) : NSTextFieldCell(ptr) {
     }
     
     // @property defaultCompletionDelay
-    }
-    
-    // @property tokenizingCharacterSet
     fun tokenizingCharacterSet(): MemorySegment {
         val sel = ObjCRuntime.sel("tokenizingCharacterSet")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -58,9 +55,6 @@ open class NSTokenFieldCell(ptr: MemorySegment) : NSTextFieldCell(ptr) {
     }
     
     // @property defaultTokenizingCharacterSet
-    }
-    
-    // @property delegate
     /** @return id<NSTokenFieldCellDelegate> */
     fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")

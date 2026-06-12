@@ -303,12 +303,6 @@ fun NSResponder.undoManager(): MemorySegment {
 }
 
 // @property undoManager
-    val sel = ObjCRuntime.sel("undoManager")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSControlEditingSupport on NSResponder ─────────────────────────────────────────
-
 fun NSResponder.validateProposedFirstResponder_forEvent(responder: MemorySegment, event: MemorySegment): BOOL {
     val sel = ObjCRuntime.sel("validateProposedFirstResponder:forEvent:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, responder, event) as BOOL
@@ -377,15 +371,6 @@ fun NSResponder.setUserActivity(userActivity: MemorySegment): Unit {
 }
 
 // @property userActivity
-    val sel = ObjCRuntime.sel("userActivity")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setUserActivity:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSTouchBarProvider on NSResponder ─────────────────────────────────────────
-
 fun NSResponder.makeTouchBar(): MemorySegment {
     val sel = ObjCRuntime.sel("makeTouchBar")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -402,15 +387,6 @@ fun NSResponder.setTouchBar(touchBar: MemorySegment): Unit {
 }
 
 // @property touchBar
-    val sel = ObjCRuntime.sel("touchBar")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setTouchBar:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSInterfaceStyle on NSResponder ─────────────────────────────────────────
-
 fun NSResponder.interfaceStyle(): NSInterfaceStyle {
     val sel = ObjCRuntime.sel("interfaceStyle")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInterfaceStyle

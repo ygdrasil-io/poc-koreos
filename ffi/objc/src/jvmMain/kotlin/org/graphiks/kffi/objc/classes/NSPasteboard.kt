@@ -136,9 +136,6 @@ open class NSPasteboard(val ptr: MemorySegment) {
     }
     
     // @property generalPasteboard
-    }
-    
-    // @property name
     open fun name(): NSPasteboardName {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPasteboardName

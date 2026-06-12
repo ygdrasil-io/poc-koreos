@@ -41,19 +41,5 @@ open class NSUnitElectricResistance(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property megaohms
-    }
-    
-    // @property kiloohms
-    }
-    
-    // @property ohms
-    }
-    
-    // @property milliohms
-    }
-    
-    // @property microohms
-    }
-    
 }
 

@@ -50,9 +50,6 @@ open class NSMutableFontCollection(ptr: MemorySegment) : NSFontCollection(ptr) {
     }
     
     // @property fontCollectionWithAllAvailableDescriptors
-    }
-    
-    // @property queryDescriptors
     /** @return NSArray<NSFontDescriptor *> * */
     override fun `queryDescriptors`(): MemorySegment {
         val sel = ObjCRuntime.sel("queryDescriptors")

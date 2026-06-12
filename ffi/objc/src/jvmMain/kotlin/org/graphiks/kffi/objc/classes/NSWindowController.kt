@@ -200,12 +200,6 @@ fun NSWindowController.storyboard(): MemorySegment {
 }
 
 // @property storyboard
-    val sel = ObjCRuntime.sel("storyboard")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSWindowControllerDismissing on NSWindowController ─────────────────────────────────────────
-
 fun NSWindowController.dismissController(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("dismissController:")
     ObjCRuntime.msgSend(null, ptr, sel, sender)

@@ -53,7 +53,5 @@ open class NSAlignmentFeedbackFilter(val ptr: MemorySegment) {
     }
     
     // @property inputEventMask
-    }
-    
 }
 

@@ -124,11 +124,6 @@ fun NSMorphology_userMorphology(): MemorySegment {
 }
 
 // @property unspecified
-    val sel = ObjCRuntime.sel("isUnspecified")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property userMorphology
 fun NSMorphology.userMorphology(): MemorySegment {
     val sel = ObjCRuntime.sel("userMorphology")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

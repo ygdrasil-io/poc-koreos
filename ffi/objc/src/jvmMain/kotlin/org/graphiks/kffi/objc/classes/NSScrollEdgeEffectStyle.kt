@@ -40,13 +40,5 @@ open class NSScrollEdgeEffectStyle(val ptr: MemorySegment) {
     }
     
     // @property automaticStyle
-    }
-    
-    // @property softStyle
-    }
-    
-    // @property hardStyle
-    }
-    
 }
 

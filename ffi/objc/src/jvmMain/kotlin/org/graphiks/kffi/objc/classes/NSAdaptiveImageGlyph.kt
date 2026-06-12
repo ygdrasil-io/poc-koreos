@@ -60,7 +60,5 @@ open class NSAdaptiveImageGlyph(val ptr: MemorySegment) {
     open fun contentDescriptionAsString(): String = ObjCRuntime.toJavaString(contentDescription())
     
     // @property contentType
-    }
-    
 }
 

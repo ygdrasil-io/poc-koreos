@@ -31,10 +31,5 @@ open class NSUnitConcentrationMass(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property gramsPerLiter
-    }
-    
-    // @property milligramsPerDeciliter
-    }
-    
 }
 

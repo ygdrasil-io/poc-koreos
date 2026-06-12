@@ -145,78 +145,72 @@ def extract_param_types(params_str: str) -> str:
 
 def dedup_functions(content: str) -> str:
     """Remove duplicate function declarations with identical JVM signatures.
-    
-    Handles both class member functions and top-level extension functions.
-    For each group of duplicates, keeps only the first occurrence.
+
+    Properly removes the entire function body by tracking brace depth.
     """
     lines = content.split('\n')
-    # Collect all function declarations with their line numbers and signatures
-    # Member functions: class methods
-    member_fns = []
+
+    # Collect all function declarations with their signatures and brace depth
+    decls = []  # (line_idx, sig_str)
     for i, line in enumerate(lines):
+        # Member functions
         m = re.match(r'^(\s+)(?:open\s+)?(?:override\s+)?fun\s+`?(\w+)`?\(([^)]*)\)', line)
         if m:
             name = m.group(2)
             params = extract_param_types(m.group(3))
-            member_fns.append((i, name, params, line))
-    
-    # Extension functions: top-level receiver.func
-    ext_fns = []
-    for i, line in enumerate(lines):
+            decls.append((i, f"mem:{name}({params})"))
+            continue
+        # Extension functions
         m = re.match(r'^fun\s+(\w+)\.`?(\w+)`?\(([^)]*)\)', line)
         if m:
             receiver = m.group(1)
             name = m.group(2)
             params = extract_param_types(m.group(3))
-            ext_fns.append((i, f"{receiver}.{name}", params, line))
-    
-    # Find duplicates and mark lines for removal
-    seen_member = set()
-    seen_ext = set()
-    remove_lines = set()
-    
-    for line_idx, sig_name, params, line in member_fns:
-        key = f"{sig_name}({params})"
-        if key in seen_member:
-            remove_lines.add(line_idx)
-        else:
-            seen_member.add(key)
-    
-    for line_idx, sig_name, params, line in ext_fns:
-        key = f"{sig_name}({params})"
-        if key in seen_ext:
-            remove_lines.add(line_idx)
-        else:
-            seen_ext.add(key)
-    
-    if not remove_lines:
+            decls.append((i, f"ext:{receiver}.{name}({params})"))
+
+    # Keep only first occurrence of each signature
+    seen = {}
+    keep_idxs = set()
+    for line_idx, sig in decls:
+        if sig not in seen:
+            seen[sig] = True
+            keep_idxs.add(line_idx)
+
+    # Build set of lines to remove (second+ occurrence of duplicate sigs)
+    remove_idxs = {d[0] for d in decls if d[0] not in keep_idxs}
+    if not remove_idxs:
         return content
-    
-    # Remove duplicate lines and their following body (indented continuation)
+
+    # Build a set of lines to keep by tracking brace depth
     result = []
-    skip = False
-    for i, line in enumerate(lines):
-        if i in remove_lines:
-            skip = True
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        if i in remove_idxs:
+            # Skip this line and count brace depth until the function ends
+            depth = 0
+            j = i
+            # Find where this function ends (brace depth returns to 0)
+            while j < len(lines):
+                dj = lines[j].count('{') - lines[j].count('}')
+                depth += dj
+                j += 1
+                if depth <= 0:
+                    break
+            # Also skip trailing blank/comment lines that belong to this function
+            while j < len(lines):
+                stripped = lines[j].strip()
+                if stripped == '' or stripped.startswith('//'):
+                    j += 1
+                else:
+                    break
+            i = j
             continue
-        if skip:
-            # Check if this line is a continuation (starts with the same or more indent)
-            # or a blank line between functions
-            stripped = line.rstrip()
-            if stripped == "":
-                # Skip blank lines after removed function
-                continue
-            if line.startswith(' ' * 4) and not line.startswith(' ' * 8) and not stripped.startswith('//'):
-                # This is a new top-level item, stop skipping
-                skip = False
-                result.append(line)
-            elif stripped.startswith('fun ') or stripped.startswith('open ') or stripped.startswith('override '):
-                skip = False
-                result.append(line)
-            # else: continue skipping (body of removed function)
-        else:
-            result.append(line)
-    
+
+        result.append(line)
+        i += 1
+
     return '\n'.join(result)
 
 

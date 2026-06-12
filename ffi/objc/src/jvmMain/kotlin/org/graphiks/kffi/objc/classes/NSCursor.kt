@@ -145,8 +145,6 @@ open class NSCursor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    }
-    
     open fun push(): Unit {
         val sel = ObjCRuntime.sel("push")
         ObjCRuntime.msgSend(null, ptr, sel)
@@ -170,56 +168,6 @@ open class NSCursor(val ptr: MemorySegment) {
     }
     
     // @property currentCursor
-    }
-    
-    // @property arrowCursor
-    }
-    
-    // @property crosshairCursor
-    }
-    
-    // @property disappearingItemCursor
-    }
-    
-    // @property operationNotAllowedCursor
-    }
-    
-    // @property dragLinkCursor
-    }
-    
-    // @property dragCopyCursor
-    }
-    
-    // @property contextualMenuCursor
-    }
-    
-    // @property pointingHandCursor
-    }
-    
-    // @property closedHandCursor
-    }
-    
-    // @property openHandCursor
-    }
-    
-    // @property IBeamCursor
-    }
-    
-    // @property IBeamCursorForVerticalLayout
-    }
-    
-    // @property zoomInCursor
-    }
-    
-    // @property zoomOutCursor
-    }
-    
-    // @property columnResizeCursor
-    }
-    
-    // @property rowResizeCursor
-    }
-    
 }
 
 // ── Category: Deprecated on NSCursor ─────────────────────────────────────────
@@ -353,12 +301,3 @@ fun NSCursor.isSetOnMouseEntered(): BOOL {
 }
 
 // @property setOnMouseExited
-    val sel = ObjCRuntime.sel("isSetOnMouseExited")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property setOnMouseEntered
-    val sel = ObjCRuntime.sel("isSetOnMouseEntered")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-

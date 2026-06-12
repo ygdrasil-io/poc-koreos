@@ -257,27 +257,6 @@ fun NSArray.sortedArrayHint(): MemorySegment {
 }
 
 // @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property firstObject
-    val sel = ObjCRuntime.sel("firstObject")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property lastObject
-    val sel = ObjCRuntime.sel("lastObject")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property sortedArrayHint
-    val sel = ObjCRuntime.sel("sortedArrayHint")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSArrayCreation on NSArray ─────────────────────────────────────────
-
 fun NSArray.initWithObjects(firstObj: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithObjects:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, firstObj) as MemorySegment

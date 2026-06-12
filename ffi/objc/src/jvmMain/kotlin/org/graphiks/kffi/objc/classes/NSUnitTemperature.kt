@@ -31,13 +31,5 @@ open class NSUnitTemperature(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kelvin
-    }
-    
-    // @property celsius
-    }
-    
-    // @property fahrenheit
-    }
-    
 }
 

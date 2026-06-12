@@ -98,11 +98,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    }
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    }
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     override fun `containsValueForKey`(key: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("containsValueForKey:")

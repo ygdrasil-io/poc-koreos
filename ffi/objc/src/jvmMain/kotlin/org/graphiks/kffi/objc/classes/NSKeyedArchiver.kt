@@ -68,11 +68,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    }
-    
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    }
-    
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     override fun `encodeObject_forKey`(`object`: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeObject:forKey:")

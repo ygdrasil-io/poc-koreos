@@ -81,11 +81,7 @@ interface NSTextFinderClient : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'visibleCharacterRanges' not implemented")
     
     // @property selectable
-    // @property allowsMultipleSelection
-    // @property editable
-    // @property string
-    // @property firstSelectedRange
-    // @property selectedRanges
     /** @return NSArray<NSValue *> * */
-    // @property visibleCharacterRanges
     /** @return NSArray<NSValue *> * */
+}
+

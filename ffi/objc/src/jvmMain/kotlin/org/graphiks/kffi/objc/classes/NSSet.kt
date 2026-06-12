@@ -144,17 +144,6 @@ fun NSSet.description(): MemorySegment {
 
 // @property allObjects
 /** @return NSArray<ObjectType> * */
-    val sel = ObjCRuntime.sel("allObjects")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property description
-    val sel = ObjCRuntime.sel("description")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSSetCreation on NSSet ─────────────────────────────────────────
-
 fun NSSet.initWithObjects(firstObj: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithObjects:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, firstObj) as MemorySegment

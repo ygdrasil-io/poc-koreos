@@ -112,19 +112,12 @@ open class NSThread(val ptr: MemorySegment) {
     }
     
     // @property currentThread
-    }
-    
-    // @property threadDictionary
     open fun threadDictionary(): MemorySegment {
         val sel = ObjCRuntime.sel("threadDictionary")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property threadPriority
-    }
-    }
-    
-    // @property qualityOfService
     open fun qualityOfService(): NSQualityOfService {
         val sel = ObjCRuntime.sel("qualityOfService")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
@@ -136,13 +129,7 @@ open class NSThread(val ptr: MemorySegment) {
     
     // @property callStackReturnAddresses
     /** @return NSArray<NSNumber *> * */
-    }
-    
-    // @property callStackSymbols
     /** @return NSArray<NSString *> * */
-    }
-    
-    // @property name
     open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -169,12 +156,6 @@ open class NSThread(val ptr: MemorySegment) {
     }
     
     // @property isMainThread
-    }
-    
-    // @property mainThread
-    }
-    
-    // @property executing
     open fun isExecuting(): BOOL {
         val sel = ObjCRuntime.sel("isExecuting")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL

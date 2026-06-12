@@ -22,7 +22,5 @@ open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTra
     
     // @property allowedTopLevelClasses
     /** @return NSArray<Class<*>> * */
-    }
-    
 }
 

@@ -90,19 +90,5 @@ open class NSUserInterfaceCompressionOptions(val ptr: MemorySegment) {
     }
     
     // @property hideImagesOption
-    }
-    
-    // @property hideTextOption
-    }
-    
-    // @property reduceMetricsOption
-    }
-    
-    // @property breakEqualWidthsOption
-    }
-    
-    // @property standardOptions
-    }
-    
 }
 

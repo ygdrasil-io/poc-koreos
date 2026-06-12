@@ -91,12 +91,6 @@ fun NSAttributedString.length(): NSUInteger {
 }
 
 // @property length
-    val sel = ObjCRuntime.sel("length")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
-}
-
-// ── Category: NSAttributedStringCreateFromMarkdown on NSAttributedString ─────────────────────────────────────────
-
 fun NSAttributedString.initWithContentsOfMarkdownFileAtURL_options_baseURL_error(markdownFile: MemorySegment, options: MemorySegment, baseURL: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithContentsOfMarkdownFileAtURL:options:baseURL:error:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, markdownFile, options, baseURL, error) as MemorySegment
@@ -395,13 +389,6 @@ fun NSAttributedString_textUnfilteredPasteboardTypes(): MemorySegment {
 }
 
 // @property containsAttachments
-    val sel = ObjCRuntime.sel("containsAttachments")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSAttributedStringAttachmentConveniences on NSAttributedString ─────────────────────────────────────────
-
-// Class<*> method: +[NSAttributedString attributedStringWithAttachment:]
 fun NSAttributedString_attributedStringWithAttachment(attachment: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringWithAttachment:")
     val cls = ObjCRuntime.getClass("NSAttributedString")

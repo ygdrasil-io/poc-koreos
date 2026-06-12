@@ -36,13 +36,6 @@ fun NSObject_setVersion(aVersion: NSInteger): Unit {
 }
 
 // @property classForCoder
-    val sel = ObjCRuntime.sel("classForCoder")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
-}
-
-// ── Category: NSDeprecatedMethods on NSObject ─────────────────────────────────────────
-
-// Class<*> method: +[NSObject poseAsClass:]
 fun NSObject_poseAsClass(aClass: Class<*>): Unit {
     val sel = ObjCRuntime.sel("poseAsClass:")
     val cls = ObjCRuntime.getClass("NSObject")
@@ -57,12 +50,6 @@ fun NSObject.autoContentAccessingProxy(): MemorySegment {
 }
 
 // @property autoContentAccessingProxy
-    val sel = ObjCRuntime.sel("autoContentAccessingProxy")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSErrorRecoveryAttempting on NSObject ─────────────────────────────────────────
-
 fun NSObject.attemptRecoveryFromError_optionIndex_delegate_didRecoverSelector_contextInfo(error: MemorySegment, recoveryOptionIndex: NSUInteger, delegate: MemorySegment, didRecoverSelector: MemorySegment, contextInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("attemptRecoveryFromError:optionIndex:delegate:didRecoverSelector:contextInfo:")
     ObjCRuntime.msgSend(null, ptr, sel, error, recoveryOptionIndex, delegate, didRecoverSelector, contextInfo)
@@ -371,16 +358,6 @@ fun NSObject_automaticallyNotifiesObserversForKey(key: MemorySegment): BOOL {
 }
 
 // @property observationInfo
-    val sel = ObjCRuntime.sel("observationInfo")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setObservationInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSDeprecatedKeyValueObservingCustomization on NSObject ─────────────────────────────────────────
-
-// Class<*> method: +[NSObject setKeys:triggerChangeNotificationsForDependentKey:]
 fun NSObject_setKeys_triggerChangeNotificationsForDependentKey(keys: MemorySegment, dependentKey: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setKeys:triggerChangeNotificationsForDependentKey:")
     val cls = ObjCRuntime.getClass("NSObject")
@@ -414,13 +391,6 @@ fun NSObject_classFallbacksForKeyedArchiver(): MemorySegment {
 }
 
 // @property classForKeyedArchiver
-    val sel = ObjCRuntime.sel("classForKeyedArchiver")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
-}
-
-// ── Category: NSKeyedUnarchiverObjectSubstitution on NSObject ─────────────────────────────────────────
-
-// Class<*> method: +[NSObject classForKeyedUnarchiver]
 fun NSObject_classForKeyedUnarchiver(): Class<*> {
     val sel = ObjCRuntime.sel("classForKeyedUnarchiver")
     val cls = ObjCRuntime.getClass("NSObject")
@@ -467,12 +437,6 @@ fun NSObject.classForArchiver(): Class<*> {
 }
 
 // @property classForArchiver
-    val sel = ObjCRuntime.sel("classForArchiver")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
-}
-
-// ── Category: NSDistributedObjects on NSObject ─────────────────────────────────────────
-
 fun NSObject.replacementObjectForPortCoder(coder: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("replacementObjectForPortCoder:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
@@ -484,12 +448,6 @@ fun NSObject.classForPortCoder(): Class<*> {
 }
 
 // @property classForPortCoder
-    val sel = ObjCRuntime.sel("classForPortCoder")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
-}
-
-// ── Category: NSClassDescriptionPrimitives on NSObject ─────────────────────────────────────────
-
 fun NSObject.inverseForRelationshipKey(relationshipKey: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("inverseForRelationshipKey:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, relationshipKey) as MemorySegment
@@ -519,30 +477,9 @@ fun NSObject.toManyRelationshipKeys(): MemorySegment {
 }
 
 // @property classDescription
-    val sel = ObjCRuntime.sel("classDescription")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property attributeKeys
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("attributeKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property toOneRelationshipKeys
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("toOneRelationshipKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property toManyRelationshipKeys
 /** @return NSArray<NSString *> * */
-    val sel = ObjCRuntime.sel("toManyRelationshipKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSScripting on NSObject ─────────────────────────────────────────
-
 fun NSObject.scriptingValueForSpecifier(objectSpecifier: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("scriptingValueForSpecifier:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objectSpecifier) as MemorySegment
@@ -571,15 +508,6 @@ fun NSObject.setScriptingProperties(scriptingProperties: MemorySegment): Unit {
 
 // @property scriptingProperties
 /** @return NSDictionary<NSString *,id> * */
-    val sel = ObjCRuntime.sel("scriptingProperties")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setScriptingProperties:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSScriptClassDescription on NSObject ─────────────────────────────────────────
-
 fun NSObject.classCode(): FourCharCode {
     val sel = ObjCRuntime.sel("classCode")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
@@ -591,17 +519,6 @@ fun NSObject.className(): MemorySegment {
 }
 
 // @property classCode
-    val sel = ObjCRuntime.sel("classCode")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
-}
-
-// @property className
-    val sel = ObjCRuntime.sel("className")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSScriptKeyValueCoding on NSObject ─────────────────────────────────────────
-
 fun NSObject.valueAtIndex_inPropertyWithKey(index: NSUInteger, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueAtIndex:inPropertyWithKey:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index, key) as MemorySegment
@@ -656,12 +573,6 @@ fun NSObject.objectSpecifier(): MemorySegment {
 }
 
 // @property objectSpecifier
-    val sel = ObjCRuntime.sel("objectSpecifier")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSComparisonMethods on NSObject ─────────────────────────────────────────
-
 fun NSObject.isEqualTo(`object`: MemorySegment): BOOL {
     val sel = ObjCRuntime.sel("isEqualTo:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
@@ -835,17 +746,6 @@ fun NSObject.accessibilityNotifiesWhenDestroyed(): BOOL {
 }
 
 // @property accessibilityFocusedUIElement
-    val sel = ObjCRuntime.sel("accessibilityFocusedUIElement")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property accessibilityNotifiesWhenDestroyed
-    val sel = ObjCRuntime.sel("accessibilityNotifiesWhenDestroyed")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSAccessibilityAdditions on NSObject ─────────────────────────────────────────
-
 fun NSObject.accessibilitySetOverrideValue_forAttribute(value: MemorySegment, attribute: NSAccessibilityAttributeName): BOOL {
     val sel = ObjCRuntime.sel("accessibilitySetOverrideValue:forAttribute:")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, attribute) as BOOL
@@ -966,13 +866,6 @@ fun NSObject_exposeBinding(binding: NSBindingName): Unit {
 
 // @property exposedBindings
 /** @return NSArray<NSBindingName> * */
-    val sel = ObjCRuntime.sel("exposedBindings")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSPlaceholders on NSObject ─────────────────────────────────────────
-
-// Class<*> method: +[NSObject setDefaultPlaceholder:forMarker:withBinding:]
 fun NSObject_setDefaultPlaceholder_forMarker_withBinding(placeholder: MemorySegment, marker: MemorySegment, binding: NSBindingName): Unit {
     val sel = ObjCRuntime.sel("setDefaultPlaceholder:forMarker:withBinding:")
     val cls = ObjCRuntime.getClass("NSObject")

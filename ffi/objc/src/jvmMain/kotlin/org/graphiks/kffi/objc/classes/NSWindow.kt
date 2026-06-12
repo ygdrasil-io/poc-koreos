@@ -571,9 +571,6 @@ open class NSWindow(ptr: MemorySegment) : NSResponder(ptr) {
     fun requestSharingOfWindowUsingPreview_title_completionHandler(image: MemorySegment, title: String, completionHandler: MemorySegment): Unit = requestSharingOfWindowUsingPreview_title_completionHandler(image, ObjCRuntime.newNSString(Arena.global(), title), completionHandler)
     
     // @property defaultDepthLimit
-    }
-    
-    // @property title
     fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -1376,13 +1373,6 @@ open class NSWindow(ptr: MemorySegment) : NSResponder(ptr) {
     }
     
     // @property allowsAutomaticWindowTabbing
-    }
-    }
-    
-    // @property userTabbingPreference
-    }
-    
-    // @property tabbingMode
     fun tabbingMode(): NSWindowTabbingMode {
         val sel = ObjCRuntime.sel("tabbingMode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowTabbingMode
@@ -1498,33 +1488,6 @@ fun NSWindow.mouseLocationOutsideOfEventStream(): NSPoint {
 }
 
 // @property currentEvent
-    val sel = ObjCRuntime.sel("currentEvent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property acceptsMouseMovedEvents
-    val sel = ObjCRuntime.sel("acceptsMouseMovedEvents")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAcceptsMouseMovedEvents:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property ignoresMouseEvents
-    val sel = ObjCRuntime.sel("ignoresMouseEvents")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setIgnoresMouseEvents:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property mouseLocationOutsideOfEventStream
-    val sel = ObjCRuntime.sel("mouseLocationOutsideOfEventStream")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
-}
-
-// ── Category: NSCursorRect on NSWindow ─────────────────────────────────────────
-
 fun NSWindow.disableCursorRects(): Unit {
     val sel = ObjCRuntime.sel("disableCursorRects")
     ObjCRuntime.msgSend(null, ptr, sel)
@@ -1556,12 +1519,6 @@ fun NSWindow.areCursorRectsEnabled(): BOOL {
 }
 
 // @property areCursorRectsEnabled
-    val sel = ObjCRuntime.sel("areCursorRectsEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSDrag on NSWindow ─────────────────────────────────────────
-
 fun NSWindow.beginDraggingSessionWithItems_event_source(items: MemorySegment, event: MemorySegment, source: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("beginDraggingSessionWithItems:event:source:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, items, event, source) as MemorySegment
@@ -1734,59 +1691,6 @@ fun NSWindow_menuChanged(menu: MemorySegment): Unit {
 }
 
 // @property flushWindowDisabled
-    val sel = ObjCRuntime.sel("isFlushWindowDisabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property autodisplay
-    val sel = ObjCRuntime.sel("isAutodisplay")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAutodisplay:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property graphicsContext
-    val sel = ObjCRuntime.sel("graphicsContext")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property oneShot
-    val sel = ObjCRuntime.sel("isOneShot")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setOneShot:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property preferredBackingLocation
-    val sel = ObjCRuntime.sel("preferredBackingLocation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowBackingLocation
-}
-    val sel = ObjCRuntime.sel("setPreferredBackingLocation:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property backingLocation
-    val sel = ObjCRuntime.sel("backingLocation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowBackingLocation
-}
-
-// @property showsResizeIndicator
-    val sel = ObjCRuntime.sel("showsResizeIndicator")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setShowsResizeIndicator:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property windowRef
-    val sel = ObjCRuntime.sel("windowRef")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSConstraintBasedLayoutCoreMethods on NSWindow ─────────────────────────────────────────
-
 fun NSWindow.updateConstraintsIfNeeded(): Unit {
     val sel = ObjCRuntime.sel("updateConstraintsIfNeeded")
     ObjCRuntime.msgSend(null, ptr, sel)
@@ -1826,12 +1730,6 @@ fun NSWindow.drawers(): MemorySegment {
 
 // @property drawers
 /** @return NSArray<NSDrawer *> * */
-    val sel = ObjCRuntime.sel("drawers")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSScripting on NSWindow ─────────────────────────────────────────
-
 fun NSWindow.setIsMiniaturized(flag: BOOL): Unit {
     val sel = ObjCRuntime.sel("setIsMiniaturized:")
     ObjCRuntime.msgSend(null, ptr, sel, flag)
@@ -1908,50 +1806,6 @@ fun NSWindow.setOrderedIndex(orderedIndex: NSInteger): Unit {
 }
 
 // @property hasCloseBox
-    val sel = ObjCRuntime.sel("hasCloseBox")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property hasTitleBar
-    val sel = ObjCRuntime.sel("hasTitleBar")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property floatingPanel
-    val sel = ObjCRuntime.sel("isFloatingPanel")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property miniaturizable
-    val sel = ObjCRuntime.sel("isMiniaturizable")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property modalPanel
-    val sel = ObjCRuntime.sel("isModalPanel")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property resizable
-    val sel = ObjCRuntime.sel("isResizable")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property zoomable
-    val sel = ObjCRuntime.sel("isZoomable")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property orderedIndex
-    val sel = ObjCRuntime.sel("orderedIndex")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
-}
-    val sel = ObjCRuntime.sel("setOrderedIndex:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSUserInterfaceRestoration on NSWindow ─────────────────────────────────────────
-
 fun NSWindow.disableSnapshotRestoration(): Unit {
     val sel = ObjCRuntime.sel("disableSnapshotRestoration")
     ObjCRuntime.msgSend(null, ptr, sel)
@@ -1984,19 +1838,4 @@ fun NSWindow.setRestorationClass(restorationClass: MemorySegment): Unit {
 }
 
 // @property restorable
-    val sel = ObjCRuntime.sel("isRestorable")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setRestorable:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property restorationClass
 /** @return Class<NSWindowRestoration> */
-    val sel = ObjCRuntime.sel("restorationClass")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setRestorationClass:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

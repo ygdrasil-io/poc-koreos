@@ -118,11 +118,6 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     }
     
     // @property currentQueue
-    }
-    
-    // @property mainQueue
-    }
-    
 }
 
 // ── Category: NSDeprecated on NSOperationQueue ─────────────────────────────────────────
@@ -140,12 +135,3 @@ fun NSOperationQueue.operationCount(): NSUInteger {
 
 // @property operations
 /** @return NSArray<__kindof NSOperation *> * */
-    val sel = ObjCRuntime.sel("operations")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// @property operationCount
-    val sel = ObjCRuntime.sel("operationCount")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
-}
-

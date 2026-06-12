@@ -102,9 +102,6 @@ open class NSOpenGLContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    }
-    
-    // @property currentVirtualScreen
     open fun currentVirtualScreen(): GLint {
         val sel = ObjCRuntime.sel("currentVirtualScreen")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint

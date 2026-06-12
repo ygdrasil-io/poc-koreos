@@ -44,12 +44,6 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property defaultSessionConfiguration
-    }
-    
-    // @property ephemeralSessionConfiguration
-    }
-    
-    // @property identifier
     open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment

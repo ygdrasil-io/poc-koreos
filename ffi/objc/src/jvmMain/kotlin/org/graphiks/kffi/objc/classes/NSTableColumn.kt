@@ -192,10 +192,3 @@ fun NSTableColumn.setDataCell(dataCell: MemorySegment): Unit {
 }
 
 // @property dataCell
-    val sel = ObjCRuntime.sel("dataCell")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setDataCell:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

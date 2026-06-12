@@ -88,9 +88,6 @@ open class NSPathCell(ptr: MemorySegment) : NSActionCell(ptr) {
     }
     
     // @property pathComponentCellClass
-    }
-    
-    // @property pathComponentCells
     /** @return NSArray<__kindof NSPathComponentCell *> * */
     fun pathComponentCells(): MemorySegment {
         val sel = ObjCRuntime.sel("pathComponentCells")

@@ -46,22 +46,5 @@ open class NSUnitAngle(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property degrees
-    }
-    
-    // @property arcMinutes
-    }
-    
-    // @property arcSeconds
-    }
-    
-    // @property radians
-    }
-    
-    // @property gradians
-    }
-    
-    // @property revolutions
-    }
-    
 }
 

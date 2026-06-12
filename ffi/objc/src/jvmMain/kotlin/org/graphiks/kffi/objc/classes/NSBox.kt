@@ -178,10 +178,3 @@ fun NSBox.setBorderType(borderType: NSBorderType): Unit {
 }
 
 // @property borderType
-    val sel = ObjCRuntime.sel("borderType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBorderType
-}
-    val sel = ObjCRuntime.sel("setBorderType:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

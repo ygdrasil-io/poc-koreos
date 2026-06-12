@@ -224,9 +224,6 @@ open class NSCell(val ptr: MemorySegment) {
     }
     
     // @property prefersTrackingUntilMouseUp
-    }
-    
-    // @property controlView
     open fun controlView(): MemorySegment {
         val sel = ObjCRuntime.sel("controlView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -562,9 +559,6 @@ open class NSCell(val ptr: MemorySegment) {
     }
     
     // @property defaultMenu
-    }
-    
-    // @property sendsActionOnEndEditing
     open fun sendsActionOnEndEditing(): BOOL {
         val sel = ObjCRuntime.sel("sendsActionOnEndEditing")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
@@ -701,47 +695,12 @@ fun NSCell_defaultFocusRingType(): NSFocusRingType {
 }
 
 // @property refusesFirstResponder
-    val sel = ObjCRuntime.sel("refusesFirstResponder")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setRefusesFirstResponder:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property acceptsFirstResponder
-    val sel = ObjCRuntime.sel("acceptsFirstResponder")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// @property showsFirstResponder
-    val sel = ObjCRuntime.sel("showsFirstResponder")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setShowsFirstResponder:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property focusRingType
-    val sel = ObjCRuntime.sel("focusRingType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFocusRingType
-}
-    val sel = ObjCRuntime.sel("setFocusRingType:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property defaultFocusRingType
 fun NSCell.defaultFocusRingType(): NSFocusRingType {
     val sel = ObjCRuntime.sel("defaultFocusRingType")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFocusRingType
 }
 
 // @property wantsNotificationForMarkedText
-    val sel = ObjCRuntime.sel("wantsNotificationForMarkedText")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-
-// ── Category: NSCellAttributedStringMethods on NSCell ─────────────────────────────────────────
-
 fun NSCell.attributedStringValue(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringValue")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -773,31 +732,6 @@ fun NSCell.setImportsGraphics(importsGraphics: BOOL): Unit {
 }
 
 // @property attributedStringValue
-    val sel = ObjCRuntime.sel("attributedStringValue")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-    val sel = ObjCRuntime.sel("setAttributedStringValue:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property allowsEditingTextAttributes
-    val sel = ObjCRuntime.sel("allowsEditingTextAttributes")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAllowsEditingTextAttributes:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property importsGraphics
-    val sel = ObjCRuntime.sel("importsGraphics")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setImportsGraphics:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// ── Category: NSCellMixedState on NSCell ─────────────────────────────────────────
-
 fun NSCell.setNextState(): Unit {
     val sel = ObjCRuntime.sel("setNextState")
     ObjCRuntime.msgSend(null, ptr, sel)
@@ -819,20 +753,6 @@ fun NSCell.nextState(): NSInteger {
 }
 
 // @property allowsMixedState
-    val sel = ObjCRuntime.sel("allowsMixedState")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
-    val sel = ObjCRuntime.sel("setAllowsMixedState:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property nextState
-    val sel = ObjCRuntime.sel("nextState")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
-}
-
-// ── Category: NSCellHitTest on NSCell ─────────────────────────────────────────
-
 fun NSCell.hitTestForEvent_inRect_ofView(event: MemorySegment, cellFrame: NSRect, controlView: MemorySegment): NSCellHitResult {
     val sel = ObjCRuntime.sel("hitTestForEvent:inRect:ofView:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, event, cellFrame, controlView) as NSCellHitResult
@@ -868,20 +788,6 @@ fun NSCell.interiorBackgroundStyle(): NSBackgroundStyle {
 }
 
 // @property backgroundStyle
-    val sel = ObjCRuntime.sel("backgroundStyle")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBackgroundStyle
-}
-    val sel = ObjCRuntime.sel("setBackgroundStyle:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-
-// @property interiorBackgroundStyle
-    val sel = ObjCRuntime.sel("interiorBackgroundStyle")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBackgroundStyle
-}
-
-// ── Category: NSDeprecated on NSCell ─────────────────────────────────────────
-
 fun NSCell.entryType(): NSInteger {
     val sel = ObjCRuntime.sel("entryType")
     return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
@@ -933,10 +839,3 @@ fun NSCell.setControlTint(controlTint: NSControlTint): Unit {
 }
 
 // @property controlTint
-    val sel = ObjCRuntime.sel("controlTint")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
-}
-    val sel = ObjCRuntime.sel("setControlTint:")
-    ObjCRuntime.msgSend(null, ptr, sel, value)
-}
-

@@ -71,37 +71,5 @@ open class NSUnitPower(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property terawatts
-    }
-    
-    // @property gigawatts
-    }
-    
-    // @property megawatts
-    }
-    
-    // @property kilowatts
-    }
-    
-    // @property watts
-    }
-    
-    // @property milliwatts
-    }
-    
-    // @property microwatts
-    }
-    
-    // @property nanowatts
-    }
-    
-    // @property picowatts
-    }
-    
-    // @property femtowatts
-    }
-    
-    // @property horsepower
-    }
-    
 }
 

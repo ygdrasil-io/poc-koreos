@@ -422,36 +422,6 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     // @property blackImage
-    }
-    
-    // @property whiteImage
-    }
-    
-    // @property grayImage
-    }
-    
-    // @property redImage
-    }
-    
-    // @property greenImage
-    }
-    
-    // @property blueImage
-    }
-    
-    // @property cyanImage
-    }
-    
-    // @property magentaImage
-    }
-    
-    // @property yellowImage
-    }
-    
-    // @property clearImage
-    }
-    
-    // @property extent
     open fun extent(): MemorySegment {
         val sel = ObjCRuntime.sel("extent")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
@@ -583,12 +553,6 @@ fun CIImage_imageWithDepthData(`data`: MemorySegment): MemorySegment {
 }
 
 // @property depthData
-    val sel = ObjCRuntime.sel("depthData")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: AVPortraitEffectsMatte on CIImage ─────────────────────────────────────────
-
 fun CIImage.initWithPortaitEffectsMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithPortaitEffectsMatte:options:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte, options) as MemorySegment
@@ -619,12 +583,6 @@ fun CIImage_imageWithPortaitEffectsMatte(matte: MemorySegment): MemorySegment {
 }
 
 // @property portraitEffectsMatte
-    val sel = ObjCRuntime.sel("portraitEffectsMatte")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: AVSemanticSegmentationMatte on CIImage ─────────────────────────────────────────
-
 fun CIImage.initWithSemanticSegmentationMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithSemanticSegmentationMatte:options:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte, options) as MemorySegment
@@ -655,12 +613,6 @@ fun CIImage_imageWithSemanticSegmentationMatte(matte: MemorySegment): MemorySegm
 }
 
 // @property semanticSegmentationMatte
-    val sel = ObjCRuntime.sel("semanticSegmentationMatte")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
-}
-
-// ── Category: NSAppKitAdditions on CIImage ─────────────────────────────────────────
-
 fun CIImage.initWithBitmapImageRep(bitmapImageRep: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithBitmapImageRep:")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bitmapImageRep) as MemorySegment

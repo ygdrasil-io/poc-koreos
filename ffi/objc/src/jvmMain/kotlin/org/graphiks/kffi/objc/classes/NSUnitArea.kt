@@ -86,46 +86,5 @@ open class NSUnitArea(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property squareMegameters
-    }
-    
-    // @property squareKilometers
-    }
-    
-    // @property squareMeters
-    }
-    
-    // @property squareCentimeters
-    }
-    
-    // @property squareMillimeters
-    }
-    
-    // @property squareMicrometers
-    }
-    
-    // @property squareNanometers
-    }
-    
-    // @property squareInches
-    }
-    
-    // @property squareFeet
-    }
-    
-    // @property squareYards
-    }
-    
-    // @property squareMiles
-    }
-    
-    // @property acres
-    }
-    
-    // @property ares
-    }
-    
-    // @property hectares
-    }
-    
 }
 

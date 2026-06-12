@@ -14,3 +14,5 @@ interface NSCollectionLayoutEnvironment : NSObject {
     
     // @property container
     /** @return id<NSCollectionLayoutContainer> */
+}
+
