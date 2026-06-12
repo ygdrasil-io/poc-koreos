@@ -30,7 +30,7 @@ open class NSBrowserCell(ptr: MemorySegment) : NSCell(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
+    override fun `initTextCell`(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
     
     override fun `initImageCell`(image: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initImageCell:")

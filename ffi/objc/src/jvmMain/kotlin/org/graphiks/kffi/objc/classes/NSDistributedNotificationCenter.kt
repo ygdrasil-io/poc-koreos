@@ -54,7 +54,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun addObserver_selector_name_object(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: String): Unit = addObserver_selector_name_object(observer, aSelector, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
+    override fun `addObserver_selector_name_object`(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: String): Unit = addObserver_selector_name_object(observer, aSelector, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
     
     override fun `postNotificationName_object`(aName: NSNotificationName, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:")
@@ -62,7 +62,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun postNotificationName_object(aName: NSNotificationName, anObject: String): Unit = postNotificationName_object(aName, ObjCRuntime.newNSString(Arena.global(), anObject))
+    override fun `postNotificationName_object`(aName: NSNotificationName, anObject: String): Unit = postNotificationName_object(aName, ObjCRuntime.newNSString(Arena.global(), anObject))
     
     override fun `postNotificationName_object_userInfo`(aName: NSNotificationName, anObject: MemorySegment, aUserInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:userInfo:")
@@ -70,7 +70,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun postNotificationName_object_userInfo(aName: NSNotificationName, anObject: String, aUserInfo: MemorySegment): Unit = postNotificationName_object_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), anObject), aUserInfo)
+    override fun `postNotificationName_object_userInfo`(aName: NSNotificationName, anObject: String, aUserInfo: MemorySegment): Unit = postNotificationName_object_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), anObject), aUserInfo)
     
     override fun `removeObserver_name_object`(observer: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObserver:name:object:")
@@ -78,7 +78,7 @@ open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationC
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun removeObserver_name_object(observer: MemorySegment, aName: NSNotificationName, anObject: String): Unit = removeObserver_name_object(observer, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
+    override fun `removeObserver_name_object`(observer: MemorySegment, aName: NSNotificationName, anObject: String): Unit = removeObserver_name_object(observer, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
     
     // @property suspended
     fun suspended(): BOOL {

@@ -171,7 +171,7 @@ open class NSCalendarDate(ptr: MemorySegment) : NSDate(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initWithString(description: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), description))
+    override fun `initWithString`(description: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), description))
     
     fun initWithYear_month_day_hour_minute_second_timeZone(year: NSInteger, month: NSUInteger, day: NSUInteger, hour: NSUInteger, minute: NSUInteger, second: NSUInteger, aTimeZone: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithYear:month:day:hour:minute:second:timeZone:")

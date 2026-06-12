@@ -99,7 +99,7 @@ open class NSMutableCharacterSet(ptr: MemorySegment) : NSCharacterSet(ptr) {
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun characterSetWithCharactersInString(aString: String): MemorySegment = characterSetWithCharactersInString(ObjCRuntime.newNSString(Arena.global(), aString))
+        override fun `characterSetWithCharactersInString`(aString: String): MemorySegment = characterSetWithCharactersInString(ObjCRuntime.newNSString(Arena.global(), aString))
         
         override fun `characterSetWithBitmapRepresentation`(`data`: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("characterSetWithBitmapRepresentation:")
@@ -112,7 +112,7 @@ open class NSMutableCharacterSet(ptr: MemorySegment) : NSCharacterSet(ptr) {
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun characterSetWithContentsOfFile(fName: String): MemorySegment = characterSetWithContentsOfFile(ObjCRuntime.newNSString(Arena.global(), fName))
+        override fun `characterSetWithContentsOfFile`(fName: String): MemorySegment = characterSetWithContentsOfFile(ObjCRuntime.newNSString(Arena.global(), fName))
         
     }
     

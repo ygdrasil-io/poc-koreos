@@ -42,7 +42,7 @@ open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun writeToURL_ofType_forSaveOperation_originalContentsURL_error(absoluteURL: MemorySegment, typeName: String, saveOperation: NSSaveOperationType, absoluteOriginalContentsURL: MemorySegment, error: MemorySegment): BOOL = writeToURL_ofType_forSaveOperation_originalContentsURL_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), saveOperation, absoluteOriginalContentsURL, error)
+    override fun `writeToURL_ofType_forSaveOperation_originalContentsURL_error`(absoluteURL: MemorySegment, typeName: String, saveOperation: NSSaveOperationType, absoluteOriginalContentsURL: MemorySegment, error: MemorySegment): BOOL = writeToURL_ofType_forSaveOperation_originalContentsURL_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), saveOperation, absoluteOriginalContentsURL, error)
     
     override fun `readFromURL_ofType_error`(absoluteURL: MemorySegment, typeName: MemorySegment, error: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("readFromURL:ofType:error:")
@@ -50,7 +50,7 @@ open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun readFromURL_ofType_error(absoluteURL: MemorySegment, typeName: String, error: MemorySegment): BOOL = readFromURL_ofType_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), error)
+    override fun `readFromURL_ofType_error`(absoluteURL: MemorySegment, typeName: String, error: MemorySegment): BOOL = readFromURL_ofType_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), error)
     
     override fun `revertToContentsOfURL_ofType_error`(inAbsoluteURL: MemorySegment, inTypeName: MemorySegment, outError: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("revertToContentsOfURL:ofType:error:")
@@ -58,7 +58,7 @@ open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun revertToContentsOfURL_ofType_error(inAbsoluteURL: MemorySegment, inTypeName: String, outError: MemorySegment): BOOL = revertToContentsOfURL_ofType_error(inAbsoluteURL, ObjCRuntime.newNSString(Arena.global(), inTypeName), outError)
+    override fun `revertToContentsOfURL_ofType_error`(inAbsoluteURL: MemorySegment, inTypeName: String, outError: MemorySegment): BOOL = revertToContentsOfURL_ofType_error(inAbsoluteURL, ObjCRuntime.newNSString(Arena.global(), inTypeName), outError)
     
     // @property managedObjectContext
     fun managedObjectContext(): MemorySegment {

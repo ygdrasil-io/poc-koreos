@@ -7,7 +7,8 @@ Fixes:
 2. Raw `Class` → `Class<*>` (Kotlin requires star projection)
 3. Class method keyword escaping (`NSData_`data`` → `NSData_data`)
 4. Missing `override` for methods re-defined in subclasses
-5. Conflicting overloads (dedup methods with same Kotlin signature)
+5. Kotlin hard keywords used as function names (e.g. `object`, `null`, `class`)
+6. Conflicting overloads (dedup methods with same Kotlin signature)
 """
 import os
 import re
@@ -23,6 +24,14 @@ IMPORTS = """\
 import java.lang.invoke.*
 import java.lang.foreign.*
 import java.lang.foreign.MemoryLayout.PathElement.*"""
+
+# Kotlin hard keywords that cannot be used as identifiers without backtick escaping
+KOTLIN_KEYWORDS = {
+    "as", "break", "class", "continue", "do", "else", "false", "for", "fun",
+    "if", "in", "interface", "is", "null", "object", "package", "return",
+    "super", "this", "throw", "true", "try", "typealias", "typeof", "val",
+    "var", "when", "while",
+}
 
 
 def needs_imports(content: str) -> bool:
@@ -57,6 +66,27 @@ def fix_raw_class(content: str) -> str:
     """
     content = re.sub(r'(?<![.\w])Class(?![.\w<*])', 'Class<*>', content)
     return content
+
+
+def fix_keyword_function_names(content: str) -> str:
+    """Wrap Kotlin hard keywords used as function names in backticks.
+    
+    Matches `fun keyword(` and `open fun keyword(` where `keyword` is a
+    Kotlin hard keyword, and adds backticks around the identifier.
+    """
+    def escape_keyword(m):
+        prefix = m.group(1)  # whitespace prefix
+        mods = m.group(2) or ""  # "open " or ""
+        kword = m.group(3)  # the keyword
+        rest = m.group(4)  # "("
+        return f"{prefix}{mods}fun `{kword}`{rest}"
+    
+    return re.sub(
+        rf'^(\s+)((?:open\s+)?)fun\s+({"|".join(KOTLIN_KEYWORDS)})\s*(\()',
+        escape_keyword,
+        content,
+        flags=re.MULTILINE
+    )
 
 
 def build_class_map(class_dir: Path) -> dict:
@@ -202,7 +232,22 @@ def main():
         if count:
             print(f"  {subdir}/: fixed raw Class in {count} files")
     
-    # 4. Make root class methods open, add override to subclasses
+    # 4. Fix Kotlin hard keywords used as function names (e.g. `object`, `null`, `class`)
+    for subdir in ["classes", "protocols", "enums", "options", "types", "functions"]:
+        d = OUT_PKG / subdir
+        if not d.exists():
+            continue
+        count = 0
+        for f in sorted(d.glob("*.kt")):
+            text = f.read_text()
+            new_text = fix_keyword_function_names(text)
+            if new_text != text:
+                f.write_text(new_text)
+                count += 1
+        if count:
+            print(f"  {subdir}/: fixed keyword function names in {count} files")
+    
+    # 5. Make root class methods open, add override to subclasses
     class_dir = OUT_PKG / "classes"
     if class_dir.exists():
         count_before = len([m for m in re.finditer(

@@ -22,7 +22,7 @@ open class NSProxy(val ptr: MemorySegment) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, zone) as MemorySegment
         }
         
-        open fun class(): Class<*> {
+        open fun `class`(): Class<*> {
             val sel = ObjCRuntime.sel("class")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class<*>
         }

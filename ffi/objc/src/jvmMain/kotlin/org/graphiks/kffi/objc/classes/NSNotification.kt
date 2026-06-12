@@ -32,7 +32,7 @@ open class NSNotification(val ptr: MemorySegment) {
     }
     
     // @property object
-    open fun object(): MemorySegment {
+    open fun `object`(): MemorySegment {
         val sel = ObjCRuntime.sel("object")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

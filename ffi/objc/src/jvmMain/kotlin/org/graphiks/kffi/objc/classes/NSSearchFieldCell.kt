@@ -20,7 +20,7 @@ open class NSSearchFieldCell(ptr: MemorySegment) : NSTextFieldCell(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
+    override fun `initTextCell`(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
     
     override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")

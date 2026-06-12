@@ -25,7 +25,7 @@ open class NSMachBootstrapServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun portForName(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
+    override fun `portForName`(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
     
     override fun `portForName_host`(name: MemorySegment, host: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:host:")
@@ -33,7 +33,7 @@ open class NSMachBootstrapServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun portForName_host(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
+    override fun `portForName_host`(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
     
     override fun `registerPort_name`(port: MemorySegment, name: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("registerPort:name:")
@@ -41,7 +41,7 @@ open class NSMachBootstrapServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun registerPort_name(port: MemorySegment, name: String): BOOL = registerPort_name(port, ObjCRuntime.newNSString(Arena.global(), name))
+    override fun `registerPort_name`(port: MemorySegment, name: String): BOOL = registerPort_name(port, ObjCRuntime.newNSString(Arena.global(), name))
     
     fun servicePortWithName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("servicePortWithName:")

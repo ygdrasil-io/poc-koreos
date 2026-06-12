@@ -90,7 +90,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeObject_forKey(`object`: MemorySegment, key: String): Unit = encodeObject_forKey(`object`, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeObject_forKey`(`object`: MemorySegment, key: String): Unit = encodeObject_forKey(`object`, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeConditionalObject_forKey`(`object`: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeConditionalObject:forKey:")
@@ -98,7 +98,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeConditionalObject_forKey(`object`: MemorySegment, key: String): Unit = encodeConditionalObject_forKey(`object`, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeConditionalObject_forKey`(`object`: MemorySegment, key: String): Unit = encodeConditionalObject_forKey(`object`, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeBool_forKey`(value: BOOL, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeBool:forKey:")
@@ -106,7 +106,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeBool_forKey(value: BOOL, key: String): Unit = encodeBool_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeBool_forKey`(value: BOOL, key: String): Unit = encodeBool_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeInt_forKey`(value: Int, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeInt:forKey:")
@@ -114,7 +114,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeInt_forKey(value: Int, key: String): Unit = encodeInt_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeInt_forKey`(value: Int, key: String): Unit = encodeInt_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeInt32_forKey`(value: int32_t, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeInt32:forKey:")
@@ -122,7 +122,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeInt32_forKey(value: int32_t, key: String): Unit = encodeInt32_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeInt32_forKey`(value: int32_t, key: String): Unit = encodeInt32_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeInt64_forKey`(value: int64_t, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeInt64:forKey:")
@@ -130,7 +130,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeInt64_forKey(value: int64_t, key: String): Unit = encodeInt64_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeInt64_forKey`(value: int64_t, key: String): Unit = encodeInt64_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeFloat_forKey`(value: Float, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeFloat:forKey:")
@@ -138,7 +138,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeFloat_forKey(value: Float, key: String): Unit = encodeFloat_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeFloat_forKey`(value: Float, key: String): Unit = encodeFloat_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeDouble_forKey`(value: Double, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeDouble:forKey:")
@@ -146,7 +146,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeDouble_forKey(value: Double, key: String): Unit = encodeDouble_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeDouble_forKey`(value: Double, key: String): Unit = encodeDouble_forKey(value, ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `encodeBytes_length_forKey`(bytes: MemorySegment, length: NSUInteger, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeBytes:length:forKey:")
@@ -154,7 +154,7 @@ open class NSKeyedArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun encodeBytes_length_forKey(bytes: MemorySegment, length: NSUInteger, key: String): Unit = encodeBytes_length_forKey(bytes, length, ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `encodeBytes_length_forKey`(bytes: MemorySegment, length: NSUInteger, key: String): Unit = encodeBytes_length_forKey(bytes, length, ObjCRuntime.newNSString(Arena.global(), key))
     
     // @property delegate
     /** @return id<NSKeyedArchiverDelegate> */

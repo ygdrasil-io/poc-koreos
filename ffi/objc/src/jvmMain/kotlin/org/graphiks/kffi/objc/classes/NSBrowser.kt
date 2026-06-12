@@ -280,7 +280,7 @@ open class NSBrowser(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property cellClass
-    fun cellClass(): Class<*> {
+    override fun `cellClass`(): Class<*> {
         val sel = ObjCRuntime.sel("cellClass")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
     }

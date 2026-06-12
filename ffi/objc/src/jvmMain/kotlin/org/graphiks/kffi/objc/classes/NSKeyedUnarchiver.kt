@@ -120,7 +120,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun containsValueForKey(key: String): BOOL = containsValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `containsValueForKey`(key: String): BOOL = containsValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeObjectForKey`(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decodeObjectForKey:")
@@ -128,7 +128,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeObjectForKey(key: String): MemorySegment = decodeObjectForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeObjectForKey`(key: String): MemorySegment = decodeObjectForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeBoolForKey`(key: MemorySegment): BOOL {
         val sel = ObjCRuntime.sel("decodeBoolForKey:")
@@ -136,7 +136,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeBoolForKey(key: String): BOOL = decodeBoolForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeBoolForKey`(key: String): BOOL = decodeBoolForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeIntForKey`(key: MemorySegment): Int {
         val sel = ObjCRuntime.sel("decodeIntForKey:")
@@ -144,7 +144,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeIntForKey(key: String): Int = decodeIntForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeIntForKey`(key: String): Int = decodeIntForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeInt32ForKey`(key: MemorySegment): int32_t {
         val sel = ObjCRuntime.sel("decodeInt32ForKey:")
@@ -152,7 +152,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeInt32ForKey(key: String): int32_t = decodeInt32ForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeInt32ForKey`(key: String): int32_t = decodeInt32ForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeInt64ForKey`(key: MemorySegment): int64_t {
         val sel = ObjCRuntime.sel("decodeInt64ForKey:")
@@ -160,7 +160,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeInt64ForKey(key: String): int64_t = decodeInt64ForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeInt64ForKey`(key: String): int64_t = decodeInt64ForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeFloatForKey`(key: MemorySegment): Float {
         val sel = ObjCRuntime.sel("decodeFloatForKey:")
@@ -168,7 +168,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeFloatForKey(key: String): Float = decodeFloatForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeFloatForKey`(key: String): Float = decodeFloatForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeDoubleForKey`(key: MemorySegment): Double {
         val sel = ObjCRuntime.sel("decodeDoubleForKey:")
@@ -176,7 +176,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeDoubleForKey(key: String): Double = decodeDoubleForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    override fun `decodeDoubleForKey`(key: String): Double = decodeDoubleForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     override fun `decodeBytesForKey_returnedLength`(key: MemorySegment, lengthp: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decodeBytesForKey:returnedLength:")
@@ -184,7 +184,7 @@ open class NSKeyedUnarchiver(ptr: MemorySegment) : NSCoder(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun decodeBytesForKey_returnedLength(key: String, lengthp: MemorySegment): MemorySegment = decodeBytesForKey_returnedLength(ObjCRuntime.newNSString(Arena.global(), key), lengthp)
+    override fun `decodeBytesForKey_returnedLength`(key: String, lengthp: MemorySegment): MemorySegment = decodeBytesForKey_returnedLength(ObjCRuntime.newNSString(Arena.global(), key), lengthp)
     
     // @property delegate
     /** @return id<NSKeyedUnarchiverDelegate> */

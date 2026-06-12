@@ -13,7 +13,7 @@ open class NSNull(val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNull") }
         
-        open fun null(): MemorySegment {
+        open fun `null`(): MemorySegment {
             val sel = ObjCRuntime.sel("null")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

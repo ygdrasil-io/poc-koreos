@@ -50,7 +50,7 @@ open class NSMutableFontCollection(ptr: MemorySegment) : NSFontCollection(ptr) {
     }
     
     // @property fontCollectionWithAllAvailableDescriptors
-    fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
+    override fun `fontCollectionWithAllAvailableDescriptors`(): MemorySegment {
         val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

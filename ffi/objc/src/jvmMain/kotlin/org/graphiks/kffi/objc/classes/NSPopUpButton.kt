@@ -154,7 +154,7 @@ open class NSPopUpButton(ptr: MemorySegment) : NSButton(ptr) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun setTitle(string: String): Unit = setTitle(ObjCRuntime.newNSString(Arena.global(), string))
+    override fun `setTitle`(string: String): Unit = setTitle(ObjCRuntime.newNSString(Arena.global(), string))
     
     fun synchronizeTitleAndSelectedItem(): Unit {
         val sel = ObjCRuntime.sel("synchronizeTitleAndSelectedItem")
