@@ -233,13 +233,13 @@ internal fun discoverGlobals(
 
         // 5. wl_registry.bind(xdg_wm_base) if present, then install the ping→pong listener.
         var xdgWmBasePtr = 0L
-        if (collector.xdgWmBaseName >= 0 && WaylandXdgLib.loaded) {
+        if (collector.xdgWmBaseName >= 0) {
             xdgWmBasePtr = bindXdgWmBase(registry, bind, collector, addListener, lookup, arena, displayPtr)
         }
 
         // 6. wl_registry.bind(zxdg_decoration_manager_v1) for server-side window decorations.
         var decorationManagerPtr = 0L
-        if (collector.decorationManagerName >= 0 && WaylandXdgLib.loaded) {
+        if (collector.decorationManagerName >= 0) {
             decorationManagerPtr = runCatching {
                 val iface = zxdg_decoration_manager_v1_interface
                 val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)

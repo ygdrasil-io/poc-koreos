@@ -22,7 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Compile the protocol XML → Kotlin generator (zero external deps, just JDK)
-RUN javac docker/wayland-codegen/ProtocolInterfaceGenerator.java
+WORKDIR /build
+COPY ProtocolInterfaceGenerator.java .
+RUN javac ProtocolInterfaceGenerator.java
 
 ENV JDK_HOME=/opt/java/openjdk \
     LLVM_HOME=/usr/lib/llvm-18
