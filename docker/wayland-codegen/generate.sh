@@ -30,17 +30,9 @@ KEXTRACT="$KEXTRACT_DIR/build/kextract/bin/kextract"
 PROTO_DECO=/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 echo "[gen] wayland-scanner $PROTO + $PROTO_DECO"
 wayland-scanner client-header "$PROTO"      "$GEN/xdg-shell-client-protocol.h"
-wayland-scanner public-code    "$PROTO"      "$GEN/xdg-shell-protocol.c"
 wayland-scanner client-header "$PROTO_DECO" "$GEN/xdg-decoration-client-protocol.h"
-wayland-scanner public-code    "$PROTO_DECO" "$GEN/xdg-decoration-protocol.c"
 
-# ── 3. Compile the interface tables into a shared lib ───────────────────────────
-echo "[gen] gcc → libkadre-xdg.so"
-gcc -shared -fPIC -o "$OUT_SO_DIR/libkadre-xdg.so" \
-    "$GEN/xdg-shell-protocol.c" "$GEN/xdg-decoration-protocol.c" -lwayland-client
-nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "(xdg_(wm_base|surface|toplevel)|zxdg_(decoration_manager|toplevel_decoration))" || true
-
-# ── 4. kextract: header → Kotlin FFM bindings ───────────────────────────────────
+# ── 3. kextract: header → Kotlin FFM bindings ───────────────────────────────────
 # -ffreestanding is required: kextract's bundled libclang, in hosted mode, can't follow
 # clang's stdint.h `#include_next <stdint.h>` chain into glibc in this image, so every
 # sized int type (int32_t/uint32_t/intmax_t) comes out "unknown" and the parse aborts.
@@ -53,17 +45,18 @@ nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "(xdg_(wm_base|surface|toplevel)|z
 "$KEXTRACT" \
   -t org.graphiks.kadre.ffi.wayland.generated \
   -o "$OUT_KT" \
-  --include-var xdg_wm_base_interface \
-  --include-var xdg_surface_interface \
-  --include-var xdg_toplevel_interface \
-  --include-var zxdg_decoration_manager_v1_interface \
-  --include-var zxdg_toplevel_decoration_v1_interface \
   --include-struct wl_interface \
   --include-struct wl_message \
   -A -ffreestanding \
   -I "$GEN" \
   "$GEN/xdg-shell-client-protocol.h" \
   "$GEN/xdg-decoration-client-protocol.h"
+
+# ── 4. Generate wl_interface MemorySegments from protocol XML ──────────────
+echo "[gen] generating wl_interface MemorySegments from XML…"
+java ProtocolInterfaceGenerator \
+    "$PROTO" "$PROTO_DECO" \
+    "$OUT_KT/org/graphiks/kadre/ffi/wayland/generated/XdgShellProtocolInterfaces.kt"
 
 echo "[gen] done. Generated:"
 find "$OUT_KT/org/graphiks/kadre/wayland/generated" -name '*.kt' 2>/dev/null
