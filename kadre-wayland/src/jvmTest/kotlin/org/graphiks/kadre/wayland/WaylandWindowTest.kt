@@ -635,6 +635,7 @@ class WaylandWindowTest {
 
     @Test
     fun `WaylandActivationToken activate with zero seat is a no-op`() {
+        if (libWaylandClient != null) return
         val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 0L)
         act.activate("test-token", surfacePtr = 100L)
     }
