@@ -11,26 +11,11 @@ PROTO=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
 
 ARCH="$(uname -m)"   # aarch64 | x86_64
 GEN="$REPO/kadre-wayland/build/wayland-xdg"
-OUT_KT="$REPO/kadre-wayland/src/jvmMain/kotlin"
-OUT_SO_DIR="$REPO/kadre-wayland/src/jvmMain/resources/native/linux-$ARCH"
+OUT_KT="$REPO/ffi/wayland/src/jvmMain/kotlin"
+OUT_SO_DIR="$REPO/ffi/wayland/src/jvmMain/resources/native/linux-$ARCH"
 
 echo "[gen] arch=$ARCH  llvm=$LLVM_HOME  jdk=$JDK_HOME"
 mkdir -p "$GEN" "$OUT_SO_DIR"
-
-# ── 0. Apply Kadre's kextract evolutions (kept as patches; submodule stays pinned) ──
-# kextract v0.0.2 mis-generates two things we need: aggregate-typed globals (struct
-# interface symbols) and struct byteSize() helpers. Our fixes live as patches here and
-# are applied idempotently before the build. See kextract-patches/.
-# Use `patch`, not `git apply`: the submodule's .git points at the parent repo's modules
-# dir, which is not mounted in the container, so git can't operate inside the submodule.
-for p in "$REPO"/docker/wayland-codegen/kextract-patches/*.patch; do
-  [ -e "$p" ] || continue
-  if patch -p1 -d "$KEXTRACT_DIR" -R --dry-run -f < "$p" >/dev/null 2>&1; then
-    echo "[gen] kextract patch already applied: $(basename "$p")"
-  else
-    patch -p1 -d "$KEXTRACT_DIR" -f < "$p" && echo "[gen] applied kextract patch: $(basename "$p")"
-  fi
-done
 
 # ── 1. Build kextract (self-contained image under build/kextract/) ──────────────
 echo "[gen] building kextract…"
@@ -66,7 +51,7 @@ nm -D "$OUT_SO_DIR/libkadre-xdg.so" | grep -E "(xdg_(wm_base|surface|toplevel)|z
 # bundled libkadre-xdg.so resource at init, which makes its symbols resolvable via
 # loaderLookup — avoiding a hard-coded library path baked into the generated file.
 "$KEXTRACT" \
-  -t org.graphiks.kadre.wayland.generated \
+  -t org.graphiks.kadre.ffi.wayland.generated \
   -o "$OUT_KT" \
   --include-var xdg_wm_base_interface \
   --include-var xdg_surface_interface \
