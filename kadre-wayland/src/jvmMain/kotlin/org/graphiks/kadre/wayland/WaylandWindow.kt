@@ -479,6 +479,7 @@ class WaylandWindow private constructor(
 
     /** Convenience: flush the Wayland display connection. */
     private fun flushDisplay() {
+        if (displayPtr == 0L) return
         wlDisplayFlush?.let { flush ->
             try {
                 val displaySeg = MemorySegment.ofAddress(displayPtr)
