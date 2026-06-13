@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSFileWrapper(val ptr: MemorySegment) {
+open class NSFileWrapper(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFileWrapper") }
         
     }
     
-    open fun initWithURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): MemorySegment {
+    open fun initWithURL_options_error(url: MemorySegment, options: MemorySegment, outError: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:options:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, options, outError) as MemorySegment
     }
@@ -45,19 +45,19 @@ open class NSFileWrapper(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, inCoder) as MemorySegment
     }
     
-    open fun matchesContentsOfURL(url: MemorySegment): BOOL {
+    open fun matchesContentsOfURL(url: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("matchesContentsOfURL:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url) as Boolean
     }
     
-    open fun readFromURL_options_error(url: MemorySegment, options: NSFileWrapperReadingOptions, outError: MemorySegment): BOOL {
+    open fun readFromURL_options_error(url: MemorySegment, options: MemorySegment, outError: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("readFromURL:options:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, outError) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, outError) as Boolean
     }
     
-    open fun writeToURL_options_originalContentsURL_error(url: MemorySegment, options: NSFileWrapperWritingOptions, originalContentsURL: MemorySegment, outError: MemorySegment): BOOL {
+    open fun writeToURL_options_originalContentsURL_error(url: MemorySegment, options: MemorySegment, originalContentsURL: MemorySegment, outError: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("writeToURL:options:originalContentsURL:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, originalContentsURL, outError) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, options, originalContentsURL, outError) as Boolean
     }
     
     open fun addFileWrapper(child: MemorySegment): MemorySegment {
@@ -66,7 +66,7 @@ open class NSFileWrapper(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun addFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(addFileWrapper(child))
+    fun addFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(addFileWrapper(child))
     
     open fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addRegularFileWithContents:preferredFilename:")
@@ -74,13 +74,13 @@ open class NSFileWrapper(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: MemorySegment): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, fileName))
+    fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: MemorySegment): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, fileName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: String): MemorySegment = addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName))
+    fun addRegularFileWithContents_preferredFilename(`data`: MemorySegment, fileName: String): MemorySegment = addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: String): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName)))
+    fun addRegularFileWithContents_preferredFilenameAsString(`data`: MemorySegment, fileName: String): String = ObjCRuntime.toJavaString(addRegularFileWithContents_preferredFilename(`data`, ObjCRuntime.newNSString(Arena.global(), fileName)))
     
     open fun removeFileWrapper(child: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeFileWrapper:")
@@ -93,24 +93,24 @@ open class NSFileWrapper(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun keyForFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(keyForFileWrapper(child))
+    fun keyForFileWrapperAsString(child: MemorySegment): String = ObjCRuntime.toJavaString(keyForFileWrapper(child))
     
     // @property directory
-    open fun isDirectory(): BOOL {
+    open fun isDirectory(): Boolean {
         val sel = ObjCRuntime.sel("isDirectory")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property regularFile
-    open fun isRegularFile(): BOOL {
+    open fun isRegularFile(): Boolean {
         val sel = ObjCRuntime.sel("isRegularFile")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property symbolicLink
-    open fun isSymbolicLink(): BOOL {
+    open fun isSymbolicLink(): Boolean {
         val sel = ObjCRuntime.sel("isSymbolicLink")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property preferredFilename
@@ -187,54 +187,53 @@ open class NSFileWrapper(val ptr: MemorySegment) {
 
 fun NSFileWrapper.initWithPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, path) as MemorySegment
 }
 
 fun NSFileWrapper.initSymbolicLinkWithDestination(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initSymbolicLinkWithDestination:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, path) as MemorySegment
 }
 
-fun NSFileWrapper.needsToBeUpdatedFromPath(path: MemorySegment): BOOL {
+fun NSFileWrapper.needsToBeUpdatedFromPath(path: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("needsToBeUpdatedFromPath:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, path) as Boolean
 }
 
-fun NSFileWrapper.updateFromPath(path: MemorySegment): BOOL {
+fun NSFileWrapper.updateFromPath(path: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("updateFromPath:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, path) as Boolean
 }
 
-fun NSFileWrapper.writeToFile_atomically_updateFilenames(path: MemorySegment, atomicFlag: BOOL, updateFilenamesFlag: BOOL): BOOL {
+fun NSFileWrapper.writeToFile_atomically_updateFilenames(path: MemorySegment, atomicFlag: Boolean, updateFilenamesFlag: Boolean): Boolean {
     val sel = ObjCRuntime.sel("writeToFile:atomically:updateFilenames:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path, atomicFlag, updateFilenamesFlag) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, path, atomicFlag, updateFilenamesFlag) as Boolean
 }
 
 fun NSFileWrapper.addFileWithPath(path: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("addFileWithPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, path) as MemorySegment
 }
 
 fun NSFileWrapper.addSymbolicLinkWithDestination_preferredFilename(path: MemorySegment, filename: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("addSymbolicLinkWithDestination:preferredFilename:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path, filename) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, path, filename) as MemorySegment
 }
 
 fun NSFileWrapper.symbolicLinkDestination(): MemorySegment {
     val sel = ObjCRuntime.sel("symbolicLinkDestination")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 // ── Category: NSExtensions on NSFileWrapper ─────────────────────────────────────────
 
 fun NSFileWrapper.icon(): MemorySegment {
     val sel = ObjCRuntime.sel("icon")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSFileWrapper.setIcon(icon: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setIcon:")
-    ObjCRuntime.msgSend(null, ptr, sel, icon)
+    ObjCRuntime.msgSend(null, this.ptr, sel, icon)
 }
 
-// @property icon

@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSOutlineViewDataSource
  * Inherits protocols: NSObject
  */
-interface NSOutlineViewDataSource : NSObject {
+interface NSOutlineViewDataSource {
     // @optional
-    fun outlineView_numberOfChildrenOfItem(outlineView: MemorySegment, item: MemorySegment): NSInteger =
+    fun outlineView_numberOfChildrenOfItem(outlineView: MemorySegment, item: MemorySegment): Long =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:numberOfChildrenOfItem:' not implemented")
     
     // @optional
-    fun outlineView_child_ofItem(outlineView: MemorySegment, index: NSInteger, item: MemorySegment): MemorySegment =
+    fun outlineView_child_ofItem(outlineView: MemorySegment, index: Long, item: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:child:ofItem:' not implemented")
     
     // @optional
-    fun outlineView_isItemExpandable(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_isItemExpandable(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:isItemExpandable:' not implemented")
     
     // @optional
@@ -47,15 +47,15 @@ interface NSOutlineViewDataSource : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:pasteboardWriterForItem:' not implemented")
     
     // @optional
-    fun outlineView_draggingSession_willBeginAtPoint_forItems(outlineView: MemorySegment, session: MemorySegment, screenPoint: NSPoint, draggedItems: MemorySegment): Unit =
+    fun outlineView_draggingSession_willBeginAtPoint_forItems(outlineView: MemorySegment, session: MemorySegment, screenPoint: MemorySegment, draggedItems: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:draggingSession:willBeginAtPoint:forItems:' not implemented")
     
     // @optional
-    fun outlineView_draggingSession_endedAtPoint_operation(outlineView: MemorySegment, session: MemorySegment, screenPoint: NSPoint, operation: NSDragOperation): Unit =
+    fun outlineView_draggingSession_endedAtPoint_operation(outlineView: MemorySegment, session: MemorySegment, screenPoint: MemorySegment, operation: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:draggingSession:endedAtPoint:operation:' not implemented")
     
     // @optional
-    fun outlineView_writeItems_toPasteboard(outlineView: MemorySegment, items: MemorySegment, pasteboard: MemorySegment): BOOL =
+    fun outlineView_writeItems_toPasteboard(outlineView: MemorySegment, items: MemorySegment, pasteboard: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:writeItems:toPasteboard:' not implemented")
     
     // @optional
@@ -63,11 +63,11 @@ interface NSOutlineViewDataSource : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:updateDraggingItemsForDrag:' not implemented")
     
     // @optional
-    fun outlineView_validateDrop_proposedItem_proposedChildIndex(outlineView: MemorySegment, info: MemorySegment, item: MemorySegment, index: NSInteger): NSDragOperation =
+    fun outlineView_validateDrop_proposedItem_proposedChildIndex(outlineView: MemorySegment, info: MemorySegment, item: MemorySegment, index: Long): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:validateDrop:proposedItem:proposedChildIndex:' not implemented")
     
     // @optional
-    fun outlineView_acceptDrop_item_childIndex(outlineView: MemorySegment, info: MemorySegment, item: MemorySegment, index: NSInteger): BOOL =
+    fun outlineView_acceptDrop_item_childIndex(outlineView: MemorySegment, info: MemorySegment, item: MemorySegment, index: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:acceptDrop:item:childIndex:' not implemented")
     
     /** @return NSArray<NSString *> * */

@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSessionWebSocketMessage
  * Superclass: NSObject
  */
-open class NSURLSessionWebSocketMessage(val ptr: MemorySegment) {
+open class NSURLSessionWebSocketMessage(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionWebSocketMessage") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -30,7 +30,7 @@ open class NSURLSessionWebSocketMessage(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
+    fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
@@ -38,13 +38,13 @@ open class NSURLSessionWebSocketMessage(val ptr: MemorySegment) {
     }
     
     // @property type
-    open fun type(): NSURLSessionWebSocketMessageType {
+    open fun type(): MemorySegment {
         val sel = ObjCRuntime.sel("type")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLSessionWebSocketMessageType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property data
-    open fun data(): MemorySegment {
+    open fun `data`(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

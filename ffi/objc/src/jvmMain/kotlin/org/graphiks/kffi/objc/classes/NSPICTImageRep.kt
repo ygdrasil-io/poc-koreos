@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPICTImageRep
  * Superclass: NSImageRep
  */
-open class NSPICTImageRep(ptr: MemorySegment) : NSImageRep(ptr) {
+open class NSPICTImageRep(override val ptr: MemorySegment) : NSImageRep(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPICTImageRep") }
         
@@ -19,21 +19,21 @@ open class NSPICTImageRep(ptr: MemorySegment) : NSImageRep(ptr) {
         
     }
     
-    fun initWithData(pictData: MemorySegment): MemorySegment {
+    open fun initWithData(pictData: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pictData) as MemorySegment
     }
     
     // @property PICTRepresentation
-    fun PICTRepresentation(): MemorySegment {
+    open fun PICTRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("PICTRepresentation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property boundingBox
-    fun boundingBox(): NSRect {
+    open fun boundingBox(): MemorySegment {
         val sel = ObjCRuntime.sel("boundingBox")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
 }

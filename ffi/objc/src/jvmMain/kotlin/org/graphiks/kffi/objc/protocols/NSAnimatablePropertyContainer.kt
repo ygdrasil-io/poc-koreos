@@ -10,16 +10,14 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 interface NSAnimatablePropertyContainer {
     fun animator(): MemorySegment
     
-    fun animationForKey(key: NSAnimatablePropertyKey): MemorySegment
+    fun animationForKey(key: MemorySegment): MemorySegment
     
-    fun defaultAnimationForKey(key: NSAnimatablePropertyKey): MemorySegment
+    fun defaultAnimationForKey(key: MemorySegment): MemorySegment
     
     /** @return NSDictionary<NSAnimatablePropertyKey,id> * */
     fun animations(): MemorySegment
     
-    fun setAnimations(animations: MemorySegment)
+    fun setAnimations(animations: MemorySegment): Unit
     
-    // @property animations
-    /** @return NSDictionary<NSAnimatablePropertyKey,id> * */
 }
 

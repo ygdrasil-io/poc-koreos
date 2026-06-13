@@ -9,23 +9,23 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSFastEnumeration, NSCopying, NSSecureCoding
  */
-open class NSPointerArray(val ptr: MemorySegment) {
+open class NSPointerArray(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPointerArray") }
         
-        open fun pointerArrayWithOptions(options: NSPointerFunctionsOptions): MemorySegment {
+        fun pointerArrayWithOptions(options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("pointerArrayWithOptions:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, options) as MemorySegment
         }
         
-        open fun pointerArrayWithPointerFunctions(functions: MemorySegment): MemorySegment {
+        fun pointerArrayWithPointerFunctions(functions: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("pointerArrayWithPointerFunctions:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, functions) as MemorySegment
         }
         
     }
     
-    open fun initWithOptions(options: NSPointerFunctionsOptions): MemorySegment {
+    open fun initWithOptions(options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithOptions:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options) as MemorySegment
     }
@@ -35,7 +35,7 @@ open class NSPointerArray(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, functions) as MemorySegment
     }
     
-    open fun pointerAtIndex(index: NSUInteger): MemorySegment {
+    open fun pointerAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("pointerAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
@@ -45,17 +45,17 @@ open class NSPointerArray(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, pointer)
     }
     
-    open fun removePointerAtIndex(index: NSUInteger): Unit {
+    open fun removePointerAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removePointerAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    open fun insertPointer_atIndex(item: MemorySegment, index: NSUInteger): Unit {
+    open fun insertPointer_atIndex(item: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertPointer:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, item, index)
     }
     
-    open fun replacePointerAtIndex_withPointer(index: NSUInteger, item: MemorySegment): Unit {
+    open fun replacePointerAtIndex_withPointer(index: Long, item: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("replacePointerAtIndex:withPointer:")
         ObjCRuntime.msgSend(null, ptr, sel, index, item)
     }
@@ -72,11 +72,11 @@ open class NSPointerArray(val ptr: MemorySegment) {
     }
     
     // @property count
-    open fun count(): NSUInteger {
+    open fun count(): Long {
         val sel = ObjCRuntime.sel("count")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setCount(value: NSUInteger) {
+    open fun setCount(value: Long) {
         val sel = ObjCRuntime.sel("setCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -87,35 +87,34 @@ open class NSPointerArray(val ptr: MemorySegment) {
 
 fun NSPointerArray.allObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("allObjects")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSPointerArray pointerArrayWithStrongObjects]
+// Class method: +[NSPointerArray pointerArrayWithStrongObjects]
 fun NSPointerArray_pointerArrayWithStrongObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("pointerArrayWithStrongObjects")
     val cls = ObjCRuntime.getClass("NSPointerArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSPointerArray pointerArrayWithWeakObjects]
+// Class method: +[NSPointerArray pointerArrayWithWeakObjects]
 fun NSPointerArray_pointerArrayWithWeakObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("pointerArrayWithWeakObjects")
     val cls = ObjCRuntime.getClass("NSPointerArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSPointerArray strongObjectsPointerArray]
+// Class method: +[NSPointerArray strongObjectsPointerArray]
 fun NSPointerArray_strongObjectsPointerArray(): MemorySegment {
     val sel = ObjCRuntime.sel("strongObjectsPointerArray")
     val cls = ObjCRuntime.getClass("NSPointerArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSPointerArray weakObjectsPointerArray]
+// Class method: +[NSPointerArray weakObjectsPointerArray]
 fun NSPointerArray_weakObjectsPointerArray(): MemorySegment {
     val sel = ObjCRuntime.sel("weakObjectsPointerArray")
     val cls = ObjCRuntime.getClass("NSPointerArray")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// @property allObjects

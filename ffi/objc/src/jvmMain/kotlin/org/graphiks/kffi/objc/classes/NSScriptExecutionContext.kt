@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSScriptExecutionContext
  * Superclass: NSObject
  */
-open class NSScriptExecutionContext(val ptr: MemorySegment) {
+open class NSScriptExecutionContext(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptExecutionContext") }
         
-        open fun sharedScriptExecutionContext(): MemorySegment {
+        fun sharedScriptExecutionContext(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedScriptExecutionContext")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

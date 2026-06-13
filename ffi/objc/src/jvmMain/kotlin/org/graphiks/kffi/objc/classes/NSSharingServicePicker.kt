@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSharingServicePicker
  * Superclass: NSObject
  */
-open class NSSharingServicePicker(val ptr: MemorySegment) {
+open class NSSharingServicePicker(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSharingServicePicker") }
         
@@ -24,7 +24,7 @@ open class NSSharingServicePicker(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun showRelativeToRect_ofView_preferredEdge(rect: NSRect, view: MemorySegment, preferredEdge: NSRectEdge): Unit {
+    open fun showRelativeToRect_ofView_preferredEdge(rect: MemorySegment, view: MemorySegment, preferredEdge: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("showRelativeToRect:ofView:preferredEdge:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), view, preferredEdge)
     }

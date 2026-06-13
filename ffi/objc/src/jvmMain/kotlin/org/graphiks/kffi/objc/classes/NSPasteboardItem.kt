@@ -9,54 +9,54 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSPasteboardWriting, NSPasteboardReading
  */
-open class NSPasteboardItem(val ptr: MemorySegment) {
+open class NSPasteboardItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPasteboardItem") }
         
     }
     
-    open fun availableTypeFromArray(types: MemorySegment): NSPasteboardType {
+    open fun availableTypeFromArray(types: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("availableTypeFromArray:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, types) as NSPasteboardType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, types) as MemorySegment
     }
     
-    open fun setDataProvider_forTypes(dataProvider: MemorySegment, types: MemorySegment): BOOL {
+    open fun setDataProvider_forTypes(dataProvider: MemorySegment, types: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setDataProvider:forTypes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dataProvider, types) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dataProvider, types) as Boolean
     }
     
-    open fun setData_forType(`data`: MemorySegment, type: NSPasteboardType): BOOL {
+    open fun setData_forType(`data`: MemorySegment, type: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setData:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`, type) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`, type) as Boolean
     }
     
-    open fun setString_forType(string: MemorySegment, type: NSPasteboardType): BOOL {
+    open fun setString_forType(string: MemorySegment, type: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setString:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, type) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, type) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setString_forType(string: String, type: NSPasteboardType): BOOL = setString_forType(ObjCRuntime.newNSString(Arena.global(), string), type)
+    fun setString_forType(string: String, type: MemorySegment): Boolean = setString_forType(ObjCRuntime.newNSString(Arena.global(), string), type)
     
-    open fun setPropertyList_forType(propertyList: MemorySegment, type: NSPasteboardType): BOOL {
+    open fun setPropertyList_forType(propertyList: MemorySegment, type: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setPropertyList:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, propertyList, type) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, propertyList, type) as Boolean
     }
     
-    open fun dataForType(type: NSPasteboardType): MemorySegment {
+    open fun dataForType(type: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dataForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type) as MemorySegment
     }
     
-    open fun stringForType(type: NSPasteboardType): MemorySegment {
+    open fun stringForType(type: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun stringForTypeAsString(type: NSPasteboardType): String = ObjCRuntime.toJavaString(stringForType(type))
+    fun stringForTypeAsString(type: MemorySegment): String = ObjCRuntime.toJavaString(stringForType(type))
     
-    open fun propertyListForType(type: NSPasteboardType): MemorySegment {
+    open fun propertyListForType(type: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("propertyListForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type) as MemorySegment
     }

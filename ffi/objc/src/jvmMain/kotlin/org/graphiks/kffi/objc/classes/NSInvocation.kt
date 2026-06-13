@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSInvocation
  * Superclass: NSObject
  */
-open class NSInvocation(val ptr: MemorySegment) {
+open class NSInvocation(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSInvocation") }
         
-        open fun invocationWithMethodSignature(sig: MemorySegment): MemorySegment {
+        fun invocationWithMethodSignature(sig: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("invocationWithMethodSignature:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, sig) as MemorySegment
         }
@@ -34,12 +34,12 @@ open class NSInvocation(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, retLoc)
     }
     
-    open fun getArgument_atIndex(argumentLocation: MemorySegment, idx: NSInteger): Unit {
+    open fun getArgument_atIndex(argumentLocation: MemorySegment, idx: Long): Unit {
         val sel = ObjCRuntime.sel("getArgument:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, argumentLocation, idx)
     }
     
-    open fun setArgument_atIndex(argumentLocation: MemorySegment, idx: NSInteger): Unit {
+    open fun setArgument_atIndex(argumentLocation: MemorySegment, idx: Long): Unit {
         val sel = ObjCRuntime.sel("setArgument:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, argumentLocation, idx)
     }
@@ -66,9 +66,9 @@ open class NSInvocation(val ptr: MemorySegment) {
     }
     
     // @property argumentsRetained
-    open fun argumentsRetained(): BOOL {
+    open fun argumentsRetained(): Boolean {
         val sel = ObjCRuntime.sel("argumentsRetained")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property target

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSFileProviderService
  * Superclass: NSObject
  */
-open class NSFileProviderService(val ptr: MemorySegment) {
+open class NSFileProviderService(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFileProviderService") }
         
@@ -20,9 +20,9 @@ open class NSFileProviderService(val ptr: MemorySegment) {
     }
     
     // @property name
-    open fun name(): NSFileProviderServiceName {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFileProviderServiceName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     

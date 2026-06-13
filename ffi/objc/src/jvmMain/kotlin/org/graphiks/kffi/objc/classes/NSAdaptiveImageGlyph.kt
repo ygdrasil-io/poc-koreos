@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding, CTAdaptiveImageProviding
  */
-open class NSAdaptiveImageGlyph(val ptr: MemorySegment) {
+open class NSAdaptiveImageGlyph(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAdaptiveImageGlyph") }
         
-        open fun contentType(): MemorySegment {
+        fun contentType(): MemorySegment {
             val sel = ObjCRuntime.sel("contentType")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -60,5 +60,10 @@ open class NSAdaptiveImageGlyph(val ptr: MemorySegment) {
     open fun contentDescriptionAsString(): String = ObjCRuntime.toJavaString(contentDescription())
     
     // @property contentType
+    open fun contentType(): MemorySegment {
+        val sel = ObjCRuntime.sel("contentType")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

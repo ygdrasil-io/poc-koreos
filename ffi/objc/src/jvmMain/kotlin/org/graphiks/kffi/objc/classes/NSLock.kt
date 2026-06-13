@@ -9,20 +9,20 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSLocking
  */
-open class NSLock(val ptr: MemorySegment) {
+open class NSLock(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSLock") }
         
     }
     
-    open fun tryLock(): BOOL {
+    open fun tryLock(): Boolean {
         val sel = ObjCRuntime.sel("tryLock")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    open fun lockBeforeDate(limit: MemorySegment): BOOL {
+    open fun lockBeforeDate(limit: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("lockBeforeDate:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, limit) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, limit) as Boolean
     }
     
     // @property name

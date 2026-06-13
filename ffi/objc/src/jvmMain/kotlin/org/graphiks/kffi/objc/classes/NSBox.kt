@@ -8,152 +8,152 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSBox
  * Superclass: NSView
  */
-open class NSBox(ptr: MemorySegment) : NSView(ptr) {
+open class NSBox(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSBox") }
         
     }
     
-    fun sizeToFit(): Unit {
+    open fun sizeToFit(): Unit {
         val sel = ObjCRuntime.sel("sizeToFit")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setFrameFromContentFrame(contentFrame: NSRect): Unit {
+    open fun setFrameFromContentFrame(contentFrame: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setFrameFromContentFrame:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(contentFrame, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
     // @property boxType
-    fun boxType(): NSBoxType {
+    open fun boxType(): MemorySegment {
         val sel = ObjCRuntime.sel("boxType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBoxType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBoxType(value: NSBoxType) {
+    open fun setBoxType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBoxType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property titlePosition
-    fun titlePosition(): NSTitlePosition {
+    open fun titlePosition(): MemorySegment {
         val sel = ObjCRuntime.sel("titlePosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTitlePosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitlePosition(value: NSTitlePosition) {
+    open fun setTitlePosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitlePosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property title
-    fun title(): MemorySegment {
+    open fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    open fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
+    open fun titleAsString(): String = ObjCRuntime.toJavaString(title())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property titleFont
-    fun titleFont(): MemorySegment {
+    open fun titleFont(): MemorySegment {
         val sel = ObjCRuntime.sel("titleFont")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitleFont(value: MemorySegment) {
+    open fun setTitleFont(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitleFont:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property borderRect
-    fun borderRect(): NSRect {
+    open fun borderRect(): MemorySegment {
         val sel = ObjCRuntime.sel("borderRect")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property titleRect
-    fun titleRect(): NSRect {
+    open fun titleRect(): MemorySegment {
         val sel = ObjCRuntime.sel("titleRect")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property titleCell
-    fun titleCell(): MemorySegment {
+    open fun titleCell(): MemorySegment {
         val sel = ObjCRuntime.sel("titleCell")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property contentViewMargins
-    fun contentViewMargins(): NSSize {
+    open fun contentViewMargins(): MemorySegment {
         val sel = ObjCRuntime.sel("contentViewMargins")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setContentViewMargins(value: NSSize) {
+    open fun setContentViewMargins(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentViewMargins:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property contentView
-    fun contentView(): MemorySegment {
+    open fun contentView(): MemorySegment {
         val sel = ObjCRuntime.sel("contentView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setContentView(value: MemorySegment) {
+    open fun setContentView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property transparent
-    fun isTransparent(): BOOL {
+    open fun isTransparent(): Boolean {
         val sel = ObjCRuntime.sel("isTransparent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setTransparent(value: BOOL) {
+    open fun setTransparent(value: Boolean) {
         val sel = ObjCRuntime.sel("setTransparent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property borderWidth
-    fun borderWidth(): CGFloat {
+    open fun borderWidth(): Double {
         val sel = ObjCRuntime.sel("borderWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setBorderWidth(value: CGFloat) {
+    open fun setBorderWidth(value: Double) {
         val sel = ObjCRuntime.sel("setBorderWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cornerRadius
-    fun cornerRadius(): CGFloat {
+    open fun cornerRadius(): Double {
         val sel = ObjCRuntime.sel("cornerRadius")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setCornerRadius(value: CGFloat) {
+    open fun setCornerRadius(value: Double) {
         val sel = ObjCRuntime.sel("setCornerRadius:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property borderColor
-    fun borderColor(): MemorySegment {
+    open fun borderColor(): MemorySegment {
         val sel = ObjCRuntime.sel("borderColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBorderColor(value: MemorySegment) {
+    open fun setBorderColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBorderColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property fillColor
-    fun fillColor(): MemorySegment {
+    open fun fillColor(): MemorySegment {
         val sel = ObjCRuntime.sel("fillColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFillColor(value: MemorySegment) {
+    open fun setFillColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFillColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -164,17 +164,16 @@ open class NSBox(ptr: MemorySegment) : NSView(ptr) {
 
 fun NSBox.setTitleWithMnemonic(stringWithAmpersand: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleWithMnemonic:")
-    ObjCRuntime.msgSend(null, ptr, sel, stringWithAmpersand)
+    ObjCRuntime.msgSend(null, this.ptr, sel, stringWithAmpersand)
 }
 
-fun NSBox.borderType(): NSBorderType {
+fun NSBox.borderType(): MemorySegment {
     val sel = ObjCRuntime.sel("borderType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBorderType
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSBox.setBorderType(borderType: NSBorderType): Unit {
+fun NSBox.setBorderType(borderType: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setBorderType:")
-    ObjCRuntime.msgSend(null, ptr, sel, borderType)
+    ObjCRuntime.msgSend(null, this.ptr, sel, borderType)
 }
 
-// @property borderType

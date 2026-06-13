@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSNotification(val ptr: MemorySegment) {
+open class NSNotification(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNotification") }
         
     }
     
-    open fun initWithName_object_userInfo(name: NSNotificationName, `object`: MemorySegment, userInfo: MemorySegment): MemorySegment {
+    open fun initWithName_object_userInfo(name: MemorySegment, `object`: MemorySegment, userInfo: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:object:userInfo:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, `object`, userInfo) as MemorySegment
     }
@@ -26,9 +26,9 @@ open class NSNotification(val ptr: MemorySegment) {
     }
     
     // @property name
-    open fun name(): NSNotificationName {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSNotificationName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property object
@@ -49,18 +49,18 @@ open class NSNotification(val ptr: MemorySegment) {
 
 fun NSNotification.init(): MemorySegment {
     val sel = ObjCRuntime.sel("init")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSNotification notificationWithName:object:]
-fun NSNotification_notificationWithName_object(aName: NSNotificationName, anObject: MemorySegment): MemorySegment {
+// Class method: +[NSNotification notificationWithName:object:]
+fun NSNotification_notificationWithName_object(aName: MemorySegment, anObject: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("notificationWithName:object:")
     val cls = ObjCRuntime.getClass("NSNotification")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, aName, anObject) as MemorySegment
 }
 
-// Class<*> method: +[NSNotification notificationWithName:object:userInfo:]
-fun NSNotification_notificationWithName_object_userInfo(aName: NSNotificationName, anObject: MemorySegment, aUserInfo: MemorySegment): MemorySegment {
+// Class method: +[NSNotification notificationWithName:object:userInfo:]
+fun NSNotification_notificationWithName_object_userInfo(aName: MemorySegment, anObject: MemorySegment, aUserInfo: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("notificationWithName:object:userInfo:")
     val cls = ObjCRuntime.getClass("NSNotification")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, aName, anObject, aUserInfo) as MemorySegment

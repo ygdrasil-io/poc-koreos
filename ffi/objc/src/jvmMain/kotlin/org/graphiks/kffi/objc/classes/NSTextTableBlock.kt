@@ -8,45 +8,45 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextTableBlock
  * Superclass: NSTextBlock
  */
-open class NSTextTableBlock(ptr: MemorySegment) : NSTextBlock(ptr) {
+open class NSTextTableBlock(override val ptr: MemorySegment) : NSTextBlock(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextTableBlock") }
         
     }
     
-    fun initWithTable_startingRow_rowSpan_startingColumn_columnSpan(table: MemorySegment, row: NSInteger, rowSpan: NSInteger, col: NSInteger, colSpan: NSInteger): MemorySegment {
+    open fun initWithTable_startingRow_rowSpan_startingColumn_columnSpan(table: MemorySegment, row: Long, rowSpan: Long, col: Long, colSpan: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTable:startingRow:rowSpan:startingColumn:columnSpan:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, table, row, rowSpan, col, colSpan) as MemorySegment
     }
     
     // @property table
-    fun table(): MemorySegment {
+    open fun table(): MemorySegment {
         val sel = ObjCRuntime.sel("table")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property startingRow
-    fun startingRow(): NSInteger {
+    open fun startingRow(): Long {
         val sel = ObjCRuntime.sel("startingRow")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property rowSpan
-    fun rowSpan(): NSInteger {
+    open fun rowSpan(): Long {
         val sel = ObjCRuntime.sel("rowSpan")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property startingColumn
-    fun startingColumn(): NSInteger {
+    open fun startingColumn(): Long {
         val sel = ObjCRuntime.sel("startingColumn")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property columnSpan
-    fun columnSpan(): NSInteger {
+    open fun columnSpan(): Long {
         val sel = ObjCRuntime.sel("columnSpan")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
 }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDockTile
  * Superclass: NSObject
  */
-open class NSDockTile(val ptr: MemorySegment) {
+open class NSDockTile(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDockTile") }
         
@@ -20,9 +20,9 @@ open class NSDockTile(val ptr: MemorySegment) {
     }
     
     // @property size
-    open fun size(): NSSize {
+    open fun size(): MemorySegment {
         val sel = ObjCRuntime.sel("size")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
     
     // @property contentView
@@ -36,11 +36,11 @@ open class NSDockTile(val ptr: MemorySegment) {
     }
     
     // @property showsApplicationBadge
-    open fun showsApplicationBadge(): BOOL {
+    open fun showsApplicationBadge(): Boolean {
         val sel = ObjCRuntime.sel("showsApplicationBadge")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShowsApplicationBadge(value: BOOL) {
+    open fun setShowsApplicationBadge(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsApplicationBadge:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

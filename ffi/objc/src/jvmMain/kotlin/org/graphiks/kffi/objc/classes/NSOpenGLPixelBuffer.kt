@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSOpenGLPixelBuffer
  * Superclass: NSObject
  */
-open class NSOpenGLPixelBuffer(val ptr: MemorySegment) {
+open class NSOpenGLPixelBuffer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOpenGLPixelBuffer") }
         
     }
     
-    open fun initWithTextureTarget_textureInternalFormat_textureMaxMipMapLevel_pixelsWide_pixelsHigh(target: GLenum, format: GLenum, maxLevel: GLint, pixelsWide: GLsizei, pixelsHigh: GLsizei): MemorySegment {
+    open fun initWithTextureTarget_textureInternalFormat_textureMaxMipMapLevel_pixelsWide_pixelsHigh(target: Int, format: Int, maxLevel: Int, pixelsWide: Int, pixelsHigh: Int): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTextureTarget:textureInternalFormat:textureMaxMipMapLevel:pixelsWide:pixelsHigh:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, format, maxLevel, pixelsWide, pixelsHigh) as MemorySegment
     }
@@ -31,33 +31,33 @@ open class NSOpenGLPixelBuffer(val ptr: MemorySegment) {
     }
     
     // @property pixelsWide
-    open fun pixelsWide(): GLsizei {
+    open fun pixelsWide(): Int {
         val sel = ObjCRuntime.sel("pixelsWide")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLsizei
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property pixelsHigh
-    open fun pixelsHigh(): GLsizei {
+    open fun pixelsHigh(): Int {
         val sel = ObjCRuntime.sel("pixelsHigh")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLsizei
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property textureTarget
-    open fun textureTarget(): GLenum {
+    open fun textureTarget(): Int {
         val sel = ObjCRuntime.sel("textureTarget")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLenum
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property textureInternalFormat
-    open fun textureInternalFormat(): GLenum {
+    open fun textureInternalFormat(): Int {
         val sel = ObjCRuntime.sel("textureInternalFormat")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLenum
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property textureMaxMipMapLevel
-    open fun textureMaxMipMapLevel(): GLint {
+    open fun textureMaxMipMapLevel(): Int {
         val sel = ObjCRuntime.sel("textureMaxMipMapLevel")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
 }

@@ -8,28 +8,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSProxy
  * Protocols: NSObject
  */
-open class NSProxy(val ptr: MemorySegment) {
+open class NSProxy(open val ptr: MemorySegment) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSProxy") }
         
-        open fun alloc(): MemorySegment {
+        fun alloc(): MemorySegment {
             val sel = ObjCRuntime.sel("alloc")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun allocWithZone(zone: MemorySegment): MemorySegment {
+        fun allocWithZone(zone: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("allocWithZone:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, zone) as MemorySegment
         }
         
-        open fun `class`(): Class<*> {
+        fun `class`(): MemorySegment {
             val sel = ObjCRuntime.sel("class")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as Class<*>
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun respondsToSelector(aSelector: MemorySegment): BOOL {
+        fun respondsToSelector(aSelector: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("respondsToSelector:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, aSelector) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, aSelector) as Boolean
         }
         
     }
@@ -49,19 +49,19 @@ open class NSProxy(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun finalize(): Unit {
+    open fun finalizeObjC(): Unit {
         val sel = ObjCRuntime.sel("finalize")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun allowsWeakReference(): BOOL {
+    open fun allowsWeakReference(): Boolean {
         val sel = ObjCRuntime.sel("allowsWeakReference")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    open fun retainWeakReference(): BOOL {
+    open fun retainWeakReference(): Boolean {
         val sel = ObjCRuntime.sel("retainWeakReference")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property description

@@ -8,11 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSViewContentSelectionInfo
  * Inherits protocols: NSObject
  */
-interface NSViewContentSelectionInfo : NSObject {
+interface NSViewContentSelectionInfo {
     // @optional
-    fun selectionAnchorRect(): NSRect =
+    fun selectionAnchorRect(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'selectionAnchorRect' not implemented")
     
-    // @property selectionAnchorRect
 }
 

@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSUserNotificationCenter
  * Superclass: NSObject
  */
-open class NSUserNotificationCenter(val ptr: MemorySegment) {
+open class NSUserNotificationCenter(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserNotificationCenter") }
         
-        open fun defaultUserNotificationCenter(): MemorySegment {
+        fun defaultUserNotificationCenter(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultUserNotificationCenter")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -45,6 +45,12 @@ open class NSUserNotificationCenter(val ptr: MemorySegment) {
     }
     
     // @property defaultUserNotificationCenter
+    open fun defaultUserNotificationCenter(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultUserNotificationCenter")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property delegate
     /** @return id<NSUserNotificationCenterDelegate> */
     open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")

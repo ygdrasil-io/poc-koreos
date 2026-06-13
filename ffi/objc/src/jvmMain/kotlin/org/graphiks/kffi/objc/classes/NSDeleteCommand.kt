@@ -8,19 +8,19 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDeleteCommand
  * Superclass: NSScriptCommand
  */
-open class NSDeleteCommand(ptr: MemorySegment) : NSScriptCommand(ptr) {
+open class NSDeleteCommand(override val ptr: MemorySegment) : NSScriptCommand(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDeleteCommand") }
         
     }
     
-    override fun `setReceiversSpecifier`(receiversRef: MemorySegment): Unit {
+    override fun setReceiversSpecifier(receiversRef: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setReceiversSpecifier:")
         ObjCRuntime.msgSend(null, ptr, sel, receiversRef)
     }
     
     // @property keySpecifier
-    fun keySpecifier(): MemorySegment {
+    open fun keySpecifier(): MemorySegment {
         val sel = ObjCRuntime.sel("keySpecifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

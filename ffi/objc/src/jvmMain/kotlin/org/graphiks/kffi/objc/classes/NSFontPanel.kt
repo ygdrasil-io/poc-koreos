@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSFontPanel
  * Superclass: NSPanel
  */
-open class NSFontPanel(ptr: MemorySegment) : NSPanel(ptr) {
+open class NSFontPanel(override val ptr: MemorySegment) : NSPanel(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFontPanel") }
         
@@ -17,54 +17,66 @@ open class NSFontPanel(ptr: MemorySegment) : NSPanel(ptr) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun sharedFontPanelExists(): BOOL {
+        fun sharedFontPanelExists(): Boolean {
             val sel = ObjCRuntime.sel("sharedFontPanelExists")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
     }
     
-    fun setPanelFont_isMultiple(fontObj: MemorySegment, flag: BOOL): Unit {
+    open fun setPanelFont_isMultiple(fontObj: MemorySegment, flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("setPanelFont:isMultiple:")
         ObjCRuntime.msgSend(null, ptr, sel, fontObj, flag)
     }
     
-    fun panelConvertFont(fontObj: MemorySegment): MemorySegment {
+    open fun panelConvertFont(fontObj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("panelConvertFont:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj) as MemorySegment
     }
     
-    fun reloadDefaultFontFamilies(): Unit {
+    open fun reloadDefaultFontFamilies(): Unit {
         val sel = ObjCRuntime.sel("reloadDefaultFontFamilies")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property sharedFontPanel
-    fun accessoryView(): MemorySegment {
+    open fun sharedFontPanel(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedFontPanel")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property sharedFontPanelExists
+    open fun sharedFontPanelExists(): Boolean {
+        val sel = ObjCRuntime.sel("sharedFontPanelExists")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
+    }
+    
+    // @property accessoryView
+    open fun accessoryView(): MemorySegment {
         val sel = ObjCRuntime.sel("accessoryView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAccessoryView(value: MemorySegment) {
+    open fun setAccessoryView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAccessoryView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property worksWhenModal
-    override fun `worksWhenModal`(): BOOL {
+    override fun worksWhenModal(): Boolean {
         val sel = ObjCRuntime.sel("worksWhenModal")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    override fun `setWorksWhenModal`(value: BOOL) {
+    override fun setWorksWhenModal(value: Boolean) {
         val sel = ObjCRuntime.sel("setWorksWhenModal:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property enabled
-    fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

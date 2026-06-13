@@ -9,17 +9,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSUserNotificationAction(val ptr: MemorySegment) {
+open class NSUserNotificationAction(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserNotificationAction") }
         
-        open fun actionWithIdentifier_title(identifier: MemorySegment, title: MemorySegment): MemorySegment {
+        fun actionWithIdentifier_title(identifier: MemorySegment, title: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("actionWithIdentifier:title:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, identifier, title) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun actionWithIdentifier_title(identifier: String, title: String): MemorySegment = actionWithIdentifier_title(ObjCRuntime.newNSString(Arena.global(), identifier), ObjCRuntime.newNSString(Arena.global(), title))
+        fun actionWithIdentifier_title(identifier: String, title: String): MemorySegment = actionWithIdentifier_title(ObjCRuntime.newNSString(Arena.global(), identifier), ObjCRuntime.newNSString(Arena.global(), title))
         
     }
     

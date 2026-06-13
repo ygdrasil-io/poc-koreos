@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserInterfaceItemSearching
  * Inherits protocols: NSObject
  */
-interface NSUserInterfaceItemSearching : NSObject {
-    fun searchForItemsWithSearchString_resultLimit_matchedItemHandler(searchString: MemorySegment, resultLimit: NSInteger, handleMatchedItems: MemorySegment)
+interface NSUserInterfaceItemSearching {
+    fun searchForItemsWithSearchString_resultLimit_matchedItemHandler(searchString: MemorySegment, resultLimit: Long, handleMatchedItems: MemorySegment): Unit
     
     /** @return NSArray<NSString *> * */
     fun localizedTitlesForItem(item: MemorySegment): MemorySegment

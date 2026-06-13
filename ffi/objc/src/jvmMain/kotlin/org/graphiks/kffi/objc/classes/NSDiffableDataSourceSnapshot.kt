@@ -9,15 +9,15 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSDiffableDataSourceSnapshot(val ptr: MemorySegment) {
+open class NSDiffableDataSourceSnapshot(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDiffableDataSourceSnapshot") }
         
     }
     
-    open fun numberOfItemsInSection(sectionIdentifier: MemorySegment): NSInteger {
+    open fun numberOfItemsInSection(sectionIdentifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("numberOfItemsInSection:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, sectionIdentifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, sectionIdentifier) as Long
     }
     
     /** @return NSArray<ItemIdentifierType> * */
@@ -31,14 +31,14 @@ open class NSDiffableDataSourceSnapshot(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, itemIdentifier) as MemorySegment
     }
     
-    open fun indexOfItemIdentifier(itemIdentifier: MemorySegment): NSInteger {
+    open fun indexOfItemIdentifier(itemIdentifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemIdentifier:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, itemIdentifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, itemIdentifier) as Long
     }
     
-    open fun indexOfSectionIdentifier(sectionIdentifier: MemorySegment): NSInteger {
+    open fun indexOfSectionIdentifier(sectionIdentifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfSectionIdentifier:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, sectionIdentifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, sectionIdentifier) as Long
     }
     
     open fun appendItemsWithIdentifiers(identifiers: MemorySegment): Unit {
@@ -122,15 +122,15 @@ open class NSDiffableDataSourceSnapshot(val ptr: MemorySegment) {
     }
     
     // @property numberOfItems
-    open fun numberOfItems(): NSInteger {
+    open fun numberOfItems(): Long {
         val sel = ObjCRuntime.sel("numberOfItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property numberOfSections
-    open fun numberOfSections(): NSInteger {
+    open fun numberOfSections(): Long {
         val sel = ObjCRuntime.sel("numberOfSections")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property sectionIdentifiers

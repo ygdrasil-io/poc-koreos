@@ -9,72 +9,72 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSColorSpace(val ptr: MemorySegment) {
+open class NSColorSpace(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSColorSpace") }
         
         /** @return NSArray<NSColorSpace *> * */
-        open fun availableColorSpacesWithModel(model: NSColorSpaceModel): MemorySegment {
+        fun availableColorSpacesWithModel(model: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("availableColorSpacesWithModel:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, model) as MemorySegment
         }
         
-        open fun sRGBColorSpace(): MemorySegment {
+        fun sRGBColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("sRGBColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun genericGamma22GrayColorSpace(): MemorySegment {
+        fun genericGamma22GrayColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("genericGamma22GrayColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun extendedSRGBColorSpace(): MemorySegment {
+        fun extendedSRGBColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("extendedSRGBColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun extendedGenericGamma22GrayColorSpace(): MemorySegment {
+        fun extendedGenericGamma22GrayColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("extendedGenericGamma22GrayColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun displayP3ColorSpace(): MemorySegment {
+        fun displayP3ColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("displayP3ColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun adobeRGB1998ColorSpace(): MemorySegment {
+        fun adobeRGB1998ColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("adobeRGB1998ColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun genericRGBColorSpace(): MemorySegment {
+        fun genericRGBColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("genericRGBColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun genericGrayColorSpace(): MemorySegment {
+        fun genericGrayColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("genericGrayColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun genericCMYKColorSpace(): MemorySegment {
+        fun genericCMYKColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("genericCMYKColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun deviceRGBColorSpace(): MemorySegment {
+        fun deviceRGBColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("deviceRGBColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun deviceGrayColorSpace(): MemorySegment {
+        fun deviceGrayColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("deviceGrayColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun deviceCMYKColorSpace(): MemorySegment {
+        fun deviceCMYKColorSpace(): MemorySegment {
             val sel = ObjCRuntime.sel("deviceCMYKColorSpace")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -115,15 +115,15 @@ open class NSColorSpace(val ptr: MemorySegment) {
     }
     
     // @property numberOfColorComponents
-    open fun numberOfColorComponents(): NSInteger {
+    open fun numberOfColorComponents(): Long {
         val sel = ObjCRuntime.sel("numberOfColorComponents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property colorSpaceModel
-    open fun colorSpaceModel(): NSColorSpaceModel {
+    open fun colorSpaceModel(): MemorySegment {
         val sel = ObjCRuntime.sel("colorSpaceModel")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSColorSpaceModel
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property localizedName
@@ -136,5 +136,76 @@ open class NSColorSpace(val ptr: MemorySegment) {
     open fun localizedNameAsString(): String = ObjCRuntime.toJavaString(localizedName())
     
     // @property sRGBColorSpace
+    open fun sRGBColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("sRGBColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property genericGamma22GrayColorSpace
+    open fun genericGamma22GrayColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("genericGamma22GrayColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property extendedSRGBColorSpace
+    open fun extendedSRGBColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("extendedSRGBColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property extendedGenericGamma22GrayColorSpace
+    open fun extendedGenericGamma22GrayColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("extendedGenericGamma22GrayColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property displayP3ColorSpace
+    open fun displayP3ColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("displayP3ColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property adobeRGB1998ColorSpace
+    open fun adobeRGB1998ColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("adobeRGB1998ColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property genericRGBColorSpace
+    open fun genericRGBColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("genericRGBColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property genericGrayColorSpace
+    open fun genericGrayColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("genericGrayColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property genericCMYKColorSpace
+    open fun genericCMYKColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("genericCMYKColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property deviceRGBColorSpace
+    open fun deviceRGBColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("deviceRGBColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property deviceGrayColorSpace
+    open fun deviceGrayColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("deviceGrayColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property deviceCMYKColorSpace
+    open fun deviceCMYKColorSpace(): MemorySegment {
+        val sel = ObjCRuntime.sel("deviceCMYKColorSpace")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

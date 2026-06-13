@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSOperation
  * Superclass: NSObject
  */
-open class NSOperation(val ptr: MemorySegment) {
+open class NSOperation(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOperation") }
         
@@ -45,39 +45,39 @@ open class NSOperation(val ptr: MemorySegment) {
     }
     
     // @property cancelled
-    open fun isCancelled(): BOOL {
+    open fun isCancelled(): Boolean {
         val sel = ObjCRuntime.sel("isCancelled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property executing
-    open fun isExecuting(): BOOL {
+    open fun isExecuting(): Boolean {
         val sel = ObjCRuntime.sel("isExecuting")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property finished
-    open fun isFinished(): BOOL {
+    open fun isFinished(): Boolean {
         val sel = ObjCRuntime.sel("isFinished")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property concurrent
-    open fun isConcurrent(): BOOL {
+    open fun isConcurrent(): Boolean {
         val sel = ObjCRuntime.sel("isConcurrent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property asynchronous
-    open fun isAsynchronous(): BOOL {
+    open fun isAsynchronous(): Boolean {
         val sel = ObjCRuntime.sel("isAsynchronous")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property ready
-    open fun isReady(): BOOL {
+    open fun isReady(): Boolean {
         val sel = ObjCRuntime.sel("isReady")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property dependencies
@@ -88,11 +88,11 @@ open class NSOperation(val ptr: MemorySegment) {
     }
     
     // @property queuePriority
-    open fun queuePriority(): NSOperationQueuePriority {
+    open fun queuePriority(): MemorySegment {
         val sel = ObjCRuntime.sel("queuePriority")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSOperationQueuePriority
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setQueuePriority(value: NSOperationQueuePriority) {
+    open fun setQueuePriority(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQueuePriority:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -118,11 +118,11 @@ open class NSOperation(val ptr: MemorySegment) {
     }
     
     // @property qualityOfService
-    open fun qualityOfService(): NSQualityOfService {
+    open fun qualityOfService(): MemorySegment {
         val sel = ObjCRuntime.sel("qualityOfService")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setQualityOfService(value: NSQualityOfService) {
+    open fun setQualityOfService(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQualityOfService:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

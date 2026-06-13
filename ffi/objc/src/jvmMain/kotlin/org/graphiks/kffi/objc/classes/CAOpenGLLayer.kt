@@ -8,68 +8,68 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: CAOpenGLLayer
  * Superclass: CALayer
  */
-open class CAOpenGLLayer(ptr: MemorySegment) : CALayer(ptr) {
+open class CAOpenGLLayer(override val ptr: MemorySegment) : CALayer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("CAOpenGLLayer") }
         
     }
     
-    fun canDrawInCGLContext_pixelFormat_forLayerTime_displayTime(ctx: MemorySegment, pf: MemorySegment, t: CFTimeInterval, ts: MemorySegment): BOOL {
+    open fun canDrawInCGLContext_pixelFormat_forLayerTime_displayTime(ctx: MemorySegment, pf: MemorySegment, t: Double, ts: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("canDrawInCGLContext:pixelFormat:forLayerTime:displayTime:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ctx, pf, t, ts) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ctx, pf, t, ts) as Boolean
     }
     
-    fun drawInCGLContext_pixelFormat_forLayerTime_displayTime(ctx: MemorySegment, pf: MemorySegment, t: CFTimeInterval, ts: MemorySegment): Unit {
+    open fun drawInCGLContext_pixelFormat_forLayerTime_displayTime(ctx: MemorySegment, pf: MemorySegment, t: Double, ts: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawInCGLContext:pixelFormat:forLayerTime:displayTime:")
         ObjCRuntime.msgSend(null, ptr, sel, ctx, pf, t, ts)
     }
     
-    fun copyCGLPixelFormatForDisplayMask(mask: uint32_t): MemorySegment {
+    open fun copyCGLPixelFormatForDisplayMask(mask: Int): MemorySegment {
         val sel = ObjCRuntime.sel("copyCGLPixelFormatForDisplayMask:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mask) as MemorySegment
     }
     
-    fun releaseCGLPixelFormat(pf: MemorySegment): Unit {
+    open fun releaseCGLPixelFormat(pf: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("releaseCGLPixelFormat:")
         ObjCRuntime.msgSend(null, ptr, sel, pf)
     }
     
-    fun copyCGLContextForPixelFormat(pf: MemorySegment): MemorySegment {
+    open fun copyCGLContextForPixelFormat(pf: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("copyCGLContextForPixelFormat:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pf) as MemorySegment
     }
     
-    fun releaseCGLContext(ctx: MemorySegment): Unit {
+    open fun releaseCGLContext(ctx: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("releaseCGLContext:")
         ObjCRuntime.msgSend(null, ptr, sel, ctx)
     }
     
     // @property asynchronous
-    fun isAsynchronous(): BOOL {
+    open fun isAsynchronous(): Boolean {
         val sel = ObjCRuntime.sel("isAsynchronous")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAsynchronous(value: BOOL) {
+    open fun setAsynchronous(value: Boolean) {
         val sel = ObjCRuntime.sel("setAsynchronous:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property colorspace
-    fun colorspace(): MemorySegment {
+    open fun colorspace(): MemorySegment {
         val sel = ObjCRuntime.sel("colorspace")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setColorspace(value: MemorySegment) {
+    open fun setColorspace(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setColorspace:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property wantsExtendedDynamicRangeContent
-    override fun `wantsExtendedDynamicRangeContent`(): BOOL {
+    override fun wantsExtendedDynamicRangeContent(): Boolean {
         val sel = ObjCRuntime.sel("wantsExtendedDynamicRangeContent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    override fun `setWantsExtendedDynamicRangeContent`(value: BOOL) {
+    override fun setWantsExtendedDynamicRangeContent(value: Boolean) {
         val sel = ObjCRuntime.sel("setWantsExtendedDynamicRangeContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

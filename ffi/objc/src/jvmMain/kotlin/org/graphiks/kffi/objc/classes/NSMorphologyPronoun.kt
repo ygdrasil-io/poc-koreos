@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSMorphologyPronoun(val ptr: MemorySegment) {
+open class NSMorphologyPronoun(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMorphologyPronoun") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -31,7 +31,7 @@ open class NSMorphologyPronoun(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithPronoun_morphology_dependentMorphology(pronoun: String, morphology: MemorySegment, dependentMorphology: MemorySegment): MemorySegment = initWithPronoun_morphology_dependentMorphology(ObjCRuntime.newNSString(Arena.global(), pronoun), morphology, dependentMorphology)
+    fun initWithPronoun_morphology_dependentMorphology(pronoun: String, morphology: MemorySegment, dependentMorphology: MemorySegment): MemorySegment = initWithPronoun_morphology_dependentMorphology(ObjCRuntime.newNSString(Arena.global(), pronoun), morphology, dependentMorphology)
     
     // @property pronoun
     open fun pronoun(): MemorySegment {

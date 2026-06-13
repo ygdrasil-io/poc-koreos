@@ -17,6 +17,5 @@ interface NSCollectionViewSectionHeaderView : NSCollectionViewElement {
     fun setSectionCollapseButton(sectionCollapseButton: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'setSectionCollapseButton:' not implemented")
     
-    // @property sectionCollapseButton
 }
 

@@ -8,21 +8,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCreateCommand
  * Superclass: NSScriptCommand
  */
-open class NSCreateCommand(ptr: MemorySegment) : NSScriptCommand(ptr) {
+open class NSCreateCommand(override val ptr: MemorySegment) : NSScriptCommand(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCreateCommand") }
         
     }
     
     // @property createClassDescription
-    fun createClassDescription(): MemorySegment {
+    open fun createClassDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("createClassDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property resolvedKeyDictionary
     /** @return NSDictionary<NSString *,id> * */
-    fun resolvedKeyDictionary(): MemorySegment {
+    open fun resolvedKeyDictionary(): MemorySegment {
         val sel = ObjCRuntime.sel("resolvedKeyDictionary")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

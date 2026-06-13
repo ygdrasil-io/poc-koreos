@@ -8,38 +8,37 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: CAMediaTiming
  */
 interface CAMediaTiming {
-    fun beginTime(): CFTimeInterval
+    fun beginTime(): Double
     
-    fun setBeginTime(beginTime: CFTimeInterval)
+    fun setBeginTime(beginTime: Double): Unit
     
-    fun duration(): CFTimeInterval
+    fun duration(): Double
     
-    fun setDuration(duration: CFTimeInterval)
+    fun setDuration(duration: Double): Unit
     
     fun speed(): Float
     
-    fun setSpeed(speed: Float)
+    fun setSpeed(speed: Float): Unit
     
-    fun timeOffset(): CFTimeInterval
+    fun timeOffset(): Double
     
-    fun setTimeOffset(timeOffset: CFTimeInterval)
+    fun setTimeOffset(timeOffset: Double): Unit
     
     fun repeatCount(): Float
     
-    fun setRepeatCount(repeatCount: Float)
+    fun setRepeatCount(repeatCount: Float): Unit
     
-    fun repeatDuration(): CFTimeInterval
+    fun repeatDuration(): Double
     
-    fun setRepeatDuration(repeatDuration: CFTimeInterval)
+    fun setRepeatDuration(repeatDuration: Double): Unit
     
-    fun autoreverses(): BOOL
+    fun autoreverses(): Boolean
     
-    fun setAutoreverses(autoreverses: BOOL)
+    fun setAutoreverses(autoreverses: Boolean): Unit
     
-    fun fillMode(): CAMediaTimingFillMode
+    fun fillMode(): MemorySegment
     
-    fun setFillMode(fillMode: CAMediaTimingFillMode)
+    fun setFillMode(fillMode: MemorySegment): Unit
     
-    // @property beginTime
 }
 

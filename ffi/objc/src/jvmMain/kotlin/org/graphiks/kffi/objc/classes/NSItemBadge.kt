@@ -8,24 +8,24 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSItemBadge
  * Superclass: NSObject
  */
-open class NSItemBadge(val ptr: MemorySegment) {
+open class NSItemBadge(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSItemBadge") }
         
-        open fun badgeWithCount(count: NSInteger): MemorySegment {
+        fun badgeWithCount(count: Long): MemorySegment {
             val sel = ObjCRuntime.sel("badgeWithCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, count) as MemorySegment
         }
         
-        open fun badgeWithText(text: MemorySegment): MemorySegment {
+        fun badgeWithText(text: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("badgeWithText:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, text) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun badgeWithText(text: String): MemorySegment = badgeWithText(ObjCRuntime.newNSString(Arena.global(), text))
+        fun badgeWithText(text: String): MemorySegment = badgeWithText(ObjCRuntime.newNSString(Arena.global(), text))
         
-        open fun indicatorBadge(): MemorySegment {
+        fun indicatorBadge(): MemorySegment {
             val sel = ObjCRuntime.sel("indicatorBadge")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

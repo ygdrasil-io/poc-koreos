@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSPreviewRepresentableActivityItem
  */
-open class NSPreviewRepresentingActivityItem(val ptr: MemorySegment) {
+open class NSPreviewRepresentingActivityItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPreviewRepresentingActivityItem") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -26,7 +26,7 @@ open class NSPreviewRepresentingActivityItem(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithItem_title_image_icon(item: MemorySegment, title: String, image: MemorySegment, icon: MemorySegment): MemorySegment = initWithItem_title_image_icon(item, ObjCRuntime.newNSString(Arena.global(), title), image, icon)
+    fun initWithItem_title_image_icon(item: MemorySegment, title: String, image: MemorySegment, icon: MemorySegment): MemorySegment = initWithItem_title_image_icon(item, ObjCRuntime.newNSString(Arena.global(), title), image, icon)
     
     open fun initWithItem_title_imageProvider_iconProvider(item: MemorySegment, title: MemorySegment, imageProvider: MemorySegment, iconProvider: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithItem:title:imageProvider:iconProvider:")
@@ -34,7 +34,7 @@ open class NSPreviewRepresentingActivityItem(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithItem_title_imageProvider_iconProvider(item: MemorySegment, title: String, imageProvider: MemorySegment, iconProvider: MemorySegment): MemorySegment = initWithItem_title_imageProvider_iconProvider(item, ObjCRuntime.newNSString(Arena.global(), title), imageProvider, iconProvider)
+    fun initWithItem_title_imageProvider_iconProvider(item: MemorySegment, title: String, imageProvider: MemorySegment, iconProvider: MemorySegment): MemorySegment = initWithItem_title_imageProvider_iconProvider(item, ObjCRuntime.newNSString(Arena.global(), title), imageProvider, iconProvider)
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")

@@ -9,103 +9,103 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSURL(val ptr: MemorySegment) {
+open class NSURL(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURL") }
         
-        open fun fileURLWithPath_isDirectory_relativeToURL(path: MemorySegment, isDir: BOOL, baseURL: MemorySegment): MemorySegment {
+        fun fileURLWithPath_isDirectory_relativeToURL(path: MemorySegment, isDir: Boolean, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fileURLWithPath:isDirectory:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path, isDir, baseURL) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fileURLWithPath_isDirectory_relativeToURL(path: String, isDir: BOOL, baseURL: MemorySegment): MemorySegment = fileURLWithPath_isDirectory_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), isDir, baseURL)
+        fun fileURLWithPath_isDirectory_relativeToURL(path: String, isDir: Boolean, baseURL: MemorySegment): MemorySegment = fileURLWithPath_isDirectory_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), isDir, baseURL)
         
-        open fun fileURLWithPath_relativeToURL(path: MemorySegment, baseURL: MemorySegment): MemorySegment {
+        fun fileURLWithPath_relativeToURL(path: MemorySegment, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fileURLWithPath:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path, baseURL) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fileURLWithPath_relativeToURL(path: String, baseURL: MemorySegment): MemorySegment = fileURLWithPath_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), baseURL)
+        fun fileURLWithPath_relativeToURL(path: String, baseURL: MemorySegment): MemorySegment = fileURLWithPath_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), baseURL)
         
-        open fun fileURLWithPath_isDirectory(path: MemorySegment, isDir: BOOL): MemorySegment {
+        fun fileURLWithPath_isDirectory(path: MemorySegment, isDir: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("fileURLWithPath:isDirectory:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path, isDir) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fileURLWithPath_isDirectory(path: String, isDir: BOOL): MemorySegment = fileURLWithPath_isDirectory(ObjCRuntime.newNSString(Arena.global(), path), isDir)
+        fun fileURLWithPath_isDirectory(path: String, isDir: Boolean): MemorySegment = fileURLWithPath_isDirectory(ObjCRuntime.newNSString(Arena.global(), path), isDir)
         
-        open fun fileURLWithPath(path: MemorySegment): MemorySegment {
+        fun fileURLWithPath(path: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fileURLWithPath:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fileURLWithPath(path: String): MemorySegment = fileURLWithPath(ObjCRuntime.newNSString(Arena.global(), path))
+        fun fileURLWithPath(path: String): MemorySegment = fileURLWithPath(ObjCRuntime.newNSString(Arena.global(), path))
         
-        open fun fileURLWithFileSystemRepresentation_isDirectory_relativeToURL(path: MemorySegment, isDir: BOOL, baseURL: MemorySegment): MemorySegment {
+        fun fileURLWithFileSystemRepresentation_isDirectory_relativeToURL(path: MemorySegment, isDir: Boolean, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fileURLWithFileSystemRepresentation:isDirectory:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path, isDir, baseURL) as MemorySegment
         }
         
-        open fun URLWithString(URLString: MemorySegment): MemorySegment {
+        fun URLWithString(URLString: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("URLWithString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URLString) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun URLWithString(URLString: String): MemorySegment = URLWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
+        fun URLWithString(URLString: String): MemorySegment = URLWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
         
-        open fun URLWithString_relativeToURL(URLString: MemorySegment, baseURL: MemorySegment): MemorySegment {
+        fun URLWithString_relativeToURL(URLString: MemorySegment, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("URLWithString:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URLString, baseURL) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun URLWithString_relativeToURL(URLString: String, baseURL: MemorySegment): MemorySegment = URLWithString_relativeToURL(ObjCRuntime.newNSString(Arena.global(), URLString), baseURL)
+        fun URLWithString_relativeToURL(URLString: String, baseURL: MemorySegment): MemorySegment = URLWithString_relativeToURL(ObjCRuntime.newNSString(Arena.global(), URLString), baseURL)
         
-        open fun URLWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: BOOL): MemorySegment {
+        fun URLWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("URLWithString:encodingInvalidCharacters:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URLString, encodingInvalidCharacters) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun URLWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: BOOL): MemorySegment = URLWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
+        fun URLWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: Boolean): MemorySegment = URLWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
         
-        open fun URLWithDataRepresentation_relativeToURL(`data`: MemorySegment, baseURL: MemorySegment): MemorySegment {
+        fun URLWithDataRepresentation_relativeToURL(`data`: MemorySegment, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("URLWithDataRepresentation:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`, baseURL) as MemorySegment
         }
         
-        open fun absoluteURLWithDataRepresentation_relativeToURL(`data`: MemorySegment, baseURL: MemorySegment): MemorySegment {
+        fun absoluteURLWithDataRepresentation_relativeToURL(`data`: MemorySegment, baseURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("absoluteURLWithDataRepresentation:relativeToURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`, baseURL) as MemorySegment
         }
         
-        open fun URLByResolvingBookmarkData_options_relativeToURL_bookmarkDataIsStale_error(bookmarkData: MemorySegment, options: NSURLBookmarkResolutionOptions, relativeURL: MemorySegment, isStale: MemorySegment, error: MemorySegment): MemorySegment {
+        fun URLByResolvingBookmarkData_options_relativeToURL_bookmarkDataIsStale_error(bookmarkData: MemorySegment, options: MemorySegment, relativeURL: MemorySegment, isStale: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("URLByResolvingBookmarkData:options:relativeToURL:bookmarkDataIsStale:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, bookmarkData, options, relativeURL, isStale, error) as MemorySegment
         }
         
         /** @return NSDictionary<NSURLResourceKey,id> * */
-        open fun resourceValuesForKeys_fromBookmarkData(keys: MemorySegment, bookmarkData: MemorySegment): MemorySegment {
+        fun resourceValuesForKeys_fromBookmarkData(keys: MemorySegment, bookmarkData: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("resourceValuesForKeys:fromBookmarkData:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, keys, bookmarkData) as MemorySegment
         }
         
-        open fun writeBookmarkData_toURL_options_error(bookmarkData: MemorySegment, bookmarkFileURL: MemorySegment, options: NSURLBookmarkFileCreationOptions, error: MemorySegment): BOOL {
+        fun writeBookmarkData_toURL_options_error(bookmarkData: MemorySegment, bookmarkFileURL: MemorySegment, options: Long, error: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("writeBookmarkData:toURL:options:error:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, bookmarkData, bookmarkFileURL, options, error) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, bookmarkData, bookmarkFileURL, options, error) as Boolean
         }
         
-        open fun bookmarkDataWithContentsOfURL_error(bookmarkFileURL: MemorySegment, error: MemorySegment): MemorySegment {
+        fun bookmarkDataWithContentsOfURL_error(bookmarkFileURL: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("bookmarkDataWithContentsOfURL:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, bookmarkFileURL, error) as MemorySegment
         }
         
-        open fun URLByResolvingAliasFileAtURL_options_error(url: MemorySegment, options: NSURLBookmarkResolutionOptions, error: MemorySegment): MemorySegment {
+        fun URLByResolvingAliasFileAtURL_options_error(url: MemorySegment, options: MemorySegment, error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("URLByResolvingAliasFileAtURL:options:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, options, error) as MemorySegment
         }
@@ -118,15 +118,15 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithScheme_host_path(scheme: String, host: String, path: String): MemorySegment = initWithScheme_host_path(ObjCRuntime.newNSString(Arena.global(), scheme), ObjCRuntime.newNSString(Arena.global(), host), ObjCRuntime.newNSString(Arena.global(), path))
+    fun initWithScheme_host_path(scheme: String, host: String, path: String): MemorySegment = initWithScheme_host_path(ObjCRuntime.newNSString(Arena.global(), scheme), ObjCRuntime.newNSString(Arena.global(), host), ObjCRuntime.newNSString(Arena.global(), path))
     
-    open fun initFileURLWithPath_isDirectory_relativeToURL(path: MemorySegment, isDir: BOOL, baseURL: MemorySegment): MemorySegment {
+    open fun initFileURLWithPath_isDirectory_relativeToURL(path: MemorySegment, isDir: Boolean, baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initFileURLWithPath:isDirectory:relativeToURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path, isDir, baseURL) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initFileURLWithPath_isDirectory_relativeToURL(path: String, isDir: BOOL, baseURL: MemorySegment): MemorySegment = initFileURLWithPath_isDirectory_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), isDir, baseURL)
+    fun initFileURLWithPath_isDirectory_relativeToURL(path: String, isDir: Boolean, baseURL: MemorySegment): MemorySegment = initFileURLWithPath_isDirectory_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), isDir, baseURL)
     
     open fun initFileURLWithPath_relativeToURL(path: MemorySegment, baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initFileURLWithPath:relativeToURL:")
@@ -134,15 +134,15 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initFileURLWithPath_relativeToURL(path: String, baseURL: MemorySegment): MemorySegment = initFileURLWithPath_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), baseURL)
+    fun initFileURLWithPath_relativeToURL(path: String, baseURL: MemorySegment): MemorySegment = initFileURLWithPath_relativeToURL(ObjCRuntime.newNSString(Arena.global(), path), baseURL)
     
-    open fun initFileURLWithPath_isDirectory(path: MemorySegment, isDir: BOOL): MemorySegment {
+    open fun initFileURLWithPath_isDirectory(path: MemorySegment, isDir: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initFileURLWithPath:isDirectory:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path, isDir) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initFileURLWithPath_isDirectory(path: String, isDir: BOOL): MemorySegment = initFileURLWithPath_isDirectory(ObjCRuntime.newNSString(Arena.global(), path), isDir)
+    fun initFileURLWithPath_isDirectory(path: String, isDir: Boolean): MemorySegment = initFileURLWithPath_isDirectory(ObjCRuntime.newNSString(Arena.global(), path), isDir)
     
     open fun initFileURLWithPath(path: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initFileURLWithPath:")
@@ -150,9 +150,9 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initFileURLWithPath(path: String): MemorySegment = initFileURLWithPath(ObjCRuntime.newNSString(Arena.global(), path))
+    fun initFileURLWithPath(path: String): MemorySegment = initFileURLWithPath(ObjCRuntime.newNSString(Arena.global(), path))
     
-    open fun initFileURLWithFileSystemRepresentation_isDirectory_relativeToURL(path: MemorySegment, isDir: BOOL, baseURL: MemorySegment): MemorySegment {
+    open fun initFileURLWithFileSystemRepresentation_isDirectory_relativeToURL(path: MemorySegment, isDir: Boolean, baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initFileURLWithFileSystemRepresentation:isDirectory:relativeToURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, path, isDir, baseURL) as MemorySegment
     }
@@ -163,7 +163,7 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(URLString: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
+    fun initWithString(URLString: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
     
     open fun initWithString_relativeToURL(URLString: MemorySegment, baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:relativeToURL:")
@@ -171,15 +171,15 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString_relativeToURL(URLString: String, baseURL: MemorySegment): MemorySegment = initWithString_relativeToURL(ObjCRuntime.newNSString(Arena.global(), URLString), baseURL)
+    fun initWithString_relativeToURL(URLString: String, baseURL: MemorySegment): MemorySegment = initWithString_relativeToURL(ObjCRuntime.newNSString(Arena.global(), URLString), baseURL)
     
-    open fun initWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: BOOL): MemorySegment {
+    open fun initWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:encodingInvalidCharacters:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, URLString, encodingInvalidCharacters) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: BOOL): MemorySegment = initWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
+    fun initWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: Boolean): MemorySegment = initWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
     
     open fun initWithDataRepresentation_relativeToURL(`data`: MemorySegment, baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDataRepresentation:relativeToURL:")
@@ -191,14 +191,14 @@ open class NSURL(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, baseURL) as MemorySegment
     }
     
-    open fun getFileSystemRepresentation_maxLength(buffer: MemorySegment, maxBufferLength: NSUInteger): BOOL {
+    open fun getFileSystemRepresentation_maxLength(buffer: MemorySegment, maxBufferLength: Long): Boolean {
         val sel = ObjCRuntime.sel("getFileSystemRepresentation:maxLength:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, buffer, maxBufferLength) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, buffer, maxBufferLength) as Boolean
     }
     
-    open fun isFileReferenceURL(): BOOL {
+    open fun isFileReferenceURL(): Boolean {
         val sel = ObjCRuntime.sel("isFileReferenceURL")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun fileReferenceURL(): MemorySegment {
@@ -206,9 +206,9 @@ open class NSURL(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun getResourceValue_forKey_error(value: MemorySegment, key: NSURLResourceKey, error: MemorySegment): BOOL {
+    open fun getResourceValue_forKey_error(value: MemorySegment, key: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getResourceValue:forKey:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, key, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, key, error) as Boolean
     }
     
     /** @return NSDictionary<NSURLResourceKey,id> * */
@@ -217,17 +217,17 @@ open class NSURL(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keys, error) as MemorySegment
     }
     
-    open fun setResourceValue_forKey_error(value: MemorySegment, key: NSURLResourceKey, error: MemorySegment): BOOL {
+    open fun setResourceValue_forKey_error(value: MemorySegment, key: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setResourceValue:forKey:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, key, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, key, error) as Boolean
     }
     
-    open fun setResourceValues_error(keyedValues: MemorySegment, error: MemorySegment): BOOL {
+    open fun setResourceValues_error(keyedValues: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setResourceValues:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, keyedValues, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, keyedValues, error) as Boolean
     }
     
-    open fun removeCachedResourceValueForKey(key: NSURLResourceKey): Unit {
+    open fun removeCachedResourceValueForKey(key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeCachedResourceValueForKey:")
         ObjCRuntime.msgSend(null, ptr, sel, key)
     }
@@ -237,24 +237,24 @@ open class NSURL(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun setTemporaryResourceValue_forKey(value: MemorySegment, key: NSURLResourceKey): Unit {
+    open fun setTemporaryResourceValue_forKey(value: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setTemporaryResourceValue:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, value, key)
     }
     
-    open fun bookmarkDataWithOptions_includingResourceValuesForKeys_relativeToURL_error(options: NSURLBookmarkCreationOptions, keys: MemorySegment, relativeURL: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun bookmarkDataWithOptions_includingResourceValuesForKeys_relativeToURL_error(options: MemorySegment, keys: MemorySegment, relativeURL: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("bookmarkDataWithOptions:includingResourceValuesForKeys:relativeToURL:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options, keys, relativeURL, error) as MemorySegment
     }
     
-    open fun initByResolvingBookmarkData_options_relativeToURL_bookmarkDataIsStale_error(bookmarkData: MemorySegment, options: NSURLBookmarkResolutionOptions, relativeURL: MemorySegment, isStale: MemorySegment, error: MemorySegment): MemorySegment {
+    open fun initByResolvingBookmarkData_options_relativeToURL_bookmarkDataIsStale_error(bookmarkData: MemorySegment, options: MemorySegment, relativeURL: MemorySegment, isStale: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initByResolvingBookmarkData:options:relativeToURL:bookmarkDataIsStale:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bookmarkData, options, relativeURL, isStale, error) as MemorySegment
     }
     
-    open fun startAccessingSecurityScopedResource(): BOOL {
+    open fun startAccessingSecurityScopedResource(): Boolean {
         val sel = ObjCRuntime.sel("startAccessingSecurityScopedResource")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun stopAccessingSecurityScopedResource(): Unit {
@@ -395,9 +395,9 @@ open class NSURL(val ptr: MemorySegment) {
     open fun relativePathAsString(): String = ObjCRuntime.toJavaString(relativePath())
     
     // @property hasDirectoryPath
-    open fun hasDirectoryPath(): BOOL {
+    open fun hasDirectoryPath(): Boolean {
         val sel = ObjCRuntime.sel("hasDirectoryPath")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property fileSystemRepresentation
@@ -407,9 +407,9 @@ open class NSURL(val ptr: MemorySegment) {
     }
     
     // @property fileURL
-    open fun isFileURL(): BOOL {
+    open fun isFileURL(): Boolean {
         val sel = ObjCRuntime.sel("isFileURL")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property standardizedURL
@@ -434,20 +434,20 @@ open class NSURL(val ptr: MemorySegment) {
 
 // ── Category: NSPromisedItems on NSURL ─────────────────────────────────────────
 
-fun NSURL.getPromisedItemResourceValue_forKey_error(value: MemorySegment, key: NSURLResourceKey, error: MemorySegment): BOOL {
+fun NSURL.getPromisedItemResourceValue_forKey_error(value: MemorySegment, key: MemorySegment, error: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("getPromisedItemResourceValue:forKey:error:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, key, error) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, value, key, error) as Boolean
 }
 
 /** @return NSDictionary<NSURLResourceKey,id> * */
 fun NSURL.promisedItemResourceValuesForKeys_error(keys: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("promisedItemResourceValuesForKeys:error:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keys, error) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keys, error) as MemorySegment
 }
 
-fun NSURL.checkPromisedItemIsReachableAndReturnError(error: MemorySegment): BOOL {
+fun NSURL.checkPromisedItemIsReachableAndReturnError(error: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("checkPromisedItemIsReachableAndReturnError:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, error) as Boolean
 }
 
 // ── Category: NSItemProvider on NSURL ─────────────────────────────────────────
@@ -456,107 +456,107 @@ fun NSURL.checkPromisedItemIsReachableAndReturnError(error: MemorySegment): BOOL
 
 fun NSURL.URLByAppendingPathComponent(pathComponent: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("URLByAppendingPathComponent:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pathComponent) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, pathComponent) as MemorySegment
 }
 
-fun NSURL.URLByAppendingPathComponent_isDirectory(pathComponent: MemorySegment, isDirectory: BOOL): MemorySegment {
+fun NSURL.URLByAppendingPathComponent_isDirectory(pathComponent: MemorySegment, isDirectory: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("URLByAppendingPathComponent:isDirectory:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pathComponent, isDirectory) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, pathComponent, isDirectory) as MemorySegment
 }
 
 fun NSURL.URLByAppendingPathExtension(pathExtension: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("URLByAppendingPathExtension:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, pathExtension) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, pathExtension) as MemorySegment
 }
 
-fun NSURL.checkResourceIsReachableAndReturnError(error: MemorySegment): BOOL {
+fun NSURL.checkResourceIsReachableAndReturnError(error: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("checkResourceIsReachableAndReturnError:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, error) as Boolean
 }
 
 /** @return NSArray<NSString *> * */
 fun NSURL.pathComponents(): MemorySegment {
     val sel = ObjCRuntime.sel("pathComponents")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.lastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("lastPathComponent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.pathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("pathExtension")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.URLByDeletingLastPathComponent(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByDeletingLastPathComponent")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.URLByDeletingPathExtension(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByDeletingPathExtension")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.URLByStandardizingPath(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByStandardizingPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSURL.URLByResolvingSymlinksInPath(): MemorySegment {
     val sel = ObjCRuntime.sel("URLByResolvingSymlinksInPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSURL fileURLWithPathComponents:]
+// Class method: +[NSURL fileURLWithPathComponents:]
 fun NSURL_fileURLWithPathComponents(components: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileURLWithPathComponents:")
     val cls = ObjCRuntime.getClass("NSURL")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, components) as MemorySegment
 }
 
-// @property pathComponents
-/** @return NSArray<NSString *> * */
-fun NSURL.resourceDataUsingCache(shouldUseCache: BOOL): MemorySegment {
+// ── Category: NSURLLoading on NSURL ─────────────────────────────────────────
+
+fun NSURL.resourceDataUsingCache(shouldUseCache: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("resourceDataUsingCache:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, shouldUseCache) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, shouldUseCache) as MemorySegment
 }
 
-fun NSURL.loadResourceDataNotifyingClient_usingCache(client: MemorySegment, shouldUseCache: BOOL): Unit {
+fun NSURL.loadResourceDataNotifyingClient_usingCache(client: MemorySegment, shouldUseCache: Boolean): Unit {
     val sel = ObjCRuntime.sel("loadResourceDataNotifyingClient:usingCache:")
-    ObjCRuntime.msgSend(null, ptr, sel, client, shouldUseCache)
+    ObjCRuntime.msgSend(null, this.ptr, sel, client, shouldUseCache)
 }
 
 fun NSURL.propertyForKey(propertyKey: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("propertyForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, propertyKey) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, propertyKey) as MemorySegment
 }
 
-fun NSURL.setResourceData(`data`: MemorySegment): BOOL {
+fun NSURL.setResourceData(`data`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("setResourceData:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `data`) as Boolean
 }
 
-fun NSURL.setProperty_forKey(property: MemorySegment, propertyKey: MemorySegment): BOOL {
+fun NSURL.setProperty_forKey(property: MemorySegment, propertyKey: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("setProperty:forKey:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, property, propertyKey) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, property, propertyKey) as Boolean
 }
 
-fun NSURL.URLHandleUsingCache(shouldUseCache: BOOL): MemorySegment {
+fun NSURL.URLHandleUsingCache(shouldUseCache: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("URLHandleUsingCache:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, shouldUseCache) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, shouldUseCache) as MemorySegment
 }
 
 // ── Category: NSPasteboardSupport on NSURL ─────────────────────────────────────────
 
 fun NSURL.writeToPasteboard(pasteBoard: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("writeToPasteboard:")
-    ObjCRuntime.msgSend(null, ptr, sel, pasteBoard)
+    ObjCRuntime.msgSend(null, this.ptr, sel, pasteBoard)
 }
 
-// Class<*> method: +[NSURL URLFromPasteboard:]
+// Class method: +[NSURL URLFromPasteboard:]
 fun NSURL_URLFromPasteboard(pasteBoard: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("URLFromPasteboard:")
     val cls = ObjCRuntime.getClass("NSURL")

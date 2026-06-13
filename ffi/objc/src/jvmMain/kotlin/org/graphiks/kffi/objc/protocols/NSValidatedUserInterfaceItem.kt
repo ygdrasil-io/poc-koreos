@@ -10,8 +10,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 interface NSValidatedUserInterfaceItem {
     fun action(): MemorySegment
     
-    fun tag(): NSInteger
+    fun tag(): Long
     
-    // @property action
 }
 

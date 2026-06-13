@@ -8,35 +8,37 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 
 fun NSObject.replacementObjectForCoder(coder: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("replacementObjectForCoder:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, coder) as MemorySegment
 }
 
 fun NSObject.awakeAfterUsingCoder(coder: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("awakeAfterUsingCoder:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, coder) as MemorySegment
 }
 
-fun NSObject.classForCoder(): Class<*> {
+fun NSObject.classForCoder(): MemorySegment {
     val sel = ObjCRuntime.sel("classForCoder")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSObject version]
-fun NSObject_version(): NSInteger {
+// Class method: +[NSObject version]
+fun NSObject_version(): Long {
     val sel = ObjCRuntime.sel("version")
     val cls = ObjCRuntime.getClass("NSObject")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, cls, sel) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, cls, sel) as Long
 }
 
-// Class<*> method: +[NSObject setVersion:]
-fun NSObject_setVersion(aVersion: NSInteger): Unit {
+// Class method: +[NSObject setVersion:]
+fun NSObject_setVersion(aVersion: Long): Unit {
     val sel = ObjCRuntime.sel("setVersion:")
     val cls = ObjCRuntime.getClass("NSObject")
     ObjCRuntime.msgSend(null, cls, sel, aVersion)
 }
 
-// @property classForCoder
-fun NSObject_poseAsClass(aClass: Class<*>): Unit {
+// ── Category: NSDeprecatedMethods on NSObject ─────────────────────────────────────────
+
+// Class method: +[NSObject poseAsClass:]
+fun NSObject_poseAsClass(aClass: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("poseAsClass:")
     val cls = ObjCRuntime.getClass("NSObject")
     ObjCRuntime.msgSend(null, cls, sel, aClass)
@@ -46,40 +48,41 @@ fun NSObject_poseAsClass(aClass: Class<*>): Unit {
 
 fun NSObject.autoContentAccessingProxy(): MemorySegment {
     val sel = ObjCRuntime.sel("autoContentAccessingProxy")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property autoContentAccessingProxy
-fun NSObject.attemptRecoveryFromError_optionIndex_delegate_didRecoverSelector_contextInfo(error: MemorySegment, recoveryOptionIndex: NSUInteger, delegate: MemorySegment, didRecoverSelector: MemorySegment, contextInfo: MemorySegment): Unit {
+// ── Category: NSErrorRecoveryAttempting on NSObject ─────────────────────────────────────────
+
+fun NSObject.attemptRecoveryFromError_optionIndex_delegate_didRecoverSelector_contextInfo(error: MemorySegment, recoveryOptionIndex: Long, delegate: MemorySegment, didRecoverSelector: MemorySegment, contextInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("attemptRecoveryFromError:optionIndex:delegate:didRecoverSelector:contextInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, error, recoveryOptionIndex, delegate, didRecoverSelector, contextInfo)
+    ObjCRuntime.msgSend(null, this.ptr, sel, error, recoveryOptionIndex, delegate, didRecoverSelector, contextInfo)
 }
 
-fun NSObject.attemptRecoveryFromError_optionIndex(error: MemorySegment, recoveryOptionIndex: NSUInteger): BOOL {
+fun NSObject.attemptRecoveryFromError_optionIndex(error: MemorySegment, recoveryOptionIndex: Long): Boolean {
     val sel = ObjCRuntime.sel("attemptRecoveryFromError:optionIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error, recoveryOptionIndex) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, error, recoveryOptionIndex) as Boolean
 }
 
 // ── Category: NSDelayedPerforming on NSObject ─────────────────────────────────────────
 
-fun NSObject.performSelector_withObject_afterDelay_inModes(aSelector: MemorySegment, anArgument: MemorySegment, delay: NSTimeInterval, modes: MemorySegment): Unit {
+fun NSObject.performSelector_withObject_afterDelay_inModes(aSelector: MemorySegment, anArgument: MemorySegment, delay: Double, modes: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performSelector:withObject:afterDelay:inModes:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, anArgument, delay, modes)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, anArgument, delay, modes)
 }
 
-fun NSObject.performSelector_withObject_afterDelay(aSelector: MemorySegment, anArgument: MemorySegment, delay: NSTimeInterval): Unit {
+fun NSObject.performSelector_withObject_afterDelay(aSelector: MemorySegment, anArgument: MemorySegment, delay: Double): Unit {
     val sel = ObjCRuntime.sel("performSelector:withObject:afterDelay:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, anArgument, delay)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, anArgument, delay)
 }
 
-// Class<*> method: +[NSObject cancelPreviousPerformRequestsWithTarget:selector:object:]
+// Class method: +[NSObject cancelPreviousPerformRequestsWithTarget:selector:object:]
 fun NSObject_cancelPreviousPerformRequestsWithTarget_selector_object(aTarget: MemorySegment, aSelector: MemorySegment, anArgument: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("cancelPreviousPerformRequestsWithTarget:selector:object:")
     val cls = ObjCRuntime.getClass("NSObject")
     ObjCRuntime.msgSend(null, cls, sel, aTarget, aSelector, anArgument)
 }
 
-// Class<*> method: +[NSObject cancelPreviousPerformRequestsWithTarget:]
+// Class method: +[NSObject cancelPreviousPerformRequestsWithTarget:]
 fun NSObject_cancelPreviousPerformRequestsWithTarget(aTarget: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("cancelPreviousPerformRequestsWithTarget:")
     val cls = ObjCRuntime.getClass("NSObject")
@@ -90,274 +93,276 @@ fun NSObject_cancelPreviousPerformRequestsWithTarget(aTarget: MemorySegment): Un
 
 fun NSObject.URL_resourceDataDidBecomeAvailable(sender: MemorySegment, newBytes: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("URL:resourceDataDidBecomeAvailable:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender, newBytes)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender, newBytes)
 }
 
 fun NSObject.URLResourceDidFinishLoading(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("URLResourceDidFinishLoading:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSObject.URLResourceDidCancelLoading(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("URLResourceDidCancelLoading:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSObject.URL_resourceDidFailLoadingWithReason(sender: MemorySegment, reason: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("URL:resourceDidFailLoadingWithReason:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender, reason)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender, reason)
 }
 
 // ── Category: NSCopyLinkMoveHandler on NSObject ─────────────────────────────────────────
 
-fun NSObject.fileManager_shouldProceedAfterError(fm: MemorySegment, errorInfo: MemorySegment): BOOL {
+fun NSObject.fileManager_shouldProceedAfterError(fm: MemorySegment, errorInfo: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("fileManager:shouldProceedAfterError:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, fm, errorInfo) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, fm, errorInfo) as Boolean
 }
 
 fun NSObject.fileManager_willProcessPath(fm: MemorySegment, path: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("fileManager:willProcessPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, fm, path)
+    ObjCRuntime.msgSend(null, this.ptr, sel, fm, path)
 }
 
 // ── Category: NSKeyValueCoding on NSObject ─────────────────────────────────────────
 
 fun NSObject.valueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.setValue_forKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setValue:forKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
-fun NSObject.validateValue_forKey_error(ioValue: MemorySegment, inKey: MemorySegment, outError: MemorySegment): BOOL {
+fun NSObject.validateValue_forKey_error(ioValue: MemorySegment, inKey: MemorySegment, outError: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("validateValue:forKey:error:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ioValue, inKey, outError) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, ioValue, inKey, outError) as Boolean
 }
 
 fun NSObject.mutableArrayValueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableArrayValueForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.mutableOrderedSetValueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableOrderedSetValueForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.mutableSetValueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableSetValueForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.valueForKeyPath(keyPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueForKeyPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyPath) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keyPath) as MemorySegment
 }
 
 fun NSObject.setValue_forKeyPath(value: MemorySegment, keyPath: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setValue:forKeyPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, keyPath)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, keyPath)
 }
 
-fun NSObject.validateValue_forKeyPath_error(ioValue: MemorySegment, inKeyPath: MemorySegment, outError: MemorySegment): BOOL {
+fun NSObject.validateValue_forKeyPath_error(ioValue: MemorySegment, inKeyPath: MemorySegment, outError: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("validateValue:forKeyPath:error:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ioValue, inKeyPath, outError) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, ioValue, inKeyPath, outError) as Boolean
 }
 
 fun NSObject.mutableArrayValueForKeyPath(keyPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableArrayValueForKeyPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyPath) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keyPath) as MemorySegment
 }
 
 fun NSObject.mutableOrderedSetValueForKeyPath(keyPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableOrderedSetValueForKeyPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyPath) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keyPath) as MemorySegment
 }
 
 fun NSObject.mutableSetValueForKeyPath(keyPath: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("mutableSetValueForKeyPath:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyPath) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keyPath) as MemorySegment
 }
 
 fun NSObject.valueForUndefinedKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueForUndefinedKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.setValue_forUndefinedKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setValue:forUndefinedKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
 fun NSObject.setNilValueForKey(key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setNilValueForKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key)
 }
 
 /** @return NSDictionary<NSString *,id> * */
 fun NSObject.dictionaryWithValuesForKeys(keys: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dictionaryWithValuesForKeys:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keys) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keys) as MemorySegment
 }
 
 fun NSObject.setValuesForKeysWithDictionary(keyedValues: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setValuesForKeysWithDictionary:")
-    ObjCRuntime.msgSend(null, ptr, sel, keyedValues)
+    ObjCRuntime.msgSend(null, this.ptr, sel, keyedValues)
 }
 
-// Class<*> method: +[NSObject accessInstanceVariablesDirectly]
-fun NSObject_accessInstanceVariablesDirectly(): BOOL {
+// Class method: +[NSObject accessInstanceVariablesDirectly]
+fun NSObject_accessInstanceVariablesDirectly(): Boolean {
     val sel = ObjCRuntime.sel("accessInstanceVariablesDirectly")
     val cls = ObjCRuntime.getClass("NSObject")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel) as Boolean
 }
 
 // @property accessInstanceVariablesDirectly
-fun NSObject.accessInstanceVariablesDirectly(): BOOL {
+fun NSObject.accessInstanceVariablesDirectly(): Boolean {
     val sel = ObjCRuntime.sel("accessInstanceVariablesDirectly")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
 // ── Category: NSDeprecatedKeyValueCoding on NSObject ─────────────────────────────────────────
 
 fun NSObject.storedValueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("storedValueForKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.takeStoredValue_forKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("takeStoredValue:forKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
 fun NSObject.takeValue_forKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("takeValue:forKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
 fun NSObject.takeValue_forKeyPath(value: MemorySegment, keyPath: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("takeValue:forKeyPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, keyPath)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, keyPath)
 }
 
 fun NSObject.handleQueryWithUnboundKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("handleQueryWithUnboundKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, key) as MemorySegment
 }
 
 fun NSObject.handleTakeValue_forUnboundKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("handleTakeValue:forUnboundKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
 fun NSObject.unableToSetNilForKey(key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("unableToSetNilForKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key)
 }
 
 fun NSObject.valuesForKeys(keys: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valuesForKeys:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keys) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, keys) as MemorySegment
 }
 
 fun NSObject.takeValuesFromDictionary(properties: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("takeValuesFromDictionary:")
-    ObjCRuntime.msgSend(null, ptr, sel, properties)
+    ObjCRuntime.msgSend(null, this.ptr, sel, properties)
 }
 
-// Class<*> method: +[NSObject useStoredAccessor]
-fun NSObject_useStoredAccessor(): BOOL {
+// Class method: +[NSObject useStoredAccessor]
+fun NSObject_useStoredAccessor(): Boolean {
     val sel = ObjCRuntime.sel("useStoredAccessor")
     val cls = ObjCRuntime.getClass("NSObject")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel) as Boolean
 }
 
 // ── Category: NSKeyValueObserving on NSObject ─────────────────────────────────────────
 
 fun NSObject.observeValueForKeyPath_ofObject_change_context(keyPath: MemorySegment, `object`: MemorySegment, change: MemorySegment, context: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("observeValueForKeyPath:ofObject:change:context:")
-    ObjCRuntime.msgSend(null, ptr, sel, keyPath, `object`, change, context)
+    ObjCRuntime.msgSend(null, this.ptr, sel, keyPath, `object`, change, context)
 }
 
 // ── Category: NSKeyValueObserverRegistration on NSObject ─────────────────────────────────────────
 
-fun NSObject.addObserver_forKeyPath_options_context(observer: MemorySegment, keyPath: MemorySegment, options: NSKeyValueObservingOptions, context: MemorySegment): Unit {
+fun NSObject.addObserver_forKeyPath_options_context(observer: MemorySegment, keyPath: MemorySegment, options: MemorySegment, context: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("addObserver:forKeyPath:options:context:")
-    ObjCRuntime.msgSend(null, ptr, sel, observer, keyPath, options, context)
+    ObjCRuntime.msgSend(null, this.ptr, sel, observer, keyPath, options, context)
 }
 
 fun NSObject.removeObserver_forKeyPath_context(observer: MemorySegment, keyPath: MemorySegment, context: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeObserver:forKeyPath:context:")
-    ObjCRuntime.msgSend(null, ptr, sel, observer, keyPath, context)
+    ObjCRuntime.msgSend(null, this.ptr, sel, observer, keyPath, context)
 }
 
 fun NSObject.removeObserver_forKeyPath(observer: MemorySegment, keyPath: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeObserver:forKeyPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, observer, keyPath)
+    ObjCRuntime.msgSend(null, this.ptr, sel, observer, keyPath)
 }
 
 // ── Category: NSKeyValueObserverNotification on NSObject ─────────────────────────────────────────
 
 fun NSObject.willChangeValueForKey(key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("willChangeValueForKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key)
 }
 
 fun NSObject.didChangeValueForKey(key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("didChangeValueForKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key)
 }
 
-fun NSObject.willChange_valuesAtIndexes_forKey(changeKind: NSKeyValueChange, indexes: MemorySegment, key: MemorySegment): Unit {
+fun NSObject.willChange_valuesAtIndexes_forKey(changeKind: MemorySegment, indexes: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("willChange:valuesAtIndexes:forKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, changeKind, indexes, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, changeKind, indexes, key)
 }
 
-fun NSObject.didChange_valuesAtIndexes_forKey(changeKind: NSKeyValueChange, indexes: MemorySegment, key: MemorySegment): Unit {
+fun NSObject.didChange_valuesAtIndexes_forKey(changeKind: MemorySegment, indexes: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("didChange:valuesAtIndexes:forKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, changeKind, indexes, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, changeKind, indexes, key)
 }
 
-fun NSObject.willChangeValueForKey_withSetMutation_usingObjects(key: MemorySegment, mutationKind: NSKeyValueSetMutationKind, objects: MemorySegment): Unit {
+fun NSObject.willChangeValueForKey_withSetMutation_usingObjects(key: MemorySegment, mutationKind: MemorySegment, objects: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("willChangeValueForKey:withSetMutation:usingObjects:")
-    ObjCRuntime.msgSend(null, ptr, sel, key, mutationKind, objects)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key, mutationKind, objects)
 }
 
-fun NSObject.didChangeValueForKey_withSetMutation_usingObjects(key: MemorySegment, mutationKind: NSKeyValueSetMutationKind, objects: MemorySegment): Unit {
+fun NSObject.didChangeValueForKey_withSetMutation_usingObjects(key: MemorySegment, mutationKind: MemorySegment, objects: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("didChangeValueForKey:withSetMutation:usingObjects:")
-    ObjCRuntime.msgSend(null, ptr, sel, key, mutationKind, objects)
+    ObjCRuntime.msgSend(null, this.ptr, sel, key, mutationKind, objects)
 }
 
 // ── Category: NSKeyValueObservingCustomization on NSObject ─────────────────────────────────────────
 
 fun NSObject.observationInfo(): MemorySegment {
     val sel = ObjCRuntime.sel("observationInfo")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSObject.setObservationInfo(observationInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setObservationInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, observationInfo)
+    ObjCRuntime.msgSend(null, this.ptr, sel, observationInfo)
 }
 
-// Class<*> method: +[NSObject keyPathsForValuesAffectingValueForKey:]
+// Class method: +[NSObject keyPathsForValuesAffectingValueForKey:]
 fun NSObject_keyPathsForValuesAffectingValueForKey(key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("keyPathsForValuesAffectingValueForKey:")
     val cls = ObjCRuntime.getClass("NSObject")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, key) as MemorySegment
 }
 
-// Class<*> method: +[NSObject automaticallyNotifiesObserversForKey:]
-fun NSObject_automaticallyNotifiesObserversForKey(key: MemorySegment): BOOL {
+// Class method: +[NSObject automaticallyNotifiesObserversForKey:]
+fun NSObject_automaticallyNotifiesObserversForKey(key: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("automaticallyNotifiesObserversForKey:")
     val cls = ObjCRuntime.getClass("NSObject")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel, key) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, cls, sel, key) as Boolean
 }
 
-// @property observationInfo
+// ── Category: NSDeprecatedKeyValueObservingCustomization on NSObject ─────────────────────────────────────────
+
+// Class method: +[NSObject setKeys:triggerChangeNotificationsForDependentKey:]
 fun NSObject_setKeys_triggerChangeNotificationsForDependentKey(keys: MemorySegment, dependentKey: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setKeys:triggerChangeNotificationsForDependentKey:")
     val cls = ObjCRuntime.getClass("NSObject")
@@ -368,195 +373,198 @@ fun NSObject_setKeys_triggerChangeNotificationsForDependentKey(keys: MemorySegme
 
 fun NSObject.setSharedObservers(sharedObservers: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setSharedObservers:")
-    ObjCRuntime.msgSend(null, ptr, sel, sharedObservers)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sharedObservers)
 }
 
 // ── Category: NSKeyedArchiverObjectSubstitution on NSObject ─────────────────────────────────────────
 
 fun NSObject.replacementObjectForKeyedArchiver(archiver: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("replacementObjectForKeyedArchiver:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, archiver) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, archiver) as MemorySegment
 }
 
-fun NSObject.classForKeyedArchiver(): Class<*> {
+fun NSObject.classForKeyedArchiver(): MemorySegment {
     val sel = ObjCRuntime.sel("classForKeyedArchiver")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSObject classFallbacksForKeyedArchiver]
+// Class method: +[NSObject classFallbacksForKeyedArchiver]
 fun NSObject_classFallbacksForKeyedArchiver(): MemorySegment {
     val sel = ObjCRuntime.sel("classFallbacksForKeyedArchiver")
     val cls = ObjCRuntime.getClass("NSObject")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// @property classForKeyedArchiver
-fun NSObject_classForKeyedUnarchiver(): Class<*> {
+// ── Category: NSKeyedUnarchiverObjectSubstitution on NSObject ─────────────────────────────────────────
+
+// Class method: +[NSObject classForKeyedUnarchiver]
+fun NSObject_classForKeyedUnarchiver(): MemorySegment {
     val sel = ObjCRuntime.sel("classForKeyedUnarchiver")
     val cls = ObjCRuntime.getClass("NSObject")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
 // ── Category: NSThreadPerformAdditions on NSObject ─────────────────────────────────────────
 
-fun NSObject.performSelectorOnMainThread_withObject_waitUntilDone_modes(aSelector: MemorySegment, arg: MemorySegment, wait: BOOL, array: MemorySegment): Unit {
+fun NSObject.performSelectorOnMainThread_withObject_waitUntilDone_modes(aSelector: MemorySegment, arg: MemorySegment, wait: Boolean, array: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performSelectorOnMainThread:withObject:waitUntilDone:modes:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, arg, wait, array)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, arg, wait, array)
 }
 
-fun NSObject.performSelectorOnMainThread_withObject_waitUntilDone(aSelector: MemorySegment, arg: MemorySegment, wait: BOOL): Unit {
+fun NSObject.performSelectorOnMainThread_withObject_waitUntilDone(aSelector: MemorySegment, arg: MemorySegment, wait: Boolean): Unit {
     val sel = ObjCRuntime.sel("performSelectorOnMainThread:withObject:waitUntilDone:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, arg, wait)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, arg, wait)
 }
 
-fun NSObject.performSelector_onThread_withObject_waitUntilDone_modes(aSelector: MemorySegment, thr: MemorySegment, arg: MemorySegment, wait: BOOL, array: MemorySegment): Unit {
+fun NSObject.performSelector_onThread_withObject_waitUntilDone_modes(aSelector: MemorySegment, thr: MemorySegment, arg: MemorySegment, wait: Boolean, array: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performSelector:onThread:withObject:waitUntilDone:modes:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, thr, arg, wait, array)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, thr, arg, wait, array)
 }
 
-fun NSObject.performSelector_onThread_withObject_waitUntilDone(aSelector: MemorySegment, thr: MemorySegment, arg: MemorySegment, wait: BOOL): Unit {
+fun NSObject.performSelector_onThread_withObject_waitUntilDone(aSelector: MemorySegment, thr: MemorySegment, arg: MemorySegment, wait: Boolean): Unit {
     val sel = ObjCRuntime.sel("performSelector:onThread:withObject:waitUntilDone:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, thr, arg, wait)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, thr, arg, wait)
 }
 
 fun NSObject.performSelectorInBackground_withObject(aSelector: MemorySegment, arg: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performSelectorInBackground:withObject:")
-    ObjCRuntime.msgSend(null, ptr, sel, aSelector, arg)
+    ObjCRuntime.msgSend(null, this.ptr, sel, aSelector, arg)
 }
 
 // ── Category: NSArchiverCallback on NSObject ─────────────────────────────────────────
 
 fun NSObject.replacementObjectForArchiver(archiver: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("replacementObjectForArchiver:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, archiver) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, archiver) as MemorySegment
 }
 
-fun NSObject.classForArchiver(): Class<*> {
+fun NSObject.classForArchiver(): MemorySegment {
     val sel = ObjCRuntime.sel("classForArchiver")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property classForArchiver
+// ── Category: NSDistributedObjects on NSObject ─────────────────────────────────────────
+
 fun NSObject.replacementObjectForPortCoder(coder: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("replacementObjectForPortCoder:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, coder) as MemorySegment
 }
 
-fun NSObject.classForPortCoder(): Class<*> {
+fun NSObject.classForPortCoder(): MemorySegment {
     val sel = ObjCRuntime.sel("classForPortCoder")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property classForPortCoder
+// ── Category: NSClassDescriptionPrimitives on NSObject ─────────────────────────────────────────
+
 fun NSObject.inverseForRelationshipKey(relationshipKey: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("inverseForRelationshipKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, relationshipKey) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, relationshipKey) as MemorySegment
 }
 
 fun NSObject.classDescription(): MemorySegment {
     val sel = ObjCRuntime.sel("classDescription")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 /** @return NSArray<NSString *> * */
 fun NSObject.attributeKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("attributeKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 /** @return NSArray<NSString *> * */
 fun NSObject.toOneRelationshipKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("toOneRelationshipKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 /** @return NSArray<NSString *> * */
 fun NSObject.toManyRelationshipKeys(): MemorySegment {
     val sel = ObjCRuntime.sel("toManyRelationshipKeys")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property classDescription
-/** @return NSArray<NSString *> * */
-/** @return NSArray<NSString *> * */
-/** @return NSArray<NSString *> * */
+// ── Category: NSScripting on NSObject ─────────────────────────────────────────
+
 fun NSObject.scriptingValueForSpecifier(objectSpecifier: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("scriptingValueForSpecifier:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objectSpecifier) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, objectSpecifier) as MemorySegment
 }
 
 fun NSObject.copyScriptingValue_forKey_withProperties(value: MemorySegment, key: MemorySegment, properties: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("copyScriptingValue:forKey:withProperties:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, value, key, properties) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, value, key, properties) as MemorySegment
 }
 
-fun NSObject.newScriptingObjectOfClass_forValueForKey_withContentsValue_properties(objectClass: Class<*>, key: MemorySegment, contentsValue: MemorySegment, properties: MemorySegment): MemorySegment {
+fun NSObject.newScriptingObjectOfClass_forValueForKey_withContentsValue_properties(objectClass: MemorySegment, key: MemorySegment, contentsValue: MemorySegment, properties: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("newScriptingObjectOfClass:forValueForKey:withContentsValue:properties:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objectClass, key, contentsValue, properties) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, objectClass, key, contentsValue, properties) as MemorySegment
 }
 
 /** @return NSDictionary<NSString *,id> * */
 fun NSObject.scriptingProperties(): MemorySegment {
     val sel = ObjCRuntime.sel("scriptingProperties")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSObject.setScriptingProperties(scriptingProperties: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setScriptingProperties:")
-    ObjCRuntime.msgSend(null, ptr, sel, scriptingProperties)
+    ObjCRuntime.msgSend(null, this.ptr, sel, scriptingProperties)
 }
 
-// @property scriptingProperties
-/** @return NSDictionary<NSString *,id> * */
-fun NSObject.classCode(): FourCharCode {
+// ── Category: NSScriptClassDescription on NSObject ─────────────────────────────────────────
+
+fun NSObject.classCode(): Int {
     val sel = ObjCRuntime.sel("classCode")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, this.ptr, sel) as Int
 }
 
 fun NSObject.className(): MemorySegment {
     val sel = ObjCRuntime.sel("className")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property classCode
-fun NSObject.valueAtIndex_inPropertyWithKey(index: NSUInteger, key: MemorySegment): MemorySegment {
+// ── Category: NSScriptKeyValueCoding on NSObject ─────────────────────────────────────────
+
+fun NSObject.valueAtIndex_inPropertyWithKey(index: Long, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueAtIndex:inPropertyWithKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, index, key) as MemorySegment
 }
 
 fun NSObject.valueWithName_inPropertyWithKey(name: MemorySegment, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueWithName:inPropertyWithKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, name, key) as MemorySegment
 }
 
 fun NSObject.valueWithUniqueID_inPropertyWithKey(uniqueID: MemorySegment, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueWithUniqueID:inPropertyWithKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, uniqueID, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, uniqueID, key) as MemorySegment
 }
 
-fun NSObject.insertValue_atIndex_inPropertyWithKey(value: MemorySegment, index: NSUInteger, key: MemorySegment): Unit {
+fun NSObject.insertValue_atIndex_inPropertyWithKey(value: MemorySegment, index: Long, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("insertValue:atIndex:inPropertyWithKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, index, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, index, key)
 }
 
-fun NSObject.removeValueAtIndex_fromPropertyWithKey(index: NSUInteger, key: MemorySegment): Unit {
+fun NSObject.removeValueAtIndex_fromPropertyWithKey(index: Long, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeValueAtIndex:fromPropertyWithKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, index, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, index, key)
 }
 
-fun NSObject.replaceValueAtIndex_inPropertyWithKey_withValue(index: NSUInteger, key: MemorySegment, value: MemorySegment): Unit {
+fun NSObject.replaceValueAtIndex_inPropertyWithKey_withValue(index: Long, key: MemorySegment, value: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("replaceValueAtIndex:inPropertyWithKey:withValue:")
-    ObjCRuntime.msgSend(null, ptr, sel, index, key, value)
+    ObjCRuntime.msgSend(null, this.ptr, sel, index, key, value)
 }
 
 fun NSObject.insertValue_inPropertyWithKey(value: MemorySegment, key: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("insertValue:inPropertyWithKey:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, key)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, key)
 }
 
 fun NSObject.coerceValue_forKey(value: MemorySegment, key: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("coerceValue:forKey:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, value, key) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, value, key) as MemorySegment
 }
 
 // ── Category: NSScriptObjectSpecifiers on NSObject ─────────────────────────────────────────
@@ -564,100 +572,101 @@ fun NSObject.coerceValue_forKey(value: MemorySegment, key: MemorySegment): Memor
 /** @return NSArray<NSNumber *> * */
 fun NSObject.indicesOfObjectsByEvaluatingObjectSpecifier(specifier: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("indicesOfObjectsByEvaluatingObjectSpecifier:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, specifier) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, specifier) as MemorySegment
 }
 
 fun NSObject.objectSpecifier(): MemorySegment {
     val sel = ObjCRuntime.sel("objectSpecifier")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property objectSpecifier
-fun NSObject.isEqualTo(`object`: MemorySegment): BOOL {
+// ── Category: NSComparisonMethods on NSObject ─────────────────────────────────────────
+
+fun NSObject.isEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isLessThanOrEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.isLessThanOrEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isLessThanOrEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isLessThan(`object`: MemorySegment): BOOL {
+fun NSObject.isLessThan(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isLessThan:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isGreaterThanOrEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.isGreaterThanOrEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isGreaterThanOrEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isGreaterThan(`object`: MemorySegment): BOOL {
+fun NSObject.isGreaterThan(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isGreaterThan:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isNotEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.isNotEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isNotEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.doesContain(`object`: MemorySegment): BOOL {
+fun NSObject.doesContain(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("doesContain:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isLike(`object`: MemorySegment): BOOL {
+fun NSObject.isLike(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isLike:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.isCaseInsensitiveLike(`object`: MemorySegment): BOOL {
+fun NSObject.isCaseInsensitiveLike(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("isCaseInsensitiveLike:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
 // ── Category: NSScriptingComparisonMethods on NSObject ─────────────────────────────────────────
 
-fun NSObject.scriptingIsEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingIsEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingIsEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingIsLessThanOrEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingIsLessThanOrEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingIsLessThanOrEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingIsLessThan(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingIsLessThan(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingIsLessThan:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingIsGreaterThanOrEqualTo(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingIsGreaterThanOrEqualTo(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingIsGreaterThanOrEqualTo:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingIsGreaterThan(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingIsGreaterThan(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingIsGreaterThan:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingBeginsWith(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingBeginsWith(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingBeginsWith:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingEndsWith(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingEndsWith(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingEndsWith:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
-fun NSObject.scriptingContains(`object`: MemorySegment): BOOL {
+fun NSObject.scriptingContains(`object`: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scriptingContains:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `object`) as Boolean
 }
 
 // ── Category: NSAccessibility on NSObject ─────────────────────────────────────────
@@ -665,102 +674,103 @@ fun NSObject.scriptingContains(`object`: MemorySegment): BOOL {
 /** @return NSArray<NSAccessibilityAttributeName> * */
 fun NSObject.accessibilityAttributeNames(): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityAttributeNames")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSObject.accessibilityAttributeValue(attribute: NSAccessibilityAttributeName): MemorySegment {
+fun NSObject.accessibilityAttributeValue(attribute: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityAttributeValue:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribute) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, attribute) as MemorySegment
 }
 
-fun NSObject.accessibilityIsAttributeSettable(attribute: NSAccessibilityAttributeName): BOOL {
+fun NSObject.accessibilityIsAttributeSettable(attribute: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("accessibilityIsAttributeSettable:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, attribute) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, attribute) as Boolean
 }
 
-fun NSObject.accessibilitySetValue_forAttribute(value: MemorySegment, attribute: NSAccessibilityAttributeName): Unit {
+fun NSObject.accessibilitySetValue_forAttribute(value: MemorySegment, attribute: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("accessibilitySetValue:forAttribute:")
-    ObjCRuntime.msgSend(null, ptr, sel, value, attribute)
+    ObjCRuntime.msgSend(null, this.ptr, sel, value, attribute)
 }
 
 /** @return NSArray<NSAccessibilityParameterizedAttributeName> * */
 fun NSObject.accessibilityParameterizedAttributeNames(): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityParameterizedAttributeNames")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSObject.accessibilityAttributeValue_forParameter(attribute: NSAccessibilityParameterizedAttributeName, parameter: MemorySegment): MemorySegment {
+fun NSObject.accessibilityAttributeValue_forParameter(attribute: MemorySegment, parameter: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityAttributeValue:forParameter:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribute, parameter) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, attribute, parameter) as MemorySegment
 }
 
 /** @return NSArray<NSAccessibilityActionName> * */
 fun NSObject.accessibilityActionNames(): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityActionNames")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSObject.accessibilityActionDescription(action: NSAccessibilityActionName): MemorySegment {
+fun NSObject.accessibilityActionDescription(action: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityActionDescription:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, action) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, action) as MemorySegment
 }
 
-fun NSObject.accessibilityPerformAction(action: NSAccessibilityActionName): Unit {
+fun NSObject.accessibilityPerformAction(action: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("accessibilityPerformAction:")
-    ObjCRuntime.msgSend(null, ptr, sel, action)
+    ObjCRuntime.msgSend(null, this.ptr, sel, action)
 }
 
-fun NSObject.accessibilityIsIgnored(): BOOL {
+fun NSObject.accessibilityIsIgnored(): Boolean {
     val sel = ObjCRuntime.sel("accessibilityIsIgnored")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSObject.accessibilityHitTest(point: NSPoint): MemorySegment {
+fun NSObject.accessibilityHitTest(point: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityHitTest:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, point) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, point) as MemorySegment
 }
 
-fun NSObject.accessibilityIndexOfChild(child: MemorySegment): NSUInteger {
+fun NSObject.accessibilityIndexOfChild(child: MemorySegment): Long {
     val sel = ObjCRuntime.sel("accessibilityIndexOfChild:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, child) as NSUInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel, child) as Long
 }
 
-fun NSObject.accessibilityArrayAttributeCount(attribute: NSAccessibilityAttributeName): NSUInteger {
+fun NSObject.accessibilityArrayAttributeCount(attribute: MemorySegment): Long {
     val sel = ObjCRuntime.sel("accessibilityArrayAttributeCount:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, attribute) as NSUInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel, attribute) as Long
 }
 
-fun NSObject.accessibilityArrayAttributeValues_index_maxCount(attribute: NSAccessibilityAttributeName, index: NSUInteger, maxCount: NSUInteger): MemorySegment {
+fun NSObject.accessibilityArrayAttributeValues_index_maxCount(attribute: MemorySegment, index: Long, maxCount: Long): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityArrayAttributeValues:index:maxCount:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribute, index, maxCount) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, attribute, index, maxCount) as MemorySegment
 }
 
 fun NSObject.accessibilityFocusedUIElement(): MemorySegment {
     val sel = ObjCRuntime.sel("accessibilityFocusedUIElement")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSObject.accessibilityNotifiesWhenDestroyed(): BOOL {
+fun NSObject.accessibilityNotifiesWhenDestroyed(): Boolean {
     val sel = ObjCRuntime.sel("accessibilityNotifiesWhenDestroyed")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-// @property accessibilityFocusedUIElement
-fun NSObject.accessibilitySetOverrideValue_forAttribute(value: MemorySegment, attribute: NSAccessibilityAttributeName): BOOL {
+// ── Category: NSAccessibilityAdditions on NSObject ─────────────────────────────────────────
+
+fun NSObject.accessibilitySetOverrideValue_forAttribute(value: MemorySegment, attribute: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("accessibilitySetOverrideValue:forAttribute:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, value, attribute) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, value, attribute) as Boolean
 }
 
 // ── Category: NSPasteboardOwner on NSObject ─────────────────────────────────────────
 
-fun NSObject.pasteboard_provideDataForType(sender: MemorySegment, type: NSPasteboardType): Unit {
+fun NSObject.pasteboard_provideDataForType(sender: MemorySegment, type: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("pasteboard:provideDataForType:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender, type)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender, type)
 }
 
 fun NSObject.pasteboardChangedOwner(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("pasteboardChangedOwner:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 // ── Category: NSDraggingSourceDeprecated on NSObject ─────────────────────────────────────────
@@ -768,112 +778,113 @@ fun NSObject.pasteboardChangedOwner(sender: MemorySegment): Unit {
 /** @return NSArray<NSString *> * */
 fun NSObject.namesOfPromisedFilesDroppedAtDestination(dropDestination: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("namesOfPromisedFilesDroppedAtDestination:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dropDestination) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, dropDestination) as MemorySegment
 }
 
-fun NSObject.draggingSourceOperationMaskForLocal(flag: BOOL): NSDragOperation {
+fun NSObject.draggingSourceOperationMaskForLocal(flag: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("draggingSourceOperationMaskForLocal:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, flag) as NSDragOperation
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, flag) as MemorySegment
 }
 
-fun NSObject.draggedImage_beganAt(image: MemorySegment, screenPoint: NSPoint): Unit {
+fun NSObject.draggedImage_beganAt(image: MemorySegment, screenPoint: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("draggedImage:beganAt:")
-    ObjCRuntime.msgSend(null, ptr, sel, image, screenPoint)
+    ObjCRuntime.msgSend(null, this.ptr, sel, image, screenPoint)
 }
 
-fun NSObject.draggedImage_endedAt_operation(image: MemorySegment, screenPoint: NSPoint, operation: NSDragOperation): Unit {
+fun NSObject.draggedImage_endedAt_operation(image: MemorySegment, screenPoint: MemorySegment, operation: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("draggedImage:endedAt:operation:")
-    ObjCRuntime.msgSend(null, ptr, sel, image, screenPoint, operation)
+    ObjCRuntime.msgSend(null, this.ptr, sel, image, screenPoint, operation)
 }
 
-fun NSObject.draggedImage_movedTo(image: MemorySegment, screenPoint: NSPoint): Unit {
+fun NSObject.draggedImage_movedTo(image: MemorySegment, screenPoint: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("draggedImage:movedTo:")
-    ObjCRuntime.msgSend(null, ptr, sel, image, screenPoint)
+    ObjCRuntime.msgSend(null, this.ptr, sel, image, screenPoint)
 }
 
-fun NSObject.ignoreModifierKeysWhileDragging(): BOOL {
+fun NSObject.ignoreModifierKeysWhileDragging(): Boolean {
     val sel = ObjCRuntime.sel("ignoreModifierKeysWhileDragging")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSObject.draggedImage_endedAt_deposited(image: MemorySegment, screenPoint: NSPoint, flag: BOOL): Unit {
+fun NSObject.draggedImage_endedAt_deposited(image: MemorySegment, screenPoint: MemorySegment, flag: Boolean): Unit {
     val sel = ObjCRuntime.sel("draggedImage:endedAt:deposited:")
-    ObjCRuntime.msgSend(null, ptr, sel, image, screenPoint, flag)
+    ObjCRuntime.msgSend(null, this.ptr, sel, image, screenPoint, flag)
 }
 
 // ── Category: NSLayerDelegateContentsScaleUpdating on NSObject ─────────────────────────────────────────
 
-fun NSObject.layer_shouldInheritContentsScale_fromWindow(layer: MemorySegment, newScale: CGFloat, window: MemorySegment): BOOL {
+fun NSObject.layer_shouldInheritContentsScale_fromWindow(layer: MemorySegment, newScale: Double, window: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("layer:shouldInheritContentsScale:fromWindow:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, layer, newScale, window) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, layer, newScale, window) as Boolean
 }
 
 // ── Category: NSToolTipOwner on NSObject ─────────────────────────────────────────
 
-fun NSObject.view_stringForToolTip_point_userData(view: MemorySegment, tag: NSToolTipTag, point: NSPoint, `data`: MemorySegment): MemorySegment {
+fun NSObject.view_stringForToolTip_point_userData(view: MemorySegment, tag: Long, point: MemorySegment, `data`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("view:stringForToolTip:point:userData:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, view, tag, point, `data`) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, view, tag, point, `data`) as MemorySegment
 }
 
 // ── Category: NSMenuValidation on NSObject ─────────────────────────────────────────
 
-fun NSObject.validateMenuItem(menuItem: MemorySegment): BOOL {
+fun NSObject.validateMenuItem(menuItem: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("validateMenuItem:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, menuItem) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, menuItem) as Boolean
 }
 
 // ── Category: NSKeyValueBindingCreation on NSObject ─────────────────────────────────────────
 
-fun NSObject.valueClassForBinding(binding: NSBindingName): Class<*> {
+fun NSObject.valueClassForBinding(binding: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("valueClassForBinding:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, binding) as Class<*>
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, binding) as MemorySegment
 }
 
-fun NSObject.bind_toObject_withKeyPath_options(binding: NSBindingName, observable: MemorySegment, keyPath: MemorySegment, options: MemorySegment): Unit {
+fun NSObject.bind_toObject_withKeyPath_options(binding: MemorySegment, observable: MemorySegment, keyPath: MemorySegment, options: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("bind:toObject:withKeyPath:options:")
-    ObjCRuntime.msgSend(null, ptr, sel, binding, observable, keyPath, options)
+    ObjCRuntime.msgSend(null, this.ptr, sel, binding, observable, keyPath, options)
 }
 
-fun NSObject.unbind(binding: NSBindingName): Unit {
+fun NSObject.unbind(binding: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("unbind:")
-    ObjCRuntime.msgSend(null, ptr, sel, binding)
+    ObjCRuntime.msgSend(null, this.ptr, sel, binding)
 }
 
 /** @return NSDictionary<NSBindingInfoKey,id> * */
-fun NSObject.infoForBinding(binding: NSBindingName): MemorySegment {
+fun NSObject.infoForBinding(binding: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("infoForBinding:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, binding) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, binding) as MemorySegment
 }
 
 /** @return NSArray<NSAttributeDescription *> * */
-fun NSObject.optionDescriptionsForBinding(binding: NSBindingName): MemorySegment {
+fun NSObject.optionDescriptionsForBinding(binding: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("optionDescriptionsForBinding:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, binding) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, binding) as MemorySegment
 }
 
 /** @return NSArray<NSBindingName> * */
 fun NSObject.exposedBindings(): MemorySegment {
     val sel = ObjCRuntime.sel("exposedBindings")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSObject exposeBinding:]
-fun NSObject_exposeBinding(binding: NSBindingName): Unit {
+// Class method: +[NSObject exposeBinding:]
+fun NSObject_exposeBinding(binding: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("exposeBinding:")
     val cls = ObjCRuntime.getClass("NSObject")
     ObjCRuntime.msgSend(null, cls, sel, binding)
 }
 
-// @property exposedBindings
-/** @return NSArray<NSBindingName> * */
-fun NSObject_setDefaultPlaceholder_forMarker_withBinding(placeholder: MemorySegment, marker: MemorySegment, binding: NSBindingName): Unit {
+// ── Category: NSPlaceholders on NSObject ─────────────────────────────────────────
+
+// Class method: +[NSObject setDefaultPlaceholder:forMarker:withBinding:]
+fun NSObject_setDefaultPlaceholder_forMarker_withBinding(placeholder: MemorySegment, marker: MemorySegment, binding: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setDefaultPlaceholder:forMarker:withBinding:")
     val cls = ObjCRuntime.getClass("NSObject")
     ObjCRuntime.msgSend(null, cls, sel, placeholder, marker, binding)
 }
 
-// Class<*> method: +[NSObject defaultPlaceholderForMarker:withBinding:]
-fun NSObject_defaultPlaceholderForMarker_withBinding(marker: MemorySegment, binding: NSBindingName): MemorySegment {
+// Class method: +[NSObject defaultPlaceholderForMarker:withBinding:]
+fun NSObject_defaultPlaceholderForMarker_withBinding(marker: MemorySegment, binding: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("defaultPlaceholderForMarker:withBinding:")
     val cls = ObjCRuntime.getClass("NSObject")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, marker, binding) as MemorySegment
@@ -883,145 +894,157 @@ fun NSObject_defaultPlaceholderForMarker_withBinding(marker: MemorySegment, bind
 
 fun NSObject.discardEditing(): Unit {
     val sel = ObjCRuntime.sel("discardEditing")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
-fun NSObject.commitEditing(): BOOL {
+fun NSObject.commitEditing(): Boolean {
     val sel = ObjCRuntime.sel("commitEditing")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
 fun NSObject.commitEditingWithDelegate_didCommitSelector_contextInfo(delegate: MemorySegment, didCommitSelector: MemorySegment, contextInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("commitEditingWithDelegate:didCommitSelector:contextInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, delegate, didCommitSelector, contextInfo)
+    ObjCRuntime.msgSend(null, this.ptr, sel, delegate, didCommitSelector, contextInfo)
 }
 
-fun NSObject.commitEditingAndReturnError(error: MemorySegment): BOOL {
+fun NSObject.commitEditingAndReturnError(error: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("commitEditingAndReturnError:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, error) as Boolean
 }
 
 // ── Category: NSEditorRegistration on NSObject ─────────────────────────────────────────
 
 fun NSObject.objectDidBeginEditing(editor: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("objectDidBeginEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, editor)
+    ObjCRuntime.msgSend(null, this.ptr, sel, editor)
 }
 
 fun NSObject.objectDidEndEditing(editor: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("objectDidEndEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, editor)
+    ObjCRuntime.msgSend(null, this.ptr, sel, editor)
 }
 
 // ── Category: NSControlSubclassNotifications on NSObject ─────────────────────────────────────────
 
 fun NSObject.controlTextDidBeginEditing(obj: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("controlTextDidBeginEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, obj)
+    ObjCRuntime.msgSend(null, this.ptr, sel, obj)
 }
 
 fun NSObject.controlTextDidEndEditing(obj: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("controlTextDidEndEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, obj)
+    ObjCRuntime.msgSend(null, this.ptr, sel, obj)
 }
 
 fun NSObject.controlTextDidChange(obj: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("controlTextDidChange:")
-    ObjCRuntime.msgSend(null, ptr, sel, obj)
+    ObjCRuntime.msgSend(null, this.ptr, sel, obj)
 }
 
 // ── Category: NSFontManagerDelegate on NSObject ─────────────────────────────────────────
 
-fun NSObject.fontManager_willIncludeFont(sender: MemorySegment, fontName: MemorySegment): BOOL {
+fun NSObject.fontManager_willIncludeFont(sender: MemorySegment, fontName: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("fontManager:willIncludeFont:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, sender, fontName) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, sender, fontName) as Boolean
 }
 
 // ── Category: NSFontManagerResponderMethod on NSObject ─────────────────────────────────────────
 
 fun NSObject.changeFont(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("changeFont:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 // ── Category: NSFontPanelValidationAdditions on NSObject ─────────────────────────────────────────
 
-fun NSObject.validModesForFontPanel(fontPanel: MemorySegment): NSFontPanelModeMask {
+fun NSObject.validModesForFontPanel(fontPanel: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("validModesForFontPanel:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontPanel) as NSFontPanelModeMask
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, fontPanel) as MemorySegment
 }
 
 // ── Category: NSColorPanelResponderMethod on NSObject ─────────────────────────────────────────
 
 fun NSObject.changeColor(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("changeColor:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 // ── Category: NSNibAwaking on NSObject ─────────────────────────────────────────
 
 fun NSObject.awakeFromNib(): Unit {
     val sel = ObjCRuntime.sel("awakeFromNib")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
 fun NSObject.prepareForInterfaceBuilder(): Unit {
     val sel = ObjCRuntime.sel("prepareForInterfaceBuilder")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
 // ── Category: NSSavePanelDelegateDeprecated on NSObject ─────────────────────────────────────────
 
-fun NSObject.panel_isValidFilename(sender: MemorySegment, filename: MemorySegment): BOOL {
+fun NSObject.panel_isValidFilename(sender: MemorySegment, filename: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("panel:isValidFilename:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, sender, filename) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, sender, filename) as Boolean
 }
 
 fun NSObject.panel_directoryDidChange(sender: MemorySegment, path: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("panel:directoryDidChange:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender, path)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender, path)
 }
 
-fun NSObject.panel_compareFilename_with_caseSensitive(sender: MemorySegment, name1: MemorySegment, name2: MemorySegment, caseSensitive: BOOL): NSComparisonResult {
+fun NSObject.panel_compareFilename_with_caseSensitive(sender: MemorySegment, name1: MemorySegment, name2: MemorySegment, caseSensitive: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("panel:compareFilename:with:caseSensitive:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sender, name1, name2, caseSensitive) as NSComparisonResult
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, sender, name1, name2, caseSensitive) as MemorySegment
 }
 
-fun NSObject.panel_shouldShowFilename(sender: MemorySegment, filename: MemorySegment): BOOL {
+fun NSObject.panel_shouldShowFilename(sender: MemorySegment, filename: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("panel:shouldShowFilename:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, sender, filename) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, sender, filename) as Boolean
 }
 
 // ── Category: NSDeprecatedTextStorageDelegateInterface on NSObject ─────────────────────────────────────────
 
 fun NSObject.textStorageWillProcessEditing(notification: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("textStorageWillProcessEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, notification)
+    ObjCRuntime.msgSend(null, this.ptr, sel, notification)
 }
 
 fun NSObject.textStorageDidProcessEditing(notification: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("textStorageDidProcessEditing:")
-    ObjCRuntime.msgSend(null, ptr, sel, notification)
+    ObjCRuntime.msgSend(null, this.ptr, sel, notification)
 }
 
 // ── Category: NSToolbarItemValidation on NSObject ─────────────────────────────────────────
 
-fun NSObject.validateToolbarItem(item: MemorySegment): BOOL {
+fun NSObject.validateToolbarItem(item: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("validateToolbarItem:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, item) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, item) as Boolean
 }
 
 // ── Category: NSTableViewDataSourceDeprecated on NSObject ─────────────────────────────────────────
 
-fun NSObject.tableView_writeRows_toPasteboard(tableView: MemorySegment, rows: MemorySegment, pboard: MemorySegment): BOOL {
+fun NSObject.tableView_writeRows_toPasteboard(tableView: MemorySegment, rows: MemorySegment, pboard: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("tableView:writeRows:toPasteboard:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, tableView, rows, pboard) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, tableView, rows, pboard) as Boolean
 }
 
 // ── Category: NSApplicationScriptingDelegation on NSObject ─────────────────────────────────────────
 
-fun NSObject.application_delegateHandlesKey(sender: MemorySegment, key: MemorySegment): BOOL {
+fun NSObject.application_delegateHandlesKey(sender: MemorySegment, key: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("application:delegateHandlesKey:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, sender, key) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, sender, key) as Boolean
+}
+
+/**
+ * Kotlin/JVM wrapper for root class NSObject.
+ * Synthesised because it is referenced as a superclass by generated classes
+ * but was not included in the framework filter set.
+ */
+open class NSObject(open val ptr: MemorySegment) {
+    companion object {
+        private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSObject") }
+    }
+    
 }
 

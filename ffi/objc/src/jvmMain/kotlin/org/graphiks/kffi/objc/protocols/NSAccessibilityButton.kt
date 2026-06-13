@@ -8,10 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityButton
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilityButton : NSAccessibilityElement {
+interface NSAccessibilityButton {
     fun accessibilityLabel(): MemorySegment
     
-    fun accessibilityPerformPress(): BOOL
+    fun accessibilityPerformPress(): Boolean
     
 }
 

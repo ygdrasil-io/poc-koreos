@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSCollectionLayoutItem
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(ptr) {
+open class NSCollectionLayoutGroup(override val ptr: MemorySegment) : NSCollectionLayoutItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutGroup") }
         
-        fun horizontalGroupWithLayoutSize_subitem_count(layoutSize: MemorySegment, subitem: MemorySegment, count: NSInteger): MemorySegment {
+        fun horizontalGroupWithLayoutSize_subitem_count(layoutSize: MemorySegment, subitem: MemorySegment, count: Long): MemorySegment {
             val sel = ObjCRuntime.sel("horizontalGroupWithLayoutSize:subitem:count:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, subitem, count) as MemorySegment
         }
@@ -23,7 +23,7 @@ open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, subitems) as MemorySegment
         }
         
-        fun verticalGroupWithLayoutSize_subitem_count(layoutSize: MemorySegment, subitem: MemorySegment, count: NSInteger): MemorySegment {
+        fun verticalGroupWithLayoutSize_subitem_count(layoutSize: MemorySegment, subitem: MemorySegment, count: Long): MemorySegment {
             val sel = ObjCRuntime.sel("verticalGroupWithLayoutSize:subitem:count:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, subitem, count) as MemorySegment
         }
@@ -38,19 +38,19 @@ open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, itemProvider) as MemorySegment
         }
         
-        override fun `new`(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    override fun `init`(): MemorySegment {
+    override fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun visualDescription(): MemorySegment {
+    open fun visualDescription(): MemorySegment {
         val sel = ObjCRuntime.sel("visualDescription")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -60,28 +60,28 @@ open class NSCollectionLayoutGroup(ptr: MemorySegment) : NSCollectionLayoutItem(
     
     // @property supplementaryItems
     /** @return NSArray<NSCollectionLayoutSupplementaryItem *> * */
-    override fun `supplementaryItems`(): MemorySegment {
+    override fun supplementaryItems(): MemorySegment {
         val sel = ObjCRuntime.sel("supplementaryItems")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSupplementaryItems(value: MemorySegment) {
+    open fun setSupplementaryItems(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSupplementaryItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interItemSpacing
-    fun interItemSpacing(): MemorySegment {
+    open fun interItemSpacing(): MemorySegment {
         val sel = ObjCRuntime.sel("interItemSpacing")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setInterItemSpacing(value: MemorySegment) {
+    open fun setInterItemSpacing(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setInterItemSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property subitems
     /** @return NSArray<NSCollectionLayoutItem *> * */
-    fun subitems(): MemorySegment {
+    open fun subitems(): MemorySegment {
         val sel = ObjCRuntime.sel("subitems")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

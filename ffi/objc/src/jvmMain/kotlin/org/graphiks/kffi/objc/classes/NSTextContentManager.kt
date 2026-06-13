@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSTextElementProvider, NSSecureCoding
  */
-open class NSTextContentManager(val ptr: MemorySegment) {
+open class NSTextContentManager(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextContentManager") }
         
@@ -85,27 +85,27 @@ open class NSTextContentManager(val ptr: MemorySegment) {
     }
     
     // @property hasEditingTransaction
-    open fun hasEditingTransaction(): BOOL {
+    open fun hasEditingTransaction(): Boolean {
         val sel = ObjCRuntime.sel("hasEditingTransaction")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property automaticallySynchronizesTextLayoutManagers
-    open fun automaticallySynchronizesTextLayoutManagers(): BOOL {
+    open fun automaticallySynchronizesTextLayoutManagers(): Boolean {
         val sel = ObjCRuntime.sel("automaticallySynchronizesTextLayoutManagers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAutomaticallySynchronizesTextLayoutManagers(value: BOOL) {
+    open fun setAutomaticallySynchronizesTextLayoutManagers(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticallySynchronizesTextLayoutManagers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property automaticallySynchronizesToBackingStore
-    open fun automaticallySynchronizesToBackingStore(): BOOL {
+    open fun automaticallySynchronizesToBackingStore(): Boolean {
         val sel = ObjCRuntime.sel("automaticallySynchronizesToBackingStore")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAutomaticallySynchronizesToBackingStore(value: BOOL) {
+    open fun setAutomaticallySynchronizesToBackingStore(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticallySynchronizesToBackingStore:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

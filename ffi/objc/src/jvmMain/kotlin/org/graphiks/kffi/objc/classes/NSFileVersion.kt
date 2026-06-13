@@ -8,62 +8,62 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSFileVersion
  * Superclass: NSObject
  */
-open class NSFileVersion(val ptr: MemorySegment) {
+open class NSFileVersion(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFileVersion") }
         
-        open fun currentVersionOfItemAtURL(url: MemorySegment): MemorySegment {
+        fun currentVersionOfItemAtURL(url: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("currentVersionOfItemAtURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url) as MemorySegment
         }
         
         /** @return NSArray<NSFileVersion *> * */
-        open fun otherVersionsOfItemAtURL(url: MemorySegment): MemorySegment {
+        fun otherVersionsOfItemAtURL(url: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("otherVersionsOfItemAtURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url) as MemorySegment
         }
         
         /** @return NSArray<NSFileVersion *> * */
-        open fun unresolvedConflictVersionsOfItemAtURL(url: MemorySegment): MemorySegment {
+        fun unresolvedConflictVersionsOfItemAtURL(url: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("unresolvedConflictVersionsOfItemAtURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url) as MemorySegment
         }
         
-        open fun getNonlocalVersionsOfItemAtURL_completionHandler(url: MemorySegment, completionHandler: MemorySegment): Unit {
+        fun getNonlocalVersionsOfItemAtURL_completionHandler(url: MemorySegment, completionHandler: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("getNonlocalVersionsOfItemAtURL:completionHandler:")
             ObjCRuntime.msgSend(null, _class, sel, url, completionHandler)
         }
         
-        open fun versionOfItemAtURL_forPersistentIdentifier(url: MemorySegment, persistentIdentifier: MemorySegment): MemorySegment {
+        fun versionOfItemAtURL_forPersistentIdentifier(url: MemorySegment, persistentIdentifier: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("versionOfItemAtURL:forPersistentIdentifier:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, persistentIdentifier) as MemorySegment
         }
         
-        open fun addVersionOfItemAtURL_withContentsOfURL_options_error(url: MemorySegment, contentsURL: MemorySegment, options: NSFileVersionAddingOptions, outError: MemorySegment): MemorySegment {
+        fun addVersionOfItemAtURL_withContentsOfURL_options_error(url: MemorySegment, contentsURL: MemorySegment, options: MemorySegment, outError: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("addVersionOfItemAtURL:withContentsOfURL:options:error:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, contentsURL, options, outError) as MemorySegment
         }
         
-        open fun temporaryDirectoryURLForNewVersionOfItemAtURL(url: MemorySegment): MemorySegment {
+        fun temporaryDirectoryURLForNewVersionOfItemAtURL(url: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("temporaryDirectoryURLForNewVersionOfItemAtURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url) as MemorySegment
         }
         
-        open fun removeOtherVersionsOfItemAtURL_error(url: MemorySegment, outError: MemorySegment): BOOL {
+        fun removeOtherVersionsOfItemAtURL_error(url: MemorySegment, outError: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("removeOtherVersionsOfItemAtURL:error:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, url, outError) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, url, outError) as Boolean
         }
         
     }
     
-    open fun replaceItemAtURL_options_error(url: MemorySegment, options: NSFileVersionReplacingOptions, error: MemorySegment): MemorySegment {
+    open fun replaceItemAtURL_options_error(url: MemorySegment, options: MemorySegment, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("replaceItemAtURL:options:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, options, error) as MemorySegment
     }
     
-    open fun removeAndReturnError(outError: MemorySegment): BOOL {
+    open fun removeAndReturnError(outError: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("removeAndReturnError:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, outError) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, outError) as Boolean
     }
     
     // @property URL
@@ -110,41 +110,41 @@ open class NSFileVersion(val ptr: MemorySegment) {
     }
     
     // @property conflict
-    open fun isConflict(): BOOL {
+    open fun isConflict(): Boolean {
         val sel = ObjCRuntime.sel("isConflict")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property resolved
-    open fun isResolved(): BOOL {
+    open fun isResolved(): Boolean {
         val sel = ObjCRuntime.sel("isResolved")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setResolved(value: BOOL) {
+    open fun setResolved(value: Boolean) {
         val sel = ObjCRuntime.sel("setResolved:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property discardable
-    open fun isDiscardable(): BOOL {
+    open fun isDiscardable(): Boolean {
         val sel = ObjCRuntime.sel("isDiscardable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDiscardable(value: BOOL) {
+    open fun setDiscardable(value: Boolean) {
         val sel = ObjCRuntime.sel("setDiscardable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hasLocalContents
-    open fun hasLocalContents(): BOOL {
+    open fun hasLocalContents(): Boolean {
         val sel = ObjCRuntime.sel("hasLocalContents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property hasThumbnail
-    open fun hasThumbnail(): BOOL {
+    open fun hasThumbnail(): Boolean {
         val sel = ObjCRuntime.sel("hasThumbnail")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSUserNotification(val ptr: MemorySegment) {
+open class NSUserNotification(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserNotification") }
         
@@ -132,15 +132,15 @@ open class NSUserNotification(val ptr: MemorySegment) {
     }
     
     // @property presented
-    open fun isPresented(): BOOL {
+    open fun isPresented(): Boolean {
         val sel = ObjCRuntime.sel("isPresented")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property remote
-    open fun isRemote(): BOOL {
+    open fun isRemote(): Boolean {
         val sel = ObjCRuntime.sel("isRemote")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property soundName
@@ -160,19 +160,19 @@ open class NSUserNotification(val ptr: MemorySegment) {
     open fun setSoundName(value: String) = setSoundName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property hasActionButton
-    open fun hasActionButton(): BOOL {
+    open fun hasActionButton(): Boolean {
         val sel = ObjCRuntime.sel("hasActionButton")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHasActionButton(value: BOOL) {
+    open fun setHasActionButton(value: Boolean) {
         val sel = ObjCRuntime.sel("setHasActionButton:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property activationType
-    open fun activationType(): NSUserNotificationActivationType {
+    open fun activationType(): MemorySegment {
         val sel = ObjCRuntime.sel("activationType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserNotificationActivationType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property otherButtonTitle
@@ -218,11 +218,11 @@ open class NSUserNotification(val ptr: MemorySegment) {
     }
     
     // @property hasReplyButton
-    open fun hasReplyButton(): BOOL {
+    open fun hasReplyButton(): Boolean {
         val sel = ObjCRuntime.sel("hasReplyButton")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHasReplyButton(value: BOOL) {
+    open fun setHasReplyButton(value: Boolean) {
         val sel = ObjCRuntime.sel("setHasReplyButton:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

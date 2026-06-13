@@ -9,42 +9,42 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSError(val ptr: MemorySegment) {
+open class NSError(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSError") }
         
-        open fun errorWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
+        fun errorWithDomain_code_userInfo(domain: MemorySegment, code: Long, dict: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("errorWithDomain:code:userInfo:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, domain, code, dict) as MemorySegment
         }
         
-        open fun setUserInfoValueProviderForDomain_provider(errorDomain: NSErrorDomain, provider: MemorySegment): Unit {
+        fun setUserInfoValueProviderForDomain_provider(errorDomain: MemorySegment, provider: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setUserInfoValueProviderForDomain:provider:")
             ObjCRuntime.msgSend(null, _class, sel, errorDomain, provider)
         }
         
-        open fun userInfoValueProviderForDomain(errorDomain: NSErrorDomain): MemorySegment {
+        fun userInfoValueProviderForDomain(errorDomain: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("userInfoValueProviderForDomain:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, errorDomain) as MemorySegment
         }
         
     }
     
-    open fun initWithDomain_code_userInfo(domain: NSErrorDomain, code: NSInteger, dict: MemorySegment): MemorySegment {
+    open fun initWithDomain_code_userInfo(domain: MemorySegment, code: Long, dict: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDomain:code:userInfo:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, domain, code, dict) as MemorySegment
     }
     
     // @property domain
-    open fun domain(): NSErrorDomain {
+    open fun domain(): MemorySegment {
         val sel = ObjCRuntime.sel("domain")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSErrorDomain
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property code
-    open fun code(): NSInteger {
+    open fun code(): Long {
         val sel = ObjCRuntime.sel("code")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property userInfo

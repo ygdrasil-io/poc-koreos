@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: CALayerDelegate
  * Inherits protocols: NSObject
  */
-interface CALayerDelegate : NSObject {
+interface CALayerDelegate {
     // @optional
     fun displayLayer(layer: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'displayLayer:' not implemented")

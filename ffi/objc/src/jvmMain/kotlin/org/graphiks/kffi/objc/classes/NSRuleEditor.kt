@@ -8,256 +8,256 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSRuleEditor
  * Superclass: NSControl
  */
-open class NSRuleEditor(ptr: MemorySegment) : NSControl(ptr) {
+open class NSRuleEditor(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSRuleEditor") }
         
     }
     
-    fun reloadCriteria(): Unit {
+    open fun reloadCriteria(): Unit {
         val sel = ObjCRuntime.sel("reloadCriteria")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun reloadPredicate(): Unit {
+    open fun reloadPredicate(): Unit {
         val sel = ObjCRuntime.sel("reloadPredicate")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun predicateForRow(row: NSInteger): MemorySegment {
+    open fun predicateForRow(row: Long): MemorySegment {
         val sel = ObjCRuntime.sel("predicateForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row) as MemorySegment
     }
     
-    fun subrowIndexesForRow(rowIndex: NSInteger): MemorySegment {
+    open fun subrowIndexesForRow(rowIndex: Long): MemorySegment {
         val sel = ObjCRuntime.sel("subrowIndexesForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rowIndex) as MemorySegment
     }
     
-    fun criteriaForRow(row: NSInteger): MemorySegment {
+    open fun criteriaForRow(row: Long): MemorySegment {
         val sel = ObjCRuntime.sel("criteriaForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row) as MemorySegment
     }
     
-    fun displayValuesForRow(row: NSInteger): MemorySegment {
+    open fun displayValuesForRow(row: Long): MemorySegment {
         val sel = ObjCRuntime.sel("displayValuesForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row) as MemorySegment
     }
     
-    fun rowForDisplayValue(displayValue: MemorySegment): NSInteger {
+    open fun rowForDisplayValue(displayValue: MemorySegment): Long {
         val sel = ObjCRuntime.sel("rowForDisplayValue:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, displayValue) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, displayValue) as Long
     }
     
-    fun rowTypeForRow(rowIndex: NSInteger): NSRuleEditorRowType {
+    open fun rowTypeForRow(rowIndex: Long): MemorySegment {
         val sel = ObjCRuntime.sel("rowTypeForRow:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rowIndex) as NSRuleEditorRowType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rowIndex) as MemorySegment
     }
     
-    fun parentRowForRow(rowIndex: NSInteger): NSInteger {
+    open fun parentRowForRow(rowIndex: Long): Long {
         val sel = ObjCRuntime.sel("parentRowForRow:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, rowIndex) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, rowIndex) as Long
     }
     
-    fun addRow(sender: MemorySegment): Unit {
+    open fun addRow(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addRow:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun insertRowAtIndex_withType_asSubrowOfRow_animate(rowIndex: NSInteger, rowType: NSRuleEditorRowType, parentRow: NSInteger, shouldAnimate: BOOL): Unit {
+    open fun insertRowAtIndex_withType_asSubrowOfRow_animate(rowIndex: Long, rowType: MemorySegment, parentRow: Long, shouldAnimate: Boolean): Unit {
         val sel = ObjCRuntime.sel("insertRowAtIndex:withType:asSubrowOfRow:animate:")
         ObjCRuntime.msgSend(null, ptr, sel, rowIndex, rowType, parentRow, shouldAnimate)
     }
     
-    fun setCriteria_andDisplayValues_forRowAtIndex(criteria: MemorySegment, values: MemorySegment, rowIndex: NSInteger): Unit {
+    open fun setCriteria_andDisplayValues_forRowAtIndex(criteria: MemorySegment, values: MemorySegment, rowIndex: Long): Unit {
         val sel = ObjCRuntime.sel("setCriteria:andDisplayValues:forRowAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, criteria, values, rowIndex)
     }
     
-    fun removeRowAtIndex(rowIndex: NSInteger): Unit {
+    open fun removeRowAtIndex(rowIndex: Long): Unit {
         val sel = ObjCRuntime.sel("removeRowAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, rowIndex)
     }
     
-    fun removeRowsAtIndexes_includeSubrows(rowIndexes: MemorySegment, includeSubrows: BOOL): Unit {
+    open fun removeRowsAtIndexes_includeSubrows(rowIndexes: MemorySegment, includeSubrows: Boolean): Unit {
         val sel = ObjCRuntime.sel("removeRowsAtIndexes:includeSubrows:")
         ObjCRuntime.msgSend(null, ptr, sel, rowIndexes, includeSubrows)
     }
     
-    fun selectRowIndexes_byExtendingSelection(indexes: MemorySegment, extend: BOOL): Unit {
+    open fun selectRowIndexes_byExtendingSelection(indexes: MemorySegment, extend: Boolean): Unit {
         val sel = ObjCRuntime.sel("selectRowIndexes:byExtendingSelection:")
         ObjCRuntime.msgSend(null, ptr, sel, indexes, extend)
     }
     
     // @property delegate
     /** @return id<NSRuleEditorDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formattingStringsFilename
-    fun formattingStringsFilename(): MemorySegment {
+    open fun formattingStringsFilename(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingStringsFilename")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingStringsFilename(value: MemorySegment) {
+    open fun setFormattingStringsFilename(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingStringsFilename:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun formattingStringsFilenameAsString(): String = ObjCRuntime.toJavaString(formattingStringsFilename())
+    open fun formattingStringsFilenameAsString(): String = ObjCRuntime.toJavaString(formattingStringsFilename())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setFormattingStringsFilename(value: String) = setFormattingStringsFilename(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setFormattingStringsFilename(value: String) = setFormattingStringsFilename(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property formattingDictionary
     /** @return NSDictionary<NSString *,NSString *> * */
-    fun formattingDictionary(): MemorySegment {
+    open fun formattingDictionary(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingDictionary")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingDictionary(value: MemorySegment) {
+    open fun setFormattingDictionary(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingDictionary:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property nestingMode
-    fun nestingMode(): NSRuleEditorNestingMode {
+    open fun nestingMode(): MemorySegment {
         val sel = ObjCRuntime.sel("nestingMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRuleEditorNestingMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNestingMode(value: NSRuleEditorNestingMode) {
+    open fun setNestingMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNestingMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rowHeight
-    fun rowHeight(): CGFloat {
+    open fun rowHeight(): Double {
         val sel = ObjCRuntime.sel("rowHeight")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setRowHeight(value: CGFloat) {
+    open fun setRowHeight(value: Double) {
         val sel = ObjCRuntime.sel("setRowHeight:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property editable
-    fun isEditable(): BOOL {
+    open fun isEditable(): Boolean {
         val sel = ObjCRuntime.sel("isEditable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setEditable(value: BOOL) {
+    open fun setEditable(value: Boolean) {
         val sel = ObjCRuntime.sel("setEditable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property canRemoveAllRows
-    fun canRemoveAllRows(): BOOL {
+    open fun canRemoveAllRows(): Boolean {
         val sel = ObjCRuntime.sel("canRemoveAllRows")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setCanRemoveAllRows(value: BOOL) {
+    open fun setCanRemoveAllRows(value: Boolean) {
         val sel = ObjCRuntime.sel("setCanRemoveAllRows:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property predicate
-    fun predicate(): MemorySegment {
+    open fun predicate(): MemorySegment {
         val sel = ObjCRuntime.sel("predicate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property numberOfRows
-    fun numberOfRows(): NSInteger {
+    open fun numberOfRows(): Long {
         val sel = ObjCRuntime.sel("numberOfRows")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property selectedRowIndexes
-    fun selectedRowIndexes(): MemorySegment {
+    open fun selectedRowIndexes(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedRowIndexes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property rowClass
-    fun rowClass(): Class<*> {
+    open fun rowClass(): MemorySegment {
         val sel = ObjCRuntime.sel("rowClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRowClass(value: Class<*>) {
+    open fun setRowClass(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRowClass:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rowTypeKeyPath
-    fun rowTypeKeyPath(): MemorySegment {
+    open fun rowTypeKeyPath(): MemorySegment {
         val sel = ObjCRuntime.sel("rowTypeKeyPath")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRowTypeKeyPath(value: MemorySegment) {
+    open fun setRowTypeKeyPath(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRowTypeKeyPath:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun rowTypeKeyPathAsString(): String = ObjCRuntime.toJavaString(rowTypeKeyPath())
+    open fun rowTypeKeyPathAsString(): String = ObjCRuntime.toJavaString(rowTypeKeyPath())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setRowTypeKeyPath(value: String) = setRowTypeKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setRowTypeKeyPath(value: String) = setRowTypeKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property subrowsKeyPath
-    fun subrowsKeyPath(): MemorySegment {
+    open fun subrowsKeyPath(): MemorySegment {
         val sel = ObjCRuntime.sel("subrowsKeyPath")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSubrowsKeyPath(value: MemorySegment) {
+    open fun setSubrowsKeyPath(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSubrowsKeyPath:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun subrowsKeyPathAsString(): String = ObjCRuntime.toJavaString(subrowsKeyPath())
+    open fun subrowsKeyPathAsString(): String = ObjCRuntime.toJavaString(subrowsKeyPath())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setSubrowsKeyPath(value: String) = setSubrowsKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setSubrowsKeyPath(value: String) = setSubrowsKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property criteriaKeyPath
-    fun criteriaKeyPath(): MemorySegment {
+    open fun criteriaKeyPath(): MemorySegment {
         val sel = ObjCRuntime.sel("criteriaKeyPath")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCriteriaKeyPath(value: MemorySegment) {
+    open fun setCriteriaKeyPath(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCriteriaKeyPath:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun criteriaKeyPathAsString(): String = ObjCRuntime.toJavaString(criteriaKeyPath())
+    open fun criteriaKeyPathAsString(): String = ObjCRuntime.toJavaString(criteriaKeyPath())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCriteriaKeyPath(value: String) = setCriteriaKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCriteriaKeyPath(value: String) = setCriteriaKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property displayValuesKeyPath
-    fun displayValuesKeyPath(): MemorySegment {
+    open fun displayValuesKeyPath(): MemorySegment {
         val sel = ObjCRuntime.sel("displayValuesKeyPath")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDisplayValuesKeyPath(value: MemorySegment) {
+    open fun setDisplayValuesKeyPath(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDisplayValuesKeyPath:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun displayValuesKeyPathAsString(): String = ObjCRuntime.toJavaString(displayValuesKeyPath())
+    open fun displayValuesKeyPathAsString(): String = ObjCRuntime.toJavaString(displayValuesKeyPath())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setDisplayValuesKeyPath(value: String) = setDisplayValuesKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setDisplayValuesKeyPath(value: String) = setDisplayValuesKeyPath(ObjCRuntime.newNSString(Arena.global(), value))
     
 }
 

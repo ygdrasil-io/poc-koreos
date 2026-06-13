@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTreeNode
  * Superclass: NSObject
  */
-open class NSTreeNode(val ptr: MemorySegment) {
+open class NSTreeNode(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTreeNode") }
         
-        open fun treeNodeWithRepresentedObject(modelObject: MemorySegment): MemorySegment {
+        fun treeNodeWithRepresentedObject(modelObject: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("treeNodeWithRepresentedObject:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, modelObject) as MemorySegment
         }
@@ -29,7 +29,7 @@ open class NSTreeNode(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, indexPath) as MemorySegment
     }
     
-    open fun sortWithSortDescriptors_recursively(sortDescriptors: MemorySegment, recursively: BOOL): Unit {
+    open fun sortWithSortDescriptors_recursively(sortDescriptors: MemorySegment, recursively: Boolean): Unit {
         val sel = ObjCRuntime.sel("sortWithSortDescriptors:recursively:")
         ObjCRuntime.msgSend(null, ptr, sel, sortDescriptors, recursively)
     }
@@ -47,9 +47,9 @@ open class NSTreeNode(val ptr: MemorySegment) {
     }
     
     // @property leaf
-    open fun isLeaf(): BOOL {
+    open fun isLeaf(): Boolean {
         val sel = ObjCRuntime.sel("isLeaf")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property childNodes

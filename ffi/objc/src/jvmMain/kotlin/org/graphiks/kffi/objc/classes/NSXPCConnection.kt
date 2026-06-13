@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSXPCProxyCreating
  */
-open class NSXPCConnection(val ptr: MemorySegment) {
+open class NSXPCConnection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSXPCConnection") }
         
-        open fun currentConnection(): MemorySegment {
+        fun currentConnection(): MemorySegment {
             val sel = ObjCRuntime.sel("currentConnection")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -26,15 +26,15 @@ open class NSXPCConnection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithServiceName(serviceName: String): MemorySegment = initWithServiceName(ObjCRuntime.newNSString(Arena.global(), serviceName))
+    fun initWithServiceName(serviceName: String): MemorySegment = initWithServiceName(ObjCRuntime.newNSString(Arena.global(), serviceName))
     
-    open fun initWithMachServiceName_options(name: MemorySegment, options: NSXPCConnectionOptions): MemorySegment {
+    open fun initWithMachServiceName_options(name: MemorySegment, options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithMachServiceName:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, options) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithMachServiceName_options(name: String, options: NSXPCConnectionOptions): MemorySegment = initWithMachServiceName_options(ObjCRuntime.newNSString(Arena.global(), name), options)
+    fun initWithMachServiceName_options(name: String, options: MemorySegment): MemorySegment = initWithMachServiceName_options(ObjCRuntime.newNSString(Arena.global(), name), options)
     
     open fun initWithListenerEndpoint(endpoint: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithListenerEndpoint:")
@@ -82,7 +82,7 @@ open class NSXPCConnection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setCodeSigningRequirement(requirement: String): Unit = setCodeSigningRequirement(ObjCRuntime.newNSString(Arena.global(), requirement))
+    fun setCodeSigningRequirement(requirement: String): Unit = setCodeSigningRequirement(ObjCRuntime.newNSString(Arena.global(), requirement))
     
     // @property serviceName
     open fun serviceName(): MemorySegment {
@@ -156,27 +156,27 @@ open class NSXPCConnection(val ptr: MemorySegment) {
     }
     
     // @property auditSessionIdentifier
-    open fun auditSessionIdentifier(): au_asid_t {
+    open fun auditSessionIdentifier(): Int {
         val sel = ObjCRuntime.sel("auditSessionIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as au_asid_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property processIdentifier
-    open fun processIdentifier(): pid_t {
+    open fun processIdentifier(): Int {
         val sel = ObjCRuntime.sel("processIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as pid_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property effectiveUserIdentifier
-    open fun effectiveUserIdentifier(): uid_t {
+    open fun effectiveUserIdentifier(): Int {
         val sel = ObjCRuntime.sel("effectiveUserIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as uid_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property effectiveGroupIdentifier
-    open fun effectiveGroupIdentifier(): gid_t {
+    open fun effectiveGroupIdentifier(): Int {
         val sel = ObjCRuntime.sel("effectiveGroupIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as gid_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
 }

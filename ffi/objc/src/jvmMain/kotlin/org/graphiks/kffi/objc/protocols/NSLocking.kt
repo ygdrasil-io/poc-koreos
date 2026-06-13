@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSLocking
  */
 interface NSLocking {
-    fun lock()
+    fun lock(): Unit
     
-    fun unlock()
+    fun unlock(): Unit
     
 }
 

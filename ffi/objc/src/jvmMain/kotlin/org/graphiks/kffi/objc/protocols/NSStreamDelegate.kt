@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSStreamDelegate
  * Inherits protocols: NSObject
  */
-interface NSStreamDelegate : NSObject {
+interface NSStreamDelegate {
     // @optional
-    fun stream_handleEvent(aStream: MemorySegment, eventCode: NSStreamEvent): Unit =
+    fun stream_handleEvent(aStream: MemorySegment, eventCode: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'stream:handleEvent:' not implemented")
     
 }

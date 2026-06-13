@@ -8,28 +8,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTypesetter
  * Superclass: NSObject
  */
-open class NSTypesetter(val ptr: MemorySegment) {
+open class NSTypesetter(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTypesetter") }
         
-        open fun printingAdjustmentInLayoutManager_forNominallySpacedGlyphRange_packedGlyphs_count(layoutMgr: MemorySegment, nominallySpacedGlyphsRange: NSRange, packedGlyphs: MemorySegment, packedGlyphsCount: NSUInteger): NSSize {
+        fun printingAdjustmentInLayoutManager_forNominallySpacedGlyphRange_packedGlyphs_count(layoutMgr: MemorySegment, nominallySpacedGlyphsRange: MemorySegment, packedGlyphs: MemorySegment, packedGlyphsCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("printingAdjustmentInLayoutManager:forNominallySpacedGlyphRange:packedGlyphs:count:")
-            return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), _class, sel, layoutMgr, ObjCRuntime.ObjCStructArg(nominallySpacedGlyphsRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), packedGlyphs, packedGlyphsCount) as NSSize
+            return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), _class, sel, layoutMgr, ObjCRuntime.ObjCStructArg(nominallySpacedGlyphsRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), packedGlyphs, packedGlyphsCount) as MemorySegment
         }
         
-        open fun sharedSystemTypesetterForBehavior(behavior: NSTypesetterBehavior): MemorySegment {
+        fun sharedSystemTypesetterForBehavior(behavior: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sharedSystemTypesetterForBehavior:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, behavior) as MemorySegment
         }
         
-        open fun sharedSystemTypesetter(): MemorySegment {
+        fun sharedSystemTypesetter(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedSystemTypesetter")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun defaultTypesetterBehavior(): NSTypesetterBehavior {
+        fun defaultTypesetterBehavior(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultTypesetterBehavior")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as NSTypesetterBehavior
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
@@ -39,19 +39,19 @@ open class NSTypesetter(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, originalFont) as MemorySegment
     }
     
-    open fun textTabForGlyphLocation_writingDirection_maxLocation(glyphLocation: CGFloat, direction: NSWritingDirection, maxLocation: CGFloat): MemorySegment {
+    open fun textTabForGlyphLocation_writingDirection_maxLocation(glyphLocation: Double, direction: MemorySegment, maxLocation: Double): MemorySegment {
         val sel = ObjCRuntime.sel("textTabForGlyphLocation:writingDirection:maxLocation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, glyphLocation, direction, maxLocation) as MemorySegment
     }
     
-    open fun setParagraphGlyphRange_separatorGlyphRange(paragraphRange: NSRange, paragraphSeparatorRange: NSRange): Unit {
+    open fun setParagraphGlyphRange_separatorGlyphRange(paragraphRange: MemorySegment, paragraphSeparatorRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setParagraphGlyphRange:separatorGlyphRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(paragraphRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), ObjCRuntime.ObjCStructArg(paragraphSeparatorRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
-    open fun layoutParagraphAtPoint(lineFragmentOrigin: MemorySegment): NSUInteger {
+    open fun layoutParagraphAtPoint(lineFragmentOrigin: MemorySegment): Long {
         val sel = ObjCRuntime.sel("layoutParagraphAtPoint:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, lineFragmentOrigin) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, lineFragmentOrigin) as Long
     }
     
     open fun beginParagraph(): Unit {
@@ -64,72 +64,72 @@ open class NSTypesetter(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun beginLineWithGlyphAtIndex(glyphIndex: NSUInteger): Unit {
+    open fun beginLineWithGlyphAtIndex(glyphIndex: Long): Unit {
         val sel = ObjCRuntime.sel("beginLineWithGlyphAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, glyphIndex)
     }
     
-    open fun endLineWithGlyphRange(lineGlyphRange: NSRange): Unit {
+    open fun endLineWithGlyphRange(lineGlyphRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("endLineWithGlyphRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(lineGlyphRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
-    open fun lineSpacingAfterGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: NSUInteger, rect: NSRect): CGFloat {
+    open fun lineSpacingAfterGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: Long, rect: MemorySegment): Double {
         val sel = ObjCRuntime.sel("lineSpacingAfterGlyphAtIndex:withProposedLineFragmentRect:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as Double
     }
     
-    open fun paragraphSpacingBeforeGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: NSUInteger, rect: NSRect): CGFloat {
+    open fun paragraphSpacingBeforeGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: Long, rect: MemorySegment): Double {
         val sel = ObjCRuntime.sel("paragraphSpacingBeforeGlyphAtIndex:withProposedLineFragmentRect:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as Double
     }
     
-    open fun paragraphSpacingAfterGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: NSUInteger, rect: NSRect): CGFloat {
+    open fun paragraphSpacingAfterGlyphAtIndex_withProposedLineFragmentRect(glyphIndex: Long, rect: MemorySegment): Double {
         val sel = ObjCRuntime.sel("paragraphSpacingAfterGlyphAtIndex:withProposedLineFragmentRect:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, glyphIndex, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as Double
     }
     
-    open fun getLineFragmentRect_usedRect_forParagraphSeparatorGlyphRange_atProposedOrigin(lineFragmentRect: MemorySegment, lineFragmentUsedRect: MemorySegment, paragraphSeparatorGlyphRange: NSRange, lineOrigin: NSPoint): Unit {
+    open fun getLineFragmentRect_usedRect_forParagraphSeparatorGlyphRange_atProposedOrigin(lineFragmentRect: MemorySegment, lineFragmentUsedRect: MemorySegment, paragraphSeparatorGlyphRange: MemorySegment, lineOrigin: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getLineFragmentRect:usedRect:forParagraphSeparatorGlyphRange:atProposedOrigin:")
         ObjCRuntime.msgSend(null, ptr, sel, lineFragmentRect, lineFragmentUsedRect, ObjCRuntime.ObjCStructArg(paragraphSeparatorGlyphRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), ObjCRuntime.ObjCStructArg(lineOrigin, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")))
     }
     
-    open fun setHardInvalidation_forGlyphRange(flag: BOOL, glyphRange: NSRange): Unit {
+    open fun setHardInvalidation_forGlyphRange(flag: Boolean, glyphRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setHardInvalidation:forGlyphRange:")
         ObjCRuntime.msgSend(null, ptr, sel, flag, ObjCRuntime.ObjCStructArg(glyphRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
-    open fun layoutGlyphsInLayoutManager_startingAtGlyphIndex_maxNumberOfLineFragments_nextGlyphIndex(layoutManager: MemorySegment, startGlyphIndex: NSUInteger, maxNumLines: NSUInteger, nextGlyph: MemorySegment): Unit {
+    open fun layoutGlyphsInLayoutManager_startingAtGlyphIndex_maxNumberOfLineFragments_nextGlyphIndex(layoutManager: MemorySegment, startGlyphIndex: Long, maxNumLines: Long, nextGlyph: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("layoutGlyphsInLayoutManager:startingAtGlyphIndex:maxNumberOfLineFragments:nextGlyphIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, layoutManager, startGlyphIndex, maxNumLines, nextGlyph)
     }
     
-    open fun layoutCharactersInRange_forLayoutManager_maximumNumberOfLineFragments(characterRange: NSRange, layoutManager: MemorySegment, maxNumLines: NSUInteger): NSRange {
+    open fun layoutCharactersInRange_forLayoutManager_maximumNumberOfLineFragments(characterRange: MemorySegment, layoutManager: MemorySegment, maxNumLines: Long): MemorySegment {
         val sel = ObjCRuntime.sel("layoutCharactersInRange:forLayoutManager:maximumNumberOfLineFragments:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel, ObjCRuntime.ObjCStructArg(characterRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), layoutManager, maxNumLines) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel, ObjCRuntime.ObjCStructArg(characterRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), layoutManager, maxNumLines) as MemorySegment
     }
     
-    open fun baselineOffsetInLayoutManager_glyphIndex(layoutMgr: MemorySegment, glyphIndex: NSUInteger): CGFloat {
+    open fun baselineOffsetInLayoutManager_glyphIndex(layoutMgr: MemorySegment, glyphIndex: Long): Double {
         val sel = ObjCRuntime.sel("baselineOffsetInLayoutManager:glyphIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, layoutMgr, glyphIndex) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, layoutMgr, glyphIndex) as Double
     }
     
     // @property usesFontLeading
-    open fun usesFontLeading(): BOOL {
+    open fun usesFontLeading(): Boolean {
         val sel = ObjCRuntime.sel("usesFontLeading")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesFontLeading(value: BOOL) {
+    open fun setUsesFontLeading(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesFontLeading:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property typesetterBehavior
-    open fun typesetterBehavior(): NSTypesetterBehavior {
+    open fun typesetterBehavior(): MemorySegment {
         val sel = ObjCRuntime.sel("typesetterBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTypesetterBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setTypesetterBehavior(value: NSTypesetterBehavior) {
+    open fun setTypesetterBehavior(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTypesetterBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -145,21 +145,21 @@ open class NSTypesetter(val ptr: MemorySegment) {
     }
     
     // @property lineFragmentPadding
-    open fun lineFragmentPadding(): CGFloat {
+    open fun lineFragmentPadding(): Double {
         val sel = ObjCRuntime.sel("lineFragmentPadding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setLineFragmentPadding(value: CGFloat) {
+    open fun setLineFragmentPadding(value: Double) {
         val sel = ObjCRuntime.sel("setLineFragmentPadding:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bidiProcessingEnabled
-    open fun bidiProcessingEnabled(): BOOL {
+    open fun bidiProcessingEnabled(): Boolean {
         val sel = ObjCRuntime.sel("bidiProcessingEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setBidiProcessingEnabled(value: BOOL) {
+    open fun setBidiProcessingEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setBidiProcessingEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -175,27 +175,27 @@ open class NSTypesetter(val ptr: MemorySegment) {
     }
     
     // @property paragraphGlyphRange
-    open fun paragraphGlyphRange(): NSRange {
+    open fun paragraphGlyphRange(): MemorySegment {
         val sel = ObjCRuntime.sel("paragraphGlyphRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property paragraphSeparatorGlyphRange
-    open fun paragraphSeparatorGlyphRange(): NSRange {
+    open fun paragraphSeparatorGlyphRange(): MemorySegment {
         val sel = ObjCRuntime.sel("paragraphSeparatorGlyphRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property paragraphCharacterRange
-    open fun paragraphCharacterRange(): NSRange {
+    open fun paragraphCharacterRange(): MemorySegment {
         val sel = ObjCRuntime.sel("paragraphCharacterRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property paragraphSeparatorCharacterRange
-    open fun paragraphSeparatorCharacterRange(): NSRange {
+    open fun paragraphSeparatorCharacterRange(): MemorySegment {
         val sel = ObjCRuntime.sel("paragraphSeparatorCharacterRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property attributesForExtraLineFragment
@@ -231,111 +231,122 @@ open class NSTypesetter(val ptr: MemorySegment) {
     }
     
     // @property sharedSystemTypesetter
+    open fun sharedSystemTypesetter(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedSystemTypesetter")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property defaultTypesetterBehavior
+    open fun defaultTypesetterBehavior(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultTypesetterBehavior")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 
 // ── Category: NSLayoutPhaseInterface on NSTypesetter ─────────────────────────────────────────
 
-fun NSTypesetter.willSetLineFragmentRect_forGlyphRange_usedRect_baselineOffset(lineRect: MemorySegment, glyphRange: NSRange, usedRect: MemorySegment, baselineOffset: MemorySegment): Unit {
+fun NSTypesetter.willSetLineFragmentRect_forGlyphRange_usedRect_baselineOffset(lineRect: MemorySegment, glyphRange: MemorySegment, usedRect: MemorySegment, baselineOffset: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("willSetLineFragmentRect:forGlyphRange:usedRect:baselineOffset:")
-    ObjCRuntime.msgSend(null, ptr, sel, lineRect, glyphRange, usedRect, baselineOffset)
+    ObjCRuntime.msgSend(null, this.ptr, sel, lineRect, glyphRange, usedRect, baselineOffset)
 }
 
-fun NSTypesetter.shouldBreakLineByWordBeforeCharacterAtIndex(charIndex: NSUInteger): BOOL {
+fun NSTypesetter.shouldBreakLineByWordBeforeCharacterAtIndex(charIndex: Long): Boolean {
     val sel = ObjCRuntime.sel("shouldBreakLineByWordBeforeCharacterAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, charIndex) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, charIndex) as Boolean
 }
 
-fun NSTypesetter.shouldBreakLineByHyphenatingBeforeCharacterAtIndex(charIndex: NSUInteger): BOOL {
+fun NSTypesetter.shouldBreakLineByHyphenatingBeforeCharacterAtIndex(charIndex: Long): Boolean {
     val sel = ObjCRuntime.sel("shouldBreakLineByHyphenatingBeforeCharacterAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, charIndex) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, charIndex) as Boolean
 }
 
-fun NSTypesetter.hyphenationFactorForGlyphAtIndex(glyphIndex: NSUInteger): Float {
+fun NSTypesetter.hyphenationFactorForGlyphAtIndex(glyphIndex: Long): Float {
     val sel = ObjCRuntime.sel("hyphenationFactorForGlyphAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel, glyphIndex) as Float
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, this.ptr, sel, glyphIndex) as Float
 }
 
-fun NSTypesetter.hyphenCharacterForGlyphAtIndex(glyphIndex: NSUInteger): UTF32Char {
+fun NSTypesetter.hyphenCharacterForGlyphAtIndex(glyphIndex: Long): Int {
     val sel = ObjCRuntime.sel("hyphenCharacterForGlyphAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, glyphIndex) as UTF32Char
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, this.ptr, sel, glyphIndex) as Int
 }
 
-fun NSTypesetter.boundingBoxForControlGlyphAtIndex_forTextContainer_proposedLineFragment_glyphPosition_characterIndex(glyphIndex: NSUInteger, textContainer: MemorySegment, proposedRect: NSRect, glyphPosition: NSPoint, charIndex: NSUInteger): NSRect {
+fun NSTypesetter.boundingBoxForControlGlyphAtIndex_forTextContainer_proposedLineFragment_glyphPosition_characterIndex(glyphIndex: Long, textContainer: MemorySegment, proposedRect: MemorySegment, glyphPosition: MemorySegment, charIndex: Long): MemorySegment {
     val sel = ObjCRuntime.sel("boundingBoxForControlGlyphAtIndex:forTextContainer:proposedLineFragment:glyphPosition:characterIndex:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, glyphIndex, textContainer, proposedRect, glyphPosition, charIndex) as NSRect
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), this.ptr, sel, glyphIndex, textContainer, proposedRect, glyphPosition, charIndex) as MemorySegment
 }
 
 // ── Category: NSGlyphStorageInterface on NSTypesetter ─────────────────────────────────────────
 
-fun NSTypesetter.characterRangeForGlyphRange_actualGlyphRange(glyphRange: NSRange, actualGlyphRange: MemorySegment): NSRange {
+fun NSTypesetter.characterRangeForGlyphRange_actualGlyphRange(glyphRange: MemorySegment, actualGlyphRange: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("characterRangeForGlyphRange:actualGlyphRange:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel, glyphRange, actualGlyphRange) as NSRange
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), this.ptr, sel, glyphRange, actualGlyphRange) as MemorySegment
 }
 
-fun NSTypesetter.glyphRangeForCharacterRange_actualCharacterRange(charRange: NSRange, actualCharRange: MemorySegment): NSRange {
+fun NSTypesetter.glyphRangeForCharacterRange_actualCharacterRange(charRange: MemorySegment, actualCharRange: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("glyphRangeForCharacterRange:actualCharacterRange:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel, charRange, actualCharRange) as NSRange
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), this.ptr, sel, charRange, actualCharRange) as MemorySegment
 }
 
-fun NSTypesetter.getLineFragmentRect_usedRect_remainingRect_forStartingGlyphAtIndex_proposedRect_lineSpacing_paragraphSpacingBefore_paragraphSpacingAfter(lineFragmentRect: MemorySegment, lineFragmentUsedRect: MemorySegment, remainingRect: MemorySegment, startingGlyphIndex: NSUInteger, proposedRect: NSRect, lineSpacing: CGFloat, paragraphSpacingBefore: CGFloat, paragraphSpacingAfter: CGFloat): Unit {
+fun NSTypesetter.getLineFragmentRect_usedRect_remainingRect_forStartingGlyphAtIndex_proposedRect_lineSpacing_paragraphSpacingBefore_paragraphSpacingAfter(lineFragmentRect: MemorySegment, lineFragmentUsedRect: MemorySegment, remainingRect: MemorySegment, startingGlyphIndex: Long, proposedRect: MemorySegment, lineSpacing: Double, paragraphSpacingBefore: Double, paragraphSpacingAfter: Double): Unit {
     val sel = ObjCRuntime.sel("getLineFragmentRect:usedRect:remainingRect:forStartingGlyphAtIndex:proposedRect:lineSpacing:paragraphSpacingBefore:paragraphSpacingAfter:")
-    ObjCRuntime.msgSend(null, ptr, sel, lineFragmentRect, lineFragmentUsedRect, remainingRect, startingGlyphIndex, proposedRect, lineSpacing, paragraphSpacingBefore, paragraphSpacingAfter)
+    ObjCRuntime.msgSend(null, this.ptr, sel, lineFragmentRect, lineFragmentUsedRect, remainingRect, startingGlyphIndex, proposedRect, lineSpacing, paragraphSpacingBefore, paragraphSpacingAfter)
 }
 
-fun NSTypesetter.setLineFragmentRect_forGlyphRange_usedRect_baselineOffset(fragmentRect: NSRect, glyphRange: NSRange, usedRect: NSRect, baselineOffset: CGFloat): Unit {
+fun NSTypesetter.setLineFragmentRect_forGlyphRange_usedRect_baselineOffset(fragmentRect: MemorySegment, glyphRange: MemorySegment, usedRect: MemorySegment, baselineOffset: Double): Unit {
     val sel = ObjCRuntime.sel("setLineFragmentRect:forGlyphRange:usedRect:baselineOffset:")
-    ObjCRuntime.msgSend(null, ptr, sel, fragmentRect, glyphRange, usedRect, baselineOffset)
+    ObjCRuntime.msgSend(null, this.ptr, sel, fragmentRect, glyphRange, usedRect, baselineOffset)
 }
 
-fun NSTypesetter.setNotShownAttribute_forGlyphRange(flag: BOOL, glyphRange: NSRange): Unit {
+fun NSTypesetter.setNotShownAttribute_forGlyphRange(flag: Boolean, glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setNotShownAttribute:forGlyphRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, flag, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, flag, glyphRange)
 }
 
-fun NSTypesetter.setDrawsOutsideLineFragment_forGlyphRange(flag: BOOL, glyphRange: NSRange): Unit {
+fun NSTypesetter.setDrawsOutsideLineFragment_forGlyphRange(flag: Boolean, glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setDrawsOutsideLineFragment:forGlyphRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, flag, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, flag, glyphRange)
 }
 
-fun NSTypesetter.setLocation_withAdvancements_forStartOfGlyphRange(location: NSPoint, advancements: MemorySegment, glyphRange: NSRange): Unit {
+fun NSTypesetter.setLocation_withAdvancements_forStartOfGlyphRange(location: MemorySegment, advancements: MemorySegment, glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setLocation:withAdvancements:forStartOfGlyphRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, location, advancements, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, location, advancements, glyphRange)
 }
 
-fun NSTypesetter.setAttachmentSize_forGlyphRange(attachmentSize: NSSize, glyphRange: NSRange): Unit {
+fun NSTypesetter.setAttachmentSize_forGlyphRange(attachmentSize: MemorySegment, glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAttachmentSize:forGlyphRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, attachmentSize, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, attachmentSize, glyphRange)
 }
 
-fun NSTypesetter.setBidiLevels_forGlyphRange(levels: MemorySegment, glyphRange: NSRange): Unit {
+fun NSTypesetter.setBidiLevels_forGlyphRange(levels: MemorySegment, glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setBidiLevels:forGlyphRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, levels, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, levels, glyphRange)
 }
 
 // ── Category: NSTypesetter_Deprecated on NSTypesetter ─────────────────────────────────────────
 
-fun NSTypesetter.actionForControlCharacterAtIndex(charIndex: NSUInteger): NSTypesetterControlCharacterAction {
+fun NSTypesetter.actionForControlCharacterAtIndex(charIndex: Long): MemorySegment {
     val sel = ObjCRuntime.sel("actionForControlCharacterAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, charIndex) as NSTypesetterControlCharacterAction
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, charIndex) as MemorySegment
 }
 
-fun NSTypesetter.getGlyphsInRange_glyphs_characterIndexes_glyphInscriptions_elasticBits_bidiLevels(glyphsRange: NSRange, glyphBuffer: MemorySegment, charIndexBuffer: MemorySegment, inscribeBuffer: MemorySegment, elasticBuffer: MemorySegment, bidiLevelBuffer: MemorySegment): NSUInteger {
+fun NSTypesetter.getGlyphsInRange_glyphs_characterIndexes_glyphInscriptions_elasticBits_bidiLevels(glyphsRange: MemorySegment, glyphBuffer: MemorySegment, charIndexBuffer: MemorySegment, inscribeBuffer: MemorySegment, elasticBuffer: MemorySegment, bidiLevelBuffer: MemorySegment): Long {
     val sel = ObjCRuntime.sel("getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:bidiLevels:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, glyphsRange, glyphBuffer, charIndexBuffer, inscribeBuffer, elasticBuffer, bidiLevelBuffer) as NSUInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel, glyphsRange, glyphBuffer, charIndexBuffer, inscribeBuffer, elasticBuffer, bidiLevelBuffer) as Long
 }
 
-fun NSTypesetter.substituteGlyphsInRange_withGlyphs(glyphRange: NSRange, glyphs: MemorySegment): Unit {
+fun NSTypesetter.substituteGlyphsInRange_withGlyphs(glyphRange: MemorySegment, glyphs: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("substituteGlyphsInRange:withGlyphs:")
-    ObjCRuntime.msgSend(null, ptr, sel, glyphRange, glyphs)
+    ObjCRuntime.msgSend(null, this.ptr, sel, glyphRange, glyphs)
 }
 
-fun NSTypesetter.insertGlyph_atGlyphIndex_characterIndex(glyph: NSGlyph, glyphIndex: NSUInteger, characterIndex: NSUInteger): Unit {
+fun NSTypesetter.insertGlyph_atGlyphIndex_characterIndex(glyph: Int, glyphIndex: Long, characterIndex: Long): Unit {
     val sel = ObjCRuntime.sel("insertGlyph:atGlyphIndex:characterIndex:")
-    ObjCRuntime.msgSend(null, ptr, sel, glyph, glyphIndex, characterIndex)
+    ObjCRuntime.msgSend(null, this.ptr, sel, glyph, glyphIndex, characterIndex)
 }
 
-fun NSTypesetter.deleteGlyphsInRange(glyphRange: NSRange): Unit {
+fun NSTypesetter.deleteGlyphsInRange(glyphRange: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("deleteGlyphsInRange:")
-    ObjCRuntime.msgSend(null, ptr, sel, glyphRange)
+    ObjCRuntime.msgSend(null, this.ptr, sel, glyphRange)
 }
 

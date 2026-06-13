@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextViewportLayoutController
  * Superclass: NSObject
  */
-open class NSTextViewportLayoutController(val ptr: MemorySegment) {
+open class NSTextViewportLayoutController(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextViewportLayoutController") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -34,12 +34,12 @@ open class NSTextViewportLayoutController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun relocateViewportToTextLocation(textLocation: MemorySegment): CGFloat {
+    open fun relocateViewportToTextLocation(textLocation: MemorySegment): Double {
         val sel = ObjCRuntime.sel("relocateViewportToTextLocation:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, textLocation) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, textLocation) as Double
     }
     
-    open fun adjustViewportByVerticalOffset(verticalOffset: CGFloat): Unit {
+    open fun adjustViewportByVerticalOffset(verticalOffset: Double): Unit {
         val sel = ObjCRuntime.sel("adjustViewportByVerticalOffset:")
         ObjCRuntime.msgSend(null, ptr, sel, verticalOffset)
     }

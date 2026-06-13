@@ -8,21 +8,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPasteboard
  * Superclass: NSObject
  */
-open class NSPasteboard(val ptr: MemorySegment) {
+open class NSPasteboard(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPasteboard") }
         
-        open fun pasteboardWithName(name: NSPasteboardName): MemorySegment {
+        fun pasteboardWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("pasteboardWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
-        open fun pasteboardWithUniqueName(): MemorySegment {
+        fun pasteboardWithUniqueName(): MemorySegment {
             val sel = ObjCRuntime.sel("pasteboardWithUniqueName")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun generalPasteboard(): MemorySegment {
+        fun generalPasteboard(): MemorySegment {
             val sel = ObjCRuntime.sel("generalPasteboard")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -34,19 +34,19 @@ open class NSPasteboard(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun prepareForNewContentsWithOptions(options: NSPasteboardContentsOptions): NSInteger {
+    open fun prepareForNewContentsWithOptions(options: MemorySegment): Long {
         val sel = ObjCRuntime.sel("prepareForNewContentsWithOptions:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, options) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, options) as Long
     }
     
-    open fun clearContents(): NSInteger {
+    open fun clearContents(): Long {
         val sel = ObjCRuntime.sel("clearContents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
-    open fun writeObjects(objects: MemorySegment): BOOL {
+    open fun writeObjects(objects: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("writeObjects:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as Boolean
     }
     
     open fun readObjectsForClasses_options(classArray: MemorySegment, options: MemorySegment): MemorySegment {
@@ -54,71 +54,71 @@ open class NSPasteboard(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, classArray, options) as MemorySegment
     }
     
-    open fun indexOfPasteboardItem(pasteboardItem: MemorySegment): NSUInteger {
+    open fun indexOfPasteboardItem(pasteboardItem: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfPasteboardItem:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, pasteboardItem) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, pasteboardItem) as Long
     }
     
-    open fun canReadItemWithDataConformingToTypes(types: MemorySegment): BOOL {
+    open fun canReadItemWithDataConformingToTypes(types: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("canReadItemWithDataConformingToTypes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, types) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, types) as Boolean
     }
     
-    open fun canReadObjectForClasses_options(classArray: MemorySegment, options: MemorySegment): BOOL {
+    open fun canReadObjectForClasses_options(classArray: MemorySegment, options: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("canReadObjectForClasses:options:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, classArray, options) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, classArray, options) as Boolean
     }
     
-    open fun declareTypes_owner(newTypes: MemorySegment, newOwner: MemorySegment): NSInteger {
+    open fun declareTypes_owner(newTypes: MemorySegment, newOwner: MemorySegment): Long {
         val sel = ObjCRuntime.sel("declareTypes:owner:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, newTypes, newOwner) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, newTypes, newOwner) as Long
     }
     
-    open fun addTypes_owner(newTypes: MemorySegment, newOwner: MemorySegment): NSInteger {
+    open fun addTypes_owner(newTypes: MemorySegment, newOwner: MemorySegment): Long {
         val sel = ObjCRuntime.sel("addTypes:owner:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, newTypes, newOwner) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, newTypes, newOwner) as Long
     }
     
-    open fun availableTypeFromArray(types: MemorySegment): NSPasteboardType {
+    open fun availableTypeFromArray(types: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("availableTypeFromArray:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, types) as NSPasteboardType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, types) as MemorySegment
     }
     
-    open fun setData_forType(`data`: MemorySegment, dataType: NSPasteboardType): BOOL {
+    open fun setData_forType(`data`: MemorySegment, dataType: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setData:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`, dataType) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `data`, dataType) as Boolean
     }
     
-    open fun setPropertyList_forType(plist: MemorySegment, dataType: NSPasteboardType): BOOL {
+    open fun setPropertyList_forType(plist: MemorySegment, dataType: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setPropertyList:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, plist, dataType) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, plist, dataType) as Boolean
     }
     
-    open fun setString_forType(string: MemorySegment, dataType: NSPasteboardType): BOOL {
+    open fun setString_forType(string: MemorySegment, dataType: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setString:forType:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, dataType) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, dataType) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setString_forType(string: String, dataType: NSPasteboardType): BOOL = setString_forType(ObjCRuntime.newNSString(Arena.global(), string), dataType)
+    fun setString_forType(string: String, dataType: MemorySegment): Boolean = setString_forType(ObjCRuntime.newNSString(Arena.global(), string), dataType)
     
-    open fun dataForType(dataType: NSPasteboardType): MemorySegment {
+    open fun dataForType(dataType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dataForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dataType) as MemorySegment
     }
     
-    open fun propertyListForType(dataType: NSPasteboardType): MemorySegment {
+    open fun propertyListForType(dataType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("propertyListForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dataType) as MemorySegment
     }
     
-    open fun stringForType(dataType: NSPasteboardType): MemorySegment {
+    open fun stringForType(dataType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dataType) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun stringForTypeAsString(dataType: NSPasteboardType): String = ObjCRuntime.toJavaString(stringForType(dataType))
+    fun stringForTypeAsString(dataType: MemorySegment): String = ObjCRuntime.toJavaString(stringForType(dataType))
     
     open fun detectPatternsForPatterns_completionHandler(patterns: MemorySegment, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("detectPatternsForPatterns:completionHandler:")
@@ -136,21 +136,27 @@ open class NSPasteboard(val ptr: MemorySegment) {
     }
     
     // @property generalPasteboard
-    open fun name(): NSPasteboardName {
+    open fun generalPasteboard(): MemorySegment {
+        val sel = ObjCRuntime.sel("generalPasteboard")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property name
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPasteboardName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property changeCount
-    open fun changeCount(): NSInteger {
+    open fun changeCount(): Long {
         val sel = ObjCRuntime.sel("changeCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property accessBehavior
-    open fun accessBehavior(): NSPasteboardAccessBehavior {
+    open fun accessBehavior(): MemorySegment {
         val sel = ObjCRuntime.sel("accessBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPasteboardAccessBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property pasteboardItems
@@ -171,28 +177,28 @@ open class NSPasteboard(val ptr: MemorySegment) {
 
 // ── Category: FilterServices on NSPasteboard ─────────────────────────────────────────
 
-// Class<*> method: +[NSPasteboard typesFilterableTo:]
-fun NSPasteboard_typesFilterableTo(type: NSPasteboardType): MemorySegment {
+// Class method: +[NSPasteboard typesFilterableTo:]
+fun NSPasteboard_typesFilterableTo(type: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("typesFilterableTo:")
     val cls = ObjCRuntime.getClass("NSPasteboard")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, type) as MemorySegment
 }
 
-// Class<*> method: +[NSPasteboard pasteboardByFilteringFile:]
+// Class method: +[NSPasteboard pasteboardByFilteringFile:]
 fun NSPasteboard_pasteboardByFilteringFile(filename: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("pasteboardByFilteringFile:")
     val cls = ObjCRuntime.getClass("NSPasteboard")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, filename) as MemorySegment
 }
 
-// Class<*> method: +[NSPasteboard pasteboardByFilteringData:ofType:]
-fun NSPasteboard_pasteboardByFilteringData_ofType(`data`: MemorySegment, type: NSPasteboardType): MemorySegment {
+// Class method: +[NSPasteboard pasteboardByFilteringData:ofType:]
+fun NSPasteboard_pasteboardByFilteringData_ofType(`data`: MemorySegment, type: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("pasteboardByFilteringData:ofType:")
     val cls = ObjCRuntime.getClass("NSPasteboard")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `data`, type) as MemorySegment
 }
 
-// Class<*> method: +[NSPasteboard pasteboardByFilteringTypesInPasteboard:]
+// Class method: +[NSPasteboard pasteboardByFilteringTypesInPasteboard:]
 fun NSPasteboard_pasteboardByFilteringTypesInPasteboard(pboard: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("pasteboardByFilteringTypesInPasteboard:")
     val cls = ObjCRuntime.getClass("NSPasteboard")
@@ -201,23 +207,23 @@ fun NSPasteboard_pasteboardByFilteringTypesInPasteboard(pboard: MemorySegment): 
 
 // ── Category: NSFileContents on NSPasteboard ─────────────────────────────────────────
 
-fun NSPasteboard.writeFileContents(filename: MemorySegment): BOOL {
+fun NSPasteboard.writeFileContents(filename: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("writeFileContents:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, filename) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, filename) as Boolean
 }
 
-fun NSPasteboard.readFileContentsType_toFile(type: NSPasteboardType, filename: MemorySegment): MemorySegment {
+fun NSPasteboard.readFileContentsType_toFile(type: MemorySegment, filename: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("readFileContentsType:toFile:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type, filename) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, type, filename) as MemorySegment
 }
 
-fun NSPasteboard.writeFileWrapper(wrapper: MemorySegment): BOOL {
+fun NSPasteboard.writeFileWrapper(wrapper: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("writeFileWrapper:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, wrapper) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, wrapper) as Boolean
 }
 
 fun NSPasteboard.readFileWrapper(): MemorySegment {
     val sel = ObjCRuntime.sel("readFileWrapper")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 

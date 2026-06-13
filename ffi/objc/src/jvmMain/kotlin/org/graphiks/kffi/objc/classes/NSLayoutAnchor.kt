@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSLayoutAnchor(val ptr: MemorySegment) {
+open class NSLayoutAnchor(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSLayoutAnchor") }
         
@@ -30,17 +30,17 @@ open class NSLayoutAnchor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, anchor) as MemorySegment
     }
     
-    open fun constraintEqualToAnchor_constant(anchor: MemorySegment, c: CGFloat): MemorySegment {
+    open fun constraintEqualToAnchor_constant(anchor: MemorySegment, c: Double): MemorySegment {
         val sel = ObjCRuntime.sel("constraintEqualToAnchor:constant:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, anchor, c) as MemorySegment
     }
     
-    open fun constraintGreaterThanOrEqualToAnchor_constant(anchor: MemorySegment, c: CGFloat): MemorySegment {
+    open fun constraintGreaterThanOrEqualToAnchor_constant(anchor: MemorySegment, c: Double): MemorySegment {
         val sel = ObjCRuntime.sel("constraintGreaterThanOrEqualToAnchor:constant:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, anchor, c) as MemorySegment
     }
     
-    open fun constraintLessThanOrEqualToAnchor_constant(anchor: MemorySegment, c: CGFloat): MemorySegment {
+    open fun constraintLessThanOrEqualToAnchor_constant(anchor: MemorySegment, c: Double): MemorySegment {
         val sel = ObjCRuntime.sel("constraintLessThanOrEqualToAnchor:constant:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, anchor, c) as MemorySegment
     }
@@ -61,9 +61,9 @@ open class NSLayoutAnchor(val ptr: MemorySegment) {
     }
     
     // @property hasAmbiguousLayout
-    open fun hasAmbiguousLayout(): BOOL {
+    open fun hasAmbiguousLayout(): Boolean {
         val sel = ObjCRuntime.sel("hasAmbiguousLayout")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property constraintsAffectingLayout

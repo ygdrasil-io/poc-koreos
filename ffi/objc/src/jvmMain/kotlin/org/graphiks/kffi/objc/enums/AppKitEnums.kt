@@ -7,422 +7,422 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_COREFOUNDATION__ 1
  */
-fun _COREFOUNDATION_COREFOUNDATION_(): Int = 1
+fun _COREFOUNDATION_COREFOUNDATION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION__ 1
  */
-fun _COREFOUNDATION_(): Int = 1
+fun _COREFOUNDATION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBASE__ 1
  */
-fun _COREFOUNDATION_CFBASE_(): Int = 1
+fun _COREFOUNDATION_CFBASE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFAVAILABILITY__ 1
  */
-fun _COREFOUNDATION_CFAVAILABILITY_(): Int = 1
+fun _COREFOUNDATION_CFAVAILABILITY_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CF_HAS_TYPED_ALLOCATOR 0
  */
-fun CF_HAS_TYPED_ALLOCATOR(): Int = 0
+fun CF_HAS_TYPED_ALLOCATOR(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define TRUE 1
  */
-fun TRUE(): Int = 1
+fun TRUE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define FALSE 0
  */
-fun FALSE(): Int = 0
+fun FALSE(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCFCoreFoundationVersionNumber10_10_2 1152
  */
-fun kCFCoreFoundationVersionNumber10_10_2(): Int = 1152
+fun kCFCoreFoundationVersionNumber10_10_2(): Int = (1152).toInt()
 
 /**
  * {@snippet lang=c : #define kCFCoreFoundationVersionNumber10_10_Max 1199
  */
-fun kCFCoreFoundationVersionNumber10_10_Max(): Int = 1199
+fun kCFCoreFoundationVersionNumber10_10_Max(): Int = (1199).toInt()
 
 /**
  * {@snippet lang=c : #define kCFCoreFoundationVersionNumber10_11 1253
  */
-fun kCFCoreFoundationVersionNumber10_11(): Int = 1253
+fun kCFCoreFoundationVersionNumber10_11(): Int = (1253).toInt()
 
 /**
  * {@snippet lang=c : #define kCFCoreFoundationVersionNumber10_11_Max 1299
  */
-fun kCFCoreFoundationVersionNumber10_11_Max(): Int = 1299
+fun kCFCoreFoundationVersionNumber10_11_Max(): Int = (1299).toInt()
 
 /**
  * {@snippet lang=c : #define ISA_PTRAUTH_DISCRIMINATOR 27361
  */
-fun ISA_PTRAUTH_DISCRIMINATOR(): Int = 27361
+fun ISA_PTRAUTH_DISCRIMINATOR(): Int = (27361).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFARRAY__ 1
  */
-fun _COREFOUNDATION_CFARRAY_(): Int = 1
+fun _COREFOUNDATION_CFARRAY_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBAG__ 1
  */
-fun _COREFOUNDATION_CFBAG_(): Int = 1
+fun _COREFOUNDATION_CFBAG_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBINARYHEAP__ 1
  */
-fun _COREFOUNDATION_CFBINARYHEAP_(): Int = 1
+fun _COREFOUNDATION_CFBINARYHEAP_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBITVECTOR__ 1
  */
-fun _COREFOUNDATION_CFBITVECTOR_(): Int = 1
+fun _COREFOUNDATION_CFBITVECTOR_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBYTEORDER__ 1
  */
-fun _COREFOUNDATION_CFBYTEORDER_(): Int = 1
+fun _COREFOUNDATION_CFBYTEORDER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CF_USE_OSBYTEORDER_H 1
  */
-fun CF_USE_OSBYTEORDER_H(): Int = 1
+fun CF_USE_OSBYTEORDER_H(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFCALENDAR__ 1
  */
-fun _COREFOUNDATION_CFCALENDAR_(): Int = 1
+fun _COREFOUNDATION_CFCALENDAR_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFLOCALE__ 1
  */
-fun _COREFOUNDATION_CFLOCALE_(): Int = 1
+fun _COREFOUNDATION_CFLOCALE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFDICTIONARY__ 1
  */
-fun _COREFOUNDATION_CFDICTIONARY_(): Int = 1
+fun _COREFOUNDATION_CFDICTIONARY_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFNOTIFICATIONCENTER__ 1
  */
-fun _COREFOUNDATION_CFNOTIFICATIONCENTER_(): Int = 1
+fun _COREFOUNDATION_CFNOTIFICATIONCENTER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFDATE__ 1
  */
-fun _COREFOUNDATION_CFDATE_(): Int = 1
+fun _COREFOUNDATION_CFDATE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFTIMEZONE__ 1
  */
-fun _COREFOUNDATION_CFTIMEZONE_(): Int = 1
+fun _COREFOUNDATION_CFTIMEZONE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFDATA__ 1
  */
-fun _COREFOUNDATION_CFDATA_(): Int = 1
+fun _COREFOUNDATION_CFDATA_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSTRING__ 1
  */
-fun _COREFOUNDATION_CFSTRING_(): Int = 1
+fun _COREFOUNDATION_CFSTRING_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFCHARACTERSET__ 1
  */
-fun _COREFOUNDATION_CFCHARACTERSET_(): Int = 1
+fun _COREFOUNDATION_CFCHARACTERSET_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFERROR__ 1
  */
-fun _COREFOUNDATION_CFERROR_(): Int = 1
+fun _COREFOUNDATION_CFERROR_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __kCFStringInlineBufferLength 64
  */
-fun _kCFStringInlineBufferLength(): Int = 64
+fun _kCFStringInlineBufferLength(): Int = (64).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFCGTYPES__ 1
  */
-fun _COREFOUNDATION_CFCGTYPES_(): Int = 1
+fun _COREFOUNDATION_CFCGTYPES_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CGFLOAT_IS_DOUBLE 1
  */
-fun CGFLOAT_IS_DOUBLE(): Int = 1
+fun CGFLOAT_IS_DOUBLE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CGFLOAT_DEFINED 1
  */
-fun CGFLOAT_DEFINED(): Int = 1
+fun CGFLOAT_DEFINED(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CGVECTOR_DEFINED 1
  */
-fun CGVECTOR_DEFINED(): Int = 1
+fun CGVECTOR_DEFINED(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFDATEFORMATTER__ 1
  */
-fun _COREFOUNDATION_CFDATEFORMATTER_(): Int = 1
+fun _COREFOUNDATION_CFDATEFORMATTER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFNUMBER__ 1
  */
-fun _COREFOUNDATION_CFNUMBER_(): Int = 1
+fun _COREFOUNDATION_CFNUMBER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFNUMBERFORMATTER__ 1
  */
-fun _COREFOUNDATION_CFNUMBERFORMATTER_(): Int = 1
+fun _COREFOUNDATION_CFNUMBERFORMATTER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFPREFERENCES__ 1
  */
-fun _COREFOUNDATION_CFPREFERENCES_(): Int = 1
+fun _COREFOUNDATION_CFPREFERENCES_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFPROPERTYLIST__ 1
  */
-fun _COREFOUNDATION_CFPROPERTYLIST_(): Int = 1
+fun _COREFOUNDATION_CFPROPERTYLIST_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSTREAM__ 1
  */
-fun _COREFOUNDATION_CFSTREAM_(): Int = 1
+fun _COREFOUNDATION_CFSTREAM_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFURL__ 1
  */
-fun _COREFOUNDATION_CFURL_(): Int = 1
+fun _COREFOUNDATION_CFURL_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFRUNLOOP__ 1
  */
-fun _COREFOUNDATION_CFRUNLOOP_(): Int = 1
+fun _COREFOUNDATION_CFRUNLOOP_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSOCKET__ 1
  */
-fun _COREFOUNDATION_CFSOCKET_(): Int = 1
+fun _COREFOUNDATION_CFSOCKET_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSET__ 1
  */
-fun _COREFOUNDATION_CFSET_(): Int = 1
+fun _COREFOUNDATION_CFSET_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSTRINGENCODINGEXT__ 1
  */
-fun _COREFOUNDATION_CFSTRINGENCODINGEXT_(): Int = 1
+fun _COREFOUNDATION_CFSTRINGENCODINGEXT_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFTREE__ 1
  */
-fun _COREFOUNDATION_CFTREE_(): Int = 1
+fun _COREFOUNDATION_CFTREE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFURLACCESS__ 1
  */
-fun _COREFOUNDATION_CFURLACCESS_(): Int = 1
+fun _COREFOUNDATION_CFURLACCESS_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFUUID__ 1
  */
-fun _COREFOUNDATION_CFUUID_(): Int = 1
+fun _COREFOUNDATION_CFUUID_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFUTILITIES__ 1
  */
-fun _COREFOUNDATION_CFUTILITIES_(): Int = 1
+fun _COREFOUNDATION_CFUTILITIES_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFBUNDLE__ 1
  */
-fun _COREFOUNDATION_CFBUNDLE_(): Int = 1
+fun _COREFOUNDATION_CFBUNDLE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFMESSAGEPORT__ 1
  */
-fun _COREFOUNDATION_CFMESSAGEPORT_(): Int = 1
+fun _COREFOUNDATION_CFMESSAGEPORT_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFPLUGIN__ 1
  */
-fun _COREFOUNDATION_CFPLUGIN_(): Int = 1
+fun _COREFOUNDATION_CFPLUGIN_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define COREFOUNDATION_CFPLUGINCOM_SEPARATE 1
  */
-fun COREFOUNDATION_CFPLUGINCOM_SEPARATE(): Int = 1
+fun COREFOUNDATION_CFPLUGINCOM_SEPARATE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFMACHPORT__ 1
  */
-fun _COREFOUNDATION_CFMACHPORT_(): Int = 1
+fun _COREFOUNDATION_CFMACHPORT_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFATTRIBUTEDSTRING__ 1
  */
-fun _COREFOUNDATION_CFATTRIBUTEDSTRING_(): Int = 1
+fun _COREFOUNDATION_CFATTRIBUTEDSTRING_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFURLENUMERATOR__ 1
  */
-fun _COREFOUNDATION_CFURLENUMERATOR_(): Int = 1
+fun _COREFOUNDATION_CFURLENUMERATOR_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFFILESECURITY__ 1
  */
-fun _COREFOUNDATION_CFFILESECURITY_(): Int = 1
+fun _COREFOUNDATION_CFFILESECURITY_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFSTRINGTOKENIZER__ 1
  */
-fun _COREFOUNDATION_CFSTRINGTOKENIZER_(): Int = 1
+fun _COREFOUNDATION_CFSTRINGTOKENIZER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFFILEDESCRIPTOR__ 1
  */
-fun _COREFOUNDATION_CFFILEDESCRIPTOR_(): Int = 1
+fun _COREFOUNDATION_CFFILEDESCRIPTOR_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFUSERNOTIFICATION__ 1
  */
-fun _COREFOUNDATION_CFUSERNOTIFICATION_(): Int = 1
+fun _COREFOUNDATION_CFUSERNOTIFICATION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFXMLNODE__ 1
  */
-fun _COREFOUNDATION_CFXMLNODE_(): Int = 1
+fun _COREFOUNDATION_CFXMLNODE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __COREFOUNDATION_CFXMLPARSER__ 1
  */
-fun _COREFOUNDATION_CFXMLPARSER_(): Int = 1
+fun _COREFOUNDATION_CFXMLPARSER_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define NS_BLOCKS_AVAILABLE 1
  */
-fun NS_BLOCKS_AVAILABLE(): Int = 1
+fun NS_BLOCKS_AVAILABLE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_9 1056
  */
-fun NSFoundationVersionNumber10_9(): Int = 1056
+fun NSFoundationVersionNumber10_9(): Int = (1056).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_9_1 1056
  */
-fun NSFoundationVersionNumber10_9_1(): Int = 1056
+fun NSFoundationVersionNumber10_9_1(): Int = (1056).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_10_5 1154
  */
-fun NSFoundationVersionNumber10_10_5(): Int = 1154
+fun NSFoundationVersionNumber10_10_5(): Int = (1154).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_10_Max 1199
  */
-fun NSFoundationVersionNumber10_10_Max(): Int = 1199
+fun NSFoundationVersionNumber10_10_Max(): Int = (1199).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_11 1252
  */
-fun NSFoundationVersionNumber10_11(): Int = 1252
+fun NSFoundationVersionNumber10_11(): Int = (1252).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_11_4 1258
  */
-fun NSFoundationVersionNumber10_11_4(): Int = 1258
+fun NSFoundationVersionNumber10_11_4(): Int = (1258).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_11_Max 1299
  */
-fun NSFoundationVersionNumber10_11_Max(): Int = 1299
+fun NSFoundationVersionNumber10_11_Max(): Int = (1299).toInt()
 
 /**
  * {@snippet lang=c : #define NS_UNICHAR_IS_EIGHT_BIT 0
  */
-fun NS_UNICHAR_IS_EIGHT_BIT(): Int = 0
+fun NS_UNICHAR_IS_EIGHT_BIT(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionWithFileManagerResourceForkSupport 412
  */
-fun NSFoundationVersionWithFileManagerResourceForkSupport(): Int = 412
+fun NSFoundationVersionWithFileManagerResourceForkSupport(): Int = (412).toInt()
 
 /**
  * {@snippet lang=c : #define __FOUNDATION_NSPOINTERFUNCTIONS__ 1
  */
-fun _FOUNDATION_NSPOINTERFUNCTIONS_(): Int = 1
+fun _FOUNDATION_NSPOINTERFUNCTIONS_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __FOUNDATION_NSHASHTABLE__ 1
  */
-fun _FOUNDATION_NSHASHTABLE_(): Int = 1
+fun _FOUNDATION_NSHASHTABLE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES 1
  */
-fun NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES(): Int = 1
+fun NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define NSEDGEINSETS_DEFINED 1
  */
-fun NSEDGEINSETS_DEFINED(): Int = 1
+fun NSEDGEINSETS_DEFINED(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __FOUNDATION_NSMAPTABLE__ 1
  */
-fun _FOUNDATION_NSMAPTABLE_(): Int = 1
+fun _FOUNDATION_NSMAPTABLE_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CG_HDR_BT_2100 1
  */
-fun CG_HDR_BT_2100(): Int = 1
+fun CG_HDR_BT_2100(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __NSWRITING_DIRECTION_SHARED_SECTION__ 1
  */
-fun _NSWRITING_DIRECTION_SHARED_SECTION_(): Int = 1
+fun _NSWRITING_DIRECTION_SHARED_SECTION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __NSTEXT_ALIGNMENT_SHARED_SECTION__ 1
  */
-fun _NSTEXT_ALIGNMENT_SHARED_SECTION_(): Int = 1
+fun _NSTEXT_ALIGNMENT_SHARED_SECTION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define __NSPARAGRAPH_STYLE_SHARED_SECTION__ 1
  */
-fun _NSPARAGRAPH_STYLE_SHARED_SECTION_(): Int = 1
+fun _NSPARAGRAPH_STYLE_SHARED_SECTION_(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define NS_USER_ACTIVITY_SUPPORTED 1
  */
-fun NS_USER_ACTIVITY_SUPPORTED(): Int = 1
+fun NS_USER_ACTIVITY_SUPPORTED(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define COREIMAGE_SUPPORTS_IOSURFACE 1
  */
-fun COREIMAGE_SUPPORTS_IOSURFACE(): Int = 1
+fun COREIMAGE_SUPPORTS_IOSURFACE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define UNIFIED_CORE_IMAGE 1
  */
-fun UNIFIED_CORE_IMAGE(): Int = 1
+fun UNIFIED_CORE_IMAGE(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define CA_WARN_DEPRECATED 1
  */
-fun CA_WARN_DEPRECATED(): Int = 1
+fun CA_WARN_DEPRECATED(): Int = (1).toInt()
 
 /**
  * NS_ENUM: {@snippet lang=c : enum idtype_t}
@@ -26241,7 +26241,7 @@ fun kCFCoreFoundationVersionNumber10_11_4(): Double = 1258.1
 /**
  * {@snippet lang=c : #define kCFStringEncodingInvalidId 4294967295
  */
-fun kCFStringEncodingInvalidId(): Any = 4294967295
+fun kCFStringEncodingInvalidId(): Int = (4294967295).toInt()
 
 /**
  * {@snippet lang=c : #define CGFLOAT_MIN 2.2250738585072014E-308
@@ -26258,10 +26258,7 @@ fun CGFLOAT_MAX(): Double = 1.7976931348623157E308
  */
 fun CGFLOAT_EPSILON(): Double = 2.220446049250313E-16
 
-/**
- * {@snippet lang=c : #define kCFFileSecurityRemoveACL 1
- */
-fun kCFFileSecurityRemoveACL(): MemorySegment = 1
+// Skipped constant kCFFileSecurityRemoveACL: numeric value cannot be represented as MemorySegment
 
 /**
  * {@snippet lang=c : #define NSFoundationVersionNumber10_0 397.4
@@ -26641,7 +26638,7 @@ fun NSFoundationVersionNumber10_11_3(): Double = 1256.1
 /**
  * {@snippet lang=c : #define NSMaximumStringLength 2147483646
  */
-fun NSMaximumStringLength(): Int = 2147483646
+fun NSMaximumStringLength(): Int = (2147483646).toInt()
 
 /**
  * {@snippet lang=c : #define NSTimeIntervalSince1970 9.783072E8
@@ -26651,32 +26648,23 @@ fun NSTimeIntervalSince1970(): Double = 9.783072E8
 /**
  * {@snippet lang=c : #define NSDecimalMaxSize 8
  */
-fun NSDecimalMaxSize(): Int = 8
+fun NSDecimalMaxSize(): Int = (8).toInt()
 
 /**
  * {@snippet lang=c : #define NSDecimalNoScale 32767
  */
-fun NSDecimalNoScale(): Int = 32767
+fun NSDecimalNoScale(): Int = (32767).toInt()
 
 /**
  * {@snippet lang=c : #define CG_OS_VERSION_2020 1
  */
-fun CG_OS_VERSION_2020(): Int = 1
+fun CG_OS_VERSION_2020(): Int = (1).toInt()
 
-/**
- * {@snippet lang=c : #define NSNotAnIntMapKey -9223372036854775808
- */
-fun NSNotAnIntMapKey(): MemorySegment = -9223372036854775808
+// Skipped constant NSNotAnIntMapKey: numeric value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define NSNotAnIntegerMapKey -9223372036854775808
- */
-fun NSNotAnIntegerMapKey(): MemorySegment = -9223372036854775808
+// Skipped constant NSNotAnIntegerMapKey: numeric value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define NSNotAPointerMapKey -1
- */
-fun NSNotAPointerMapKey(): MemorySegment = -1
+// Skipped constant NSNotAPointerMapKey: numeric value cannot be represented as MemorySegment
 
 /**
  * {@snippet lang=c : #define NSOperationQualityOfServiceUserInteractive 33
@@ -26706,7 +26694,7 @@ fun NSURLResponseUnknownLength(): Long = -1
 /**
  * {@snippet lang=c : #define kCGNullWindowID 0
  */
-fun kCGNullWindowID(): Any = 0
+fun kCGNullWindowID(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGWindowIDCFNumberType 3
@@ -26726,207 +26714,162 @@ fun kCGWindowBackingCFNumberType(): Long = 3
 /**
  * {@snippet lang=c : #define kCGNumReservedWindowLevels 16
  */
-fun kCGNumReservedWindowLevels(): Int = 16
+fun kCGNumReservedWindowLevels(): Int = (16).toInt()
 
 /**
  * {@snippet lang=c : #define kCGNumReservedBaseWindowLevels 5
  */
-fun kCGNumReservedBaseWindowLevels(): Int = 5
+fun kCGNumReservedBaseWindowLevels(): Int = (5).toInt()
 
 /**
  * {@snippet lang=c : #define kCGBaseWindowLevel -2147483648
  */
-fun kCGBaseWindowLevel(): Int = -2147483648
+fun kCGBaseWindowLevel(): Int = (-2147483648).toInt()
 
 /**
  * {@snippet lang=c : #define kCGMinimumWindowLevel -2147483643
  */
-fun kCGMinimumWindowLevel(): Int = -2147483643
+fun kCGMinimumWindowLevel(): Int = (-2147483643).toInt()
 
 /**
  * {@snippet lang=c : #define kCGMaximumWindowLevel 2147483631
  */
-fun kCGMaximumWindowLevel(): Int = 2147483631
+fun kCGMaximumWindowLevel(): Int = (2147483631).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDesktopWindowLevel -2147483623
  */
-fun kCGDesktopWindowLevel(): Int = -2147483623
+fun kCGDesktopWindowLevel(): Int = (-2147483623).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDesktopIconWindowLevel -2147483603
  */
-fun kCGDesktopIconWindowLevel(): Int = -2147483603
+fun kCGDesktopIconWindowLevel(): Int = (-2147483603).toInt()
 
 /**
  * {@snippet lang=c : #define kCGBackstopMenuLevel -20
  */
-fun kCGBackstopMenuLevel(): Int = -20
+fun kCGBackstopMenuLevel(): Int = (-20).toInt()
 
 /**
  * {@snippet lang=c : #define kCGNormalWindowLevel 0
  */
-fun kCGNormalWindowLevel(): Int = 0
+fun kCGNormalWindowLevel(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGFloatingWindowLevel 3
  */
-fun kCGFloatingWindowLevel(): Int = 3
+fun kCGFloatingWindowLevel(): Int = (3).toInt()
 
 /**
  * {@snippet lang=c : #define kCGTornOffMenuWindowLevel 3
  */
-fun kCGTornOffMenuWindowLevel(): Int = 3
+fun kCGTornOffMenuWindowLevel(): Int = (3).toInt()
 
 /**
  * {@snippet lang=c : #define kCGModalPanelWindowLevel 8
  */
-fun kCGModalPanelWindowLevel(): Int = 8
+fun kCGModalPanelWindowLevel(): Int = (8).toInt()
 
 /**
  * {@snippet lang=c : #define kCGUtilityWindowLevel 19
  */
-fun kCGUtilityWindowLevel(): Int = 19
+fun kCGUtilityWindowLevel(): Int = (19).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDockWindowLevel 20
  */
-fun kCGDockWindowLevel(): Int = 20
+fun kCGDockWindowLevel(): Int = (20).toInt()
 
 /**
  * {@snippet lang=c : #define kCGMainMenuWindowLevel 24
  */
-fun kCGMainMenuWindowLevel(): Int = 24
+fun kCGMainMenuWindowLevel(): Int = (24).toInt()
 
 /**
  * {@snippet lang=c : #define kCGStatusWindowLevel 25
  */
-fun kCGStatusWindowLevel(): Int = 25
+fun kCGStatusWindowLevel(): Int = (25).toInt()
 
 /**
  * {@snippet lang=c : #define kCGPopUpMenuWindowLevel 101
  */
-fun kCGPopUpMenuWindowLevel(): Int = 101
+fun kCGPopUpMenuWindowLevel(): Int = (101).toInt()
 
 /**
  * {@snippet lang=c : #define kCGOverlayWindowLevel 102
  */
-fun kCGOverlayWindowLevel(): Int = 102
+fun kCGOverlayWindowLevel(): Int = (102).toInt()
 
 /**
  * {@snippet lang=c : #define kCGHelpWindowLevel 200
  */
-fun kCGHelpWindowLevel(): Int = 200
+fun kCGHelpWindowLevel(): Int = (200).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDraggingWindowLevel 500
  */
-fun kCGDraggingWindowLevel(): Int = 500
+fun kCGDraggingWindowLevel(): Int = (500).toInt()
 
 /**
  * {@snippet lang=c : #define kCGScreenSaverWindowLevel 1000
  */
-fun kCGScreenSaverWindowLevel(): Int = 1000
+fun kCGScreenSaverWindowLevel(): Int = (1000).toInt()
 
 /**
  * {@snippet lang=c : #define kCGAssistiveTechHighWindowLevel 1500
  */
-fun kCGAssistiveTechHighWindowLevel(): Int = 1500
+fun kCGAssistiveTechHighWindowLevel(): Int = (1500).toInt()
 
 /**
  * {@snippet lang=c : #define kCGCursorWindowLevel 2147483630
  */
-fun kCGCursorWindowLevel(): Int = 2147483630
+fun kCGCursorWindowLevel(): Int = (2147483630).toInt()
 
 /**
  * {@snippet lang=c : #define kCGNullDirectDisplay 0
  */
-fun kCGNullDirectDisplay(): Any = 0
+fun kCGNullDirectDisplay(): Int = (0).toInt()
 
-/**
- * {@snippet lang=c : #define kCGDisplayWidth Width
- */
-fun kCGDisplayWidth(): MemorySegment = Width
+// Skipped constant kCGDisplayWidth: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayHeight Height
- */
-fun kCGDisplayHeight(): MemorySegment = Height
+// Skipped constant kCGDisplayHeight: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayMode Mode
- */
-fun kCGDisplayMode(): MemorySegment = Mode
+// Skipped constant kCGDisplayMode: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayBitsPerPixel BitsPerPixel
- */
-fun kCGDisplayBitsPerPixel(): MemorySegment = BitsPerPixel
+// Skipped constant kCGDisplayBitsPerPixel: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayBitsPerSample BitsPerSample
- */
-fun kCGDisplayBitsPerSample(): MemorySegment = BitsPerSample
+// Skipped constant kCGDisplayBitsPerSample: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplaySamplesPerPixel SamplesPerPixel
- */
-fun kCGDisplaySamplesPerPixel(): MemorySegment = SamplesPerPixel
+// Skipped constant kCGDisplaySamplesPerPixel: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayRefreshRate RefreshRate
- */
-fun kCGDisplayRefreshRate(): MemorySegment = RefreshRate
+// Skipped constant kCGDisplayRefreshRate: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayModeUsableForDesktopGUI UsableForDesktopGUI
- */
-fun kCGDisplayModeUsableForDesktopGUI(): MemorySegment = UsableForDesktopGUI
+// Skipped constant kCGDisplayModeUsableForDesktopGUI: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayIOFlags IOFlags
- */
-fun kCGDisplayIOFlags(): MemorySegment = IOFlags
+// Skipped constant kCGDisplayIOFlags: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayBytesPerRow kCGDisplayBytesPerRow
- */
-fun kCGDisplayBytesPerRow(): MemorySegment = kCGDisplayBytesPerRow
+// Skipped constant kCGDisplayBytesPerRow: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGIODisplayModeID IODisplayModeID
- */
-fun kCGIODisplayModeID(): MemorySegment = IODisplayModeID
+// Skipped constant kCGIODisplayModeID: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayModeIsSafeForHardware kCGDisplayModeIsSafeForHardware
- */
-fun kCGDisplayModeIsSafeForHardware(): MemorySegment = kCGDisplayModeIsSafeForHardware
+// Skipped constant kCGDisplayModeIsSafeForHardware: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayModeIsInterlaced kCGDisplayModeIsInterlaced
- */
-fun kCGDisplayModeIsInterlaced(): MemorySegment = kCGDisplayModeIsInterlaced
+// Skipped constant kCGDisplayModeIsInterlaced: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayModeIsStretched kCGDisplayModeIsStretched
- */
-fun kCGDisplayModeIsStretched(): MemorySegment = kCGDisplayModeIsStretched
+// Skipped constant kCGDisplayModeIsStretched: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGDisplayModeIsTelevisionOutput kCGDisplayModeIsTelevisionOutput
- */
-fun kCGDisplayModeIsTelevisionOutput(): MemorySegment = kCGDisplayModeIsTelevisionOutput
+// Skipped constant kCGDisplayModeIsTelevisionOutput: String value cannot be represented as MemorySegment
 
 /**
  * {@snippet lang=c : #define CGDisplayNoErr 0
  */
-fun CGDisplayNoErr(): Int = 0
+fun CGDisplayNoErr(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDisplayFadeReservationInvalidToken 0
  */
-fun kCGDisplayFadeReservationInvalidToken(): Int = 0
+fun kCGDisplayFadeReservationInvalidToken(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGDisplayBlendNormal 0.0
@@ -26941,12 +26884,12 @@ fun kCGDisplayBlendSolidColor(): Double = 1.0
 /**
  * {@snippet lang=c : #define kCGMaxDisplayReservationInterval 15.0
  */
-fun kCGMaxDisplayReservationInterval(): Float = 15.0
+fun kCGMaxDisplayReservationInterval(): Float = (15.0).toFloat()
 
 /**
  * {@snippet lang=c : #define CGEventNoErr 0
  */
-fun CGEventNoErr(): Int = 0
+fun CGEventNoErr(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGMouseDownEventMaskingDeadSwitchTimeout 60.0
@@ -26956,75 +26899,48 @@ fun kCGMouseDownEventMaskingDeadSwitchTimeout(): Double = 60.0
 /**
  * {@snippet lang=c : #define kCGEventFilterMaskPermitAllEvents 7
  */
-fun kCGEventFilterMaskPermitAllEvents(): Any = 7
+fun kCGEventFilterMaskPermitAllEvents(): Int = (7).toInt()
 
 /**
  * {@snippet lang=c : #define kCGEventSupressionStateSupressionInterval 0
  */
-fun kCGEventSupressionStateSupressionInterval(): Any = 0
+fun kCGEventSupressionStateSupressionInterval(): Int = (0).toInt()
 
 /**
  * {@snippet lang=c : #define kCGEventSupressionStateRemoteMouseDrag 1
  */
-fun kCGEventSupressionStateRemoteMouseDrag(): Any = 1
+fun kCGEventSupressionStateRemoteMouseDrag(): Int = (1).toInt()
 
 /**
  * {@snippet lang=c : #define kCGNumberOfEventSupressionStates 2
  */
-fun kCGNumberOfEventSupressionStates(): Any = 2
+fun kCGNumberOfEventSupressionStates(): Int = (2).toInt()
 
 /**
  * {@snippet lang=c : #define kCGEventMaskForAllEvents -1
  */
-fun kCGEventMaskForAllEvents(): Any = -1
+fun kCGEventMaskForAllEvents(): Long = -1
 
-/**
- * {@snippet lang=c : #define kCGNotifyEventTapAdded com.apple.coregraphics.eventTapAdded
- */
-fun kCGNotifyEventTapAdded(): MemorySegment = com.apple.coregraphics.eventTapAdded
+// Skipped constant kCGNotifyEventTapAdded: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGNotifyEventTapRemoved com.apple.coregraphics.eventTapRemoved
- */
-fun kCGNotifyEventTapRemoved(): MemorySegment = com.apple.coregraphics.eventTapRemoved
+// Skipped constant kCGNotifyEventTapRemoved: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGSessionUserIDKey kCGSSessionUserIDKey
- */
-fun kCGSessionUserIDKey(): MemorySegment = kCGSSessionUserIDKey
+// Skipped constant kCGSessionUserIDKey: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGSessionUserNameKey kCGSSessionUserNameKey
- */
-fun kCGSessionUserNameKey(): MemorySegment = kCGSSessionUserNameKey
+// Skipped constant kCGSessionUserNameKey: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGSessionConsoleSetKey kCGSSessionConsoleSetKey
- */
-fun kCGSessionConsoleSetKey(): MemorySegment = kCGSSessionConsoleSetKey
+// Skipped constant kCGSessionConsoleSetKey: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGSessionOnConsoleKey kCGSSessionOnConsoleKey
- */
-fun kCGSessionOnConsoleKey(): MemorySegment = kCGSSessionOnConsoleKey
+// Skipped constant kCGSessionOnConsoleKey: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGSessionLoginDoneKey kCGSessionLoginDoneKey
- */
-fun kCGSessionLoginDoneKey(): MemorySegment = kCGSessionLoginDoneKey
+// Skipped constant kCGSessionLoginDoneKey: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGNotifyGUIConsoleSessionChanged com.apple.coregraphics.GUIConsoleSessionChanged
- */
-fun kCGNotifyGUIConsoleSessionChanged(): MemorySegment = com.apple.coregraphics.GUIConsoleSessionChanged
+// Skipped constant kCGNotifyGUIConsoleSessionChanged: String value cannot be represented as MemorySegment
 
-/**
- * {@snippet lang=c : #define kCGNotifyGUISessionUserChanged com.apple.coregraphics.GUISessionUserChanged
- */
-fun kCGNotifyGUISessionUserChanged(): MemorySegment = com.apple.coregraphics.GUISessionUserChanged
+// Skipped constant kCGNotifyGUISessionUserChanged: String value cannot be represented as MemorySegment
 
 /**
  * {@snippet lang=c : #define NSIMAGE_UNAVAILABLE_MACCATALYST 0
  */
-fun NSIMAGE_UNAVAILABLE_MACCATALYST(): Int = 0
+fun NSIMAGE_UNAVAILABLE_MACCATALYST(): Int = (0).toInt()
 

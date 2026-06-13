@@ -9,26 +9,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSFormatter
  * Protocols: NSSecureCoding
  */
-open class NSISO8601DateFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSISO8601DateFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSISO8601DateFormatter") }
         
-        fun stringFromDate_timeZone_formatOptions(date: MemorySegment, timeZone: MemorySegment, formatOptions: NSISO8601DateFormatOptions): MemorySegment {
+        fun stringFromDate_timeZone_formatOptions(date: MemorySegment, timeZone: MemorySegment, formatOptions: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("stringFromDate:timeZone:formatOptions:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, date, timeZone, formatOptions) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun stringFromDate_timeZone_formatOptionsAsString(date: MemorySegment, timeZone: MemorySegment, formatOptions: NSISO8601DateFormatOptions): String = ObjCRuntime.toJavaString(stringFromDate_timeZone_formatOptions(date, timeZone, formatOptions))
+        fun stringFromDate_timeZone_formatOptionsAsString(date: MemorySegment, timeZone: MemorySegment, formatOptions: MemorySegment): String = ObjCRuntime.toJavaString(stringFromDate_timeZone_formatOptions(date, timeZone, formatOptions))
         
     }
     
-    fun init(): MemorySegment {
+    open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun stringFromDate(date: MemorySegment): MemorySegment {
+    open fun stringFromDate(date: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromDate:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, date) as MemorySegment
     }
@@ -36,7 +36,7 @@ open class NSISO8601DateFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromDateAsString(date: MemorySegment): String = ObjCRuntime.toJavaString(stringFromDate(date))
     
-    fun dateFromString(string: MemorySegment): MemorySegment {
+    open fun dateFromString(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dateFromString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
@@ -45,21 +45,21 @@ open class NSISO8601DateFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     fun dateFromString(string: String): MemorySegment = dateFromString(ObjCRuntime.newNSString(Arena.global(), string))
     
     // @property timeZone
-    fun timeZone(): MemorySegment {
+    open fun timeZone(): MemorySegment {
         val sel = ObjCRuntime.sel("timeZone")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTimeZone(value: MemorySegment) {
+    open fun setTimeZone(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTimeZone:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formatOptions
-    fun formatOptions(): NSISO8601DateFormatOptions {
+    open fun formatOptions(): MemorySegment {
         val sel = ObjCRuntime.sel("formatOptions")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSISO8601DateFormatOptions
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormatOptions(value: NSISO8601DateFormatOptions) {
+    open fun setFormatOptions(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormatOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -68,6 +68,6 @@ open class NSISO8601DateFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _formatter: MemorySegment
     // ivar: _timeZone: MemorySegment
-    // ivar: _formatOptions: NSISO8601DateFormatOptions
+    // ivar: _formatOptions: MemorySegment
 }
 

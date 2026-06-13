@@ -8,9 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTouchBarProvider
  * Inherits protocols: NSObject
  */
-interface NSTouchBarProvider : NSObject {
+interface NSTouchBarProvider {
     fun touchBar(): MemorySegment
     
-    // @property touchBar
 }
 

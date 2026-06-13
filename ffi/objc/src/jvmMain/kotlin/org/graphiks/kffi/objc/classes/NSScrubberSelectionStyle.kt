@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSScrubberSelectionStyle(val ptr: MemorySegment) {
+open class NSScrubberSelectionStyle(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScrubberSelectionStyle") }
         
-        open fun outlineOverlayStyle(): MemorySegment {
+        fun outlineOverlayStyle(): MemorySegment {
             val sel = ObjCRuntime.sel("outlineOverlayStyle")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun roundedBackgroundStyle(): MemorySegment {
+        fun roundedBackgroundStyle(): MemorySegment {
             val sel = ObjCRuntime.sel("roundedBackgroundStyle")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -41,5 +41,16 @@ open class NSScrubberSelectionStyle(val ptr: MemorySegment) {
     }
     
     // @property outlineOverlayStyle
+    open fun outlineOverlayStyle(): MemorySegment {
+        val sel = ObjCRuntime.sel("outlineOverlayStyle")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property roundedBackgroundStyle
+    open fun roundedBackgroundStyle(): MemorySegment {
+        val sel = ObjCRuntime.sel("roundedBackgroundStyle")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

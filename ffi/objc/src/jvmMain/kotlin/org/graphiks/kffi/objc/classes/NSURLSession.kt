@@ -8,26 +8,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSession
  * Superclass: NSObject
  */
-open class NSURLSession(val ptr: MemorySegment) {
+open class NSURLSession(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSession") }
         
-        open fun sessionWithConfiguration(configuration: MemorySegment): MemorySegment {
+        fun sessionWithConfiguration(configuration: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sessionWithConfiguration:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, configuration) as MemorySegment
         }
         
-        open fun sessionWithConfiguration_delegate_delegateQueue(configuration: MemorySegment, delegate: MemorySegment, queue: MemorySegment): MemorySegment {
+        fun sessionWithConfiguration_delegate_delegateQueue(configuration: MemorySegment, delegate: MemorySegment, queue: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sessionWithConfiguration:delegate:delegateQueue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, configuration, delegate, queue) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun sharedSession(): MemorySegment {
+        fun sharedSession(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedSession")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -109,13 +109,13 @@ open class NSURLSession(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, resumeData) as MemorySegment
     }
     
-    open fun streamTaskWithHostName_port(hostname: MemorySegment, port: NSInteger): MemorySegment {
+    open fun streamTaskWithHostName_port(hostname: MemorySegment, port: Long): MemorySegment {
         val sel = ObjCRuntime.sel("streamTaskWithHostName:port:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, hostname, port) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun streamTaskWithHostName_port(hostname: String, port: NSInteger): MemorySegment = streamTaskWithHostName_port(ObjCRuntime.newNSString(Arena.global(), hostname), port)
+    fun streamTaskWithHostName_port(hostname: String, port: Long): MemorySegment = streamTaskWithHostName_port(ObjCRuntime.newNSString(Arena.global(), hostname), port)
     
     open fun streamTaskWithNetService(service: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("streamTaskWithNetService:")
@@ -143,6 +143,12 @@ open class NSURLSession(val ptr: MemorySegment) {
     }
     
     // @property sharedSession
+    open fun sharedSession(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedSession")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property delegateQueue
     open fun delegateQueue(): MemorySegment {
         val sel = ObjCRuntime.sel("delegateQueue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -183,41 +189,41 @@ open class NSURLSession(val ptr: MemorySegment) {
 
 fun NSURLSession.dataTaskWithRequest_completionHandler(request: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataTaskWithRequest:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, request, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.dataTaskWithURL_completionHandler(url: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("dataTaskWithURL:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, url, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.uploadTaskWithRequest_fromFile_completionHandler(request: MemorySegment, fileURL: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("uploadTaskWithRequest:fromFile:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, fileURL, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, request, fileURL, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.uploadTaskWithRequest_fromData_completionHandler(request: MemorySegment, bodyData: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("uploadTaskWithRequest:fromData:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, bodyData, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, request, bodyData, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.uploadTaskWithResumeData_completionHandler(resumeData: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("uploadTaskWithResumeData:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, resumeData, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, resumeData, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.downloadTaskWithRequest_completionHandler(request: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("downloadTaskWithRequest:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, request, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.downloadTaskWithURL_completionHandler(url: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("downloadTaskWithURL:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, url, completionHandler) as MemorySegment
 }
 
 fun NSURLSession.downloadTaskWithResumeData_completionHandler(resumeData: MemorySegment, completionHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("downloadTaskWithResumeData:completionHandler:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, resumeData, completionHandler) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, resumeData, completionHandler) as MemorySegment
 }
 

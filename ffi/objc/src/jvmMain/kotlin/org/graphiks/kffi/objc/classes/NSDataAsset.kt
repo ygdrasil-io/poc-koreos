@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSDataAsset(val ptr: MemorySegment) {
+open class NSDataAsset(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDataAsset") }
         
@@ -20,24 +20,24 @@ open class NSDataAsset(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun initWithName(name: NSDataAssetName): MemorySegment {
+    open fun initWithName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
     
-    open fun initWithName_bundle(name: NSDataAssetName, bundle: MemorySegment): MemorySegment {
+    open fun initWithName_bundle(name: MemorySegment, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, bundle) as MemorySegment
     }
     
     // @property name
-    open fun name(): NSDataAssetName {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDataAssetName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property data
-    open fun data(): MemorySegment {
+    open fun `data`(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

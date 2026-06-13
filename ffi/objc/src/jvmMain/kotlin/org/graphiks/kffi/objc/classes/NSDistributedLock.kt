@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDistributedLock
  * Superclass: NSObject
  */
-open class NSDistributedLock(val ptr: MemorySegment) {
+open class NSDistributedLock(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDistributedLock") }
         
-        open fun lockWithPath(path: MemorySegment): MemorySegment {
+        fun lockWithPath(path: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("lockWithPath:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, path) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun lockWithPath(path: String): MemorySegment = lockWithPath(ObjCRuntime.newNSString(Arena.global(), path))
+        fun lockWithPath(path: String): MemorySegment = lockWithPath(ObjCRuntime.newNSString(Arena.global(), path))
         
     }
     
@@ -33,11 +33,11 @@ open class NSDistributedLock(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithPath(path: String): MemorySegment = initWithPath(ObjCRuntime.newNSString(Arena.global(), path))
+    fun initWithPath(path: String): MemorySegment = initWithPath(ObjCRuntime.newNSString(Arena.global(), path))
     
-    open fun tryLock(): BOOL {
+    open fun tryLock(): Boolean {
         val sel = ObjCRuntime.sel("tryLock")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun unlock(): Unit {

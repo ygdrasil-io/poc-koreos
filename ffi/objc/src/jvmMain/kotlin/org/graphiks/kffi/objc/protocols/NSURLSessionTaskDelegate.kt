@@ -34,11 +34,11 @@ interface NSURLSessionTaskDelegate : NSURLSessionDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:task:needNewBodyStream:' not implemented")
     
     // @optional
-    fun URLSession_task_needNewBodyStreamFromOffset_completionHandler(session: MemorySegment, task: MemorySegment, offset: int64_t, completionHandler: MemorySegment): Unit =
+    fun URLSession_task_needNewBodyStreamFromOffset_completionHandler(session: MemorySegment, task: MemorySegment, offset: Long, completionHandler: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:task:needNewBodyStreamFromOffset:completionHandler:' not implemented")
     
     // @optional
-    fun URLSession_task_didSendBodyData_totalBytesSent_totalBytesExpectedToSend(session: MemorySegment, task: MemorySegment, bytesSent: int64_t, totalBytesSent: int64_t, totalBytesExpectedToSend: int64_t): Unit =
+    fun URLSession_task_didSendBodyData_totalBytesSent_totalBytesExpectedToSend(session: MemorySegment, task: MemorySegment, bytesSent: Long, totalBytesSent: Long, totalBytesExpectedToSend: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:task:didSendBodyData:totalBytesSent:totalBytesExpectedToSend:' not implemented")
     
     // @optional

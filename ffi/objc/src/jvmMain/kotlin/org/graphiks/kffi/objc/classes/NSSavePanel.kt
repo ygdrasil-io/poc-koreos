@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSavePanel
  * Superclass: NSPanel
  */
-open class NSSavePanel(ptr: MemorySegment) : NSPanel(ptr) {
+open class NSSavePanel(override val ptr: MemorySegment) : NSPanel(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSavePanel") }
         
@@ -19,277 +19,271 @@ open class NSSavePanel(ptr: MemorySegment) : NSPanel(ptr) {
         
     }
     
-    fun validateVisibleColumns(): Unit {
+    open fun validateVisibleColumns(): Unit {
         val sel = ObjCRuntime.sel("validateVisibleColumns")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun ok(sender: MemorySegment): Unit {
+    open fun ok(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("ok:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun cancel(sender: MemorySegment): Unit {
+    open fun cancel(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("cancel:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun beginSheetModalForWindow_completionHandler(window: MemorySegment, handler: MemorySegment): Unit {
+    open fun beginSheetModalForWindow_completionHandler(window: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginSheetModalForWindow:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, window, handler)
     }
     
-    fun beginWithCompletionHandler(handler: MemorySegment): Unit {
+    open fun beginWithCompletionHandler(handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginWithCompletionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, handler)
     }
     
-    fun runModal(): NSModalResponse {
+    open fun runModal(): Long {
         val sel = ObjCRuntime.sel("runModal")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSModalResponse
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property URL
-    fun URL(): MemorySegment {
+    open fun URL(): MemorySegment {
         val sel = ObjCRuntime.sel("URL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property identifier
-    fun identifier(): NSUserInterfaceItemIdentifier {
+    open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceItemIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setIdentifier(value: NSUserInterfaceItemIdentifier) {
+    open fun setIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property directoryURL
-    fun directoryURL(): MemorySegment {
+    open fun directoryURL(): MemorySegment {
         val sel = ObjCRuntime.sel("directoryURL")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDirectoryURL(value: MemorySegment) {
+    open fun setDirectoryURL(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDirectoryURL:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowedContentTypes
     /** @return NSArray<UTType *> * */
-    fun allowedContentTypes(): MemorySegment {
+    open fun allowedContentTypes(): MemorySegment {
         val sel = ObjCRuntime.sel("allowedContentTypes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAllowedContentTypes(value: MemorySegment) {
+    open fun setAllowedContentTypes(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAllowedContentTypes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsOtherFileTypes
-    fun allowsOtherFileTypes(): BOOL {
+    open fun allowsOtherFileTypes(): Boolean {
         val sel = ObjCRuntime.sel("allowsOtherFileTypes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsOtherFileTypes(value: BOOL) {
+    open fun setAllowsOtherFileTypes(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsOtherFileTypes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currentContentType
-    fun currentContentType(): MemorySegment {
+    open fun currentContentType(): MemorySegment {
         val sel = ObjCRuntime.sel("currentContentType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrentContentType(value: MemorySegment) {
+    open fun setCurrentContentType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrentContentType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property accessoryView
-    fun accessoryView(): MemorySegment {
+    open fun accessoryView(): MemorySegment {
         val sel = ObjCRuntime.sel("accessoryView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAccessoryView(value: MemorySegment) {
+    open fun setAccessoryView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAccessoryView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delegate
     /** @return id<NSOpenSavePanelDelegate> */
-    fun delegate(): MemorySegment {
+    override fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    override fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property expanded
-    fun isExpanded(): BOOL {
+    open fun isExpanded(): Boolean {
         val sel = ObjCRuntime.sel("isExpanded")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property canCreateDirectories
-    fun canCreateDirectories(): BOOL {
+    open fun canCreateDirectories(): Boolean {
         val sel = ObjCRuntime.sel("canCreateDirectories")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setCanCreateDirectories(value: BOOL) {
+    open fun setCanCreateDirectories(value: Boolean) {
         val sel = ObjCRuntime.sel("setCanCreateDirectories:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property canSelectHiddenExtension
-    fun canSelectHiddenExtension(): BOOL {
+    open fun canSelectHiddenExtension(): Boolean {
         val sel = ObjCRuntime.sel("canSelectHiddenExtension")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setCanSelectHiddenExtension(value: BOOL) {
+    open fun setCanSelectHiddenExtension(value: Boolean) {
         val sel = ObjCRuntime.sel("setCanSelectHiddenExtension:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property extensionHidden
-    fun isExtensionHidden(): BOOL {
+    open fun isExtensionHidden(): Boolean {
         val sel = ObjCRuntime.sel("isExtensionHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setExtensionHidden(value: BOOL) {
+    open fun setExtensionHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setExtensionHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property treatsFilePackagesAsDirectories
-    fun treatsFilePackagesAsDirectories(): BOOL {
+    open fun treatsFilePackagesAsDirectories(): Boolean {
         val sel = ObjCRuntime.sel("treatsFilePackagesAsDirectories")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setTreatsFilePackagesAsDirectories(value: BOOL) {
+    open fun setTreatsFilePackagesAsDirectories(value: Boolean) {
         val sel = ObjCRuntime.sel("setTreatsFilePackagesAsDirectories:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property prompt
-    fun prompt(): MemorySegment {
+    open fun prompt(): MemorySegment {
         val sel = ObjCRuntime.sel("prompt")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPrompt(value: MemorySegment) {
+    open fun setPrompt(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPrompt:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun promptAsString(): String = ObjCRuntime.toJavaString(prompt())
+    open fun promptAsString(): String = ObjCRuntime.toJavaString(prompt())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPrompt(value: String) = setPrompt(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPrompt(value: String) = setPrompt(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property title
-    fun title(): MemorySegment {
+    override fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    override fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
-    
-    /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
-    
     // @property nameFieldLabel
-    fun nameFieldLabel(): MemorySegment {
+    open fun nameFieldLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("nameFieldLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNameFieldLabel(value: MemorySegment) {
+    open fun setNameFieldLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNameFieldLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameFieldLabelAsString(): String = ObjCRuntime.toJavaString(nameFieldLabel())
+    open fun nameFieldLabelAsString(): String = ObjCRuntime.toJavaString(nameFieldLabel())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNameFieldLabel(value: String) = setNameFieldLabel(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNameFieldLabel(value: String) = setNameFieldLabel(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property nameFieldStringValue
-    fun nameFieldStringValue(): MemorySegment {
+    open fun nameFieldStringValue(): MemorySegment {
         val sel = ObjCRuntime.sel("nameFieldStringValue")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNameFieldStringValue(value: MemorySegment) {
+    open fun setNameFieldStringValue(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNameFieldStringValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nameFieldStringValueAsString(): String = ObjCRuntime.toJavaString(nameFieldStringValue())
+    open fun nameFieldStringValueAsString(): String = ObjCRuntime.toJavaString(nameFieldStringValue())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNameFieldStringValue(value: String) = setNameFieldStringValue(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNameFieldStringValue(value: String) = setNameFieldStringValue(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property message
-    fun message(): MemorySegment {
+    open fun message(): MemorySegment {
         val sel = ObjCRuntime.sel("message")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMessage(value: MemorySegment) {
+    open fun setMessage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMessage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun messageAsString(): String = ObjCRuntime.toJavaString(message())
+    open fun messageAsString(): String = ObjCRuntime.toJavaString(message())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setMessage(value: String) = setMessage(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setMessage(value: String) = setMessage(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property showsHiddenFiles
-    fun showsHiddenFiles(): BOOL {
+    open fun showsHiddenFiles(): Boolean {
         val sel = ObjCRuntime.sel("showsHiddenFiles")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsHiddenFiles(value: BOOL) {
+    open fun setShowsHiddenFiles(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsHiddenFiles:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsTagField
-    fun showsTagField(): BOOL {
+    open fun showsTagField(): Boolean {
         val sel = ObjCRuntime.sel("showsTagField")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsTagField(value: BOOL) {
+    open fun setShowsTagField(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsTagField:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tagNames
     /** @return NSArray<NSString *> * */
-    fun tagNames(): MemorySegment {
+    open fun tagNames(): MemorySegment {
         val sel = ObjCRuntime.sel("tagNames")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTagNames(value: MemorySegment) {
+    open fun setTagNames(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTagNames:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsContentTypes
-    fun showsContentTypes(): BOOL {
+    open fun showsContentTypes(): Boolean {
         val sel = ObjCRuntime.sel("showsContentTypes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsContentTypes(value: BOOL) {
+    open fun setShowsContentTypes(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsContentTypes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -300,54 +294,52 @@ open class NSSavePanel(ptr: MemorySegment) : NSPanel(ptr) {
 
 fun NSSavePanel.filename(): MemorySegment {
     val sel = ObjCRuntime.sel("filename")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSavePanel.directory(): MemorySegment {
     val sel = ObjCRuntime.sel("directory")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSavePanel.setDirectory(path: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setDirectory:")
-    ObjCRuntime.msgSend(null, ptr, sel, path)
+    ObjCRuntime.msgSend(null, this.ptr, sel, path)
 }
 
 fun NSSavePanel.requiredFileType(): MemorySegment {
     val sel = ObjCRuntime.sel("requiredFileType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSavePanel.setRequiredFileType(type: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setRequiredFileType:")
-    ObjCRuntime.msgSend(null, ptr, sel, type)
+    ObjCRuntime.msgSend(null, this.ptr, sel, type)
 }
 
 fun NSSavePanel.beginSheetForDirectory_file_modalForWindow_modalDelegate_didEndSelector_contextInfo(path: MemorySegment, name: MemorySegment, docWindow: MemorySegment, delegate: MemorySegment, didEndSelector: MemorySegment, contextInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("beginSheetForDirectory:file:modalForWindow:modalDelegate:didEndSelector:contextInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, path, name, docWindow, delegate, didEndSelector, contextInfo)
+    ObjCRuntime.msgSend(null, this.ptr, sel, path, name, docWindow, delegate, didEndSelector, contextInfo)
 }
 
-fun NSSavePanel.runModalForDirectory_file(path: MemorySegment, name: MemorySegment): NSInteger {
+fun NSSavePanel.runModalForDirectory_file(path: MemorySegment, name: MemorySegment): Long {
     val sel = ObjCRuntime.sel("runModalForDirectory:file:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, path, name) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel, path, name) as Long
 }
 
 fun NSSavePanel.selectText(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("selectText:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 /** @return NSArray<NSString *> * */
 fun NSSavePanel.allowedFileTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedFileTypes")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSavePanel.setAllowedFileTypes(allowedFileTypes: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAllowedFileTypes:")
-    ObjCRuntime.msgSend(null, ptr, sel, allowedFileTypes)
+    ObjCRuntime.msgSend(null, this.ptr, sel, allowedFileTypes)
 }
 
-// @property allowedFileTypes
-/** @return NSArray<NSString *> * */

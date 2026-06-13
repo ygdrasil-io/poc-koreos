@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSExtensionItem(val ptr: MemorySegment) {
+open class NSExtensionItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSExtensionItem") }
         

@@ -9,161 +9,161 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class CIImage(val ptr: MemorySegment) {
+open class CIImage(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("CIImage") }
         
-        open fun imageWithCGImage(image: MemorySegment): MemorySegment {
+        fun imageWithCGImage(image: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCGImage:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, image) as MemorySegment
         }
         
-        open fun imageWithCGImage_options(image: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithCGImage_options(image: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCGImage:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, image, options) as MemorySegment
         }
         
-        open fun imageWithCGImageSource_index_options(source: MemorySegment, index: size_t, dict: MemorySegment): MemorySegment {
+        fun imageWithCGImageSource_index_options(source: MemorySegment, index: Long, dict: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCGImageSource:index:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, source, index, dict) as MemorySegment
         }
         
-        open fun imageWithCGLayer(layer: MemorySegment): MemorySegment {
+        fun imageWithCGLayer(layer: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCGLayer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layer) as MemorySegment
         }
         
-        open fun imageWithCGLayer_options(layer: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithCGLayer_options(layer: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCGLayer:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layer, options) as MemorySegment
         }
         
-        open fun imageWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: MemorySegment, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
+        fun imageWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: Long, size: MemorySegment, format: Int, colorSpace: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithBitmapData:bytesPerRow:size:format:colorSpace:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`, bytesPerRow, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), format, colorSpace) as MemorySegment
         }
         
-        open fun imageWithTexture_size_flipped_colorSpace(name: Any, size: MemorySegment, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
+        fun imageWithTexture_size_flipped_colorSpace(name: Int, size: MemorySegment, flipped: Boolean, colorSpace: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithTexture:size:flipped:colorSpace:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, colorSpace) as MemorySegment
         }
         
-        open fun imageWithTexture_size_flipped_options(name: Any, size: MemorySegment, flipped: BOOL, options: MemorySegment): MemorySegment {
+        fun imageWithTexture_size_flipped_options(name: Int, size: MemorySegment, flipped: Boolean, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithTexture:size:flipped:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, options) as MemorySegment
         }
         
-        open fun imageWithMTLTexture_options(texture: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithMTLTexture_options(texture: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithMTLTexture:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, texture, options) as MemorySegment
         }
         
-        open fun imageWithContentsOfURL(url: MemorySegment): MemorySegment {
+        fun imageWithContentsOfURL(url: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithContentsOfURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url) as MemorySegment
         }
         
-        open fun imageWithContentsOfURL_options(url: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithContentsOfURL_options(url: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithContentsOfURL:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, options) as MemorySegment
         }
         
-        open fun imageWithData(`data`: MemorySegment): MemorySegment {
+        fun imageWithData(`data`: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithData:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`) as MemorySegment
         }
         
-        open fun imageWithData_options(`data`: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithData_options(`data`: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithData:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, `data`, options) as MemorySegment
         }
         
-        open fun imageWithCVImageBuffer(imageBuffer: MemorySegment): MemorySegment {
+        fun imageWithCVImageBuffer(imageBuffer: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCVImageBuffer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, imageBuffer) as MemorySegment
         }
         
-        open fun imageWithCVImageBuffer_options(imageBuffer: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithCVImageBuffer_options(imageBuffer: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCVImageBuffer:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, imageBuffer, options) as MemorySegment
         }
         
-        open fun imageWithCVPixelBuffer(pixelBuffer: MemorySegment): MemorySegment {
+        fun imageWithCVPixelBuffer(pixelBuffer: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCVPixelBuffer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, pixelBuffer) as MemorySegment
         }
         
-        open fun imageWithCVPixelBuffer_options(pixelBuffer: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithCVPixelBuffer_options(pixelBuffer: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithCVPixelBuffer:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, pixelBuffer, options) as MemorySegment
         }
         
-        open fun imageWithIOSurface(surface: MemorySegment): MemorySegment {
+        fun imageWithIOSurface(surface: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithIOSurface:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, surface) as MemorySegment
         }
         
-        open fun imageWithIOSurface_options(surface: MemorySegment, options: MemorySegment): MemorySegment {
+        fun imageWithIOSurface_options(surface: MemorySegment, options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithIOSurface:options:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, surface, options) as MemorySegment
         }
         
-        open fun imageWithColor(color: MemorySegment): MemorySegment {
+        fun imageWithColor(color: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("imageWithColor:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, color) as MemorySegment
         }
         
-        open fun emptyImage(): MemorySegment {
+        fun emptyImage(): MemorySegment {
             val sel = ObjCRuntime.sel("emptyImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun blackImage(): MemorySegment {
+        fun blackImage(): MemorySegment {
             val sel = ObjCRuntime.sel("blackImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun whiteImage(): MemorySegment {
+        fun whiteImage(): MemorySegment {
             val sel = ObjCRuntime.sel("whiteImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun grayImage(): MemorySegment {
+        fun grayImage(): MemorySegment {
             val sel = ObjCRuntime.sel("grayImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun redImage(): MemorySegment {
+        fun redImage(): MemorySegment {
             val sel = ObjCRuntime.sel("redImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun greenImage(): MemorySegment {
+        fun greenImage(): MemorySegment {
             val sel = ObjCRuntime.sel("greenImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun blueImage(): MemorySegment {
+        fun blueImage(): MemorySegment {
             val sel = ObjCRuntime.sel("blueImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun cyanImage(): MemorySegment {
+        fun cyanImage(): MemorySegment {
             val sel = ObjCRuntime.sel("cyanImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun magentaImage(): MemorySegment {
+        fun magentaImage(): MemorySegment {
             val sel = ObjCRuntime.sel("magentaImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun yellowImage(): MemorySegment {
+        fun yellowImage(): MemorySegment {
             val sel = ObjCRuntime.sel("yellowImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun clearImage(): MemorySegment {
+        fun clearImage(): MemorySegment {
             val sel = ObjCRuntime.sel("clearImage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -180,7 +180,7 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, image, options) as MemorySegment
     }
     
-    open fun initWithCGImageSource_index_options(source: MemorySegment, index: size_t, dict: MemorySegment): MemorySegment {
+    open fun initWithCGImageSource_index_options(source: MemorySegment, index: Long, dict: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCGImageSource:index:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, source, index, dict) as MemorySegment
     }
@@ -205,17 +205,17 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, options) as MemorySegment
     }
     
-    open fun initWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: size_t, size: MemorySegment, format: CIFormat, colorSpace: MemorySegment): MemorySegment {
+    open fun initWithBitmapData_bytesPerRow_size_format_colorSpace(`data`: MemorySegment, bytesPerRow: Long, size: MemorySegment, format: Int, colorSpace: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithBitmapData:bytesPerRow:size:format:colorSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, bytesPerRow, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), format, colorSpace) as MemorySegment
     }
     
-    open fun initWithTexture_size_flipped_colorSpace(name: Any, size: MemorySegment, flipped: BOOL, colorSpace: MemorySegment): MemorySegment {
+    open fun initWithTexture_size_flipped_colorSpace(name: Int, size: MemorySegment, flipped: Boolean, colorSpace: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTexture:size:flipped:colorSpace:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, colorSpace) as MemorySegment
     }
     
-    open fun initWithTexture_size_flipped_options(name: Any, size: MemorySegment, flipped: BOOL, options: MemorySegment): MemorySegment {
+    open fun initWithTexture_size_flipped_options(name: Int, size: MemorySegment, flipped: Boolean, options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTexture:size:flipped:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")), flipped, options) as MemorySegment
     }
@@ -245,7 +245,7 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, surface, options) as MemorySegment
     }
     
-    open fun initWithIOSurface_plane_format_options(surface: MemorySegment, plane: size_t, format: CIFormat, options: MemorySegment): MemorySegment {
+    open fun initWithIOSurface_plane_format_options(surface: MemorySegment, plane: Long, format: Int, options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithIOSurface:plane:format:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, surface, plane, format, options) as MemorySegment
     }
@@ -275,12 +275,12 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, color) as MemorySegment
     }
     
-    open fun imageByApplyingTransform(matrix: CGAffineTransform): MemorySegment {
+    open fun imageByApplyingTransform(matrix: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByApplyingTransform:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matrix) as MemorySegment
     }
     
-    open fun imageByApplyingTransform_highQualityDownsample(matrix: CGAffineTransform, highQualityDownsample: BOOL): MemorySegment {
+    open fun imageByApplyingTransform_highQualityDownsample(matrix: MemorySegment, highQualityDownsample: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("imageByApplyingTransform:highQualityDownsample:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matrix, highQualityDownsample) as MemorySegment
     }
@@ -290,19 +290,19 @@ open class CIImage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as MemorySegment
     }
     
-    open fun imageTransformForOrientation(orientation: Int): CGAffineTransform {
+    open fun imageTransformForOrientation(orientation: Int): MemorySegment {
         val sel = ObjCRuntime.sel("imageTransformForOrientation:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as CGAffineTransform
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as MemorySegment
     }
     
-    open fun imageByApplyingCGOrientation(orientation: CGImagePropertyOrientation): MemorySegment {
+    open fun imageByApplyingCGOrientation(orientation: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByApplyingCGOrientation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as MemorySegment
     }
     
-    open fun imageTransformForCGOrientation(orientation: CGImagePropertyOrientation): CGAffineTransform {
+    open fun imageTransformForCGOrientation(orientation: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageTransformForCGOrientation:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as CGAffineTransform
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as MemorySegment
     }
     
     open fun imageByCompositingOverImage(dest: MemorySegment): MemorySegment {
@@ -331,7 +331,7 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun imageByApplyingFilter_withInputParameters(filterName: String, params: MemorySegment): MemorySegment = imageByApplyingFilter_withInputParameters(ObjCRuntime.newNSString(Arena.global(), filterName), params)
+    fun imageByApplyingFilter_withInputParameters(filterName: String, params: MemorySegment): MemorySegment = imageByApplyingFilter_withInputParameters(ObjCRuntime.newNSString(Arena.global(), filterName), params)
     
     open fun imageByApplyingFilter(filterName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByApplyingFilter:")
@@ -339,7 +339,7 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun imageByApplyingFilter(filterName: String): MemorySegment = imageByApplyingFilter(ObjCRuntime.newNSString(Arena.global(), filterName))
+    fun imageByApplyingFilter(filterName: String): MemorySegment = imageByApplyingFilter(ObjCRuntime.newNSString(Arena.global(), filterName))
     
     open fun imageByColorMatchingColorSpaceToWorkingSpace(colorSpace: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("imageByColorMatchingColorSpaceToWorkingSpace:")
@@ -422,15 +422,75 @@ open class CIImage(val ptr: MemorySegment) {
     }
     
     // @property blackImage
+    open fun blackImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("blackImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property whiteImage
+    open fun whiteImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("whiteImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property grayImage
+    open fun grayImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("grayImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property redImage
+    open fun redImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("redImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property greenImage
+    open fun greenImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("greenImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property blueImage
+    open fun blueImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("blueImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property cyanImage
+    open fun cyanImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("cyanImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property magentaImage
+    open fun magentaImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("magentaImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property yellowImage
+    open fun yellowImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("yellowImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property clearImage
+    open fun clearImage(): MemorySegment {
+        val sel = ObjCRuntime.sel("clearImage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property extent
     open fun extent(): MemorySegment {
         val sel = ObjCRuntime.sel("extent")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property opaque
-    open fun isOpaque(): BOOL {
+    open fun isOpaque(): Boolean {
         val sel = ObjCRuntime.sel("isOpaque")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property properties
@@ -500,131 +560,134 @@ open class CIImage(val ptr: MemorySegment) {
 /** @return NSArray<CIFilter *> * */
 fun CIImage.autoAdjustmentFilters(): MemorySegment {
     val sel = ObjCRuntime.sel("autoAdjustmentFilters")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 /** @return NSArray<CIFilter *> * */
 fun CIImage.autoAdjustmentFiltersWithOptions(options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("autoAdjustmentFiltersWithOptions:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, options) as MemorySegment
 }
 
 // ── Category: LabConversion on CIImage ─────────────────────────────────────────
 
 fun CIImage.imageByConvertingWorkingSpaceToLab(): MemorySegment {
     val sel = ObjCRuntime.sel("imageByConvertingWorkingSpaceToLab")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun CIImage.imageByConvertingLabToWorkingSpace(): MemorySegment {
     val sel = ObjCRuntime.sel("imageByConvertingLabToWorkingSpace")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 // ── Category: AVDepthData on CIImage ─────────────────────────────────────────
 
 fun CIImage.initWithDepthData_options(`data`: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithDepthData:options:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`, options) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, `data`, options) as MemorySegment
 }
 
 fun CIImage.initWithDepthData(`data`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithDepthData:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, `data`) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, `data`) as MemorySegment
 }
 
 fun CIImage.depthData(): MemorySegment {
     val sel = ObjCRuntime.sel("depthData")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithDepthData:options:]
+// Class method: +[CIImage imageWithDepthData:options:]
 fun CIImage_imageWithDepthData_options(`data`: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithDepthData:options:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `data`, options) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithDepthData:]
+// Class method: +[CIImage imageWithDepthData:]
 fun CIImage_imageWithDepthData(`data`: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithDepthData:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, `data`) as MemorySegment
 }
 
-// @property depthData
+// ── Category: AVPortraitEffectsMatte on CIImage ─────────────────────────────────────────
+
 fun CIImage.initWithPortaitEffectsMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithPortaitEffectsMatte:options:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte, options) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, matte, options) as MemorySegment
 }
 
 fun CIImage.initWithPortaitEffectsMatte(matte: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithPortaitEffectsMatte:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, matte) as MemorySegment
 }
 
 fun CIImage.portraitEffectsMatte(): MemorySegment {
     val sel = ObjCRuntime.sel("portraitEffectsMatte")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithPortaitEffectsMatte:options:]
+// Class method: +[CIImage imageWithPortaitEffectsMatte:options:]
 fun CIImage_imageWithPortaitEffectsMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithPortaitEffectsMatte:options:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, matte, options) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithPortaitEffectsMatte:]
+// Class method: +[CIImage imageWithPortaitEffectsMatte:]
 fun CIImage_imageWithPortaitEffectsMatte(matte: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithPortaitEffectsMatte:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, matte) as MemorySegment
 }
 
-// @property portraitEffectsMatte
+// ── Category: AVSemanticSegmentationMatte on CIImage ─────────────────────────────────────────
+
 fun CIImage.initWithSemanticSegmentationMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithSemanticSegmentationMatte:options:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte, options) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, matte, options) as MemorySegment
 }
 
 fun CIImage.initWithSemanticSegmentationMatte(matte: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithSemanticSegmentationMatte:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, matte) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, matte) as MemorySegment
 }
 
 fun CIImage.semanticSegmentationMatte(): MemorySegment {
     val sel = ObjCRuntime.sel("semanticSegmentationMatte")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithSemanticSegmentationMatte:options:]
+// Class method: +[CIImage imageWithSemanticSegmentationMatte:options:]
 fun CIImage_imageWithSemanticSegmentationMatte_options(matte: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithSemanticSegmentationMatte:options:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, matte, options) as MemorySegment
 }
 
-// Class<*> method: +[CIImage imageWithSemanticSegmentationMatte:]
+// Class method: +[CIImage imageWithSemanticSegmentationMatte:]
 fun CIImage_imageWithSemanticSegmentationMatte(matte: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("imageWithSemanticSegmentationMatte:")
     val cls = ObjCRuntime.getClass("CIImage")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, matte) as MemorySegment
 }
 
-// @property semanticSegmentationMatte
+// ── Category: NSAppKitAdditions on CIImage ─────────────────────────────────────────
+
 fun CIImage.initWithBitmapImageRep(bitmapImageRep: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithBitmapImageRep:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, bitmapImageRep) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, bitmapImageRep) as MemorySegment
 }
 
-fun CIImage.drawInRect_fromRect_operation_fraction(rect: NSRect, fromRect: NSRect, op: NSCompositingOperation, delta: CGFloat): Unit {
+fun CIImage.drawInRect_fromRect_operation_fraction(rect: MemorySegment, fromRect: MemorySegment, op: MemorySegment, delta: Double): Unit {
     val sel = ObjCRuntime.sel("drawInRect:fromRect:operation:fraction:")
-    ObjCRuntime.msgSend(null, ptr, sel, rect, fromRect, op, delta)
+    ObjCRuntime.msgSend(null, this.ptr, sel, rect, fromRect, op, delta)
 }
 
-fun CIImage.drawAtPoint_fromRect_operation_fraction(point: NSPoint, fromRect: NSRect, op: NSCompositingOperation, delta: CGFloat): Unit {
+fun CIImage.drawAtPoint_fromRect_operation_fraction(point: MemorySegment, fromRect: MemorySegment, op: MemorySegment, delta: Double): Unit {
     val sel = ObjCRuntime.sel("drawAtPoint:fromRect:operation:fraction:")
-    ObjCRuntime.msgSend(null, ptr, sel, point, fromRect, op, delta)
+    ObjCRuntime.msgSend(null, this.ptr, sel, point, fromRect, op, delta)
 }
 

@@ -8,105 +8,99 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPopoverTouchBarItem
  * Superclass: NSTouchBarItem
  */
-open class NSPopoverTouchBarItem(ptr: MemorySegment) : NSTouchBarItem(ptr) {
+open class NSPopoverTouchBarItem(override val ptr: MemorySegment) : NSTouchBarItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPopoverTouchBarItem") }
         
     }
     
-    fun showPopover(sender: MemorySegment): Unit {
+    open fun showPopover(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("showPopover:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun dismissPopover(sender: MemorySegment): Unit {
+    open fun dismissPopover(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("dismissPopover:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun makeStandardActivatePopoverGestureRecognizer(): MemorySegment {
+    open fun makeStandardActivatePopoverGestureRecognizer(): MemorySegment {
         val sel = ObjCRuntime.sel("makeStandardActivatePopoverGestureRecognizer")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property popoverTouchBar
-    fun popoverTouchBar(): MemorySegment {
+    open fun popoverTouchBar(): MemorySegment {
         val sel = ObjCRuntime.sel("popoverTouchBar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPopoverTouchBar(value: MemorySegment) {
+    open fun setPopoverTouchBar(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPopoverTouchBar:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property customizationLabel
-    override fun `customizationLabel`(): MemorySegment {
+    override fun customizationLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("customizationLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCustomizationLabel(value: MemorySegment) {
+    open fun setCustomizationLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCustomizationLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    override fun `customizationLabelAsString`(): String = ObjCRuntime.toJavaString(customizationLabel())
-    
-    /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCustomizationLabel(value: String) = setCustomizationLabel(ObjCRuntime.newNSString(Arena.global(), value))
-    
     // @property collapsedRepresentation
-    fun collapsedRepresentation(): MemorySegment {
+    open fun collapsedRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("collapsedRepresentation")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCollapsedRepresentation(value: MemorySegment) {
+    open fun setCollapsedRepresentation(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCollapsedRepresentation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property collapsedRepresentationImage
-    fun collapsedRepresentationImage(): MemorySegment {
+    open fun collapsedRepresentationImage(): MemorySegment {
         val sel = ObjCRuntime.sel("collapsedRepresentationImage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCollapsedRepresentationImage(value: MemorySegment) {
+    open fun setCollapsedRepresentationImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCollapsedRepresentationImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property collapsedRepresentationLabel
-    fun collapsedRepresentationLabel(): MemorySegment {
+    open fun collapsedRepresentationLabel(): MemorySegment {
         val sel = ObjCRuntime.sel("collapsedRepresentationLabel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCollapsedRepresentationLabel(value: MemorySegment) {
+    open fun setCollapsedRepresentationLabel(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCollapsedRepresentationLabel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun collapsedRepresentationLabelAsString(): String = ObjCRuntime.toJavaString(collapsedRepresentationLabel())
+    open fun collapsedRepresentationLabelAsString(): String = ObjCRuntime.toJavaString(collapsedRepresentationLabel())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCollapsedRepresentationLabel(value: String) = setCollapsedRepresentationLabel(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCollapsedRepresentationLabel(value: String) = setCollapsedRepresentationLabel(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property pressAndHoldTouchBar
-    fun pressAndHoldTouchBar(): MemorySegment {
+    open fun pressAndHoldTouchBar(): MemorySegment {
         val sel = ObjCRuntime.sel("pressAndHoldTouchBar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPressAndHoldTouchBar(value: MemorySegment) {
+    open fun setPressAndHoldTouchBar(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPressAndHoldTouchBar:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsCloseButton
-    fun showsCloseButton(): BOOL {
+    open fun showsCloseButton(): Boolean {
         val sel = ObjCRuntime.sel("showsCloseButton")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsCloseButton(value: BOOL) {
+    open fun setShowsCloseButton(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsCloseButton:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

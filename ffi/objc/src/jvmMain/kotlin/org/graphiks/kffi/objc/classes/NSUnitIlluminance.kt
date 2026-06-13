@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitIlluminance(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitIlluminance(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitIlluminance") }
         
@@ -21,5 +21,10 @@ open class NSUnitIlluminance(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property lux
+    open fun lux(): MemorySegment {
+        val sel = ObjCRuntime.sel("lux")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

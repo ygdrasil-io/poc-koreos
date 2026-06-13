@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSScrubberDelegate
  * Inherits protocols: NSObject
  */
-interface NSScrubberDelegate : NSObject {
+interface NSScrubberDelegate {
     // @optional
-    fun scrubber_didSelectItemAtIndex(scrubber: MemorySegment, selectedIndex: NSInteger): Unit =
+    fun scrubber_didSelectItemAtIndex(scrubber: MemorySegment, selectedIndex: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'scrubber:didSelectItemAtIndex:' not implemented")
     
     // @optional
-    fun scrubber_didHighlightItemAtIndex(scrubber: MemorySegment, highlightedIndex: NSInteger): Unit =
+    fun scrubber_didHighlightItemAtIndex(scrubber: MemorySegment, highlightedIndex: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'scrubber:didHighlightItemAtIndex:' not implemented")
     
     // @optional
-    fun scrubber_didChangeVisibleRange(scrubber: MemorySegment, visibleRange: NSRange): Unit =
+    fun scrubber_didChangeVisibleRange(scrubber: MemorySegment, visibleRange: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'scrubber:didChangeVisibleRange:' not implemented")
     
     // @optional

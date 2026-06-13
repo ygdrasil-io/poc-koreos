@@ -9,51 +9,51 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSSortDescriptor(val ptr: MemorySegment) {
+open class NSSortDescriptor(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSortDescriptor") }
         
-        open fun sortDescriptorWithKey_ascending(key: MemorySegment, ascending: BOOL): MemorySegment {
+        fun sortDescriptorWithKey_ascending(key: MemorySegment, ascending: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("sortDescriptorWithKey:ascending:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, key, ascending) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun sortDescriptorWithKey_ascending(key: String, ascending: BOOL): MemorySegment = sortDescriptorWithKey_ascending(ObjCRuntime.newNSString(Arena.global(), key), ascending)
+        fun sortDescriptorWithKey_ascending(key: String, ascending: Boolean): MemorySegment = sortDescriptorWithKey_ascending(ObjCRuntime.newNSString(Arena.global(), key), ascending)
         
-        open fun sortDescriptorWithKey_ascending_selector(key: MemorySegment, ascending: BOOL, selector: MemorySegment): MemorySegment {
+        fun sortDescriptorWithKey_ascending_selector(key: MemorySegment, ascending: Boolean, selector: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sortDescriptorWithKey:ascending:selector:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, key, ascending, selector) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun sortDescriptorWithKey_ascending_selector(key: String, ascending: BOOL, selector: MemorySegment): MemorySegment = sortDescriptorWithKey_ascending_selector(ObjCRuntime.newNSString(Arena.global(), key), ascending, selector)
+        fun sortDescriptorWithKey_ascending_selector(key: String, ascending: Boolean, selector: MemorySegment): MemorySegment = sortDescriptorWithKey_ascending_selector(ObjCRuntime.newNSString(Arena.global(), key), ascending, selector)
         
-        open fun sortDescriptorWithKey_ascending_comparator(key: MemorySegment, ascending: BOOL, cmptr: MemorySegment): MemorySegment {
+        fun sortDescriptorWithKey_ascending_comparator(key: MemorySegment, ascending: Boolean, cmptr: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sortDescriptorWithKey:ascending:comparator:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, key, ascending, cmptr) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun sortDescriptorWithKey_ascending_comparator(key: String, ascending: BOOL, cmptr: MemorySegment): MemorySegment = sortDescriptorWithKey_ascending_comparator(ObjCRuntime.newNSString(Arena.global(), key), ascending, cmptr)
+        fun sortDescriptorWithKey_ascending_comparator(key: String, ascending: Boolean, cmptr: MemorySegment): MemorySegment = sortDescriptorWithKey_ascending_comparator(ObjCRuntime.newNSString(Arena.global(), key), ascending, cmptr)
         
     }
     
-    open fun initWithKey_ascending(key: MemorySegment, ascending: BOOL): MemorySegment {
+    open fun initWithKey_ascending(key: MemorySegment, ascending: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKey:ascending:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key, ascending) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithKey_ascending(key: String, ascending: BOOL): MemorySegment = initWithKey_ascending(ObjCRuntime.newNSString(Arena.global(), key), ascending)
+    fun initWithKey_ascending(key: String, ascending: Boolean): MemorySegment = initWithKey_ascending(ObjCRuntime.newNSString(Arena.global(), key), ascending)
     
-    open fun initWithKey_ascending_selector(key: MemorySegment, ascending: BOOL, selector: MemorySegment): MemorySegment {
+    open fun initWithKey_ascending_selector(key: MemorySegment, ascending: Boolean, selector: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKey:ascending:selector:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key, ascending, selector) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithKey_ascending_selector(key: String, ascending: BOOL, selector: MemorySegment): MemorySegment = initWithKey_ascending_selector(ObjCRuntime.newNSString(Arena.global(), key), ascending, selector)
+    fun initWithKey_ascending_selector(key: String, ascending: Boolean, selector: MemorySegment): MemorySegment = initWithKey_ascending_selector(ObjCRuntime.newNSString(Arena.global(), key), ascending, selector)
     
     open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
@@ -65,17 +65,17 @@ open class NSSortDescriptor(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun initWithKey_ascending_comparator(key: MemorySegment, ascending: BOOL, cmptr: MemorySegment): MemorySegment {
+    open fun initWithKey_ascending_comparator(key: MemorySegment, ascending: Boolean, cmptr: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithKey:ascending:comparator:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key, ascending, cmptr) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithKey_ascending_comparator(key: String, ascending: BOOL, cmptr: MemorySegment): MemorySegment = initWithKey_ascending_comparator(ObjCRuntime.newNSString(Arena.global(), key), ascending, cmptr)
+    fun initWithKey_ascending_comparator(key: String, ascending: Boolean, cmptr: MemorySegment): MemorySegment = initWithKey_ascending_comparator(ObjCRuntime.newNSString(Arena.global(), key), ascending, cmptr)
     
-    open fun compareObject_toObject(object1: MemorySegment, object2: MemorySegment): NSComparisonResult {
+    open fun compareObject_toObject(object1: MemorySegment, object2: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("compareObject:toObject:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, object1, object2) as NSComparisonResult
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, object1, object2) as MemorySegment
     }
     
     // @property key
@@ -88,9 +88,9 @@ open class NSSortDescriptor(val ptr: MemorySegment) {
     open fun keyAsString(): String = ObjCRuntime.toJavaString(key())
     
     // @property ascending
-    open fun ascending(): BOOL {
+    open fun ascending(): Boolean {
         val sel = ObjCRuntime.sel("ascending")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property selector
@@ -113,7 +113,7 @@ open class NSSortDescriptor(val ptr: MemorySegment) {
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _sortDescriptorFlags: NSUInteger
+    // ivar: _sortDescriptorFlags: Long
     // ivar: _key: MemorySegment
     // ivar: _selector: MemorySegment
     // ivar: _selectorOrBlock: MemorySegment

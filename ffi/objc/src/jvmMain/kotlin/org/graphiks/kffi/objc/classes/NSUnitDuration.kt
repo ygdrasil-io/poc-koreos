@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitDuration(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitDuration(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitDuration") }
         
@@ -51,5 +51,46 @@ open class NSUnitDuration(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property hours
+    open fun hours(): MemorySegment {
+        val sel = ObjCRuntime.sel("hours")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property minutes
+    open fun minutes(): MemorySegment {
+        val sel = ObjCRuntime.sel("minutes")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property seconds
+    open fun seconds(): MemorySegment {
+        val sel = ObjCRuntime.sel("seconds")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property milliseconds
+    open fun milliseconds(): MemorySegment {
+        val sel = ObjCRuntime.sel("milliseconds")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property microseconds
+    open fun microseconds(): MemorySegment {
+        val sel = ObjCRuntime.sel("microseconds")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property nanoseconds
+    open fun nanoseconds(): MemorySegment {
+        val sel = ObjCRuntime.sel("nanoseconds")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property picoseconds
+    open fun picoseconds(): MemorySegment {
+        val sel = ObjCRuntime.sel("picoseconds")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

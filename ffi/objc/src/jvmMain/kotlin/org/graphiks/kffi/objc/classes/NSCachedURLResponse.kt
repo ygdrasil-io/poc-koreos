@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSCachedURLResponse(val ptr: MemorySegment) {
+open class NSCachedURLResponse(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCachedURLResponse") }
         
@@ -20,7 +20,7 @@ open class NSCachedURLResponse(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, response, `data`) as MemorySegment
     }
     
-    open fun initWithResponse_data_userInfo_storagePolicy(response: MemorySegment, `data`: MemorySegment, userInfo: MemorySegment, storagePolicy: NSURLCacheStoragePolicy): MemorySegment {
+    open fun initWithResponse_data_userInfo_storagePolicy(response: MemorySegment, `data`: MemorySegment, userInfo: MemorySegment, storagePolicy: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithResponse:data:userInfo:storagePolicy:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, response, `data`, userInfo, storagePolicy) as MemorySegment
     }
@@ -32,7 +32,7 @@ open class NSCachedURLResponse(val ptr: MemorySegment) {
     }
     
     // @property data
-    open fun data(): MemorySegment {
+    open fun `data`(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -44,9 +44,9 @@ open class NSCachedURLResponse(val ptr: MemorySegment) {
     }
     
     // @property storagePolicy
-    open fun storagePolicy(): NSURLCacheStoragePolicy {
+    open fun storagePolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("storagePolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLCacheStoragePolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     

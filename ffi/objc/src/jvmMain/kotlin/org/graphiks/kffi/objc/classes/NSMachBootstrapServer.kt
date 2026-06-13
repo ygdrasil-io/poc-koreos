@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMachBootstrapServer
  * Superclass: NSPortNameServer
  */
-open class NSMachBootstrapServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
+open class NSMachBootstrapServer(override val ptr: MemorySegment) : NSPortNameServer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMachBootstrapServer") }
         
@@ -19,31 +19,22 @@ open class NSMachBootstrapServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
         
     }
     
-    override fun `portForName`(name: MemorySegment): MemorySegment {
+    override fun portForName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `portForName`(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
-    
-    override fun `portForName_host`(name: MemorySegment, host: MemorySegment): MemorySegment {
+    override fun portForName_host(name: MemorySegment, host: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:host:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, host) as MemorySegment
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `portForName_host`(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
-    
-    override fun `registerPort_name`(port: MemorySegment, name: MemorySegment): BOOL {
+    override fun registerPort_name(port: MemorySegment, name: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("registerPort:name:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, port, name) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, port, name) as Boolean
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `registerPort_name`(port: MemorySegment, name: String): BOOL = registerPort_name(port, ObjCRuntime.newNSString(Arena.global(), name))
-    
-    fun servicePortWithName(name: MemorySegment): MemorySegment {
+    open fun servicePortWithName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("servicePortWithName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }

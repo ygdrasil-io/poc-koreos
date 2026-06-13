@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPipe
  * Superclass: NSObject
  */
-open class NSPipe(val ptr: MemorySegment) {
+open class NSPipe(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPipe") }
         
-        open fun pipe(): MemorySegment {
+        fun pipe(): MemorySegment {
             val sel = ObjCRuntime.sel("pipe")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

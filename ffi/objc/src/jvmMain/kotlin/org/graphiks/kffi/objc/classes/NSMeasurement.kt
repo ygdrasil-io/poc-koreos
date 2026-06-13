@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSMeasurement(val ptr: MemorySegment) {
+open class NSMeasurement(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMeasurement") }
         
@@ -25,9 +25,9 @@ open class NSMeasurement(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, doubleValue, unit) as MemorySegment
     }
     
-    open fun canBeConvertedToUnit(unit: MemorySegment): BOOL {
+    open fun canBeConvertedToUnit(unit: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("canBeConvertedToUnit:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, unit) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, unit) as Boolean
     }
     
     open fun measurementByConvertingToUnit(unit: MemorySegment): MemorySegment {

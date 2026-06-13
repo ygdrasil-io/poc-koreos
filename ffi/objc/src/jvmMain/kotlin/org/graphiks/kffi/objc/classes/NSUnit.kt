@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSUnit(val ptr: MemorySegment) {
+open class NSUnit(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnit") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -31,7 +31,7 @@ open class NSUnit(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithSymbol(symbol: String): MemorySegment = initWithSymbol(ObjCRuntime.newNSString(Arena.global(), symbol))
+    fun initWithSymbol(symbol: String): MemorySegment = initWithSymbol(ObjCRuntime.newNSString(Arena.global(), symbol))
     
     // @property symbol
     open fun symbol(): MemorySegment {

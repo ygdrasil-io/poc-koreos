@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataQueryAttributeValueTuple
  * Superclass: NSObject
  */
-open class NSMetadataQueryAttributeValueTuple(val ptr: MemorySegment) {
+open class NSMetadataQueryAttributeValueTuple(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMetadataQueryAttributeValueTuple") }
         
@@ -30,16 +30,16 @@ open class NSMetadataQueryAttributeValueTuple(val ptr: MemorySegment) {
     }
     
     // @property count
-    open fun count(): NSUInteger {
+    open fun count(): Long {
         val sel = ObjCRuntime.sel("count")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _attr: MemorySegment
     // ivar: _value: MemorySegment
-    // ivar: _count: NSUInteger
+    // ivar: _count: Long
     // ivar: _reserved: MemorySegment
 }
 

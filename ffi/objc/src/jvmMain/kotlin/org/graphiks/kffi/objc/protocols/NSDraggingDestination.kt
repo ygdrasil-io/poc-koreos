@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSDraggingDestination
  * Inherits protocols: NSObject
  */
-interface NSDraggingDestination : NSObject {
+interface NSDraggingDestination {
     // @optional
-    fun draggingEntered(sender: MemorySegment): NSDragOperation =
+    fun draggingEntered(sender: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'draggingEntered:' not implemented")
     
     // @optional
-    fun draggingUpdated(sender: MemorySegment): NSDragOperation =
+    fun draggingUpdated(sender: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'draggingUpdated:' not implemented")
     
     // @optional
@@ -22,11 +22,11 @@ interface NSDraggingDestination : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'draggingExited:' not implemented")
     
     // @optional
-    fun prepareForDragOperation(sender: MemorySegment): BOOL =
+    fun prepareForDragOperation(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'prepareForDragOperation:' not implemented")
     
     // @optional
-    fun performDragOperation(sender: MemorySegment): BOOL =
+    fun performDragOperation(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'performDragOperation:' not implemented")
     
     // @optional
@@ -38,7 +38,7 @@ interface NSDraggingDestination : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'draggingEnded:' not implemented")
     
     // @optional
-    fun wantsPeriodicDraggingUpdates(): BOOL =
+    fun wantsPeriodicDraggingUpdates(): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'wantsPeriodicDraggingUpdates' not implemented")
     
     // @optional

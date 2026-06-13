@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSTabViewItem(val ptr: MemorySegment) {
+open class NSTabViewItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTabViewItem") }
         
-        open fun tabViewItemWithViewController(viewController: MemorySegment): MemorySegment {
+        fun tabViewItemWithViewController(viewController: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("tabViewItemWithViewController:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, viewController) as MemorySegment
         }
@@ -25,14 +25,14 @@ open class NSTabViewItem(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, identifier) as MemorySegment
     }
     
-    open fun drawLabel_inRect(shouldTruncateLabel: BOOL, labelRect: NSRect): Unit {
+    open fun drawLabel_inRect(shouldTruncateLabel: Boolean, labelRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawLabel:inRect:")
         ObjCRuntime.msgSend(null, ptr, sel, shouldTruncateLabel, ObjCRuntime.ObjCStructArg(labelRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    open fun sizeOfLabel(computeMin: BOOL): NSSize {
+    open fun sizeOfLabel(computeMin: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("sizeOfLabel:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, computeMin) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, computeMin) as MemorySegment
     }
     
     // @property identifier
@@ -102,9 +102,9 @@ open class NSTabViewItem(val ptr: MemorySegment) {
     }
     
     // @property tabState
-    open fun tabState(): NSTabState {
+    open fun tabState(): MemorySegment {
         val sel = ObjCRuntime.sel("tabState")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTabState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property tabView

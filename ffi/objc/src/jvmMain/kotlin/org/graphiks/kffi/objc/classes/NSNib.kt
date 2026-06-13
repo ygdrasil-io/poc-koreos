@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSNib(val ptr: MemorySegment) {
+open class NSNib(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNib") }
         
     }
     
-    open fun initWithNibNamed_bundle(nibName: NSNibName, bundle: MemorySegment): MemorySegment {
+    open fun initWithNibNamed_bundle(nibName: MemorySegment, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithNibNamed:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, nibName, bundle) as MemorySegment
     }
@@ -25,9 +25,9 @@ open class NSNib(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, nibData, bundle) as MemorySegment
     }
     
-    open fun instantiateWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): BOOL {
+    open fun instantiateWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("instantiateWithOwner:topLevelObjects:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, owner, topLevelObjects) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, owner, topLevelObjects) as Boolean
     }
     
 }
@@ -36,16 +36,16 @@ open class NSNib(val ptr: MemorySegment) {
 
 fun NSNib.initWithContentsOfURL(nibFileURL: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithContentsOfURL:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, nibFileURL) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, nibFileURL) as MemorySegment
 }
 
-fun NSNib.instantiateNibWithExternalNameTable(externalNameTable: MemorySegment): BOOL {
+fun NSNib.instantiateNibWithExternalNameTable(externalNameTable: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("instantiateNibWithExternalNameTable:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, externalNameTable) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, externalNameTable) as Boolean
 }
 
-fun NSNib.instantiateNibWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): BOOL {
+fun NSNib.instantiateNibWithOwner_topLevelObjects(owner: MemorySegment, topLevelObjects: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("instantiateNibWithOwner:topLevelObjects:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, owner, topLevelObjects) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, owner, topLevelObjects) as Boolean
 }
 

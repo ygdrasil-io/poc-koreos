@@ -8,16 +8,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDecimalNumber
  * Superclass: NSNumber
  */
-open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
+open class NSDecimalNumber(override val ptr: MemorySegment) : NSNumber(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDecimalNumber") }
         
-        fun decimalNumberWithMantissa_exponent_isNegative(mantissa: Any, exponent: Short, flag: BOOL): MemorySegment {
+        fun decimalNumberWithMantissa_exponent_isNegative(mantissa: Long, exponent: Short, flag: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("decimalNumberWithMantissa:exponent:isNegative:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, mantissa, exponent, flag) as MemorySegment
         }
         
-        fun decimalNumberWithDecimal(dcm: NSDecimal): MemorySegment {
+        fun decimalNumberWithDecimal(dcm: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("decimalNumberWithDecimal:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(dcm, MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"))) as MemorySegment
         }
@@ -76,17 +76,17 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
         
     }
     
-    fun initWithMantissa_exponent_isNegative(mantissa: Any, exponent: Short, flag: BOOL): MemorySegment {
+    open fun initWithMantissa_exponent_isNegative(mantissa: Long, exponent: Short, flag: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithMantissa:exponent:isNegative:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mantissa, exponent, flag) as MemorySegment
     }
     
-    fun initWithDecimal(dcm: NSDecimal): MemorySegment {
+    open fun initWithDecimal(dcm: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDecimal:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(dcm, MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"))) as MemorySegment
     }
     
-    fun initWithString(numberValue: MemorySegment): MemorySegment {
+    open fun initWithString(numberValue: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, numberValue) as MemorySegment
     }
@@ -94,7 +94,7 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithString(numberValue: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), numberValue))
     
-    fun initWithString_locale(numberValue: MemorySegment, locale: MemorySegment): MemorySegment {
+    open fun initWithString_locale(numberValue: MemorySegment, locale: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:locale:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, numberValue, locale) as MemorySegment
     }
@@ -102,99 +102,136 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun initWithString_locale(numberValue: String, locale: MemorySegment): MemorySegment = initWithString_locale(ObjCRuntime.newNSString(Arena.global(), numberValue), locale)
     
-    override fun `descriptionWithLocale`(locale: MemorySegment): MemorySegment {
+    override fun descriptionWithLocale(locale: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("descriptionWithLocale:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, locale) as MemorySegment
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    override fun `descriptionWithLocaleAsString`(locale: MemorySegment): String = ObjCRuntime.toJavaString(descriptionWithLocale(locale))
-    
-    fun decimalNumberByAdding(decimalNumber: MemorySegment): MemorySegment {
+    open fun decimalNumberByAdding(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByAdding:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as MemorySegment
     }
     
-    fun decimalNumberByAdding_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByAdding_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByAdding:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber, behavior) as MemorySegment
     }
     
-    fun decimalNumberBySubtracting(decimalNumber: MemorySegment): MemorySegment {
+    open fun decimalNumberBySubtracting(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberBySubtracting:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as MemorySegment
     }
     
-    fun decimalNumberBySubtracting_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberBySubtracting_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberBySubtracting:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber, behavior) as MemorySegment
     }
     
-    fun decimalNumberByMultiplyingBy(decimalNumber: MemorySegment): MemorySegment {
+    open fun decimalNumberByMultiplyingBy(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByMultiplyingBy:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as MemorySegment
     }
     
-    fun decimalNumberByMultiplyingBy_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByMultiplyingBy_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByMultiplyingBy:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber, behavior) as MemorySegment
     }
     
-    fun decimalNumberByDividingBy(decimalNumber: MemorySegment): MemorySegment {
+    open fun decimalNumberByDividingBy(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByDividingBy:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as MemorySegment
     }
     
-    fun decimalNumberByDividingBy_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByDividingBy_withBehavior(decimalNumber: MemorySegment, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByDividingBy:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber, behavior) as MemorySegment
     }
     
-    fun decimalNumberByRaisingToPower(power: NSUInteger): MemorySegment {
+    open fun decimalNumberByRaisingToPower(power: Long): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByRaisingToPower:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, power) as MemorySegment
     }
     
-    fun decimalNumberByRaisingToPower_withBehavior(power: NSUInteger, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByRaisingToPower_withBehavior(power: Long, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByRaisingToPower:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, power, behavior) as MemorySegment
     }
     
-    fun decimalNumberByMultiplyingByPowerOf10(power: Short): MemorySegment {
+    open fun decimalNumberByMultiplyingByPowerOf10(power: Short): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByMultiplyingByPowerOf10:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, power) as MemorySegment
     }
     
-    fun decimalNumberByMultiplyingByPowerOf10_withBehavior(power: Short, behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByMultiplyingByPowerOf10_withBehavior(power: Short, behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByMultiplyingByPowerOf10:withBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, power, behavior) as MemorySegment
     }
     
-    fun decimalNumberByRoundingAccordingToBehavior(behavior: MemorySegment): MemorySegment {
+    open fun decimalNumberByRoundingAccordingToBehavior(behavior: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("decimalNumberByRoundingAccordingToBehavior:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, behavior) as MemorySegment
     }
     
-    override fun `compare`(decimalNumber: MemorySegment): NSComparisonResult {
+    override fun compare(decimalNumber: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("compare:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as NSComparisonResult
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, decimalNumber) as MemorySegment
     }
     
     // @property decimalValue
-    override fun `decimalValue`(): NSDecimal {
+    open fun decimalValue(): MemorySegment {
         val sel = ObjCRuntime.sel("decimalValue")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"), ptr, sel) as NSDecimal
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.ADDRESS.withName("_mantissa")).withName("NSDecimal"), ptr, sel) as MemorySegment
     }
     
     // @property zero
+    open fun zero(): MemorySegment {
+        val sel = ObjCRuntime.sel("zero")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property one
+    open fun one(): MemorySegment {
+        val sel = ObjCRuntime.sel("one")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property minimumDecimalNumber
+    open fun minimumDecimalNumber(): MemorySegment {
+        val sel = ObjCRuntime.sel("minimumDecimalNumber")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property maximumDecimalNumber
+    open fun maximumDecimalNumber(): MemorySegment {
+        val sel = ObjCRuntime.sel("maximumDecimalNumber")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property notANumber
+    open fun notANumber(): MemorySegment {
+        val sel = ObjCRuntime.sel("notANumber")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property defaultBehavior
     /** @return id<NSDecimalNumberBehaviors> */
-    fun objCType(): MemorySegment {
+    open fun defaultBehavior(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultBehavior")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    open fun setDefaultBehavior(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setDefaultBehavior:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property objCType
+    override fun objCType(): MemorySegment {
         val sel = ObjCRuntime.sel("objCType")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property doubleValue
-    override fun `doubleValue`(): Double {
+    override fun doubleValue(): Double {
         val sel = ObjCRuntime.sel("doubleValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
@@ -202,12 +239,12 @@ open class NSDecimalNumber(ptr: MemorySegment) : NSNumber(ptr) {
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _exponent: Int
-    // ivar: _length: Any
-    // ivar: _isNegative: Any
-    // ivar: _isCompact: Any
-    // ivar: _reserved: Any
-    // ivar: _hasExternalRefCount: Any
-    // ivar: _refs: Any
+    // ivar: _length: Int
+    // ivar: _isNegative: Int
+    // ivar: _isCompact: Int
+    // ivar: _reserved: Int
+    // ivar: _hasExternalRefCount: Int
+    // ivar: _refs: Int
     // ivar: _mantissa: MemorySegment
 }
 

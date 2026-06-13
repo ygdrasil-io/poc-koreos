@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSUserScriptTask
  * Superclass: NSObject
  */
-open class NSUserScriptTask(val ptr: MemorySegment) {
+open class NSUserScriptTask(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserScriptTask") }
         
@@ -34,8 +34,8 @@ open class NSUserScriptTask(val ptr: MemorySegment) {
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _scriptURL: MemorySegment
     // ivar: _connection: MemorySegment
-    // ivar: _hasExeced: BOOL
-    // ivar: _hasTerminated: BOOL
+    // ivar: _hasExeced: Boolean
+    // ivar: _hasTerminated: Boolean
     // ivar: _stdin: MemorySegment
     // ivar: _stdout: MemorySegment
     // ivar: _stderr: MemorySegment

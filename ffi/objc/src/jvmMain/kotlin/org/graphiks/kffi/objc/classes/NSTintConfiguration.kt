@@ -9,26 +9,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSTintConfiguration(val ptr: MemorySegment) {
+open class NSTintConfiguration(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTintConfiguration") }
         
-        open fun tintConfigurationWithPreferredColor(color: MemorySegment): MemorySegment {
+        fun tintConfigurationWithPreferredColor(color: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("tintConfigurationWithPreferredColor:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, color) as MemorySegment
         }
         
-        open fun tintConfigurationWithFixedColor(color: MemorySegment): MemorySegment {
+        fun tintConfigurationWithFixedColor(color: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("tintConfigurationWithFixedColor:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, color) as MemorySegment
         }
         
-        open fun defaultTintConfiguration(): MemorySegment {
+        fun defaultTintConfiguration(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultTintConfiguration")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun monochromeTintConfiguration(): MemorySegment {
+        fun monochromeTintConfiguration(): MemorySegment {
             val sel = ObjCRuntime.sel("monochromeTintConfiguration")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -36,6 +36,18 @@ open class NSTintConfiguration(val ptr: MemorySegment) {
     }
     
     // @property defaultTintConfiguration
+    open fun defaultTintConfiguration(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultTintConfiguration")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property monochromeTintConfiguration
+    open fun monochromeTintConfiguration(): MemorySegment {
+        val sel = ObjCRuntime.sel("monochromeTintConfiguration")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property baseTintColor
     open fun baseTintColor(): MemorySegment {
         val sel = ObjCRuntime.sel("baseTintColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -48,9 +60,9 @@ open class NSTintConfiguration(val ptr: MemorySegment) {
     }
     
     // @property adaptsToUserAccentColor
-    open fun adaptsToUserAccentColor(): BOOL {
+    open fun adaptsToUserAccentColor(): Boolean {
         val sel = ObjCRuntime.sel("adaptsToUserAccentColor")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

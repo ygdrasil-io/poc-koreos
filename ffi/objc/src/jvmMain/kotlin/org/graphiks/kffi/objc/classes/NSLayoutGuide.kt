@@ -9,22 +9,22 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding, NSUserInterfaceItemIdentification
  */
-open class NSLayoutGuide(val ptr: MemorySegment) {
+open class NSLayoutGuide(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSLayoutGuide") }
         
     }
     
     /** @return NSArray<NSLayoutConstraint *> * */
-    open fun constraintsAffectingLayoutForOrientation(orientation: NSLayoutConstraintOrientation): MemorySegment {
+    open fun constraintsAffectingLayoutForOrientation(orientation: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("constraintsAffectingLayoutForOrientation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, orientation) as MemorySegment
     }
     
     // @property frame
-    open fun frame(): NSRect {
+    open fun frame(): MemorySegment {
         val sel = ObjCRuntime.sel("frame")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property owningView
@@ -38,11 +38,11 @@ open class NSLayoutGuide(val ptr: MemorySegment) {
     }
     
     // @property identifier
-    open fun identifier(): NSUserInterfaceItemIdentifier {
+    open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceItemIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setIdentifier(value: NSUserInterfaceItemIdentifier) {
+    open fun setIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -108,9 +108,9 @@ open class NSLayoutGuide(val ptr: MemorySegment) {
     }
     
     // @property hasAmbiguousLayout
-    open fun hasAmbiguousLayout(): BOOL {
+    open fun hasAmbiguousLayout(): Boolean {
         val sel = ObjCRuntime.sel("hasAmbiguousLayout")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCollectionViewPrefetching
  * Inherits protocols: NSObject
  */
-interface NSCollectionViewPrefetching : NSObject {
-    fun collectionView_prefetchItemsAtIndexPaths(collectionView: MemorySegment, indexPaths: MemorySegment)
+interface NSCollectionViewPrefetching {
+    fun collectionView_prefetchItemsAtIndexPaths(collectionView: MemorySegment, indexPaths: MemorySegment): Unit
     
     // @optional
     fun collectionView_cancelPrefetchingForItemsAtIndexPaths(collectionView: MemorySegment, indexPaths: MemorySegment): Unit =

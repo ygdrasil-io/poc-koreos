@@ -8,11 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCollectionLayoutEnvironment
  * Inherits protocols: NSObject
  */
-interface NSCollectionLayoutEnvironment : NSObject {
+interface NSCollectionLayoutEnvironment {
     /** @return id<NSCollectionLayoutContainer> */
     fun container(): MemorySegment
     
-    // @property container
-    /** @return id<NSCollectionLayoutContainer> */
 }
 

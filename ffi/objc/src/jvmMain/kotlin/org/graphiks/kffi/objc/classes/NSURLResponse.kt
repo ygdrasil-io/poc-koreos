@@ -9,19 +9,19 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSURLResponse(val ptr: MemorySegment) {
+open class NSURLResponse(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLResponse") }
         
     }
     
-    open fun initWithURL_MIMEType_expectedContentLength_textEncodingName(URL: MemorySegment, MIMEType: MemorySegment, length: NSInteger, name: MemorySegment): MemorySegment {
+    open fun initWithURL_MIMEType_expectedContentLength_textEncodingName(URL: MemorySegment, MIMEType: MemorySegment, length: Long, name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:MIMEType:expectedContentLength:textEncodingName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, URL, MIMEType, length, name) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithURL_MIMEType_expectedContentLength_textEncodingName(URL: MemorySegment, MIMEType: String, length: NSInteger, name: String): MemorySegment = initWithURL_MIMEType_expectedContentLength_textEncodingName(URL, ObjCRuntime.newNSString(Arena.global(), MIMEType), length, ObjCRuntime.newNSString(Arena.global(), name))
+    fun initWithURL_MIMEType_expectedContentLength_textEncodingName(URL: MemorySegment, MIMEType: String, length: Long, name: String): MemorySegment = initWithURL_MIMEType_expectedContentLength_textEncodingName(URL, ObjCRuntime.newNSString(Arena.global(), MIMEType), length, ObjCRuntime.newNSString(Arena.global(), name))
     
     // @property URL
     open fun URL(): MemorySegment {

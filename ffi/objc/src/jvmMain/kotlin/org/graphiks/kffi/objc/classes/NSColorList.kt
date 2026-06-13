@@ -9,68 +9,68 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSColorList(val ptr: MemorySegment) {
+open class NSColorList(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSColorList") }
         
-        open fun colorListNamed(name: NSColorListName): MemorySegment {
+        fun colorListNamed(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("colorListNamed:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** @return NSArray<NSColorList *> * */
-        open fun availableColorLists(): MemorySegment {
+        fun availableColorLists(): MemorySegment {
             val sel = ObjCRuntime.sel("availableColorLists")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun initWithName(name: NSColorListName): MemorySegment {
+    open fun initWithName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
     
-    open fun initWithName_fromFile(name: NSColorListName, path: MemorySegment): MemorySegment {
+    open fun initWithName_fromFile(name: MemorySegment, path: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:fromFile:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, path) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithName_fromFile(name: NSColorListName, path: String): MemorySegment = initWithName_fromFile(name, ObjCRuntime.newNSString(Arena.global(), path))
+    fun initWithName_fromFile(name: MemorySegment, path: String): MemorySegment = initWithName_fromFile(name, ObjCRuntime.newNSString(Arena.global(), path))
     
-    open fun setColor_forKey(color: MemorySegment, key: NSColorName): Unit {
+    open fun setColor_forKey(color: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setColor:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, color, key)
     }
     
-    open fun insertColor_key_atIndex(color: MemorySegment, key: NSColorName, loc: NSUInteger): Unit {
+    open fun insertColor_key_atIndex(color: MemorySegment, key: MemorySegment, loc: Long): Unit {
         val sel = ObjCRuntime.sel("insertColor:key:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, color, key, loc)
     }
     
-    open fun removeColorWithKey(key: NSColorName): Unit {
+    open fun removeColorWithKey(key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeColorWithKey:")
         ObjCRuntime.msgSend(null, ptr, sel, key)
     }
     
-    open fun colorWithKey(key: NSColorName): MemorySegment {
+    open fun colorWithKey(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("colorWithKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
     
-    open fun writeToURL_error(url: MemorySegment, errPtr: MemorySegment): BOOL {
+    open fun writeToURL_error(url: MemorySegment, errPtr: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("writeToURL:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, errPtr) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, errPtr) as Boolean
     }
     
-    open fun writeToFile(path: MemorySegment): BOOL {
+    open fun writeToFile(path: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("writeToFile:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, path) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun writeToFile(path: String): BOOL = writeToFile(ObjCRuntime.newNSString(Arena.global(), path))
+    fun writeToFile(path: String): Boolean = writeToFile(ObjCRuntime.newNSString(Arena.global(), path))
     
     open fun removeFile(): Unit {
         val sel = ObjCRuntime.sel("removeFile")
@@ -79,9 +79,15 @@ open class NSColorList(val ptr: MemorySegment) {
     
     // @property availableColorLists
     /** @return NSArray<NSColorList *> * */
-    open fun name(): NSColorListName {
+    open fun availableColorLists(): MemorySegment {
+        val sel = ObjCRuntime.sel("availableColorLists")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property name
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSColorListName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property allKeys
@@ -92,9 +98,9 @@ open class NSColorList(val ptr: MemorySegment) {
     }
     
     // @property editable
-    open fun isEditable(): BOOL {
+    open fun isEditable(): Boolean {
         val sel = ObjCRuntime.sel("isEditable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

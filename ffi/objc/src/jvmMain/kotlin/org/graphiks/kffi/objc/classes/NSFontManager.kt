@@ -9,28 +9,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSMenuItemValidation
  */
-open class NSFontManager(val ptr: MemorySegment) {
+open class NSFontManager(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFontManager") }
         
-        open fun setFontPanelFactory(factoryId: Class<*>): Unit {
+        fun setFontPanelFactory(factoryId: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setFontPanelFactory:")
             ObjCRuntime.msgSend(null, _class, sel, factoryId)
         }
         
-        open fun setFontManagerFactory(factoryId: Class<*>): Unit {
+        fun setFontManagerFactory(factoryId: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setFontManagerFactory:")
             ObjCRuntime.msgSend(null, _class, sel, factoryId)
         }
         
-        open fun sharedFontManager(): MemorySegment {
+        fun sharedFontManager(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedFontManager")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun setSelectedFont_isMultiple(fontObj: MemorySegment, flag: BOOL): Unit {
+    open fun setSelectedFont_isMultiple(fontObj: MemorySegment, flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("setSelectedFont:isMultiple:")
         ObjCRuntime.msgSend(null, ptr, sel, fontObj, flag)
     }
@@ -40,32 +40,32 @@ open class NSFontManager(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, newMenu)
     }
     
-    open fun fontMenu(create: BOOL): MemorySegment {
+    open fun fontMenu(create: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("fontMenu:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, create) as MemorySegment
     }
     
-    open fun fontPanel(create: BOOL): MemorySegment {
+    open fun fontPanel(create: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("fontPanel:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, create) as MemorySegment
     }
     
-    open fun fontWithFamily_traits_weight_size(family: MemorySegment, traits: NSFontTraitMask, weight: NSInteger, size: CGFloat): MemorySegment {
+    open fun fontWithFamily_traits_weight_size(family: MemorySegment, traits: MemorySegment, weight: Long, size: Double): MemorySegment {
         val sel = ObjCRuntime.sel("fontWithFamily:traits:weight:size:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, family, traits, weight, size) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun fontWithFamily_traits_weight_size(family: String, traits: NSFontTraitMask, weight: NSInteger, size: CGFloat): MemorySegment = fontWithFamily_traits_weight_size(ObjCRuntime.newNSString(Arena.global(), family), traits, weight, size)
+    fun fontWithFamily_traits_weight_size(family: String, traits: MemorySegment, weight: Long, size: Double): MemorySegment = fontWithFamily_traits_weight_size(ObjCRuntime.newNSString(Arena.global(), family), traits, weight, size)
     
-    open fun traitsOfFont(fontObj: MemorySegment): NSFontTraitMask {
+    open fun traitsOfFont(fontObj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("traitsOfFont:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj) as NSFontTraitMask
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj) as MemorySegment
     }
     
-    open fun weightOfFont(fontObj: MemorySegment): NSInteger {
+    open fun weightOfFont(fontObj: MemorySegment): Long {
         val sel = ObjCRuntime.sel("weightOfFont:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, fontObj) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, fontObj) as Long
     }
     
     /** @return NSArray<NSArray *> * */
@@ -75,14 +75,14 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun availableMembersOfFontFamily(fam: String): MemorySegment = availableMembersOfFontFamily(ObjCRuntime.newNSString(Arena.global(), fam))
+    fun availableMembersOfFontFamily(fam: String): MemorySegment = availableMembersOfFontFamily(ObjCRuntime.newNSString(Arena.global(), fam))
     
     open fun convertFont(fontObj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertFont:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj) as MemorySegment
     }
     
-    open fun convertFont_toSize(fontObj: MemorySegment, size: CGFloat): MemorySegment {
+    open fun convertFont_toSize(fontObj: MemorySegment, size: Double): MemorySegment {
         val sel = ObjCRuntime.sel("convertFont:toSize:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj, size) as MemorySegment
     }
@@ -93,7 +93,7 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun convertFont_toFace(fontObj: MemorySegment, typeface: String): MemorySegment = convertFont_toFace(fontObj, ObjCRuntime.newNSString(Arena.global(), typeface))
+    fun convertFont_toFace(fontObj: MemorySegment, typeface: String): MemorySegment = convertFont_toFace(fontObj, ObjCRuntime.newNSString(Arena.global(), typeface))
     
     open fun convertFont_toFamily(fontObj: MemorySegment, family: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertFont:toFamily:")
@@ -101,26 +101,26 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun convertFont_toFamily(fontObj: MemorySegment, family: String): MemorySegment = convertFont_toFamily(fontObj, ObjCRuntime.newNSString(Arena.global(), family))
+    fun convertFont_toFamily(fontObj: MemorySegment, family: String): MemorySegment = convertFont_toFamily(fontObj, ObjCRuntime.newNSString(Arena.global(), family))
     
-    open fun convertFont_toHaveTrait(fontObj: MemorySegment, trait: NSFontTraitMask): MemorySegment {
+    open fun convertFont_toHaveTrait(fontObj: MemorySegment, trait: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertFont:toHaveTrait:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj, trait) as MemorySegment
     }
     
-    open fun convertFont_toNotHaveTrait(fontObj: MemorySegment, trait: NSFontTraitMask): MemorySegment {
+    open fun convertFont_toNotHaveTrait(fontObj: MemorySegment, trait: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertFont:toNotHaveTrait:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontObj, trait) as MemorySegment
     }
     
-    open fun convertWeight_ofFont(upFlag: BOOL, fontObj: MemorySegment): MemorySegment {
+    open fun convertWeight_ofFont(upFlag: Boolean, fontObj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertWeight:ofFont:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, upFlag, fontObj) as MemorySegment
     }
     
-    open fun sendAction(): BOOL {
+    open fun sendAction(): Boolean {
         val sel = ObjCRuntime.sel("sendAction")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun localizedNameForFamily_face(family: MemorySegment, faceKey: MemorySegment): MemorySegment {
@@ -129,15 +129,15 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun localizedNameForFamily_faceAsString(family: MemorySegment, faceKey: MemorySegment): String = ObjCRuntime.toJavaString(localizedNameForFamily_face(family, faceKey))
+    fun localizedNameForFamily_faceAsString(family: MemorySegment, faceKey: MemorySegment): String = ObjCRuntime.toJavaString(localizedNameForFamily_face(family, faceKey))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun localizedNameForFamily_face(family: String, faceKey: String): MemorySegment = localizedNameForFamily_face(ObjCRuntime.newNSString(Arena.global(), family), ObjCRuntime.newNSString(Arena.global(), faceKey))
+    fun localizedNameForFamily_face(family: String, faceKey: String): MemorySegment = localizedNameForFamily_face(ObjCRuntime.newNSString(Arena.global(), family), ObjCRuntime.newNSString(Arena.global(), faceKey))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun localizedNameForFamily_faceAsString(family: String, faceKey: String): String = ObjCRuntime.toJavaString(localizedNameForFamily_face(ObjCRuntime.newNSString(Arena.global(), family), ObjCRuntime.newNSString(Arena.global(), faceKey)))
+    fun localizedNameForFamily_faceAsString(family: String, faceKey: String): String = ObjCRuntime.toJavaString(localizedNameForFamily_face(ObjCRuntime.newNSString(Arena.global(), family), ObjCRuntime.newNSString(Arena.global(), faceKey)))
     
-    open fun setSelectedAttributes_isMultiple(attributes: MemorySegment, flag: BOOL): Unit {
+    open fun setSelectedAttributes_isMultiple(attributes: MemorySegment, flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("setSelectedAttributes:isMultiple:")
         ObjCRuntime.msgSend(null, ptr, sel, attributes, flag)
     }
@@ -159,23 +159,23 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun fontDescriptorsInCollection(collectionNames: String): MemorySegment = fontDescriptorsInCollection(ObjCRuntime.newNSString(Arena.global(), collectionNames))
+    fun fontDescriptorsInCollection(collectionNames: String): MemorySegment = fontDescriptorsInCollection(ObjCRuntime.newNSString(Arena.global(), collectionNames))
     
-    open fun addCollection_options(collectionName: MemorySegment, collectionOptions: NSFontCollectionOptions): BOOL {
+    open fun addCollection_options(collectionName: MemorySegment, collectionOptions: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("addCollection:options:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, collectionName, collectionOptions) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, collectionName, collectionOptions) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addCollection_options(collectionName: String, collectionOptions: NSFontCollectionOptions): BOOL = addCollection_options(ObjCRuntime.newNSString(Arena.global(), collectionName), collectionOptions)
+    fun addCollection_options(collectionName: String, collectionOptions: MemorySegment): Boolean = addCollection_options(ObjCRuntime.newNSString(Arena.global(), collectionName), collectionOptions)
     
-    open fun removeCollection(collectionName: MemorySegment): BOOL {
+    open fun removeCollection(collectionName: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("removeCollection:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, collectionName) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, collectionName) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removeCollection(collectionName: String): BOOL = removeCollection(ObjCRuntime.newNSString(Arena.global(), collectionName))
+    fun removeCollection(collectionName: String): Boolean = removeCollection(ObjCRuntime.newNSString(Arena.global(), collectionName))
     
     open fun addFontDescriptors_toCollection(descriptors: MemorySegment, collectionName: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addFontDescriptors:toCollection:")
@@ -183,7 +183,7 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addFontDescriptors_toCollection(descriptors: MemorySegment, collectionName: String): Unit = addFontDescriptors_toCollection(descriptors, ObjCRuntime.newNSString(Arena.global(), collectionName))
+    fun addFontDescriptors_toCollection(descriptors: MemorySegment, collectionName: String): Unit = addFontDescriptors_toCollection(descriptors, ObjCRuntime.newNSString(Arena.global(), collectionName))
     
     open fun removeFontDescriptor_fromCollection(descriptor: MemorySegment, collection: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeFontDescriptor:fromCollection:")
@@ -191,17 +191,23 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removeFontDescriptor_fromCollection(descriptor: MemorySegment, collection: String): Unit = removeFontDescriptor_fromCollection(descriptor, ObjCRuntime.newNSString(Arena.global(), collection))
+    fun removeFontDescriptor_fromCollection(descriptor: MemorySegment, collection: String): Unit = removeFontDescriptor_fromCollection(descriptor, ObjCRuntime.newNSString(Arena.global(), collection))
     
-    open fun convertFontTraits(traits: NSFontTraitMask): NSFontTraitMask {
+    open fun convertFontTraits(traits: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("convertFontTraits:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, traits) as NSFontTraitMask
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, traits) as MemorySegment
     }
     
     // @property sharedFontManager
-    open fun isMultiple(): BOOL {
+    open fun sharedFontManager(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedFontManager")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property multiple
+    open fun isMultiple(): Boolean {
         val sel = ObjCRuntime.sel("isMultiple")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property selectedFont
@@ -225,11 +231,11 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     // @property enabled
-    open fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -261,9 +267,9 @@ open class NSFontManager(val ptr: MemorySegment) {
     }
     
     // @property currentFontAction
-    open fun currentFontAction(): NSFontAction {
+    open fun currentFontAction(): MemorySegment {
         val sel = ObjCRuntime.sel("currentFontAction")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFontAction
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property target
@@ -280,44 +286,44 @@ open class NSFontManager(val ptr: MemorySegment) {
 
 // ── Category: NSFontManagerMenuActionMethods on NSFontManager ─────────────────────────────────────────
 
-fun NSFontManager.fontNamed_hasTraits(fName: MemorySegment, someTraits: NSFontTraitMask): BOOL {
+fun NSFontManager.fontNamed_hasTraits(fName: MemorySegment, someTraits: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("fontNamed:hasTraits:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, fName, someTraits) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, fName, someTraits) as Boolean
 }
 
 /** @return NSArray<NSString *> * */
-fun NSFontManager.availableFontNamesWithTraits(someTraits: NSFontTraitMask): MemorySegment {
+fun NSFontManager.availableFontNamesWithTraits(someTraits: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("availableFontNamesWithTraits:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, someTraits) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, someTraits) as MemorySegment
 }
 
 fun NSFontManager.addFontTrait(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("addFontTrait:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSFontManager.removeFontTrait(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeFontTrait:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSFontManager.modifyFontViaPanel(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("modifyFontViaPanel:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSFontManager.modifyFont(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("modifyFont:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSFontManager.orderFrontFontPanel(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("orderFrontFontPanel:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 fun NSFontManager.orderFrontStylesPanel(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("orderFrontStylesPanel:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 

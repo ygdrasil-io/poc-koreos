@@ -8,23 +8,23 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSDraggingInfo
  * Inherits protocols: NSObject
  */
-interface NSDraggingInfo : NSObject {
-    fun slideDraggedImageTo(screenPoint: NSPoint)
+interface NSDraggingInfo {
+    fun slideDraggedImageTo(screenPoint: MemorySegment): Unit
     
     /** @return NSArray<NSString *> * */
     fun namesOfPromisedFilesDroppedAtDestination(dropDestination: MemorySegment): MemorySegment
     
-    fun enumerateDraggingItemsWithOptions_forView_classes_searchOptions_usingBlock(enumOpts: NSDraggingItemEnumerationOptions, view: MemorySegment, classArray: MemorySegment, searchOptions: MemorySegment, block: MemorySegment)
+    fun enumerateDraggingItemsWithOptions_forView_classes_searchOptions_usingBlock(enumOpts: MemorySegment, view: MemorySegment, classArray: MemorySegment, searchOptions: MemorySegment, block: MemorySegment): Unit
     
-    fun resetSpringLoading()
+    fun resetSpringLoading(): Unit
     
     fun draggingDestinationWindow(): MemorySegment
     
-    fun draggingSourceOperationMask(): NSDragOperation
+    fun draggingSourceOperationMask(): MemorySegment
     
-    fun draggingLocation(): NSPoint
+    fun draggingLocation(): MemorySegment
     
-    fun draggedImageLocation(): NSPoint
+    fun draggedImageLocation(): MemorySegment
     
     fun draggedImage(): MemorySegment
     
@@ -32,22 +32,21 @@ interface NSDraggingInfo : NSObject {
     
     fun draggingSource(): MemorySegment
     
-    fun draggingSequenceNumber(): NSInteger
+    fun draggingSequenceNumber(): Long
     
-    fun draggingFormation(): NSDraggingFormation
+    fun draggingFormation(): MemorySegment
     
-    fun setDraggingFormation(draggingFormation: NSDraggingFormation)
+    fun setDraggingFormation(draggingFormation: MemorySegment): Unit
     
-    fun animatesToDestination(): BOOL
+    fun animatesToDestination(): Boolean
     
-    fun setAnimatesToDestination(animatesToDestination: BOOL)
+    fun setAnimatesToDestination(animatesToDestination: Boolean): Unit
     
-    fun numberOfValidItemsForDrop(): NSInteger
+    fun numberOfValidItemsForDrop(): Long
     
-    fun setNumberOfValidItemsForDrop(numberOfValidItemsForDrop: NSInteger)
+    fun setNumberOfValidItemsForDrop(numberOfValidItemsForDrop: Long): Unit
     
-    fun springLoadingHighlight(): NSSpringLoadingHighlight
+    fun springLoadingHighlight(): MemorySegment
     
-    // @property draggingDestinationWindow
 }
 

@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextRange
  * Superclass: NSObject
  */
-open class NSTextRange(val ptr: MemorySegment) {
+open class NSTextRange(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextRange") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -34,24 +34,24 @@ open class NSTextRange(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun isEqualToTextRange(textRange: MemorySegment): BOOL {
+    open fun isEqualToTextRange(textRange: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isEqualToTextRange:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as Boolean
     }
     
-    open fun containsLocation(location: MemorySegment): BOOL {
+    open fun containsLocation(location: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsLocation:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, location) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, location) as Boolean
     }
     
-    open fun containsRange(textRange: MemorySegment): BOOL {
+    open fun containsRange(textRange: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsRange:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as Boolean
     }
     
-    open fun intersectsWithTextRange(textRange: MemorySegment): BOOL {
+    open fun intersectsWithTextRange(textRange: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("intersectsWithTextRange:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textRange) as Boolean
     }
     
     open fun textRangeByIntersectingWithTextRange(textRange: MemorySegment): MemorySegment {
@@ -65,9 +65,9 @@ open class NSTextRange(val ptr: MemorySegment) {
     }
     
     // @property empty
-    open fun isEmpty(): BOOL {
+    open fun isEmpty(): Boolean {
         val sel = ObjCRuntime.sel("isEmpty")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property location

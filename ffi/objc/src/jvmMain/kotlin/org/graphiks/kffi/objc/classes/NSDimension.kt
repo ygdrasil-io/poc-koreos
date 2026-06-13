@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSUnit
  * Protocols: NSSecureCoding
  */
-open class NSDimension(ptr: MemorySegment) : NSUnit(ptr) {
+open class NSDimension(override val ptr: MemorySegment) : NSUnit(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDimension") }
         
@@ -20,7 +20,7 @@ open class NSDimension(ptr: MemorySegment) : NSUnit(ptr) {
         
     }
     
-    fun initWithSymbol_converter(symbol: MemorySegment, converter: MemorySegment): MemorySegment {
+    open fun initWithSymbol_converter(symbol: MemorySegment, converter: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithSymbol:converter:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, symbol, converter) as MemorySegment
     }
@@ -29,14 +29,14 @@ open class NSDimension(ptr: MemorySegment) : NSUnit(ptr) {
     fun initWithSymbol_converter(symbol: String, converter: MemorySegment): MemorySegment = initWithSymbol_converter(ObjCRuntime.newNSString(Arena.global(), symbol), converter)
     
     // @property converter
-    fun converter(): MemorySegment {
+    open fun converter(): MemorySegment {
         val sel = ObjCRuntime.sel("converter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _reserved: NSUInteger
+    // ivar: _reserved: Long
     // ivar: _converter: MemorySegment
 }
 

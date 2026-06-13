@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitFuelEfficiency(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitFuelEfficiency(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitFuelEfficiency") }
         
@@ -31,5 +31,22 @@ open class NSUnitFuelEfficiency(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property litersPer100Kilometers
+    open fun litersPer100Kilometers(): MemorySegment {
+        val sel = ObjCRuntime.sel("litersPer100Kilometers")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property milesPerImperialGallon
+    open fun milesPerImperialGallon(): MemorySegment {
+        val sel = ObjCRuntime.sel("milesPerImperialGallon")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property milesPerGallon
+    open fun milesPerGallon(): MemorySegment {
+        val sel = ObjCRuntime.sel("milesPerGallon")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

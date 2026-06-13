@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSExtensionRequestHandling
  * Inherits protocols: NSObject
  */
-interface NSExtensionRequestHandling : NSObject {
-    fun beginRequestWithExtensionContext(context: MemorySegment)
+interface NSExtensionRequestHandling {
+    fun beginRequestWithExtensionContext(context: MemorySegment): Unit
     
 }
 

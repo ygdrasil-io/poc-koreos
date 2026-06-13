@@ -8,16 +8,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSUserActivity
  * Superclass: NSObject
  */
-open class NSUserActivity(val ptr: MemorySegment) {
+open class NSUserActivity(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserActivity") }
         
-        open fun deleteSavedUserActivitiesWithPersistentIdentifiers_completionHandler(persistentIdentifiers: MemorySegment, handler: MemorySegment): Unit {
+        fun deleteSavedUserActivitiesWithPersistentIdentifiers_completionHandler(persistentIdentifiers: MemorySegment, handler: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("deleteSavedUserActivitiesWithPersistentIdentifiers:completionHandler:")
             ObjCRuntime.msgSend(null, _class, sel, persistentIdentifiers, handler)
         }
         
-        open fun deleteAllSavedUserActivitiesWithCompletionHandler(handler: MemorySegment): Unit {
+        fun deleteAllSavedUserActivitiesWithCompletionHandler(handler: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("deleteAllSavedUserActivitiesWithCompletionHandler:")
             ObjCRuntime.msgSend(null, _class, sel, handler)
         }
@@ -30,7 +30,7 @@ open class NSUserActivity(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithActivityType(activityType: String): MemorySegment = initWithActivityType(ObjCRuntime.newNSString(Arena.global(), activityType))
+    fun initWithActivityType(activityType: String): MemorySegment = initWithActivityType(ObjCRuntime.newNSString(Arena.global(), activityType))
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
@@ -109,11 +109,11 @@ open class NSUserActivity(val ptr: MemorySegment) {
     }
     
     // @property needsSave
-    open fun needsSave(): BOOL {
+    open fun needsSave(): Boolean {
         val sel = ObjCRuntime.sel("needsSave")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setNeedsSave(value: BOOL) {
+    open fun setNeedsSave(value: Boolean) {
         val sel = ObjCRuntime.sel("setNeedsSave:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -160,11 +160,11 @@ open class NSUserActivity(val ptr: MemorySegment) {
     }
     
     // @property supportsContinuationStreams
-    open fun supportsContinuationStreams(): BOOL {
+    open fun supportsContinuationStreams(): Boolean {
         val sel = ObjCRuntime.sel("supportsContinuationStreams")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setSupportsContinuationStreams(value: BOOL) {
+    open fun setSupportsContinuationStreams(value: Boolean) {
         val sel = ObjCRuntime.sel("setSupportsContinuationStreams:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -197,51 +197,51 @@ open class NSUserActivity(val ptr: MemorySegment) {
     open fun setTargetContentIdentifier(value: String) = setTargetContentIdentifier(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property eligibleForHandoff
-    open fun isEligibleForHandoff(): BOOL {
+    open fun isEligibleForHandoff(): Boolean {
         val sel = ObjCRuntime.sel("isEligibleForHandoff")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEligibleForHandoff(value: BOOL) {
+    open fun setEligibleForHandoff(value: Boolean) {
         val sel = ObjCRuntime.sel("setEligibleForHandoff:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property eligibleForSearch
-    open fun isEligibleForSearch(): BOOL {
+    open fun isEligibleForSearch(): Boolean {
         val sel = ObjCRuntime.sel("isEligibleForSearch")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEligibleForSearch(value: BOOL) {
+    open fun setEligibleForSearch(value: Boolean) {
         val sel = ObjCRuntime.sel("setEligibleForSearch:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property eligibleForPublicIndexing
-    open fun isEligibleForPublicIndexing(): BOOL {
+    open fun isEligibleForPublicIndexing(): Boolean {
         val sel = ObjCRuntime.sel("isEligibleForPublicIndexing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEligibleForPublicIndexing(value: BOOL) {
+    open fun setEligibleForPublicIndexing(value: Boolean) {
         val sel = ObjCRuntime.sel("setEligibleForPublicIndexing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property eligibleForPrediction
-    open fun isEligibleForPrediction(): BOOL {
+    open fun isEligibleForPrediction(): Boolean {
         val sel = ObjCRuntime.sel("isEligibleForPrediction")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEligibleForPrediction(value: BOOL) {
+    open fun setEligibleForPrediction(value: Boolean) {
         val sel = ObjCRuntime.sel("setEligibleForPrediction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property persistentIdentifier
-    open fun persistentIdentifier(): NSUserActivityPersistentIdentifier {
+    open fun persistentIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("persistentIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserActivityPersistentIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setPersistentIdentifier(value: NSUserActivityPersistentIdentifier) {
+    open fun setPersistentIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPersistentIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

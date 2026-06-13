@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSExistsCommand
  * Superclass: NSScriptCommand
  */
-open class NSExistsCommand(ptr: MemorySegment) : NSScriptCommand(ptr) {
+open class NSExistsCommand(override val ptr: MemorySegment) : NSScriptCommand(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSExistsCommand") }
         

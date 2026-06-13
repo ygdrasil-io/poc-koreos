@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSWritingToolsCoordinatorAnimationParameters
  * Superclass: NSObject
  */
-open class NSWritingToolsCoordinatorAnimationParameters(val ptr: MemorySegment) {
+open class NSWritingToolsCoordinatorAnimationParameters(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSWritingToolsCoordinatorAnimationParameters") }
         
@@ -20,15 +20,15 @@ open class NSWritingToolsCoordinatorAnimationParameters(val ptr: MemorySegment) 
     }
     
     // @property duration
-    open fun duration(): CGFloat {
+    open fun duration(): Double {
         val sel = ObjCRuntime.sel("duration")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property delay
-    open fun delay(): CGFloat {
+    open fun delay(): Double {
         val sel = ObjCRuntime.sel("delay")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property progressHandler

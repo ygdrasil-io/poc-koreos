@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserActivityDelegate
  * Inherits protocols: NSObject
  */
-interface NSUserActivityDelegate : NSObject {
+interface NSUserActivityDelegate {
     // @optional
     fun userActivityWillSave(userActivity: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'userActivityWillSave:' not implemented")

@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSFastEnumeration
  */
-open class NSEnumerator(val ptr: MemorySegment) {
+open class NSEnumerator(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSEnumerator") }
         
@@ -27,8 +27,6 @@ open class NSEnumerator(val ptr: MemorySegment) {
 /** @return NSArray<ObjectType> * */
 fun NSEnumerator.allObjects(): MemorySegment {
     val sel = ObjCRuntime.sel("allObjects")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property allObjects
-/** @return NSArray<ObjectType> * */

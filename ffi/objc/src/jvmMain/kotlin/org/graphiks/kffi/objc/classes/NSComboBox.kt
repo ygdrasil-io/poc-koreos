@@ -8,199 +8,199 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSComboBox
  * Superclass: NSTextField
  */
-open class NSComboBox(ptr: MemorySegment) : NSTextField(ptr) {
+open class NSComboBox(override val ptr: MemorySegment) : NSTextField(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSComboBox") }
         
     }
     
-    fun reloadData(): Unit {
+    open fun reloadData(): Unit {
         val sel = ObjCRuntime.sel("reloadData")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun noteNumberOfItemsChanged(): Unit {
+    open fun noteNumberOfItemsChanged(): Unit {
         val sel = ObjCRuntime.sel("noteNumberOfItemsChanged")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun scrollItemAtIndexToTop(index: NSInteger): Unit {
+    open fun scrollItemAtIndexToTop(index: Long): Unit {
         val sel = ObjCRuntime.sel("scrollItemAtIndexToTop:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun scrollItemAtIndexToVisible(index: NSInteger): Unit {
+    open fun scrollItemAtIndexToVisible(index: Long): Unit {
         val sel = ObjCRuntime.sel("scrollItemAtIndexToVisible:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun selectItemAtIndex(index: NSInteger): Unit {
+    open fun selectItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("selectItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun deselectItemAtIndex(index: NSInteger): Unit {
+    open fun deselectItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("deselectItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun addItemWithObjectValue(`object`: MemorySegment): Unit {
+    open fun addItemWithObjectValue(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addItemWithObjectValue:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun addItemsWithObjectValues(objects: MemorySegment): Unit {
+    open fun addItemsWithObjectValues(objects: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addItemsWithObjectValues:")
         ObjCRuntime.msgSend(null, ptr, sel, objects)
     }
     
-    fun insertItemWithObjectValue_atIndex(`object`: MemorySegment, index: NSInteger): Unit {
+    open fun insertItemWithObjectValue_atIndex(`object`: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertItemWithObjectValue:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`, index)
     }
     
-    fun removeItemWithObjectValue(`object`: MemorySegment): Unit {
+    open fun removeItemWithObjectValue(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeItemWithObjectValue:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun removeItemAtIndex(index: NSInteger): Unit {
+    open fun removeItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun removeAllItems(): Unit {
+    open fun removeAllItems(): Unit {
         val sel = ObjCRuntime.sel("removeAllItems")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun selectItemWithObjectValue(`object`: MemorySegment): Unit {
+    open fun selectItemWithObjectValue(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectItemWithObjectValue:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun itemObjectValueAtIndex(index: NSInteger): MemorySegment {
+    open fun itemObjectValueAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("itemObjectValueAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun indexOfItemWithObjectValue(`object`: MemorySegment): NSInteger {
+    open fun indexOfItemWithObjectValue(`object`: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithObjectValue:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, `object`) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, `object`) as Long
     }
     
     // @property hasVerticalScroller
-    fun hasVerticalScroller(): BOOL {
+    open fun hasVerticalScroller(): Boolean {
         val sel = ObjCRuntime.sel("hasVerticalScroller")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setHasVerticalScroller(value: BOOL) {
+    open fun setHasVerticalScroller(value: Boolean) {
         val sel = ObjCRuntime.sel("setHasVerticalScroller:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property intercellSpacing
-    fun intercellSpacing(): NSSize {
+    open fun intercellSpacing(): MemorySegment {
         val sel = ObjCRuntime.sel("intercellSpacing")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setIntercellSpacing(value: NSSize) {
+    open fun setIntercellSpacing(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setIntercellSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property itemHeight
-    fun itemHeight(): CGFloat {
+    open fun itemHeight(): Double {
         val sel = ObjCRuntime.sel("itemHeight")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setItemHeight(value: CGFloat) {
+    open fun setItemHeight(value: Double) {
         val sel = ObjCRuntime.sel("setItemHeight:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfVisibleItems
-    fun numberOfVisibleItems(): NSInteger {
+    open fun numberOfVisibleItems(): Long {
         val sel = ObjCRuntime.sel("numberOfVisibleItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfVisibleItems(value: NSInteger) {
+    open fun setNumberOfVisibleItems(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfVisibleItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property buttonBordered
-    fun isButtonBordered(): BOOL {
+    open fun isButtonBordered(): Boolean {
         val sel = ObjCRuntime.sel("isButtonBordered")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setButtonBordered(value: BOOL) {
+    open fun setButtonBordered(value: Boolean) {
         val sel = ObjCRuntime.sel("setButtonBordered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesDataSource
-    fun usesDataSource(): BOOL {
+    open fun usesDataSource(): Boolean {
         val sel = ObjCRuntime.sel("usesDataSource")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setUsesDataSource(value: BOOL) {
+    open fun setUsesDataSource(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesDataSource:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property indexOfSelectedItem
-    fun indexOfSelectedItem(): NSInteger {
+    open fun indexOfSelectedItem(): Long {
         val sel = ObjCRuntime.sel("indexOfSelectedItem")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property numberOfItems
-    fun numberOfItems(): NSInteger {
+    open fun numberOfItems(): Long {
         val sel = ObjCRuntime.sel("numberOfItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property completes
-    fun completes(): BOOL {
+    open fun completes(): Boolean {
         val sel = ObjCRuntime.sel("completes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setCompletes(value: BOOL) {
+    open fun setCompletes(value: Boolean) {
         val sel = ObjCRuntime.sel("setCompletes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delegate
     /** @return id<NSComboBoxDelegate> */
-    override fun `delegate`(): MemorySegment {
+    override fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    override fun `setDelegate`(value: MemorySegment) {
+    override fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property dataSource
     /** @return id<NSComboBoxDataSource> */
-    fun dataSource(): MemorySegment {
+    open fun dataSource(): MemorySegment {
         val sel = ObjCRuntime.sel("dataSource")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDataSource(value: MemorySegment) {
+    open fun setDataSource(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDataSource:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property objectValueOfSelectedItem
-    fun objectValueOfSelectedItem(): MemorySegment {
+    open fun objectValueOfSelectedItem(): MemorySegment {
         val sel = ObjCRuntime.sel("objectValueOfSelectedItem")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property objectValues
-    fun objectValues(): MemorySegment {
+    open fun objectValues(): MemorySegment {
         val sel = ObjCRuntime.sel("objectValues")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

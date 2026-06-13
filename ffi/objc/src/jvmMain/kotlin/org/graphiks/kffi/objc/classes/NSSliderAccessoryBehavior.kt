@@ -9,31 +9,31 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding, NSCopying
  */
-open class NSSliderAccessoryBehavior(val ptr: MemorySegment) {
+open class NSSliderAccessoryBehavior(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSliderAccessoryBehavior") }
         
-        open fun behaviorWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
+        fun behaviorWithTarget_action(target: MemorySegment, action: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("behaviorWithTarget:action:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, target, action) as MemorySegment
         }
         
-        open fun behaviorWithHandler(handler: MemorySegment): MemorySegment {
+        fun behaviorWithHandler(handler: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("behaviorWithHandler:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, handler) as MemorySegment
         }
         
-        open fun automaticBehavior(): MemorySegment {
+        fun automaticBehavior(): MemorySegment {
             val sel = ObjCRuntime.sel("automaticBehavior")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun valueStepBehavior(): MemorySegment {
+        fun valueStepBehavior(): MemorySegment {
             val sel = ObjCRuntime.sel("valueStepBehavior")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun valueResetBehavior(): MemorySegment {
+        fun valueResetBehavior(): MemorySegment {
             val sel = ObjCRuntime.sel("valueResetBehavior")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -46,5 +46,22 @@ open class NSSliderAccessoryBehavior(val ptr: MemorySegment) {
     }
     
     // @property automaticBehavior
+    open fun automaticBehavior(): MemorySegment {
+        val sel = ObjCRuntime.sel("automaticBehavior")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property valueStepBehavior
+    open fun valueStepBehavior(): MemorySegment {
+        val sel = ObjCRuntime.sel("valueStepBehavior")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property valueResetBehavior
+    open fun valueResetBehavior(): MemorySegment {
+        val sel = ObjCRuntime.sel("valueResetBehavior")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

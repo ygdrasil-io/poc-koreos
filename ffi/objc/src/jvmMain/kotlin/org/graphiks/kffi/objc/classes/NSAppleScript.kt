@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSAppleScript(val ptr: MemorySegment) {
+open class NSAppleScript(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAppleScript") }
         
@@ -26,11 +26,11 @@ open class NSAppleScript(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithSource(source: String): MemorySegment = initWithSource(ObjCRuntime.newNSString(Arena.global(), source))
+    fun initWithSource(source: String): MemorySegment = initWithSource(ObjCRuntime.newNSString(Arena.global(), source))
     
-    open fun compileAndReturnError(errorInfo: MemorySegment): BOOL {
+    open fun compileAndReturnError(errorInfo: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("compileAndReturnError:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, errorInfo) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, errorInfo) as Boolean
     }
     
     open fun executeAndReturnError(errorInfo: MemorySegment): MemorySegment {
@@ -53,15 +53,15 @@ open class NSAppleScript(val ptr: MemorySegment) {
     open fun sourceAsString(): String = ObjCRuntime.toJavaString(source())
     
     // @property compiled
-    open fun isCompiled(): BOOL {
+    open fun isCompiled(): Boolean {
         val sel = ObjCRuntime.sel("isCompiled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _source: MemorySegment
-    // ivar: _compiledScriptID: Any
+    // ivar: _compiledScriptID: Int
     // ivar: _reserved1: MemorySegment
     // ivar: _reserved2: MemorySegment
 }
@@ -70,7 +70,6 @@ open class NSAppleScript(val ptr: MemorySegment) {
 
 fun NSAppleScript.richTextSource(): MemorySegment {
     val sel = ObjCRuntime.sel("richTextSource")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property richTextSource

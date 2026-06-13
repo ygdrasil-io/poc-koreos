@@ -9,35 +9,35 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding, NSFastEnumeration
  */
-open class NSHashTable(val ptr: MemorySegment) {
+open class NSHashTable(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSHashTable") }
         
         /** @return NSHashTable<ObjectType> * */
-        open fun hashTableWithOptions(options: NSPointerFunctionsOptions): MemorySegment {
+        fun hashTableWithOptions(options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("hashTableWithOptions:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, options) as MemorySegment
         }
         
-        open fun hashTableWithWeakObjects(): MemorySegment {
+        fun hashTableWithWeakObjects(): MemorySegment {
             val sel = ObjCRuntime.sel("hashTableWithWeakObjects")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
         /** @return NSHashTable<ObjectType> * */
-        open fun weakObjectsHashTable(): MemorySegment {
+        fun weakObjectsHashTable(): MemorySegment {
             val sel = ObjCRuntime.sel("weakObjectsHashTable")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun initWithOptions_capacity(options: NSPointerFunctionsOptions, initialCapacity: NSUInteger): MemorySegment {
+    open fun initWithOptions_capacity(options: MemorySegment, initialCapacity: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithOptions:capacity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options, initialCapacity) as MemorySegment
     }
     
-    open fun initWithPointerFunctions_capacity(functions: MemorySegment, initialCapacity: NSUInteger): MemorySegment {
+    open fun initWithPointerFunctions_capacity(functions: MemorySegment, initialCapacity: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithPointerFunctions:capacity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, functions, initialCapacity) as MemorySegment
     }
@@ -68,24 +68,24 @@ open class NSHashTable(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun containsObject(anObject: MemorySegment): BOOL {
+    open fun containsObject(anObject: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsObject:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, anObject) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, anObject) as Boolean
     }
     
-    open fun intersectsHashTable(other: MemorySegment): BOOL {
+    open fun intersectsHashTable(other: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("intersectsHashTable:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as Boolean
     }
     
-    open fun isEqualToHashTable(other: MemorySegment): BOOL {
+    open fun isEqualToHashTable(other: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isEqualToHashTable:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as Boolean
     }
     
-    open fun isSubsetOfHashTable(other: MemorySegment): BOOL {
+    open fun isSubsetOfHashTable(other: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isSubsetOfHashTable:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, other) as Boolean
     }
     
     open fun intersectHashTable(other: MemorySegment): Unit {
@@ -110,9 +110,9 @@ open class NSHashTable(val ptr: MemorySegment) {
     }
     
     // @property count
-    open fun count(): NSUInteger {
+    open fun count(): Long {
         val sel = ObjCRuntime.sel("count")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property allObjects

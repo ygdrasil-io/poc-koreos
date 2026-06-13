@@ -8,569 +8,561 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibility
  * Inherits protocols: NSObject
  */
-interface NSAccessibility : NSObject {
-    fun accessibilityLayoutPointForScreenPoint(point: NSPoint): NSPoint
+interface NSAccessibility {
+    fun accessibilityLayoutPointForScreenPoint(point: MemorySegment): MemorySegment
     
-    fun accessibilityLayoutSizeForScreenSize(size: NSSize): NSSize
+    fun accessibilityLayoutSizeForScreenSize(size: MemorySegment): MemorySegment
     
-    fun accessibilityScreenPointForLayoutPoint(point: NSPoint): NSPoint
+    fun accessibilityScreenPointForLayoutPoint(point: MemorySegment): MemorySegment
     
-    fun accessibilityScreenSizeForLayoutSize(size: NSSize): NSSize
+    fun accessibilityScreenSizeForLayoutSize(size: MemorySegment): MemorySegment
     
-    fun accessibilityCellForColumn_row(column: NSInteger, row: NSInteger): MemorySegment
+    fun accessibilityCellForColumn_row(column: Long, row: Long): MemorySegment
     
-    fun accessibilityAttributedStringForRange(range: NSRange): MemorySegment
+    fun accessibilityAttributedStringForRange(range: MemorySegment): MemorySegment
     
-    fun accessibilityRangeForLine(line: NSInteger): NSRange
+    fun accessibilityRangeForLine(line: Long): MemorySegment
     
-    fun accessibilityStringForRange(range: NSRange): MemorySegment
+    fun accessibilityStringForRange(range: MemorySegment): MemorySegment
     
-    fun accessibilityRangeForPosition(point: NSPoint): NSRange
+    fun accessibilityRangeForPosition(point: MemorySegment): MemorySegment
     
-    fun accessibilityRangeForIndex(index: NSInteger): NSRange
+    fun accessibilityRangeForIndex(index: Long): MemorySegment
     
-    fun accessibilityFrameForRange(range: NSRange): NSRect
+    fun accessibilityFrameForRange(range: MemorySegment): MemorySegment
     
-    fun accessibilityRTFForRange(range: NSRange): MemorySegment
+    fun accessibilityRTFForRange(range: MemorySegment): MemorySegment
     
-    fun accessibilityStyleRangeForIndex(index: NSInteger): NSRange
+    fun accessibilityStyleRangeForIndex(index: Long): MemorySegment
     
-    fun accessibilityLineForIndex(index: NSInteger): NSInteger
+    fun accessibilityLineForIndex(index: Long): Long
     
-    fun accessibilityPerformCancel(): BOOL
+    fun accessibilityPerformCancel(): Boolean
     
-    fun accessibilityPerformConfirm(): BOOL
+    fun accessibilityPerformConfirm(): Boolean
     
-    fun accessibilityPerformDecrement(): BOOL
+    fun accessibilityPerformDecrement(): Boolean
     
-    fun accessibilityPerformDelete(): BOOL
+    fun accessibilityPerformDelete(): Boolean
     
-    fun accessibilityPerformIncrement(): BOOL
+    fun accessibilityPerformIncrement(): Boolean
     
-    fun accessibilityPerformPick(): BOOL
+    fun accessibilityPerformPick(): Boolean
     
-    fun accessibilityPerformPress(): BOOL
+    fun accessibilityPerformPress(): Boolean
     
-    fun accessibilityPerformRaise(): BOOL
+    fun accessibilityPerformRaise(): Boolean
     
-    fun accessibilityPerformShowAlternateUI(): BOOL
+    fun accessibilityPerformShowAlternateUI(): Boolean
     
-    fun accessibilityPerformShowDefaultUI(): BOOL
+    fun accessibilityPerformShowDefaultUI(): Boolean
     
-    fun accessibilityPerformShowMenu(): BOOL
+    fun accessibilityPerformShowMenu(): Boolean
     
-    fun isAccessibilitySelectorAllowed(selector: MemorySegment): BOOL
+    fun isAccessibilitySelectorAllowed(selector: MemorySegment): Boolean
     
-    fun isAccessibilityElement(): BOOL
+    fun isAccessibilityElement(): Boolean
     
-    fun setAccessibilityElement(accessibilityElement: BOOL)
+    fun setAccessibilityElement(accessibilityElement: Boolean): Unit
     
-    fun accessibilityFrame(): NSRect
+    fun accessibilityFrame(): MemorySegment
     
-    fun setAccessibilityFrame(accessibilityFrame: NSRect)
+    fun setAccessibilityFrame(accessibilityFrame: MemorySegment): Unit
     
-    fun isAccessibilityFocused(): BOOL
+    fun isAccessibilityFocused(): Boolean
     
-    fun setAccessibilityFocused(accessibilityFocused: BOOL)
+    fun setAccessibilityFocused(accessibilityFocused: Boolean): Unit
     
-    fun accessibilityActivationPoint(): NSPoint
+    fun accessibilityActivationPoint(): MemorySegment
     
-    fun setAccessibilityActivationPoint(accessibilityActivationPoint: NSPoint)
+    fun setAccessibilityActivationPoint(accessibilityActivationPoint: MemorySegment): Unit
     
     fun accessibilityTopLevelUIElement(): MemorySegment
     
-    fun setAccessibilityTopLevelUIElement(accessibilityTopLevelUIElement: MemorySegment)
+    fun setAccessibilityTopLevelUIElement(accessibilityTopLevelUIElement: MemorySegment): Unit
     
     fun accessibilityURL(): MemorySegment
     
-    fun setAccessibilityURL(accessibilityURL: MemorySegment)
+    fun setAccessibilityURL(accessibilityURL: MemorySegment): Unit
     
     fun accessibilityValue(): MemorySegment
     
-    fun setAccessibilityValue(accessibilityValue: MemorySegment)
+    fun setAccessibilityValue(accessibilityValue: MemorySegment): Unit
     
     fun accessibilityValueDescription(): MemorySegment
     
-    fun setAccessibilityValueDescription(accessibilityValueDescription: MemorySegment)
+    fun setAccessibilityValueDescription(accessibilityValueDescription: MemorySegment): Unit
     
     fun accessibilityVisibleChildren(): MemorySegment
     
-    fun setAccessibilityVisibleChildren(accessibilityVisibleChildren: MemorySegment)
+    fun setAccessibilityVisibleChildren(accessibilityVisibleChildren: MemorySegment): Unit
     
-    fun accessibilitySubrole(): NSAccessibilitySubrole
+    fun accessibilitySubrole(): MemorySegment
     
-    fun setAccessibilitySubrole(accessibilitySubrole: NSAccessibilitySubrole)
+    fun setAccessibilitySubrole(accessibilitySubrole: MemorySegment): Unit
     
     fun accessibilityTitle(): MemorySegment
     
-    fun setAccessibilityTitle(accessibilityTitle: MemorySegment)
+    fun setAccessibilityTitle(accessibilityTitle: MemorySegment): Unit
     
     fun accessibilityTitleUIElement(): MemorySegment
     
-    fun setAccessibilityTitleUIElement(accessibilityTitleUIElement: MemorySegment)
+    fun setAccessibilityTitleUIElement(accessibilityTitleUIElement: MemorySegment): Unit
     
     fun accessibilityNextContents(): MemorySegment
     
-    fun setAccessibilityNextContents(accessibilityNextContents: MemorySegment)
+    fun setAccessibilityNextContents(accessibilityNextContents: MemorySegment): Unit
     
-    fun accessibilityOrientation(): NSAccessibilityOrientation
+    fun accessibilityOrientation(): MemorySegment
     
-    fun setAccessibilityOrientation(accessibilityOrientation: NSAccessibilityOrientation)
+    fun setAccessibilityOrientation(accessibilityOrientation: MemorySegment): Unit
     
     fun accessibilityOverflowButton(): MemorySegment
     
-    fun setAccessibilityOverflowButton(accessibilityOverflowButton: MemorySegment)
+    fun setAccessibilityOverflowButton(accessibilityOverflowButton: MemorySegment): Unit
     
     fun accessibilityParent(): MemorySegment
     
-    fun setAccessibilityParent(accessibilityParent: MemorySegment)
+    fun setAccessibilityParent(accessibilityParent: MemorySegment): Unit
     
     fun accessibilityPlaceholderValue(): MemorySegment
     
-    fun setAccessibilityPlaceholderValue(accessibilityPlaceholderValue: MemorySegment)
+    fun setAccessibilityPlaceholderValue(accessibilityPlaceholderValue: MemorySegment): Unit
     
     fun accessibilityPreviousContents(): MemorySegment
     
-    fun setAccessibilityPreviousContents(accessibilityPreviousContents: MemorySegment)
+    fun setAccessibilityPreviousContents(accessibilityPreviousContents: MemorySegment): Unit
     
-    fun accessibilityRole(): NSAccessibilityRole
+    fun accessibilityRole(): MemorySegment
     
-    fun setAccessibilityRole(accessibilityRole: NSAccessibilityRole)
+    fun setAccessibilityRole(accessibilityRole: MemorySegment): Unit
     
     fun accessibilityRoleDescription(): MemorySegment
     
-    fun setAccessibilityRoleDescription(accessibilityRoleDescription: MemorySegment)
+    fun setAccessibilityRoleDescription(accessibilityRoleDescription: MemorySegment): Unit
     
     fun accessibilitySearchButton(): MemorySegment
     
-    fun setAccessibilitySearchButton(accessibilitySearchButton: MemorySegment)
+    fun setAccessibilitySearchButton(accessibilitySearchButton: MemorySegment): Unit
     
     fun accessibilitySearchMenu(): MemorySegment
     
-    fun setAccessibilitySearchMenu(accessibilitySearchMenu: MemorySegment)
+    fun setAccessibilitySearchMenu(accessibilitySearchMenu: MemorySegment): Unit
     
-    fun isAccessibilitySelected(): BOOL
+    fun isAccessibilitySelected(): Boolean
     
-    fun setAccessibilitySelected(accessibilitySelected: BOOL)
+    fun setAccessibilitySelected(accessibilitySelected: Boolean): Unit
     
     fun accessibilitySelectedChildren(): MemorySegment
     
-    fun setAccessibilitySelectedChildren(accessibilitySelectedChildren: MemorySegment)
+    fun setAccessibilitySelectedChildren(accessibilitySelectedChildren: MemorySegment): Unit
     
     fun accessibilityServesAsTitleForUIElements(): MemorySegment
     
-    fun setAccessibilityServesAsTitleForUIElements(accessibilityServesAsTitleForUIElements: MemorySegment)
+    fun setAccessibilityServesAsTitleForUIElements(accessibilityServesAsTitleForUIElements: MemorySegment): Unit
     
     fun accessibilityShownMenu(): MemorySegment
     
-    fun setAccessibilityShownMenu(accessibilityShownMenu: MemorySegment)
+    fun setAccessibilityShownMenu(accessibilityShownMenu: MemorySegment): Unit
     
     fun accessibilityMinValue(): MemorySegment
     
-    fun setAccessibilityMinValue(accessibilityMinValue: MemorySegment)
+    fun setAccessibilityMinValue(accessibilityMinValue: MemorySegment): Unit
     
     fun accessibilityMaxValue(): MemorySegment
     
-    fun setAccessibilityMaxValue(accessibilityMaxValue: MemorySegment)
+    fun setAccessibilityMaxValue(accessibilityMaxValue: MemorySegment): Unit
     
     fun accessibilityLinkedUIElements(): MemorySegment
     
-    fun setAccessibilityLinkedUIElements(accessibilityLinkedUIElements: MemorySegment)
+    fun setAccessibilityLinkedUIElements(accessibilityLinkedUIElements: MemorySegment): Unit
     
     fun accessibilityWindow(): MemorySegment
     
-    fun setAccessibilityWindow(accessibilityWindow: MemorySegment)
+    fun setAccessibilityWindow(accessibilityWindow: MemorySegment): Unit
     
     fun accessibilityIdentifier(): MemorySegment
     
-    fun setAccessibilityIdentifier(accessibilityIdentifier: MemorySegment)
+    fun setAccessibilityIdentifier(accessibilityIdentifier: MemorySegment): Unit
     
     fun accessibilityHelp(): MemorySegment
     
-    fun setAccessibilityHelp(accessibilityHelp: MemorySegment)
+    fun setAccessibilityHelp(accessibilityHelp: MemorySegment): Unit
     
     fun accessibilityFilename(): MemorySegment
     
-    fun setAccessibilityFilename(accessibilityFilename: MemorySegment)
+    fun setAccessibilityFilename(accessibilityFilename: MemorySegment): Unit
     
-    fun isAccessibilityExpanded(): BOOL
+    fun isAccessibilityExpanded(): Boolean
     
-    fun setAccessibilityExpanded(accessibilityExpanded: BOOL)
+    fun setAccessibilityExpanded(accessibilityExpanded: Boolean): Unit
     
-    fun isAccessibilityEdited(): BOOL
+    fun isAccessibilityEdited(): Boolean
     
-    fun setAccessibilityEdited(accessibilityEdited: BOOL)
+    fun setAccessibilityEdited(accessibilityEdited: Boolean): Unit
     
-    fun isAccessibilityEnabled(): BOOL
+    fun isAccessibilityEnabled(): Boolean
     
-    fun setAccessibilityEnabled(accessibilityEnabled: BOOL)
+    fun setAccessibilityEnabled(accessibilityEnabled: Boolean): Unit
     
     fun accessibilityChildren(): MemorySegment
     
-    fun setAccessibilityChildren(accessibilityChildren: MemorySegment)
+    fun setAccessibilityChildren(accessibilityChildren: MemorySegment): Unit
     
     /** @return NSArray<id<NSAccessibilityElement>> * */
     fun accessibilityChildrenInNavigationOrder(): MemorySegment
     
-    fun setAccessibilityChildrenInNavigationOrder(accessibilityChildrenInNavigationOrder: MemorySegment)
+    fun setAccessibilityChildrenInNavigationOrder(accessibilityChildrenInNavigationOrder: MemorySegment): Unit
     
     fun accessibilityClearButton(): MemorySegment
     
-    fun setAccessibilityClearButton(accessibilityClearButton: MemorySegment)
+    fun setAccessibilityClearButton(accessibilityClearButton: MemorySegment): Unit
     
     fun accessibilityCancelButton(): MemorySegment
     
-    fun setAccessibilityCancelButton(accessibilityCancelButton: MemorySegment)
+    fun setAccessibilityCancelButton(accessibilityCancelButton: MemorySegment): Unit
     
-    fun isAccessibilityProtectedContent(): BOOL
+    fun isAccessibilityProtectedContent(): Boolean
     
-    fun setAccessibilityProtectedContent(accessibilityProtectedContent: BOOL)
+    fun setAccessibilityProtectedContent(accessibilityProtectedContent: Boolean): Unit
     
     fun accessibilityContents(): MemorySegment
     
-    fun setAccessibilityContents(accessibilityContents: MemorySegment)
+    fun setAccessibilityContents(accessibilityContents: MemorySegment): Unit
     
     fun accessibilityLabel(): MemorySegment
     
-    fun setAccessibilityLabel(accessibilityLabel: MemorySegment)
+    fun setAccessibilityLabel(accessibilityLabel: MemorySegment): Unit
     
-    fun isAccessibilityAlternateUIVisible(): BOOL
+    fun isAccessibilityAlternateUIVisible(): Boolean
     
-    fun setAccessibilityAlternateUIVisible(accessibilityAlternateUIVisible: BOOL)
+    fun setAccessibilityAlternateUIVisible(accessibilityAlternateUIVisible: Boolean): Unit
     
     fun accessibilitySharedFocusElements(): MemorySegment
     
-    fun setAccessibilitySharedFocusElements(accessibilitySharedFocusElements: MemorySegment)
+    fun setAccessibilitySharedFocusElements(accessibilitySharedFocusElements: MemorySegment): Unit
     
-    fun isAccessibilityRequired(): BOOL
+    fun isAccessibilityRequired(): Boolean
     
-    fun setAccessibilityRequired(accessibilityRequired: BOOL)
+    fun setAccessibilityRequired(accessibilityRequired: Boolean): Unit
     
     /** @return NSArray<NSAccessibilityCustomRotor *> * */
     fun accessibilityCustomRotors(): MemorySegment
     
-    fun setAccessibilityCustomRotors(accessibilityCustomRotors: MemorySegment)
+    fun setAccessibilityCustomRotors(accessibilityCustomRotors: MemorySegment): Unit
     
     /** @return NSArray<NSString *> * */
     fun accessibilityUserInputLabels(): MemorySegment
     
-    fun setAccessibilityUserInputLabels(accessibilityUserInputLabels: MemorySegment)
+    fun setAccessibilityUserInputLabels(accessibilityUserInputLabels: MemorySegment): Unit
     
     /** @return NSArray<NSAttributedString *> * */
     fun accessibilityAttributedUserInputLabels(): MemorySegment
     
-    fun setAccessibilityAttributedUserInputLabels(accessibilityAttributedUserInputLabels: MemorySegment)
+    fun setAccessibilityAttributedUserInputLabels(accessibilityAttributedUserInputLabels: MemorySegment): Unit
     
     fun accessibilityApplicationFocusedUIElement(): MemorySegment
     
-    fun setAccessibilityApplicationFocusedUIElement(accessibilityApplicationFocusedUIElement: MemorySegment)
+    fun setAccessibilityApplicationFocusedUIElement(accessibilityApplicationFocusedUIElement: MemorySegment): Unit
     
     fun accessibilityMainWindow(): MemorySegment
     
-    fun setAccessibilityMainWindow(accessibilityMainWindow: MemorySegment)
+    fun setAccessibilityMainWindow(accessibilityMainWindow: MemorySegment): Unit
     
-    fun isAccessibilityHidden(): BOOL
+    fun isAccessibilityHidden(): Boolean
     
-    fun setAccessibilityHidden(accessibilityHidden: BOOL)
+    fun setAccessibilityHidden(accessibilityHidden: Boolean): Unit
     
-    fun isAccessibilityFrontmost(): BOOL
+    fun isAccessibilityFrontmost(): Boolean
     
-    fun setAccessibilityFrontmost(accessibilityFrontmost: BOOL)
+    fun setAccessibilityFrontmost(accessibilityFrontmost: Boolean): Unit
     
     fun accessibilityFocusedWindow(): MemorySegment
     
-    fun setAccessibilityFocusedWindow(accessibilityFocusedWindow: MemorySegment)
+    fun setAccessibilityFocusedWindow(accessibilityFocusedWindow: MemorySegment): Unit
     
     fun accessibilityWindows(): MemorySegment
     
-    fun setAccessibilityWindows(accessibilityWindows: MemorySegment)
+    fun setAccessibilityWindows(accessibilityWindows: MemorySegment): Unit
     
     fun accessibilityExtrasMenuBar(): MemorySegment
     
-    fun setAccessibilityExtrasMenuBar(accessibilityExtrasMenuBar: MemorySegment)
+    fun setAccessibilityExtrasMenuBar(accessibilityExtrasMenuBar: MemorySegment): Unit
     
     fun accessibilityMenuBar(): MemorySegment
     
-    fun setAccessibilityMenuBar(accessibilityMenuBar: MemorySegment)
+    fun setAccessibilityMenuBar(accessibilityMenuBar: MemorySegment): Unit
     
     fun accessibilityColumnTitles(): MemorySegment
     
-    fun setAccessibilityColumnTitles(accessibilityColumnTitles: MemorySegment)
+    fun setAccessibilityColumnTitles(accessibilityColumnTitles: MemorySegment): Unit
     
-    fun isAccessibilityOrderedByRow(): BOOL
+    fun isAccessibilityOrderedByRow(): Boolean
     
-    fun setAccessibilityOrderedByRow(accessibilityOrderedByRow: BOOL)
+    fun setAccessibilityOrderedByRow(accessibilityOrderedByRow: Boolean): Unit
     
-    fun accessibilityHorizontalUnits(): NSAccessibilityUnits
+    fun accessibilityHorizontalUnits(): MemorySegment
     
-    fun setAccessibilityHorizontalUnits(accessibilityHorizontalUnits: NSAccessibilityUnits)
+    fun setAccessibilityHorizontalUnits(accessibilityHorizontalUnits: MemorySegment): Unit
     
-    fun accessibilityVerticalUnits(): NSAccessibilityUnits
+    fun accessibilityVerticalUnits(): MemorySegment
     
-    fun setAccessibilityVerticalUnits(accessibilityVerticalUnits: NSAccessibilityUnits)
+    fun setAccessibilityVerticalUnits(accessibilityVerticalUnits: MemorySegment): Unit
     
     fun accessibilityHorizontalUnitDescription(): MemorySegment
     
-    fun setAccessibilityHorizontalUnitDescription(accessibilityHorizontalUnitDescription: MemorySegment)
+    fun setAccessibilityHorizontalUnitDescription(accessibilityHorizontalUnitDescription: MemorySegment): Unit
     
     fun accessibilityVerticalUnitDescription(): MemorySegment
     
-    fun setAccessibilityVerticalUnitDescription(accessibilityVerticalUnitDescription: MemorySegment)
+    fun setAccessibilityVerticalUnitDescription(accessibilityVerticalUnitDescription: MemorySegment): Unit
     
     fun accessibilityHandles(): MemorySegment
     
-    fun setAccessibilityHandles(accessibilityHandles: MemorySegment)
+    fun setAccessibilityHandles(accessibilityHandles: MemorySegment): Unit
     
     fun accessibilityWarningValue(): MemorySegment
     
-    fun setAccessibilityWarningValue(accessibilityWarningValue: MemorySegment)
+    fun setAccessibilityWarningValue(accessibilityWarningValue: MemorySegment): Unit
     
     fun accessibilityCriticalValue(): MemorySegment
     
-    fun setAccessibilityCriticalValue(accessibilityCriticalValue: MemorySegment)
+    fun setAccessibilityCriticalValue(accessibilityCriticalValue: MemorySegment): Unit
     
-    fun isAccessibilityDisclosed(): BOOL
+    fun isAccessibilityDisclosed(): Boolean
     
-    fun setAccessibilityDisclosed(accessibilityDisclosed: BOOL)
+    fun setAccessibilityDisclosed(accessibilityDisclosed: Boolean): Unit
     
     fun accessibilityDisclosedByRow(): MemorySegment
     
-    fun setAccessibilityDisclosedByRow(accessibilityDisclosedByRow: MemorySegment)
+    fun setAccessibilityDisclosedByRow(accessibilityDisclosedByRow: MemorySegment): Unit
     
     fun accessibilityDisclosedRows(): MemorySegment
     
-    fun setAccessibilityDisclosedRows(accessibilityDisclosedRows: MemorySegment)
+    fun setAccessibilityDisclosedRows(accessibilityDisclosedRows: MemorySegment): Unit
     
-    fun accessibilityDisclosureLevel(): NSInteger
+    fun accessibilityDisclosureLevel(): Long
     
-    fun setAccessibilityDisclosureLevel(accessibilityDisclosureLevel: NSInteger)
+    fun setAccessibilityDisclosureLevel(accessibilityDisclosureLevel: Long): Unit
     
     fun accessibilityMarkerUIElements(): MemorySegment
     
-    fun setAccessibilityMarkerUIElements(accessibilityMarkerUIElements: MemorySegment)
+    fun setAccessibilityMarkerUIElements(accessibilityMarkerUIElements: MemorySegment): Unit
     
     fun accessibilityMarkerValues(): MemorySegment
     
-    fun setAccessibilityMarkerValues(accessibilityMarkerValues: MemorySegment)
+    fun setAccessibilityMarkerValues(accessibilityMarkerValues: MemorySegment): Unit
     
     fun accessibilityMarkerGroupUIElement(): MemorySegment
     
-    fun setAccessibilityMarkerGroupUIElement(accessibilityMarkerGroupUIElement: MemorySegment)
+    fun setAccessibilityMarkerGroupUIElement(accessibilityMarkerGroupUIElement: MemorySegment): Unit
     
-    fun accessibilityUnits(): NSAccessibilityUnits
+    fun accessibilityUnits(): MemorySegment
     
-    fun setAccessibilityUnits(accessibilityUnits: NSAccessibilityUnits)
+    fun setAccessibilityUnits(accessibilityUnits: MemorySegment): Unit
     
     fun accessibilityUnitDescription(): MemorySegment
     
-    fun setAccessibilityUnitDescription(accessibilityUnitDescription: MemorySegment)
+    fun setAccessibilityUnitDescription(accessibilityUnitDescription: MemorySegment): Unit
     
-    fun accessibilityRulerMarkerType(): NSAccessibilityRulerMarkerType
+    fun accessibilityRulerMarkerType(): MemorySegment
     
-    fun setAccessibilityRulerMarkerType(accessibilityRulerMarkerType: NSAccessibilityRulerMarkerType)
+    fun setAccessibilityRulerMarkerType(accessibilityRulerMarkerType: MemorySegment): Unit
     
     fun accessibilityMarkerTypeDescription(): MemorySegment
     
-    fun setAccessibilityMarkerTypeDescription(accessibilityMarkerTypeDescription: MemorySegment)
+    fun setAccessibilityMarkerTypeDescription(accessibilityMarkerTypeDescription: MemorySegment): Unit
     
     fun accessibilityHorizontalScrollBar(): MemorySegment
     
-    fun setAccessibilityHorizontalScrollBar(accessibilityHorizontalScrollBar: MemorySegment)
+    fun setAccessibilityHorizontalScrollBar(accessibilityHorizontalScrollBar: MemorySegment): Unit
     
     fun accessibilityVerticalScrollBar(): MemorySegment
     
-    fun setAccessibilityVerticalScrollBar(accessibilityVerticalScrollBar: MemorySegment)
+    fun setAccessibilityVerticalScrollBar(accessibilityVerticalScrollBar: MemorySegment): Unit
     
     /** @return NSArray<NSNumber *> * */
     fun accessibilityAllowedValues(): MemorySegment
     
-    fun setAccessibilityAllowedValues(accessibilityAllowedValues: MemorySegment)
+    fun setAccessibilityAllowedValues(accessibilityAllowedValues: MemorySegment): Unit
     
     fun accessibilityLabelUIElements(): MemorySegment
     
-    fun setAccessibilityLabelUIElements(accessibilityLabelUIElements: MemorySegment)
+    fun setAccessibilityLabelUIElements(accessibilityLabelUIElements: MemorySegment): Unit
     
     fun accessibilityLabelValue(): Float
     
-    fun setAccessibilityLabelValue(accessibilityLabelValue: Float)
+    fun setAccessibilityLabelValue(accessibilityLabelValue: Float): Unit
     
     fun accessibilitySplitters(): MemorySegment
     
-    fun setAccessibilitySplitters(accessibilitySplitters: MemorySegment)
+    fun setAccessibilitySplitters(accessibilitySplitters: MemorySegment): Unit
     
     fun accessibilityDecrementButton(): MemorySegment
     
-    fun setAccessibilityDecrementButton(accessibilityDecrementButton: MemorySegment)
+    fun setAccessibilityDecrementButton(accessibilityDecrementButton: MemorySegment): Unit
     
     fun accessibilityIncrementButton(): MemorySegment
     
-    fun setAccessibilityIncrementButton(accessibilityIncrementButton: MemorySegment)
+    fun setAccessibilityIncrementButton(accessibilityIncrementButton: MemorySegment): Unit
     
     fun accessibilityTabs(): MemorySegment
     
-    fun setAccessibilityTabs(accessibilityTabs: MemorySegment)
+    fun setAccessibilityTabs(accessibilityTabs: MemorySegment): Unit
     
     fun accessibilityHeader(): MemorySegment
     
-    fun setAccessibilityHeader(accessibilityHeader: MemorySegment)
+    fun setAccessibilityHeader(accessibilityHeader: MemorySegment): Unit
     
-    fun accessibilityColumnCount(): NSInteger
+    fun accessibilityColumnCount(): Long
     
-    fun setAccessibilityColumnCount(accessibilityColumnCount: NSInteger)
+    fun setAccessibilityColumnCount(accessibilityColumnCount: Long): Unit
     
-    fun accessibilityRowCount(): NSInteger
+    fun accessibilityRowCount(): Long
     
-    fun setAccessibilityRowCount(accessibilityRowCount: NSInteger)
+    fun setAccessibilityRowCount(accessibilityRowCount: Long): Unit
     
-    fun accessibilityIndex(): NSInteger
+    fun accessibilityIndex(): Long
     
-    fun setAccessibilityIndex(accessibilityIndex: NSInteger)
+    fun setAccessibilityIndex(accessibilityIndex: Long): Unit
     
     fun accessibilityColumns(): MemorySegment
     
-    fun setAccessibilityColumns(accessibilityColumns: MemorySegment)
+    fun setAccessibilityColumns(accessibilityColumns: MemorySegment): Unit
     
     fun accessibilityRows(): MemorySegment
     
-    fun setAccessibilityRows(accessibilityRows: MemorySegment)
+    fun setAccessibilityRows(accessibilityRows: MemorySegment): Unit
     
     fun accessibilityVisibleRows(): MemorySegment
     
-    fun setAccessibilityVisibleRows(accessibilityVisibleRows: MemorySegment)
+    fun setAccessibilityVisibleRows(accessibilityVisibleRows: MemorySegment): Unit
     
     fun accessibilitySelectedRows(): MemorySegment
     
-    fun setAccessibilitySelectedRows(accessibilitySelectedRows: MemorySegment)
+    fun setAccessibilitySelectedRows(accessibilitySelectedRows: MemorySegment): Unit
     
     fun accessibilityVisibleColumns(): MemorySegment
     
-    fun setAccessibilityVisibleColumns(accessibilityVisibleColumns: MemorySegment)
+    fun setAccessibilityVisibleColumns(accessibilityVisibleColumns: MemorySegment): Unit
     
     fun accessibilitySelectedColumns(): MemorySegment
     
-    fun setAccessibilitySelectedColumns(accessibilitySelectedColumns: MemorySegment)
+    fun setAccessibilitySelectedColumns(accessibilitySelectedColumns: MemorySegment): Unit
     
-    fun accessibilitySortDirection(): NSAccessibilitySortDirection
+    fun accessibilitySortDirection(): MemorySegment
     
-    fun setAccessibilitySortDirection(accessibilitySortDirection: NSAccessibilitySortDirection)
+    fun setAccessibilitySortDirection(accessibilitySortDirection: MemorySegment): Unit
     
     fun accessibilityRowHeaderUIElements(): MemorySegment
     
-    fun setAccessibilityRowHeaderUIElements(accessibilityRowHeaderUIElements: MemorySegment)
+    fun setAccessibilityRowHeaderUIElements(accessibilityRowHeaderUIElements: MemorySegment): Unit
     
     fun accessibilitySelectedCells(): MemorySegment
     
-    fun setAccessibilitySelectedCells(accessibilitySelectedCells: MemorySegment)
+    fun setAccessibilitySelectedCells(accessibilitySelectedCells: MemorySegment): Unit
     
     fun accessibilityVisibleCells(): MemorySegment
     
-    fun setAccessibilityVisibleCells(accessibilityVisibleCells: MemorySegment)
+    fun setAccessibilityVisibleCells(accessibilityVisibleCells: MemorySegment): Unit
     
     fun accessibilityColumnHeaderUIElements(): MemorySegment
     
-    fun setAccessibilityColumnHeaderUIElements(accessibilityColumnHeaderUIElements: MemorySegment)
+    fun setAccessibilityColumnHeaderUIElements(accessibilityColumnHeaderUIElements: MemorySegment): Unit
     
-    fun accessibilityRowIndexRange(): NSRange
+    fun accessibilityRowIndexRange(): MemorySegment
     
-    fun setAccessibilityRowIndexRange(accessibilityRowIndexRange: NSRange)
+    fun setAccessibilityRowIndexRange(accessibilityRowIndexRange: MemorySegment): Unit
     
-    fun accessibilityColumnIndexRange(): NSRange
+    fun accessibilityColumnIndexRange(): MemorySegment
     
-    fun setAccessibilityColumnIndexRange(accessibilityColumnIndexRange: NSRange)
+    fun setAccessibilityColumnIndexRange(accessibilityColumnIndexRange: MemorySegment): Unit
     
-    fun accessibilityInsertionPointLineNumber(): NSInteger
+    fun accessibilityInsertionPointLineNumber(): Long
     
-    fun setAccessibilityInsertionPointLineNumber(accessibilityInsertionPointLineNumber: NSInteger)
+    fun setAccessibilityInsertionPointLineNumber(accessibilityInsertionPointLineNumber: Long): Unit
     
-    fun accessibilitySharedCharacterRange(): NSRange
+    fun accessibilitySharedCharacterRange(): MemorySegment
     
-    fun setAccessibilitySharedCharacterRange(accessibilitySharedCharacterRange: NSRange)
+    fun setAccessibilitySharedCharacterRange(accessibilitySharedCharacterRange: MemorySegment): Unit
     
     fun accessibilitySharedTextUIElements(): MemorySegment
     
-    fun setAccessibilitySharedTextUIElements(accessibilitySharedTextUIElements: MemorySegment)
+    fun setAccessibilitySharedTextUIElements(accessibilitySharedTextUIElements: MemorySegment): Unit
     
-    fun accessibilityVisibleCharacterRange(): NSRange
+    fun accessibilityVisibleCharacterRange(): MemorySegment
     
-    fun setAccessibilityVisibleCharacterRange(accessibilityVisibleCharacterRange: NSRange)
+    fun setAccessibilityVisibleCharacterRange(accessibilityVisibleCharacterRange: MemorySegment): Unit
     
-    fun accessibilityNumberOfCharacters(): NSInteger
+    fun accessibilityNumberOfCharacters(): Long
     
-    fun setAccessibilityNumberOfCharacters(accessibilityNumberOfCharacters: NSInteger)
+    fun setAccessibilityNumberOfCharacters(accessibilityNumberOfCharacters: Long): Unit
     
     fun accessibilitySelectedText(): MemorySegment
     
-    fun setAccessibilitySelectedText(accessibilitySelectedText: MemorySegment)
+    fun setAccessibilitySelectedText(accessibilitySelectedText: MemorySegment): Unit
     
-    fun accessibilitySelectedTextRange(): NSRange
+    fun accessibilitySelectedTextRange(): MemorySegment
     
-    fun setAccessibilitySelectedTextRange(accessibilitySelectedTextRange: NSRange)
+    fun setAccessibilitySelectedTextRange(accessibilitySelectedTextRange: MemorySegment): Unit
     
     /** @return NSArray<NSValue *> * */
     fun accessibilitySelectedTextRanges(): MemorySegment
     
-    fun setAccessibilitySelectedTextRanges(accessibilitySelectedTextRanges: MemorySegment)
+    fun setAccessibilitySelectedTextRanges(accessibilitySelectedTextRanges: MemorySegment): Unit
     
     fun accessibilityToolbarButton(): MemorySegment
     
-    fun setAccessibilityToolbarButton(accessibilityToolbarButton: MemorySegment)
+    fun setAccessibilityToolbarButton(accessibilityToolbarButton: MemorySegment): Unit
     
-    fun isAccessibilityModal(): BOOL
+    fun isAccessibilityModal(): Boolean
     
-    fun setAccessibilityModal(accessibilityModal: BOOL)
+    fun setAccessibilityModal(accessibilityModal: Boolean): Unit
     
     fun accessibilityProxy(): MemorySegment
     
-    fun setAccessibilityProxy(accessibilityProxy: MemorySegment)
+    fun setAccessibilityProxy(accessibilityProxy: MemorySegment): Unit
     
-    fun isAccessibilityMain(): BOOL
+    fun isAccessibilityMain(): Boolean
     
-    fun setAccessibilityMain(accessibilityMain: BOOL)
+    fun setAccessibilityMain(accessibilityMain: Boolean): Unit
     
     fun accessibilityFullScreenButton(): MemorySegment
     
-    fun setAccessibilityFullScreenButton(accessibilityFullScreenButton: MemorySegment)
+    fun setAccessibilityFullScreenButton(accessibilityFullScreenButton: MemorySegment): Unit
     
     fun accessibilityGrowArea(): MemorySegment
     
-    fun setAccessibilityGrowArea(accessibilityGrowArea: MemorySegment)
+    fun setAccessibilityGrowArea(accessibilityGrowArea: MemorySegment): Unit
     
     fun accessibilityDocument(): MemorySegment
     
-    fun setAccessibilityDocument(accessibilityDocument: MemorySegment)
+    fun setAccessibilityDocument(accessibilityDocument: MemorySegment): Unit
     
     fun accessibilityDefaultButton(): MemorySegment
     
-    fun setAccessibilityDefaultButton(accessibilityDefaultButton: MemorySegment)
+    fun setAccessibilityDefaultButton(accessibilityDefaultButton: MemorySegment): Unit
     
     fun accessibilityCloseButton(): MemorySegment
     
-    fun setAccessibilityCloseButton(accessibilityCloseButton: MemorySegment)
+    fun setAccessibilityCloseButton(accessibilityCloseButton: MemorySegment): Unit
     
     fun accessibilityZoomButton(): MemorySegment
     
-    fun setAccessibilityZoomButton(accessibilityZoomButton: MemorySegment)
+    fun setAccessibilityZoomButton(accessibilityZoomButton: MemorySegment): Unit
     
     fun accessibilityMinimizeButton(): MemorySegment
     
-    fun setAccessibilityMinimizeButton(accessibilityMinimizeButton: MemorySegment)
+    fun setAccessibilityMinimizeButton(accessibilityMinimizeButton: MemorySegment): Unit
     
-    fun isAccessibilityMinimized(): BOOL
+    fun isAccessibilityMinimized(): Boolean
     
-    fun setAccessibilityMinimized(accessibilityMinimized: BOOL)
+    fun setAccessibilityMinimized(accessibilityMinimized: Boolean): Unit
     
     /** @return NSArray<NSAccessibilityCustomAction *> * */
     fun accessibilityCustomActions(): MemorySegment
     
-    fun setAccessibilityCustomActions(accessibilityCustomActions: MemorySegment)
+    fun setAccessibilityCustomActions(accessibilityCustomActions: MemorySegment): Unit
     
-    // @property accessibilityElement
-    /** @return NSArray<id<NSAccessibilityElement>> * */
-    /** @return NSArray<NSAccessibilityCustomRotor *> * */
-    /** @return NSArray<NSString *> * */
-    /** @return NSArray<NSAttributedString *> * */
-    /** @return NSArray<NSNumber *> * */
-    /** @return NSArray<NSValue *> * */
-    /** @return NSArray<NSAccessibilityCustomAction *> * */
 }
 

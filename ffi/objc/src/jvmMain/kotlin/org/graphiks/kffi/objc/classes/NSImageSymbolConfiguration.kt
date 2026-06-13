@@ -9,66 +9,66 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSImageSymbolConfiguration(val ptr: MemorySegment) {
+open class NSImageSymbolConfiguration(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSImageSymbolConfiguration") }
         
-        open fun configurationWithPointSize_weight_scale(pointSize: CGFloat, weight: NSFontWeight, scale: NSImageSymbolScale): MemorySegment {
+        fun configurationWithPointSize_weight_scale(pointSize: Double, weight: Double, scale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithPointSize:weight:scale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, pointSize, weight, scale) as MemorySegment
         }
         
-        open fun configurationWithPointSize_weight(pointSize: CGFloat, weight: NSFontWeight): MemorySegment {
+        fun configurationWithPointSize_weight(pointSize: Double, weight: Double): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithPointSize:weight:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, pointSize, weight) as MemorySegment
         }
         
-        open fun configurationWithTextStyle_scale(style: NSFontTextStyle, scale: NSImageSymbolScale): MemorySegment {
+        fun configurationWithTextStyle_scale(style: MemorySegment, scale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithTextStyle:scale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, style, scale) as MemorySegment
         }
         
-        open fun configurationWithTextStyle(style: NSFontTextStyle): MemorySegment {
+        fun configurationWithTextStyle(style: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithTextStyle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, style) as MemorySegment
         }
         
-        open fun configurationWithScale(scale: NSImageSymbolScale): MemorySegment {
+        fun configurationWithScale(scale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithScale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, scale) as MemorySegment
         }
         
-        open fun configurationPreferringMonochrome(): MemorySegment {
+        fun configurationPreferringMonochrome(): MemorySegment {
             val sel = ObjCRuntime.sel("configurationPreferringMonochrome")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun configurationPreferringHierarchical(): MemorySegment {
+        fun configurationPreferringHierarchical(): MemorySegment {
             val sel = ObjCRuntime.sel("configurationPreferringHierarchical")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun configurationWithHierarchicalColor(hierarchicalColor: MemorySegment): MemorySegment {
+        fun configurationWithHierarchicalColor(hierarchicalColor: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithHierarchicalColor:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, hierarchicalColor) as MemorySegment
         }
         
-        open fun configurationWithPaletteColors(paletteColors: MemorySegment): MemorySegment {
+        fun configurationWithPaletteColors(paletteColors: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithPaletteColors:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, paletteColors) as MemorySegment
         }
         
-        open fun configurationPreferringMulticolor(): MemorySegment {
+        fun configurationPreferringMulticolor(): MemorySegment {
             val sel = ObjCRuntime.sel("configurationPreferringMulticolor")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun configurationWithVariableValueMode(variableValueMode: NSImageSymbolVariableValueMode): MemorySegment {
+        fun configurationWithVariableValueMode(variableValueMode: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithVariableValueMode:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, variableValueMode) as MemorySegment
         }
         
-        open fun configurationWithColorRenderingMode(mode: NSImageSymbolColorRenderingMode): MemorySegment {
+        fun configurationWithColorRenderingMode(mode: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("configurationWithColorRenderingMode:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, mode) as MemorySegment
         }

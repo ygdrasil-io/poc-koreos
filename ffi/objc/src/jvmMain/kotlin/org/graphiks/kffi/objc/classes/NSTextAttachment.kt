@@ -9,25 +9,25 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSTextAttachmentLayout, NSSecureCoding
  */
-open class NSTextAttachment(val ptr: MemorySegment) {
+open class NSTextAttachment(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextAttachment") }
         
-        open fun textAttachmentViewProviderClassForFileType(fileType: MemorySegment): Class<*> {
+        fun textAttachmentViewProviderClassForFileType(fileType: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("textAttachmentViewProviderClassForFileType:")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fileType) as Class<*>
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fileType) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun textAttachmentViewProviderClassForFileType(fileType: String): Class<*> = textAttachmentViewProviderClassForFileType(ObjCRuntime.newNSString(Arena.global(), fileType))
+        fun textAttachmentViewProviderClassForFileType(fileType: String): MemorySegment = textAttachmentViewProviderClassForFileType(ObjCRuntime.newNSString(Arena.global(), fileType))
         
-        open fun registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass: Class<*>, fileType: MemorySegment): Unit {
+        fun registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass: MemorySegment, fileType: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("registerTextAttachmentViewProviderClass:forFileType:")
             ObjCRuntime.msgSend(null, _class, sel, textAttachmentViewProviderClass, fileType)
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass: Class<*>, fileType: String): Unit = registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass, ObjCRuntime.newNSString(Arena.global(), fileType))
+        fun registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass: MemorySegment, fileType: String): Unit = registerTextAttachmentViewProviderClass_forFileType(textAttachmentViewProviderClass, ObjCRuntime.newNSString(Arena.global(), fileType))
         
     }
     
@@ -37,7 +37,7 @@ open class NSTextAttachment(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithData_ofType(contentData: MemorySegment, uti: String): MemorySegment = initWithData_ofType(contentData, ObjCRuntime.newNSString(Arena.global(), uti))
+    fun initWithData_ofType(contentData: MemorySegment, uti: String): MemorySegment = initWithData_ofType(contentData, ObjCRuntime.newNSString(Arena.global(), uti))
     
     open fun initWithFileWrapper(fileWrapper: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFileWrapper:")
@@ -112,29 +112,29 @@ open class NSTextAttachment(val ptr: MemorySegment) {
     }
     
     // @property lineLayoutPadding
-    open fun lineLayoutPadding(): CGFloat {
+    open fun lineLayoutPadding(): Double {
         val sel = ObjCRuntime.sel("lineLayoutPadding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setLineLayoutPadding(value: CGFloat) {
+    open fun setLineLayoutPadding(value: Double) {
         val sel = ObjCRuntime.sel("setLineLayoutPadding:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsTextAttachmentView
-    open fun allowsTextAttachmentView(): BOOL {
+    open fun allowsTextAttachmentView(): Boolean {
         val sel = ObjCRuntime.sel("allowsTextAttachmentView")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsTextAttachmentView(value: BOOL) {
+    open fun setAllowsTextAttachmentView(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsTextAttachmentView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesTextAttachmentView
-    open fun usesTextAttachmentView(): BOOL {
+    open fun usesTextAttachmentView(): Boolean {
         val sel = ObjCRuntime.sel("usesTextAttachmentView")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

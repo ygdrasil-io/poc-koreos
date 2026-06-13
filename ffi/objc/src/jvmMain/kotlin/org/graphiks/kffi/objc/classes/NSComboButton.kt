@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSComboButton
  * Superclass: NSControl
  */
-open class NSComboButton(ptr: MemorySegment) : NSControl(ptr) {
+open class NSComboButton(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSComboButton") }
         
@@ -36,57 +36,57 @@ open class NSComboButton(ptr: MemorySegment) : NSControl(ptr) {
     }
     
     // @property title
-    fun title(): MemorySegment {
+    open fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    open fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
+    open fun titleAsString(): String = ObjCRuntime.toJavaString(title())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property image
-    fun image(): MemorySegment {
+    open fun image(): MemorySegment {
         val sel = ObjCRuntime.sel("image")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImage(value: MemorySegment) {
+    open fun setImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageScaling
-    fun imageScaling(): NSImageScaling {
+    open fun imageScaling(): MemorySegment {
         val sel = ObjCRuntime.sel("imageScaling")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageScaling
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageScaling(value: NSImageScaling) {
+    open fun setImageScaling(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageScaling:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property menu
-    fun menu(): MemorySegment {
+    override fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenu(value: MemorySegment) {
+    override fun setMenu(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenu:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property style
-    fun style(): NSComboButtonStyle {
+    open fun style(): MemorySegment {
         val sel = ObjCRuntime.sel("style")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSComboButtonStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setStyle(value: NSComboButtonStyle) {
+    open fun setStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

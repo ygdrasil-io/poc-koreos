@@ -9,52 +9,52 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSMutableCopying, NSCoding
  */
-open class NSFontCollection(val ptr: MemorySegment) {
+open class NSFontCollection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFontCollection") }
         
-        open fun fontCollectionWithDescriptors(queryDescriptors: MemorySegment): MemorySegment {
+        fun fontCollectionWithDescriptors(queryDescriptors: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithDescriptors:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, queryDescriptors) as MemorySegment
         }
         
-        open fun fontCollectionWithLocale(locale: MemorySegment): MemorySegment {
+        fun fontCollectionWithLocale(locale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithLocale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, locale) as MemorySegment
         }
         
-        open fun showFontCollection_withName_visibility_error(collection: MemorySegment, name: NSFontCollectionName, visibility: NSFontCollectionVisibility, error: MemorySegment): BOOL {
+        fun showFontCollection_withName_visibility_error(collection: MemorySegment, name: MemorySegment, visibility: MemorySegment, error: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("showFontCollection:withName:visibility:error:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, collection, name, visibility, error) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, collection, name, visibility, error) as Boolean
         }
         
-        open fun hideFontCollectionWithName_visibility_error(name: NSFontCollectionName, visibility: NSFontCollectionVisibility, error: MemorySegment): BOOL {
+        fun hideFontCollectionWithName_visibility_error(name: MemorySegment, visibility: MemorySegment, error: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("hideFontCollectionWithName:visibility:error:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, name, visibility, error) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, name, visibility, error) as Boolean
         }
         
-        open fun renameFontCollectionWithName_visibility_toName_error(oldName: NSFontCollectionName, visibility: NSFontCollectionVisibility, newName: NSFontCollectionName, outError: MemorySegment): BOOL {
+        fun renameFontCollectionWithName_visibility_toName_error(oldName: MemorySegment, visibility: MemorySegment, newName: MemorySegment, outError: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("renameFontCollectionWithName:visibility:toName:error:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, oldName, visibility, newName, outError) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, oldName, visibility, newName, outError) as Boolean
         }
         
-        open fun fontCollectionWithName(name: NSFontCollectionName): MemorySegment {
+        fun fontCollectionWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
-        open fun fontCollectionWithName_visibility(name: NSFontCollectionName, visibility: NSFontCollectionVisibility): MemorySegment {
+        fun fontCollectionWithName_visibility(name: MemorySegment, visibility: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithName:visibility:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, visibility) as MemorySegment
         }
         
-        open fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
+        fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
         /** @return NSArray<NSFontCollectionName> * */
-        open fun allFontCollectionNames(): MemorySegment {
+        fun allFontCollectionNames(): MemorySegment {
             val sel = ObjCRuntime.sel("allFontCollectionNames")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -74,7 +74,7 @@ open class NSFontCollection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun matchingDescriptorsForFamily(family: String): MemorySegment = matchingDescriptorsForFamily(ObjCRuntime.newNSString(Arena.global(), family))
+    fun matchingDescriptorsForFamily(family: String): MemorySegment = matchingDescriptorsForFamily(ObjCRuntime.newNSString(Arena.global(), family))
     
     /** @return NSArray<NSFontDescriptor *> * */
     open fun matchingDescriptorsForFamily_options(family: MemorySegment, options: MemorySegment): MemorySegment {
@@ -83,10 +83,22 @@ open class NSFontCollection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun matchingDescriptorsForFamily_options(family: String, options: MemorySegment): MemorySegment = matchingDescriptorsForFamily_options(ObjCRuntime.newNSString(Arena.global(), family), options)
+    fun matchingDescriptorsForFamily_options(family: String, options: MemorySegment): MemorySegment = matchingDescriptorsForFamily_options(ObjCRuntime.newNSString(Arena.global(), family), options)
     
     // @property fontCollectionWithAllAvailableDescriptors
+    open fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
+        val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property allFontCollectionNames
     /** @return NSArray<NSFontCollectionName> * */
+    open fun allFontCollectionNames(): MemorySegment {
+        val sel = ObjCRuntime.sel("allFontCollectionNames")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property queryDescriptors
     /** @return NSArray<NSFontDescriptor *> * */
     open fun queryDescriptors(): MemorySegment {
         val sel = ObjCRuntime.sel("queryDescriptors")

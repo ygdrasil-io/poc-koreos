@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutEdgeSpacing(val ptr: MemorySegment) {
+open class NSCollectionLayoutEdgeSpacing(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutEdgeSpacing") }
         
-        open fun spacingForLeading_top_trailing_bottom(leading: MemorySegment, top: MemorySegment, trailing: MemorySegment, bottom: MemorySegment): MemorySegment {
+        fun spacingForLeading_top_trailing_bottom(leading: MemorySegment, top: MemorySegment, trailing: MemorySegment, bottom: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("spacingForLeading:top:trailing:bottom:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, leading, top, trailing, bottom) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

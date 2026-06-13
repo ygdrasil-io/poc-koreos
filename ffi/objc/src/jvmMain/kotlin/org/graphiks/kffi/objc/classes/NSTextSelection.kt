@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSTextSelection(val ptr: MemorySegment) {
+open class NSTextSelection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextSelection") }
         
     }
     
-    open fun initWithRanges_affinity_granularity(textRanges: MemorySegment, affinity: NSTextSelectionAffinity, granularity: NSTextSelectionGranularity): MemorySegment {
+    open fun initWithRanges_affinity_granularity(textRanges: MemorySegment, affinity: MemorySegment, granularity: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRanges:affinity:granularity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, textRanges, affinity, granularity) as MemorySegment
     }
@@ -25,12 +25,12 @@ open class NSTextSelection(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun initWithRange_affinity_granularity(range: MemorySegment, affinity: NSTextSelectionAffinity, granularity: NSTextSelectionGranularity): MemorySegment {
+    open fun initWithRange_affinity_granularity(range: MemorySegment, affinity: MemorySegment, granularity: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRange:affinity:granularity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, range, affinity, granularity) as MemorySegment
     }
     
-    open fun initWithLocation_affinity(location: MemorySegment, affinity: NSTextSelectionAffinity): MemorySegment {
+    open fun initWithLocation_affinity(location: MemorySegment, affinity: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLocation:affinity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, location, affinity) as MemorySegment
     }
@@ -53,39 +53,39 @@ open class NSTextSelection(val ptr: MemorySegment) {
     }
     
     // @property granularity
-    open fun granularity(): NSTextSelectionGranularity {
+    open fun granularity(): MemorySegment {
         val sel = ObjCRuntime.sel("granularity")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextSelectionGranularity
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property affinity
-    open fun affinity(): NSTextSelectionAffinity {
+    open fun affinity(): MemorySegment {
         val sel = ObjCRuntime.sel("affinity")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextSelectionAffinity
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property transient
-    open fun isTransient(): BOOL {
+    open fun isTransient(): Boolean {
         val sel = ObjCRuntime.sel("isTransient")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property anchorPositionOffset
-    open fun anchorPositionOffset(): CGFloat {
+    open fun anchorPositionOffset(): Double {
         val sel = ObjCRuntime.sel("anchorPositionOffset")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setAnchorPositionOffset(value: CGFloat) {
+    open fun setAnchorPositionOffset(value: Double) {
         val sel = ObjCRuntime.sel("setAnchorPositionOffset:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property logical
-    open fun isLogical(): BOOL {
+    open fun isLogical(): Boolean {
         val sel = ObjCRuntime.sel("isLogical")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setLogical(value: BOOL) {
+    open fun setLogical(value: Boolean) {
         val sel = ObjCRuntime.sel("setLogical:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

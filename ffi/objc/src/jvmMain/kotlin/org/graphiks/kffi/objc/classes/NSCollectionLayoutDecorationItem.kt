@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSCollectionLayoutItem
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutDecorationItem(ptr: MemorySegment) : NSCollectionLayoutItem(ptr) {
+open class NSCollectionLayoutDecorationItem(override val ptr: MemorySegment) : NSCollectionLayoutItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutDecorationItem") }
         
@@ -21,36 +21,36 @@ open class NSCollectionLayoutDecorationItem(ptr: MemorySegment) : NSCollectionLa
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
         fun backgroundDecorationItemWithElementKind(elementKind: String): MemorySegment = backgroundDecorationItemWithElementKind(ObjCRuntime.newNSString(Arena.global(), elementKind))
         
-        override fun `new`(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    override fun `init`(): MemorySegment {
+    override fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property zIndex
-    fun zIndex(): NSInteger {
+    open fun zIndex(): Long {
         val sel = ObjCRuntime.sel("zIndex")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setZIndex(value: NSInteger) {
+    open fun setZIndex(value: Long) {
         val sel = ObjCRuntime.sel("setZIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property elementKind
-    fun elementKind(): MemorySegment {
+    open fun elementKind(): MemorySegment {
         val sel = ObjCRuntime.sel("elementKind")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun elementKindAsString(): String = ObjCRuntime.toJavaString(elementKind())
+    open fun elementKindAsString(): String = ObjCRuntime.toJavaString(elementKind())
     
 }
 

@@ -12,11 +12,11 @@ interface NSAccessibilitySwitch : NSAccessibilityButton {
     fun accessibilityValue(): MemorySegment
     
     // @optional
-    fun accessibilityPerformIncrement(): BOOL =
+    fun accessibilityPerformIncrement(): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityPerformIncrement' not implemented")
     
     // @optional
-    fun accessibilityPerformDecrement(): BOOL =
+    fun accessibilityPerformDecrement(): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityPerformDecrement' not implemented")
     
 }

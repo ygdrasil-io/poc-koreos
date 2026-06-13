@@ -8,129 +8,120 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSFormCell
  * Superclass: NSActionCell
  */
-open class NSFormCell(ptr: MemorySegment) : NSActionCell(ptr) {
+open class NSFormCell(override val ptr: MemorySegment) : NSActionCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFormCell") }
         
     }
     
-    fun initTextCell(string: MemorySegment): MemorySegment {
+    override fun initTextCell(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initTextCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun initTextCell(string: String): MemorySegment = initTextCell(ObjCRuntime.newNSString(Arena.global(), string))
-    
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    override fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun initImageCell(image: MemorySegment): MemorySegment {
+    override fun initImageCell(image: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initImageCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, image) as MemorySegment
     }
     
-    fun titleWidth(size: NSSize): CGFloat {
+    open fun titleWidth(size: MemorySegment): Double {
         val sel = ObjCRuntime.sel("titleWidth:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"))) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, ObjCRuntime.ObjCStructArg(size, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"))) as Double
     }
     
     // @property titleWidth
-    fun titleWidth(): CGFloat {
+    open fun titleWidth(): Double {
         val sel = ObjCRuntime.sel("titleWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setTitleWidth(value: CGFloat) {
+    open fun setTitleWidth(value: Double) {
         val sel = ObjCRuntime.sel("setTitleWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property title
-    fun title(): MemorySegment {
+    override fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    override fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
-    
-    /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
-    
     // @property titleFont
-    fun titleFont(): MemorySegment {
+    open fun titleFont(): MemorySegment {
         val sel = ObjCRuntime.sel("titleFont")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitleFont(value: MemorySegment) {
+    open fun setTitleFont(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitleFont:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property opaque
-    fun isOpaque(): BOOL {
+    override fun isOpaque(): Boolean {
         val sel = ObjCRuntime.sel("isOpaque")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property placeholderString
-    fun placeholderString(): MemorySegment {
+    open fun placeholderString(): MemorySegment {
         val sel = ObjCRuntime.sel("placeholderString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPlaceholderString(value: MemorySegment) {
+    open fun setPlaceholderString(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPlaceholderString:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun placeholderStringAsString(): String = ObjCRuntime.toJavaString(placeholderString())
+    open fun placeholderStringAsString(): String = ObjCRuntime.toJavaString(placeholderString())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPlaceholderString(value: String) = setPlaceholderString(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPlaceholderString(value: String) = setPlaceholderString(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property placeholderAttributedString
-    fun placeholderAttributedString(): MemorySegment {
+    open fun placeholderAttributedString(): MemorySegment {
         val sel = ObjCRuntime.sel("placeholderAttributedString")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPlaceholderAttributedString(value: MemorySegment) {
+    open fun setPlaceholderAttributedString(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPlaceholderAttributedString:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property titleAlignment
-    fun titleAlignment(): NSTextAlignment {
+    open fun titleAlignment(): MemorySegment {
         val sel = ObjCRuntime.sel("titleAlignment")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitleAlignment(value: NSTextAlignment) {
+    open fun setTitleAlignment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitleAlignment:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property titleBaseWritingDirection
-    fun titleBaseWritingDirection(): NSWritingDirection {
+    open fun titleBaseWritingDirection(): MemorySegment {
         val sel = ObjCRuntime.sel("titleBaseWritingDirection")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWritingDirection
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitleBaseWritingDirection(value: NSWritingDirection) {
+    open fun setTitleBaseWritingDirection(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitleBaseWritingDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preferredTextFieldWidth
-    fun preferredTextFieldWidth(): CGFloat {
+    open fun preferredTextFieldWidth(): Double {
         val sel = ObjCRuntime.sel("preferredTextFieldWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setPreferredTextFieldWidth(value: CGFloat) {
+    open fun setPreferredTextFieldWidth(value: Double) {
         val sel = ObjCRuntime.sel("setPreferredTextFieldWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -141,19 +132,18 @@ open class NSFormCell(ptr: MemorySegment) : NSActionCell(ptr) {
 
 fun NSFormCell.setTitleWithMnemonic(stringWithAmpersand: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleWithMnemonic:")
-    ObjCRuntime.msgSend(null, ptr, sel, stringWithAmpersand)
+    ObjCRuntime.msgSend(null, this.ptr, sel, stringWithAmpersand)
 }
 
 // ── Category: NSFormCellAttributedStringMethods on NSFormCell ─────────────────────────────────────────
 
 fun NSFormCell.attributedTitle(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedTitle")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSFormCell.setAttributedTitle(attributedTitle: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAttributedTitle:")
-    ObjCRuntime.msgSend(null, ptr, sel, attributedTitle)
+    ObjCRuntime.msgSend(null, this.ptr, sel, attributedTitle)
 }
 
-// @property attributedTitle

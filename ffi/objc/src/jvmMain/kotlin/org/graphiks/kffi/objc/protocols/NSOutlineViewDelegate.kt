@@ -18,11 +18,11 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:rowViewForItem:' not implemented")
     
     // @optional
-    fun outlineView_didAddRowView_forRow(outlineView: MemorySegment, rowView: MemorySegment, row: NSInteger): Unit =
+    fun outlineView_didAddRowView_forRow(outlineView: MemorySegment, rowView: MemorySegment, row: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:didAddRowView:forRow:' not implemented")
     
     // @optional
-    fun outlineView_didRemoveRowView_forRow(outlineView: MemorySegment, rowView: MemorySegment, row: NSInteger): Unit =
+    fun outlineView_didRemoveRowView_forRow(outlineView: MemorySegment, rowView: MemorySegment, row: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:didRemoveRowView:forRow:' not implemented")
     
     // @optional
@@ -30,15 +30,15 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:willDisplayCell:forTableColumn:item:' not implemented")
     
     // @optional
-    fun outlineView_shouldEditTableColumn_item(outlineView: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldEditTableColumn_item(outlineView: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldEditTableColumn:item:' not implemented")
     
     // @optional
-    fun selectionShouldChangeInOutlineView(outlineView: MemorySegment): BOOL =
+    fun selectionShouldChangeInOutlineView(outlineView: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'selectionShouldChangeInOutlineView:' not implemented")
     
     // @optional
-    fun outlineView_shouldSelectItem(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldSelectItem(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldSelectItem:' not implemented")
     
     // @optional
@@ -46,7 +46,7 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:selectionIndexesForProposedSelection:' not implemented")
     
     // @optional
-    fun outlineView_shouldSelectTableColumn(outlineView: MemorySegment, tableColumn: MemorySegment): BOOL =
+    fun outlineView_shouldSelectTableColumn(outlineView: MemorySegment, tableColumn: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldSelectTableColumn:' not implemented")
     
     // @optional
@@ -62,11 +62,11 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:didDragTableColumn:' not implemented")
     
     // @optional
-    fun outlineView_toolTipForCell_rect_tableColumn_item_mouseLocation(outlineView: MemorySegment, cell: MemorySegment, rect: MemorySegment, tableColumn: MemorySegment, item: MemorySegment, mouseLocation: NSPoint): MemorySegment =
+    fun outlineView_toolTipForCell_rect_tableColumn_item_mouseLocation(outlineView: MemorySegment, cell: MemorySegment, rect: MemorySegment, tableColumn: MemorySegment, item: MemorySegment, mouseLocation: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:toolTipForCell:rect:tableColumn:item:mouseLocation:' not implemented")
     
     // @optional
-    fun outlineView_heightOfRowByItem(outlineView: MemorySegment, item: MemorySegment): CGFloat =
+    fun outlineView_heightOfRowByItem(outlineView: MemorySegment, item: MemorySegment): Double =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:heightOfRowByItem:' not implemented")
     
     // @optional
@@ -82,15 +82,15 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:nextTypeSelectMatchFromItem:toItem:forString:' not implemented")
     
     // @optional
-    fun outlineView_shouldTypeSelectForEvent_withCurrentSearchString(outlineView: MemorySegment, event: MemorySegment, searchString: MemorySegment): BOOL =
+    fun outlineView_shouldTypeSelectForEvent_withCurrentSearchString(outlineView: MemorySegment, event: MemorySegment, searchString: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldTypeSelectForEvent:withCurrentSearchString:' not implemented")
     
     // @optional
-    fun outlineView_shouldShowCellExpansionForTableColumn_item(outlineView: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldShowCellExpansionForTableColumn_item(outlineView: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldShowCellExpansionForTableColumn:item:' not implemented")
     
     // @optional
-    fun outlineView_shouldTrackCell_forTableColumn_item(outlineView: MemorySegment, cell: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldTrackCell_forTableColumn_item(outlineView: MemorySegment, cell: MemorySegment, tableColumn: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldTrackCell:forTableColumn:item:' not implemented")
     
     // @optional
@@ -98,15 +98,15 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:dataCellForTableColumn:item:' not implemented")
     
     // @optional
-    fun outlineView_isGroupItem(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_isGroupItem(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:isGroupItem:' not implemented")
     
     // @optional
-    fun outlineView_shouldExpandItem(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldExpandItem(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldExpandItem:' not implemented")
     
     // @optional
-    fun outlineView_shouldCollapseItem(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldCollapseItem(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldCollapseItem:' not implemented")
     
     // @optional
@@ -114,19 +114,19 @@ interface NSOutlineViewDelegate : NSControlTextEditingDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:willDisplayOutlineCell:forTableColumn:item:' not implemented")
     
     // @optional
-    fun outlineView_sizeToFitWidthOfColumn(outlineView: MemorySegment, column: NSInteger): CGFloat =
+    fun outlineView_sizeToFitWidthOfColumn(outlineView: MemorySegment, column: Long): Double =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:sizeToFitWidthOfColumn:' not implemented")
     
     // @optional
-    fun outlineView_shouldReorderColumn_toColumn(outlineView: MemorySegment, columnIndex: NSInteger, newColumnIndex: NSInteger): BOOL =
+    fun outlineView_shouldReorderColumn_toColumn(outlineView: MemorySegment, columnIndex: Long, newColumnIndex: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldReorderColumn:toColumn:' not implemented")
     
     // @optional
-    fun outlineView_shouldShowOutlineCellForItem(outlineView: MemorySegment, item: MemorySegment): BOOL =
+    fun outlineView_shouldShowOutlineCellForItem(outlineView: MemorySegment, item: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:shouldShowOutlineCellForItem:' not implemented")
     
     // @optional
-    fun outlineView_userCanChangeVisibilityOfTableColumn(outlineView: MemorySegment, column: MemorySegment): BOOL =
+    fun outlineView_userCanChangeVisibilityOfTableColumn(outlineView: MemorySegment, column: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'outlineView:userCanChangeVisibilityOfTableColumn:' not implemented")
     
     // @optional

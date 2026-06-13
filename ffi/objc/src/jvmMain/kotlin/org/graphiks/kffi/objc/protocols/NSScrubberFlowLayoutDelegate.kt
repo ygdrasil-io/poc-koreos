@@ -10,7 +10,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  */
 interface NSScrubberFlowLayoutDelegate : NSScrubberDelegate {
     // @optional
-    fun scrubber_layout_sizeForItemAtIndex(scrubber: MemorySegment, layout: MemorySegment, itemIndex: NSInteger): NSSize =
+    fun scrubber_layout_sizeForItemAtIndex(scrubber: MemorySegment, layout: MemorySegment, itemIndex: Long): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'scrubber:layout:sizeForItemAtIndex:' not implemented")
     
 }

@@ -8,21 +8,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSClassDescription
  * Superclass: NSObject
  */
-open class NSClassDescription(val ptr: MemorySegment) {
+open class NSClassDescription(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSClassDescription") }
         
-        open fun registerClassDescription_forClass(description: MemorySegment, aClass: Class<*>): Unit {
+        fun registerClassDescription_forClass(description: MemorySegment, aClass: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("registerClassDescription:forClass:")
             ObjCRuntime.msgSend(null, _class, sel, description, aClass)
         }
         
-        open fun invalidateClassDescriptionCache(): Unit {
+        fun invalidateClassDescriptionCache(): Unit {
             val sel = ObjCRuntime.sel("invalidateClassDescriptionCache")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        open fun classDescriptionForClass(aClass: Class<*>): MemorySegment {
+        fun classDescriptionForClass(aClass: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("classDescriptionForClass:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, aClass) as MemorySegment
         }
@@ -35,13 +35,13 @@ open class NSClassDescription(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun inverseForRelationshipKeyAsString(relationshipKey: MemorySegment): String = ObjCRuntime.toJavaString(inverseForRelationshipKey(relationshipKey))
+    fun inverseForRelationshipKeyAsString(relationshipKey: MemorySegment): String = ObjCRuntime.toJavaString(inverseForRelationshipKey(relationshipKey))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun inverseForRelationshipKey(relationshipKey: String): MemorySegment = inverseForRelationshipKey(ObjCRuntime.newNSString(Arena.global(), relationshipKey))
+    fun inverseForRelationshipKey(relationshipKey: String): MemorySegment = inverseForRelationshipKey(ObjCRuntime.newNSString(Arena.global(), relationshipKey))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun inverseForRelationshipKeyAsString(relationshipKey: String): String = ObjCRuntime.toJavaString(inverseForRelationshipKey(ObjCRuntime.newNSString(Arena.global(), relationshipKey)))
+    fun inverseForRelationshipKeyAsString(relationshipKey: String): String = ObjCRuntime.toJavaString(inverseForRelationshipKey(ObjCRuntime.newNSString(Arena.global(), relationshipKey)))
     
     // @property attributeKeys
     /** @return NSArray<NSString *> * */

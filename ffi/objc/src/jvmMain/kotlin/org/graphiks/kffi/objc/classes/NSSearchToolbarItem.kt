@@ -8,58 +8,58 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSearchToolbarItem
  * Superclass: NSToolbarItem
  */
-open class NSSearchToolbarItem(ptr: MemorySegment) : NSToolbarItem(ptr) {
+open class NSSearchToolbarItem(override val ptr: MemorySegment) : NSToolbarItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSearchToolbarItem") }
         
     }
     
-    fun beginSearchInteraction(): Unit {
+    open fun beginSearchInteraction(): Unit {
         val sel = ObjCRuntime.sel("beginSearchInteraction")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun endSearchInteraction(): Unit {
+    open fun endSearchInteraction(): Unit {
         val sel = ObjCRuntime.sel("endSearchInteraction")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property searchField
-    fun searchField(): MemorySegment {
+    open fun searchField(): MemorySegment {
         val sel = ObjCRuntime.sel("searchField")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSearchField(value: MemorySegment) {
+    open fun setSearchField(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSearchField:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property view
-    override fun `view`(): MemorySegment {
+    override fun view(): MemorySegment {
         val sel = ObjCRuntime.sel("view")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    override fun `setView`(value: MemorySegment) {
+    override fun setView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property resignsFirstResponderWithCancel
-    fun resignsFirstResponderWithCancel(): BOOL {
+    open fun resignsFirstResponderWithCancel(): Boolean {
         val sel = ObjCRuntime.sel("resignsFirstResponderWithCancel")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setResignsFirstResponderWithCancel(value: BOOL) {
+    open fun setResignsFirstResponderWithCancel(value: Boolean) {
         val sel = ObjCRuntime.sel("setResignsFirstResponderWithCancel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preferredWidthForSearchField
-    fun preferredWidthForSearchField(): CGFloat {
+    open fun preferredWidthForSearchField(): Double {
         val sel = ObjCRuntime.sel("preferredWidthForSearchField")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setPreferredWidthForSearchField(value: CGFloat) {
+    open fun setPreferredWidthForSearchField(value: Double) {
         val sel = ObjCRuntime.sel("setPreferredWidthForSearchField:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

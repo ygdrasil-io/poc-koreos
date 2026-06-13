@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCollectionViewElement
  * Inherits protocols: NSObject, NSUserInterfaceItemIdentification
  */
-interface NSCollectionViewElement : NSObject, NSUserInterfaceItemIdentification {
+interface NSCollectionViewElement : NSUserInterfaceItemIdentification {
     // @optional
     fun prepareForReuse(): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'prepareForReuse' not implemented")

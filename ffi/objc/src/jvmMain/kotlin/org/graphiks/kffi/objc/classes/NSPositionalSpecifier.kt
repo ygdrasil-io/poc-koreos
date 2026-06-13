@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPositionalSpecifier
  * Superclass: NSObject
  */
-open class NSPositionalSpecifier(val ptr: MemorySegment) {
+open class NSPositionalSpecifier(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPositionalSpecifier") }
         
     }
     
-    open fun initWithPosition_objectSpecifier(position: NSInsertionPosition, specifier: MemorySegment): MemorySegment {
+    open fun initWithPosition_objectSpecifier(position: MemorySegment, specifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithPosition:objectSpecifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, position, specifier) as MemorySegment
     }
@@ -30,9 +30,9 @@ open class NSPositionalSpecifier(val ptr: MemorySegment) {
     }
     
     // @property position
-    open fun position(): NSInsertionPosition {
+    open fun position(): MemorySegment {
         val sel = ObjCRuntime.sel("position")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSInsertionPosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property objectSpecifier
@@ -57,21 +57,21 @@ open class NSPositionalSpecifier(val ptr: MemorySegment) {
     open fun insertionKeyAsString(): String = ObjCRuntime.toJavaString(insertionKey())
     
     // @property insertionIndex
-    open fun insertionIndex(): NSInteger {
+    open fun insertionIndex(): Long {
         val sel = ObjCRuntime.sel("insertionIndex")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property insertionReplaces
-    open fun insertionReplaces(): BOOL {
+    open fun insertionReplaces(): Boolean {
         val sel = ObjCRuntime.sel("insertionReplaces")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _specifier: MemorySegment
-    // ivar: _unadjustedPosition: NSInsertionPosition
+    // ivar: _unadjustedPosition: MemorySegment
     // ivar: _insertionClassDescription: MemorySegment
     // ivar: _moreVars: MemorySegment
     // ivar: _reserved0: MemorySegment

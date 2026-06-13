@@ -8,31 +8,31 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLCache
  * Superclass: NSObject
  */
-open class NSURLCache(val ptr: MemorySegment) {
+open class NSURLCache(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLCache") }
         
-        open fun sharedURLCache(): MemorySegment {
+        fun sharedURLCache(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedURLCache")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun setSharedURLCache(sharedURLCache: MemorySegment): Unit {
+        fun setSharedURLCache(sharedURLCache: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setSharedURLCache:")
             ObjCRuntime.msgSend(null, _class, sel, sharedURLCache)
         }
         
     }
     
-    open fun initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity: NSUInteger, diskCapacity: NSUInteger, path: MemorySegment): MemorySegment {
+    open fun initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity: Long, diskCapacity: Long, path: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithMemoryCapacity:diskCapacity:diskPath:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, memoryCapacity, diskCapacity, path) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity: NSUInteger, diskCapacity: NSUInteger, path: String): MemorySegment = initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity, diskCapacity, ObjCRuntime.newNSString(Arena.global(), path))
+    fun initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity: Long, diskCapacity: Long, path: String): MemorySegment = initWithMemoryCapacity_diskCapacity_diskPath(memoryCapacity, diskCapacity, ObjCRuntime.newNSString(Arena.global(), path))
     
-    open fun initWithMemoryCapacity_diskCapacity_directoryURL(memoryCapacity: NSUInteger, diskCapacity: NSUInteger, directoryURL: MemorySegment): MemorySegment {
+    open fun initWithMemoryCapacity_diskCapacity_directoryURL(memoryCapacity: Long, diskCapacity: Long, directoryURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithMemoryCapacity:diskCapacity:directoryURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, memoryCapacity, diskCapacity, directoryURL) as MemorySegment
     }
@@ -63,35 +63,45 @@ open class NSURLCache(val ptr: MemorySegment) {
     }
     
     // @property sharedURLCache
-    open fun memoryCapacity(): NSUInteger {
-        val sel = ObjCRuntime.sel("memoryCapacity")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+    open fun sharedURLCache(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedURLCache")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setMemoryCapacity(value: NSUInteger) {
+    open fun setSharedURLCache(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setSharedURLCache:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property memoryCapacity
+    open fun memoryCapacity(): Long {
+        val sel = ObjCRuntime.sel("memoryCapacity")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
+    }
+    open fun setMemoryCapacity(value: Long) {
         val sel = ObjCRuntime.sel("setMemoryCapacity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property diskCapacity
-    open fun diskCapacity(): NSUInteger {
+    open fun diskCapacity(): Long {
         val sel = ObjCRuntime.sel("diskCapacity")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setDiskCapacity(value: NSUInteger) {
+    open fun setDiskCapacity(value: Long) {
         val sel = ObjCRuntime.sel("setDiskCapacity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currentMemoryUsage
-    open fun currentMemoryUsage(): NSUInteger {
+    open fun currentMemoryUsage(): Long {
         val sel = ObjCRuntime.sel("currentMemoryUsage")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property currentDiskUsage
-    open fun currentDiskUsage(): NSUInteger {
+    open fun currentDiskUsage(): Long {
         val sel = ObjCRuntime.sel("currentDiskUsage")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     
@@ -103,16 +113,16 @@ open class NSURLCache(val ptr: MemorySegment) {
 
 fun NSURLCache.storeCachedResponse_forDataTask(cachedResponse: MemorySegment, dataTask: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("storeCachedResponse:forDataTask:")
-    ObjCRuntime.msgSend(null, ptr, sel, cachedResponse, dataTask)
+    ObjCRuntime.msgSend(null, this.ptr, sel, cachedResponse, dataTask)
 }
 
 fun NSURLCache.getCachedResponseForDataTask_completionHandler(dataTask: MemorySegment, completionHandler: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("getCachedResponseForDataTask:completionHandler:")
-    ObjCRuntime.msgSend(null, ptr, sel, dataTask, completionHandler)
+    ObjCRuntime.msgSend(null, this.ptr, sel, dataTask, completionHandler)
 }
 
 fun NSURLCache.removeCachedResponseForDataTask(dataTask: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeCachedResponseForDataTask:")
-    ObjCRuntime.msgSend(null, ptr, sel, dataTask)
+    ObjCRuntime.msgSend(null, this.ptr, sel, dataTask)
 }
 

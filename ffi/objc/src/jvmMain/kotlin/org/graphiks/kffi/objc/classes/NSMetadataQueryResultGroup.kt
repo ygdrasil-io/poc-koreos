@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataQueryResultGroup
  * Superclass: NSObject
  */
-open class NSMetadataQueryResultGroup(val ptr: MemorySegment) {
+open class NSMetadataQueryResultGroup(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMetadataQueryResultGroup") }
         
     }
     
-    open fun resultAtIndex(idx: NSUInteger): MemorySegment {
+    open fun resultAtIndex(idx: Long): MemorySegment {
         val sel = ObjCRuntime.sel("resultAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, idx) as MemorySegment
     }
@@ -42,9 +42,9 @@ open class NSMetadataQueryResultGroup(val ptr: MemorySegment) {
     }
     
     // @property resultCount
-    open fun resultCount(): NSUInteger {
+    open fun resultCount(): Long {
         val sel = ObjCRuntime.sel("resultCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property results

@@ -8,15 +8,15 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataQuery
  * Superclass: NSObject
  */
-open class NSMetadataQuery(val ptr: MemorySegment) {
+open class NSMetadataQuery(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMetadataQuery") }
         
     }
     
-    open fun startQuery(): BOOL {
+    open fun startQuery(): Boolean {
         val sel = ObjCRuntime.sel("startQuery")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun stopQuery(): Unit {
@@ -34,7 +34,7 @@ open class NSMetadataQuery(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun resultAtIndex(idx: NSUInteger): MemorySegment {
+    open fun resultAtIndex(idx: Long): MemorySegment {
         val sel = ObjCRuntime.sel("resultAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, idx) as MemorySegment
     }
@@ -44,23 +44,23 @@ open class NSMetadataQuery(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, block)
     }
     
-    open fun enumerateResultsWithOptions_usingBlock(opts: NSEnumerationOptions, block: MemorySegment): Unit {
+    open fun enumerateResultsWithOptions_usingBlock(opts: MemorySegment, block: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("enumerateResultsWithOptions:usingBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, opts, block)
     }
     
-    open fun indexOfResult(result: MemorySegment): NSUInteger {
+    open fun indexOfResult(result: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfResult:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, result) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, result) as Long
     }
     
-    open fun valueOfAttribute_forResultAtIndex(attrName: MemorySegment, idx: NSUInteger): MemorySegment {
+    open fun valueOfAttribute_forResultAtIndex(attrName: MemorySegment, idx: Long): MemorySegment {
         val sel = ObjCRuntime.sel("valueOfAttribute:forResultAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attrName, idx) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun valueOfAttribute_forResultAtIndex(attrName: String, idx: NSUInteger): MemorySegment = valueOfAttribute_forResultAtIndex(ObjCRuntime.newNSString(Arena.global(), attrName), idx)
+    fun valueOfAttribute_forResultAtIndex(attrName: String, idx: Long): MemorySegment = valueOfAttribute_forResultAtIndex(ObjCRuntime.newNSString(Arena.global(), attrName), idx)
     
     // @property delegate
     /** @return id<NSMetadataQueryDelegate> */
@@ -117,11 +117,11 @@ open class NSMetadataQuery(val ptr: MemorySegment) {
     }
     
     // @property notificationBatchingInterval
-    open fun notificationBatchingInterval(): NSTimeInterval {
+    open fun notificationBatchingInterval(): Double {
         val sel = ObjCRuntime.sel("notificationBatchingInterval")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setNotificationBatchingInterval(value: NSTimeInterval) {
+    open fun setNotificationBatchingInterval(value: Double) {
         val sel = ObjCRuntime.sel("setNotificationBatchingInterval:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -157,27 +157,27 @@ open class NSMetadataQuery(val ptr: MemorySegment) {
     }
     
     // @property started
-    open fun isStarted(): BOOL {
+    open fun isStarted(): Boolean {
         val sel = ObjCRuntime.sel("isStarted")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property gathering
-    open fun isGathering(): BOOL {
+    open fun isGathering(): Boolean {
         val sel = ObjCRuntime.sel("isGathering")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property stopped
-    open fun isStopped(): BOOL {
+    open fun isStopped(): Boolean {
         val sel = ObjCRuntime.sel("isStopped")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property resultCount
-    open fun resultCount(): NSUInteger {
+    open fun resultCount(): Long {
         val sel = ObjCRuntime.sel("resultCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property results
@@ -202,8 +202,8 @@ open class NSMetadataQuery(val ptr: MemorySegment) {
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _flags: NSUInteger
-    // ivar: _interval: NSTimeInterval
+    // ivar: _flags: Long
+    // ivar: _interval: Double
     // ivar: _private: MemorySegment
     // ivar: _reserved: MemorySegment
 }

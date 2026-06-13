@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionViewUpdateItem
  * Superclass: NSObject
  */
-open class NSCollectionViewUpdateItem(val ptr: MemorySegment) {
+open class NSCollectionViewUpdateItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewUpdateItem") }
         
@@ -27,9 +27,9 @@ open class NSCollectionViewUpdateItem(val ptr: MemorySegment) {
     }
     
     // @property updateAction
-    open fun updateAction(): NSCollectionUpdateAction {
+    open fun updateAction(): MemorySegment {
         val sel = ObjCRuntime.sel("updateAction")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCollectionUpdateAction
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

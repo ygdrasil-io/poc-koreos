@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitEnergy(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitEnergy(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitEnergy") }
         
@@ -41,5 +41,34 @@ open class NSUnitEnergy(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property kilojoules
+    open fun kilojoules(): MemorySegment {
+        val sel = ObjCRuntime.sel("kilojoules")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property joules
+    open fun joules(): MemorySegment {
+        val sel = ObjCRuntime.sel("joules")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property kilocalories
+    open fun kilocalories(): MemorySegment {
+        val sel = ObjCRuntime.sel("kilocalories")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property calories
+    open fun calories(): MemorySegment {
+        val sel = ObjCRuntime.sel("calories")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property kilowattHours
+    open fun kilowattHours(): MemorySegment {
+        val sel = ObjCRuntime.sel("kilowattHours")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

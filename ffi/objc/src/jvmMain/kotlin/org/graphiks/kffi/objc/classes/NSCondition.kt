@@ -9,20 +9,20 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSLocking
  */
-open class NSCondition(val ptr: MemorySegment) {
+open class NSCondition(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCondition") }
         
     }
     
-    open fun wait(): Unit {
+    open fun waitObjC(): Unit {
         val sel = ObjCRuntime.sel("wait")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun waitUntilDate(limit: MemorySegment): BOOL {
+    open fun waitUntilDate(limit: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("waitUntilDate:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, limit) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, limit) as Boolean
     }
     
     open fun signal(): Unit {

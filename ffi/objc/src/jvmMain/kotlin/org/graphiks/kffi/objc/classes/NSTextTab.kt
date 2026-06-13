@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding, NSSecureCoding
  */
-open class NSTextTab(val ptr: MemorySegment) {
+open class NSTextTab(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextTab") }
         
-        open fun columnTerminatorsForLocale(aLocale: MemorySegment): MemorySegment {
+        fun columnTerminatorsForLocale(aLocale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("columnTerminatorsForLocale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, aLocale) as MemorySegment
         }
@@ -21,9 +21,9 @@ open class NSTextTab(val ptr: MemorySegment) {
     }
     
     // @property location
-    open fun location(): CGFloat {
+    open fun location(): Double {
         val sel = ObjCRuntime.sel("location")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property options
@@ -37,25 +37,25 @@ open class NSTextTab(val ptr: MemorySegment) {
 
 // ── Category:  on NSTextTab ─────────────────────────────────────────
 
-fun NSTextTab.initWithTextAlignment_location_options(alignment: NSTextAlignment, loc: CGFloat, options: MemorySegment): MemorySegment {
+fun NSTextTab.initWithTextAlignment_location_options(alignment: MemorySegment, loc: Double, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("initWithTextAlignment:location:options:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, alignment, loc, options) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, alignment, loc, options) as MemorySegment
 }
 
-fun NSTextTab.alignment(): NSTextAlignment {
+fun NSTextTab.alignment(): MemorySegment {
     val sel = ObjCRuntime.sel("alignment")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextAlignment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property alignment
-fun NSTextTab.initWithType_location(type: NSTextTabType, loc: CGFloat): MemorySegment {
+// ── Category: NSTextTabDeprecated on NSTextTab ─────────────────────────────────────────
+
+fun NSTextTab.initWithType_location(type: MemorySegment, loc: Double): MemorySegment {
     val sel = ObjCRuntime.sel("initWithType:location:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type, loc) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, type, loc) as MemorySegment
 }
 
-fun NSTextTab.tabStopType(): NSTextTabType {
+fun NSTextTab.tabStopType(): MemorySegment {
     val sel = ObjCRuntime.sel("tabStopType")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextTabType
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property tabStopType

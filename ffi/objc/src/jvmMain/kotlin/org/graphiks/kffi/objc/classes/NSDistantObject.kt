@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSProxy
  * Protocols: NSCoding
  */
-open class NSDistantObject(ptr: MemorySegment) : NSProxy(ptr) {
+open class NSDistantObject(override val ptr: MemorySegment) : NSProxy(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDistantObject") }
         
@@ -25,28 +25,28 @@ open class NSDistantObject(ptr: MemorySegment) : NSProxy(ptr) {
         
     }
     
-    fun initWithTarget_connection(target: MemorySegment, connection: MemorySegment): MemorySegment {
+    open fun initWithTarget_connection(target: MemorySegment, connection: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithTarget:connection:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, connection) as MemorySegment
     }
     
-    fun initWithLocal_connection(target: MemorySegment, connection: MemorySegment): MemorySegment {
+    open fun initWithLocal_connection(target: MemorySegment, connection: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLocal:connection:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, target, connection) as MemorySegment
     }
     
-    fun initWithCoder(inCoder: MemorySegment): MemorySegment {
+    open fun initWithCoder(inCoder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, inCoder) as MemorySegment
     }
     
-    fun setProtocolForProxy(proto: MemorySegment): Unit {
+    open fun setProtocolForProxy(proto: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setProtocolForProxy:")
         ObjCRuntime.msgSend(null, ptr, sel, proto)
     }
     
     // @property connectionForProxy
-    fun connectionForProxy(): MemorySegment {
+    open fun connectionForProxy(): MemorySegment {
         val sel = ObjCRuntime.sel("connectionForProxy")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -54,12 +54,12 @@ open class NSDistantObject(ptr: MemorySegment) : NSProxy(ptr) {
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _knownSelectors: MemorySegment
-    // ivar: _wireCount: NSUInteger
-    // ivar: _refCount: NSUInteger
+    // ivar: _wireCount: Long
+    // ivar: _refCount: Long
     // ivar: _proto: MemorySegment
-    // ivar: ___2: uint16_t
-    // ivar: ___1: uint8_t
-    // ivar: _wireType: uint8_t
+    // ivar: ___2: Short
+    // ivar: ___1: Byte
+    // ivar: _wireType: Byte
     // ivar: _remoteClass: MemorySegment
 }
 

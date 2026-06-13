@@ -8,20 +8,20 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSProcessInfo
  * Superclass: NSObject
  */
-open class NSProcessInfo(val ptr: MemorySegment) {
+open class NSProcessInfo(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSProcessInfo") }
         
-        open fun processInfo(): MemorySegment {
+        fun processInfo(): MemorySegment {
             val sel = ObjCRuntime.sel("processInfo")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun operatingSystem(): NSUInteger {
+    open fun operatingSystem(): Long {
         val sel = ObjCRuntime.sel("operatingSystem")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     open fun operatingSystemName(): MemorySegment {
@@ -30,11 +30,11 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun operatingSystemNameAsString(): String = ObjCRuntime.toJavaString(operatingSystemName())
+    fun operatingSystemNameAsString(): String = ObjCRuntime.toJavaString(operatingSystemName())
     
-    open fun isOperatingSystemAtLeastVersion(version: NSOperatingSystemVersion): BOOL {
+    open fun isOperatingSystemAtLeastVersion(version: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isOperatingSystemAtLeastVersion:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(version, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"))) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(version, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"))) as Boolean
     }
     
     open fun disableSuddenTermination(): Unit {
@@ -53,7 +53,7 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun disableAutomaticTermination(reason: String): Unit = disableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
+    fun disableAutomaticTermination(reason: String): Unit = disableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
     open fun enableAutomaticTermination(reason: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("enableAutomaticTermination:")
@@ -61,9 +61,15 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
+    fun enableAutomaticTermination(reason: String): Unit = enableAutomaticTermination(ObjCRuntime.newNSString(Arena.global(), reason))
     
     // @property processInfo
+    open fun processInfo(): MemorySegment {
+        val sel = ObjCRuntime.sel("processInfo")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property environment
     /** @return NSDictionary<NSString *,NSString *> * */
     open fun environment(): MemorySegment {
         val sel = ObjCRuntime.sel("environment")
@@ -127,41 +133,41 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     open fun operatingSystemVersionStringAsString(): String = ObjCRuntime.toJavaString(operatingSystemVersionString())
     
     // @property operatingSystemVersion
-    open fun operatingSystemVersion(): NSOperatingSystemVersion {
+    open fun operatingSystemVersion(): MemorySegment {
         val sel = ObjCRuntime.sel("operatingSystemVersion")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"), ptr, sel) as NSOperatingSystemVersion
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("majorVersion"), ValueLayout.JAVA_LONG.withName("minorVersion"), ValueLayout.JAVA_LONG.withName("patchVersion")).withName("NSOperatingSystemVersion"), ptr, sel) as MemorySegment
     }
     
     // @property processorCount
-    open fun processorCount(): NSUInteger {
+    open fun processorCount(): Long {
         val sel = ObjCRuntime.sel("processorCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property activeProcessorCount
-    open fun activeProcessorCount(): NSUInteger {
+    open fun activeProcessorCount(): Long {
         val sel = ObjCRuntime.sel("activeProcessorCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property physicalMemory
-    open fun physicalMemory(): Any {
+    open fun physicalMemory(): Long {
         val sel = ObjCRuntime.sel("physicalMemory")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Any
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property systemUptime
-    open fun systemUptime(): NSTimeInterval {
+    open fun systemUptime(): Double {
         val sel = ObjCRuntime.sel("systemUptime")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property automaticTerminationSupportEnabled
-    open fun automaticTerminationSupportEnabled(): BOOL {
+    open fun automaticTerminationSupportEnabled(): Boolean {
         val sel = ObjCRuntime.sel("automaticTerminationSupportEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAutomaticTerminationSupportEnabled(value: BOOL) {
+    open fun setAutomaticTerminationSupportEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticTerminationSupportEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -172,70 +178,72 @@ open class NSProcessInfo(val ptr: MemorySegment) {
     // ivar: arguments: MemorySegment
     // ivar: hostName: MemorySegment
     // ivar: name: MemorySegment
-    // ivar: automaticTerminationOptOutCounter: NSInteger
+    // ivar: automaticTerminationOptOutCounter: Long
 }
 
 // ── Category: NSProcessInfoActivity on NSProcessInfo ─────────────────────────────────────────
 
 /** @return id<NSObject> */
-fun NSProcessInfo.beginActivityWithOptions_reason(options: NSActivityOptions, reason: MemorySegment): MemorySegment {
+fun NSProcessInfo.beginActivityWithOptions_reason(options: MemorySegment, reason: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("beginActivityWithOptions:reason:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options, reason) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, options, reason) as MemorySegment
 }
 
 fun NSProcessInfo.endActivity(activity: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("endActivity:")
-    ObjCRuntime.msgSend(null, ptr, sel, activity)
+    ObjCRuntime.msgSend(null, this.ptr, sel, activity)
 }
 
-fun NSProcessInfo.performActivityWithOptions_reason_usingBlock(options: NSActivityOptions, reason: MemorySegment, block: MemorySegment): Unit {
+fun NSProcessInfo.performActivityWithOptions_reason_usingBlock(options: MemorySegment, reason: MemorySegment, block: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performActivityWithOptions:reason:usingBlock:")
-    ObjCRuntime.msgSend(null, ptr, sel, options, reason, block)
+    ObjCRuntime.msgSend(null, this.ptr, sel, options, reason, block)
 }
 
 fun NSProcessInfo.performExpiringActivityWithReason_usingBlock(reason: MemorySegment, block: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("performExpiringActivityWithReason:usingBlock:")
-    ObjCRuntime.msgSend(null, ptr, sel, reason, block)
+    ObjCRuntime.msgSend(null, this.ptr, sel, reason, block)
 }
 
 // ── Category: NSUserInformation on NSProcessInfo ─────────────────────────────────────────
 
 fun NSProcessInfo.userName(): MemorySegment {
     val sel = ObjCRuntime.sel("userName")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSProcessInfo.fullUserName(): MemorySegment {
     val sel = ObjCRuntime.sel("fullUserName")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property userName
-fun NSProcessInfo.thermalState(): NSProcessInfoThermalState {
+// ── Category: NSProcessInfoThermalState on NSProcessInfo ─────────────────────────────────────────
+
+fun NSProcessInfo.thermalState(): MemorySegment {
     val sel = ObjCRuntime.sel("thermalState")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProcessInfoThermalState
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property thermalState
-fun NSProcessInfo.isLowPowerModeEnabled(): BOOL {
+// ── Category: NSProcessInfoPowerState on NSProcessInfo ─────────────────────────────────────────
+
+fun NSProcessInfo.isLowPowerModeEnabled(): Boolean {
     val sel = ObjCRuntime.sel("isLowPowerModeEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-// @property lowPowerModeEnabled
-fun NSProcessInfo.isMacCatalystApp(): BOOL {
+// ── Category: NSProcessInfoPlatform on NSProcessInfo ─────────────────────────────────────────
+
+fun NSProcessInfo.isMacCatalystApp(): Boolean {
     val sel = ObjCRuntime.sel("isMacCatalystApp")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSProcessInfo.isiOSAppOnMac(): BOOL {
+fun NSProcessInfo.isiOSAppOnMac(): Boolean {
     val sel = ObjCRuntime.sel("isiOSAppOnMac")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSProcessInfo.isiOSAppOnVision(): BOOL {
+fun NSProcessInfo.isiOSAppOnVision(): Boolean {
     val sel = ObjCRuntime.sel("isiOSAppOnVision")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-// @property macCatalystApp

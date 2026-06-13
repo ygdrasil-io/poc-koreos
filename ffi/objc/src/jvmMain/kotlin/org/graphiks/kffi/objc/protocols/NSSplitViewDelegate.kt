@@ -8,45 +8,45 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSSplitViewDelegate
  * Inherits protocols: NSObject
  */
-interface NSSplitViewDelegate : NSObject {
+interface NSSplitViewDelegate {
     // @optional
-    fun splitView_canCollapseSubview(splitView: MemorySegment, subview: MemorySegment): BOOL =
+    fun splitView_canCollapseSubview(splitView: MemorySegment, subview: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:canCollapseSubview:' not implemented")
     
     // @optional
-    fun splitView_shouldCollapseSubview_forDoubleClickOnDividerAtIndex(splitView: MemorySegment, subview: MemorySegment, dividerIndex: NSInteger): BOOL =
+    fun splitView_shouldCollapseSubview_forDoubleClickOnDividerAtIndex(splitView: MemorySegment, subview: MemorySegment, dividerIndex: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:shouldCollapseSubview:forDoubleClickOnDividerAtIndex:' not implemented")
     
     // @optional
-    fun splitView_constrainMinCoordinate_ofSubviewAt(splitView: MemorySegment, proposedMinimumPosition: CGFloat, dividerIndex: NSInteger): CGFloat =
+    fun splitView_constrainMinCoordinate_ofSubviewAt(splitView: MemorySegment, proposedMinimumPosition: Double, dividerIndex: Long): Double =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:constrainMinCoordinate:ofSubviewAt:' not implemented")
     
     // @optional
-    fun splitView_constrainMaxCoordinate_ofSubviewAt(splitView: MemorySegment, proposedMaximumPosition: CGFloat, dividerIndex: NSInteger): CGFloat =
+    fun splitView_constrainMaxCoordinate_ofSubviewAt(splitView: MemorySegment, proposedMaximumPosition: Double, dividerIndex: Long): Double =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:constrainMaxCoordinate:ofSubviewAt:' not implemented")
     
     // @optional
-    fun splitView_constrainSplitPosition_ofSubviewAt(splitView: MemorySegment, proposedPosition: CGFloat, dividerIndex: NSInteger): CGFloat =
+    fun splitView_constrainSplitPosition_ofSubviewAt(splitView: MemorySegment, proposedPosition: Double, dividerIndex: Long): Double =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:constrainSplitPosition:ofSubviewAt:' not implemented")
     
     // @optional
-    fun splitView_resizeSubviewsWithOldSize(splitView: MemorySegment, oldSize: NSSize): Unit =
+    fun splitView_resizeSubviewsWithOldSize(splitView: MemorySegment, oldSize: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:resizeSubviewsWithOldSize:' not implemented")
     
     // @optional
-    fun splitView_shouldAdjustSizeOfSubview(splitView: MemorySegment, view: MemorySegment): BOOL =
+    fun splitView_shouldAdjustSizeOfSubview(splitView: MemorySegment, view: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:shouldAdjustSizeOfSubview:' not implemented")
     
     // @optional
-    fun splitView_shouldHideDividerAtIndex(splitView: MemorySegment, dividerIndex: NSInteger): BOOL =
+    fun splitView_shouldHideDividerAtIndex(splitView: MemorySegment, dividerIndex: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:shouldHideDividerAtIndex:' not implemented")
     
     // @optional
-    fun splitView_effectiveRect_forDrawnRect_ofDividerAtIndex(splitView: MemorySegment, proposedEffectiveRect: NSRect, drawnRect: NSRect, dividerIndex: NSInteger): NSRect =
+    fun splitView_effectiveRect_forDrawnRect_ofDividerAtIndex(splitView: MemorySegment, proposedEffectiveRect: MemorySegment, drawnRect: MemorySegment, dividerIndex: Long): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:effectiveRect:forDrawnRect:ofDividerAtIndex:' not implemented")
     
     // @optional
-    fun splitView_additionalEffectiveRectOfDividerAtIndex(splitView: MemorySegment, dividerIndex: NSInteger): NSRect =
+    fun splitView_additionalEffectiveRectOfDividerAtIndex(splitView: MemorySegment, dividerIndex: Long): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'splitView:additionalEffectiveRectOfDividerAtIndex:' not implemented")
     
     // @optional

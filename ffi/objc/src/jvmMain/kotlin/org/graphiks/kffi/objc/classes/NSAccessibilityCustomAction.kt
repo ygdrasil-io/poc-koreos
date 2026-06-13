@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAccessibilityCustomAction
  * Superclass: NSObject
  */
-open class NSAccessibilityCustomAction(val ptr: MemorySegment) {
+open class NSAccessibilityCustomAction(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAccessibilityCustomAction") }
         
@@ -20,7 +20,7 @@ open class NSAccessibilityCustomAction(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithName_handler(name: String, handler: MemorySegment): MemorySegment = initWithName_handler(ObjCRuntime.newNSString(Arena.global(), name), handler)
+    fun initWithName_handler(name: String, handler: MemorySegment): MemorySegment = initWithName_handler(ObjCRuntime.newNSString(Arena.global(), name), handler)
     
     open fun initWithName_target_selector(name: MemorySegment, target: MemorySegment, selector: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:target:selector:")
@@ -28,7 +28,7 @@ open class NSAccessibilityCustomAction(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithName_target_selector(name: String, target: MemorySegment, selector: MemorySegment): MemorySegment = initWithName_target_selector(ObjCRuntime.newNSString(Arena.global(), name), target, selector)
+    fun initWithName_target_selector(name: String, target: MemorySegment, selector: MemorySegment): MemorySegment = initWithName_target_selector(ObjCRuntime.newNSString(Arena.global(), name), target, selector)
     
     // @property name
     open fun name(): MemorySegment {

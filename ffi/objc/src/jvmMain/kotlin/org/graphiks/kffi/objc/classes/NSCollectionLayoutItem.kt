@@ -9,21 +9,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutItem(val ptr: MemorySegment) {
+open class NSCollectionLayoutItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutItem") }
         
-        open fun itemWithLayoutSize(layoutSize: MemorySegment): MemorySegment {
+        fun itemWithLayoutSize(layoutSize: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("itemWithLayoutSize:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize) as MemorySegment
         }
         
-        open fun itemWithLayoutSize_supplementaryItems(layoutSize: MemorySegment, supplementaryItems: MemorySegment): MemorySegment {
+        fun itemWithLayoutSize_supplementaryItems(layoutSize: MemorySegment, supplementaryItems: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("itemWithLayoutSize:supplementaryItems:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, layoutSize, supplementaryItems) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -36,11 +36,11 @@ open class NSCollectionLayoutItem(val ptr: MemorySegment) {
     }
     
     // @property contentInsets
-    open fun contentInsets(): NSDirectionalEdgeInsets {
+    open fun contentInsets(): MemorySegment {
         val sel = ObjCRuntime.sel("contentInsets")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets"), ptr, sel) as NSDirectionalEdgeInsets
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets"), ptr, sel) as MemorySegment
     }
-    open fun setContentInsets(value: NSDirectionalEdgeInsets) {
+    open fun setContentInsets(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentInsets:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets")))
     }

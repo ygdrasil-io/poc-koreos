@@ -10,7 +10,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  */
 interface NSTextContentStorageDelegate : NSTextContentManagerDelegate {
     // @optional
-    fun textContentStorage_textParagraphWithRange(textContentStorage: MemorySegment, range: NSRange): MemorySegment =
+    fun textContentStorage_textParagraphWithRange(textContentStorage: MemorySegment, range: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'textContentStorage:textParagraphWithRange:' not implemented")
     
 }

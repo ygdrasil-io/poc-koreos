@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSSharingServiceDelegate
  * Inherits protocols: NSObject
  */
-interface NSSharingServiceDelegate : NSObject {
+interface NSSharingServiceDelegate {
     // @optional
     fun sharingService_willShareItems(sharingService: MemorySegment, items: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'sharingService:willShareItems:' not implemented")
@@ -22,7 +22,7 @@ interface NSSharingServiceDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'sharingService:didShareItems:' not implemented")
     
     // @optional
-    fun sharingService_sourceFrameOnScreenForShareItem(sharingService: MemorySegment, item: MemorySegment): NSRect =
+    fun sharingService_sourceFrameOnScreenForShareItem(sharingService: MemorySegment, item: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'sharingService:sourceFrameOnScreenForShareItem:' not implemented")
     
     // @optional

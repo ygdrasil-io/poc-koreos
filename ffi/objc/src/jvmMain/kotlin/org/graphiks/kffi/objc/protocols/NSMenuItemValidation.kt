@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSMenuItemValidation
  * Inherits protocols: NSObject
  */
-interface NSMenuItemValidation : NSObject {
-    fun validateMenuItem(menuItem: MemorySegment): BOOL
+interface NSMenuItemValidation {
+    fun validateMenuItem(menuItem: MemorySegment): Boolean
     
 }
 

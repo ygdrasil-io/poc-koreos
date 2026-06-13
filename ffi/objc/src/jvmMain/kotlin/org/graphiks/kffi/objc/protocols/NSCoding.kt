@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCoding
  */
 interface NSCoding {
-    fun encodeWithCoder(coder: MemorySegment)
+    fun encodeWithCoder(coder: MemorySegment): Unit
     
     fun initWithCoder(coder: MemorySegment): MemorySegment
     

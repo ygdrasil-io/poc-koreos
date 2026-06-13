@@ -8,19 +8,19 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextInputContext
  * Superclass: NSObject
  */
-open class NSTextInputContext(val ptr: MemorySegment) {
+open class NSTextInputContext(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextInputContext") }
         
-        open fun localizedNameForInputSource(inputSourceIdentifier: NSTextInputSourceIdentifier): MemorySegment {
+        fun localizedNameForInputSource(inputSourceIdentifier: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("localizedNameForInputSource:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, inputSourceIdentifier) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        open fun localizedNameForInputSourceAsString(inputSourceIdentifier: NSTextInputSourceIdentifier): String = ObjCRuntime.toJavaString(localizedNameForInputSource(inputSourceIdentifier))
+        fun localizedNameForInputSourceAsString(inputSourceIdentifier: MemorySegment): String = ObjCRuntime.toJavaString(localizedNameForInputSource(inputSourceIdentifier))
         
-        open fun currentInputContext(): MemorySegment {
+        fun currentInputContext(): MemorySegment {
             val sel = ObjCRuntime.sel("currentInputContext")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -47,9 +47,9 @@ open class NSTextInputContext(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun handleEvent(event: MemorySegment): BOOL {
+    open fun handleEvent(event: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("handleEvent:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as Boolean
     }
     
     open fun discardMarkedText(): Unit {
@@ -83,6 +83,12 @@ open class NSTextInputContext(val ptr: MemorySegment) {
     }
     
     // @property currentInputContext
+    open fun currentInputContext(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentInputContext")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property client
     /** @return id<NSTextInputClient> */
     open fun client(): MemorySegment {
         val sel = ObjCRuntime.sel("client")
@@ -90,11 +96,11 @@ open class NSTextInputContext(val ptr: MemorySegment) {
     }
     
     // @property acceptsGlyphInfo
-    open fun acceptsGlyphInfo(): BOOL {
+    open fun acceptsGlyphInfo(): Boolean {
         val sel = ObjCRuntime.sel("acceptsGlyphInfo")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAcceptsGlyphInfo(value: BOOL) {
+    open fun setAcceptsGlyphInfo(value: Boolean) {
         val sel = ObjCRuntime.sel("setAcceptsGlyphInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -118,11 +124,11 @@ open class NSTextInputContext(val ptr: MemorySegment) {
     }
     
     // @property selectedKeyboardInputSource
-    open fun selectedKeyboardInputSource(): NSTextInputSourceIdentifier {
+    open fun selectedKeyboardInputSource(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedKeyboardInputSource")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextInputSourceIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setSelectedKeyboardInputSource(value: NSTextInputSourceIdentifier) {
+    open fun setSelectedKeyboardInputSource(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSelectedKeyboardInputSource:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,25 +8,25 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSColorPickingDefault
  */
 interface NSColorPickingDefault {
-    fun initWithPickerMask_colorPanel(mask: NSUInteger, owningColorPanel: MemorySegment): MemorySegment
+    fun initWithPickerMask_colorPanel(mask: Long, owningColorPanel: MemorySegment): MemorySegment
     
     fun provideNewButtonImage(): MemorySegment
     
-    fun insertNewButtonImage_in(newButtonImage: MemorySegment, buttonCell: MemorySegment)
+    fun insertNewButtonImage_in(newButtonImage: MemorySegment, buttonCell: MemorySegment): Unit
     
-    fun viewSizeChanged(sender: MemorySegment)
+    fun viewSizeChanged(sender: MemorySegment): Unit
     
-    fun alphaControlAddedOrRemoved(sender: MemorySegment)
+    fun alphaControlAddedOrRemoved(sender: MemorySegment): Unit
     
-    fun attachColorList(colorList: MemorySegment)
+    fun attachColorList(colorList: MemorySegment): Unit
     
-    fun detachColorList(colorList: MemorySegment)
+    fun detachColorList(colorList: MemorySegment): Unit
     
-    fun setMode(mode: NSColorPanelMode)
+    fun setMode(mode: MemorySegment): Unit
     
     fun buttonToolTip(): MemorySegment
     
-    fun minContentSize(): NSSize
+    fun minContentSize(): MemorySegment
     
 }
 

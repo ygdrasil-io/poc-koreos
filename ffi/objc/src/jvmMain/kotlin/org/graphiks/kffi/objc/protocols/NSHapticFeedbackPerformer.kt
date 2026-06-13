@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSHapticFeedbackPerformer
  * Inherits protocols: NSObject
  */
-interface NSHapticFeedbackPerformer : NSObject {
-    fun performFeedbackPattern_performanceTime(pattern: NSHapticFeedbackPattern, performanceTime: NSHapticFeedbackPerformanceTime)
+interface NSHapticFeedbackPerformer {
+    fun performFeedbackPattern_performanceTime(pattern: MemorySegment, performanceTime: MemorySegment): Unit
     
 }
 

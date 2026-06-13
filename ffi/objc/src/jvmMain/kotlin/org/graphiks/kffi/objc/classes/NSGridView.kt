@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSGridView
  * Superclass: NSView
  */
-open class NSGridView(ptr: MemorySegment) : NSView(ptr) {
+open class NSGridView(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGridView") }
         
-        fun gridViewWithNumberOfColumns_rows(columnCount: NSInteger, rowCount: NSInteger): MemorySegment {
+        fun gridViewWithNumberOfColumns_rows(columnCount: Long, rowCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("gridViewWithNumberOfColumns:rows:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, columnCount, rowCount) as MemorySegment
         }
@@ -24,149 +24,149 @@ open class NSGridView(ptr: MemorySegment) : NSView(ptr) {
         
     }
     
-    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
+    override fun initWithFrame(frameRect: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
+    override fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun rowAtIndex(index: NSInteger): MemorySegment {
+    open fun rowAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("rowAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun indexOfRow(row: MemorySegment): NSInteger {
+    open fun indexOfRow(row: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfRow:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, row) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, row) as Long
     }
     
-    fun columnAtIndex(index: NSInteger): MemorySegment {
+    open fun columnAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("columnAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun indexOfColumn(column: MemorySegment): NSInteger {
+    open fun indexOfColumn(column: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfColumn:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, column) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, column) as Long
     }
     
-    fun cellAtColumnIndex_rowIndex(columnIndex: NSInteger, rowIndex: NSInteger): MemorySegment {
+    open fun cellAtColumnIndex_rowIndex(columnIndex: Long, rowIndex: Long): MemorySegment {
         val sel = ObjCRuntime.sel("cellAtColumnIndex:rowIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, columnIndex, rowIndex) as MemorySegment
     }
     
-    fun cellForView(view: MemorySegment): MemorySegment {
+    open fun cellForView(view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("cellForView:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, view) as MemorySegment
     }
     
-    fun addRowWithViews(views: MemorySegment): MemorySegment {
+    open fun addRowWithViews(views: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addRowWithViews:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, views) as MemorySegment
     }
     
-    fun insertRowAtIndex_withViews(index: NSInteger, views: MemorySegment): MemorySegment {
+    open fun insertRowAtIndex_withViews(index: Long, views: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("insertRowAtIndex:withViews:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index, views) as MemorySegment
     }
     
-    fun moveRowAtIndex_toIndex(fromIndex: NSInteger, toIndex: NSInteger): Unit {
+    open fun moveRowAtIndex_toIndex(fromIndex: Long, toIndex: Long): Unit {
         val sel = ObjCRuntime.sel("moveRowAtIndex:toIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, fromIndex, toIndex)
     }
     
-    fun removeRowAtIndex(index: NSInteger): Unit {
+    open fun removeRowAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeRowAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun addColumnWithViews(views: MemorySegment): MemorySegment {
+    open fun addColumnWithViews(views: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addColumnWithViews:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, views) as MemorySegment
     }
     
-    fun insertColumnAtIndex_withViews(index: NSInteger, views: MemorySegment): MemorySegment {
+    open fun insertColumnAtIndex_withViews(index: Long, views: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("insertColumnAtIndex:withViews:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index, views) as MemorySegment
     }
     
-    fun moveColumnAtIndex_toIndex(fromIndex: NSInteger, toIndex: NSInteger): Unit {
+    open fun moveColumnAtIndex_toIndex(fromIndex: Long, toIndex: Long): Unit {
         val sel = ObjCRuntime.sel("moveColumnAtIndex:toIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, fromIndex, toIndex)
     }
     
-    fun removeColumnAtIndex(index: NSInteger): Unit {
+    open fun removeColumnAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeColumnAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun mergeCellsInHorizontalRange_verticalRange(hRange: NSRange, vRange: NSRange): Unit {
+    open fun mergeCellsInHorizontalRange_verticalRange(hRange: MemorySegment, vRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mergeCellsInHorizontalRange:verticalRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(hRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), ObjCRuntime.ObjCStructArg(vRange, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
     // @property numberOfRows
-    fun numberOfRows(): NSInteger {
+    open fun numberOfRows(): Long {
         val sel = ObjCRuntime.sel("numberOfRows")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property numberOfColumns
-    fun numberOfColumns(): NSInteger {
+    open fun numberOfColumns(): Long {
         val sel = ObjCRuntime.sel("numberOfColumns")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property xPlacement
-    fun xPlacement(): NSGridCellPlacement {
+    open fun xPlacement(): MemorySegment {
         val sel = ObjCRuntime.sel("xPlacement")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridCellPlacement
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setXPlacement(value: NSGridCellPlacement) {
+    open fun setXPlacement(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setXPlacement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property yPlacement
-    fun yPlacement(): NSGridCellPlacement {
+    open fun yPlacement(): MemorySegment {
         val sel = ObjCRuntime.sel("yPlacement")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridCellPlacement
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setYPlacement(value: NSGridCellPlacement) {
+    open fun setYPlacement(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setYPlacement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rowAlignment
-    fun rowAlignment(): NSGridRowAlignment {
+    open fun rowAlignment(): MemorySegment {
         val sel = ObjCRuntime.sel("rowAlignment")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridRowAlignment
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRowAlignment(value: NSGridRowAlignment) {
+    open fun setRowAlignment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRowAlignment:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rowSpacing
-    fun rowSpacing(): CGFloat {
+    open fun rowSpacing(): Double {
         val sel = ObjCRuntime.sel("rowSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setRowSpacing(value: CGFloat) {
+    open fun setRowSpacing(value: Double) {
         val sel = ObjCRuntime.sel("setRowSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property columnSpacing
-    fun columnSpacing(): CGFloat {
+    open fun columnSpacing(): Double {
         val sel = ObjCRuntime.sel("columnSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setColumnSpacing(value: CGFloat) {
+    open fun setColumnSpacing(value: Double) {
         val sel = ObjCRuntime.sel("setColumnSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

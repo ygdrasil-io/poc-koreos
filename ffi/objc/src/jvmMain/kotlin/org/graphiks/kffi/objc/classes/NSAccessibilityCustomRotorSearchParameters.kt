@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAccessibilityCustomRotorSearchParameters
  * Superclass: NSObject
  */
-open class NSAccessibilityCustomRotorSearchParameters(val ptr: MemorySegment) {
+open class NSAccessibilityCustomRotorSearchParameters(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAccessibilityCustomRotorSearchParameters") }
         
@@ -25,11 +25,11 @@ open class NSAccessibilityCustomRotorSearchParameters(val ptr: MemorySegment) {
     }
     
     // @property searchDirection
-    open fun searchDirection(): NSAccessibilityCustomRotorSearchDirection {
+    open fun searchDirection(): MemorySegment {
         val sel = ObjCRuntime.sel("searchDirection")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAccessibilityCustomRotorSearchDirection
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setSearchDirection(value: NSAccessibilityCustomRotorSearchDirection) {
+    open fun setSearchDirection(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSearchDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

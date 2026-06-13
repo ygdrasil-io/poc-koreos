@@ -9,38 +9,38 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSGestureRecognizer
  * Protocols: NSCoding
  */
-open class NSClickGestureRecognizer(ptr: MemorySegment) : NSGestureRecognizer(ptr) {
+open class NSClickGestureRecognizer(override val ptr: MemorySegment) : NSGestureRecognizer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSClickGestureRecognizer") }
         
     }
     
     // @property buttonMask
-    fun buttonMask(): NSUInteger {
+    open fun buttonMask(): Long {
         val sel = ObjCRuntime.sel("buttonMask")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setButtonMask(value: NSUInteger) {
+    open fun setButtonMask(value: Long) {
         val sel = ObjCRuntime.sel("setButtonMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfClicksRequired
-    fun numberOfClicksRequired(): NSInteger {
+    open fun numberOfClicksRequired(): Long {
         val sel = ObjCRuntime.sel("numberOfClicksRequired")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfClicksRequired(value: NSInteger) {
+    open fun setNumberOfClicksRequired(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfClicksRequired:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfTouchesRequired
-    fun numberOfTouchesRequired(): NSInteger {
+    open fun numberOfTouchesRequired(): Long {
         val sel = ObjCRuntime.sel("numberOfTouchesRequired")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfTouchesRequired(value: NSInteger) {
+    open fun setNumberOfTouchesRequired(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfTouchesRequired:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

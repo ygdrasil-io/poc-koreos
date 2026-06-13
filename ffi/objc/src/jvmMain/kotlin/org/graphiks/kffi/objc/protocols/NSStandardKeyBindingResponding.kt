@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSStandardKeyBindingResponding
  * Inherits protocols: NSObject
  */
-interface NSStandardKeyBindingResponding : NSObject {
+interface NSStandardKeyBindingResponding {
     // @optional
     fun insertText(insertString: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'insertText:' not implemented")

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextCheckingController
  * Superclass: NSObject
  */
-open class NSTextCheckingController(val ptr: MemorySegment) {
+open class NSTextCheckingController(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextCheckingController") }
         
@@ -29,12 +29,12 @@ open class NSTextCheckingController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun didChangeTextInRange(range: NSRange): Unit {
+    open fun didChangeTextInRange(range: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("didChangeTextInRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
-    open fun insertedTextInRange(range: NSRange): Unit {
+    open fun insertedTextInRange(range: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("insertedTextInRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
@@ -44,12 +44,12 @@ open class NSTextCheckingController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun considerTextCheckingForRange(range: NSRange): Unit {
+    open fun considerTextCheckingForRange(range: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("considerTextCheckingForRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }
     
-    open fun checkTextInRange_types_options(range: NSRange, checkingTypes: NSTextCheckingTypes, options: MemorySegment): Unit {
+    open fun checkTextInRange_types_options(range: MemorySegment, checkingTypes: Long, options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("checkTextInRange:types:options:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")), checkingTypes, options)
     }
@@ -100,7 +100,7 @@ open class NSTextCheckingController(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun menuAtIndex_clickedOnSelection_effectiveRange(location: NSUInteger, clickedOnSelection: BOOL, effectiveRange: MemorySegment): MemorySegment {
+    open fun menuAtIndex_clickedOnSelection_effectiveRange(location: Long, clickedOnSelection: Boolean, effectiveRange: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("menuAtIndex:clickedOnSelection:effectiveRange:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, location, clickedOnSelection, effectiveRange) as MemorySegment
     }
@@ -113,11 +113,11 @@ open class NSTextCheckingController(val ptr: MemorySegment) {
     }
     
     // @property spellCheckerDocumentTag
-    open fun spellCheckerDocumentTag(): NSInteger {
+    open fun spellCheckerDocumentTag(): Long {
         val sel = ObjCRuntime.sel("spellCheckerDocumentTag")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setSpellCheckerDocumentTag(value: NSInteger) {
+    open fun setSpellCheckerDocumentTag(value: Long) {
         val sel = ObjCRuntime.sel("setSpellCheckerDocumentTag:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

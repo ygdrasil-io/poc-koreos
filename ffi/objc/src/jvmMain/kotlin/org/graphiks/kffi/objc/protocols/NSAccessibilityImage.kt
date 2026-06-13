@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityImage
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilityImage : NSAccessibilityElement {
+interface NSAccessibilityImage {
     fun accessibilityLabel(): MemorySegment
     
 }

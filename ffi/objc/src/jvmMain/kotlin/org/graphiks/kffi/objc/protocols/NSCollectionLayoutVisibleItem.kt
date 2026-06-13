@@ -8,35 +8,34 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCollectionLayoutVisibleItem
  * Inherits protocols: NSObject
  */
-interface NSCollectionLayoutVisibleItem : NSObject {
-    fun alpha(): CGFloat
+interface NSCollectionLayoutVisibleItem {
+    fun alpha(): Double
     
-    fun setAlpha(alpha: CGFloat)
+    fun setAlpha(alpha: Double): Unit
     
-    fun zIndex(): NSInteger
+    fun zIndex(): Long
     
-    fun setZIndex(zIndex: NSInteger)
+    fun setZIndex(zIndex: Long): Unit
     
-    fun isHidden(): BOOL
+    fun isHidden(): Boolean
     
-    fun setHidden(hidden: BOOL)
+    fun setHidden(hidden: Boolean): Unit
     
-    fun center(): NSPoint
+    fun center(): MemorySegment
     
-    fun setCenter(center: NSPoint)
+    fun setCenter(center: MemorySegment): Unit
     
     fun name(): MemorySegment
     
     fun indexPath(): MemorySegment
     
-    fun frame(): NSRect
+    fun frame(): MemorySegment
     
-    fun bounds(): NSRect
+    fun bounds(): MemorySegment
     
-    fun representedElementCategory(): NSCollectionElementCategory
+    fun representedElementCategory(): MemorySegment
     
     fun representedElementKind(): MemorySegment
     
-    // @property alpha
 }
 

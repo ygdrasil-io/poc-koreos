@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSTouchBarItem(val ptr: MemorySegment) {
+open class NSTouchBarItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTouchBarItem") }
         
     }
     
-    open fun initWithIdentifier(identifier: NSTouchBarItemIdentifier): MemorySegment {
+    open fun initWithIdentifier(identifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, identifier) as MemorySegment
     }
@@ -31,17 +31,17 @@ open class NSTouchBarItem(val ptr: MemorySegment) {
     }
     
     // @property identifier
-    open fun identifier(): NSTouchBarItemIdentifier {
+    open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchBarItemIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property visibilityPriority
-    open fun visibilityPriority(): NSTouchBarItemPriority {
+    open fun visibilityPriority(): Float {
         val sel = ObjCRuntime.sel("visibilityPriority")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as NSTouchBarItemPriority
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
     }
-    open fun setVisibilityPriority(value: NSTouchBarItemPriority) {
+    open fun setVisibilityPriority(value: Float) {
         val sel = ObjCRuntime.sel("setVisibilityPriority:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -68,9 +68,9 @@ open class NSTouchBarItem(val ptr: MemorySegment) {
     open fun customizationLabelAsString(): String = ObjCRuntime.toJavaString(customizationLabel())
     
     // @property visible
-    open fun isVisible(): BOOL {
+    open fun isVisible(): Boolean {
         val sel = ObjCRuntime.sel("isVisible")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

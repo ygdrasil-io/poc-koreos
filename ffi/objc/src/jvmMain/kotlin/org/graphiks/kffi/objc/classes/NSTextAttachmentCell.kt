@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSCell
  * Protocols: NSTextAttachmentCell
  */
-open class NSTextAttachmentCell(ptr: MemorySegment) : NSCell(ptr) {
+open class NSTextAttachmentCell(override val ptr: MemorySegment) : NSCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextAttachmentCell") }
         

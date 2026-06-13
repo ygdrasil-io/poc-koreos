@@ -8,10 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSScrubberDataSource
  * Inherits protocols: NSObject
  */
-interface NSScrubberDataSource : NSObject {
-    fun numberOfItemsForScrubber(scrubber: MemorySegment): NSInteger
+interface NSScrubberDataSource {
+    fun numberOfItemsForScrubber(scrubber: MemorySegment): Long
     
-    fun scrubber_viewForItemAtIndex(scrubber: MemorySegment, index: NSInteger): MemorySegment
+    fun scrubber_viewForItemAtIndex(scrubber: MemorySegment, index: Long): MemorySegment
     
 }
 

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionViewLayoutInvalidationContext
  * Superclass: NSObject
  */
-open class NSCollectionViewLayoutInvalidationContext(val ptr: MemorySegment) {
+open class NSCollectionViewLayoutInvalidationContext(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewLayoutInvalidationContext") }
         
@@ -19,26 +19,26 @@ open class NSCollectionViewLayoutInvalidationContext(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, indexPaths)
     }
     
-    open fun invalidateSupplementaryElementsOfKind_atIndexPaths(elementKind: NSCollectionViewSupplementaryElementKind, indexPaths: MemorySegment): Unit {
+    open fun invalidateSupplementaryElementsOfKind_atIndexPaths(elementKind: MemorySegment, indexPaths: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("invalidateSupplementaryElementsOfKind:atIndexPaths:")
         ObjCRuntime.msgSend(null, ptr, sel, elementKind, indexPaths)
     }
     
-    open fun invalidateDecorationElementsOfKind_atIndexPaths(elementKind: NSCollectionViewDecorationElementKind, indexPaths: MemorySegment): Unit {
+    open fun invalidateDecorationElementsOfKind_atIndexPaths(elementKind: MemorySegment, indexPaths: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("invalidateDecorationElementsOfKind:atIndexPaths:")
         ObjCRuntime.msgSend(null, ptr, sel, elementKind, indexPaths)
     }
     
     // @property invalidateEverything
-    open fun invalidateEverything(): BOOL {
+    open fun invalidateEverything(): Boolean {
         val sel = ObjCRuntime.sel("invalidateEverything")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property invalidateDataSourceCounts
-    open fun invalidateDataSourceCounts(): BOOL {
+    open fun invalidateDataSourceCounts(): Boolean {
         val sel = ObjCRuntime.sel("invalidateDataSourceCounts")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property invalidatedItemIndexPaths
@@ -63,21 +63,21 @@ open class NSCollectionViewLayoutInvalidationContext(val ptr: MemorySegment) {
     }
     
     // @property contentOffsetAdjustment
-    open fun contentOffsetAdjustment(): NSPoint {
+    open fun contentOffsetAdjustment(): MemorySegment {
         val sel = ObjCRuntime.sel("contentOffsetAdjustment")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as MemorySegment
     }
-    open fun setContentOffsetAdjustment(value: NSPoint) {
+    open fun setContentOffsetAdjustment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentOffsetAdjustment:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")))
     }
     
     // @property contentSizeAdjustment
-    open fun contentSizeAdjustment(): NSSize {
+    open fun contentSizeAdjustment(): MemorySegment {
         val sel = ObjCRuntime.sel("contentSizeAdjustment")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    open fun setContentSizeAdjustment(value: NSSize) {
+    open fun setContentSizeAdjustment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentSizeAdjustment:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }

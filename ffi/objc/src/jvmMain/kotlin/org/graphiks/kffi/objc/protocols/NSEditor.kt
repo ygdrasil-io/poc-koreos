@@ -8,14 +8,14 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSEditor
  * Inherits protocols: NSObject
  */
-interface NSEditor : NSObject {
-    fun discardEditing()
+interface NSEditor {
+    fun discardEditing(): Unit
     
-    fun commitEditing(): BOOL
+    fun commitEditing(): Boolean
     
-    fun commitEditingWithDelegate_didCommitSelector_contextInfo(delegate: MemorySegment, didCommitSelector: MemorySegment, contextInfo: MemorySegment)
+    fun commitEditingWithDelegate_didCommitSelector_contextInfo(delegate: MemorySegment, didCommitSelector: MemorySegment, contextInfo: MemorySegment): Unit
     
-    fun commitEditingAndReturnError(error: MemorySegment): BOOL
+    fun commitEditingAndReturnError(error: MemorySegment): Boolean
     
 }
 

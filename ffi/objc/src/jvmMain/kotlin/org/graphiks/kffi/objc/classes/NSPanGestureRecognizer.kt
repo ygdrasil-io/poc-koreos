@@ -9,43 +9,43 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSGestureRecognizer
  * Protocols: NSCoding
  */
-open class NSPanGestureRecognizer(ptr: MemorySegment) : NSGestureRecognizer(ptr) {
+open class NSPanGestureRecognizer(override val ptr: MemorySegment) : NSGestureRecognizer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPanGestureRecognizer") }
         
     }
     
-    fun translationInView(view: MemorySegment): NSPoint {
+    open fun translationInView(view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("translationInView:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as NSPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as MemorySegment
     }
     
-    fun setTranslation_inView(translation: NSPoint, view: MemorySegment): Unit {
+    open fun setTranslation_inView(translation: MemorySegment, view: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setTranslation:inView:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(translation, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), view)
     }
     
-    fun velocityInView(view: MemorySegment): NSPoint {
+    open fun velocityInView(view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("velocityInView:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as NSPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as MemorySegment
     }
     
     // @property buttonMask
-    fun buttonMask(): NSUInteger {
+    open fun buttonMask(): Long {
         val sel = ObjCRuntime.sel("buttonMask")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setButtonMask(value: NSUInteger) {
+    open fun setButtonMask(value: Long) {
         val sel = ObjCRuntime.sel("setButtonMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfTouchesRequired
-    fun numberOfTouchesRequired(): NSInteger {
+    open fun numberOfTouchesRequired(): Long {
         val sel = ObjCRuntime.sel("numberOfTouchesRequired")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfTouchesRequired(value: NSInteger) {
+    open fun setNumberOfTouchesRequired(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfTouchesRequired:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

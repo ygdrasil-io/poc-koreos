@@ -9,35 +9,35 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding, NSValidatedUserInterfaceItem, NSUserInterfaceItemIdentification, NSAccessibilityElement, NSAccessibility
  */
-open class NSMenuItem(val ptr: MemorySegment) {
+open class NSMenuItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMenuItem") }
         
-        open fun separatorItem(): MemorySegment {
+        fun separatorItem(): MemorySegment {
             val sel = ObjCRuntime.sel("separatorItem")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun sectionHeaderWithTitle(title: MemorySegment): MemorySegment {
+        fun sectionHeaderWithTitle(title: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sectionHeaderWithTitle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, title) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun sectionHeaderWithTitle(title: String): MemorySegment = sectionHeaderWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+        fun sectionHeaderWithTitle(title: String): MemorySegment = sectionHeaderWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
         
-        open fun usesUserKeyEquivalents(): BOOL {
+        fun usesUserKeyEquivalents(): Boolean {
             val sel = ObjCRuntime.sel("usesUserKeyEquivalents")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
-        open fun setUsesUserKeyEquivalents(usesUserKeyEquivalents: BOOL): Unit {
+        fun setUsesUserKeyEquivalents(usesUserKeyEquivalents: Boolean): Unit {
             val sel = ObjCRuntime.sel("setUsesUserKeyEquivalents:")
             ObjCRuntime.msgSend(null, _class, sel, usesUserKeyEquivalents)
         }
         
         /** @return NSArray<NSMenuItem *> * */
-        open fun writingToolsItems(): MemorySegment {
+        fun writingToolsItems(): MemorySegment {
             val sel = ObjCRuntime.sel("writingToolsItems")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -50,7 +50,7 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithTitle_action_keyEquivalent(string: String, selector: MemorySegment, charCode: String): MemorySegment = initWithTitle_action_keyEquivalent(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode))
+    fun initWithTitle_action_keyEquivalent(string: String, selector: MemorySegment, charCode: String): MemorySegment = initWithTitle_action_keyEquivalent(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode))
     
     open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
@@ -58,7 +58,23 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property usesUserKeyEquivalents
+    open fun usesUserKeyEquivalents(): Boolean {
+        val sel = ObjCRuntime.sel("usesUserKeyEquivalents")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
+    }
+    open fun setUsesUserKeyEquivalents(value: Boolean) {
+        val sel = ObjCRuntime.sel("setUsesUserKeyEquivalents:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property writingToolsItems
     /** @return NSArray<NSMenuItem *> * */
+    open fun writingToolsItems(): MemorySegment {
+        val sel = ObjCRuntime.sel("writingToolsItems")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property menu
     open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -69,9 +85,9 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property hasSubmenu
-    open fun hasSubmenu(): BOOL {
+    open fun hasSubmenu(): Boolean {
         val sel = ObjCRuntime.sel("hasSubmenu")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property submenu
@@ -133,15 +149,15 @@ open class NSMenuItem(val ptr: MemorySegment) {
     open fun setSubtitle(value: String) = setSubtitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property separatorItem
-    open fun isSeparatorItem(): BOOL {
+    open fun isSeparatorItem(): Boolean {
         val sel = ObjCRuntime.sel("isSeparatorItem")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property sectionHeader
-    open fun isSectionHeader(): BOOL {
+    open fun isSectionHeader(): Boolean {
         val sel = ObjCRuntime.sel("isSectionHeader")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property keyEquivalent
@@ -161,11 +177,11 @@ open class NSMenuItem(val ptr: MemorySegment) {
     open fun setKeyEquivalent(value: String) = setKeyEquivalent(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property keyEquivalentModifierMask
-    open fun keyEquivalentModifierMask(): NSEventModifierFlags {
+    open fun keyEquivalentModifierMask(): MemorySegment {
         val sel = ObjCRuntime.sel("keyEquivalentModifierMask")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventModifierFlags
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setKeyEquivalentModifierMask(value: NSEventModifierFlags) {
+    open fun setKeyEquivalentModifierMask(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setKeyEquivalentModifierMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -180,31 +196,31 @@ open class NSMenuItem(val ptr: MemorySegment) {
     open fun userKeyEquivalentAsString(): String = ObjCRuntime.toJavaString(userKeyEquivalent())
     
     // @property allowsKeyEquivalentWhenHidden
-    open fun allowsKeyEquivalentWhenHidden(): BOOL {
+    open fun allowsKeyEquivalentWhenHidden(): Boolean {
         val sel = ObjCRuntime.sel("allowsKeyEquivalentWhenHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsKeyEquivalentWhenHidden(value: BOOL) {
+    open fun setAllowsKeyEquivalentWhenHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsKeyEquivalentWhenHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsAutomaticKeyEquivalentLocalization
-    open fun allowsAutomaticKeyEquivalentLocalization(): BOOL {
+    open fun allowsAutomaticKeyEquivalentLocalization(): Boolean {
         val sel = ObjCRuntime.sel("allowsAutomaticKeyEquivalentLocalization")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsAutomaticKeyEquivalentLocalization(value: BOOL) {
+    open fun setAllowsAutomaticKeyEquivalentLocalization(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsAutomaticKeyEquivalentLocalization:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsAutomaticKeyEquivalentMirroring
-    open fun allowsAutomaticKeyEquivalentMirroring(): BOOL {
+    open fun allowsAutomaticKeyEquivalentMirroring(): Boolean {
         val sel = ObjCRuntime.sel("allowsAutomaticKeyEquivalentMirroring")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsAutomaticKeyEquivalentMirroring(value: BOOL) {
+    open fun setAllowsAutomaticKeyEquivalentMirroring(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsAutomaticKeyEquivalentMirroring:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -220,11 +236,11 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property state
-    open fun state(): NSControlStateValue {
+    open fun state(): Long {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSControlStateValue
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setState(value: NSControlStateValue) {
+    open fun setState(value: Long) {
         val sel = ObjCRuntime.sel("setState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -260,31 +276,31 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property enabled
-    open fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property alternate
-    open fun isAlternate(): BOOL {
+    open fun isAlternate(): Boolean {
         val sel = ObjCRuntime.sel("isAlternate")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAlternate(value: BOOL) {
+    open fun setAlternate(value: Boolean) {
         val sel = ObjCRuntime.sel("setAlternate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property indentationLevel
-    open fun indentationLevel(): NSInteger {
+    open fun indentationLevel(): Long {
         val sel = ObjCRuntime.sel("indentationLevel")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setIndentationLevel(value: NSInteger) {
+    open fun setIndentationLevel(value: Long) {
         val sel = ObjCRuntime.sel("setIndentationLevel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -310,11 +326,11 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property tag
-    open fun tag(): NSInteger {
+    open fun tag(): Long {
         val sel = ObjCRuntime.sel("tag")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setTag(value: NSInteger) {
+    open fun setTag(value: Long) {
         val sel = ObjCRuntime.sel("setTag:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -340,25 +356,25 @@ open class NSMenuItem(val ptr: MemorySegment) {
     }
     
     // @property highlighted
-    open fun isHighlighted(): BOOL {
+    open fun isHighlighted(): Boolean {
         val sel = ObjCRuntime.sel("isHighlighted")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property hidden
-    open fun isHidden(): BOOL {
+    open fun isHidden(): Boolean {
         val sel = ObjCRuntime.sel("isHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHidden(value: BOOL) {
+    open fun setHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hiddenOrHasHiddenAncestor
-    open fun isHiddenOrHasHiddenAncestor(): BOOL {
+    open fun isHiddenOrHasHiddenAncestor(): Boolean {
         val sel = ObjCRuntime.sel("isHiddenOrHasHiddenAncestor")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property toolTip
@@ -391,23 +407,23 @@ open class NSMenuItem(val ptr: MemorySegment) {
 
 // ── Category: NSDeprecated on NSMenuItem ─────────────────────────────────────────
 
-fun NSMenuItem.setMnemonicLocation(location: NSUInteger): Unit {
+fun NSMenuItem.setMnemonicLocation(location: Long): Unit {
     val sel = ObjCRuntime.sel("setMnemonicLocation:")
-    ObjCRuntime.msgSend(null, ptr, sel, location)
+    ObjCRuntime.msgSend(null, this.ptr, sel, location)
 }
 
-fun NSMenuItem.mnemonicLocation(): NSUInteger {
+fun NSMenuItem.mnemonicLocation(): Long {
     val sel = ObjCRuntime.sel("mnemonicLocation")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel) as Long
 }
 
 fun NSMenuItem.mnemonic(): MemorySegment {
     val sel = ObjCRuntime.sel("mnemonic")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMenuItem.setTitleWithMnemonic(stringWithAmpersand: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleWithMnemonic:")
-    ObjCRuntime.msgSend(null, ptr, sel, stringWithAmpersand)
+    ObjCRuntime.msgSend(null, this.ptr, sel, stringWithAmpersand)
 }
 

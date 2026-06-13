@@ -9,21 +9,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutSpacing(val ptr: MemorySegment) {
+open class NSCollectionLayoutSpacing(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutSpacing") }
         
-        open fun flexibleSpacing(flexibleSpacing: CGFloat): MemorySegment {
+        fun flexibleSpacing(flexibleSpacing: Double): MemorySegment {
             val sel = ObjCRuntime.sel("flexibleSpacing:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, flexibleSpacing) as MemorySegment
         }
         
-        open fun fixedSpacing(fixedSpacing: CGFloat): MemorySegment {
+        fun fixedSpacing(fixedSpacing: Double): MemorySegment {
             val sel = ObjCRuntime.sel("fixedSpacing:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fixedSpacing) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -36,21 +36,21 @@ open class NSCollectionLayoutSpacing(val ptr: MemorySegment) {
     }
     
     // @property spacing
-    open fun spacing(): CGFloat {
+    open fun spacing(): Double {
         val sel = ObjCRuntime.sel("spacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property isFlexibleSpacing
-    open fun isFlexibleSpacing(): BOOL {
+    open fun isFlexibleSpacing(): Boolean {
         val sel = ObjCRuntime.sel("isFlexibleSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property isFixedSpacing
-    open fun isFixedSpacing(): BOOL {
+    open fun isFixedSpacing(): Boolean {
         val sel = ObjCRuntime.sel("isFixedSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

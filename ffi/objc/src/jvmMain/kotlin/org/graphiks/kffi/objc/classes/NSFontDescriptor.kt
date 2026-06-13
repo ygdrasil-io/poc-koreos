@@ -9,34 +9,34 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSFontDescriptor(val ptr: MemorySegment) {
+open class NSFontDescriptor(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFontDescriptor") }
         
-        open fun fontDescriptorWithFontAttributes(attributes: MemorySegment): MemorySegment {
+        fun fontDescriptorWithFontAttributes(attributes: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontDescriptorWithFontAttributes:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, attributes) as MemorySegment
         }
         
-        open fun fontDescriptorWithName_size(fontName: MemorySegment, size: CGFloat): MemorySegment {
+        fun fontDescriptorWithName_size(fontName: MemorySegment, size: Double): MemorySegment {
             val sel = ObjCRuntime.sel("fontDescriptorWithName:size:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fontName, size) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fontDescriptorWithName_size(fontName: String, size: CGFloat): MemorySegment = fontDescriptorWithName_size(ObjCRuntime.newNSString(Arena.global(), fontName), size)
+        fun fontDescriptorWithName_size(fontName: String, size: Double): MemorySegment = fontDescriptorWithName_size(ObjCRuntime.newNSString(Arena.global(), fontName), size)
         
-        open fun fontDescriptorWithName_matrix(fontName: MemorySegment, matrix: MemorySegment): MemorySegment {
+        fun fontDescriptorWithName_matrix(fontName: MemorySegment, matrix: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontDescriptorWithName:matrix:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fontName, matrix) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun fontDescriptorWithName_matrix(fontName: String, matrix: MemorySegment): MemorySegment = fontDescriptorWithName_matrix(ObjCRuntime.newNSString(Arena.global(), fontName), matrix)
+        fun fontDescriptorWithName_matrix(fontName: String, matrix: MemorySegment): MemorySegment = fontDescriptorWithName_matrix(ObjCRuntime.newNSString(Arena.global(), fontName), matrix)
         
     }
     
-    open fun objectForKey(attribute: NSFontDescriptorAttributeName): MemorySegment {
+    open fun objectForKey(attribute: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("objectForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attribute) as MemorySegment
     }
@@ -62,12 +62,12 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attributes) as MemorySegment
     }
     
-    open fun fontDescriptorWithSymbolicTraits(symbolicTraits: NSFontDescriptorSymbolicTraits): MemorySegment {
+    open fun fontDescriptorWithSymbolicTraits(symbolicTraits: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("fontDescriptorWithSymbolicTraits:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, symbolicTraits) as MemorySegment
     }
     
-    open fun fontDescriptorWithSize(newPointSize: CGFloat): MemorySegment {
+    open fun fontDescriptorWithSize(newPointSize: Double): MemorySegment {
         val sel = ObjCRuntime.sel("fontDescriptorWithSize:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, newPointSize) as MemorySegment
     }
@@ -83,7 +83,7 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun fontDescriptorWithFace(newFace: String): MemorySegment = fontDescriptorWithFace(ObjCRuntime.newNSString(Arena.global(), newFace))
+    fun fontDescriptorWithFace(newFace: String): MemorySegment = fontDescriptorWithFace(ObjCRuntime.newNSString(Arena.global(), newFace))
     
     open fun fontDescriptorWithFamily(newFamily: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("fontDescriptorWithFamily:")
@@ -91,9 +91,9 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun fontDescriptorWithFamily(newFamily: String): MemorySegment = fontDescriptorWithFamily(ObjCRuntime.newNSString(Arena.global(), newFamily))
+    fun fontDescriptorWithFamily(newFamily: String): MemorySegment = fontDescriptorWithFamily(ObjCRuntime.newNSString(Arena.global(), newFamily))
     
-    open fun fontDescriptorWithDesign(design: NSFontDescriptorSystemDesign): MemorySegment {
+    open fun fontDescriptorWithDesign(design: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("fontDescriptorWithDesign:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, design) as MemorySegment
     }
@@ -108,9 +108,9 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
     open fun postscriptNameAsString(): String = ObjCRuntime.toJavaString(postscriptName())
     
     // @property pointSize
-    open fun pointSize(): CGFloat {
+    open fun pointSize(): Double {
         val sel = ObjCRuntime.sel("pointSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property matrix
@@ -120,15 +120,15 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
     }
     
     // @property symbolicTraits
-    open fun symbolicTraits(): NSFontDescriptorSymbolicTraits {
+    open fun symbolicTraits(): MemorySegment {
         val sel = ObjCRuntime.sel("symbolicTraits")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFontDescriptorSymbolicTraits
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property requiresFontAssetRequest
-    open fun requiresFontAssetRequest(): BOOL {
+    open fun requiresFontAssetRequest(): Boolean {
         val sel = ObjCRuntime.sel("requiresFontAssetRequest")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property fontAttributes
@@ -142,8 +142,8 @@ open class NSFontDescriptor(val ptr: MemorySegment) {
 
 // ── Category: NSFontDescriptor_TextStyles on NSFontDescriptor ─────────────────────────────────────────
 
-// Class<*> method: +[NSFontDescriptor preferredFontDescriptorForTextStyle:options:]
-fun NSFontDescriptor_preferredFontDescriptorForTextStyle_options(style: NSFontTextStyle, options: MemorySegment): MemorySegment {
+// Class method: +[NSFontDescriptor preferredFontDescriptorForTextStyle:options:]
+fun NSFontDescriptor_preferredFontDescriptorForTextStyle_options(style: MemorySegment, options: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("preferredFontDescriptorForTextStyle:options:")
     val cls = ObjCRuntime.getClass("NSFontDescriptor")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, style, options) as MemorySegment

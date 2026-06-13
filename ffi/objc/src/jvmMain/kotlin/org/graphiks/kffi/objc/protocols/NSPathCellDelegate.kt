@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSPathCellDelegate
  * Inherits protocols: NSObject
  */
-interface NSPathCellDelegate : NSObject {
+interface NSPathCellDelegate {
     // @optional
     fun pathCell_willDisplayOpenPanel(pathCell: MemorySegment, openPanel: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'pathCell:willDisplayOpenPanel:' not implemented")

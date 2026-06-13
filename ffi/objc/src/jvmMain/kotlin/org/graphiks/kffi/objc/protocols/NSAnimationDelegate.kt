@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAnimationDelegate
  * Inherits protocols: NSObject
  */
-interface NSAnimationDelegate : NSObject {
+interface NSAnimationDelegate {
     // @optional
-    fun animationShouldStart(animation: MemorySegment): BOOL =
+    fun animationShouldStart(animation: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'animationShouldStart:' not implemented")
     
     // @optional
@@ -22,11 +22,11 @@ interface NSAnimationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'animationDidEnd:' not implemented")
     
     // @optional
-    fun animation_valueForProgress(animation: MemorySegment, progress: NSAnimationProgress): Float =
+    fun animation_valueForProgress(animation: MemorySegment, progress: Float): Float =
         throw UnsupportedOperationException("Optional ObjC method 'animation:valueForProgress:' not implemented")
     
     // @optional
-    fun animation_didReachProgressMark(animation: MemorySegment, progress: NSAnimationProgress): Unit =
+    fun animation_didReachProgressMark(animation: MemorySegment, progress: Float): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'animation:didReachProgressMark:' not implemented")
     
 }

@@ -9,28 +9,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding, NSUserInterfaceItemIdentification, NSAppearanceCustomization, NSAccessibilityElement, NSAccessibility
  */
-open class NSMenu(val ptr: MemorySegment) {
+open class NSMenu(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMenu") }
         
-        open fun popUpContextMenu_withEvent_forView(menu: MemorySegment, event: MemorySegment, view: MemorySegment): Unit {
+        fun popUpContextMenu_withEvent_forView(menu: MemorySegment, event: MemorySegment, view: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("popUpContextMenu:withEvent:forView:")
             ObjCRuntime.msgSend(null, _class, sel, menu, event, view)
         }
         
-        open fun popUpContextMenu_withEvent_forView_withFont(menu: MemorySegment, event: MemorySegment, view: MemorySegment, font: MemorySegment): Unit {
+        fun popUpContextMenu_withEvent_forView_withFont(menu: MemorySegment, event: MemorySegment, view: MemorySegment, font: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("popUpContextMenu:withEvent:forView:withFont:")
             ObjCRuntime.msgSend(null, _class, sel, menu, event, view, font)
         }
         
-        open fun setMenuBarVisible(visible: BOOL): Unit {
+        fun setMenuBarVisible(visible: Boolean): Unit {
             val sel = ObjCRuntime.sel("setMenuBarVisible:")
             ObjCRuntime.msgSend(null, _class, sel, visible)
         }
         
-        open fun menuBarVisible(): BOOL {
+        fun menuBarVisible(): Boolean {
             val sel = ObjCRuntime.sel("menuBarVisible")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
     }
@@ -41,19 +41,19 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithTitle(title: String): MemorySegment = initWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+    fun initWithTitle(title: String): MemorySegment = initWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
     
     open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun popUpMenuPositioningItem_atLocation_inView(item: MemorySegment, location: NSPoint, view: MemorySegment): BOOL {
+    open fun popUpMenuPositioningItem_atLocation_inView(item: MemorySegment, location: MemorySegment, view: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("popUpMenuPositioningItem:atLocation:inView:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, item, ObjCRuntime.ObjCStructArg(location, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), view) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, item, ObjCRuntime.ObjCStructArg(location, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), view) as Boolean
     }
     
-    open fun insertItem_atIndex(newItem: MemorySegment, index: NSInteger): Unit {
+    open fun insertItem_atIndex(newItem: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertItem:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, newItem, index)
     }
@@ -63,13 +63,13 @@ open class NSMenu(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, newItem)
     }
     
-    open fun insertItemWithTitle_action_keyEquivalent_atIndex(string: MemorySegment, selector: MemorySegment, charCode: MemorySegment, index: NSInteger): MemorySegment {
+    open fun insertItemWithTitle_action_keyEquivalent_atIndex(string: MemorySegment, selector: MemorySegment, charCode: MemorySegment, index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("insertItemWithTitle:action:keyEquivalent:atIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string, selector, charCode, index) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun insertItemWithTitle_action_keyEquivalent_atIndex(string: String, selector: MemorySegment, charCode: String, index: NSInteger): MemorySegment = insertItemWithTitle_action_keyEquivalent_atIndex(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode), index)
+    fun insertItemWithTitle_action_keyEquivalent_atIndex(string: String, selector: MemorySegment, charCode: String, index: Long): MemorySegment = insertItemWithTitle_action_keyEquivalent_atIndex(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode), index)
     
     open fun addItemWithTitle_action_keyEquivalent(string: MemorySegment, selector: MemorySegment, charCode: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("addItemWithTitle:action:keyEquivalent:")
@@ -77,9 +77,9 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addItemWithTitle_action_keyEquivalent(string: String, selector: MemorySegment, charCode: String): MemorySegment = addItemWithTitle_action_keyEquivalent(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode))
+    fun addItemWithTitle_action_keyEquivalent(string: String, selector: MemorySegment, charCode: String): MemorySegment = addItemWithTitle_action_keyEquivalent(ObjCRuntime.newNSString(Arena.global(), string), selector, ObjCRuntime.newNSString(Arena.global(), charCode))
     
-    open fun removeItemAtIndex(index: NSInteger): Unit {
+    open fun removeItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
@@ -99,42 +99,42 @@ open class NSMenu(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun itemAtIndex(index: NSInteger): MemorySegment {
+    open fun itemAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("itemAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    open fun indexOfItem(item: MemorySegment): NSInteger {
+    open fun indexOfItem(item: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItem:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, item) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, item) as Long
     }
     
-    open fun indexOfItemWithTitle(title: MemorySegment): NSInteger {
+    open fun indexOfItemWithTitle(title: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithTitle:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, title) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, title) as Long
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun indexOfItemWithTitle(title: String): NSInteger = indexOfItemWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+    fun indexOfItemWithTitle(title: String): Long = indexOfItemWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
     
-    open fun indexOfItemWithTag(tag: NSInteger): NSInteger {
+    open fun indexOfItemWithTag(tag: Long): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithTag:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, tag) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, tag) as Long
     }
     
-    open fun indexOfItemWithRepresentedObject(`object`: MemorySegment): NSInteger {
+    open fun indexOfItemWithRepresentedObject(`object`: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithRepresentedObject:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, `object`) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, `object`) as Long
     }
     
-    open fun indexOfItemWithSubmenu(submenu: MemorySegment): NSInteger {
+    open fun indexOfItemWithSubmenu(submenu: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithSubmenu:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, submenu) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, submenu) as Long
     }
     
-    open fun indexOfItemWithTarget_andAction(target: MemorySegment, actionSelector: MemorySegment): NSInteger {
+    open fun indexOfItemWithTarget_andAction(target: MemorySegment, actionSelector: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfItemWithTarget:andAction:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, target, actionSelector) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, target, actionSelector) as Long
     }
     
     open fun itemWithTitle(title: MemorySegment): MemorySegment {
@@ -143,9 +143,9 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun itemWithTitle(title: String): MemorySegment = itemWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+    fun itemWithTitle(title: String): MemorySegment = itemWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
     
-    open fun itemWithTag(tag: NSInteger): MemorySegment {
+    open fun itemWithTag(tag: Long): MemorySegment {
         val sel = ObjCRuntime.sel("itemWithTag:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, tag) as MemorySegment
     }
@@ -155,9 +155,9 @@ open class NSMenu(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun performKeyEquivalent(event: MemorySegment): BOOL {
+    open fun performKeyEquivalent(event: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("performKeyEquivalent:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as Boolean
     }
     
     open fun itemChanged(item: MemorySegment): Unit {
@@ -165,7 +165,7 @@ open class NSMenu(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, item)
     }
     
-    open fun performActionForItemAtIndex(index: NSInteger): Unit {
+    open fun performActionForItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("performActionForItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
@@ -218,17 +218,17 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     // @property numberOfItems
-    open fun numberOfItems(): NSInteger {
+    open fun numberOfItems(): Long {
         val sel = ObjCRuntime.sel("numberOfItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property autoenablesItems
-    open fun autoenablesItems(): BOOL {
+    open fun autoenablesItems(): Boolean {
         val sel = ObjCRuntime.sel("autoenablesItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAutoenablesItems(value: BOOL) {
+    open fun setAutoenablesItems(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutoenablesItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -245,9 +245,9 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     // @property menuBarHeight
-    open fun menuBarHeight(): CGFloat {
+    open fun menuBarHeight(): Double {
         val sel = ObjCRuntime.sel("menuBarHeight")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property highlightedItem
@@ -257,19 +257,19 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     // @property minimumWidth
-    open fun minimumWidth(): CGFloat {
+    open fun minimumWidth(): Double {
         val sel = ObjCRuntime.sel("minimumWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setMinimumWidth(value: CGFloat) {
+    open fun setMinimumWidth(value: Double) {
         val sel = ObjCRuntime.sel("setMinimumWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property size
-    open fun size(): NSSize {
+    open fun size(): MemorySegment {
         val sel = ObjCRuntime.sel("size")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
     
     // @property font
@@ -283,41 +283,41 @@ open class NSMenu(val ptr: MemorySegment) {
     }
     
     // @property allowsContextMenuPlugIns
-    open fun allowsContextMenuPlugIns(): BOOL {
+    open fun allowsContextMenuPlugIns(): Boolean {
         val sel = ObjCRuntime.sel("allowsContextMenuPlugIns")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsContextMenuPlugIns(value: BOOL) {
+    open fun setAllowsContextMenuPlugIns(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsContextMenuPlugIns:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property automaticallyInsertsWritingToolsItems
-    open fun automaticallyInsertsWritingToolsItems(): BOOL {
+    open fun automaticallyInsertsWritingToolsItems(): Boolean {
         val sel = ObjCRuntime.sel("automaticallyInsertsWritingToolsItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAutomaticallyInsertsWritingToolsItems(value: BOOL) {
+    open fun setAutomaticallyInsertsWritingToolsItems(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticallyInsertsWritingToolsItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsStateColumn
-    open fun showsStateColumn(): BOOL {
+    open fun showsStateColumn(): Boolean {
         val sel = ObjCRuntime.sel("showsStateColumn")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShowsStateColumn(value: BOOL) {
+    open fun setShowsStateColumn(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsStateColumn:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property userInterfaceLayoutDirection
-    open fun userInterfaceLayoutDirection(): NSUserInterfaceLayoutDirection {
+    open fun userInterfaceLayoutDirection(): MemorySegment {
         val sel = ObjCRuntime.sel("userInterfaceLayoutDirection")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSUserInterfaceLayoutDirection
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setUserInterfaceLayoutDirection(value: NSUserInterfaceLayoutDirection) {
+    open fun setUserInterfaceLayoutDirection(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUserInterfaceLayoutDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -326,148 +326,148 @@ open class NSMenu(val ptr: MemorySegment) {
 
 // ── Category: NSPaletteMenus on NSMenu ─────────────────────────────────────────
 
-fun NSMenu.presentationStyle(): NSMenuPresentationStyle {
+fun NSMenu.presentationStyle(): MemorySegment {
     val sel = ObjCRuntime.sel("presentationStyle")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuPresentationStyle
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSMenu.setPresentationStyle(presentationStyle: NSMenuPresentationStyle): Unit {
+fun NSMenu.setPresentationStyle(presentationStyle: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setPresentationStyle:")
-    ObjCRuntime.msgSend(null, ptr, sel, presentationStyle)
+    ObjCRuntime.msgSend(null, this.ptr, sel, presentationStyle)
 }
 
-fun NSMenu.selectionMode(): NSMenuSelectionMode {
+fun NSMenu.selectionMode(): MemorySegment {
     val sel = ObjCRuntime.sel("selectionMode")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuSelectionMode
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSMenu.setSelectionMode(selectionMode: NSMenuSelectionMode): Unit {
+fun NSMenu.setSelectionMode(selectionMode: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setSelectionMode:")
-    ObjCRuntime.msgSend(null, ptr, sel, selectionMode)
+    ObjCRuntime.msgSend(null, this.ptr, sel, selectionMode)
 }
 
 /** @return NSArray<NSMenuItem *> * */
 fun NSMenu.selectedItems(): MemorySegment {
     val sel = ObjCRuntime.sel("selectedItems")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMenu.setSelectedItems(selectedItems: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setSelectedItems:")
-    ObjCRuntime.msgSend(null, ptr, sel, selectedItems)
+    ObjCRuntime.msgSend(null, this.ptr, sel, selectedItems)
 }
 
-// Class<*> method: +[NSMenu paletteMenuWithColors:titles:selectionHandler:]
+// Class method: +[NSMenu paletteMenuWithColors:titles:selectionHandler:]
 fun NSMenu_paletteMenuWithColors_titles_selectionHandler(colors: MemorySegment, itemTitles: MemorySegment, onSelectionChange: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("paletteMenuWithColors:titles:selectionHandler:")
     val cls = ObjCRuntime.getClass("NSMenu")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, colors, itemTitles, onSelectionChange) as MemorySegment
 }
 
-// Class<*> method: +[NSMenu paletteMenuWithColors:titles:templateImage:selectionHandler:]
+// Class method: +[NSMenu paletteMenuWithColors:titles:templateImage:selectionHandler:]
 fun NSMenu_paletteMenuWithColors_titles_templateImage_selectionHandler(colors: MemorySegment, itemTitles: MemorySegment, image: MemorySegment, onSelectionChange: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("paletteMenuWithColors:titles:templateImage:selectionHandler:")
     val cls = ObjCRuntime.getClass("NSMenu")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, colors, itemTitles, image, onSelectionChange) as MemorySegment
 }
 
-// @property presentationStyle
-/** @return NSArray<NSMenuItem *> * */
+// ── Category: NSSubmenuAction on NSMenu ─────────────────────────────────────────
+
 fun NSMenu.submenuAction(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("submenuAction:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
 // ── Category: NSMenuPropertiesToUpdate on NSMenu ─────────────────────────────────────────
 
-fun NSMenu.propertiesToUpdate(): NSMenuProperties {
+fun NSMenu.propertiesToUpdate(): MemorySegment {
     val sel = ObjCRuntime.sel("propertiesToUpdate")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuProperties
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property propertiesToUpdate
+// ── Category: NSDeprecated on NSMenu ─────────────────────────────────────────
+
 fun NSMenu.setMenuRepresentation(menuRep: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setMenuRepresentation:")
-    ObjCRuntime.msgSend(null, ptr, sel, menuRep)
+    ObjCRuntime.msgSend(null, this.ptr, sel, menuRep)
 }
 
 fun NSMenu.menuRepresentation(): MemorySegment {
     val sel = ObjCRuntime.sel("menuRepresentation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMenu.setContextMenuRepresentation(menuRep: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setContextMenuRepresentation:")
-    ObjCRuntime.msgSend(null, ptr, sel, menuRep)
+    ObjCRuntime.msgSend(null, this.ptr, sel, menuRep)
 }
 
 fun NSMenu.contextMenuRepresentation(): MemorySegment {
     val sel = ObjCRuntime.sel("contextMenuRepresentation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMenu.setTearOffMenuRepresentation(menuRep: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTearOffMenuRepresentation:")
-    ObjCRuntime.msgSend(null, ptr, sel, menuRep)
+    ObjCRuntime.msgSend(null, this.ptr, sel, menuRep)
 }
 
 fun NSMenu.tearOffMenuRepresentation(): MemorySegment {
     val sel = ObjCRuntime.sel("tearOffMenuRepresentation")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMenu.attachedMenu(): MemorySegment {
     val sel = ObjCRuntime.sel("attachedMenu")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSMenu.isAttached(): BOOL {
+fun NSMenu.isAttached(): Boolean {
     val sel = ObjCRuntime.sel("isAttached")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
 fun NSMenu.sizeToFit(): Unit {
     val sel = ObjCRuntime.sel("sizeToFit")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
-fun NSMenu.locationForSubmenu(submenu: MemorySegment): NSPoint {
+fun NSMenu.locationForSubmenu(submenu: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("locationForSubmenu:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, submenu) as NSPoint
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), this.ptr, sel, submenu) as MemorySegment
 }
 
 fun NSMenu.helpRequested(eventPtr: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("helpRequested:")
-    ObjCRuntime.msgSend(null, ptr, sel, eventPtr)
+    ObjCRuntime.msgSend(null, this.ptr, sel, eventPtr)
 }
 
-fun NSMenu.menuChangedMessagesEnabled(): BOOL {
+fun NSMenu.menuChangedMessagesEnabled(): Boolean {
     val sel = ObjCRuntime.sel("menuChangedMessagesEnabled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSMenu.setMenuChangedMessagesEnabled(menuChangedMessagesEnabled: BOOL): Unit {
+fun NSMenu.setMenuChangedMessagesEnabled(menuChangedMessagesEnabled: Boolean): Unit {
     val sel = ObjCRuntime.sel("setMenuChangedMessagesEnabled:")
-    ObjCRuntime.msgSend(null, ptr, sel, menuChangedMessagesEnabled)
+    ObjCRuntime.msgSend(null, this.ptr, sel, menuChangedMessagesEnabled)
 }
 
-fun NSMenu.isTornOff(): BOOL {
+fun NSMenu.isTornOff(): Boolean {
     val sel = ObjCRuntime.sel("isTornOff")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-// Class<*> method: +[NSMenu menuZone]
+// Class method: +[NSMenu menuZone]
 fun NSMenu_menuZone(): MemorySegment {
     val sel = ObjCRuntime.sel("menuZone")
     val cls = ObjCRuntime.getClass("NSMenu")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel) as MemorySegment
 }
 
-// Class<*> method: +[NSMenu setMenuZone:]
+// Class method: +[NSMenu setMenuZone:]
 fun NSMenu_setMenuZone(zone: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setMenuZone:")
     val cls = ObjCRuntime.getClass("NSMenu")
     ObjCRuntime.msgSend(null, cls, sel, zone)
 }
 
-// @property menuChangedMessagesEnabled

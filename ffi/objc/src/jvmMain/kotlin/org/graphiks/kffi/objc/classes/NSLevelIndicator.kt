@@ -8,178 +8,178 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSLevelIndicator
  * Superclass: NSControl
  */
-open class NSLevelIndicator(ptr: MemorySegment) : NSControl(ptr) {
+open class NSLevelIndicator(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSLevelIndicator") }
         
     }
     
-    fun tickMarkValueAtIndex(index: NSInteger): Double {
+    open fun tickMarkValueAtIndex(index: Long): Double {
         val sel = ObjCRuntime.sel("tickMarkValueAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as Double
     }
     
-    fun rectOfTickMarkAtIndex(index: NSInteger): NSRect {
+    open fun rectOfTickMarkAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("rectOfTickMarkAtIndex:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, index) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, index) as MemorySegment
     }
     
     // @property levelIndicatorStyle
-    fun levelIndicatorStyle(): NSLevelIndicatorStyle {
+    open fun levelIndicatorStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("levelIndicatorStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLevelIndicatorStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLevelIndicatorStyle(value: NSLevelIndicatorStyle) {
+    open fun setLevelIndicatorStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLevelIndicatorStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property editable
-    fun isEditable(): BOOL {
+    open fun isEditable(): Boolean {
         val sel = ObjCRuntime.sel("isEditable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setEditable(value: BOOL) {
+    open fun setEditable(value: Boolean) {
         val sel = ObjCRuntime.sel("setEditable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minValue
-    fun minValue(): Double {
+    open fun minValue(): Double {
         val sel = ObjCRuntime.sel("minValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMinValue(value: Double) {
+    open fun setMinValue(value: Double) {
         val sel = ObjCRuntime.sel("setMinValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maxValue
-    fun maxValue(): Double {
+    open fun maxValue(): Double {
         val sel = ObjCRuntime.sel("maxValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMaxValue(value: Double) {
+    open fun setMaxValue(value: Double) {
         val sel = ObjCRuntime.sel("setMaxValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property warningValue
-    fun warningValue(): Double {
+    open fun warningValue(): Double {
         val sel = ObjCRuntime.sel("warningValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setWarningValue(value: Double) {
+    open fun setWarningValue(value: Double) {
         val sel = ObjCRuntime.sel("setWarningValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property criticalValue
-    fun criticalValue(): Double {
+    open fun criticalValue(): Double {
         val sel = ObjCRuntime.sel("criticalValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setCriticalValue(value: Double) {
+    open fun setCriticalValue(value: Double) {
         val sel = ObjCRuntime.sel("setCriticalValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tickMarkPosition
-    fun tickMarkPosition(): NSTickMarkPosition {
+    open fun tickMarkPosition(): MemorySegment {
         val sel = ObjCRuntime.sel("tickMarkPosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTickMarkPosition(value: NSTickMarkPosition) {
+    open fun setTickMarkPosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTickMarkPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfTickMarks
-    fun numberOfTickMarks(): NSInteger {
+    open fun numberOfTickMarks(): Long {
         val sel = ObjCRuntime.sel("numberOfTickMarks")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfTickMarks(value: NSInteger) {
+    open fun setNumberOfTickMarks(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfMajorTickMarks
-    fun numberOfMajorTickMarks(): NSInteger {
+    open fun numberOfMajorTickMarks(): Long {
         val sel = ObjCRuntime.sel("numberOfMajorTickMarks")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfMajorTickMarks(value: NSInteger) {
+    open fun setNumberOfMajorTickMarks(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfMajorTickMarks:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property fillColor
-    fun fillColor(): MemorySegment {
+    open fun fillColor(): MemorySegment {
         val sel = ObjCRuntime.sel("fillColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFillColor(value: MemorySegment) {
+    open fun setFillColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFillColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property warningFillColor
-    fun warningFillColor(): MemorySegment {
+    open fun warningFillColor(): MemorySegment {
         val sel = ObjCRuntime.sel("warningFillColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setWarningFillColor(value: MemorySegment) {
+    open fun setWarningFillColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setWarningFillColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property criticalFillColor
-    fun criticalFillColor(): MemorySegment {
+    open fun criticalFillColor(): MemorySegment {
         val sel = ObjCRuntime.sel("criticalFillColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCriticalFillColor(value: MemorySegment) {
+    open fun setCriticalFillColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCriticalFillColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property drawsTieredCapacityLevels
-    fun drawsTieredCapacityLevels(): BOOL {
+    open fun drawsTieredCapacityLevels(): Boolean {
         val sel = ObjCRuntime.sel("drawsTieredCapacityLevels")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setDrawsTieredCapacityLevels(value: BOOL) {
+    open fun setDrawsTieredCapacityLevels(value: Boolean) {
         val sel = ObjCRuntime.sel("setDrawsTieredCapacityLevels:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property placeholderVisibility
-    fun placeholderVisibility(): NSLevelIndicatorPlaceholderVisibility {
+    open fun placeholderVisibility(): MemorySegment {
         val sel = ObjCRuntime.sel("placeholderVisibility")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLevelIndicatorPlaceholderVisibility
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPlaceholderVisibility(value: NSLevelIndicatorPlaceholderVisibility) {
+    open fun setPlaceholderVisibility(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPlaceholderVisibility:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property ratingImage
-    fun ratingImage(): MemorySegment {
+    open fun ratingImage(): MemorySegment {
         val sel = ObjCRuntime.sel("ratingImage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRatingImage(value: MemorySegment) {
+    open fun setRatingImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRatingImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property ratingPlaceholderImage
-    fun ratingPlaceholderImage(): MemorySegment {
+    open fun ratingPlaceholderImage(): MemorySegment {
         val sel = ObjCRuntime.sel("ratingPlaceholderImage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRatingPlaceholderImage(value: MemorySegment) {
+    open fun setRatingPlaceholderImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRatingPlaceholderImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

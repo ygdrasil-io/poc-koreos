@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAlert
  * Superclass: NSObject
  */
-open class NSAlert(val ptr: MemorySegment) {
+open class NSAlert(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAlert") }
         
-        open fun alertWithError(error: MemorySegment): MemorySegment {
+        fun alertWithError(error: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("alertWithError:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, error) as MemorySegment
         }
@@ -25,16 +25,16 @@ open class NSAlert(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addButtonWithTitle(title: String): MemorySegment = addButtonWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
+    fun addButtonWithTitle(title: String): MemorySegment = addButtonWithTitle(ObjCRuntime.newNSString(Arena.global(), title))
     
     open fun layout(): Unit {
         val sel = ObjCRuntime.sel("layout")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun runModal(): NSModalResponse {
+    open fun runModal(): Long {
         val sel = ObjCRuntime.sel("runModal")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSModalResponse
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     open fun beginSheetModalForWindow_completionHandler(sheetWindow: MemorySegment, handler: MemorySegment): Unit {
@@ -92,31 +92,31 @@ open class NSAlert(val ptr: MemorySegment) {
     }
     
     // @property alertStyle
-    open fun alertStyle(): NSAlertStyle {
+    open fun alertStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("alertStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAlertStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setAlertStyle(value: NSAlertStyle) {
+    open fun setAlertStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAlertStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsHelp
-    open fun showsHelp(): BOOL {
+    open fun showsHelp(): Boolean {
         val sel = ObjCRuntime.sel("showsHelp")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShowsHelp(value: BOOL) {
+    open fun setShowsHelp(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsHelp:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property helpAnchor
-    open fun helpAnchor(): NSHelpAnchorName {
+    open fun helpAnchor(): MemorySegment {
         val sel = ObjCRuntime.sel("helpAnchor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHelpAnchorName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setHelpAnchor(value: NSHelpAnchorName) {
+    open fun setHelpAnchor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setHelpAnchor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -143,11 +143,11 @@ open class NSAlert(val ptr: MemorySegment) {
     }
     
     // @property showsSuppressionButton
-    open fun showsSuppressionButton(): BOOL {
+    open fun showsSuppressionButton(): Boolean {
         val sel = ObjCRuntime.sel("showsSuppressionButton")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShowsSuppressionButton(value: BOOL) {
+    open fun setShowsSuppressionButton(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsSuppressionButton:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -170,10 +170,10 @@ open class NSAlert(val ptr: MemorySegment) {
 
 fun NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo(window: MemorySegment, delegate: MemorySegment, didEndSelector: MemorySegment, contextInfo: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("beginSheetModalForWindow:modalDelegate:didEndSelector:contextInfo:")
-    ObjCRuntime.msgSend(null, ptr, sel, window, delegate, didEndSelector, contextInfo)
+    ObjCRuntime.msgSend(null, this.ptr, sel, window, delegate, didEndSelector, contextInfo)
 }
 
-// Class<*> method: +[NSAlert alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:]
+// Class method: +[NSAlert alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:]
 fun NSAlert_alertWithMessageText_defaultButton_alternateButton_otherButton_informativeTextWithFormat(message: MemorySegment, defaultButton: MemorySegment, alternateButton: MemorySegment, otherButton: MemorySegment, format: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:")
     val cls = ObjCRuntime.getClass("NSAlert")

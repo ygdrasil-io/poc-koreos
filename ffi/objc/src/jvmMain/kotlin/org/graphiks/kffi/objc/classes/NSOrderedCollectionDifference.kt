@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSFastEnumeration
  */
-open class NSOrderedCollectionDifference(val ptr: MemorySegment) {
+open class NSOrderedCollectionDifference(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOrderedCollectionDifference") }
         
@@ -56,9 +56,9 @@ open class NSOrderedCollectionDifference(val ptr: MemorySegment) {
     }
     
     // @property hasChanges
-    open fun hasChanges(): BOOL {
+    open fun hasChanges(): Boolean {
         val sel = ObjCRuntime.sel("hasChanges")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

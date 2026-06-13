@@ -8,21 +8,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPersistentDocument
  * Superclass: NSDocument
  */
-open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
+open class NSPersistentDocument(override val ptr: MemorySegment) : NSDocument(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPersistentDocument") }
         
     }
     
-    fun configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url: MemorySegment, fileType: MemorySegment, configuration: MemorySegment, storeOptions: MemorySegment, error: MemorySegment): BOOL {
+    open fun configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url: MemorySegment, fileType: MemorySegment, configuration: MemorySegment, storeOptions: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("configurePersistentStoreCoordinatorForURL:ofType:modelConfiguration:storeOptions:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, fileType, configuration, storeOptions, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, fileType, configuration, storeOptions, error) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url: MemorySegment, fileType: String, configuration: String, storeOptions: MemorySegment, error: MemorySegment): BOOL = configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url, ObjCRuntime.newNSString(Arena.global(), fileType), ObjCRuntime.newNSString(Arena.global(), configuration), storeOptions, error)
+    fun configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url: MemorySegment, fileType: String, configuration: String, storeOptions: MemorySegment, error: MemorySegment): Boolean = configurePersistentStoreCoordinatorForURL_ofType_modelConfiguration_storeOptions_error(url, ObjCRuntime.newNSString(Arena.global(), fileType), ObjCRuntime.newNSString(Arena.global(), configuration), storeOptions, error)
     
-    fun persistentStoreTypeForFileType(fileType: MemorySegment): MemorySegment {
+    open fun persistentStoreTypeForFileType(fileType: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("persistentStoreTypeForFileType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fileType) as MemorySegment
     }
@@ -36,42 +36,33 @@ open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
     /** Convenience overload — [String] parameters and [String] return type. */
     fun persistentStoreTypeForFileTypeAsString(fileType: String): String = ObjCRuntime.toJavaString(persistentStoreTypeForFileType(ObjCRuntime.newNSString(Arena.global(), fileType)))
     
-    override fun `writeToURL_ofType_forSaveOperation_originalContentsURL_error`(absoluteURL: MemorySegment, typeName: MemorySegment, saveOperation: NSSaveOperationType, absoluteOriginalContentsURL: MemorySegment, error: MemorySegment): BOOL {
+    override fun writeToURL_ofType_forSaveOperation_originalContentsURL_error(absoluteURL: MemorySegment, typeName: MemorySegment, saveOperation: MemorySegment, absoluteOriginalContentsURL: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("writeToURL:ofType:forSaveOperation:originalContentsURL:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, absoluteURL, typeName, saveOperation, absoluteOriginalContentsURL, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, absoluteURL, typeName, saveOperation, absoluteOriginalContentsURL, error) as Boolean
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `writeToURL_ofType_forSaveOperation_originalContentsURL_error`(absoluteURL: MemorySegment, typeName: String, saveOperation: NSSaveOperationType, absoluteOriginalContentsURL: MemorySegment, error: MemorySegment): BOOL = writeToURL_ofType_forSaveOperation_originalContentsURL_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), saveOperation, absoluteOriginalContentsURL, error)
-    
-    override fun `readFromURL_ofType_error`(absoluteURL: MemorySegment, typeName: MemorySegment, error: MemorySegment): BOOL {
+    override fun readFromURL_ofType_error(absoluteURL: MemorySegment, typeName: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("readFromURL:ofType:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, absoluteURL, typeName, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, absoluteURL, typeName, error) as Boolean
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `readFromURL_ofType_error`(absoluteURL: MemorySegment, typeName: String, error: MemorySegment): BOOL = readFromURL_ofType_error(absoluteURL, ObjCRuntime.newNSString(Arena.global(), typeName), error)
-    
-    override fun `revertToContentsOfURL_ofType_error`(inAbsoluteURL: MemorySegment, inTypeName: MemorySegment, outError: MemorySegment): BOOL {
+    override fun revertToContentsOfURL_ofType_error(inAbsoluteURL: MemorySegment, inTypeName: MemorySegment, outError: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("revertToContentsOfURL:ofType:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, inAbsoluteURL, inTypeName, outError) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, inAbsoluteURL, inTypeName, outError) as Boolean
     }
-    
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `revertToContentsOfURL_ofType_error`(inAbsoluteURL: MemorySegment, inTypeName: String, outError: MemorySegment): BOOL = revertToContentsOfURL_ofType_error(inAbsoluteURL, ObjCRuntime.newNSString(Arena.global(), inTypeName), outError)
     
     // @property managedObjectContext
-    fun managedObjectContext(): MemorySegment {
+    open fun managedObjectContext(): MemorySegment {
         val sel = ObjCRuntime.sel("managedObjectContext")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setManagedObjectContext(value: MemorySegment) {
+    open fun setManagedObjectContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setManagedObjectContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property managedObjectModel
-    fun managedObjectModel(): MemorySegment {
+    open fun managedObjectModel(): MemorySegment {
         val sel = ObjCRuntime.sel("managedObjectModel")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
@@ -80,8 +71,8 @@ open class NSPersistentDocument(ptr: MemorySegment) : NSDocument(ptr) {
 
 // ── Category: NSDeprecated on NSPersistentDocument ─────────────────────────────────────────
 
-fun NSPersistentDocument.configurePersistentStoreCoordinatorForURL_ofType_error(url: MemorySegment, fileType: MemorySegment, error: MemorySegment): BOOL {
+fun NSPersistentDocument.configurePersistentStoreCoordinatorForURL_ofType_error(url: MemorySegment, fileType: MemorySegment, error: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("configurePersistentStoreCoordinatorForURL:ofType:error:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, fileType, error) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, url, fileType, error) as Boolean
 }
 

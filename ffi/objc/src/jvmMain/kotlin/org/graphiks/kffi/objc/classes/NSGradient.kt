@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSGradient(val ptr: MemorySegment) {
+open class NSGradient(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGradient") }
         
@@ -40,42 +40,42 @@ open class NSGradient(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun drawFromPoint_toPoint_options(startingPoint: NSPoint, endingPoint: NSPoint, options: NSGradientDrawingOptions): Unit {
+    open fun drawFromPoint_toPoint_options(startingPoint: MemorySegment, endingPoint: MemorySegment, options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawFromPoint:toPoint:options:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(startingPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), ObjCRuntime.ObjCStructArg(endingPoint, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), options)
     }
     
-    open fun drawInRect_angle(rect: NSRect, angle: CGFloat): Unit {
+    open fun drawInRect_angle(rect: MemorySegment, angle: Double): Unit {
         val sel = ObjCRuntime.sel("drawInRect:angle:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), angle)
     }
     
-    open fun drawInBezierPath_angle(path: MemorySegment, angle: CGFloat): Unit {
+    open fun drawInBezierPath_angle(path: MemorySegment, angle: Double): Unit {
         val sel = ObjCRuntime.sel("drawInBezierPath:angle:")
         ObjCRuntime.msgSend(null, ptr, sel, path, angle)
     }
     
-    open fun drawFromCenter_radius_toCenter_radius_options(startCenter: NSPoint, startRadius: CGFloat, endCenter: NSPoint, endRadius: CGFloat, options: NSGradientDrawingOptions): Unit {
+    open fun drawFromCenter_radius_toCenter_radius_options(startCenter: MemorySegment, startRadius: Double, endCenter: MemorySegment, endRadius: Double, options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawFromCenter:radius:toCenter:radius:options:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(startCenter, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), startRadius, ObjCRuntime.ObjCStructArg(endCenter, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), endRadius, options)
     }
     
-    open fun drawInRect_relativeCenterPosition(rect: NSRect, relativeCenterPosition: NSPoint): Unit {
+    open fun drawInRect_relativeCenterPosition(rect: MemorySegment, relativeCenterPosition: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawInRect:relativeCenterPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), ObjCRuntime.ObjCStructArg(relativeCenterPosition, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")))
     }
     
-    open fun drawInBezierPath_relativeCenterPosition(path: MemorySegment, relativeCenterPosition: NSPoint): Unit {
+    open fun drawInBezierPath_relativeCenterPosition(path: MemorySegment, relativeCenterPosition: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawInBezierPath:relativeCenterPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, path, ObjCRuntime.ObjCStructArg(relativeCenterPosition, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")))
     }
     
-    open fun getColor_location_atIndex(color: MemorySegment, location: MemorySegment, index: NSInteger): Unit {
+    open fun getColor_location_atIndex(color: MemorySegment, location: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("getColor:location:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, color, location, index)
     }
     
-    open fun interpolatedColorAtLocation(location: CGFloat): MemorySegment {
+    open fun interpolatedColorAtLocation(location: Double): MemorySegment {
         val sel = ObjCRuntime.sel("interpolatedColorAtLocation:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, location) as MemorySegment
     }
@@ -87,9 +87,9 @@ open class NSGradient(val ptr: MemorySegment) {
     }
     
     // @property numberOfColorStops
-    open fun numberOfColorStops(): NSInteger {
+    open fun numberOfColorStops(): Long {
         val sel = ObjCRuntime.sel("numberOfColorStops")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
 }

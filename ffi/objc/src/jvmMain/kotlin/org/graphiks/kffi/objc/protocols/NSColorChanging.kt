@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSColorChanging
  * Inherits protocols: NSObject
  */
-interface NSColorChanging : NSObject {
-    fun changeColor(sender: MemorySegment)
+interface NSColorChanging {
+    fun changeColor(sender: MemorySegment): Unit
     
 }
 

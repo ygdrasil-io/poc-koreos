@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSWindowTabGroup
  * Superclass: NSObject
  */
-open class NSWindowTabGroup(val ptr: MemorySegment) {
+open class NSWindowTabGroup(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSWindowTabGroup") }
         
@@ -19,7 +19,7 @@ open class NSWindowTabGroup(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, window)
     }
     
-    open fun insertWindow_atIndex(window: MemorySegment, index: NSInteger): Unit {
+    open fun insertWindow_atIndex(window: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertWindow:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, window, index)
     }
@@ -30,9 +30,9 @@ open class NSWindowTabGroup(val ptr: MemorySegment) {
     }
     
     // @property identifier
-    open fun identifier(): NSWindowTabbingIdentifier {
+    open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSWindowTabbingIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property windows
@@ -43,19 +43,19 @@ open class NSWindowTabGroup(val ptr: MemorySegment) {
     }
     
     // @property overviewVisible
-    open fun isOverviewVisible(): BOOL {
+    open fun isOverviewVisible(): Boolean {
         val sel = ObjCRuntime.sel("isOverviewVisible")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setOverviewVisible(value: BOOL) {
+    open fun setOverviewVisible(value: Boolean) {
         val sel = ObjCRuntime.sel("setOverviewVisible:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tabBarVisible
-    open fun isTabBarVisible(): BOOL {
+    open fun isTabBarVisible(): Boolean {
         val sel = ObjCRuntime.sel("isTabBarVisible")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property selectedWindow

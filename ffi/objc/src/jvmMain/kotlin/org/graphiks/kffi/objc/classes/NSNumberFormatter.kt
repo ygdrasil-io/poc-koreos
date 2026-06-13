@@ -8,39 +8,39 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSNumberFormatter
  * Superclass: NSFormatter
  */
-open class NSNumberFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSNumberFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNumberFormatter") }
         
-        fun localizedStringFromNumber_numberStyle(num: MemorySegment, nstyle: NSNumberFormatterStyle): MemorySegment {
+        fun localizedStringFromNumber_numberStyle(num: MemorySegment, nstyle: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("localizedStringFromNumber:numberStyle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, num, nstyle) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun localizedStringFromNumber_numberStyleAsString(num: MemorySegment, nstyle: NSNumberFormatterStyle): String = ObjCRuntime.toJavaString(localizedStringFromNumber_numberStyle(num, nstyle))
+        fun localizedStringFromNumber_numberStyleAsString(num: MemorySegment, nstyle: MemorySegment): String = ObjCRuntime.toJavaString(localizedStringFromNumber_numberStyle(num, nstyle))
         
-        fun defaultFormatterBehavior(): NSNumberFormatterBehavior {
+        fun defaultFormatterBehavior(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultFormatterBehavior")
-            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as NSNumberFormatterBehavior
+            return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        fun setDefaultFormatterBehavior(behavior: NSNumberFormatterBehavior): Unit {
+        fun setDefaultFormatterBehavior(behavior: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setDefaultFormatterBehavior:")
             ObjCRuntime.msgSend(null, _class, sel, behavior)
         }
         
     }
     
-    fun getObjectValue_forString_range_error(obj: MemorySegment, string: MemorySegment, rangep: MemorySegment, error: MemorySegment): BOOL {
+    open fun getObjectValue_forString_range_error(obj: MemorySegment, string: MemorySegment, rangep: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getObjectValue:forString:range:error:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, rangep, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, rangep, error) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun getObjectValue_forString_range_error(obj: MemorySegment, string: String, rangep: MemorySegment, error: MemorySegment): BOOL = getObjectValue_forString_range_error(obj, ObjCRuntime.newNSString(Arena.global(), string), rangep, error)
+    fun getObjectValue_forString_range_error(obj: MemorySegment, string: String, rangep: MemorySegment, error: MemorySegment): Boolean = getObjectValue_forString_range_error(obj, ObjCRuntime.newNSString(Arena.global(), string), rangep, error)
     
-    fun stringFromNumber(number: MemorySegment): MemorySegment {
+    open fun stringFromNumber(number: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromNumber:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, number) as MemorySegment
     }
@@ -48,7 +48,7 @@ open class NSNumberFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromNumberAsString(number: MemorySegment): String = ObjCRuntime.toJavaString(stringFromNumber(number))
     
-    fun numberFromString(string: MemorySegment): MemorySegment {
+    open fun numberFromString(string: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("numberFromString:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string) as MemorySegment
     }
@@ -57,732 +57,732 @@ open class NSNumberFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     fun numberFromString(string: String): MemorySegment = numberFromString(ObjCRuntime.newNSString(Arena.global(), string))
     
     // @property formattingContext
-    fun formattingContext(): NSFormattingContext {
+    open fun formattingContext(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFormattingContext
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingContext(value: NSFormattingContext) {
+    open fun setFormattingContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumGroupingDigits
-    fun minimumGroupingDigits(): NSInteger {
+    open fun minimumGroupingDigits(): Long {
         val sel = ObjCRuntime.sel("minimumGroupingDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMinimumGroupingDigits(value: NSInteger) {
+    open fun setMinimumGroupingDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMinimumGroupingDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberStyle
-    fun numberStyle(): NSNumberFormatterStyle {
+    open fun numberStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("numberStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSNumberFormatterStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNumberStyle(value: NSNumberFormatterStyle) {
+    open fun setNumberStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNumberStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property locale
-    fun locale(): MemorySegment {
+    open fun locale(): MemorySegment {
         val sel = ObjCRuntime.sel("locale")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLocale(value: MemorySegment) {
+    open fun setLocale(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLocale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property generatesDecimalNumbers
-    fun generatesDecimalNumbers(): BOOL {
+    open fun generatesDecimalNumbers(): Boolean {
         val sel = ObjCRuntime.sel("generatesDecimalNumbers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setGeneratesDecimalNumbers(value: BOOL) {
+    open fun setGeneratesDecimalNumbers(value: Boolean) {
         val sel = ObjCRuntime.sel("setGeneratesDecimalNumbers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formatterBehavior
-    fun formatterBehavior(): NSNumberFormatterBehavior {
+    open fun formatterBehavior(): MemorySegment {
         val sel = ObjCRuntime.sel("formatterBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSNumberFormatterBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormatterBehavior(value: NSNumberFormatterBehavior) {
+    open fun setFormatterBehavior(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormatterBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property negativeFormat
-    fun negativeFormat(): MemorySegment {
+    open fun negativeFormat(): MemorySegment {
         val sel = ObjCRuntime.sel("negativeFormat")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNegativeFormat(value: MemorySegment) {
+    open fun setNegativeFormat(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNegativeFormat:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun negativeFormatAsString(): String = ObjCRuntime.toJavaString(negativeFormat())
+    open fun negativeFormatAsString(): String = ObjCRuntime.toJavaString(negativeFormat())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNegativeFormat(value: String) = setNegativeFormat(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNegativeFormat(value: String) = setNegativeFormat(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForNegativeValues
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForNegativeValues(): MemorySegment {
+    open fun textAttributesForNegativeValues(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForNegativeValues")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForNegativeValues(value: MemorySegment) {
+    open fun setTextAttributesForNegativeValues(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForNegativeValues:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property positiveFormat
-    fun positiveFormat(): MemorySegment {
+    open fun positiveFormat(): MemorySegment {
         val sel = ObjCRuntime.sel("positiveFormat")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPositiveFormat(value: MemorySegment) {
+    open fun setPositiveFormat(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPositiveFormat:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun positiveFormatAsString(): String = ObjCRuntime.toJavaString(positiveFormat())
+    open fun positiveFormatAsString(): String = ObjCRuntime.toJavaString(positiveFormat())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPositiveFormat(value: String) = setPositiveFormat(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPositiveFormat(value: String) = setPositiveFormat(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForPositiveValues
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForPositiveValues(): MemorySegment {
+    open fun textAttributesForPositiveValues(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForPositiveValues")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForPositiveValues(value: MemorySegment) {
+    open fun setTextAttributesForPositiveValues(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForPositiveValues:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsFloats
-    fun allowsFloats(): BOOL {
+    open fun allowsFloats(): Boolean {
         val sel = ObjCRuntime.sel("allowsFloats")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsFloats(value: BOOL) {
+    open fun setAllowsFloats(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsFloats:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property decimalSeparator
-    fun decimalSeparator(): MemorySegment {
+    open fun decimalSeparator(): MemorySegment {
         val sel = ObjCRuntime.sel("decimalSeparator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDecimalSeparator(value: MemorySegment) {
+    open fun setDecimalSeparator(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDecimalSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun decimalSeparatorAsString(): String = ObjCRuntime.toJavaString(decimalSeparator())
+    open fun decimalSeparatorAsString(): String = ObjCRuntime.toJavaString(decimalSeparator())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setDecimalSeparator(value: String) = setDecimalSeparator(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setDecimalSeparator(value: String) = setDecimalSeparator(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property alwaysShowsDecimalSeparator
-    fun alwaysShowsDecimalSeparator(): BOOL {
+    open fun alwaysShowsDecimalSeparator(): Boolean {
         val sel = ObjCRuntime.sel("alwaysShowsDecimalSeparator")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAlwaysShowsDecimalSeparator(value: BOOL) {
+    open fun setAlwaysShowsDecimalSeparator(value: Boolean) {
         val sel = ObjCRuntime.sel("setAlwaysShowsDecimalSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currencyDecimalSeparator
-    fun currencyDecimalSeparator(): MemorySegment {
+    open fun currencyDecimalSeparator(): MemorySegment {
         val sel = ObjCRuntime.sel("currencyDecimalSeparator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrencyDecimalSeparator(value: MemorySegment) {
+    open fun setCurrencyDecimalSeparator(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrencyDecimalSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun currencyDecimalSeparatorAsString(): String = ObjCRuntime.toJavaString(currencyDecimalSeparator())
+    open fun currencyDecimalSeparatorAsString(): String = ObjCRuntime.toJavaString(currencyDecimalSeparator())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCurrencyDecimalSeparator(value: String) = setCurrencyDecimalSeparator(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCurrencyDecimalSeparator(value: String) = setCurrencyDecimalSeparator(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property usesGroupingSeparator
-    fun usesGroupingSeparator(): BOOL {
+    open fun usesGroupingSeparator(): Boolean {
         val sel = ObjCRuntime.sel("usesGroupingSeparator")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setUsesGroupingSeparator(value: BOOL) {
+    open fun setUsesGroupingSeparator(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesGroupingSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property groupingSeparator
-    fun groupingSeparator(): MemorySegment {
+    open fun groupingSeparator(): MemorySegment {
         val sel = ObjCRuntime.sel("groupingSeparator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setGroupingSeparator(value: MemorySegment) {
+    open fun setGroupingSeparator(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setGroupingSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun groupingSeparatorAsString(): String = ObjCRuntime.toJavaString(groupingSeparator())
+    open fun groupingSeparatorAsString(): String = ObjCRuntime.toJavaString(groupingSeparator())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setGroupingSeparator(value: String) = setGroupingSeparator(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setGroupingSeparator(value: String) = setGroupingSeparator(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property zeroSymbol
-    fun zeroSymbol(): MemorySegment {
+    open fun zeroSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("zeroSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setZeroSymbol(value: MemorySegment) {
+    open fun setZeroSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setZeroSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun zeroSymbolAsString(): String = ObjCRuntime.toJavaString(zeroSymbol())
+    open fun zeroSymbolAsString(): String = ObjCRuntime.toJavaString(zeroSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setZeroSymbol(value: String) = setZeroSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setZeroSymbol(value: String) = setZeroSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForZero
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForZero(): MemorySegment {
+    open fun textAttributesForZero(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForZero")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForZero(value: MemorySegment) {
+    open fun setTextAttributesForZero(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForZero:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property nilSymbol
-    fun nilSymbol(): MemorySegment {
+    open fun nilSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("nilSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNilSymbol(value: MemorySegment) {
+    open fun setNilSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNilSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun nilSymbolAsString(): String = ObjCRuntime.toJavaString(nilSymbol())
+    open fun nilSymbolAsString(): String = ObjCRuntime.toJavaString(nilSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNilSymbol(value: String) = setNilSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNilSymbol(value: String) = setNilSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForNil
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForNil(): MemorySegment {
+    open fun textAttributesForNil(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForNil")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForNil(value: MemorySegment) {
+    open fun setTextAttributesForNil(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForNil:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property notANumberSymbol
-    fun notANumberSymbol(): MemorySegment {
+    open fun notANumberSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("notANumberSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNotANumberSymbol(value: MemorySegment) {
+    open fun setNotANumberSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNotANumberSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun notANumberSymbolAsString(): String = ObjCRuntime.toJavaString(notANumberSymbol())
+    open fun notANumberSymbolAsString(): String = ObjCRuntime.toJavaString(notANumberSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNotANumberSymbol(value: String) = setNotANumberSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNotANumberSymbol(value: String) = setNotANumberSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForNotANumber
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForNotANumber(): MemorySegment {
+    open fun textAttributesForNotANumber(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForNotANumber")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForNotANumber(value: MemorySegment) {
+    open fun setTextAttributesForNotANumber(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForNotANumber:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property positiveInfinitySymbol
-    fun positiveInfinitySymbol(): MemorySegment {
+    open fun positiveInfinitySymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("positiveInfinitySymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPositiveInfinitySymbol(value: MemorySegment) {
+    open fun setPositiveInfinitySymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPositiveInfinitySymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun positiveInfinitySymbolAsString(): String = ObjCRuntime.toJavaString(positiveInfinitySymbol())
+    open fun positiveInfinitySymbolAsString(): String = ObjCRuntime.toJavaString(positiveInfinitySymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPositiveInfinitySymbol(value: String) = setPositiveInfinitySymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPositiveInfinitySymbol(value: String) = setPositiveInfinitySymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForPositiveInfinity
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForPositiveInfinity(): MemorySegment {
+    open fun textAttributesForPositiveInfinity(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForPositiveInfinity")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForPositiveInfinity(value: MemorySegment) {
+    open fun setTextAttributesForPositiveInfinity(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForPositiveInfinity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property negativeInfinitySymbol
-    fun negativeInfinitySymbol(): MemorySegment {
+    open fun negativeInfinitySymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("negativeInfinitySymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNegativeInfinitySymbol(value: MemorySegment) {
+    open fun setNegativeInfinitySymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNegativeInfinitySymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun negativeInfinitySymbolAsString(): String = ObjCRuntime.toJavaString(negativeInfinitySymbol())
+    open fun negativeInfinitySymbolAsString(): String = ObjCRuntime.toJavaString(negativeInfinitySymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNegativeInfinitySymbol(value: String) = setNegativeInfinitySymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNegativeInfinitySymbol(value: String) = setNegativeInfinitySymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property textAttributesForNegativeInfinity
     /** @return NSDictionary<NSString *,id> * */
-    fun textAttributesForNegativeInfinity(): MemorySegment {
+    open fun textAttributesForNegativeInfinity(): MemorySegment {
         val sel = ObjCRuntime.sel("textAttributesForNegativeInfinity")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextAttributesForNegativeInfinity(value: MemorySegment) {
+    open fun setTextAttributesForNegativeInfinity(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextAttributesForNegativeInfinity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property positivePrefix
-    fun positivePrefix(): MemorySegment {
+    open fun positivePrefix(): MemorySegment {
         val sel = ObjCRuntime.sel("positivePrefix")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPositivePrefix(value: MemorySegment) {
+    open fun setPositivePrefix(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPositivePrefix:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun positivePrefixAsString(): String = ObjCRuntime.toJavaString(positivePrefix())
+    open fun positivePrefixAsString(): String = ObjCRuntime.toJavaString(positivePrefix())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPositivePrefix(value: String) = setPositivePrefix(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPositivePrefix(value: String) = setPositivePrefix(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property positiveSuffix
-    fun positiveSuffix(): MemorySegment {
+    open fun positiveSuffix(): MemorySegment {
         val sel = ObjCRuntime.sel("positiveSuffix")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPositiveSuffix(value: MemorySegment) {
+    open fun setPositiveSuffix(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPositiveSuffix:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun positiveSuffixAsString(): String = ObjCRuntime.toJavaString(positiveSuffix())
+    open fun positiveSuffixAsString(): String = ObjCRuntime.toJavaString(positiveSuffix())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPositiveSuffix(value: String) = setPositiveSuffix(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPositiveSuffix(value: String) = setPositiveSuffix(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property negativePrefix
-    fun negativePrefix(): MemorySegment {
+    open fun negativePrefix(): MemorySegment {
         val sel = ObjCRuntime.sel("negativePrefix")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNegativePrefix(value: MemorySegment) {
+    open fun setNegativePrefix(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNegativePrefix:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun negativePrefixAsString(): String = ObjCRuntime.toJavaString(negativePrefix())
+    open fun negativePrefixAsString(): String = ObjCRuntime.toJavaString(negativePrefix())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNegativePrefix(value: String) = setNegativePrefix(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNegativePrefix(value: String) = setNegativePrefix(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property negativeSuffix
-    fun negativeSuffix(): MemorySegment {
+    open fun negativeSuffix(): MemorySegment {
         val sel = ObjCRuntime.sel("negativeSuffix")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNegativeSuffix(value: MemorySegment) {
+    open fun setNegativeSuffix(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNegativeSuffix:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun negativeSuffixAsString(): String = ObjCRuntime.toJavaString(negativeSuffix())
+    open fun negativeSuffixAsString(): String = ObjCRuntime.toJavaString(negativeSuffix())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setNegativeSuffix(value: String) = setNegativeSuffix(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setNegativeSuffix(value: String) = setNegativeSuffix(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property currencyCode
-    fun currencyCode(): MemorySegment {
+    open fun currencyCode(): MemorySegment {
         val sel = ObjCRuntime.sel("currencyCode")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrencyCode(value: MemorySegment) {
+    open fun setCurrencyCode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrencyCode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun currencyCodeAsString(): String = ObjCRuntime.toJavaString(currencyCode())
+    open fun currencyCodeAsString(): String = ObjCRuntime.toJavaString(currencyCode())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCurrencyCode(value: String) = setCurrencyCode(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCurrencyCode(value: String) = setCurrencyCode(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property currencySymbol
-    fun currencySymbol(): MemorySegment {
+    open fun currencySymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("currencySymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrencySymbol(value: MemorySegment) {
+    open fun setCurrencySymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrencySymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun currencySymbolAsString(): String = ObjCRuntime.toJavaString(currencySymbol())
+    open fun currencySymbolAsString(): String = ObjCRuntime.toJavaString(currencySymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCurrencySymbol(value: String) = setCurrencySymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCurrencySymbol(value: String) = setCurrencySymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property internationalCurrencySymbol
-    fun internationalCurrencySymbol(): MemorySegment {
+    open fun internationalCurrencySymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("internationalCurrencySymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setInternationalCurrencySymbol(value: MemorySegment) {
+    open fun setInternationalCurrencySymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setInternationalCurrencySymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun internationalCurrencySymbolAsString(): String = ObjCRuntime.toJavaString(internationalCurrencySymbol())
+    open fun internationalCurrencySymbolAsString(): String = ObjCRuntime.toJavaString(internationalCurrencySymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setInternationalCurrencySymbol(value: String) = setInternationalCurrencySymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setInternationalCurrencySymbol(value: String) = setInternationalCurrencySymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property percentSymbol
-    fun percentSymbol(): MemorySegment {
+    open fun percentSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("percentSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPercentSymbol(value: MemorySegment) {
+    open fun setPercentSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPercentSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun percentSymbolAsString(): String = ObjCRuntime.toJavaString(percentSymbol())
+    open fun percentSymbolAsString(): String = ObjCRuntime.toJavaString(percentSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPercentSymbol(value: String) = setPercentSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPercentSymbol(value: String) = setPercentSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property perMillSymbol
-    fun perMillSymbol(): MemorySegment {
+    open fun perMillSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("perMillSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPerMillSymbol(value: MemorySegment) {
+    open fun setPerMillSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPerMillSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun perMillSymbolAsString(): String = ObjCRuntime.toJavaString(perMillSymbol())
+    open fun perMillSymbolAsString(): String = ObjCRuntime.toJavaString(perMillSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPerMillSymbol(value: String) = setPerMillSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPerMillSymbol(value: String) = setPerMillSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property minusSign
-    fun minusSign(): MemorySegment {
+    open fun minusSign(): MemorySegment {
         val sel = ObjCRuntime.sel("minusSign")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMinusSign(value: MemorySegment) {
+    open fun setMinusSign(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMinusSign:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun minusSignAsString(): String = ObjCRuntime.toJavaString(minusSign())
+    open fun minusSignAsString(): String = ObjCRuntime.toJavaString(minusSign())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setMinusSign(value: String) = setMinusSign(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setMinusSign(value: String) = setMinusSign(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property plusSign
-    fun plusSign(): MemorySegment {
+    open fun plusSign(): MemorySegment {
         val sel = ObjCRuntime.sel("plusSign")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPlusSign(value: MemorySegment) {
+    open fun setPlusSign(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPlusSign:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun plusSignAsString(): String = ObjCRuntime.toJavaString(plusSign())
+    open fun plusSignAsString(): String = ObjCRuntime.toJavaString(plusSign())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPlusSign(value: String) = setPlusSign(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPlusSign(value: String) = setPlusSign(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property exponentSymbol
-    fun exponentSymbol(): MemorySegment {
+    open fun exponentSymbol(): MemorySegment {
         val sel = ObjCRuntime.sel("exponentSymbol")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setExponentSymbol(value: MemorySegment) {
+    open fun setExponentSymbol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setExponentSymbol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun exponentSymbolAsString(): String = ObjCRuntime.toJavaString(exponentSymbol())
+    open fun exponentSymbolAsString(): String = ObjCRuntime.toJavaString(exponentSymbol())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setExponentSymbol(value: String) = setExponentSymbol(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setExponentSymbol(value: String) = setExponentSymbol(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property groupingSize
-    fun groupingSize(): NSUInteger {
+    open fun groupingSize(): Long {
         val sel = ObjCRuntime.sel("groupingSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setGroupingSize(value: NSUInteger) {
+    open fun setGroupingSize(value: Long) {
         val sel = ObjCRuntime.sel("setGroupingSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property secondaryGroupingSize
-    fun secondaryGroupingSize(): NSUInteger {
+    open fun secondaryGroupingSize(): Long {
         val sel = ObjCRuntime.sel("secondaryGroupingSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setSecondaryGroupingSize(value: NSUInteger) {
+    open fun setSecondaryGroupingSize(value: Long) {
         val sel = ObjCRuntime.sel("setSecondaryGroupingSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property multiplier
-    fun multiplier(): MemorySegment {
+    open fun multiplier(): MemorySegment {
         val sel = ObjCRuntime.sel("multiplier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMultiplier(value: MemorySegment) {
+    open fun setMultiplier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMultiplier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formatWidth
-    fun formatWidth(): NSUInteger {
+    open fun formatWidth(): Long {
         val sel = ObjCRuntime.sel("formatWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setFormatWidth(value: NSUInteger) {
+    open fun setFormatWidth(value: Long) {
         val sel = ObjCRuntime.sel("setFormatWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property paddingCharacter
-    fun paddingCharacter(): MemorySegment {
+    open fun paddingCharacter(): MemorySegment {
         val sel = ObjCRuntime.sel("paddingCharacter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPaddingCharacter(value: MemorySegment) {
+    open fun setPaddingCharacter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPaddingCharacter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun paddingCharacterAsString(): String = ObjCRuntime.toJavaString(paddingCharacter())
+    open fun paddingCharacterAsString(): String = ObjCRuntime.toJavaString(paddingCharacter())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setPaddingCharacter(value: String) = setPaddingCharacter(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setPaddingCharacter(value: String) = setPaddingCharacter(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property paddingPosition
-    fun paddingPosition(): NSNumberFormatterPadPosition {
+    open fun paddingPosition(): MemorySegment {
         val sel = ObjCRuntime.sel("paddingPosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSNumberFormatterPadPosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPaddingPosition(value: NSNumberFormatterPadPosition) {
+    open fun setPaddingPosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPaddingPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property roundingMode
-    fun roundingMode(): NSNumberFormatterRoundingMode {
+    open fun roundingMode(): MemorySegment {
         val sel = ObjCRuntime.sel("roundingMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSNumberFormatterRoundingMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRoundingMode(value: NSNumberFormatterRoundingMode) {
+    open fun setRoundingMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRoundingMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property roundingIncrement
-    fun roundingIncrement(): MemorySegment {
+    open fun roundingIncrement(): MemorySegment {
         val sel = ObjCRuntime.sel("roundingIncrement")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setRoundingIncrement(value: MemorySegment) {
+    open fun setRoundingIncrement(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRoundingIncrement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumIntegerDigits
-    fun minimumIntegerDigits(): NSUInteger {
+    open fun minimumIntegerDigits(): Long {
         val sel = ObjCRuntime.sel("minimumIntegerDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMinimumIntegerDigits(value: NSUInteger) {
+    open fun setMinimumIntegerDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMinimumIntegerDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximumIntegerDigits
-    fun maximumIntegerDigits(): NSUInteger {
+    open fun maximumIntegerDigits(): Long {
         val sel = ObjCRuntime.sel("maximumIntegerDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMaximumIntegerDigits(value: NSUInteger) {
+    open fun setMaximumIntegerDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMaximumIntegerDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumFractionDigits
-    fun minimumFractionDigits(): NSUInteger {
+    open fun minimumFractionDigits(): Long {
         val sel = ObjCRuntime.sel("minimumFractionDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMinimumFractionDigits(value: NSUInteger) {
+    open fun setMinimumFractionDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMinimumFractionDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximumFractionDigits
-    fun maximumFractionDigits(): NSUInteger {
+    open fun maximumFractionDigits(): Long {
         val sel = ObjCRuntime.sel("maximumFractionDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMaximumFractionDigits(value: NSUInteger) {
+    open fun setMaximumFractionDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMaximumFractionDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimum
-    fun minimum(): MemorySegment {
+    open fun minimum(): MemorySegment {
         val sel = ObjCRuntime.sel("minimum")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMinimum(value: MemorySegment) {
+    open fun setMinimum(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMinimum:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximum
-    fun maximum(): MemorySegment {
+    open fun maximum(): MemorySegment {
         val sel = ObjCRuntime.sel("maximum")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMaximum(value: MemorySegment) {
+    open fun setMaximum(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMaximum:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property currencyGroupingSeparator
-    fun currencyGroupingSeparator(): MemorySegment {
+    open fun currencyGroupingSeparator(): MemorySegment {
         val sel = ObjCRuntime.sel("currencyGroupingSeparator")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCurrencyGroupingSeparator(value: MemorySegment) {
+    open fun setCurrencyGroupingSeparator(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCurrencyGroupingSeparator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun currencyGroupingSeparatorAsString(): String = ObjCRuntime.toJavaString(currencyGroupingSeparator())
+    open fun currencyGroupingSeparatorAsString(): String = ObjCRuntime.toJavaString(currencyGroupingSeparator())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setCurrencyGroupingSeparator(value: String) = setCurrencyGroupingSeparator(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setCurrencyGroupingSeparator(value: String) = setCurrencyGroupingSeparator(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property lenient
-    fun isLenient(): BOOL {
+    open fun isLenient(): Boolean {
         val sel = ObjCRuntime.sel("isLenient")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setLenient(value: BOOL) {
+    open fun setLenient(value: Boolean) {
         val sel = ObjCRuntime.sel("setLenient:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesSignificantDigits
-    fun usesSignificantDigits(): BOOL {
+    open fun usesSignificantDigits(): Boolean {
         val sel = ObjCRuntime.sel("usesSignificantDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setUsesSignificantDigits(value: BOOL) {
+    open fun setUsesSignificantDigits(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesSignificantDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumSignificantDigits
-    fun minimumSignificantDigits(): NSUInteger {
+    open fun minimumSignificantDigits(): Long {
         val sel = ObjCRuntime.sel("minimumSignificantDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMinimumSignificantDigits(value: NSUInteger) {
+    open fun setMinimumSignificantDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMinimumSignificantDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximumSignificantDigits
-    fun maximumSignificantDigits(): NSUInteger {
+    open fun maximumSignificantDigits(): Long {
         val sel = ObjCRuntime.sel("maximumSignificantDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMaximumSignificantDigits(value: NSUInteger) {
+    open fun setMaximumSignificantDigits(value: Long) {
         val sel = ObjCRuntime.sel("setMaximumSignificantDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property partialStringValidationEnabled
-    fun isPartialStringValidationEnabled(): BOOL {
+    open fun isPartialStringValidationEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isPartialStringValidationEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setPartialStringValidationEnabled(value: BOOL) {
+    open fun setPartialStringValidationEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setPartialStringValidationEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -791,84 +791,83 @@ open class NSNumberFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
 
 // ── Category: NSNumberFormatterCompatibility on NSNumberFormatter ─────────────────────────────────────────
 
-fun NSNumberFormatter.hasThousandSeparators(): BOOL {
+fun NSNumberFormatter.hasThousandSeparators(): Boolean {
     val sel = ObjCRuntime.sel("hasThousandSeparators")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSNumberFormatter.setHasThousandSeparators(hasThousandSeparators: BOOL): Unit {
+fun NSNumberFormatter.setHasThousandSeparators(hasThousandSeparators: Boolean): Unit {
     val sel = ObjCRuntime.sel("setHasThousandSeparators:")
-    ObjCRuntime.msgSend(null, ptr, sel, hasThousandSeparators)
+    ObjCRuntime.msgSend(null, this.ptr, sel, hasThousandSeparators)
 }
 
 fun NSNumberFormatter.thousandSeparator(): MemorySegment {
     val sel = ObjCRuntime.sel("thousandSeparator")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setThousandSeparator(thousandSeparator: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setThousandSeparator:")
-    ObjCRuntime.msgSend(null, ptr, sel, thousandSeparator)
+    ObjCRuntime.msgSend(null, this.ptr, sel, thousandSeparator)
 }
 
-fun NSNumberFormatter.localizesFormat(): BOOL {
+fun NSNumberFormatter.localizesFormat(): Boolean {
     val sel = ObjCRuntime.sel("localizesFormat")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSNumberFormatter.setLocalizesFormat(localizesFormat: BOOL): Unit {
+fun NSNumberFormatter.setLocalizesFormat(localizesFormat: Boolean): Unit {
     val sel = ObjCRuntime.sel("setLocalizesFormat:")
-    ObjCRuntime.msgSend(null, ptr, sel, localizesFormat)
+    ObjCRuntime.msgSend(null, this.ptr, sel, localizesFormat)
 }
 
 fun NSNumberFormatter.format(): MemorySegment {
     val sel = ObjCRuntime.sel("format")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setFormat(format: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setFormat:")
-    ObjCRuntime.msgSend(null, ptr, sel, format)
+    ObjCRuntime.msgSend(null, this.ptr, sel, format)
 }
 
 fun NSNumberFormatter.attributedStringForZero(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForZero")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setAttributedStringForZero(attributedStringForZero: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAttributedStringForZero:")
-    ObjCRuntime.msgSend(null, ptr, sel, attributedStringForZero)
+    ObjCRuntime.msgSend(null, this.ptr, sel, attributedStringForZero)
 }
 
 fun NSNumberFormatter.attributedStringForNil(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForNil")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setAttributedStringForNil(attributedStringForNil: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAttributedStringForNil:")
-    ObjCRuntime.msgSend(null, ptr, sel, attributedStringForNil)
+    ObjCRuntime.msgSend(null, this.ptr, sel, attributedStringForNil)
 }
 
 fun NSNumberFormatter.attributedStringForNotANumber(): MemorySegment {
     val sel = ObjCRuntime.sel("attributedStringForNotANumber")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setAttributedStringForNotANumber(attributedStringForNotANumber: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAttributedStringForNotANumber:")
-    ObjCRuntime.msgSend(null, ptr, sel, attributedStringForNotANumber)
+    ObjCRuntime.msgSend(null, this.ptr, sel, attributedStringForNotANumber)
 }
 
 fun NSNumberFormatter.roundingBehavior(): MemorySegment {
     val sel = ObjCRuntime.sel("roundingBehavior")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSNumberFormatter.setRoundingBehavior(roundingBehavior: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setRoundingBehavior:")
-    ObjCRuntime.msgSend(null, ptr, sel, roundingBehavior)
+    ObjCRuntime.msgSend(null, this.ptr, sel, roundingBehavior)
 }
 
-// @property hasThousandSeparators

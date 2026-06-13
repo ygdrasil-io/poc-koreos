@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSNetServiceDelegate
  * Inherits protocols: NSObject
  */
-interface NSNetServiceDelegate : NSObject {
+interface NSNetServiceDelegate {
     // @optional
     fun netServiceWillPublish(sender: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'netServiceWillPublish:' not implemented")

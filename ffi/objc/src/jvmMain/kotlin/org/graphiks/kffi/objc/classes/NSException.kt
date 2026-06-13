@@ -9,27 +9,27 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSException(val ptr: MemorySegment) {
+open class NSException(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSException") }
         
-        open fun exceptionWithName_reason_userInfo(name: NSExceptionName, reason: MemorySegment, userInfo: MemorySegment): MemorySegment {
+        fun exceptionWithName_reason_userInfo(name: MemorySegment, reason: MemorySegment, userInfo: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("exceptionWithName:reason:userInfo:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, reason, userInfo) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun exceptionWithName_reason_userInfo(name: NSExceptionName, reason: String, userInfo: MemorySegment): MemorySegment = exceptionWithName_reason_userInfo(name, ObjCRuntime.newNSString(Arena.global(), reason), userInfo)
+        fun exceptionWithName_reason_userInfo(name: MemorySegment, reason: String, userInfo: MemorySegment): MemorySegment = exceptionWithName_reason_userInfo(name, ObjCRuntime.newNSString(Arena.global(), reason), userInfo)
         
     }
     
-    open fun initWithName_reason_userInfo(aName: NSExceptionName, aReason: MemorySegment, aUserInfo: MemorySegment): MemorySegment {
+    open fun initWithName_reason_userInfo(aName: MemorySegment, aReason: MemorySegment, aUserInfo: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithName:reason:userInfo:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aName, aReason, aUserInfo) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithName_reason_userInfo(aName: NSExceptionName, aReason: String, aUserInfo: MemorySegment): MemorySegment = initWithName_reason_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), aReason), aUserInfo)
+    fun initWithName_reason_userInfo(aName: MemorySegment, aReason: String, aUserInfo: MemorySegment): MemorySegment = initWithName_reason_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), aReason), aUserInfo)
     
     open fun raise(): Unit {
         val sel = ObjCRuntime.sel("raise")
@@ -37,9 +37,9 @@ open class NSException(val ptr: MemorySegment) {
     }
     
     // @property name
-    open fun name(): NSExceptionName {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSExceptionName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property reason
@@ -81,15 +81,15 @@ open class NSException(val ptr: MemorySegment) {
 
 // ── Category: NSExceptionRaisingConveniences on NSException ─────────────────────────────────────────
 
-// Class<*> method: +[NSException raise:format:]
-fun NSException_raise_format(name: NSExceptionName, format: MemorySegment): Unit {
+// Class method: +[NSException raise:format:]
+fun NSException_raise_format(name: MemorySegment, format: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("raise:format:")
     val cls = ObjCRuntime.getClass("NSException")
     ObjCRuntime.msgSend(null, cls, sel, name, format)
 }
 
-// Class<*> method: +[NSException raise:format:arguments:]
-fun NSException_raise_format_arguments(name: NSExceptionName, format: MemorySegment, argList: MemorySegment): Unit {
+// Class method: +[NSException raise:format:arguments:]
+fun NSException_raise_format_arguments(name: MemorySegment, format: MemorySegment, argList: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("raise:format:arguments:")
     val cls = ObjCRuntime.getClass("NSException")
     ObjCRuntime.msgSend(null, cls, sel, name, format, argList)

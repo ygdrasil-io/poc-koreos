@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextAttachmentLayout
  * Inherits protocols: NSObject
  */
-interface NSTextAttachmentLayout : NSObject {
+interface NSTextAttachmentLayout {
     fun imageForBounds_attributes_location_textContainer(bounds: MemorySegment, attributes: MemorySegment, location: MemorySegment, textContainer: MemorySegment): MemorySegment
     
     fun attachmentBoundsForAttributes_location_textContainer_proposedLineFragment_position(attributes: MemorySegment, location: MemorySegment, textContainer: MemorySegment, proposedLineFragment: MemorySegment, position: MemorySegment): MemorySegment

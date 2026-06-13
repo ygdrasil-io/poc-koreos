@@ -8,31 +8,31 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAnimationContext
  * Superclass: NSObject
  */
-open class NSAnimationContext(val ptr: MemorySegment) {
+open class NSAnimationContext(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAnimationContext") }
         
-        open fun runAnimationGroup_completionHandler(changes: MemorySegment, completionHandler: MemorySegment): Unit {
+        fun runAnimationGroup_completionHandler(changes: MemorySegment, completionHandler: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("runAnimationGroup:completionHandler:")
             ObjCRuntime.msgSend(null, _class, sel, changes, completionHandler)
         }
         
-        open fun runAnimationGroup(changes: MemorySegment): Unit {
+        fun runAnimationGroup(changes: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("runAnimationGroup:")
             ObjCRuntime.msgSend(null, _class, sel, changes)
         }
         
-        open fun beginGrouping(): Unit {
+        fun beginGrouping(): Unit {
             val sel = ObjCRuntime.sel("beginGrouping")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        open fun endGrouping(): Unit {
+        fun endGrouping(): Unit {
             val sel = ObjCRuntime.sel("endGrouping")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        open fun currentContext(): MemorySegment {
+        fun currentContext(): MemorySegment {
             val sel = ObjCRuntime.sel("currentContext")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -40,11 +40,17 @@ open class NSAnimationContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    open fun duration(): NSTimeInterval {
-        val sel = ObjCRuntime.sel("duration")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+    open fun currentContext(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentContext")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setDuration(value: NSTimeInterval) {
+    
+    // @property duration
+    open fun duration(): Double {
+        val sel = ObjCRuntime.sel("duration")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
+    }
+    open fun setDuration(value: Double) {
         val sel = ObjCRuntime.sel("setDuration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -70,11 +76,11 @@ open class NSAnimationContext(val ptr: MemorySegment) {
     }
     
     // @property allowsImplicitAnimation
-    open fun allowsImplicitAnimation(): BOOL {
+    open fun allowsImplicitAnimation(): Boolean {
         val sel = ObjCRuntime.sel("allowsImplicitAnimation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsImplicitAnimation(value: BOOL) {
+    open fun setAllowsImplicitAnimation(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsImplicitAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSNetServiceBrowser
  * Superclass: NSObject
  */
-open class NSNetServiceBrowser(val ptr: MemorySegment) {
+open class NSNetServiceBrowser(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNetServiceBrowser") }
         
@@ -19,12 +19,12 @@ open class NSNetServiceBrowser(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("scheduleInRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
     
-    open fun removeFromRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun removeFromRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeFromRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
@@ -45,7 +45,7 @@ open class NSNetServiceBrowser(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun searchForServicesOfType_inDomain(type: String, domainString: String): Unit = searchForServicesOfType_inDomain(ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), domainString))
+    fun searchForServicesOfType_inDomain(type: String, domainString: String): Unit = searchForServicesOfType_inDomain(ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), domainString))
     
     open fun stop(): Unit {
         val sel = ObjCRuntime.sel("stop")
@@ -64,11 +64,11 @@ open class NSNetServiceBrowser(val ptr: MemorySegment) {
     }
     
     // @property includesPeerToPeer
-    open fun includesPeerToPeer(): BOOL {
+    open fun includesPeerToPeer(): Boolean {
         val sel = ObjCRuntime.sel("includesPeerToPeer")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setIncludesPeerToPeer(value: BOOL) {
+    open fun setIncludesPeerToPeer(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesPeerToPeer:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

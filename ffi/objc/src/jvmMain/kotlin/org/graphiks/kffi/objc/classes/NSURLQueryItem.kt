@@ -9,17 +9,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSURLQueryItem(val ptr: MemorySegment) {
+open class NSURLQueryItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLQueryItem") }
         
-        open fun queryItemWithName_value(name: MemorySegment, value: MemorySegment): MemorySegment {
+        fun queryItemWithName_value(name: MemorySegment, value: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("queryItemWithName:value:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, value) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun queryItemWithName_value(name: String, value: String): MemorySegment = queryItemWithName_value(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), value))
+        fun queryItemWithName_value(name: String, value: String): MemorySegment = queryItemWithName_value(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), value))
         
     }
     
@@ -29,7 +29,7 @@ open class NSURLQueryItem(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithName_value(name: String, value: String): MemorySegment = initWithName_value(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), value))
+    fun initWithName_value(name: String, value: String): MemorySegment = initWithName_value(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property name
     open fun name(): MemorySegment {

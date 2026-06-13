@@ -9,12 +9,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSPasteboardReading
  */
-open class NSFilePromiseReceiver(val ptr: MemorySegment) {
+open class NSFilePromiseReceiver(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFilePromiseReceiver") }
         
         /** @return NSArray<NSString *> * */
-        open fun readableDraggedTypes(): MemorySegment {
+        fun readableDraggedTypes(): MemorySegment {
             val sel = ObjCRuntime.sel("readableDraggedTypes")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -28,6 +28,12 @@ open class NSFilePromiseReceiver(val ptr: MemorySegment) {
     
     // @property readableDraggedTypes
     /** @return NSArray<NSString *> * */
+    open fun readableDraggedTypes(): MemorySegment {
+        val sel = ObjCRuntime.sel("readableDraggedTypes")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property fileTypes
     /** @return NSArray<NSString *> * */
     open fun fileTypes(): MemorySegment {
         val sel = ObjCRuntime.sel("fileTypes")

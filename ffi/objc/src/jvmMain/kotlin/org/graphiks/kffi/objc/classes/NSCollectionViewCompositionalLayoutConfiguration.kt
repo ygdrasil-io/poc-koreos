@@ -9,28 +9,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSCollectionViewCompositionalLayoutConfiguration(val ptr: MemorySegment) {
+open class NSCollectionViewCompositionalLayoutConfiguration(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewCompositionalLayoutConfiguration") }
         
     }
     
     // @property scrollDirection
-    open fun scrollDirection(): NSCollectionViewScrollDirection {
+    open fun scrollDirection(): MemorySegment {
         val sel = ObjCRuntime.sel("scrollDirection")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCollectionViewScrollDirection
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setScrollDirection(value: NSCollectionViewScrollDirection) {
+    open fun setScrollDirection(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setScrollDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interSectionSpacing
-    open fun interSectionSpacing(): CGFloat {
+    open fun interSectionSpacing(): Double {
         val sel = ObjCRuntime.sel("interSectionSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setInterSectionSpacing(value: CGFloat) {
+    open fun setInterSectionSpacing(value: Double) {
         val sel = ObjCRuntime.sel("setInterSectionSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

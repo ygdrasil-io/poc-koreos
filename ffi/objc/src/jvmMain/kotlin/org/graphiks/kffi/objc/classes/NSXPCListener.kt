@@ -8,16 +8,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSXPCListener
  * Superclass: NSObject
  */
-open class NSXPCListener(val ptr: MemorySegment) {
+open class NSXPCListener(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSXPCListener") }
         
-        open fun serviceListener(): MemorySegment {
+        fun serviceListener(): MemorySegment {
             val sel = ObjCRuntime.sel("serviceListener")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun anonymousListener(): MemorySegment {
+        fun anonymousListener(): MemorySegment {
             val sel = ObjCRuntime.sel("anonymousListener")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -30,7 +30,7 @@ open class NSXPCListener(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithMachServiceName(name: String): MemorySegment = initWithMachServiceName(ObjCRuntime.newNSString(Arena.global(), name))
+    fun initWithMachServiceName(name: String): MemorySegment = initWithMachServiceName(ObjCRuntime.newNSString(Arena.global(), name))
     
     open fun resume(): Unit {
         val sel = ObjCRuntime.sel("resume")
@@ -58,7 +58,7 @@ open class NSXPCListener(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setConnectionCodeSigningRequirement(requirement: String): Unit = setConnectionCodeSigningRequirement(ObjCRuntime.newNSString(Arena.global(), requirement))
+    fun setConnectionCodeSigningRequirement(requirement: String): Unit = setConnectionCodeSigningRequirement(ObjCRuntime.newNSString(Arena.global(), requirement))
     
     // @property delegate
     /** @return id<NSXPCListenerDelegate> */

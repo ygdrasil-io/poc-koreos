@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSSpringLoadingDestination
  * Inherits protocols: NSObject
  */
-interface NSSpringLoadingDestination : NSObject {
-    fun springLoadingActivated_draggingInfo(activated: BOOL, draggingInfo: MemorySegment)
+interface NSSpringLoadingDestination {
+    fun springLoadingActivated_draggingInfo(activated: Boolean, draggingInfo: MemorySegment): Unit
     
-    fun springLoadingHighlightChanged(draggingInfo: MemorySegment)
+    fun springLoadingHighlightChanged(draggingInfo: MemorySegment): Unit
     
     // @optional
-    fun springLoadingEntered(draggingInfo: MemorySegment): NSSpringLoadingOptions =
+    fun springLoadingEntered(draggingInfo: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'springLoadingEntered:' not implemented")
     
     // @optional
-    fun springLoadingUpdated(draggingInfo: MemorySegment): NSSpringLoadingOptions =
+    fun springLoadingUpdated(draggingInfo: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'springLoadingUpdated:' not implemented")
     
     // @optional

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSColorSampler
  * Superclass: NSObject
  */
-open class NSColorSampler(val ptr: MemorySegment) {
+open class NSColorSampler(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSColorSampler") }
         

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPortCoder
  * Superclass: NSCoder
  */
-open class NSPortCoder(ptr: MemorySegment) : NSCoder(ptr) {
+open class NSPortCoder(override val ptr: MemorySegment) : NSCoder(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPortCoder") }
         
@@ -19,37 +19,37 @@ open class NSPortCoder(ptr: MemorySegment) : NSCoder(ptr) {
         
     }
     
-    fun isBycopy(): BOOL {
+    open fun isBycopy(): Boolean {
         val sel = ObjCRuntime.sel("isBycopy")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    fun isByref(): BOOL {
+    open fun isByref(): Boolean {
         val sel = ObjCRuntime.sel("isByref")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    fun encodePortObject(aport: MemorySegment): Unit {
+    open fun encodePortObject(aport: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodePortObject:")
         ObjCRuntime.msgSend(null, ptr, sel, aport)
     }
     
-    fun decodePortObject(): MemorySegment {
+    open fun decodePortObject(): MemorySegment {
         val sel = ObjCRuntime.sel("decodePortObject")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun connection(): MemorySegment {
+    open fun connection(): MemorySegment {
         val sel = ObjCRuntime.sel("connection")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun initWithReceivePort_sendPort_components(rcvPort: MemorySegment, sndPort: MemorySegment, comps: MemorySegment): MemorySegment {
+    open fun initWithReceivePort_sendPort_components(rcvPort: MemorySegment, sndPort: MemorySegment, comps: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithReceivePort:sendPort:components:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rcvPort, sndPort, comps) as MemorySegment
     }
     
-    fun dispatch(): Unit {
+    open fun dispatch(): Unit {
         val sel = ObjCRuntime.sel("dispatch")
         ObjCRuntime.msgSend(null, ptr, sel)
     }

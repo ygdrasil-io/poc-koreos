@@ -8,209 +8,209 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTabView
  * Superclass: NSView
  */
-open class NSTabView(ptr: MemorySegment) : NSView(ptr) {
+open class NSTabView(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTabView") }
         
     }
     
-    fun selectTabViewItem(tabViewItem: MemorySegment): Unit {
+    open fun selectTabViewItem(tabViewItem: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, tabViewItem)
     }
     
-    fun selectTabViewItemAtIndex(index: NSInteger): Unit {
+    open fun selectTabViewItemAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("selectTabViewItemAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun selectTabViewItemWithIdentifier(identifier: MemorySegment): Unit {
+    open fun selectTabViewItemWithIdentifier(identifier: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectTabViewItemWithIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, identifier)
     }
     
-    fun takeSelectedTabViewItemFromSender(sender: MemorySegment): Unit {
+    open fun takeSelectedTabViewItemFromSender(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeSelectedTabViewItemFromSender:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectFirstTabViewItem(sender: MemorySegment): Unit {
+    open fun selectFirstTabViewItem(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectFirstTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectLastTabViewItem(sender: MemorySegment): Unit {
+    open fun selectLastTabViewItem(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectLastTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectNextTabViewItem(sender: MemorySegment): Unit {
+    open fun selectNextTabViewItem(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectNextTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectPreviousTabViewItem(sender: MemorySegment): Unit {
+    open fun selectPreviousTabViewItem(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectPreviousTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun addTabViewItem(tabViewItem: MemorySegment): Unit {
+    open fun addTabViewItem(tabViewItem: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, tabViewItem)
     }
     
-    fun insertTabViewItem_atIndex(tabViewItem: MemorySegment, index: NSInteger): Unit {
+    open fun insertTabViewItem_atIndex(tabViewItem: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertTabViewItem:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, tabViewItem, index)
     }
     
-    fun removeTabViewItem(tabViewItem: MemorySegment): Unit {
+    open fun removeTabViewItem(tabViewItem: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeTabViewItem:")
         ObjCRuntime.msgSend(null, ptr, sel, tabViewItem)
     }
     
-    fun tabViewItemAtPoint(point: NSPoint): MemorySegment {
+    open fun tabViewItemAtPoint(point: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("tabViewItemAtPoint:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
     }
     
-    fun indexOfTabViewItem(tabViewItem: MemorySegment): NSInteger {
+    open fun indexOfTabViewItem(tabViewItem: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfTabViewItem:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, tabViewItem) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, tabViewItem) as Long
     }
     
-    fun tabViewItemAtIndex(index: NSInteger): MemorySegment {
+    open fun tabViewItemAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("tabViewItemAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    fun indexOfTabViewItemWithIdentifier(identifier: MemorySegment): NSInteger {
+    open fun indexOfTabViewItemWithIdentifier(identifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("indexOfTabViewItemWithIdentifier:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as Long
     }
     
     // @property selectedTabViewItem
-    fun selectedTabViewItem(): MemorySegment {
+    open fun selectedTabViewItem(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedTabViewItem")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property font
-    fun font(): MemorySegment {
+    open fun font(): MemorySegment {
         val sel = ObjCRuntime.sel("font")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFont(value: MemorySegment) {
+    open fun setFont(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFont:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tabViewType
-    fun tabViewType(): NSTabViewType {
+    open fun tabViewType(): MemorySegment {
         val sel = ObjCRuntime.sel("tabViewType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTabViewType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTabViewType(value: NSTabViewType) {
+    open fun setTabViewType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTabViewType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tabPosition
-    fun tabPosition(): NSTabPosition {
+    open fun tabPosition(): MemorySegment {
         val sel = ObjCRuntime.sel("tabPosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTabPosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTabPosition(value: NSTabPosition) {
+    open fun setTabPosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTabPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tabViewBorderType
-    fun tabViewBorderType(): NSTabViewBorderType {
+    open fun tabViewBorderType(): MemorySegment {
         val sel = ObjCRuntime.sel("tabViewBorderType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTabViewBorderType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTabViewBorderType(value: NSTabViewBorderType) {
+    open fun setTabViewBorderType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTabViewBorderType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tabViewItems
     /** @return NSArray<__kindof NSTabViewItem *> * */
-    fun tabViewItems(): MemorySegment {
+    open fun tabViewItems(): MemorySegment {
         val sel = ObjCRuntime.sel("tabViewItems")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTabViewItems(value: MemorySegment) {
+    open fun setTabViewItems(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTabViewItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsTruncatedLabels
-    fun allowsTruncatedLabels(): BOOL {
+    open fun allowsTruncatedLabels(): Boolean {
         val sel = ObjCRuntime.sel("allowsTruncatedLabels")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsTruncatedLabels(value: BOOL) {
+    open fun setAllowsTruncatedLabels(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsTruncatedLabels:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumSize
-    fun minimumSize(): NSSize {
+    open fun minimumSize(): MemorySegment {
         val sel = ObjCRuntime.sel("minimumSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
     
     // @property drawsBackground
-    fun drawsBackground(): BOOL {
+    open fun drawsBackground(): Boolean {
         val sel = ObjCRuntime.sel("drawsBackground")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setDrawsBackground(value: BOOL) {
+    open fun setDrawsBackground(value: Boolean) {
         val sel = ObjCRuntime.sel("setDrawsBackground:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property controlSize
-    fun controlSize(): NSControlSize {
+    open fun controlSize(): MemorySegment {
         val sel = ObjCRuntime.sel("controlSize")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlSize
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setControlSize(value: NSControlSize) {
+    open fun setControlSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setControlSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delegate
     /** @return id<NSTabViewDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentRect
-    fun contentRect(): NSRect {
+    open fun contentRect(): MemorySegment {
         val sel = ObjCRuntime.sel("contentRect")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property numberOfTabViewItems
-    fun numberOfTabViewItems(): NSInteger {
+    open fun numberOfTabViewItems(): Long {
         val sel = ObjCRuntime.sel("numberOfTabViewItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property controlTint
-    fun controlTint(): NSControlTint {
+    open fun controlTint(): MemorySegment {
         val sel = ObjCRuntime.sel("controlTint")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setControlTint(value: NSControlTint) {
+    open fun setControlTint(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setControlTint:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

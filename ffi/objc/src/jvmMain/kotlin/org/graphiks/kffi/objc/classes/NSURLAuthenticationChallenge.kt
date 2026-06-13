@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSURLAuthenticationChallenge(val ptr: MemorySegment) {
+open class NSURLAuthenticationChallenge(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLAuthenticationChallenge") }
         
     }
     
-    open fun initWithProtectionSpace_proposedCredential_previousFailureCount_failureResponse_error_sender(space: MemorySegment, credential: MemorySegment, previousFailureCount: NSInteger, response: MemorySegment, error: MemorySegment, sender: MemorySegment): MemorySegment {
+    open fun initWithProtectionSpace_proposedCredential_previousFailureCount_failureResponse_error_sender(space: MemorySegment, credential: MemorySegment, previousFailureCount: Long, response: MemorySegment, error: MemorySegment, sender: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithProtectionSpace:proposedCredential:previousFailureCount:failureResponse:error:sender:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, space, credential, previousFailureCount, response, error, sender) as MemorySegment
     }
@@ -38,9 +38,9 @@ open class NSURLAuthenticationChallenge(val ptr: MemorySegment) {
     }
     
     // @property previousFailureCount
-    open fun previousFailureCount(): NSInteger {
+    open fun previousFailureCount(): Long {
         val sel = ObjCRuntime.sel("previousFailureCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property failureResponse

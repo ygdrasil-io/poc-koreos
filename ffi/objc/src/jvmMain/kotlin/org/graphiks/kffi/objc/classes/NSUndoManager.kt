@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSUndoManager
  * Superclass: NSObject
  */
-open class NSUndoManager(val ptr: MemorySegment) {
+open class NSUndoManager(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUndoManager") }
         
@@ -74,7 +74,7 @@ open class NSUndoManager(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, target, undoHandler)
     }
     
-    open fun setActionIsDiscardable(discardable: BOOL): Unit {
+    open fun setActionIsDiscardable(discardable: Boolean): Unit {
         val sel = ObjCRuntime.sel("setActionIsDiscardable:")
         ObjCRuntime.msgSend(null, ptr, sel, discardable)
     }
@@ -85,19 +85,19 @@ open class NSUndoManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setActionName(actionName: String): Unit = setActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
+    fun setActionName(actionName: String): Unit = setActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
     
-    open fun undoActionUserInfoValueForKey(key: NSUndoManagerUserInfoKey): MemorySegment {
+    open fun undoActionUserInfoValueForKey(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("undoActionUserInfoValueForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
     
-    open fun redoActionUserInfoValueForKey(key: NSUndoManagerUserInfoKey): MemorySegment {
+    open fun redoActionUserInfoValueForKey(key: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("redoActionUserInfoValueForKey:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, key) as MemorySegment
     }
     
-    open fun setActionUserInfoValue_forKey(info: MemorySegment, key: NSUndoManagerUserInfoKey): Unit {
+    open fun setActionUserInfoValue_forKey(info: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setActionUserInfoValue:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, info, key)
     }
@@ -108,13 +108,13 @@ open class NSUndoManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun undoMenuTitleForUndoActionNameAsString(actionName: MemorySegment): String = ObjCRuntime.toJavaString(undoMenuTitleForUndoActionName(actionName))
+    fun undoMenuTitleForUndoActionNameAsString(actionName: MemorySegment): String = ObjCRuntime.toJavaString(undoMenuTitleForUndoActionName(actionName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun undoMenuTitleForUndoActionName(actionName: String): MemorySegment = undoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
+    fun undoMenuTitleForUndoActionName(actionName: String): MemorySegment = undoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun undoMenuTitleForUndoActionNameAsString(actionName: String): String = ObjCRuntime.toJavaString(undoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName)))
+    fun undoMenuTitleForUndoActionNameAsString(actionName: String): String = ObjCRuntime.toJavaString(undoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName)))
     
     open fun redoMenuTitleForUndoActionName(actionName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("redoMenuTitleForUndoActionName:")
@@ -122,42 +122,42 @@ open class NSUndoManager(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun redoMenuTitleForUndoActionNameAsString(actionName: MemorySegment): String = ObjCRuntime.toJavaString(redoMenuTitleForUndoActionName(actionName))
+    fun redoMenuTitleForUndoActionNameAsString(actionName: MemorySegment): String = ObjCRuntime.toJavaString(redoMenuTitleForUndoActionName(actionName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun redoMenuTitleForUndoActionName(actionName: String): MemorySegment = redoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
+    fun redoMenuTitleForUndoActionName(actionName: String): MemorySegment = redoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun redoMenuTitleForUndoActionNameAsString(actionName: String): String = ObjCRuntime.toJavaString(redoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName)))
+    fun redoMenuTitleForUndoActionNameAsString(actionName: String): String = ObjCRuntime.toJavaString(redoMenuTitleForUndoActionName(ObjCRuntime.newNSString(Arena.global(), actionName)))
     
     // @property groupingLevel
-    open fun groupingLevel(): NSInteger {
+    open fun groupingLevel(): Long {
         val sel = ObjCRuntime.sel("groupingLevel")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property undoRegistrationEnabled
-    open fun isUndoRegistrationEnabled(): BOOL {
+    open fun isUndoRegistrationEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isUndoRegistrationEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property groupsByEvent
-    open fun groupsByEvent(): BOOL {
+    open fun groupsByEvent(): Boolean {
         val sel = ObjCRuntime.sel("groupsByEvent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setGroupsByEvent(value: BOOL) {
+    open fun setGroupsByEvent(value: Boolean) {
         val sel = ObjCRuntime.sel("setGroupsByEvent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property levelsOfUndo
-    open fun levelsOfUndo(): NSUInteger {
+    open fun levelsOfUndo(): Long {
         val sel = ObjCRuntime.sel("levelsOfUndo")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setLevelsOfUndo(value: NSUInteger) {
+    open fun setLevelsOfUndo(value: Long) {
         val sel = ObjCRuntime.sel("setLevelsOfUndo:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -174,51 +174,51 @@ open class NSUndoManager(val ptr: MemorySegment) {
     }
     
     // @property canUndo
-    open fun canUndo(): BOOL {
+    open fun canUndo(): Boolean {
         val sel = ObjCRuntime.sel("canUndo")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property canRedo
-    open fun canRedo(): BOOL {
+    open fun canRedo(): Boolean {
         val sel = ObjCRuntime.sel("canRedo")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property undoCount
-    open fun undoCount(): NSUInteger {
+    open fun undoCount(): Long {
         val sel = ObjCRuntime.sel("undoCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property redoCount
-    open fun redoCount(): NSUInteger {
+    open fun redoCount(): Long {
         val sel = ObjCRuntime.sel("redoCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property undoing
-    open fun isUndoing(): BOOL {
+    open fun isUndoing(): Boolean {
         val sel = ObjCRuntime.sel("isUndoing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property redoing
-    open fun isRedoing(): BOOL {
+    open fun isRedoing(): Boolean {
         val sel = ObjCRuntime.sel("isRedoing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property undoActionIsDiscardable
-    open fun undoActionIsDiscardable(): BOOL {
+    open fun undoActionIsDiscardable(): Boolean {
         val sel = ObjCRuntime.sel("undoActionIsDiscardable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property redoActionIsDiscardable
-    open fun redoActionIsDiscardable(): BOOL {
+    open fun redoActionIsDiscardable(): Boolean {
         val sel = ObjCRuntime.sel("redoActionIsDiscardable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property undoActionName

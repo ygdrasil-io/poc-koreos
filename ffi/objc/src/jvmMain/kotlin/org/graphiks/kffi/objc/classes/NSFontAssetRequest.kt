@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSProgressReporting
  */
-open class NSFontAssetRequest(val ptr: MemorySegment) {
+open class NSFontAssetRequest(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFontAssetRequest") }
         
@@ -20,7 +20,7 @@ open class NSFontAssetRequest(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun initWithFontDescriptors_options(fontDescriptors: MemorySegment, options: NSFontAssetRequestOptions): MemorySegment {
+    open fun initWithFontDescriptors_options(fontDescriptors: MemorySegment, options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFontDescriptors:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fontDescriptors, options) as MemorySegment
     }

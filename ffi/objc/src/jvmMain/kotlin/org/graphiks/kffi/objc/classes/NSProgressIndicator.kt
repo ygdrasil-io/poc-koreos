@@ -9,118 +9,118 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSView
  * Protocols: NSAccessibilityProgressIndicator
  */
-open class NSProgressIndicator(ptr: MemorySegment) : NSView(ptr) {
+open class NSProgressIndicator(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSProgressIndicator") }
         
     }
     
-    fun incrementBy(delta: Double): Unit {
+    open fun incrementBy(delta: Double): Unit {
         val sel = ObjCRuntime.sel("incrementBy:")
         ObjCRuntime.msgSend(null, ptr, sel, delta)
     }
     
-    fun startAnimation(sender: MemorySegment): Unit {
+    open fun startAnimation(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("startAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun stopAnimation(sender: MemorySegment): Unit {
+    open fun stopAnimation(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("stopAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun sizeToFit(): Unit {
+    open fun sizeToFit(): Unit {
         val sel = ObjCRuntime.sel("sizeToFit")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property indeterminate
-    fun isIndeterminate(): BOOL {
+    open fun isIndeterminate(): Boolean {
         val sel = ObjCRuntime.sel("isIndeterminate")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIndeterminate(value: BOOL) {
+    open fun setIndeterminate(value: Boolean) {
         val sel = ObjCRuntime.sel("setIndeterminate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property controlSize
-    fun controlSize(): NSControlSize {
+    open fun controlSize(): MemorySegment {
         val sel = ObjCRuntime.sel("controlSize")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlSize
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setControlSize(value: NSControlSize) {
+    open fun setControlSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setControlSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property doubleValue
-    fun doubleValue(): Double {
+    open fun doubleValue(): Double {
         val sel = ObjCRuntime.sel("doubleValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setDoubleValue(value: Double) {
+    open fun setDoubleValue(value: Double) {
         val sel = ObjCRuntime.sel("setDoubleValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minValue
-    fun minValue(): Double {
+    open fun minValue(): Double {
         val sel = ObjCRuntime.sel("minValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMinValue(value: Double) {
+    open fun setMinValue(value: Double) {
         val sel = ObjCRuntime.sel("setMinValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maxValue
-    fun maxValue(): Double {
+    open fun maxValue(): Double {
         val sel = ObjCRuntime.sel("maxValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMaxValue(value: Double) {
+    open fun setMaxValue(value: Double) {
         val sel = ObjCRuntime.sel("setMaxValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property observedProgress
-    fun observedProgress(): MemorySegment {
+    open fun observedProgress(): MemorySegment {
         val sel = ObjCRuntime.sel("observedProgress")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setObservedProgress(value: MemorySegment) {
+    open fun setObservedProgress(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setObservedProgress:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesThreadedAnimation
-    fun usesThreadedAnimation(): BOOL {
+    open fun usesThreadedAnimation(): Boolean {
         val sel = ObjCRuntime.sel("usesThreadedAnimation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setUsesThreadedAnimation(value: BOOL) {
+    open fun setUsesThreadedAnimation(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesThreadedAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property style
-    fun style(): NSProgressIndicatorStyle {
+    open fun style(): MemorySegment {
         val sel = ObjCRuntime.sel("style")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProgressIndicatorStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setStyle(value: NSProgressIndicatorStyle) {
+    open fun setStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property displayedWhenStopped
-    fun isDisplayedWhenStopped(): BOOL {
+    open fun isDisplayedWhenStopped(): Boolean {
         val sel = ObjCRuntime.sel("isDisplayedWhenStopped")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setDisplayedWhenStopped(value: BOOL) {
+    open fun setDisplayedWhenStopped(value: Boolean) {
         val sel = ObjCRuntime.sel("setDisplayedWhenStopped:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -129,39 +129,38 @@ open class NSProgressIndicator(ptr: MemorySegment) : NSView(ptr) {
 
 // ── Category: NSProgressIndicatorDeprecated on NSProgressIndicator ─────────────────────────────────────────
 
-fun NSProgressIndicator.animationDelay(): NSTimeInterval {
+fun NSProgressIndicator.animationDelay(): Double {
     val sel = ObjCRuntime.sel("animationDelay")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, this.ptr, sel) as Double
 }
 
-fun NSProgressIndicator.setAnimationDelay(delay: NSTimeInterval): Unit {
+fun NSProgressIndicator.setAnimationDelay(delay: Double): Unit {
     val sel = ObjCRuntime.sel("setAnimationDelay:")
-    ObjCRuntime.msgSend(null, ptr, sel, delay)
+    ObjCRuntime.msgSend(null, this.ptr, sel, delay)
 }
 
 fun NSProgressIndicator.animate(sender: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("animate:")
-    ObjCRuntime.msgSend(null, ptr, sel, sender)
+    ObjCRuntime.msgSend(null, this.ptr, sel, sender)
 }
 
-fun NSProgressIndicator.isBezeled(): BOOL {
+fun NSProgressIndicator.isBezeled(): Boolean {
     val sel = ObjCRuntime.sel("isBezeled")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSProgressIndicator.setBezeled(bezeled: BOOL): Unit {
+fun NSProgressIndicator.setBezeled(bezeled: Boolean): Unit {
     val sel = ObjCRuntime.sel("setBezeled:")
-    ObjCRuntime.msgSend(null, ptr, sel, bezeled)
+    ObjCRuntime.msgSend(null, this.ptr, sel, bezeled)
 }
 
-fun NSProgressIndicator.controlTint(): NSControlTint {
+fun NSProgressIndicator.controlTint(): MemorySegment {
     val sel = ObjCRuntime.sel("controlTint")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlTint
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSProgressIndicator.setControlTint(controlTint: NSControlTint): Unit {
+fun NSProgressIndicator.setControlTint(controlTint: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setControlTint:")
-    ObjCRuntime.msgSend(null, ptr, sel, controlTint)
+    ObjCRuntime.msgSend(null, this.ptr, sel, controlTint)
 }
 
-// @property bezeled

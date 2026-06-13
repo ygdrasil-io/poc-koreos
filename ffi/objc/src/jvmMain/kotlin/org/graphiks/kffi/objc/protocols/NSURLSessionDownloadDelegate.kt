@@ -9,14 +9,14 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Inherits protocols: NSURLSessionTaskDelegate
  */
 interface NSURLSessionDownloadDelegate : NSURLSessionTaskDelegate {
-    fun URLSession_downloadTask_didFinishDownloadingToURL(session: MemorySegment, downloadTask: MemorySegment, location: MemorySegment)
+    fun URLSession_downloadTask_didFinishDownloadingToURL(session: MemorySegment, downloadTask: MemorySegment, location: MemorySegment): Unit
     
     // @optional
-    fun URLSession_downloadTask_didWriteData_totalBytesWritten_totalBytesExpectedToWrite(session: MemorySegment, downloadTask: MemorySegment, bytesWritten: int64_t, totalBytesWritten: int64_t, totalBytesExpectedToWrite: int64_t): Unit =
+    fun URLSession_downloadTask_didWriteData_totalBytesWritten_totalBytesExpectedToWrite(session: MemorySegment, downloadTask: MemorySegment, bytesWritten: Long, totalBytesWritten: Long, totalBytesExpectedToWrite: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:downloadTask:didWriteData:totalBytesWritten:totalBytesExpectedToWrite:' not implemented")
     
     // @optional
-    fun URLSession_downloadTask_didResumeAtOffset_expectedTotalBytes(session: MemorySegment, downloadTask: MemorySegment, fileOffset: int64_t, expectedTotalBytes: int64_t): Unit =
+    fun URLSession_downloadTask_didResumeAtOffset_expectedTotalBytes(session: MemorySegment, downloadTask: MemorySegment, fileOffset: Long, expectedTotalBytes: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:downloadTask:didResumeAtOffset:expectedTotalBytes:' not implemented")
     
 }

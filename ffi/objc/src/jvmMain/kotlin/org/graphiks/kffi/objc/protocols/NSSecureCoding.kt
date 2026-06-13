@@ -9,8 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Inherits protocols: NSCoding
  */
 interface NSSecureCoding : NSCoding {
-    fun supportsSecureCoding(): BOOL
+    fun supportsSecureCoding(): Boolean
     
-    // @property supportsSecureCoding
 }
 

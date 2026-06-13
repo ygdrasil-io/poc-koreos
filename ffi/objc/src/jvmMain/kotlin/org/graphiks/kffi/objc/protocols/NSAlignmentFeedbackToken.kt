@@ -8,6 +8,6 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAlignmentFeedbackToken
  * Inherits protocols: NSObject
  */
-interface NSAlignmentFeedbackToken : NSObject {
+interface NSAlignmentFeedbackToken {
 }
 

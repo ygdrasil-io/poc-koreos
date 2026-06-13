@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSStackViewDelegate
  * Inherits protocols: NSObject
  */
-interface NSStackViewDelegate : NSObject {
+interface NSStackViewDelegate {
     // @optional
     fun stackView_willDetachViews(stackView: MemorySegment, views: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'stackView:willDetachViews:' not implemented")

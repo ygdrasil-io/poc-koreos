@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSGestureRecognizer(val ptr: MemorySegment) {
+open class NSGestureRecognizer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGestureRecognizer") }
         
@@ -25,9 +25,9 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun locationInView(view: MemorySegment): NSPoint {
+    open fun locationInView(view: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("locationInView:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as NSPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, view) as MemorySegment
     }
     
     // @property target
@@ -51,9 +51,9 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
     }
     
     // @property state
-    open fun state(): NSGestureRecognizerState {
+    open fun state(): MemorySegment {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGestureRecognizerState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property delegate
@@ -68,11 +68,11 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
     }
     
     // @property enabled
-    open fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -94,61 +94,61 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
     }
     
     // @property delaysPrimaryMouseButtonEvents
-    open fun delaysPrimaryMouseButtonEvents(): BOOL {
+    open fun delaysPrimaryMouseButtonEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysPrimaryMouseButtonEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysPrimaryMouseButtonEvents(value: BOOL) {
+    open fun setDelaysPrimaryMouseButtonEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysPrimaryMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysSecondaryMouseButtonEvents
-    open fun delaysSecondaryMouseButtonEvents(): BOOL {
+    open fun delaysSecondaryMouseButtonEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysSecondaryMouseButtonEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysSecondaryMouseButtonEvents(value: BOOL) {
+    open fun setDelaysSecondaryMouseButtonEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysSecondaryMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysOtherMouseButtonEvents
-    open fun delaysOtherMouseButtonEvents(): BOOL {
+    open fun delaysOtherMouseButtonEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysOtherMouseButtonEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysOtherMouseButtonEvents(value: BOOL) {
+    open fun setDelaysOtherMouseButtonEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysOtherMouseButtonEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysKeyEvents
-    open fun delaysKeyEvents(): BOOL {
+    open fun delaysKeyEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysKeyEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysKeyEvents(value: BOOL) {
+    open fun setDelaysKeyEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysKeyEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysMagnificationEvents
-    open fun delaysMagnificationEvents(): BOOL {
+    open fun delaysMagnificationEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysMagnificationEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysMagnificationEvents(value: BOOL) {
+    open fun setDelaysMagnificationEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysMagnificationEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delaysRotationEvents
-    open fun delaysRotationEvents(): BOOL {
+    open fun delaysRotationEvents(): Boolean {
         val sel = ObjCRuntime.sel("delaysRotationEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDelaysRotationEvents(value: BOOL) {
+    open fun setDelaysRotationEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setDelaysRotationEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -170,164 +170,159 @@ open class NSGestureRecognizer(val ptr: MemorySegment) {
     open fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property modifierFlags
-    open fun modifierFlags(): NSEventModifierFlags {
+    open fun modifierFlags(): MemorySegment {
         val sel = ObjCRuntime.sel("modifierFlags")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventModifierFlags
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }
 
 // ── Category: NSTouchBar on NSGestureRecognizer ─────────────────────────────────────────
 
-fun NSGestureRecognizer.allowedTouchTypes(): NSTouchTypeMask {
+fun NSGestureRecognizer.allowedTouchTypes(): MemorySegment {
     val sel = ObjCRuntime.sel("allowedTouchTypes")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchTypeMask
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSGestureRecognizer.setAllowedTouchTypes(allowedTouchTypes: NSTouchTypeMask): Unit {
+fun NSGestureRecognizer.setAllowedTouchTypes(allowedTouchTypes: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAllowedTouchTypes:")
-    ObjCRuntime.msgSend(null, ptr, sel, allowedTouchTypes)
+    ObjCRuntime.msgSend(null, this.ptr, sel, allowedTouchTypes)
 }
 
-// @property allowedTouchTypes
+// ── Category: NSSubclassUse on NSGestureRecognizer ─────────────────────────────────────────
+
 fun NSGestureRecognizer.reset(): Unit {
     val sel = ObjCRuntime.sel("reset")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
-fun NSGestureRecognizer.canPreventGestureRecognizer(preventedGestureRecognizer: MemorySegment): BOOL {
+fun NSGestureRecognizer.canPreventGestureRecognizer(preventedGestureRecognizer: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("canPreventGestureRecognizer:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, preventedGestureRecognizer) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, preventedGestureRecognizer) as Boolean
 }
 
-fun NSGestureRecognizer.canBePreventedByGestureRecognizer(preventingGestureRecognizer: MemorySegment): BOOL {
+fun NSGestureRecognizer.canBePreventedByGestureRecognizer(preventingGestureRecognizer: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("canBePreventedByGestureRecognizer:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, preventingGestureRecognizer) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, preventingGestureRecognizer) as Boolean
 }
 
-fun NSGestureRecognizer.shouldRequireFailureOfGestureRecognizer(otherGestureRecognizer: MemorySegment): BOOL {
+fun NSGestureRecognizer.shouldRequireFailureOfGestureRecognizer(otherGestureRecognizer: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("shouldRequireFailureOfGestureRecognizer:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, otherGestureRecognizer) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, otherGestureRecognizer) as Boolean
 }
 
-fun NSGestureRecognizer.shouldBeRequiredToFailByGestureRecognizer(otherGestureRecognizer: MemorySegment): BOOL {
+fun NSGestureRecognizer.shouldBeRequiredToFailByGestureRecognizer(otherGestureRecognizer: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("shouldBeRequiredToFailByGestureRecognizer:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, otherGestureRecognizer) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, otherGestureRecognizer) as Boolean
 }
 
 fun NSGestureRecognizer.mouseDown(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("mouseDown:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.rightMouseDown(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("rightMouseDown:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.otherMouseDown(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("otherMouseDown:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.mouseUp(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("mouseUp:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.rightMouseUp(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("rightMouseUp:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.otherMouseUp(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("otherMouseUp:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.mouseDragged(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("mouseDragged:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.rightMouseDragged(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("rightMouseDragged:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.otherMouseDragged(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("otherMouseDragged:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.mouseCancelled(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("mouseCancelled:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.keyDown(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("keyDown:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.keyUp(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("keyUp:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.flagsChanged(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("flagsChanged:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.tabletPoint(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("tabletPoint:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.magnifyWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("magnifyWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.rotateWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("rotateWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.pressureChangeWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("pressureChangeWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.touchesBeganWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("touchesBeganWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.touchesMovedWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("touchesMovedWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.touchesEndedWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("touchesEndedWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
 fun NSGestureRecognizer.touchesCancelledWithEvent(event: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("touchesCancelledWithEvent:")
-    ObjCRuntime.msgSend(null, ptr, sel, event)
+    ObjCRuntime.msgSend(null, this.ptr, sel, event)
 }
 
-fun NSGestureRecognizer.state(): NSGestureRecognizerState {
-    val sel = ObjCRuntime.sel("state")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGestureRecognizerState
-}
-
-fun NSGestureRecognizer.setState(state: NSGestureRecognizerState): Unit {
+fun NSGestureRecognizer.setState(state: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setState:")
-    ObjCRuntime.msgSend(null, ptr, sel, state)
+    ObjCRuntime.msgSend(null, this.ptr, sel, state)
 }
 
-// @property state

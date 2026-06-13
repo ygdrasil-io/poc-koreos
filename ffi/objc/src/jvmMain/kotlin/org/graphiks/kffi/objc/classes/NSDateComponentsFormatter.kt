@@ -8,29 +8,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDateComponentsFormatter
  * Superclass: NSFormatter
  */
-open class NSDateComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSDateComponentsFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDateComponentsFormatter") }
         
-        fun localizedStringFromDateComponents_unitsStyle(components: MemorySegment, unitsStyle: NSDateComponentsFormatterUnitsStyle): MemorySegment {
+        fun localizedStringFromDateComponents_unitsStyle(components: MemorySegment, unitsStyle: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("localizedStringFromDateComponents:unitsStyle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, components, unitsStyle) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun localizedStringFromDateComponents_unitsStyleAsString(components: MemorySegment, unitsStyle: NSDateComponentsFormatterUnitsStyle): String = ObjCRuntime.toJavaString(localizedStringFromDateComponents_unitsStyle(components, unitsStyle))
+        fun localizedStringFromDateComponents_unitsStyleAsString(components: MemorySegment, unitsStyle: MemorySegment): String = ObjCRuntime.toJavaString(localizedStringFromDateComponents_unitsStyle(components, unitsStyle))
         
     }
     
-    override fun `stringForObjectValue`(obj: MemorySegment): MemorySegment {
+    override fun stringForObjectValue(obj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForObjectValue:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, obj) as MemorySegment
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    override fun `stringForObjectValueAsString`(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
-    
-    fun stringFromDateComponents(components: MemorySegment): MemorySegment {
+    open fun stringFromDateComponents(components: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromDateComponents:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, components) as MemorySegment
     }
@@ -38,7 +35,7 @@ open class NSDateComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromDateComponentsAsString(components: MemorySegment): String = ObjCRuntime.toJavaString(stringFromDateComponents(components))
     
-    fun stringFromDate_toDate(startDate: MemorySegment, endDate: MemorySegment): MemorySegment {
+    open fun stringFromDate_toDate(startDate: MemorySegment, endDate: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromDate:toDate:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, startDate, endDate) as MemorySegment
     }
@@ -46,128 +43,125 @@ open class NSDateComponentsFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromDate_toDateAsString(startDate: MemorySegment, endDate: MemorySegment): String = ObjCRuntime.toJavaString(stringFromDate_toDate(startDate, endDate))
     
-    fun stringFromTimeInterval(ti: NSTimeInterval): MemorySegment {
+    open fun stringFromTimeInterval(ti: Double): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromTimeInterval:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ti) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun stringFromTimeIntervalAsString(ti: NSTimeInterval): String = ObjCRuntime.toJavaString(stringFromTimeInterval(ti))
+    fun stringFromTimeIntervalAsString(ti: Double): String = ObjCRuntime.toJavaString(stringFromTimeInterval(ti))
     
-    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: MemorySegment, error: MemorySegment): BOOL {
+    override fun getObjectValue_forString_errorDescription(obj: MemorySegment, string: MemorySegment, error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getObjectValue:forString:errorDescription:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, obj, string, error) as Boolean
     }
-    
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `getObjectValue_forString_errorDescription`(obj: MemorySegment, string: String, error: String): BOOL = getObjectValue_forString_errorDescription(obj, ObjCRuntime.newNSString(Arena.global(), string), ObjCRuntime.newNSString(Arena.global(), error))
     
     // @property unitsStyle
-    fun unitsStyle(): NSDateComponentsFormatterUnitsStyle {
+    open fun unitsStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("unitsStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDateComponentsFormatterUnitsStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setUnitsStyle(value: NSDateComponentsFormatterUnitsStyle) {
+    open fun setUnitsStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUnitsStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowedUnits
-    fun allowedUnits(): NSCalendarUnit {
+    open fun allowedUnits(): MemorySegment {
         val sel = ObjCRuntime.sel("allowedUnits")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCalendarUnit
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAllowedUnits(value: NSCalendarUnit) {
+    open fun setAllowedUnits(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAllowedUnits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property zeroFormattingBehavior
-    fun zeroFormattingBehavior(): NSDateComponentsFormatterZeroFormattingBehavior {
+    open fun zeroFormattingBehavior(): MemorySegment {
         val sel = ObjCRuntime.sel("zeroFormattingBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSDateComponentsFormatterZeroFormattingBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setZeroFormattingBehavior(value: NSDateComponentsFormatterZeroFormattingBehavior) {
+    open fun setZeroFormattingBehavior(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setZeroFormattingBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property calendar
-    fun calendar(): MemorySegment {
+    open fun calendar(): MemorySegment {
         val sel = ObjCRuntime.sel("calendar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCalendar(value: MemorySegment) {
+    open fun setCalendar(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCalendar:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property referenceDate
-    fun referenceDate(): MemorySegment {
+    open fun referenceDate(): MemorySegment {
         val sel = ObjCRuntime.sel("referenceDate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setReferenceDate(value: MemorySegment) {
+    open fun setReferenceDate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setReferenceDate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsFractionalUnits
-    fun allowsFractionalUnits(): BOOL {
+    open fun allowsFractionalUnits(): Boolean {
         val sel = ObjCRuntime.sel("allowsFractionalUnits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsFractionalUnits(value: BOOL) {
+    open fun setAllowsFractionalUnits(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsFractionalUnits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maximumUnitCount
-    fun maximumUnitCount(): NSInteger {
+    open fun maximumUnitCount(): Long {
         val sel = ObjCRuntime.sel("maximumUnitCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMaximumUnitCount(value: NSInteger) {
+    open fun setMaximumUnitCount(value: Long) {
         val sel = ObjCRuntime.sel("setMaximumUnitCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property collapsesLargestUnit
-    fun collapsesLargestUnit(): BOOL {
+    open fun collapsesLargestUnit(): Boolean {
         val sel = ObjCRuntime.sel("collapsesLargestUnit")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setCollapsesLargestUnit(value: BOOL) {
+    open fun setCollapsesLargestUnit(value: Boolean) {
         val sel = ObjCRuntime.sel("setCollapsesLargestUnit:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property includesApproximationPhrase
-    fun includesApproximationPhrase(): BOOL {
+    open fun includesApproximationPhrase(): Boolean {
         val sel = ObjCRuntime.sel("includesApproximationPhrase")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIncludesApproximationPhrase(value: BOOL) {
+    open fun setIncludesApproximationPhrase(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesApproximationPhrase:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property includesTimeRemainingPhrase
-    fun includesTimeRemainingPhrase(): BOOL {
+    open fun includesTimeRemainingPhrase(): Boolean {
         val sel = ObjCRuntime.sel("includesTimeRemainingPhrase")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIncludesTimeRemainingPhrase(value: BOOL) {
+    open fun setIncludesTimeRemainingPhrase(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesTimeRemainingPhrase:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formattingContext
-    fun formattingContext(): NSFormattingContext {
+    open fun formattingContext(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFormattingContext
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingContext(value: NSFormattingContext) {
+    open fun setFormattingContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

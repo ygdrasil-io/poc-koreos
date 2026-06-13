@@ -9,24 +9,24 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSTableViewRowAction(val ptr: MemorySegment) {
+open class NSTableViewRowAction(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTableViewRowAction") }
         
-        open fun rowActionWithStyle_title_handler(style: NSTableViewRowActionStyle, title: MemorySegment, handler: MemorySegment): MemorySegment {
+        fun rowActionWithStyle_title_handler(style: MemorySegment, title: MemorySegment, handler: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("rowActionWithStyle:title:handler:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, style, title, handler) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun rowActionWithStyle_title_handler(style: NSTableViewRowActionStyle, title: String, handler: MemorySegment): MemorySegment = rowActionWithStyle_title_handler(style, ObjCRuntime.newNSString(Arena.global(), title), handler)
+        fun rowActionWithStyle_title_handler(style: MemorySegment, title: String, handler: MemorySegment): MemorySegment = rowActionWithStyle_title_handler(style, ObjCRuntime.newNSString(Arena.global(), title), handler)
         
     }
     
     // @property style
-    open fun style(): NSTableViewRowActionStyle {
+    open fun style(): MemorySegment {
         val sel = ObjCRuntime.sel("style")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTableViewRowActionStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property title

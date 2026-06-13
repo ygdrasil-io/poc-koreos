@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSScanner(val ptr: MemorySegment) {
+open class NSScanner(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScanner") }
         
@@ -21,7 +21,7 @@ open class NSScanner(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
+    fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
     
     // @property string
     open fun string(): MemorySegment {
@@ -33,11 +33,11 @@ open class NSScanner(val ptr: MemorySegment) {
     open fun stringAsString(): String = ObjCRuntime.toJavaString(string())
     
     // @property scanLocation
-    open fun scanLocation(): NSUInteger {
+    open fun scanLocation(): Long {
         val sel = ObjCRuntime.sel("scanLocation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setScanLocation(value: NSUInteger) {
+    open fun setScanLocation(value: Long) {
         val sel = ObjCRuntime.sel("setScanLocation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -53,11 +53,11 @@ open class NSScanner(val ptr: MemorySegment) {
     }
     
     // @property caseSensitive
-    open fun caseSensitive(): BOOL {
+    open fun caseSensitive(): Boolean {
         val sel = ObjCRuntime.sel("caseSensitive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setCaseSensitive(value: BOOL) {
+    open fun setCaseSensitive(value: Boolean) {
         val sel = ObjCRuntime.sel("setCaseSensitive:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -76,98 +76,99 @@ open class NSScanner(val ptr: MemorySegment) {
 
 // ── Category: NSExtendedScanner on NSScanner ─────────────────────────────────────────
 
-fun NSScanner.scanInt(result: MemorySegment): BOOL {
+fun NSScanner.scanInt(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanInt:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanInteger(result: MemorySegment): BOOL {
+fun NSScanner.scanInteger(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanInteger:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanLongLong(result: MemorySegment): BOOL {
+fun NSScanner.scanLongLong(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanLongLong:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanUnsignedLongLong(result: MemorySegment): BOOL {
+fun NSScanner.scanUnsignedLongLong(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanUnsignedLongLong:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanFloat(result: MemorySegment): BOOL {
+fun NSScanner.scanFloat(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanFloat:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanDouble(result: MemorySegment): BOOL {
+fun NSScanner.scanDouble(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanDouble:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanHexInt(result: MemorySegment): BOOL {
+fun NSScanner.scanHexInt(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanHexInt:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanHexLongLong(result: MemorySegment): BOOL {
+fun NSScanner.scanHexLongLong(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanHexLongLong:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanHexFloat(result: MemorySegment): BOOL {
+fun NSScanner.scanHexFloat(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanHexFloat:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanHexDouble(result: MemorySegment): BOOL {
+fun NSScanner.scanHexDouble(result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanHexDouble:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, result) as Boolean
 }
 
-fun NSScanner.scanString_intoString(string: MemorySegment, result: MemorySegment): BOOL {
+fun NSScanner.scanString_intoString(string: MemorySegment, result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanString:intoString:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, string, result) as Boolean
 }
 
-fun NSScanner.scanCharactersFromSet_intoString(`set`: MemorySegment, result: MemorySegment): BOOL {
+fun NSScanner.scanCharactersFromSet_intoString(`set`: MemorySegment, result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanCharactersFromSet:intoString:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `set`, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `set`, result) as Boolean
 }
 
-fun NSScanner.scanUpToString_intoString(string: MemorySegment, result: MemorySegment): BOOL {
+fun NSScanner.scanUpToString_intoString(string: MemorySegment, result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanUpToString:intoString:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, string, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, string, result) as Boolean
 }
 
-fun NSScanner.scanUpToCharactersFromSet_intoString(`set`: MemorySegment, result: MemorySegment): BOOL {
+fun NSScanner.scanUpToCharactersFromSet_intoString(`set`: MemorySegment, result: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanUpToCharactersFromSet:intoString:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `set`, result) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, `set`, result) as Boolean
 }
 
-fun NSScanner.isAtEnd(): BOOL {
+fun NSScanner.isAtEnd(): Boolean {
     val sel = ObjCRuntime.sel("isAtEnd")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-// Class<*> method: +[NSScanner scannerWithString:]
+// Class method: +[NSScanner scannerWithString:]
 fun NSScanner_scannerWithString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("scannerWithString:")
     val cls = ObjCRuntime.getClass("NSScanner")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// Class<*> method: +[NSScanner localizedScannerWithString:]
+// Class method: +[NSScanner localizedScannerWithString:]
 fun NSScanner_localizedScannerWithString(string: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("localizedScannerWithString:")
     val cls = ObjCRuntime.getClass("NSScanner")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, string) as MemorySegment
 }
 
-// @property atEnd
-fun NSScanner.scanDecimal(dcm: MemorySegment): BOOL {
+// ── Category: NSDecimalNumberScanning on NSScanner ─────────────────────────────────────────
+
+fun NSScanner.scanDecimal(dcm: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("scanDecimal:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dcm) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, dcm) as Boolean
 }
 

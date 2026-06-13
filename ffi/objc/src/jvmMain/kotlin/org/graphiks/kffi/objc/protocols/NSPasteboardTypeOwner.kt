@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSPasteboardTypeOwner
  * Inherits protocols: NSObject
  */
-interface NSPasteboardTypeOwner : NSObject {
-    fun pasteboard_provideDataForType(sender: MemorySegment, type: NSPasteboardType)
+interface NSPasteboardTypeOwner {
+    fun pasteboard_provideDataForType(sender: MemorySegment, type: MemorySegment): Unit
     
     // @optional
     fun pasteboardChangedOwner(sender: MemorySegment): Unit =

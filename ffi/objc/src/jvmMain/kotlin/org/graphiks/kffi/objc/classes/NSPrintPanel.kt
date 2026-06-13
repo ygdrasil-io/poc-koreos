@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPrintPanel
  * Superclass: NSObject
  */
-open class NSPrintPanel(val ptr: MemorySegment) {
+open class NSPrintPanel(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPrintPanel") }
         
-        open fun printPanel(): MemorySegment {
+        fun printPanel(): MemorySegment {
             val sel = ObjCRuntime.sel("printPanel")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -35,7 +35,7 @@ open class NSPrintPanel(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setDefaultButtonTitle(defaultButtonTitle: String): Unit = setDefaultButtonTitle(ObjCRuntime.newNSString(Arena.global(), defaultButtonTitle))
+    fun setDefaultButtonTitle(defaultButtonTitle: String): Unit = setDefaultButtonTitle(ObjCRuntime.newNSString(Arena.global(), defaultButtonTitle))
     
     open fun defaultButtonTitle(): MemorySegment {
         val sel = ObjCRuntime.sel("defaultButtonTitle")
@@ -43,7 +43,7 @@ open class NSPrintPanel(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun defaultButtonTitleAsString(): String = ObjCRuntime.toJavaString(defaultButtonTitle())
+    fun defaultButtonTitleAsString(): String = ObjCRuntime.toJavaString(defaultButtonTitle())
     
     open fun beginSheetUsingPrintInfo_onWindow_completionHandler(printInfo: MemorySegment, parentWindow: MemorySegment, handler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("beginSheetUsingPrintInfo:onWindow:completionHandler:")
@@ -55,14 +55,14 @@ open class NSPrintPanel(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, printInfo, docWindow, delegate, didEndSelector, contextInfo)
     }
     
-    open fun runModalWithPrintInfo(printInfo: MemorySegment): NSInteger {
+    open fun runModalWithPrintInfo(printInfo: MemorySegment): Long {
         val sel = ObjCRuntime.sel("runModalWithPrintInfo:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, printInfo) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, printInfo) as Long
     }
     
-    open fun runModal(): NSInteger {
+    open fun runModal(): Long {
         val sel = ObjCRuntime.sel("runModal")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property accessoryControllers
@@ -73,31 +73,31 @@ open class NSPrintPanel(val ptr: MemorySegment) {
     }
     
     // @property options
-    open fun options(): NSPrintPanelOptions {
+    open fun options(): MemorySegment {
         val sel = ObjCRuntime.sel("options")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrintPanelOptions
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setOptions(value: NSPrintPanelOptions) {
+    open fun setOptions(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property helpAnchor
-    open fun helpAnchor(): NSHelpAnchorName {
+    open fun helpAnchor(): MemorySegment {
         val sel = ObjCRuntime.sel("helpAnchor")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHelpAnchorName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setHelpAnchor(value: NSHelpAnchorName) {
+    open fun setHelpAnchor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setHelpAnchor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property jobStyleHint
-    open fun jobStyleHint(): NSPrintPanelJobStyleHint {
+    open fun jobStyleHint(): MemorySegment {
         val sel = ObjCRuntime.sel("jobStyleHint")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPrintPanelJobStyleHint
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setJobStyleHint(value: NSPrintPanelJobStyleHint) {
+    open fun setJobStyleHint(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setJobStyleHint:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -114,21 +114,21 @@ open class NSPrintPanel(val ptr: MemorySegment) {
 
 fun NSPrintPanel.setAccessoryView(accessoryView: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAccessoryView:")
-    ObjCRuntime.msgSend(null, ptr, sel, accessoryView)
+    ObjCRuntime.msgSend(null, this.ptr, sel, accessoryView)
 }
 
 fun NSPrintPanel.accessoryView(): MemorySegment {
     val sel = ObjCRuntime.sel("accessoryView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSPrintPanel.updateFromPrintInfo(): Unit {
     val sel = ObjCRuntime.sel("updateFromPrintInfo")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
 fun NSPrintPanel.finalWritePrintInfo(): Unit {
     val sel = ObjCRuntime.sel("finalWritePrintInfo")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 

@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSColorPickingDefault
  */
-open class NSColorPicker(val ptr: MemorySegment) {
+open class NSColorPicker(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSColorPicker") }
         
     }
     
-    open fun initWithPickerMask_colorPanel(mask: NSUInteger, owningColorPanel: MemorySegment): MemorySegment {
+    open fun initWithPickerMask_colorPanel(mask: Long, owningColorPanel: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithPickerMask:colorPanel:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mask, owningColorPanel) as MemorySegment
     }
@@ -40,7 +40,7 @@ open class NSColorPicker(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, colorList)
     }
     
-    open fun setMode(mode: NSColorPanelMode): Unit {
+    open fun setMode(mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setMode:")
         ObjCRuntime.msgSend(null, ptr, sel, mode)
     }
@@ -67,9 +67,9 @@ open class NSColorPicker(val ptr: MemorySegment) {
     open fun buttonToolTipAsString(): String = ObjCRuntime.toJavaString(buttonToolTip())
     
     // @property minContentSize
-    open fun minContentSize(): NSSize {
+    open fun minContentSize(): MemorySegment {
         val sel = ObjCRuntime.sel("minContentSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
     
 }

@@ -9,102 +9,102 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSAppleEventDescriptor(val ptr: MemorySegment) {
+open class NSAppleEventDescriptor(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAppleEventDescriptor") }
         
-        open fun nullDescriptor(): MemorySegment {
+        fun nullDescriptor(): MemorySegment {
             val sel = ObjCRuntime.sel("nullDescriptor")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun descriptorWithDescriptorType_bytes_length(descriptorType: DescType, bytes: MemorySegment, byteCount: NSUInteger): MemorySegment {
+        fun descriptorWithDescriptorType_bytes_length(descriptorType: Int, bytes: MemorySegment, byteCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithDescriptorType:bytes:length:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, descriptorType, bytes, byteCount) as MemorySegment
         }
         
-        open fun descriptorWithDescriptorType_data(descriptorType: DescType, `data`: MemorySegment): MemorySegment {
+        fun descriptorWithDescriptorType_data(descriptorType: Int, `data`: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithDescriptorType:data:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, descriptorType, `data`) as MemorySegment
         }
         
-        open fun descriptorWithBoolean(boolean: Boolean): MemorySegment {
+        fun descriptorWithBoolean(boolean: Byte): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithBoolean:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, boolean) as MemorySegment
         }
         
-        open fun descriptorWithEnumCode(enumerator: OSType): MemorySegment {
+        fun descriptorWithEnumCode(enumerator: Int): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithEnumCode:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, enumerator) as MemorySegment
         }
         
-        open fun descriptorWithInt32(signedInt: SInt32): MemorySegment {
+        fun descriptorWithInt32(signedInt: Int): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithInt32:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, signedInt) as MemorySegment
         }
         
-        open fun descriptorWithDouble(doubleValue: Double): MemorySegment {
+        fun descriptorWithDouble(doubleValue: Double): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithDouble:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, doubleValue) as MemorySegment
         }
         
-        open fun descriptorWithTypeCode(typeCode: OSType): MemorySegment {
+        fun descriptorWithTypeCode(typeCode: Int): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithTypeCode:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, typeCode) as MemorySegment
         }
         
-        open fun descriptorWithString(string: MemorySegment): MemorySegment {
+        fun descriptorWithString(string: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, string) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun descriptorWithString(string: String): MemorySegment = descriptorWithString(ObjCRuntime.newNSString(Arena.global(), string))
+        fun descriptorWithString(string: String): MemorySegment = descriptorWithString(ObjCRuntime.newNSString(Arena.global(), string))
         
-        open fun descriptorWithDate(date: MemorySegment): MemorySegment {
+        fun descriptorWithDate(date: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithDate:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, date) as MemorySegment
         }
         
-        open fun descriptorWithFileURL(fileURL: MemorySegment): MemorySegment {
+        fun descriptorWithFileURL(fileURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithFileURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, fileURL) as MemorySegment
         }
         
-        open fun appleEventWithEventClass_eventID_targetDescriptor_returnID_transactionID(eventClass: AEEventClass, eventID: AEEventID, targetDescriptor: MemorySegment, returnID: AEReturnID, transactionID: AETransactionID): MemorySegment {
+        fun appleEventWithEventClass_eventID_targetDescriptor_returnID_transactionID(eventClass: Int, eventID: Int, targetDescriptor: MemorySegment, returnID: Short, transactionID: Int): MemorySegment {
             val sel = ObjCRuntime.sel("appleEventWithEventClass:eventID:targetDescriptor:returnID:transactionID:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, eventClass, eventID, targetDescriptor, returnID, transactionID) as MemorySegment
         }
         
-        open fun listDescriptor(): MemorySegment {
+        fun listDescriptor(): MemorySegment {
             val sel = ObjCRuntime.sel("listDescriptor")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun recordDescriptor(): MemorySegment {
+        fun recordDescriptor(): MemorySegment {
             val sel = ObjCRuntime.sel("recordDescriptor")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun currentProcessDescriptor(): MemorySegment {
+        fun currentProcessDescriptor(): MemorySegment {
             val sel = ObjCRuntime.sel("currentProcessDescriptor")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun descriptorWithProcessIdentifier(processIdentifier: pid_t): MemorySegment {
+        fun descriptorWithProcessIdentifier(processIdentifier: Int): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithProcessIdentifier:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, processIdentifier) as MemorySegment
         }
         
-        open fun descriptorWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
+        fun descriptorWithBundleIdentifier(bundleIdentifier: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithBundleIdentifier:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, bundleIdentifier) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun descriptorWithBundleIdentifier(bundleIdentifier: String): MemorySegment = descriptorWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
+        fun descriptorWithBundleIdentifier(bundleIdentifier: String): MemorySegment = descriptorWithBundleIdentifier(ObjCRuntime.newNSString(Arena.global(), bundleIdentifier))
         
-        open fun descriptorWithApplicationURL(applicationURL: MemorySegment): MemorySegment {
+        fun descriptorWithApplicationURL(applicationURL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("descriptorWithApplicationURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, applicationURL) as MemorySegment
         }
@@ -116,17 +116,17 @@ open class NSAppleEventDescriptor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aeDesc) as MemorySegment
     }
     
-    open fun initWithDescriptorType_bytes_length(descriptorType: DescType, bytes: MemorySegment, byteCount: NSUInteger): MemorySegment {
+    open fun initWithDescriptorType_bytes_length(descriptorType: Int, bytes: MemorySegment, byteCount: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDescriptorType:bytes:length:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, descriptorType, bytes, byteCount) as MemorySegment
     }
     
-    open fun initWithDescriptorType_data(descriptorType: DescType, `data`: MemorySegment): MemorySegment {
+    open fun initWithDescriptorType_data(descriptorType: Int, `data`: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDescriptorType:data:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, descriptorType, `data`) as MemorySegment
     }
     
-    open fun initWithEventClass_eventID_targetDescriptor_returnID_transactionID(eventClass: AEEventClass, eventID: AEEventID, targetDescriptor: MemorySegment, returnID: AEReturnID, transactionID: AETransactionID): MemorySegment {
+    open fun initWithEventClass_eventID_targetDescriptor_returnID_transactionID(eventClass: Int, eventID: Int, targetDescriptor: MemorySegment, returnID: Short, transactionID: Int): MemorySegment {
         val sel = ObjCRuntime.sel("initWithEventClass:eventID:targetDescriptor:returnID:transactionID:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, eventClass, eventID, targetDescriptor, returnID, transactionID) as MemorySegment
     }
@@ -141,72 +141,72 @@ open class NSAppleEventDescriptor(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun setParamDescriptor_forKeyword(descriptor: MemorySegment, keyword: AEKeyword): Unit {
+    open fun setParamDescriptor_forKeyword(descriptor: MemorySegment, keyword: Int): Unit {
         val sel = ObjCRuntime.sel("setParamDescriptor:forKeyword:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptor, keyword)
     }
     
-    open fun paramDescriptorForKeyword(keyword: AEKeyword): MemorySegment {
+    open fun paramDescriptorForKeyword(keyword: Int): MemorySegment {
         val sel = ObjCRuntime.sel("paramDescriptorForKeyword:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyword) as MemorySegment
     }
     
-    open fun removeParamDescriptorWithKeyword(keyword: AEKeyword): Unit {
+    open fun removeParamDescriptorWithKeyword(keyword: Int): Unit {
         val sel = ObjCRuntime.sel("removeParamDescriptorWithKeyword:")
         ObjCRuntime.msgSend(null, ptr, sel, keyword)
     }
     
-    open fun setAttributeDescriptor_forKeyword(descriptor: MemorySegment, keyword: AEKeyword): Unit {
+    open fun setAttributeDescriptor_forKeyword(descriptor: MemorySegment, keyword: Int): Unit {
         val sel = ObjCRuntime.sel("setAttributeDescriptor:forKeyword:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptor, keyword)
     }
     
-    open fun attributeDescriptorForKeyword(keyword: AEKeyword): MemorySegment {
+    open fun attributeDescriptorForKeyword(keyword: Int): MemorySegment {
         val sel = ObjCRuntime.sel("attributeDescriptorForKeyword:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyword) as MemorySegment
     }
     
-    open fun sendEventWithOptions_timeout_error(sendOptions: NSAppleEventSendOptions, timeoutInSeconds: NSTimeInterval, error: MemorySegment): MemorySegment {
+    open fun sendEventWithOptions_timeout_error(sendOptions: MemorySegment, timeoutInSeconds: Double, error: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("sendEventWithOptions:timeout:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sendOptions, timeoutInSeconds, error) as MemorySegment
     }
     
-    open fun insertDescriptor_atIndex(descriptor: MemorySegment, index: NSInteger): Unit {
+    open fun insertDescriptor_atIndex(descriptor: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertDescriptor:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptor, index)
     }
     
-    open fun descriptorAtIndex(index: NSInteger): MemorySegment {
+    open fun descriptorAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("descriptorAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, index) as MemorySegment
     }
     
-    open fun removeDescriptorAtIndex(index: NSInteger): Unit {
+    open fun removeDescriptorAtIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeDescriptorAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    open fun setDescriptor_forKeyword(descriptor: MemorySegment, keyword: AEKeyword): Unit {
+    open fun setDescriptor_forKeyword(descriptor: MemorySegment, keyword: Int): Unit {
         val sel = ObjCRuntime.sel("setDescriptor:forKeyword:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptor, keyword)
     }
     
-    open fun descriptorForKeyword(keyword: AEKeyword): MemorySegment {
+    open fun descriptorForKeyword(keyword: Int): MemorySegment {
         val sel = ObjCRuntime.sel("descriptorForKeyword:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, keyword) as MemorySegment
     }
     
-    open fun removeDescriptorWithKeyword(keyword: AEKeyword): Unit {
+    open fun removeDescriptorWithKeyword(keyword: Int): Unit {
         val sel = ObjCRuntime.sel("removeDescriptorWithKeyword:")
         ObjCRuntime.msgSend(null, ptr, sel, keyword)
     }
     
-    open fun keywordForDescriptorAtIndex(index: NSInteger): AEKeyword {
+    open fun keywordForDescriptorAtIndex(index: Long): Int {
         val sel = ObjCRuntime.sel("keywordForDescriptorAtIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, index) as AEKeyword
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, index) as Int
     }
     
-    open fun coerceToDescriptorType(descriptorType: DescType): MemorySegment {
+    open fun coerceToDescriptorType(descriptorType: Int): MemorySegment {
         val sel = ObjCRuntime.sel("coerceToDescriptorType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, descriptorType) as MemorySegment
     }
@@ -218,33 +218,33 @@ open class NSAppleEventDescriptor(val ptr: MemorySegment) {
     }
     
     // @property descriptorType
-    open fun descriptorType(): DescType {
+    open fun descriptorType(): Int {
         val sel = ObjCRuntime.sel("descriptorType")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as DescType
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property data
-    open fun data(): MemorySegment {
+    open fun `data`(): MemorySegment {
         val sel = ObjCRuntime.sel("data")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property booleanValue
-    open fun booleanValue(): Boolean {
+    open fun booleanValue(): Byte {
         val sel = ObjCRuntime.sel("booleanValue")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BYTE, ptr, sel) as Boolean
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BYTE, ptr, sel) as Byte
     }
     
     // @property enumCodeValue
-    open fun enumCodeValue(): OSType {
+    open fun enumCodeValue(): Int {
         val sel = ObjCRuntime.sel("enumCodeValue")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as OSType
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property int32Value
-    open fun int32Value(): SInt32 {
+    open fun int32Value(): Int {
         val sel = ObjCRuntime.sel("int32Value")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as SInt32
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property doubleValue
@@ -254,9 +254,9 @@ open class NSAppleEventDescriptor(val ptr: MemorySegment) {
     }
     
     // @property typeCodeValue
-    open fun typeCodeValue(): OSType {
+    open fun typeCodeValue(): Int {
         val sel = ObjCRuntime.sel("typeCodeValue")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as OSType
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property stringValue
@@ -281,45 +281,45 @@ open class NSAppleEventDescriptor(val ptr: MemorySegment) {
     }
     
     // @property eventClass
-    open fun eventClass(): AEEventClass {
+    open fun eventClass(): Int {
         val sel = ObjCRuntime.sel("eventClass")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as AEEventClass
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property eventID
-    open fun eventID(): AEEventID {
+    open fun eventID(): Int {
         val sel = ObjCRuntime.sel("eventID")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as AEEventID
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property returnID
-    open fun returnID(): AEReturnID {
+    open fun returnID(): Short {
         val sel = ObjCRuntime.sel("returnID")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_SHORT, ptr, sel) as AEReturnID
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_SHORT, ptr, sel) as Short
     }
     
     // @property transactionID
-    open fun transactionID(): AETransactionID {
+    open fun transactionID(): Int {
         val sel = ObjCRuntime.sel("transactionID")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as AETransactionID
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property isRecordDescriptor
-    open fun isRecordDescriptor(): BOOL {
+    open fun isRecordDescriptor(): Boolean {
         val sel = ObjCRuntime.sel("isRecordDescriptor")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property numberOfItems
-    open fun numberOfItems(): NSInteger {
+    open fun numberOfItems(): Long {
         val sel = ObjCRuntime.sel("numberOfItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _desc: AEDesc
-    // ivar: _hasValidDesc: BOOL
+    // ivar: _desc: MemorySegment
+    // ivar: _hasValidDesc: Boolean
     // ivar: _padding: MemorySegment
 }
 

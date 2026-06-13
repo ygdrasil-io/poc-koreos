@@ -8,18 +8,18 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSStatusBar
  * Superclass: NSObject
  */
-open class NSStatusBar(val ptr: MemorySegment) {
+open class NSStatusBar(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSStatusBar") }
         
-        open fun systemStatusBar(): MemorySegment {
+        fun systemStatusBar(): MemorySegment {
             val sel = ObjCRuntime.sel("systemStatusBar")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun statusItemWithLength(length: CGFloat): MemorySegment {
+    open fun statusItemWithLength(length: Double): MemorySegment {
         val sel = ObjCRuntime.sel("statusItemWithLength:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, length) as MemorySegment
     }
@@ -30,15 +30,21 @@ open class NSStatusBar(val ptr: MemorySegment) {
     }
     
     // @property systemStatusBar
-    open fun isVertical(): BOOL {
+    open fun systemStatusBar(): MemorySegment {
+        val sel = ObjCRuntime.sel("systemStatusBar")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property vertical
+    open fun isVertical(): Boolean {
         val sel = ObjCRuntime.sel("isVertical")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property thickness
-    open fun thickness(): CGFloat {
+    open fun thickness(): Double {
         val sel = ObjCRuntime.sel("thickness")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
 }

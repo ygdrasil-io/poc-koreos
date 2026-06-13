@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserInterfaceValidations
  */
 interface NSUserInterfaceValidations {
-    fun validateUserInterfaceItem(item: MemorySegment): BOOL
+    fun validateUserInterfaceItem(item: MemorySegment): Boolean
     
 }
 

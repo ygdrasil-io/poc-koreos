@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPortNameServer
  * Superclass: NSObject
  */
-open class NSPortNameServer(val ptr: MemorySegment) {
+open class NSPortNameServer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPortNameServer") }
         
-        open fun systemDefaultPortNameServer(): MemorySegment {
+        fun systemDefaultPortNameServer(): MemorySegment {
             val sel = ObjCRuntime.sel("systemDefaultPortNameServer")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -25,7 +25,7 @@ open class NSPortNameServer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun portForName(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
+    fun portForName(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
     
     open fun portForName_host(name: MemorySegment, host: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:host:")
@@ -33,23 +33,23 @@ open class NSPortNameServer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun portForName_host(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
+    fun portForName_host(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
     
-    open fun registerPort_name(port: MemorySegment, name: MemorySegment): BOOL {
+    open fun registerPort_name(port: MemorySegment, name: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("registerPort:name:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, port, name) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, port, name) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun registerPort_name(port: MemorySegment, name: String): BOOL = registerPort_name(port, ObjCRuntime.newNSString(Arena.global(), name))
+    fun registerPort_name(port: MemorySegment, name: String): Boolean = registerPort_name(port, ObjCRuntime.newNSString(Arena.global(), name))
     
-    open fun removePortForName(name: MemorySegment): BOOL {
+    open fun removePortForName(name: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("removePortForName:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removePortForName(name: String): BOOL = removePortForName(ObjCRuntime.newNSString(Arena.global(), name))
+    fun removePortForName(name: String): Boolean = removePortForName(ObjCRuntime.newNSString(Arena.global(), name))
     
 }
 

@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSUUID(val ptr: MemorySegment) {
+open class NSUUID(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUUID") }
         
-        open fun UUID(): MemorySegment {
+        fun UUID(): MemorySegment {
             val sel = ObjCRuntime.sel("UUID")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -31,7 +31,7 @@ open class NSUUID(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithUUIDString(string: String): MemorySegment = initWithUUIDString(ObjCRuntime.newNSString(Arena.global(), string))
+    fun initWithUUIDString(string: String): MemorySegment = initWithUUIDString(ObjCRuntime.newNSString(Arena.global(), string))
     
     open fun initWithUUIDBytes(bytes: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithUUIDBytes:")
@@ -43,9 +43,9 @@ open class NSUUID(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, uuid)
     }
     
-    open fun compare(otherUUID: MemorySegment): NSComparisonResult {
+    open fun compare(otherUUID: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("compare:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, otherUUID) as NSComparisonResult
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, otherUUID) as MemorySegment
     }
     
     // @property UUIDString

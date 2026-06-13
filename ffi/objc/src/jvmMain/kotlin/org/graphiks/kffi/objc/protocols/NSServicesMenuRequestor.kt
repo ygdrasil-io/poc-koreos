@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSServicesMenuRequestor
  * Inherits protocols: NSObject
  */
-interface NSServicesMenuRequestor : NSObject {
+interface NSServicesMenuRequestor {
     // @optional
-    fun writeSelectionToPasteboard_types(pboard: MemorySegment, types: MemorySegment): BOOL =
+    fun writeSelectionToPasteboard_types(pboard: MemorySegment, types: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'writeSelectionToPasteboard:types:' not implemented")
     
     // @optional
-    fun readSelectionFromPasteboard(pboard: MemorySegment): BOOL =
+    fun readSelectionFromPasteboard(pboard: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'readSelectionFromPasteboard:' not implemented")
     
 }

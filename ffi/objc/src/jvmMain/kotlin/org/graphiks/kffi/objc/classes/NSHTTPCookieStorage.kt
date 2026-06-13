@@ -8,19 +8,19 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSHTTPCookieStorage
  * Superclass: NSObject
  */
-open class NSHTTPCookieStorage(val ptr: MemorySegment) {
+open class NSHTTPCookieStorage(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSHTTPCookieStorage") }
         
-        open fun sharedCookieStorageForGroupContainerIdentifier(identifier: MemorySegment): MemorySegment {
+        fun sharedCookieStorageForGroupContainerIdentifier(identifier: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sharedCookieStorageForGroupContainerIdentifier:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, identifier) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun sharedCookieStorageForGroupContainerIdentifier(identifier: String): MemorySegment = sharedCookieStorageForGroupContainerIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
+        fun sharedCookieStorageForGroupContainerIdentifier(identifier: String): MemorySegment = sharedCookieStorageForGroupContainerIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
         
-        open fun sharedHTTPCookieStorage(): MemorySegment {
+        fun sharedHTTPCookieStorage(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedHTTPCookieStorage")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -60,6 +60,12 @@ open class NSHTTPCookieStorage(val ptr: MemorySegment) {
     }
     
     // @property sharedHTTPCookieStorage
+    open fun sharedHTTPCookieStorage(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedHTTPCookieStorage")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property cookies
     /** @return NSArray<NSHTTPCookie *> * */
     open fun cookies(): MemorySegment {
         val sel = ObjCRuntime.sel("cookies")
@@ -67,11 +73,11 @@ open class NSHTTPCookieStorage(val ptr: MemorySegment) {
     }
     
     // @property cookieAcceptPolicy
-    open fun cookieAcceptPolicy(): NSHTTPCookieAcceptPolicy {
+    open fun cookieAcceptPolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("cookieAcceptPolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHTTPCookieAcceptPolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCookieAcceptPolicy(value: NSHTTPCookieAcceptPolicy) {
+    open fun setCookieAcceptPolicy(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCookieAcceptPolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -85,11 +91,11 @@ open class NSHTTPCookieStorage(val ptr: MemorySegment) {
 
 fun NSHTTPCookieStorage.storeCookies_forTask(cookies: MemorySegment, task: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("storeCookies:forTask:")
-    ObjCRuntime.msgSend(null, ptr, sel, cookies, task)
+    ObjCRuntime.msgSend(null, this.ptr, sel, cookies, task)
 }
 
 fun NSHTTPCookieStorage.getCookiesForTask_completionHandler(task: MemorySegment, completionHandler: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("getCookiesForTask:completionHandler:")
-    ObjCRuntime.msgSend(null, ptr, sel, task, completionHandler)
+    ObjCRuntime.msgSend(null, this.ptr, sel, task, completionHandler)
 }
 

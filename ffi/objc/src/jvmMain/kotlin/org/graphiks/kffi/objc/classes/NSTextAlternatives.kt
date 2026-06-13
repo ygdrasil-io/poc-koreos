@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSTextAlternatives(val ptr: MemorySegment) {
+open class NSTextAlternatives(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextAlternatives") }
         
@@ -21,7 +21,7 @@ open class NSTextAlternatives(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithPrimaryString_alternativeStrings(primaryString: String, alternativeStrings: MemorySegment): MemorySegment = initWithPrimaryString_alternativeStrings(ObjCRuntime.newNSString(Arena.global(), primaryString), alternativeStrings)
+    fun initWithPrimaryString_alternativeStrings(primaryString: String, alternativeStrings: MemorySegment): MemorySegment = initWithPrimaryString_alternativeStrings(ObjCRuntime.newNSString(Arena.global(), primaryString), alternativeStrings)
     
     open fun noteSelectedAlternativeString(alternativeString: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("noteSelectedAlternativeString:")
@@ -29,7 +29,7 @@ open class NSTextAlternatives(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun noteSelectedAlternativeString(alternativeString: String): Unit = noteSelectedAlternativeString(ObjCRuntime.newNSString(Arena.global(), alternativeString))
+    fun noteSelectedAlternativeString(alternativeString: String): Unit = noteSelectedAlternativeString(ObjCRuntime.newNSString(Arena.global(), alternativeString))
     
     // @property primaryString
     open fun primaryString(): MemorySegment {

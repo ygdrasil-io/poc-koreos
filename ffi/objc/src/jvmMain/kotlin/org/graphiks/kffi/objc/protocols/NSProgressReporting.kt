@@ -8,9 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSProgressReporting
  * Inherits protocols: NSObject
  */
-interface NSProgressReporting : NSObject {
+interface NSProgressReporting {
     fun progress(): MemorySegment
     
-    // @property progress
 }
 

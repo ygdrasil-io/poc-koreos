@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
+open class NSScriptObjectSpecifier(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptObjectSpecifier") }
         
-        open fun objectSpecifierWithDescriptor(descriptor: MemorySegment): MemorySegment {
+        fun objectSpecifierWithDescriptor(descriptor: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("objectSpecifierWithDescriptor:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, descriptor) as MemorySegment
         }
@@ -26,7 +26,7 @@ open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithContainerSpecifier_key(container: MemorySegment, property: String): MemorySegment = initWithContainerSpecifier_key(container, ObjCRuntime.newNSString(Arena.global(), property))
+    fun initWithContainerSpecifier_key(container: MemorySegment, property: String): MemorySegment = initWithContainerSpecifier_key(container, ObjCRuntime.newNSString(Arena.global(), property))
     
     open fun initWithContainerClassDescription_containerSpecifier_key(classDesc: MemorySegment, container: MemorySegment, property: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithContainerClassDescription:containerSpecifier:key:")
@@ -34,7 +34,7 @@ open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithContainerClassDescription_containerSpecifier_key(classDesc: MemorySegment, container: MemorySegment, property: String): MemorySegment = initWithContainerClassDescription_containerSpecifier_key(classDesc, container, ObjCRuntime.newNSString(Arena.global(), property))
+    fun initWithContainerClassDescription_containerSpecifier_key(classDesc: MemorySegment, container: MemorySegment, property: String): MemorySegment = initWithContainerClassDescription_containerSpecifier_key(classDesc, container, ObjCRuntime.newNSString(Arena.global(), property))
     
     open fun initWithCoder(inCoder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
@@ -72,21 +72,21 @@ open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
     }
     
     // @property containerIsObjectBeingTested
-    open fun containerIsObjectBeingTested(): BOOL {
+    open fun containerIsObjectBeingTested(): Boolean {
         val sel = ObjCRuntime.sel("containerIsObjectBeingTested")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setContainerIsObjectBeingTested(value: BOOL) {
+    open fun setContainerIsObjectBeingTested(value: Boolean) {
         val sel = ObjCRuntime.sel("setContainerIsObjectBeingTested:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property containerIsRangeContainerObject
-    open fun containerIsRangeContainerObject(): BOOL {
+    open fun containerIsRangeContainerObject(): Boolean {
         val sel = ObjCRuntime.sel("containerIsRangeContainerObject")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setContainerIsRangeContainerObject(value: BOOL) {
+    open fun setContainerIsRangeContainerObject(value: Boolean) {
         val sel = ObjCRuntime.sel("setContainerIsRangeContainerObject:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -130,11 +130,11 @@ open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
     }
     
     // @property evaluationErrorNumber
-    open fun evaluationErrorNumber(): NSInteger {
+    open fun evaluationErrorNumber(): Long {
         val sel = ObjCRuntime.sel("evaluationErrorNumber")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setEvaluationErrorNumber(value: NSInteger) {
+    open fun setEvaluationErrorNumber(value: Long) {
         val sel = ObjCRuntime.sel("setEvaluationErrorNumber:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -157,10 +157,10 @@ open class NSScriptObjectSpecifier(val ptr: MemorySegment) {
     // ivar: _child: MemorySegment
     // ivar: _key: MemorySegment
     // ivar: _containerClassDescription: MemorySegment
-    // ivar: _containerIsObjectBeingTested: BOOL
-    // ivar: _containerIsRangeContainerObject: BOOL
+    // ivar: _containerIsObjectBeingTested: Boolean
+    // ivar: _containerIsRangeContainerObject: Boolean
     // ivar: _padding: MemorySegment
     // ivar: _descriptor: MemorySegment
-    // ivar: _error: NSInteger
+    // ivar: _error: Long
 }
 

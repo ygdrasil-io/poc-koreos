@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSharingService
  * Superclass: NSObject
  */
-open class NSSharingService(val ptr: MemorySegment) {
+open class NSSharingService(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSharingService") }
         
         /** @return NSArray<NSSharingService *> * */
-        open fun sharingServicesForItems(items: MemorySegment): MemorySegment {
+        fun sharingServicesForItems(items: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sharingServicesForItems:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, items) as MemorySegment
         }
         
-        open fun sharingServiceNamed(serviceName: NSSharingServiceName): MemorySegment {
+        fun sharingServiceNamed(serviceName: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sharingServiceNamed:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, serviceName) as MemorySegment
         }
@@ -31,16 +31,16 @@ open class NSSharingService(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithTitle_image_alternateImage_handler(title: String, image: MemorySegment, alternateImage: MemorySegment, block: MemorySegment): MemorySegment = initWithTitle_image_alternateImage_handler(ObjCRuntime.newNSString(Arena.global(), title), image, alternateImage, block)
+    fun initWithTitle_image_alternateImage_handler(title: String, image: MemorySegment, alternateImage: MemorySegment, block: MemorySegment): MemorySegment = initWithTitle_image_alternateImage_handler(ObjCRuntime.newNSString(Arena.global(), title), image, alternateImage, block)
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun canPerformWithItems(items: MemorySegment): BOOL {
+    open fun canPerformWithItems(items: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("canPerformWithItems:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, items) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, items) as Boolean
     }
     
     open fun performWithItems(items: MemorySegment): Unit {

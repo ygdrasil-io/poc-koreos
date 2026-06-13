@@ -8,23 +8,23 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSessionUploadTask
  * Superclass: NSURLSessionDataTask
  */
-open class NSURLSessionUploadTask(ptr: MemorySegment) : NSURLSessionDataTask(ptr) {
+open class NSURLSessionUploadTask(override val ptr: MemorySegment) : NSURLSessionDataTask(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionUploadTask") }
         
-        override fun `new`(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    override fun `init`(): MemorySegment {
+    override fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    fun cancelByProducingResumeData(completionHandler: MemorySegment): Unit {
+    open fun cancelByProducingResumeData(completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("cancelByProducingResumeData:")
         ObjCRuntime.msgSend(null, ptr, sel, completionHandler)
     }

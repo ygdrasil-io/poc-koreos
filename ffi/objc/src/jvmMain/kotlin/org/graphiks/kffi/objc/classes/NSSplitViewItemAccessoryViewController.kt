@@ -9,58 +9,58 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSViewController
  * Protocols: NSAnimatablePropertyContainer
  */
-open class NSSplitViewItemAccessoryViewController(ptr: MemorySegment) : NSViewController(ptr) {
+open class NSSplitViewItemAccessoryViewController(override val ptr: MemorySegment) : NSViewController(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSplitViewItemAccessoryViewController") }
         
     }
     
-    override fun `viewWillAppear`(): Unit {
+    override fun viewWillAppear(): Unit {
         val sel = ObjCRuntime.sel("viewWillAppear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    override fun `viewDidAppear`(): Unit {
+    override fun viewDidAppear(): Unit {
         val sel = ObjCRuntime.sel("viewDidAppear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    override fun `viewWillDisappear`(): Unit {
+    override fun viewWillDisappear(): Unit {
         val sel = ObjCRuntime.sel("viewWillDisappear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    override fun `viewDidDisappear`(): Unit {
+    override fun viewDidDisappear(): Unit {
         val sel = ObjCRuntime.sel("viewDidDisappear")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property hidden
-    fun isHidden(): BOOL {
+    open fun isHidden(): Boolean {
         val sel = ObjCRuntime.sel("isHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setHidden(value: BOOL) {
+    open fun setHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property automaticallyAppliesContentInsets
-    fun automaticallyAppliesContentInsets(): BOOL {
+    open fun automaticallyAppliesContentInsets(): Boolean {
         val sel = ObjCRuntime.sel("automaticallyAppliesContentInsets")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAutomaticallyAppliesContentInsets(value: BOOL) {
+    open fun setAutomaticallyAppliesContentInsets(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticallyAppliesContentInsets:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preferredScrollEdgeEffectStyle
-    fun preferredScrollEdgeEffectStyle(): MemorySegment {
+    open fun preferredScrollEdgeEffectStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("preferredScrollEdgeEffectStyle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPreferredScrollEdgeEffectStyle(value: MemorySegment) {
+    open fun setPreferredScrollEdgeEffectStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPreferredScrollEdgeEffectStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

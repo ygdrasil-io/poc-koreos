@@ -9,33 +9,33 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSMenuItemBadge(val ptr: MemorySegment) {
+open class NSMenuItemBadge(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMenuItemBadge") }
         
-        open fun updatesWithCount(itemCount: NSInteger): MemorySegment {
+        fun updatesWithCount(itemCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("updatesWithCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, itemCount) as MemorySegment
         }
         
-        open fun newItemsWithCount(itemCount: NSInteger): MemorySegment {
+        fun newItemsWithCount(itemCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("newItemsWithCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, itemCount) as MemorySegment
         }
         
-        open fun alertsWithCount(itemCount: NSInteger): MemorySegment {
+        fun alertsWithCount(itemCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("alertsWithCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, itemCount) as MemorySegment
         }
         
     }
     
-    open fun initWithCount_type(itemCount: NSInteger, type: NSMenuItemBadgeType): MemorySegment {
+    open fun initWithCount_type(itemCount: Long, type: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCount:type:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, itemCount, type) as MemorySegment
     }
     
-    open fun initWithCount(itemCount: NSInteger): MemorySegment {
+    open fun initWithCount(itemCount: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCount:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, itemCount) as MemorySegment
     }
@@ -46,7 +46,7 @@ open class NSMenuItemBadge(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
+    fun initWithString(string: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), string))
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
@@ -54,15 +54,15 @@ open class NSMenuItemBadge(val ptr: MemorySegment) {
     }
     
     // @property itemCount
-    open fun itemCount(): NSInteger {
+    open fun itemCount(): Long {
         val sel = ObjCRuntime.sel("itemCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property type
-    open fun type(): NSMenuItemBadgeType {
+    open fun type(): MemorySegment {
         val sel = ObjCRuntime.sel("type")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMenuItemBadgeType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property stringValue

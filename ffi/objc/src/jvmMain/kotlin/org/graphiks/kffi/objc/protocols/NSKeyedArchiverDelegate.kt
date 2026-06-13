@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSKeyedArchiverDelegate
  * Inherits protocols: NSObject
  */
-interface NSKeyedArchiverDelegate : NSObject {
+interface NSKeyedArchiverDelegate {
     // @optional
     fun archiver_willEncodeObject(archiver: MemorySegment, `object`: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'archiver:willEncodeObject:' not implemented")

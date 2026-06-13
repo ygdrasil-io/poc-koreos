@@ -9,157 +9,157 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSView
  * Protocols: NSAccessibilityRow
  */
-open class NSTableRowView(ptr: MemorySegment) : NSView(ptr) {
+open class NSTableRowView(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTableRowView") }
         
     }
     
-    fun drawBackgroundInRect(dirtyRect: NSRect): Unit {
+    open fun drawBackgroundInRect(dirtyRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawBackgroundInRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(dirtyRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun drawSelectionInRect(dirtyRect: NSRect): Unit {
+    open fun drawSelectionInRect(dirtyRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawSelectionInRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(dirtyRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun drawSeparatorInRect(dirtyRect: NSRect): Unit {
+    open fun drawSeparatorInRect(dirtyRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawSeparatorInRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(dirtyRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun drawDraggingDestinationFeedbackInRect(dirtyRect: NSRect): Unit {
+    open fun drawDraggingDestinationFeedbackInRect(dirtyRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawDraggingDestinationFeedbackInRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(dirtyRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun viewAtColumn(column: NSInteger): MemorySegment {
+    open fun viewAtColumn(column: Long): MemorySegment {
         val sel = ObjCRuntime.sel("viewAtColumn:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, column) as MemorySegment
     }
     
     // @property selectionHighlightStyle
-    fun selectionHighlightStyle(): NSTableViewSelectionHighlightStyle {
+    open fun selectionHighlightStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("selectionHighlightStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTableViewSelectionHighlightStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSelectionHighlightStyle(value: NSTableViewSelectionHighlightStyle) {
+    open fun setSelectionHighlightStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSelectionHighlightStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property emphasized
-    fun isEmphasized(): BOOL {
+    open fun isEmphasized(): Boolean {
         val sel = ObjCRuntime.sel("isEmphasized")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setEmphasized(value: BOOL) {
+    open fun setEmphasized(value: Boolean) {
         val sel = ObjCRuntime.sel("setEmphasized:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property groupRowStyle
-    fun isGroupRowStyle(): BOOL {
+    open fun isGroupRowStyle(): Boolean {
         val sel = ObjCRuntime.sel("isGroupRowStyle")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setGroupRowStyle(value: BOOL) {
+    open fun setGroupRowStyle(value: Boolean) {
         val sel = ObjCRuntime.sel("setGroupRowStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selected
-    fun isSelected(): BOOL {
+    open fun isSelected(): Boolean {
         val sel = ObjCRuntime.sel("isSelected")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSelected(value: BOOL) {
+    open fun setSelected(value: Boolean) {
         val sel = ObjCRuntime.sel("setSelected:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property previousRowSelected
-    fun isPreviousRowSelected(): BOOL {
+    open fun isPreviousRowSelected(): Boolean {
         val sel = ObjCRuntime.sel("isPreviousRowSelected")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setPreviousRowSelected(value: BOOL) {
+    open fun setPreviousRowSelected(value: Boolean) {
         val sel = ObjCRuntime.sel("setPreviousRowSelected:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property nextRowSelected
-    fun isNextRowSelected(): BOOL {
+    open fun isNextRowSelected(): Boolean {
         val sel = ObjCRuntime.sel("isNextRowSelected")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setNextRowSelected(value: BOOL) {
+    open fun setNextRowSelected(value: Boolean) {
         val sel = ObjCRuntime.sel("setNextRowSelected:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property floating
-    fun isFloating(): BOOL {
+    open fun isFloating(): Boolean {
         val sel = ObjCRuntime.sel("isFloating")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setFloating(value: BOOL) {
+    open fun setFloating(value: Boolean) {
         val sel = ObjCRuntime.sel("setFloating:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property targetForDropOperation
-    fun isTargetForDropOperation(): BOOL {
+    open fun isTargetForDropOperation(): Boolean {
         val sel = ObjCRuntime.sel("isTargetForDropOperation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setTargetForDropOperation(value: BOOL) {
+    open fun setTargetForDropOperation(value: Boolean) {
         val sel = ObjCRuntime.sel("setTargetForDropOperation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property draggingDestinationFeedbackStyle
-    fun draggingDestinationFeedbackStyle(): NSTableViewDraggingDestinationFeedbackStyle {
+    open fun draggingDestinationFeedbackStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("draggingDestinationFeedbackStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTableViewDraggingDestinationFeedbackStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDraggingDestinationFeedbackStyle(value: NSTableViewDraggingDestinationFeedbackStyle) {
+    open fun setDraggingDestinationFeedbackStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDraggingDestinationFeedbackStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property indentationForDropOperation
-    fun indentationForDropOperation(): CGFloat {
+    open fun indentationForDropOperation(): Double {
         val sel = ObjCRuntime.sel("indentationForDropOperation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setIndentationForDropOperation(value: CGFloat) {
+    open fun setIndentationForDropOperation(value: Double) {
         val sel = ObjCRuntime.sel("setIndentationForDropOperation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interiorBackgroundStyle
-    fun interiorBackgroundStyle(): NSBackgroundStyle {
+    open fun interiorBackgroundStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("interiorBackgroundStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBackgroundStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property backgroundColor
-    fun backgroundColor(): MemorySegment {
+    open fun backgroundColor(): MemorySegment {
         val sel = ObjCRuntime.sel("backgroundColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBackgroundColor(value: MemorySegment) {
+    open fun setBackgroundColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBackgroundColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfColumns
-    fun numberOfColumns(): NSInteger {
+    open fun numberOfColumns(): Long {
         val sel = ObjCRuntime.sel("numberOfColumns")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
 }

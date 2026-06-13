@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDictionaryControllerKeyValuePair
  * Superclass: NSObject
  */
-open class NSDictionaryControllerKeyValuePair(val ptr: MemorySegment) {
+open class NSDictionaryControllerKeyValuePair(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDictionaryControllerKeyValuePair") }
         
@@ -62,9 +62,9 @@ open class NSDictionaryControllerKeyValuePair(val ptr: MemorySegment) {
     open fun setLocalizedKey(value: String) = setLocalizedKey(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property explicitlyIncluded
-    open fun isExplicitlyIncluded(): BOOL {
+    open fun isExplicitlyIncluded(): Boolean {
         val sel = ObjCRuntime.sel("isExplicitlyIncluded")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

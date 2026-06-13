@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMessagePortNameServer
  * Superclass: NSPortNameServer
  */
-open class NSMessagePortNameServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
+open class NSMessagePortNameServer(override val ptr: MemorySegment) : NSPortNameServer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMessagePortNameServer") }
         
@@ -19,21 +19,15 @@ open class NSMessagePortNameServer(ptr: MemorySegment) : NSPortNameServer(ptr) {
         
     }
     
-    override fun `portForName`(name: MemorySegment): MemorySegment {
+    override fun portForName(name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name) as MemorySegment
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `portForName`(name: String): MemorySegment = portForName(ObjCRuntime.newNSString(Arena.global(), name))
-    
-    override fun `portForName_host`(name: MemorySegment, host: MemorySegment): MemorySegment {
+    override fun portForName_host(name: MemorySegment, host: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("portForName:host:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, host) as MemorySegment
     }
-    
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `portForName_host`(name: String, host: String): MemorySegment = portForName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), host))
     
 }
 

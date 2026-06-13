@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: CALayoutManager
  * Inherits protocols: NSObject
  */
-interface CALayoutManager : NSObject {
+interface CALayoutManager {
     // @optional
     fun preferredSizeOfLayer(layer: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'preferredSizeOfLayer:' not implemented")

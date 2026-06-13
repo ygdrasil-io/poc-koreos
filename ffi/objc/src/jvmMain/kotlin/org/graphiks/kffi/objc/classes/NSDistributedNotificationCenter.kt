@@ -8,84 +8,72 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDistributedNotificationCenter
  * Superclass: NSNotificationCenter
  */
-open class NSDistributedNotificationCenter(ptr: MemorySegment) : NSNotificationCenter(ptr) {
+open class NSDistributedNotificationCenter(override val ptr: MemorySegment) : NSNotificationCenter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDistributedNotificationCenter") }
         
-        fun notificationCenterForType(notificationCenterType: NSDistributedNotificationCenterType): MemorySegment {
+        fun notificationCenterForType(notificationCenterType: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("notificationCenterForType:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, notificationCenterType) as MemorySegment
         }
         
-        override fun `defaultCenter`(): MemorySegment {
+        fun defaultCenter(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultCenter")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun addObserver_selector_name_object_suspensionBehavior(observer: MemorySegment, selector: MemorySegment, name: NSNotificationName, `object`: MemorySegment, suspensionBehavior: NSNotificationSuspensionBehavior): Unit {
+    open fun addObserver_selector_name_object_suspensionBehavior(observer: MemorySegment, selector: MemorySegment, name: MemorySegment, `object`: MemorySegment, suspensionBehavior: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObserver:selector:name:object:suspensionBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, observer, selector, name, `object`, suspensionBehavior)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun addObserver_selector_name_object_suspensionBehavior(observer: MemorySegment, selector: MemorySegment, name: NSNotificationName, `object`: String, suspensionBehavior: NSNotificationSuspensionBehavior): Unit = addObserver_selector_name_object_suspensionBehavior(observer, selector, name, ObjCRuntime.newNSString(Arena.global(), `object`), suspensionBehavior)
+    fun addObserver_selector_name_object_suspensionBehavior(observer: MemorySegment, selector: MemorySegment, name: MemorySegment, `object`: String, suspensionBehavior: MemorySegment): Unit = addObserver_selector_name_object_suspensionBehavior(observer, selector, name, ObjCRuntime.newNSString(Arena.global(), `object`), suspensionBehavior)
     
-    fun postNotificationName_object_userInfo_deliverImmediately(name: NSNotificationName, `object`: MemorySegment, userInfo: MemorySegment, deliverImmediately: BOOL): Unit {
+    open fun postNotificationName_object_userInfo_deliverImmediately(name: MemorySegment, `object`: MemorySegment, userInfo: MemorySegment, deliverImmediately: Boolean): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:userInfo:deliverImmediately:")
         ObjCRuntime.msgSend(null, ptr, sel, name, `object`, userInfo, deliverImmediately)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun postNotificationName_object_userInfo_deliverImmediately(name: NSNotificationName, `object`: String, userInfo: MemorySegment, deliverImmediately: BOOL): Unit = postNotificationName_object_userInfo_deliverImmediately(name, ObjCRuntime.newNSString(Arena.global(), `object`), userInfo, deliverImmediately)
+    fun postNotificationName_object_userInfo_deliverImmediately(name: MemorySegment, `object`: String, userInfo: MemorySegment, deliverImmediately: Boolean): Unit = postNotificationName_object_userInfo_deliverImmediately(name, ObjCRuntime.newNSString(Arena.global(), `object`), userInfo, deliverImmediately)
     
-    fun postNotificationName_object_userInfo_options(name: NSNotificationName, `object`: MemorySegment, userInfo: MemorySegment, options: NSDistributedNotificationOptions): Unit {
+    open fun postNotificationName_object_userInfo_options(name: MemorySegment, `object`: MemorySegment, userInfo: MemorySegment, options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:userInfo:options:")
         ObjCRuntime.msgSend(null, ptr, sel, name, `object`, userInfo, options)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    fun postNotificationName_object_userInfo_options(name: NSNotificationName, `object`: String, userInfo: MemorySegment, options: NSDistributedNotificationOptions): Unit = postNotificationName_object_userInfo_options(name, ObjCRuntime.newNSString(Arena.global(), `object`), userInfo, options)
+    fun postNotificationName_object_userInfo_options(name: MemorySegment, `object`: String, userInfo: MemorySegment, options: MemorySegment): Unit = postNotificationName_object_userInfo_options(name, ObjCRuntime.newNSString(Arena.global(), `object`), userInfo, options)
     
-    override fun `addObserver_selector_name_object`(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun addObserver_selector_name_object(observer: MemorySegment, aSelector: MemorySegment, aName: MemorySegment, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObserver:selector:name:object:")
         ObjCRuntime.msgSend(null, ptr, sel, observer, aSelector, aName, anObject)
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `addObserver_selector_name_object`(observer: MemorySegment, aSelector: MemorySegment, aName: NSNotificationName, anObject: String): Unit = addObserver_selector_name_object(observer, aSelector, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
-    
-    override fun `postNotificationName_object`(aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun postNotificationName_object(aName: MemorySegment, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:")
         ObjCRuntime.msgSend(null, ptr, sel, aName, anObject)
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `postNotificationName_object`(aName: NSNotificationName, anObject: String): Unit = postNotificationName_object(aName, ObjCRuntime.newNSString(Arena.global(), anObject))
-    
-    override fun `postNotificationName_object_userInfo`(aName: NSNotificationName, anObject: MemorySegment, aUserInfo: MemorySegment): Unit {
+    override fun postNotificationName_object_userInfo(aName: MemorySegment, anObject: MemorySegment, aUserInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("postNotificationName:object:userInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, aName, anObject, aUserInfo)
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `postNotificationName_object_userInfo`(aName: NSNotificationName, anObject: String, aUserInfo: MemorySegment): Unit = postNotificationName_object_userInfo(aName, ObjCRuntime.newNSString(Arena.global(), anObject), aUserInfo)
-    
-    override fun `removeObserver_name_object`(observer: MemorySegment, aName: NSNotificationName, anObject: MemorySegment): Unit {
+    override fun removeObserver_name_object(observer: MemorySegment, aName: MemorySegment, anObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObserver:name:object:")
         ObjCRuntime.msgSend(null, ptr, sel, observer, aName, anObject)
     }
     
-    /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    override fun `removeObserver_name_object`(observer: MemorySegment, aName: NSNotificationName, anObject: String): Unit = removeObserver_name_object(observer, aName, ObjCRuntime.newNSString(Arena.global(), anObject))
-    
     // @property suspended
-    fun suspended(): BOOL {
+    open fun suspended(): Boolean {
         val sel = ObjCRuntime.sel("suspended")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSuspended(value: BOOL) {
+    open fun setSuspended(value: Boolean) {
         val sel = ObjCRuntime.sel("setSuspended:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

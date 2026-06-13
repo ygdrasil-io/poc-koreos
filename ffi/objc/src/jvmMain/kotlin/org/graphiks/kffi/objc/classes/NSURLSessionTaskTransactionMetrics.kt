@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSessionTaskTransactionMetrics
  * Superclass: NSObject
  */
-open class NSURLSessionTaskTransactionMetrics(val ptr: MemorySegment) {
+open class NSURLSessionTaskTransactionMetrics(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionTaskTransactionMetrics") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -112,57 +112,57 @@ open class NSURLSessionTaskTransactionMetrics(val ptr: MemorySegment) {
     open fun networkProtocolNameAsString(): String = ObjCRuntime.toJavaString(networkProtocolName())
     
     // @property proxyConnection
-    open fun isProxyConnection(): BOOL {
+    open fun isProxyConnection(): Boolean {
         val sel = ObjCRuntime.sel("isProxyConnection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property reusedConnection
-    open fun isReusedConnection(): BOOL {
+    open fun isReusedConnection(): Boolean {
         val sel = ObjCRuntime.sel("isReusedConnection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property resourceFetchType
-    open fun resourceFetchType(): NSURLSessionTaskMetricsResourceFetchType {
+    open fun resourceFetchType(): MemorySegment {
         val sel = ObjCRuntime.sel("resourceFetchType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLSessionTaskMetricsResourceFetchType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property countOfRequestHeaderBytesSent
-    open fun countOfRequestHeaderBytesSent(): int64_t {
+    open fun countOfRequestHeaderBytesSent(): Long {
         val sel = ObjCRuntime.sel("countOfRequestHeaderBytesSent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfRequestBodyBytesSent
-    open fun countOfRequestBodyBytesSent(): int64_t {
+    open fun countOfRequestBodyBytesSent(): Long {
         val sel = ObjCRuntime.sel("countOfRequestBodyBytesSent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfRequestBodyBytesBeforeEncoding
-    open fun countOfRequestBodyBytesBeforeEncoding(): int64_t {
+    open fun countOfRequestBodyBytesBeforeEncoding(): Long {
         val sel = ObjCRuntime.sel("countOfRequestBodyBytesBeforeEncoding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfResponseHeaderBytesReceived
-    open fun countOfResponseHeaderBytesReceived(): int64_t {
+    open fun countOfResponseHeaderBytesReceived(): Long {
         val sel = ObjCRuntime.sel("countOfResponseHeaderBytesReceived")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfResponseBodyBytesReceived
-    open fun countOfResponseBodyBytesReceived(): int64_t {
+    open fun countOfResponseBodyBytesReceived(): Long {
         val sel = ObjCRuntime.sel("countOfResponseBodyBytesReceived")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfResponseBodyBytesAfterDecoding
-    open fun countOfResponseBodyBytesAfterDecoding(): int64_t {
+    open fun countOfResponseBodyBytesAfterDecoding(): Long {
         val sel = ObjCRuntime.sel("countOfResponseBodyBytesAfterDecoding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property localAddress
@@ -208,33 +208,33 @@ open class NSURLSessionTaskTransactionMetrics(val ptr: MemorySegment) {
     }
     
     // @property cellular
-    open fun isCellular(): BOOL {
+    open fun isCellular(): Boolean {
         val sel = ObjCRuntime.sel("isCellular")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property expensive
-    open fun isExpensive(): BOOL {
+    open fun isExpensive(): Boolean {
         val sel = ObjCRuntime.sel("isExpensive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property constrained
-    open fun isConstrained(): BOOL {
+    open fun isConstrained(): Boolean {
         val sel = ObjCRuntime.sel("isConstrained")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property multipath
-    open fun isMultipath(): BOOL {
+    open fun isMultipath(): Boolean {
         val sel = ObjCRuntime.sel("isMultipath")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property domainResolutionProtocol
-    open fun domainResolutionProtocol(): NSURLSessionTaskMetricsDomainResolutionProtocol {
+    open fun domainResolutionProtocol(): MemorySegment {
         val sel = ObjCRuntime.sel("domainResolutionProtocol")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLSessionTaskMetricsDomainResolutionProtocol
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
 }

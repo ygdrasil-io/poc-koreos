@@ -8,103 +8,103 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSLevelIndicatorCell
  * Superclass: NSActionCell
  */
-open class NSLevelIndicatorCell(ptr: MemorySegment) : NSActionCell(ptr) {
+open class NSLevelIndicatorCell(override val ptr: MemorySegment) : NSActionCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSLevelIndicatorCell") }
         
     }
     
-    fun initWithLevelIndicatorStyle(levelIndicatorStyle: NSLevelIndicatorStyle): MemorySegment {
+    open fun initWithLevelIndicatorStyle(levelIndicatorStyle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLevelIndicatorStyle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, levelIndicatorStyle) as MemorySegment
     }
     
-    fun rectOfTickMarkAtIndex(index: NSInteger): NSRect {
+    open fun rectOfTickMarkAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("rectOfTickMarkAtIndex:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, index) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, index) as MemorySegment
     }
     
-    fun tickMarkValueAtIndex(index: NSInteger): Double {
+    open fun tickMarkValueAtIndex(index: Long): Double {
         val sel = ObjCRuntime.sel("tickMarkValueAtIndex:")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as Double
     }
     
     // @property levelIndicatorStyle
-    fun levelIndicatorStyle(): NSLevelIndicatorStyle {
+    open fun levelIndicatorStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("levelIndicatorStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSLevelIndicatorStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLevelIndicatorStyle(value: NSLevelIndicatorStyle) {
+    open fun setLevelIndicatorStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLevelIndicatorStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minValue
-    fun minValue(): Double {
+    open fun minValue(): Double {
         val sel = ObjCRuntime.sel("minValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMinValue(value: Double) {
+    open fun setMinValue(value: Double) {
         val sel = ObjCRuntime.sel("setMinValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maxValue
-    fun maxValue(): Double {
+    open fun maxValue(): Double {
         val sel = ObjCRuntime.sel("maxValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMaxValue(value: Double) {
+    open fun setMaxValue(value: Double) {
         val sel = ObjCRuntime.sel("setMaxValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property warningValue
-    fun warningValue(): Double {
+    open fun warningValue(): Double {
         val sel = ObjCRuntime.sel("warningValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setWarningValue(value: Double) {
+    open fun setWarningValue(value: Double) {
         val sel = ObjCRuntime.sel("setWarningValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property criticalValue
-    fun criticalValue(): Double {
+    open fun criticalValue(): Double {
         val sel = ObjCRuntime.sel("criticalValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setCriticalValue(value: Double) {
+    open fun setCriticalValue(value: Double) {
         val sel = ObjCRuntime.sel("setCriticalValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tickMarkPosition
-    fun tickMarkPosition(): NSTickMarkPosition {
+    open fun tickMarkPosition(): MemorySegment {
         val sel = ObjCRuntime.sel("tickMarkPosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTickMarkPosition(value: NSTickMarkPosition) {
+    open fun setTickMarkPosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTickMarkPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfTickMarks
-    fun numberOfTickMarks(): NSInteger {
+    open fun numberOfTickMarks(): Long {
         val sel = ObjCRuntime.sel("numberOfTickMarks")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfTickMarks(value: NSInteger) {
+    open fun setNumberOfTickMarks(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfMajorTickMarks
-    fun numberOfMajorTickMarks(): NSInteger {
+    open fun numberOfMajorTickMarks(): Long {
         val sel = ObjCRuntime.sel("numberOfMajorTickMarks")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfMajorTickMarks(value: NSInteger) {
+    open fun setNumberOfMajorTickMarks(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfMajorTickMarks:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSXMLParser
  * Superclass: NSObject
  */
-open class NSXMLParser(val ptr: MemorySegment) {
+open class NSXMLParser(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSXMLParser") }
         
@@ -29,9 +29,9 @@ open class NSXMLParser(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, stream) as MemorySegment
     }
     
-    open fun parse(): BOOL {
+    open fun parse(): Boolean {
         val sel = ObjCRuntime.sel("parse")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun abortParsing(): Unit {
@@ -51,31 +51,31 @@ open class NSXMLParser(val ptr: MemorySegment) {
     }
     
     // @property shouldProcessNamespaces
-    open fun shouldProcessNamespaces(): BOOL {
+    open fun shouldProcessNamespaces(): Boolean {
         val sel = ObjCRuntime.sel("shouldProcessNamespaces")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShouldProcessNamespaces(value: BOOL) {
+    open fun setShouldProcessNamespaces(value: Boolean) {
         val sel = ObjCRuntime.sel("setShouldProcessNamespaces:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property shouldReportNamespacePrefixes
-    open fun shouldReportNamespacePrefixes(): BOOL {
+    open fun shouldReportNamespacePrefixes(): Boolean {
         val sel = ObjCRuntime.sel("shouldReportNamespacePrefixes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShouldReportNamespacePrefixes(value: BOOL) {
+    open fun setShouldReportNamespacePrefixes(value: Boolean) {
         val sel = ObjCRuntime.sel("setShouldReportNamespacePrefixes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property externalEntityResolvingPolicy
-    open fun externalEntityResolvingPolicy(): NSXMLParserExternalEntityResolvingPolicy {
+    open fun externalEntityResolvingPolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("externalEntityResolvingPolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSXMLParserExternalEntityResolvingPolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setExternalEntityResolvingPolicy(value: NSXMLParserExternalEntityResolvingPolicy) {
+    open fun setExternalEntityResolvingPolicy(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setExternalEntityResolvingPolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -98,11 +98,11 @@ open class NSXMLParser(val ptr: MemorySegment) {
     }
     
     // @property shouldResolveExternalEntities
-    open fun shouldResolveExternalEntities(): BOOL {
+    open fun shouldResolveExternalEntities(): Boolean {
         val sel = ObjCRuntime.sel("shouldResolveExternalEntities")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShouldResolveExternalEntities(value: BOOL) {
+    open fun setShouldResolveExternalEntities(value: Boolean) {
         val sel = ObjCRuntime.sel("setShouldResolveExternalEntities:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -113,22 +113,21 @@ open class NSXMLParser(val ptr: MemorySegment) {
 
 fun NSXMLParser.publicID(): MemorySegment {
     val sel = ObjCRuntime.sel("publicID")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSXMLParser.systemID(): MemorySegment {
     val sel = ObjCRuntime.sel("systemID")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSXMLParser.lineNumber(): NSInteger {
+fun NSXMLParser.lineNumber(): Long {
     val sel = ObjCRuntime.sel("lineNumber")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel) as Long
 }
 
-fun NSXMLParser.columnNumber(): NSInteger {
+fun NSXMLParser.columnNumber(): Long {
     val sel = ObjCRuntime.sel("columnNumber")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel) as Long
 }
 
-// @property publicID

@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding, NSEditor, NSEditorRegistration
  */
-open class NSController(val ptr: MemorySegment) {
+open class NSController(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSController") }
         
@@ -40,9 +40,9 @@ open class NSController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun commitEditing(): BOOL {
+    open fun commitEditing(): Boolean {
         val sel = ObjCRuntime.sel("commitEditing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun commitEditingWithDelegate_didCommitSelector_contextInfo(delegate: MemorySegment, didCommitSelector: MemorySegment, contextInfo: MemorySegment): Unit {
@@ -51,9 +51,9 @@ open class NSController(val ptr: MemorySegment) {
     }
     
     // @property editing
-    open fun isEditing(): BOOL {
+    open fun isEditing(): Boolean {
         val sel = ObjCRuntime.sel("isEditing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCollectionViewDataSource
  */
-open class NSCollectionViewDiffableDataSource(val ptr: MemorySegment) {
+open class NSCollectionViewDiffableDataSource(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewDiffableDataSource") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -36,7 +36,7 @@ open class NSCollectionViewDiffableDataSource(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun applySnapshot_animatingDifferences(snapshot: MemorySegment, animatingDifferences: BOOL): Unit {
+    open fun applySnapshot_animatingDifferences(snapshot: MemorySegment, animatingDifferences: Boolean): Unit {
         val sel = ObjCRuntime.sel("applySnapshot:animatingDifferences:")
         ObjCRuntime.msgSend(null, ptr, sel, snapshot, animatingDifferences)
     }

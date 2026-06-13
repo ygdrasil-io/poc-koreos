@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSDateInterval(val ptr: MemorySegment) {
+open class NSDateInterval(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDateInterval") }
         
@@ -25,7 +25,7 @@ open class NSDateInterval(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun initWithStartDate_duration(startDate: MemorySegment, duration: NSTimeInterval): MemorySegment {
+    open fun initWithStartDate_duration(startDate: MemorySegment, duration: Double): MemorySegment {
         val sel = ObjCRuntime.sel("initWithStartDate:duration:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, startDate, duration) as MemorySegment
     }
@@ -35,19 +35,19 @@ open class NSDateInterval(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, startDate, endDate) as MemorySegment
     }
     
-    open fun compare(dateInterval: MemorySegment): NSComparisonResult {
+    open fun compare(dateInterval: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("compare:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dateInterval) as NSComparisonResult
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dateInterval) as MemorySegment
     }
     
-    open fun isEqualToDateInterval(dateInterval: MemorySegment): BOOL {
+    open fun isEqualToDateInterval(dateInterval: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isEqualToDateInterval:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dateInterval) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dateInterval) as Boolean
     }
     
-    open fun intersectsDateInterval(dateInterval: MemorySegment): BOOL {
+    open fun intersectsDateInterval(dateInterval: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("intersectsDateInterval:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dateInterval) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, dateInterval) as Boolean
     }
     
     open fun intersectionWithDateInterval(dateInterval: MemorySegment): MemorySegment {
@@ -55,9 +55,9 @@ open class NSDateInterval(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dateInterval) as MemorySegment
     }
     
-    open fun containsDate(date: MemorySegment): BOOL {
+    open fun containsDate(date: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsDate:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, date) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, date) as Boolean
     }
     
     // @property startDate
@@ -73,9 +73,9 @@ open class NSDateInterval(val ptr: MemorySegment) {
     }
     
     // @property duration
-    open fun duration(): NSTimeInterval {
+    open fun duration(): Double {
         val sel = ObjCRuntime.sel("duration")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
 }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAccessibilityCustomRotor
  * Superclass: NSObject
  */
-open class NSAccessibilityCustomRotor(val ptr: MemorySegment) {
+open class NSAccessibilityCustomRotor(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAccessibilityCustomRotor") }
         
@@ -20,19 +20,19 @@ open class NSAccessibilityCustomRotor(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithLabel_itemSearchDelegate(label: String, itemSearchDelegate: MemorySegment): MemorySegment = initWithLabel_itemSearchDelegate(ObjCRuntime.newNSString(Arena.global(), label), itemSearchDelegate)
+    fun initWithLabel_itemSearchDelegate(label: String, itemSearchDelegate: MemorySegment): MemorySegment = initWithLabel_itemSearchDelegate(ObjCRuntime.newNSString(Arena.global(), label), itemSearchDelegate)
     
-    open fun initWithRotorType_itemSearchDelegate(rotorType: NSAccessibilityCustomRotorType, itemSearchDelegate: MemorySegment): MemorySegment {
+    open fun initWithRotorType_itemSearchDelegate(rotorType: MemorySegment, itemSearchDelegate: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRotorType:itemSearchDelegate:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, rotorType, itemSearchDelegate) as MemorySegment
     }
     
     // @property type
-    open fun type(): NSAccessibilityCustomRotorType {
+    open fun type(): MemorySegment {
         val sel = ObjCRuntime.sel("type")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAccessibilityCustomRotorType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setType(value: NSAccessibilityCustomRotorType) {
+    open fun setType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

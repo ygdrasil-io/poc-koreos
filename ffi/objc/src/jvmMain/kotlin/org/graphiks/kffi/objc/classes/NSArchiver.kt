@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSArchiver
  * Superclass: NSCoder
  */
-open class NSArchiver(ptr: MemorySegment) : NSCoder(ptr) {
+open class NSArchiver(override val ptr: MemorySegment) : NSCoder(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSArchiver") }
         
@@ -17,32 +17,32 @@ open class NSArchiver(ptr: MemorySegment) : NSCoder(ptr) {
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, rootObject) as MemorySegment
         }
         
-        fun archiveRootObject_toFile(rootObject: MemorySegment, path: MemorySegment): BOOL {
+        fun archiveRootObject_toFile(rootObject: MemorySegment, path: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("archiveRootObject:toFile:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, rootObject, path) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, rootObject, path) as Boolean
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        fun archiveRootObject_toFile(rootObject: MemorySegment, path: String): BOOL = archiveRootObject_toFile(rootObject, ObjCRuntime.newNSString(Arena.global(), path))
+        fun archiveRootObject_toFile(rootObject: MemorySegment, path: String): Boolean = archiveRootObject_toFile(rootObject, ObjCRuntime.newNSString(Arena.global(), path))
         
     }
     
-    fun initForWritingWithMutableData(mdata: MemorySegment): MemorySegment {
+    open fun initForWritingWithMutableData(mdata: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initForWritingWithMutableData:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, mdata) as MemorySegment
     }
     
-    override fun `encodeRootObject`(rootObject: MemorySegment): Unit {
+    open fun encodeRootObject(rootObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeRootObject:")
         ObjCRuntime.msgSend(null, ptr, sel, rootObject)
     }
     
-    override fun `encodeConditionalObject`(`object`: MemorySegment): Unit {
+    open fun encodeConditionalObject(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeConditionalObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun encodeClassName_intoClassName(trueName: MemorySegment, inArchiveName: MemorySegment): Unit {
+    open fun encodeClassName_intoClassName(trueName: MemorySegment, inArchiveName: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("encodeClassName:intoClassName:")
         ObjCRuntime.msgSend(null, ptr, sel, trueName, inArchiveName)
     }
@@ -50,7 +50,7 @@ open class NSArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun encodeClassName_intoClassName(trueName: String, inArchiveName: String): Unit = encodeClassName_intoClassName(ObjCRuntime.newNSString(Arena.global(), trueName), ObjCRuntime.newNSString(Arena.global(), inArchiveName))
     
-    fun classNameEncodedForTrueClassName(trueName: MemorySegment): MemorySegment {
+    open fun classNameEncodedForTrueClassName(trueName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("classNameEncodedForTrueClassName:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, trueName) as MemorySegment
     }
@@ -64,13 +64,13 @@ open class NSArchiver(ptr: MemorySegment) : NSCoder(ptr) {
     /** Convenience overload — [String] parameters and [String] return type. */
     fun classNameEncodedForTrueClassNameAsString(trueName: String): String = ObjCRuntime.toJavaString(classNameEncodedForTrueClassName(ObjCRuntime.newNSString(Arena.global(), trueName)))
     
-    fun replaceObject_withObject(`object`: MemorySegment, newObject: MemorySegment): Unit {
+    open fun replaceObject_withObject(`object`: MemorySegment, newObject: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("replaceObject:withObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`, newObject)
     }
     
     // @property archiverData
-    fun archiverData(): MemorySegment {
+    open fun archiverData(): MemorySegment {
         val sel = ObjCRuntime.sel("archiverData")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

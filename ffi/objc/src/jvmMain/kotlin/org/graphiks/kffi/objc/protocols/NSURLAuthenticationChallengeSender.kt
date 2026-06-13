@@ -8,12 +8,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSURLAuthenticationChallengeSender
  * Inherits protocols: NSObject
  */
-interface NSURLAuthenticationChallengeSender : NSObject {
-    fun useCredential_forAuthenticationChallenge(credential: MemorySegment, challenge: MemorySegment)
+interface NSURLAuthenticationChallengeSender {
+    fun useCredential_forAuthenticationChallenge(credential: MemorySegment, challenge: MemorySegment): Unit
     
-    fun continueWithoutCredentialForAuthenticationChallenge(challenge: MemorySegment)
+    fun continueWithoutCredentialForAuthenticationChallenge(challenge: MemorySegment): Unit
     
-    fun cancelAuthenticationChallenge(challenge: MemorySegment)
+    fun cancelAuthenticationChallenge(challenge: MemorySegment): Unit
     
     // @optional
     fun performDefaultHandlingForAuthenticationChallenge(challenge: MemorySegment): Unit =

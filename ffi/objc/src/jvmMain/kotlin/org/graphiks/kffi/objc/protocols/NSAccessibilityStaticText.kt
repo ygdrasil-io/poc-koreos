@@ -8,15 +8,15 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityStaticText
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilityStaticText : NSAccessibilityElement {
+interface NSAccessibilityStaticText {
     fun accessibilityValue(): MemorySegment
     
     // @optional
-    fun accessibilityAttributedStringForRange(range: NSRange): MemorySegment =
+    fun accessibilityAttributedStringForRange(range: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityAttributedStringForRange:' not implemented")
     
     // @optional
-    fun accessibilityVisibleCharacterRange(): NSRange =
+    fun accessibilityVisibleCharacterRange(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityVisibleCharacterRange' not implemented")
     
 }

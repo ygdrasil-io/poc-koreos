@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextAttachmentViewProvider
  * Superclass: NSObject
  */
-open class NSTextAttachmentViewProvider(val ptr: MemorySegment) {
+open class NSTextAttachmentViewProvider(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextAttachmentViewProvider") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -69,11 +69,11 @@ open class NSTextAttachmentViewProvider(val ptr: MemorySegment) {
     }
     
     // @property tracksTextAttachmentViewBounds
-    open fun tracksTextAttachmentViewBounds(): BOOL {
+    open fun tracksTextAttachmentViewBounds(): Boolean {
         val sel = ObjCRuntime.sel("tracksTextAttachmentViewBounds")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setTracksTextAttachmentViewBounds(value: BOOL) {
+    open fun setTracksTextAttachmentViewBounds(value: Boolean) {
         val sel = ObjCRuntime.sel("setTracksTextAttachmentViewBounds:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

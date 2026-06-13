@@ -8,13 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSItemProviderReading
  * Inherits protocols: NSObject
  */
-interface NSItemProviderReading : NSObject {
+interface NSItemProviderReading {
     fun objectWithItemProviderData_typeIdentifier_error(`data`: MemorySegment, typeIdentifier: MemorySegment, outError: MemorySegment): MemorySegment
     
     /** @return NSArray<NSString *> * */
     fun readableTypeIdentifiersForItemProvider(): MemorySegment
     
-    // @property readableTypeIdentifiersForItemProvider
-    /** @return NSArray<NSString *> * */
 }
 

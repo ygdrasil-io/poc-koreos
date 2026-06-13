@@ -9,19 +9,19 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Inherits protocols: NSTextInputClient, NSTextInputTraits
  */
 interface NSTextCheckingClient : NSTextInputClient, NSTextInputTraits {
-    fun annotatedSubstringForProposedRange_actualRange(range: NSRange, actualRange: MemorySegment): MemorySegment
+    fun annotatedSubstringForProposedRange_actualRange(range: MemorySegment, actualRange: MemorySegment): MemorySegment
     
-    fun setAnnotations_range(annotations: MemorySegment, range: NSRange)
+    fun setAnnotations_range(annotations: MemorySegment, range: MemorySegment): Unit
     
-    fun addAnnotations_range(annotations: MemorySegment, range: NSRange)
+    fun addAnnotations_range(annotations: MemorySegment, range: MemorySegment): Unit
     
-    fun removeAnnotation_range(annotationName: NSAttributedStringKey, range: NSRange)
+    fun removeAnnotation_range(annotationName: MemorySegment, range: MemorySegment): Unit
     
-    fun replaceCharactersInRange_withAnnotatedString(range: NSRange, annotatedString: MemorySegment)
+    fun replaceCharactersInRange_withAnnotatedString(range: MemorySegment, annotatedString: MemorySegment): Unit
     
-    fun selectAndShowRange(range: NSRange)
+    fun selectAndShowRange(range: MemorySegment): Unit
     
-    fun viewForRange_firstRect_actualRange(range: NSRange, firstRect: MemorySegment, actualRange: MemorySegment): MemorySegment
+    fun viewForRange_firstRect_actualRange(range: MemorySegment, firstRect: MemorySegment, actualRange: MemorySegment): MemorySegment
     
     fun candidateListTouchBarItem(): MemorySegment
     

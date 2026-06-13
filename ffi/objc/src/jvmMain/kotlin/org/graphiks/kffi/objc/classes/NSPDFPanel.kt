@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPDFPanel
  * Superclass: NSObject
  */
-open class NSPDFPanel(val ptr: MemorySegment) {
+open class NSPDFPanel(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPDFPanel") }
         
-        open fun panel(): MemorySegment {
+        fun panel(): MemorySegment {
             val sel = ObjCRuntime.sel("panel")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -35,11 +35,11 @@ open class NSPDFPanel(val ptr: MemorySegment) {
     }
     
     // @property options
-    open fun options(): NSPDFPanelOptions {
+    open fun options(): MemorySegment {
         val sel = ObjCRuntime.sel("options")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPDFPanelOptions
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setOptions(value: NSPDFPanelOptions) {
+    open fun setOptions(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,10 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextContent
  */
 interface NSTextContent {
-    fun contentType(): NSTextContentType
+    fun contentType(): MemorySegment
     
-    fun setContentType(contentType: NSTextContentType)
+    fun setContentType(contentType: MemorySegment): Unit
     
-    // @property contentType
 }
 

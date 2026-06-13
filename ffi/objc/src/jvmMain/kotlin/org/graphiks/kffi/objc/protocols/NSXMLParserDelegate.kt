@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSXMLParserDelegate
  * Inherits protocols: NSObject
  */
-interface NSXMLParserDelegate : NSObject {
+interface NSXMLParserDelegate {
     // @optional
     fun parserDidStartDocument(parser: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'parserDidStartDocument:' not implemented")

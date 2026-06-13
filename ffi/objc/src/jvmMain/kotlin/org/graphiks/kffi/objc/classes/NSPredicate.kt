@@ -9,48 +9,48 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSPredicate(val ptr: MemorySegment) {
+open class NSPredicate(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPredicate") }
         
-        open fun predicateWithFormat_argumentArray(predicateFormat: MemorySegment, arguments: MemorySegment): MemorySegment {
+        fun predicateWithFormat_argumentArray(predicateFormat: MemorySegment, arguments: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predicateWithFormat:argumentArray:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, predicateFormat, arguments) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun predicateWithFormat_argumentArray(predicateFormat: String, arguments: MemorySegment): MemorySegment = predicateWithFormat_argumentArray(ObjCRuntime.newNSString(Arena.global(), predicateFormat), arguments)
+        fun predicateWithFormat_argumentArray(predicateFormat: String, arguments: MemorySegment): MemorySegment = predicateWithFormat_argumentArray(ObjCRuntime.newNSString(Arena.global(), predicateFormat), arguments)
         
-        open fun predicateWithFormat(predicateFormat: MemorySegment): MemorySegment {
+        fun predicateWithFormat(predicateFormat: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predicateWithFormat:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, predicateFormat) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun predicateWithFormat(predicateFormat: String): MemorySegment = predicateWithFormat(ObjCRuntime.newNSString(Arena.global(), predicateFormat))
+        fun predicateWithFormat(predicateFormat: String): MemorySegment = predicateWithFormat(ObjCRuntime.newNSString(Arena.global(), predicateFormat))
         
-        open fun predicateWithFormat_arguments(predicateFormat: MemorySegment, argList: MemorySegment): MemorySegment {
+        fun predicateWithFormat_arguments(predicateFormat: MemorySegment, argList: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predicateWithFormat:arguments:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, predicateFormat, argList) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun predicateWithFormat_arguments(predicateFormat: String, argList: MemorySegment): MemorySegment = predicateWithFormat_arguments(ObjCRuntime.newNSString(Arena.global(), predicateFormat), argList)
+        fun predicateWithFormat_arguments(predicateFormat: String, argList: MemorySegment): MemorySegment = predicateWithFormat_arguments(ObjCRuntime.newNSString(Arena.global(), predicateFormat), argList)
         
-        open fun predicateFromMetadataQueryString(queryString: MemorySegment): MemorySegment {
+        fun predicateFromMetadataQueryString(queryString: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predicateFromMetadataQueryString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, queryString) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun predicateFromMetadataQueryString(queryString: String): MemorySegment = predicateFromMetadataQueryString(ObjCRuntime.newNSString(Arena.global(), queryString))
+        fun predicateFromMetadataQueryString(queryString: String): MemorySegment = predicateFromMetadataQueryString(ObjCRuntime.newNSString(Arena.global(), queryString))
         
-        open fun predicateWithValue(value: BOOL): MemorySegment {
+        fun predicateWithValue(value: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("predicateWithValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, value) as MemorySegment
         }
         
-        open fun predicateWithBlock(block: MemorySegment): MemorySegment {
+        fun predicateWithBlock(block: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("predicateWithBlock:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, block) as MemorySegment
         }
@@ -62,14 +62,14 @@ open class NSPredicate(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, variables) as MemorySegment
     }
     
-    open fun evaluateWithObject(`object`: MemorySegment): BOOL {
+    open fun evaluateWithObject(`object`: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("evaluateWithObject:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`) as Boolean
     }
     
-    open fun evaluateWithObject_substitutionVariables(`object`: MemorySegment, bindings: MemorySegment): BOOL {
+    open fun evaluateWithObject_substitutionVariables(`object`: MemorySegment, bindings: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("evaluateWithObject:substitutionVariables:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`, bindings) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, `object`, bindings) as Boolean
     }
     
     open fun allowEvaluation(): Unit {
@@ -89,6 +89,6 @@ open class NSPredicate(val ptr: MemorySegment) {
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _predicateFlags: MemorySegment
-    // ivar: reserved: uint32_t
+    // ivar: reserved: Int
 }
 

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSURLDownloadDelegate
  * Inherits protocols: NSObject
  */
-interface NSURLDownloadDelegate : NSObject {
+interface NSURLDownloadDelegate {
     // @optional
     fun downloadDidBegin(download: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'downloadDidBegin:' not implemented")
@@ -18,7 +18,7 @@ interface NSURLDownloadDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'download:willSendRequest:redirectResponse:' not implemented")
     
     // @optional
-    fun download_canAuthenticateAgainstProtectionSpace(connection: MemorySegment, protectionSpace: MemorySegment): BOOL =
+    fun download_canAuthenticateAgainstProtectionSpace(connection: MemorySegment, protectionSpace: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'download:canAuthenticateAgainstProtectionSpace:' not implemented")
     
     // @optional
@@ -30,7 +30,7 @@ interface NSURLDownloadDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'download:didCancelAuthenticationChallenge:' not implemented")
     
     // @optional
-    fun downloadShouldUseCredentialStorage(download: MemorySegment): BOOL =
+    fun downloadShouldUseCredentialStorage(download: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'downloadShouldUseCredentialStorage:' not implemented")
     
     // @optional
@@ -42,11 +42,11 @@ interface NSURLDownloadDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'download:willResumeWithResponse:fromByte:' not implemented")
     
     // @optional
-    fun download_didReceiveDataOfLength(download: MemorySegment, length: NSUInteger): Unit =
+    fun download_didReceiveDataOfLength(download: MemorySegment, length: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'download:didReceiveDataOfLength:' not implemented")
     
     // @optional
-    fun download_shouldDecodeSourceDataOfMIMEType(download: MemorySegment, encodingType: MemorySegment): BOOL =
+    fun download_shouldDecodeSourceDataOfMIMEType(download: MemorySegment, encodingType: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'download:shouldDecodeSourceDataOfMIMEType:' not implemented")
     
     // @optional

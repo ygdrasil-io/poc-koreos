@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSURLSessionDelegate
  * Inherits protocols: NSObject
  */
-interface NSURLSessionDelegate : NSObject {
+interface NSURLSessionDelegate {
     // @optional
     fun URLSession_didBecomeInvalidWithError(session: MemorySegment, error: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:didBecomeInvalidWithError:' not implemented")

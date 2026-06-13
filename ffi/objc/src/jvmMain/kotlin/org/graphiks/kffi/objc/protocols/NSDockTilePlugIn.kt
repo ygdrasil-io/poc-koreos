@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSDockTilePlugIn
  * Inherits protocols: NSObject
  */
-interface NSDockTilePlugIn : NSObject {
-    fun setDockTile(dockTile: MemorySegment)
+interface NSDockTilePlugIn {
+    fun setDockTile(dockTile: MemorySegment): Unit
     
     // @optional
     fun dockMenu(): MemorySegment =

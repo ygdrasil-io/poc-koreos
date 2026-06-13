@@ -8,14 +8,14 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilitySlider
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilitySlider : NSAccessibilityElement {
+interface NSAccessibilitySlider {
     fun accessibilityLabel(): MemorySegment
     
     fun accessibilityValue(): MemorySegment
     
-    fun accessibilityPerformIncrement(): BOOL
+    fun accessibilityPerformIncrement(): Boolean
     
-    fun accessibilityPerformDecrement(): BOOL
+    fun accessibilityPerformDecrement(): Boolean
     
 }
 

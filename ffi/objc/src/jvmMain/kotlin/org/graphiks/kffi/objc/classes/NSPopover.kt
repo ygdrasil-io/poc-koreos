@@ -9,137 +9,137 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSResponder
  * Protocols: NSAppearanceCustomization, NSAccessibilityElement, NSAccessibility
  */
-open class NSPopover(ptr: MemorySegment) : NSResponder(ptr) {
+open class NSPopover(override val ptr: MemorySegment) : NSResponder(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPopover") }
         
     }
     
-    override fun `init`(): MemorySegment {
+    override fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    override fun `initWithCoder`(coder: MemorySegment): MemorySegment {
+    override fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    fun showRelativeToRect_ofView_preferredEdge(positioningRect: NSRect, positioningView: MemorySegment, preferredEdge: NSRectEdge): Unit {
+    open fun showRelativeToRect_ofView_preferredEdge(positioningRect: MemorySegment, positioningView: MemorySegment, preferredEdge: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("showRelativeToRect:ofView:preferredEdge:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(positioningRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), positioningView, preferredEdge)
     }
     
-    fun showRelativeToToolbarItem(toolbarItem: MemorySegment): Unit {
+    open fun showRelativeToToolbarItem(toolbarItem: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("showRelativeToToolbarItem:")
         ObjCRuntime.msgSend(null, ptr, sel, toolbarItem)
     }
     
-    fun performClose(sender: MemorySegment): Unit {
+    open fun performClose(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("performClose:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun close(): Unit {
+    open fun close(): Unit {
         val sel = ObjCRuntime.sel("close")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
     // @property delegate
     /** @return id<NSPopoverDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property appearance
-    fun appearance(): MemorySegment {
+    open fun appearance(): MemorySegment {
         val sel = ObjCRuntime.sel("appearance")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAppearance(value: MemorySegment) {
+    open fun setAppearance(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAppearance:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property effectiveAppearance
-    fun effectiveAppearance(): MemorySegment {
+    open fun effectiveAppearance(): MemorySegment {
         val sel = ObjCRuntime.sel("effectiveAppearance")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property behavior
-    fun behavior(): NSPopoverBehavior {
+    open fun behavior(): MemorySegment {
         val sel = ObjCRuntime.sel("behavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPopoverBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBehavior(value: NSPopoverBehavior) {
+    open fun setBehavior(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property animates
-    fun animates(): BOOL {
+    open fun animates(): Boolean {
         val sel = ObjCRuntime.sel("animates")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAnimates(value: BOOL) {
+    open fun setAnimates(value: Boolean) {
         val sel = ObjCRuntime.sel("setAnimates:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentViewController
-    fun contentViewController(): MemorySegment {
+    open fun contentViewController(): MemorySegment {
         val sel = ObjCRuntime.sel("contentViewController")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setContentViewController(value: MemorySegment) {
+    open fun setContentViewController(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentViewController:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentSize
-    fun contentSize(): NSSize {
+    open fun contentSize(): MemorySegment {
         val sel = ObjCRuntime.sel("contentSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setContentSize(value: NSSize) {
+    open fun setContentSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property shown
-    fun isShown(): BOOL {
+    open fun isShown(): Boolean {
         val sel = ObjCRuntime.sel("isShown")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property detached
-    fun isDetached(): BOOL {
+    open fun isDetached(): Boolean {
         val sel = ObjCRuntime.sel("isDetached")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property positioningRect
-    fun positioningRect(): NSRect {
+    open fun positioningRect(): MemorySegment {
         val sel = ObjCRuntime.sel("positioningRect")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
-    fun setPositioningRect(value: NSRect) {
+    open fun setPositioningRect(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPositioningRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
     // @property hasFullSizeContent
-    fun hasFullSizeContent(): BOOL {
+    open fun hasFullSizeContent(): Boolean {
         val sel = ObjCRuntime.sel("hasFullSizeContent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setHasFullSizeContent(value: BOOL) {
+    open fun setHasFullSizeContent(value: Boolean) {
         val sel = ObjCRuntime.sel("setHasFullSizeContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -9,268 +9,268 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSControl
  * Protocols: NSUserInterfaceValidations, NSViewToolTipOwner
  */
-open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
+open class NSMatrix(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMatrix") }
         
     }
     
-    override fun `initWithFrame`(frameRect: NSRect): MemorySegment {
+    override fun initWithFrame(frameRect: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    fun initWithFrame_mode_prototype_numberOfRows_numberOfColumns(frameRect: NSRect, mode: NSMatrixMode, cell: MemorySegment, rowsHigh: NSInteger, colsWide: NSInteger): MemorySegment {
+    open fun initWithFrame_mode_prototype_numberOfRows_numberOfColumns(frameRect: MemorySegment, mode: MemorySegment, cell: MemorySegment, rowsHigh: Long, colsWide: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:mode:prototype:numberOfRows:numberOfColumns:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), mode, cell, rowsHigh, colsWide) as MemorySegment
     }
     
-    fun initWithFrame_mode_cellClass_numberOfRows_numberOfColumns(frameRect: NSRect, mode: NSMatrixMode, factoryId: Class<*>, rowsHigh: NSInteger, colsWide: NSInteger): MemorySegment {
+    open fun initWithFrame_mode_cellClass_numberOfRows_numberOfColumns(frameRect: MemorySegment, mode: MemorySegment, factoryId: MemorySegment, rowsHigh: Long, colsWide: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithFrame:mode:cellClass:numberOfRows:numberOfColumns:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(frameRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), mode, factoryId, rowsHigh, colsWide) as MemorySegment
     }
     
-    fun makeCellAtRow_column(row: NSInteger, col: NSInteger): MemorySegment {
+    open fun makeCellAtRow_column(row: Long, col: Long): MemorySegment {
         val sel = ObjCRuntime.sel("makeCellAtRow:column:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row, col) as MemorySegment
     }
     
-    fun sendAction_to_forAllCells(selector: MemorySegment, `object`: MemorySegment, flag: BOOL): Unit {
+    open fun sendAction_to_forAllCells(selector: MemorySegment, `object`: MemorySegment, flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("sendAction:to:forAllCells:")
         ObjCRuntime.msgSend(null, ptr, sel, selector, `object`, flag)
     }
     
-    fun sortUsingSelector(comparator: MemorySegment): Unit {
+    open fun sortUsingSelector(comparator: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("sortUsingSelector:")
         ObjCRuntime.msgSend(null, ptr, sel, comparator)
     }
     
-    fun sortUsingFunction_context(compare: MemorySegment, context: MemorySegment): Unit {
+    open fun sortUsingFunction_context(compare: MemorySegment, context: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("sortUsingFunction:context:")
         ObjCRuntime.msgSend(null, ptr, sel, compare, context)
     }
     
-    fun setSelectionFrom_to_anchor_highlight(startPos: NSInteger, endPos: NSInteger, anchorPos: NSInteger, lit: BOOL): Unit {
+    open fun setSelectionFrom_to_anchor_highlight(startPos: Long, endPos: Long, anchorPos: Long, lit: Boolean): Unit {
         val sel = ObjCRuntime.sel("setSelectionFrom:to:anchor:highlight:")
         ObjCRuntime.msgSend(null, ptr, sel, startPos, endPos, anchorPos, lit)
     }
     
-    fun deselectSelectedCell(): Unit {
+    open fun deselectSelectedCell(): Unit {
         val sel = ObjCRuntime.sel("deselectSelectedCell")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun deselectAllCells(): Unit {
+    open fun deselectAllCells(): Unit {
         val sel = ObjCRuntime.sel("deselectAllCells")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun selectCellAtRow_column(row: NSInteger, col: NSInteger): Unit {
+    open fun selectCellAtRow_column(row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("selectCellAtRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, row, col)
     }
     
-    fun selectAll(sender: MemorySegment): Unit {
+    open fun selectAll(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectAll:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectCellWithTag(tag: NSInteger): BOOL {
+    open fun selectCellWithTag(tag: Long): Boolean {
         val sel = ObjCRuntime.sel("selectCellWithTag:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, tag) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, tag) as Boolean
     }
     
-    fun setScrollable(flag: BOOL): Unit {
+    open fun setScrollable(flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("setScrollable:")
         ObjCRuntime.msgSend(null, ptr, sel, flag)
     }
     
-    fun setState_atRow_column(value: NSInteger, row: NSInteger, col: NSInteger): Unit {
+    open fun setState_atRow_column(value: Long, row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("setState:atRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, value, row, col)
     }
     
-    fun getNumberOfRows_columns(rowCount: MemorySegment, colCount: MemorySegment): Unit {
+    open fun getNumberOfRows_columns(rowCount: MemorySegment, colCount: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getNumberOfRows:columns:")
         ObjCRuntime.msgSend(null, ptr, sel, rowCount, colCount)
     }
     
-    fun cellAtRow_column(row: NSInteger, col: NSInteger): MemorySegment {
+    open fun cellAtRow_column(row: Long, col: Long): MemorySegment {
         val sel = ObjCRuntime.sel("cellAtRow:column:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row, col) as MemorySegment
     }
     
-    fun cellFrameAtRow_column(row: NSInteger, col: NSInteger): NSRect {
+    open fun cellFrameAtRow_column(row: Long, col: Long): MemorySegment {
         val sel = ObjCRuntime.sel("cellFrameAtRow:column:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, row, col) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, row, col) as MemorySegment
     }
     
-    fun getRow_column_ofCell(row: MemorySegment, col: MemorySegment, cell: MemorySegment): BOOL {
+    open fun getRow_column_ofCell(row: MemorySegment, col: MemorySegment, cell: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getRow:column:ofCell:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, row, col, cell) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, row, col, cell) as Boolean
     }
     
-    fun getRow_column_forPoint(row: MemorySegment, col: MemorySegment, point: NSPoint): BOOL {
+    open fun getRow_column_forPoint(row: MemorySegment, col: MemorySegment, point: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getRow:column:forPoint:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, row, col, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, row, col, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as Boolean
     }
     
-    fun renewRows_columns(newRows: NSInteger, newCols: NSInteger): Unit {
+    open fun renewRows_columns(newRows: Long, newCols: Long): Unit {
         val sel = ObjCRuntime.sel("renewRows:columns:")
         ObjCRuntime.msgSend(null, ptr, sel, newRows, newCols)
     }
     
-    fun putCell_atRow_column(newCell: MemorySegment, row: NSInteger, col: NSInteger): Unit {
+    open fun putCell_atRow_column(newCell: MemorySegment, row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("putCell:atRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, newCell, row, col)
     }
     
-    fun addRow(): Unit {
+    open fun addRow(): Unit {
         val sel = ObjCRuntime.sel("addRow")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun addRowWithCells(newCells: MemorySegment): Unit {
+    open fun addRowWithCells(newCells: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addRowWithCells:")
         ObjCRuntime.msgSend(null, ptr, sel, newCells)
     }
     
-    fun insertRow(row: NSInteger): Unit {
+    open fun insertRow(row: Long): Unit {
         val sel = ObjCRuntime.sel("insertRow:")
         ObjCRuntime.msgSend(null, ptr, sel, row)
     }
     
-    fun insertRow_withCells(row: NSInteger, newCells: MemorySegment): Unit {
+    open fun insertRow_withCells(row: Long, newCells: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("insertRow:withCells:")
         ObjCRuntime.msgSend(null, ptr, sel, row, newCells)
     }
     
-    fun removeRow(row: NSInteger): Unit {
+    open fun removeRow(row: Long): Unit {
         val sel = ObjCRuntime.sel("removeRow:")
         ObjCRuntime.msgSend(null, ptr, sel, row)
     }
     
-    fun addColumn(): Unit {
+    open fun addColumn(): Unit {
         val sel = ObjCRuntime.sel("addColumn")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun addColumnWithCells(newCells: MemorySegment): Unit {
+    open fun addColumnWithCells(newCells: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addColumnWithCells:")
         ObjCRuntime.msgSend(null, ptr, sel, newCells)
     }
     
-    fun insertColumn(column: NSInteger): Unit {
+    open fun insertColumn(column: Long): Unit {
         val sel = ObjCRuntime.sel("insertColumn:")
         ObjCRuntime.msgSend(null, ptr, sel, column)
     }
     
-    fun insertColumn_withCells(column: NSInteger, newCells: MemorySegment): Unit {
+    open fun insertColumn_withCells(column: Long, newCells: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("insertColumn:withCells:")
         ObjCRuntime.msgSend(null, ptr, sel, column, newCells)
     }
     
-    fun removeColumn(col: NSInteger): Unit {
+    open fun removeColumn(col: Long): Unit {
         val sel = ObjCRuntime.sel("removeColumn:")
         ObjCRuntime.msgSend(null, ptr, sel, col)
     }
     
-    fun cellWithTag(tag: NSInteger): MemorySegment {
+    open fun cellWithTag(tag: Long): MemorySegment {
         val sel = ObjCRuntime.sel("cellWithTag:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, tag) as MemorySegment
     }
     
-    fun sizeToCells(): Unit {
+    open fun sizeToCells(): Unit {
         val sel = ObjCRuntime.sel("sizeToCells")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setValidateSize(flag: BOOL): Unit {
+    open fun setValidateSize(flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("setValidateSize:")
         ObjCRuntime.msgSend(null, ptr, sel, flag)
     }
     
-    fun drawCellAtRow_column(row: NSInteger, col: NSInteger): Unit {
+    open fun drawCellAtRow_column(row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("drawCellAtRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, row, col)
     }
     
-    fun highlightCell_atRow_column(flag: BOOL, row: NSInteger, col: NSInteger): Unit {
+    open fun highlightCell_atRow_column(flag: Boolean, row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("highlightCell:atRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, flag, row, col)
     }
     
-    fun scrollCellToVisibleAtRow_column(row: NSInteger, col: NSInteger): Unit {
+    open fun scrollCellToVisibleAtRow_column(row: Long, col: Long): Unit {
         val sel = ObjCRuntime.sel("scrollCellToVisibleAtRow:column:")
         ObjCRuntime.msgSend(null, ptr, sel, row, col)
     }
     
-    fun mouseDown(event: MemorySegment): Unit {
+    override fun mouseDown(event: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("mouseDown:")
         ObjCRuntime.msgSend(null, ptr, sel, event)
     }
     
-    fun performKeyEquivalent(event: MemorySegment): BOOL {
+    override fun performKeyEquivalent(event: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("performKeyEquivalent:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as Boolean
     }
     
-    fun sendAction(): BOOL {
+    open fun sendAction(): Boolean {
         val sel = ObjCRuntime.sel("sendAction")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    fun sendDoubleAction(): Unit {
+    open fun sendDoubleAction(): Unit {
         val sel = ObjCRuntime.sel("sendDoubleAction")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun textShouldBeginEditing(textObject: MemorySegment): BOOL {
+    open fun textShouldBeginEditing(textObject: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("textShouldBeginEditing:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textObject) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textObject) as Boolean
     }
     
-    fun textShouldEndEditing(textObject: MemorySegment): BOOL {
+    open fun textShouldEndEditing(textObject: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("textShouldEndEditing:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textObject) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, textObject) as Boolean
     }
     
-    fun textDidBeginEditing(notification: MemorySegment): Unit {
+    open fun textDidBeginEditing(notification: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("textDidBeginEditing:")
         ObjCRuntime.msgSend(null, ptr, sel, notification)
     }
     
-    fun textDidEndEditing(notification: MemorySegment): Unit {
+    open fun textDidEndEditing(notification: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("textDidEndEditing:")
         ObjCRuntime.msgSend(null, ptr, sel, notification)
     }
     
-    fun textDidChange(notification: MemorySegment): Unit {
+    open fun textDidChange(notification: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("textDidChange:")
         ObjCRuntime.msgSend(null, ptr, sel, notification)
     }
     
-    fun selectText(sender: MemorySegment): Unit {
+    open fun selectText(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectText:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectTextAtRow_column(row: NSInteger, col: NSInteger): MemorySegment {
+    open fun selectTextAtRow_column(row: Long, col: Long): MemorySegment {
         val sel = ObjCRuntime.sel("selectTextAtRow:column:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row, col) as MemorySegment
     }
     
-    fun acceptsFirstMouse(event: MemorySegment): BOOL {
+    override fun acceptsFirstMouse(event: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("acceptsFirstMouse:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, event) as Boolean
     }
     
-    fun resetCursorRects(): Unit {
+    open fun resetCursorRects(): Unit {
         val sel = ObjCRuntime.sel("resetCursorRects")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun setToolTip_forCell(toolTipString: MemorySegment, cell: MemorySegment): Unit {
+    open fun setToolTip_forCell(toolTipString: MemorySegment, cell: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setToolTip:forCell:")
         ObjCRuntime.msgSend(null, ptr, sel, toolTipString, cell)
     }
@@ -278,7 +278,7 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
     fun setToolTip_forCell(toolTipString: String, cell: MemorySegment): Unit = setToolTip_forCell(ObjCRuntime.newNSString(Arena.global(), toolTipString), cell)
     
-    fun toolTipForCell(cell: MemorySegment): MemorySegment {
+    open fun toolTipForCell(cell: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("toolTipForCell:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, cell) as MemorySegment
     }
@@ -287,212 +287,212 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
     fun toolTipForCellAsString(cell: MemorySegment): String = ObjCRuntime.toJavaString(toolTipForCell(cell))
     
     // @property cellClass
-    override fun `cellClass`(): Class<*> {
+    open fun cellClass(): MemorySegment {
         val sel = ObjCRuntime.sel("cellClass")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as Class<*>
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    override fun `setCellClass`(value: Class<*>) {
+    open fun setCellClass(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCellClass:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property prototype
-    fun prototype(): MemorySegment {
+    open fun prototype(): MemorySegment {
         val sel = ObjCRuntime.sel("prototype")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setPrototype(value: MemorySegment) {
+    open fun setPrototype(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPrototype:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property mode
-    fun mode(): NSMatrixMode {
+    open fun mode(): MemorySegment {
         val sel = ObjCRuntime.sel("mode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMatrixMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMode(value: NSMatrixMode) {
+    open fun setMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsEmptySelection
-    fun allowsEmptySelection(): BOOL {
+    open fun allowsEmptySelection(): Boolean {
         val sel = ObjCRuntime.sel("allowsEmptySelection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsEmptySelection(value: BOOL) {
+    open fun setAllowsEmptySelection(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsEmptySelection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cells
     /** @return NSArray<NSCell *> * */
-    fun cells(): MemorySegment {
+    open fun cells(): MemorySegment {
         val sel = ObjCRuntime.sel("cells")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedCell
-    override fun `selectedCell`(): MemorySegment {
+    open fun selectedCell(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedCell")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedCells
     /** @return NSArray<__kindof NSCell *> * */
-    fun selectedCells(): MemorySegment {
+    open fun selectedCells(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedCells")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectedRow
-    fun selectedRow(): NSInteger {
+    open fun selectedRow(): Long {
         val sel = ObjCRuntime.sel("selectedRow")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property selectedColumn
-    fun selectedColumn(): NSInteger {
+    open fun selectedColumn(): Long {
         val sel = ObjCRuntime.sel("selectedColumn")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property selectionByRect
-    fun isSelectionByRect(): BOOL {
+    open fun isSelectionByRect(): Boolean {
         val sel = ObjCRuntime.sel("isSelectionByRect")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSelectionByRect(value: BOOL) {
+    open fun setSelectionByRect(value: Boolean) {
         val sel = ObjCRuntime.sel("setSelectionByRect:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cellSize
-    fun cellSize(): NSSize {
+    open fun cellSize(): MemorySegment {
         val sel = ObjCRuntime.sel("cellSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setCellSize(value: NSSize) {
+    open fun setCellSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCellSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property intercellSpacing
-    fun intercellSpacing(): NSSize {
+    open fun intercellSpacing(): MemorySegment {
         val sel = ObjCRuntime.sel("intercellSpacing")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setIntercellSpacing(value: NSSize) {
+    open fun setIntercellSpacing(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setIntercellSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }
     
     // @property backgroundColor
-    fun backgroundColor(): MemorySegment {
+    open fun backgroundColor(): MemorySegment {
         val sel = ObjCRuntime.sel("backgroundColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBackgroundColor(value: MemorySegment) {
+    open fun setBackgroundColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBackgroundColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cellBackgroundColor
-    fun cellBackgroundColor(): MemorySegment {
+    open fun cellBackgroundColor(): MemorySegment {
         val sel = ObjCRuntime.sel("cellBackgroundColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCellBackgroundColor(value: MemorySegment) {
+    open fun setCellBackgroundColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCellBackgroundColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property drawsCellBackground
-    fun drawsCellBackground(): BOOL {
+    open fun drawsCellBackground(): Boolean {
         val sel = ObjCRuntime.sel("drawsCellBackground")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setDrawsCellBackground(value: BOOL) {
+    open fun setDrawsCellBackground(value: Boolean) {
         val sel = ObjCRuntime.sel("setDrawsCellBackground:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property drawsBackground
-    fun drawsBackground(): BOOL {
+    open fun drawsBackground(): Boolean {
         val sel = ObjCRuntime.sel("drawsBackground")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setDrawsBackground(value: BOOL) {
+    open fun setDrawsBackground(value: Boolean) {
         val sel = ObjCRuntime.sel("setDrawsBackground:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfRows
-    fun numberOfRows(): NSInteger {
+    open fun numberOfRows(): Long {
         val sel = ObjCRuntime.sel("numberOfRows")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property numberOfColumns
-    fun numberOfColumns(): NSInteger {
+    open fun numberOfColumns(): Long {
         val sel = ObjCRuntime.sel("numberOfColumns")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property doubleAction
-    fun doubleAction(): MemorySegment {
+    open fun doubleAction(): MemorySegment {
         val sel = ObjCRuntime.sel("doubleAction")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDoubleAction(value: MemorySegment) {
+    open fun setDoubleAction(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDoubleAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autosizesCells
-    fun autosizesCells(): BOOL {
+    open fun autosizesCells(): Boolean {
         val sel = ObjCRuntime.sel("autosizesCells")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAutosizesCells(value: BOOL) {
+    open fun setAutosizesCells(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutosizesCells:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autoscroll
-    fun isAutoscroll(): BOOL {
+    open fun isAutoscroll(): Boolean {
         val sel = ObjCRuntime.sel("isAutoscroll")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAutoscroll(value: BOOL) {
+    open fun setAutoscroll(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutoscroll:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property mouseDownFlags
-    fun mouseDownFlags(): NSInteger {
+    open fun mouseDownFlags(): Long {
         val sel = ObjCRuntime.sel("mouseDownFlags")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property delegate
     /** @return id<NSMatrixDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autorecalculatesCellSize
-    fun autorecalculatesCellSize(): BOOL {
+    open fun autorecalculatesCellSize(): Boolean {
         val sel = ObjCRuntime.sel("autorecalculatesCellSize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAutorecalculatesCellSize(value: BOOL) {
+    open fun setAutorecalculatesCellSize(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutorecalculatesCellSize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -501,24 +501,23 @@ open class NSMatrix(ptr: MemorySegment) : NSControl(ptr) {
 
 // ── Category: NSKeyboardUI on NSMatrix ─────────────────────────────────────────
 
-fun NSMatrix.tabKeyTraversesCells(): BOOL {
+fun NSMatrix.tabKeyTraversesCells(): Boolean {
     val sel = ObjCRuntime.sel("tabKeyTraversesCells")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSMatrix.setTabKeyTraversesCells(tabKeyTraversesCells: BOOL): Unit {
+fun NSMatrix.setTabKeyTraversesCells(tabKeyTraversesCells: Boolean): Unit {
     val sel = ObjCRuntime.sel("setTabKeyTraversesCells:")
-    ObjCRuntime.msgSend(null, ptr, sel, tabKeyTraversesCells)
+    ObjCRuntime.msgSend(null, this.ptr, sel, tabKeyTraversesCells)
 }
 
 fun NSMatrix.keyCell(): MemorySegment {
     val sel = ObjCRuntime.sel("keyCell")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSMatrix.setKeyCell(keyCell: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setKeyCell:")
-    ObjCRuntime.msgSend(null, ptr, sel, keyCell)
+    ObjCRuntime.msgSend(null, this.ptr, sel, keyCell)
 }
 
-// @property tabKeyTraversesCells

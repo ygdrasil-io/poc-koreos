@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSBackgroundActivityScheduler
  * Superclass: NSObject
  */
-open class NSBackgroundActivityScheduler(val ptr: MemorySegment) {
+open class NSBackgroundActivityScheduler(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSBackgroundActivityScheduler") }
         
@@ -20,7 +20,7 @@ open class NSBackgroundActivityScheduler(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithIdentifier(identifier: String): MemorySegment = initWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
+    fun initWithIdentifier(identifier: String): MemorySegment = initWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
     
     open fun scheduleWithBlock(block: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("scheduleWithBlock:")
@@ -42,49 +42,49 @@ open class NSBackgroundActivityScheduler(val ptr: MemorySegment) {
     open fun identifierAsString(): String = ObjCRuntime.toJavaString(identifier())
     
     // @property qualityOfService
-    open fun qualityOfService(): NSQualityOfService {
+    open fun qualityOfService(): MemorySegment {
         val sel = ObjCRuntime.sel("qualityOfService")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setQualityOfService(value: NSQualityOfService) {
+    open fun setQualityOfService(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQualityOfService:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property repeats
-    open fun repeats(): BOOL {
+    open fun repeats(): Boolean {
         val sel = ObjCRuntime.sel("repeats")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setRepeats(value: BOOL) {
+    open fun setRepeats(value: Boolean) {
         val sel = ObjCRuntime.sel("setRepeats:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interval
-    open fun interval(): NSTimeInterval {
+    open fun interval(): Double {
         val sel = ObjCRuntime.sel("interval")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setInterval(value: NSTimeInterval) {
+    open fun setInterval(value: Double) {
         val sel = ObjCRuntime.sel("setInterval:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tolerance
-    open fun tolerance(): NSTimeInterval {
+    open fun tolerance(): Double {
         val sel = ObjCRuntime.sel("tolerance")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setTolerance(value: NSTimeInterval) {
+    open fun setTolerance(value: Double) {
         val sel = ObjCRuntime.sel("setTolerance:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property shouldDefer
-    open fun shouldDefer(): BOOL {
+    open fun shouldDefer(): Boolean {
         val sel = ObjCRuntime.sel("shouldDefer")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

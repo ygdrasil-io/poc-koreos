@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMessagePort
  * Superclass: NSPort
  */
-open class NSMessagePort(ptr: MemorySegment) : NSPort(ptr) {
+open class NSMessagePort(override val ptr: MemorySegment) : NSPort(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMessagePort") }
         

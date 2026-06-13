@@ -8,53 +8,53 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSessionStreamTask
  * Superclass: NSURLSessionTask
  */
-open class NSURLSessionStreamTask(ptr: MemorySegment) : NSURLSessionTask(ptr) {
+open class NSURLSessionStreamTask(override val ptr: MemorySegment) : NSURLSessionTask(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionStreamTask") }
         
-        override fun `new`(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun readDataOfMinLength_maxLength_timeout_completionHandler(minBytes: NSUInteger, maxBytes: NSUInteger, timeout: NSTimeInterval, completionHandler: MemorySegment): Unit {
+    open fun readDataOfMinLength_maxLength_timeout_completionHandler(minBytes: Long, maxBytes: Long, timeout: Double, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("readDataOfMinLength:maxLength:timeout:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, minBytes, maxBytes, timeout, completionHandler)
     }
     
-    fun writeData_timeout_completionHandler(`data`: MemorySegment, timeout: NSTimeInterval, completionHandler: MemorySegment): Unit {
+    open fun writeData_timeout_completionHandler(`data`: MemorySegment, timeout: Double, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("writeData:timeout:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, `data`, timeout, completionHandler)
     }
     
-    fun captureStreams(): Unit {
+    open fun captureStreams(): Unit {
         val sel = ObjCRuntime.sel("captureStreams")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun closeWrite(): Unit {
+    open fun closeWrite(): Unit {
         val sel = ObjCRuntime.sel("closeWrite")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun closeRead(): Unit {
+    open fun closeRead(): Unit {
         val sel = ObjCRuntime.sel("closeRead")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun startSecureConnection(): Unit {
+    open fun startSecureConnection(): Unit {
         val sel = ObjCRuntime.sel("startSecureConnection")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun stopSecureConnection(): Unit {
+    open fun stopSecureConnection(): Unit {
         val sel = ObjCRuntime.sel("stopSecureConnection")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    override fun `init`(): MemorySegment {
+    override fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

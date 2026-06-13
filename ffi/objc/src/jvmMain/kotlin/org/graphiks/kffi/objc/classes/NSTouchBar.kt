@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSTouchBar(val ptr: MemorySegment) {
+open class NSTouchBar(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTouchBar") }
         
-        open fun isAutomaticCustomizeTouchBarMenuItemEnabled(): BOOL {
+        fun isAutomaticCustomizeTouchBarMenuItemEnabled(): Boolean {
             val sel = ObjCRuntime.sel("isAutomaticCustomizeTouchBarMenuItemEnabled")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
-        open fun setAutomaticCustomizeTouchBarMenuItemEnabled(automaticCustomizeTouchBarMenuItemEnabled: BOOL): Unit {
+        fun setAutomaticCustomizeTouchBarMenuItemEnabled(automaticCustomizeTouchBarMenuItemEnabled: Boolean): Unit {
             val sel = ObjCRuntime.sel("setAutomaticCustomizeTouchBarMenuItemEnabled:")
             ObjCRuntime.msgSend(null, _class, sel, automaticCustomizeTouchBarMenuItemEnabled)
         }
@@ -35,17 +35,17 @@ open class NSTouchBar(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun itemForIdentifier(identifier: NSTouchBarItemIdentifier): MemorySegment {
+    open fun itemForIdentifier(identifier: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("itemForIdentifier:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, identifier) as MemorySegment
     }
     
     // @property customizationIdentifier
-    open fun customizationIdentifier(): NSTouchBarCustomizationIdentifier {
+    open fun customizationIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("customizationIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchBarCustomizationIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCustomizationIdentifier(value: NSTouchBarCustomizationIdentifier) {
+    open fun setCustomizationIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCustomizationIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -91,21 +91,21 @@ open class NSTouchBar(val ptr: MemorySegment) {
     }
     
     // @property principalItemIdentifier
-    open fun principalItemIdentifier(): NSTouchBarItemIdentifier {
+    open fun principalItemIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("principalItemIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchBarItemIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setPrincipalItemIdentifier(value: NSTouchBarItemIdentifier) {
+    open fun setPrincipalItemIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPrincipalItemIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property escapeKeyReplacementItemIdentifier
-    open fun escapeKeyReplacementItemIdentifier(): NSTouchBarItemIdentifier {
+    open fun escapeKeyReplacementItemIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("escapeKeyReplacementItemIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTouchBarItemIdentifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setEscapeKeyReplacementItemIdentifier(value: NSTouchBarItemIdentifier) {
+    open fun setEscapeKeyReplacementItemIdentifier(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setEscapeKeyReplacementItemIdentifier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -133,11 +133,20 @@ open class NSTouchBar(val ptr: MemorySegment) {
     }
     
     // @property visible
-    open fun isVisible(): BOOL {
+    open fun isVisible(): Boolean {
         val sel = ObjCRuntime.sel("isVisible")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property automaticCustomizeTouchBarMenuItemEnabled
+    open fun isAutomaticCustomizeTouchBarMenuItemEnabled(): Boolean {
+        val sel = ObjCRuntime.sel("isAutomaticCustomizeTouchBarMenuItemEnabled")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
+    }
+    open fun setAutomaticCustomizeTouchBarMenuItemEnabled(value: Boolean) {
+        val sel = ObjCRuntime.sel("setAutomaticCustomizeTouchBarMenuItemEnabled:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
 }
 

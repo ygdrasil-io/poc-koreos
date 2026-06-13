@@ -14,7 +14,7 @@ interface NSURLSessionWebSocketDelegate : NSURLSessionTaskDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:webSocketTask:didOpenWithProtocol:' not implemented")
     
     // @optional
-    fun URLSession_webSocketTask_didCloseWithCode_reason(session: MemorySegment, webSocketTask: MemorySegment, closeCode: NSURLSessionWebSocketCloseCode, reason: MemorySegment): Unit =
+    fun URLSession_webSocketTask_didCloseWithCode_reason(session: MemorySegment, webSocketTask: MemorySegment, closeCode: MemorySegment, reason: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'URLSession:webSocketTask:didCloseWithCode:reason:' not implemented")
     
 }

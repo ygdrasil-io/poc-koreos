@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSDrawerDelegate
  * Inherits protocols: NSObject
  */
-interface NSDrawerDelegate : NSObject {
+interface NSDrawerDelegate {
     // @optional
-    fun drawerShouldOpen(sender: MemorySegment): BOOL =
+    fun drawerShouldOpen(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'drawerShouldOpen:' not implemented")
     
     // @optional
-    fun drawerShouldClose(sender: MemorySegment): BOOL =
+    fun drawerShouldClose(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'drawerShouldClose:' not implemented")
     
     // @optional
-    fun drawerWillResizeContents_toSize(sender: MemorySegment, contentSize: NSSize): NSSize =
+    fun drawerWillResizeContents_toSize(sender: MemorySegment, contentSize: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'drawerWillResizeContents:toSize:' not implemented")
     
     // @optional

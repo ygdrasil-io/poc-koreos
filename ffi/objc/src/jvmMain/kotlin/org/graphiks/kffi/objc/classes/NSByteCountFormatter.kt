@@ -8,29 +8,29 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSByteCountFormatter
  * Superclass: NSFormatter
  */
-open class NSByteCountFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSByteCountFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSByteCountFormatter") }
         
-        fun stringFromByteCount_countStyle(byteCount: Long, countStyle: NSByteCountFormatterCountStyle): MemorySegment {
+        fun stringFromByteCount_countStyle(byteCount: Long, countStyle: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("stringFromByteCount:countStyle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, byteCount, countStyle) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun stringFromByteCount_countStyleAsString(byteCount: Long, countStyle: NSByteCountFormatterCountStyle): String = ObjCRuntime.toJavaString(stringFromByteCount_countStyle(byteCount, countStyle))
+        fun stringFromByteCount_countStyleAsString(byteCount: Long, countStyle: MemorySegment): String = ObjCRuntime.toJavaString(stringFromByteCount_countStyle(byteCount, countStyle))
         
-        fun stringFromMeasurement_countStyle(measurement: MemorySegment, countStyle: NSByteCountFormatterCountStyle): MemorySegment {
+        fun stringFromMeasurement_countStyle(measurement: MemorySegment, countStyle: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("stringFromMeasurement:countStyle:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, measurement, countStyle) as MemorySegment
         }
         
         /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-        fun stringFromMeasurement_countStyleAsString(measurement: MemorySegment, countStyle: NSByteCountFormatterCountStyle): String = ObjCRuntime.toJavaString(stringFromMeasurement_countStyle(measurement, countStyle))
+        fun stringFromMeasurement_countStyleAsString(measurement: MemorySegment, countStyle: MemorySegment): String = ObjCRuntime.toJavaString(stringFromMeasurement_countStyle(measurement, countStyle))
         
     }
     
-    fun stringFromByteCount(byteCount: Long): MemorySegment {
+    open fun stringFromByteCount(byteCount: Long): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromByteCount:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, byteCount) as MemorySegment
     }
@@ -38,7 +38,7 @@ open class NSByteCountFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromByteCountAsString(byteCount: Long): String = ObjCRuntime.toJavaString(stringFromByteCount(byteCount))
     
-    fun stringFromMeasurement(measurement: MemorySegment): MemorySegment {
+    open fun stringFromMeasurement(measurement: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromMeasurement:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, measurement) as MemorySegment
     }
@@ -46,100 +46,97 @@ open class NSByteCountFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromMeasurementAsString(measurement: MemorySegment): String = ObjCRuntime.toJavaString(stringFromMeasurement(measurement))
     
-    override fun `stringForObjectValue`(obj: MemorySegment): MemorySegment {
+    override fun stringForObjectValue(obj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForObjectValue:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, obj) as MemorySegment
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    override fun `stringForObjectValueAsString`(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
-    
     // @property allowedUnits
-    fun allowedUnits(): NSByteCountFormatterUnits {
+    open fun allowedUnits(): MemorySegment {
         val sel = ObjCRuntime.sel("allowedUnits")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSByteCountFormatterUnits
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAllowedUnits(value: NSByteCountFormatterUnits) {
+    open fun setAllowedUnits(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAllowedUnits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property countStyle
-    fun countStyle(): NSByteCountFormatterCountStyle {
+    open fun countStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("countStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSByteCountFormatterCountStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCountStyle(value: NSByteCountFormatterCountStyle) {
+    open fun setCountStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCountStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsNonnumericFormatting
-    fun allowsNonnumericFormatting(): BOOL {
+    open fun allowsNonnumericFormatting(): Boolean {
         val sel = ObjCRuntime.sel("allowsNonnumericFormatting")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsNonnumericFormatting(value: BOOL) {
+    open fun setAllowsNonnumericFormatting(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsNonnumericFormatting:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property includesUnit
-    fun includesUnit(): BOOL {
+    open fun includesUnit(): Boolean {
         val sel = ObjCRuntime.sel("includesUnit")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIncludesUnit(value: BOOL) {
+    open fun setIncludesUnit(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesUnit:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property includesCount
-    fun includesCount(): BOOL {
+    open fun includesCount(): Boolean {
         val sel = ObjCRuntime.sel("includesCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIncludesCount(value: BOOL) {
+    open fun setIncludesCount(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property includesActualByteCount
-    fun includesActualByteCount(): BOOL {
+    open fun includesActualByteCount(): Boolean {
         val sel = ObjCRuntime.sel("includesActualByteCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setIncludesActualByteCount(value: BOOL) {
+    open fun setIncludesActualByteCount(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesActualByteCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property adaptive
-    fun isAdaptive(): BOOL {
+    open fun isAdaptive(): Boolean {
         val sel = ObjCRuntime.sel("isAdaptive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAdaptive(value: BOOL) {
+    open fun setAdaptive(value: Boolean) {
         val sel = ObjCRuntime.sel("setAdaptive:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property zeroPadsFractionDigits
-    fun zeroPadsFractionDigits(): BOOL {
+    open fun zeroPadsFractionDigits(): Boolean {
         val sel = ObjCRuntime.sel("zeroPadsFractionDigits")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setZeroPadsFractionDigits(value: BOOL) {
+    open fun setZeroPadsFractionDigits(value: Boolean) {
         val sel = ObjCRuntime.sel("setZeroPadsFractionDigits:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formattingContext
-    fun formattingContext(): NSFormattingContext {
+    open fun formattingContext(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFormattingContext
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingContext(value: NSFormattingContext) {
+    open fun setFormattingContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

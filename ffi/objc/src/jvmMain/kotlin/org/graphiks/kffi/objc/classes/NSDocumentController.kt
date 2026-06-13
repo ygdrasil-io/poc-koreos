@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding, NSMenuItemValidation, NSUserInterfaceValidations
  */
-open class NSDocumentController(val ptr: MemorySegment) {
+open class NSDocumentController(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDocumentController") }
         
-        open fun sharedDocumentController(): MemorySegment {
+        fun sharedDocumentController(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedDocumentController")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -55,7 +55,7 @@ open class NSDocumentController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    open fun openUntitledDocumentAndDisplay_error(displayDocument: BOOL, outError: MemorySegment): MemorySegment {
+    open fun openUntitledDocumentAndDisplay_error(displayDocument: Boolean, outError: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("openUntitledDocumentAndDisplay:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, displayDocument, outError) as MemorySegment
     }
@@ -66,7 +66,7 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun makeUntitledDocumentOfType_error(typeName: String, outError: MemorySegment): MemorySegment = makeUntitledDocumentOfType_error(ObjCRuntime.newNSString(Arena.global(), typeName), outError)
+    fun makeUntitledDocumentOfType_error(typeName: String, outError: MemorySegment): MemorySegment = makeUntitledDocumentOfType_error(ObjCRuntime.newNSString(Arena.global(), typeName), outError)
     
     open fun openDocument(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("openDocument:")
@@ -79,9 +79,9 @@ open class NSDocumentController(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun runModalOpenPanel_forTypes(openPanel: MemorySegment, types: MemorySegment): NSInteger {
+    open fun runModalOpenPanel_forTypes(openPanel: MemorySegment, types: MemorySegment): Long {
         val sel = ObjCRuntime.sel("runModalOpenPanel:forTypes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, openPanel, types) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, openPanel, types) as Long
     }
     
     open fun beginOpenPanelWithCompletionHandler(completionHandler: MemorySegment): Unit {
@@ -94,7 +94,7 @@ open class NSDocumentController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, openPanel, inTypes, completionHandler)
     }
     
-    open fun openDocumentWithContentsOfURL_display_completionHandler(url: MemorySegment, displayDocument: BOOL, completionHandler: MemorySegment): Unit {
+    open fun openDocumentWithContentsOfURL_display_completionHandler(url: MemorySegment, displayDocument: Boolean, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("openDocumentWithContentsOfURL:display:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, url, displayDocument, completionHandler)
     }
@@ -105,9 +105,9 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun makeDocumentWithContentsOfURL_ofType_error(url: MemorySegment, typeName: String, outError: MemorySegment): MemorySegment = makeDocumentWithContentsOfURL_ofType_error(url, ObjCRuntime.newNSString(Arena.global(), typeName), outError)
+    fun makeDocumentWithContentsOfURL_ofType_error(url: MemorySegment, typeName: String, outError: MemorySegment): MemorySegment = makeDocumentWithContentsOfURL_ofType_error(url, ObjCRuntime.newNSString(Arena.global(), typeName), outError)
     
-    open fun reopenDocumentForURL_withContentsOfURL_display_completionHandler(urlOrNil: MemorySegment, contentsURL: MemorySegment, displayDocument: BOOL, completionHandler: MemorySegment): Unit {
+    open fun reopenDocumentForURL_withContentsOfURL_display_completionHandler(urlOrNil: MemorySegment, contentsURL: MemorySegment, displayDocument: Boolean, completionHandler: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("reopenDocumentForURL:withContentsOfURL:display:completionHandler:")
         ObjCRuntime.msgSend(null, ptr, sel, urlOrNil, contentsURL, displayDocument, completionHandler)
     }
@@ -118,33 +118,33 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun makeDocumentForURL_withContentsOfURL_ofType_error(urlOrNil: MemorySegment, contentsURL: MemorySegment, typeName: String, outError: MemorySegment): MemorySegment = makeDocumentForURL_withContentsOfURL_ofType_error(urlOrNil, contentsURL, ObjCRuntime.newNSString(Arena.global(), typeName), outError)
+    fun makeDocumentForURL_withContentsOfURL_ofType_error(urlOrNil: MemorySegment, contentsURL: MemorySegment, typeName: String, outError: MemorySegment): MemorySegment = makeDocumentForURL_withContentsOfURL_ofType_error(urlOrNil, contentsURL, ObjCRuntime.newNSString(Arena.global(), typeName), outError)
     
     open fun saveAllDocuments(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("saveAllDocuments:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    open fun reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(title: MemorySegment, cancellable: BOOL, delegate: MemorySegment, didReviewAllSelector: MemorySegment, contextInfo: MemorySegment): Unit {
+    open fun reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(title: MemorySegment, cancellable: Boolean, delegate: MemorySegment, didReviewAllSelector: MemorySegment, contextInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("reviewUnsavedDocumentsWithAlertTitle:cancellable:delegate:didReviewAllSelector:contextInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, title, cancellable, delegate, didReviewAllSelector, contextInfo)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(title: String, cancellable: BOOL, delegate: MemorySegment, didReviewAllSelector: MemorySegment, contextInfo: MemorySegment): Unit = reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(ObjCRuntime.newNSString(Arena.global(), title), cancellable, delegate, didReviewAllSelector, contextInfo)
+    fun reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(title: String, cancellable: Boolean, delegate: MemorySegment, didReviewAllSelector: MemorySegment, contextInfo: MemorySegment): Unit = reviewUnsavedDocumentsWithAlertTitle_cancellable_delegate_didReviewAllSelector_contextInfo(ObjCRuntime.newNSString(Arena.global(), title), cancellable, delegate, didReviewAllSelector, contextInfo)
     
     open fun closeAllDocumentsWithDelegate_didCloseAllSelector_contextInfo(delegate: MemorySegment, didCloseAllSelector: MemorySegment, contextInfo: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("closeAllDocumentsWithDelegate:didCloseAllSelector:contextInfo:")
         ObjCRuntime.msgSend(null, ptr, sel, delegate, didCloseAllSelector, contextInfo)
     }
     
-    open fun duplicateDocumentWithContentsOfURL_copying_displayName_error(url: MemorySegment, duplicateByCopying: BOOL, displayNameOrNil: MemorySegment, outError: MemorySegment): MemorySegment {
+    open fun duplicateDocumentWithContentsOfURL_copying_displayName_error(url: MemorySegment, duplicateByCopying: Boolean, displayNameOrNil: MemorySegment, outError: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("duplicateDocumentWithContentsOfURL:copying:displayName:error:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, duplicateByCopying, displayNameOrNil, outError) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun duplicateDocumentWithContentsOfURL_copying_displayName_error(url: MemorySegment, duplicateByCopying: BOOL, displayNameOrNil: String, outError: MemorySegment): MemorySegment = duplicateDocumentWithContentsOfURL_copying_displayName_error(url, duplicateByCopying, ObjCRuntime.newNSString(Arena.global(), displayNameOrNil), outError)
+    fun duplicateDocumentWithContentsOfURL_copying_displayName_error(url: MemorySegment, duplicateByCopying: Boolean, displayNameOrNil: String, outError: MemorySegment): MemorySegment = duplicateDocumentWithContentsOfURL_copying_displayName_error(url, duplicateByCopying, ObjCRuntime.newNSString(Arena.global(), displayNameOrNil), outError)
     
     open fun standardShareMenuItem(): MemorySegment {
         val sel = ObjCRuntime.sel("standardShareMenuItem")
@@ -156,9 +156,9 @@ open class NSDocumentController(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, error, window, delegate, didPresentSelector, contextInfo)
     }
     
-    open fun presentError(error: MemorySegment): BOOL {
+    open fun presentError(error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("presentError:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as Boolean
     }
     
     open fun willPresentError(error: MemorySegment): MemorySegment {
@@ -187,15 +187,15 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun typeForContentsOfURL_errorAsString(url: MemorySegment, outError: MemorySegment): String = ObjCRuntime.toJavaString(typeForContentsOfURL_error(url, outError))
+    fun typeForContentsOfURL_errorAsString(url: MemorySegment, outError: MemorySegment): String = ObjCRuntime.toJavaString(typeForContentsOfURL_error(url, outError))
     
-    open fun documentClassForType(typeName: MemorySegment): Class<*> {
+    open fun documentClassForType(typeName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("documentClassForType:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, typeName) as Class<*>
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, typeName) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun documentClassForType(typeName: String): Class<*> = documentClassForType(ObjCRuntime.newNSString(Arena.global(), typeName))
+    fun documentClassForType(typeName: String): MemorySegment = documentClassForType(ObjCRuntime.newNSString(Arena.global(), typeName))
     
     open fun displayNameForType(typeName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("displayNameForType:")
@@ -203,20 +203,26 @@ open class NSDocumentController(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun displayNameForTypeAsString(typeName: MemorySegment): String = ObjCRuntime.toJavaString(displayNameForType(typeName))
+    fun displayNameForTypeAsString(typeName: MemorySegment): String = ObjCRuntime.toJavaString(displayNameForType(typeName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun displayNameForType(typeName: String): MemorySegment = displayNameForType(ObjCRuntime.newNSString(Arena.global(), typeName))
+    fun displayNameForType(typeName: String): MemorySegment = displayNameForType(ObjCRuntime.newNSString(Arena.global(), typeName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun displayNameForTypeAsString(typeName: String): String = ObjCRuntime.toJavaString(displayNameForType(ObjCRuntime.newNSString(Arena.global(), typeName)))
+    fun displayNameForTypeAsString(typeName: String): String = ObjCRuntime.toJavaString(displayNameForType(ObjCRuntime.newNSString(Arena.global(), typeName)))
     
-    open fun validateUserInterfaceItem(item: MemorySegment): BOOL {
+    open fun validateUserInterfaceItem(item: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("validateUserInterfaceItem:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, item) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, item) as Boolean
     }
     
     // @property sharedDocumentController
+    open fun sharedDocumentController(): MemorySegment {
+        val sel = ObjCRuntime.sel("sharedDocumentController")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property documents
     /** @return NSArray<__kindof NSDocument *> * */
     open fun documents(): MemorySegment {
         val sel = ObjCRuntime.sel("documents")
@@ -239,31 +245,31 @@ open class NSDocumentController(val ptr: MemorySegment) {
     open fun currentDirectoryAsString(): String = ObjCRuntime.toJavaString(currentDirectory())
     
     // @property autosavingDelay
-    open fun autosavingDelay(): NSTimeInterval {
+    open fun autosavingDelay(): Double {
         val sel = ObjCRuntime.sel("autosavingDelay")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setAutosavingDelay(value: NSTimeInterval) {
+    open fun setAutosavingDelay(value: Double) {
         val sel = ObjCRuntime.sel("setAutosavingDelay:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hasEditedDocuments
-    open fun hasEditedDocuments(): BOOL {
+    open fun hasEditedDocuments(): Boolean {
         val sel = ObjCRuntime.sel("hasEditedDocuments")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property allowsAutomaticShareMenu
-    open fun allowsAutomaticShareMenu(): BOOL {
+    open fun allowsAutomaticShareMenu(): Boolean {
         val sel = ObjCRuntime.sel("allowsAutomaticShareMenu")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property maximumRecentDocumentCount
-    open fun maximumRecentDocumentCount(): NSUInteger {
+    open fun maximumRecentDocumentCount(): Long {
         val sel = ObjCRuntime.sel("maximumRecentDocumentCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property recentDocumentURLs
@@ -293,74 +299,74 @@ open class NSDocumentController(val ptr: MemorySegment) {
 
 // ── Category: NSDeprecated on NSDocumentController ─────────────────────────────────────────
 
-fun NSDocumentController.openDocumentWithContentsOfURL_display_error(url: MemorySegment, displayDocument: BOOL, outError: MemorySegment): MemorySegment {
+fun NSDocumentController.openDocumentWithContentsOfURL_display_error(url: MemorySegment, displayDocument: Boolean, outError: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("openDocumentWithContentsOfURL:display:error:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, displayDocument, outError) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, url, displayDocument, outError) as MemorySegment
 }
 
-fun NSDocumentController.reopenDocumentForURL_withContentsOfURL_error(url: MemorySegment, contentsURL: MemorySegment, outError: MemorySegment): BOOL {
+fun NSDocumentController.reopenDocumentForURL_withContentsOfURL_error(url: MemorySegment, contentsURL: MemorySegment, outError: MemorySegment): Boolean {
     val sel = ObjCRuntime.sel("reopenDocumentForURL:withContentsOfURL:error:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, url, contentsURL, outError) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel, url, contentsURL, outError) as Boolean
 }
 
 fun NSDocumentController.fileExtensionsFromType(typeName: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("fileExtensionsFromType:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, typeName) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, typeName) as MemorySegment
 }
 
 fun NSDocumentController.typeFromFileExtension(fileNameExtensionOrHFSFileType: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("typeFromFileExtension:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fileNameExtensionOrHFSFileType) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, fileNameExtensionOrHFSFileType) as MemorySegment
 }
 
 fun NSDocumentController.documentForFileName(fileName: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("documentForFileName:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fileName) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, fileName) as MemorySegment
 }
 
 fun NSDocumentController.fileNamesFromRunningOpenPanel(): MemorySegment {
     val sel = ObjCRuntime.sel("fileNamesFromRunningOpenPanel")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSDocumentController.makeDocumentWithContentsOfFile_ofType(fileName: MemorySegment, type: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("makeDocumentWithContentsOfFile:ofType:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fileName, type) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, fileName, type) as MemorySegment
 }
 
 fun NSDocumentController.makeDocumentWithContentsOfURL_ofType(url: MemorySegment, type: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("makeDocumentWithContentsOfURL:ofType:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, type) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, url, type) as MemorySegment
 }
 
 fun NSDocumentController.makeUntitledDocumentOfType(type: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("makeUntitledDocumentOfType:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, type) as MemorySegment
 }
 
-fun NSDocumentController.openDocumentWithContentsOfFile_display(fileName: MemorySegment, display: BOOL): MemorySegment {
+fun NSDocumentController.openDocumentWithContentsOfFile_display(fileName: MemorySegment, display: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("openDocumentWithContentsOfFile:display:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, fileName, display) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, fileName, display) as MemorySegment
 }
 
-fun NSDocumentController.openDocumentWithContentsOfURL_display(url: MemorySegment, display: BOOL): MemorySegment {
+fun NSDocumentController.openDocumentWithContentsOfURL_display(url: MemorySegment, display: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("openDocumentWithContentsOfURL:display:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, display) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, url, display) as MemorySegment
 }
 
-fun NSDocumentController.openUntitledDocumentOfType_display(type: MemorySegment, display: BOOL): MemorySegment {
+fun NSDocumentController.openUntitledDocumentOfType_display(type: MemorySegment, display: Boolean): MemorySegment {
     val sel = ObjCRuntime.sel("openUntitledDocumentOfType:display:")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type, display) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel, type, display) as MemorySegment
 }
 
-fun NSDocumentController.setShouldCreateUI(flag: BOOL): Unit {
+fun NSDocumentController.setShouldCreateUI(flag: Boolean): Unit {
     val sel = ObjCRuntime.sel("setShouldCreateUI:")
-    ObjCRuntime.msgSend(null, ptr, sel, flag)
+    ObjCRuntime.msgSend(null, this.ptr, sel, flag)
 }
 
-fun NSDocumentController.shouldCreateUI(): BOOL {
+fun NSDocumentController.shouldCreateUI(): Boolean {
     val sel = ObjCRuntime.sel("shouldCreateUI")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
 // ── Category: NSWindowRestoration on NSDocumentController ─────────────────────────────────────────

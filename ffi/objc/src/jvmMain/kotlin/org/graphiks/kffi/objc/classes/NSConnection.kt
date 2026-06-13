@@ -8,75 +8,75 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSConnection
  * Superclass: NSObject
  */
-open class NSConnection(val ptr: MemorySegment) {
+open class NSConnection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSConnection") }
         
         /** @return NSArray<NSConnection *> * */
-        open fun allConnections(): MemorySegment {
+        fun allConnections(): MemorySegment {
             val sel = ObjCRuntime.sel("allConnections")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun defaultConnection(): MemorySegment {
+        fun defaultConnection(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultConnection")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun connectionWithRegisteredName_host(name: MemorySegment, hostName: MemorySegment): MemorySegment {
+        fun connectionWithRegisteredName_host(name: MemorySegment, hostName: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("connectionWithRegisteredName:host:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, hostName) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun connectionWithRegisteredName_host(name: String, hostName: String): MemorySegment = connectionWithRegisteredName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName))
+        fun connectionWithRegisteredName_host(name: String, hostName: String): MemorySegment = connectionWithRegisteredName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName))
         
-        open fun connectionWithRegisteredName_host_usingNameServer(name: MemorySegment, hostName: MemorySegment, server: MemorySegment): MemorySegment {
+        fun connectionWithRegisteredName_host_usingNameServer(name: MemorySegment, hostName: MemorySegment, server: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("connectionWithRegisteredName:host:usingNameServer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, hostName, server) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun connectionWithRegisteredName_host_usingNameServer(name: String, hostName: String, server: MemorySegment): MemorySegment = connectionWithRegisteredName_host_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName), server)
+        fun connectionWithRegisteredName_host_usingNameServer(name: String, hostName: String, server: MemorySegment): MemorySegment = connectionWithRegisteredName_host_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName), server)
         
-        open fun rootProxyForConnectionWithRegisteredName_host(name: MemorySegment, hostName: MemorySegment): MemorySegment {
+        fun rootProxyForConnectionWithRegisteredName_host(name: MemorySegment, hostName: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("rootProxyForConnectionWithRegisteredName:host:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, hostName) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun rootProxyForConnectionWithRegisteredName_host(name: String, hostName: String): MemorySegment = rootProxyForConnectionWithRegisteredName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName))
+        fun rootProxyForConnectionWithRegisteredName_host(name: String, hostName: String): MemorySegment = rootProxyForConnectionWithRegisteredName_host(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName))
         
-        open fun rootProxyForConnectionWithRegisteredName_host_usingNameServer(name: MemorySegment, hostName: MemorySegment, server: MemorySegment): MemorySegment {
+        fun rootProxyForConnectionWithRegisteredName_host_usingNameServer(name: MemorySegment, hostName: MemorySegment, server: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("rootProxyForConnectionWithRegisteredName:host:usingNameServer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, hostName, server) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun rootProxyForConnectionWithRegisteredName_host_usingNameServer(name: String, hostName: String, server: MemorySegment): MemorySegment = rootProxyForConnectionWithRegisteredName_host_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName), server)
+        fun rootProxyForConnectionWithRegisteredName_host_usingNameServer(name: String, hostName: String, server: MemorySegment): MemorySegment = rootProxyForConnectionWithRegisteredName_host_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), ObjCRuntime.newNSString(Arena.global(), hostName), server)
         
-        open fun serviceConnectionWithName_rootObject_usingNameServer(name: MemorySegment, root: MemorySegment, server: MemorySegment): MemorySegment {
+        fun serviceConnectionWithName_rootObject_usingNameServer(name: MemorySegment, root: MemorySegment, server: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("serviceConnectionWithName:rootObject:usingNameServer:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, root, server) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun serviceConnectionWithName_rootObject_usingNameServer(name: String, root: MemorySegment, server: MemorySegment): MemorySegment = serviceConnectionWithName_rootObject_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), root, server)
+        fun serviceConnectionWithName_rootObject_usingNameServer(name: String, root: MemorySegment, server: MemorySegment): MemorySegment = serviceConnectionWithName_rootObject_usingNameServer(ObjCRuntime.newNSString(Arena.global(), name), root, server)
         
-        open fun serviceConnectionWithName_rootObject(name: MemorySegment, root: MemorySegment): MemorySegment {
+        fun serviceConnectionWithName_rootObject(name: MemorySegment, root: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("serviceConnectionWithName:rootObject:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, root) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun serviceConnectionWithName_rootObject(name: String, root: MemorySegment): MemorySegment = serviceConnectionWithName_rootObject(ObjCRuntime.newNSString(Arena.global(), name), root)
+        fun serviceConnectionWithName_rootObject(name: String, root: MemorySegment): MemorySegment = serviceConnectionWithName_rootObject(ObjCRuntime.newNSString(Arena.global(), name), root)
         
-        open fun connectionWithReceivePort_sendPort(receivePort: MemorySegment, sendPort: MemorySegment): MemorySegment {
+        fun connectionWithReceivePort_sendPort(receivePort: MemorySegment, sendPort: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("connectionWithReceivePort:sendPort:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, receivePort, sendPort) as MemorySegment
         }
         
-        open fun currentConversation(): MemorySegment {
+        fun currentConversation(): MemorySegment {
             val sel = ObjCRuntime.sel("currentConversation")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -94,7 +94,7 @@ open class NSConnection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addRequestMode(rmode: String): Unit = addRequestMode(ObjCRuntime.newNSString(Arena.global(), rmode))
+    fun addRequestMode(rmode: String): Unit = addRequestMode(ObjCRuntime.newNSString(Arena.global(), rmode))
     
     open fun removeRequestMode(rmode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeRequestMode:")
@@ -102,23 +102,23 @@ open class NSConnection(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removeRequestMode(rmode: String): Unit = removeRequestMode(ObjCRuntime.newNSString(Arena.global(), rmode))
+    fun removeRequestMode(rmode: String): Unit = removeRequestMode(ObjCRuntime.newNSString(Arena.global(), rmode))
     
-    open fun registerName(name: MemorySegment): BOOL {
+    open fun registerName(name: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("registerName:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun registerName(name: String): BOOL = registerName(ObjCRuntime.newNSString(Arena.global(), name))
+    fun registerName(name: String): Boolean = registerName(ObjCRuntime.newNSString(Arena.global(), name))
     
-    open fun registerName_withNameServer(name: MemorySegment, server: MemorySegment): BOOL {
+    open fun registerName_withNameServer(name: MemorySegment, server: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("registerName:withNameServer:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name, server) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, name, server) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun registerName_withNameServer(name: String, server: MemorySegment): BOOL = registerName_withNameServer(ObjCRuntime.newNSString(Arena.global(), name), server)
+    fun registerName_withNameServer(name: String, server: MemorySegment): Boolean = registerName_withNameServer(ObjCRuntime.newNSString(Arena.global(), name), server)
     
     open fun initWithReceivePort_sendPort(receivePort: MemorySegment, sendPort: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithReceivePort:sendPort:")
@@ -158,21 +158,21 @@ open class NSConnection(val ptr: MemorySegment) {
     }
     
     // @property requestTimeout
-    open fun requestTimeout(): NSTimeInterval {
+    open fun requestTimeout(): Double {
         val sel = ObjCRuntime.sel("requestTimeout")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setRequestTimeout(value: NSTimeInterval) {
+    open fun setRequestTimeout(value: Double) {
         val sel = ObjCRuntime.sel("setRequestTimeout:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property replyTimeout
-    open fun replyTimeout(): NSTimeInterval {
+    open fun replyTimeout(): Double {
         val sel = ObjCRuntime.sel("replyTimeout")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setReplyTimeout(value: NSTimeInterval) {
+    open fun setReplyTimeout(value: Double) {
         val sel = ObjCRuntime.sel("setReplyTimeout:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -199,19 +199,19 @@ open class NSConnection(val ptr: MemorySegment) {
     }
     
     // @property independentConversationQueueing
-    open fun independentConversationQueueing(): BOOL {
+    open fun independentConversationQueueing(): Boolean {
         val sel = ObjCRuntime.sel("independentConversationQueueing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setIndependentConversationQueueing(value: BOOL) {
+    open fun setIndependentConversationQueueing(value: Boolean) {
         val sel = ObjCRuntime.sel("setIndependentConversationQueueing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property valid
-    open fun isValid(): BOOL {
+    open fun isValid(): Boolean {
         val sel = ObjCRuntime.sel("isValid")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property rootProxy
@@ -240,9 +240,9 @@ open class NSConnection(val ptr: MemorySegment) {
     }
     
     // @property multipleThreadsEnabled
-    open fun multipleThreadsEnabled(): BOOL {
+    open fun multipleThreadsEnabled(): Boolean {
         val sel = ObjCRuntime.sel("multipleThreadsEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property remoteObjects
@@ -262,22 +262,22 @@ open class NSConnection(val ptr: MemorySegment) {
     // ivar: receivePort: MemorySegment
     // ivar: sendPort: MemorySegment
     // ivar: delegate: MemorySegment
-    // ivar: busy: int32_t
-    // ivar: localProxyCount: int32_t
-    // ivar: waitCount: int32_t
+    // ivar: busy: Int
+    // ivar: localProxyCount: Int
+    // ivar: waitCount: Int
     // ivar: delayedRL: MemorySegment
     // ivar: statistics: MemorySegment
-    // ivar: isDead: Any
-    // ivar: isValid: Any
-    // ivar: wantsInvalid: Any
-    // ivar: authGen: Any
-    // ivar: authCheck: Any
-    // ivar: _reserved1: Any
-    // ivar: _reserved2: Any
-    // ivar: doRequest: Any
-    // ivar: isQueueing: Any
-    // ivar: isMulti: Any
-    // ivar: invalidateRP: Any
+    // ivar: isDead: Byte
+    // ivar: isValid: Byte
+    // ivar: wantsInvalid: Byte
+    // ivar: authGen: Byte
+    // ivar: authCheck: Byte
+    // ivar: _reserved1: Byte
+    // ivar: _reserved2: Byte
+    // ivar: doRequest: Byte
+    // ivar: isQueueing: Byte
+    // ivar: isMulti: Byte
+    // ivar: invalidateRP: Byte
     // ivar: ___1: MemorySegment
     // ivar: ___2: MemorySegment
     // ivar: runLoops: MemorySegment

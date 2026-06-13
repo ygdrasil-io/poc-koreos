@@ -8,23 +8,23 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSHTTPCookie
  * Superclass: NSObject
  */
-open class NSHTTPCookie(val ptr: MemorySegment) {
+open class NSHTTPCookie(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSHTTPCookie") }
         
-        open fun cookieWithProperties(properties: MemorySegment): MemorySegment {
+        fun cookieWithProperties(properties: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("cookieWithProperties:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, properties) as MemorySegment
         }
         
         /** @return NSDictionary<NSString *,NSString *> * */
-        open fun requestHeaderFieldsWithCookies(cookies: MemorySegment): MemorySegment {
+        fun requestHeaderFieldsWithCookies(cookies: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("requestHeaderFieldsWithCookies:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, cookies) as MemorySegment
         }
         
         /** @return NSArray<NSHTTPCookie *> * */
-        open fun cookiesWithResponseHeaderFields_forURL(headerFields: MemorySegment, URL: MemorySegment): MemorySegment {
+        fun cookiesWithResponseHeaderFields_forURL(headerFields: MemorySegment, URL: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("cookiesWithResponseHeaderFields:forURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, headerFields, URL) as MemorySegment
         }
@@ -44,9 +44,9 @@ open class NSHTTPCookie(val ptr: MemorySegment) {
     }
     
     // @property version
-    open fun version(): NSUInteger {
+    open fun version(): Long {
         val sel = ObjCRuntime.sel("version")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property name
@@ -74,9 +74,9 @@ open class NSHTTPCookie(val ptr: MemorySegment) {
     }
     
     // @property sessionOnly
-    open fun isSessionOnly(): BOOL {
+    open fun isSessionOnly(): Boolean {
         val sel = ObjCRuntime.sel("isSessionOnly")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property domain
@@ -98,15 +98,15 @@ open class NSHTTPCookie(val ptr: MemorySegment) {
     open fun pathAsString(): String = ObjCRuntime.toJavaString(path())
     
     // @property secure
-    open fun isSecure(): BOOL {
+    open fun isSecure(): Boolean {
         val sel = ObjCRuntime.sel("isSecure")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property HTTPOnly
-    open fun isHTTPOnly(): BOOL {
+    open fun isHTTPOnly(): Boolean {
         val sel = ObjCRuntime.sel("isHTTPOnly")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property comment
@@ -132,9 +132,9 @@ open class NSHTTPCookie(val ptr: MemorySegment) {
     }
     
     // @property sameSitePolicy
-    open fun sameSitePolicy(): NSHTTPCookieStringPolicy {
+    open fun sameSitePolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("sameSitePolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHTTPCookieStringPolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     

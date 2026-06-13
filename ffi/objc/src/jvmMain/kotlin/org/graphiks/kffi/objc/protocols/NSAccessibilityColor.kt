@@ -10,6 +10,5 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 interface NSAccessibilityColor {
     fun accessibilityName(): MemorySegment
     
-    // @property accessibilityName
 }
 

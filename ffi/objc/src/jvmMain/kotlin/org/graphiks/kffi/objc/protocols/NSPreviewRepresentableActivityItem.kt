@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSPreviewRepresentableActivityItem
  * Inherits protocols: NSObject
  */
-interface NSPreviewRepresentableActivityItem : NSObject {
+interface NSPreviewRepresentableActivityItem {
     fun item(): MemorySegment
     
     // @optional
@@ -23,6 +23,5 @@ interface NSPreviewRepresentableActivityItem : NSObject {
     fun iconProvider(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'iconProvider' not implemented")
     
-    // @property item
 }
 

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSDistantObjectRequest
  * Superclass: NSObject
  */
-open class NSDistantObjectRequest(val ptr: MemorySegment) {
+open class NSDistantObjectRequest(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSDistantObjectRequest") }
         

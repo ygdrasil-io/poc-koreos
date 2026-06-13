@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPortMessage
  * Superclass: NSObject
  */
-open class NSPortMessage(val ptr: MemorySegment) {
+open class NSPortMessage(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPortMessage") }
         
@@ -19,9 +19,9 @@ open class NSPortMessage(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, sendPort, replyPort, components) as MemorySegment
     }
     
-    open fun sendBeforeDate(date: MemorySegment): BOOL {
+    open fun sendBeforeDate(date: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("sendBeforeDate:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, date) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, date) as Boolean
     }
     
     // @property components
@@ -43,11 +43,11 @@ open class NSPortMessage(val ptr: MemorySegment) {
     }
     
     // @property msgid
-    open fun msgid(): uint32_t {
+    open fun msgid(): Int {
         val sel = ObjCRuntime.sel("msgid")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as uint32_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
-    open fun setMsgid(value: uint32_t) {
+    open fun setMsgid(value: Int) {
         val sel = ObjCRuntime.sel("setMsgid:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -57,7 +57,7 @@ open class NSPortMessage(val ptr: MemorySegment) {
     // ivar: localPort: MemorySegment
     // ivar: remotePort: MemorySegment
     // ivar: components: MemorySegment
-    // ivar: msgid: uint32_t
+    // ivar: msgid: Int
     // ivar: reserved2: MemorySegment
     // ivar: reserved: MemorySegment
 }

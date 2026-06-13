@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCloudSharingValidation
  * Inherits protocols: NSObject
  */
-interface NSCloudSharingValidation : NSObject {
+interface NSCloudSharingValidation {
     fun cloudShareForUserInterfaceItem(item: MemorySegment): MemorySegment
     
 }

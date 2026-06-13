@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSInputServiceProvider, NSInputServerMouseTracker
  */
-open class NSInputServer(val ptr: MemorySegment) {
+open class NSInputServer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSInputServer") }
         
@@ -21,7 +21,7 @@ open class NSInputServer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDelegate_name(delegate: MemorySegment, name: String): MemorySegment = initWithDelegate_name(delegate, ObjCRuntime.newNSString(Arena.global(), name))
+    fun initWithDelegate_name(delegate: MemorySegment, name: String): MemorySegment = initWithDelegate_name(delegate, ObjCRuntime.newNSString(Arena.global(), name))
     
 }
 

@@ -9,31 +9,31 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSBindingSelectionMarker(val ptr: MemorySegment) {
+open class NSBindingSelectionMarker(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSBindingSelectionMarker") }
         
-        open fun setDefaultPlaceholder_forMarker_onClass_withBinding(placeholder: MemorySegment, marker: MemorySegment, objectClass: Class<*>, binding: NSBindingName): Unit {
+        fun setDefaultPlaceholder_forMarker_onClass_withBinding(placeholder: MemorySegment, marker: MemorySegment, objectClass: MemorySegment, binding: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setDefaultPlaceholder:forMarker:onClass:withBinding:")
             ObjCRuntime.msgSend(null, _class, sel, placeholder, marker, objectClass, binding)
         }
         
-        open fun defaultPlaceholderForMarker_onClass_withBinding(marker: MemorySegment, objectClass: Class<*>, binding: NSBindingName): MemorySegment {
+        fun defaultPlaceholderForMarker_onClass_withBinding(marker: MemorySegment, objectClass: MemorySegment, binding: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("defaultPlaceholderForMarker:onClass:withBinding:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, marker, objectClass, binding) as MemorySegment
         }
         
-        open fun multipleValuesSelectionMarker(): MemorySegment {
+        fun multipleValuesSelectionMarker(): MemorySegment {
             val sel = ObjCRuntime.sel("multipleValuesSelectionMarker")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun noSelectionMarker(): MemorySegment {
+        fun noSelectionMarker(): MemorySegment {
             val sel = ObjCRuntime.sel("noSelectionMarker")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun notApplicableSelectionMarker(): MemorySegment {
+        fun notApplicableSelectionMarker(): MemorySegment {
             val sel = ObjCRuntime.sel("notApplicableSelectionMarker")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -46,5 +46,22 @@ open class NSBindingSelectionMarker(val ptr: MemorySegment) {
     }
     
     // @property multipleValuesSelectionMarker
+    open fun multipleValuesSelectionMarker(): MemorySegment {
+        val sel = ObjCRuntime.sel("multipleValuesSelectionMarker")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property noSelectionMarker
+    open fun noSelectionMarker(): MemorySegment {
+        val sel = ObjCRuntime.sel("noSelectionMarker")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property notApplicableSelectionMarker
+    open fun notApplicableSelectionMarker(): MemorySegment {
+        val sel = ObjCRuntime.sel("notApplicableSelectionMarker")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

@@ -17,7 +17,7 @@ interface NSURLConnectionDownloadDelegate : NSURLConnectionDelegate {
     fun connectionDidResumeDownloading_totalBytesWritten_expectedTotalBytes(connection: MemorySegment, totalBytesWritten: Long, expectedTotalBytes: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'connectionDidResumeDownloading:totalBytesWritten:expectedTotalBytes:' not implemented")
     
-    fun connectionDidFinishDownloading_destinationURL(connection: MemorySegment, destinationURL: MemorySegment)
+    fun connectionDidFinishDownloading_destinationURL(connection: MemorySegment, destinationURL: MemorySegment): Unit
     
 }
 

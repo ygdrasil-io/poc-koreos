@@ -9,18 +9,18 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSControl
  * Protocols: NSAccessibilitySwitch
  */
-open class NSSwitch(ptr: MemorySegment) : NSControl(ptr) {
+open class NSSwitch(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSwitch") }
         
     }
     
     // @property state
-    fun state(): NSControlStateValue {
+    open fun state(): Long {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSControlStateValue
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setState(value: NSControlStateValue) {
+    open fun setState(value: Long) {
         val sel = ObjCRuntime.sel("setState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -9,38 +9,38 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSCell
  * Protocols: NSCopying, NSCoding
  */
-open class NSImageCell(ptr: MemorySegment) : NSCell(ptr) {
+open class NSImageCell(override val ptr: MemorySegment) : NSCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSImageCell") }
         
     }
     
     // @property imageAlignment
-    fun imageAlignment(): NSImageAlignment {
+    open fun imageAlignment(): MemorySegment {
         val sel = ObjCRuntime.sel("imageAlignment")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageAlignment
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageAlignment(value: NSImageAlignment) {
+    open fun setImageAlignment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageAlignment:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageScaling
-    fun imageScaling(): NSImageScaling {
+    open fun imageScaling(): MemorySegment {
         val sel = ObjCRuntime.sel("imageScaling")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageScaling
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageScaling(value: NSImageScaling) {
+    open fun setImageScaling(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageScaling:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageFrameStyle
-    fun imageFrameStyle(): NSImageFrameStyle {
+    open fun imageFrameStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("imageFrameStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageFrameStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageFrameStyle(value: NSImageFrameStyle) {
+    open fun setImageFrameStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageFrameStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

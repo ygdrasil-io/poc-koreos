@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSNetService
  * Superclass: NSObject
  */
-open class NSNetService(val ptr: MemorySegment) {
+open class NSNetService(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSNetService") }
         
         /** @return NSDictionary<NSString *,NSData *> * */
-        open fun dictionaryFromTXTRecordData(txtData: MemorySegment): MemorySegment {
+        fun dictionaryFromTXTRecordData(txtData: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("dictionaryFromTXTRecordData:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, txtData) as MemorySegment
         }
         
-        open fun dataFromTXTRecordDictionary(txtDictionary: MemorySegment): MemorySegment {
+        fun dataFromTXTRecordDictionary(txtDictionary: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("dataFromTXTRecordDictionary:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, txtDictionary) as MemorySegment
         }
@@ -31,7 +31,7 @@ open class NSNetService(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDomain_type_name_port(domain: String, type: String, name: String, port: Int): MemorySegment = initWithDomain_type_name_port(ObjCRuntime.newNSString(Arena.global(), domain), ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), name), port)
+    fun initWithDomain_type_name_port(domain: String, type: String, name: String, port: Int): MemorySegment = initWithDomain_type_name_port(ObjCRuntime.newNSString(Arena.global(), domain), ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), name), port)
     
     open fun initWithDomain_type_name(domain: MemorySegment, type: MemorySegment, name: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDomain:type:name:")
@@ -39,14 +39,14 @@ open class NSNetService(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDomain_type_name(domain: String, type: String, name: String): MemorySegment = initWithDomain_type_name(ObjCRuntime.newNSString(Arena.global(), domain), ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), name))
+    fun initWithDomain_type_name(domain: String, type: String, name: String): MemorySegment = initWithDomain_type_name(ObjCRuntime.newNSString(Arena.global(), domain), ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), name))
     
-    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("scheduleInRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
     
-    open fun removeFromRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun removeFromRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeFromRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
@@ -56,7 +56,7 @@ open class NSNetService(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun publishWithOptions(options: NSNetServiceOptions): Unit {
+    open fun publishWithOptions(options: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("publishWithOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, options)
     }
@@ -71,19 +71,19 @@ open class NSNetService(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun resolveWithTimeout(timeout: NSTimeInterval): Unit {
+    open fun resolveWithTimeout(timeout: Double): Unit {
         val sel = ObjCRuntime.sel("resolveWithTimeout:")
         ObjCRuntime.msgSend(null, ptr, sel, timeout)
     }
     
-    open fun getInputStream_outputStream(inputStream: MemorySegment, outputStream: MemorySegment): BOOL {
+    open fun getInputStream_outputStream(inputStream: MemorySegment, outputStream: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("getInputStream:outputStream:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, inputStream, outputStream) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, inputStream, outputStream) as Boolean
     }
     
-    open fun setTXTRecordData(recordData: MemorySegment): BOOL {
+    open fun setTXTRecordData(recordData: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setTXTRecordData:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, recordData) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, recordData) as Boolean
     }
     
     open fun TXTRecordData(): MemorySegment {
@@ -113,11 +113,11 @@ open class NSNetService(val ptr: MemorySegment) {
     }
     
     // @property includesPeerToPeer
-    open fun includesPeerToPeer(): BOOL {
+    open fun includesPeerToPeer(): Boolean {
         val sel = ObjCRuntime.sel("includesPeerToPeer")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setIncludesPeerToPeer(value: BOOL) {
+    open fun setIncludesPeerToPeer(value: Boolean) {
         val sel = ObjCRuntime.sel("setIncludesPeerToPeer:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -166,9 +166,9 @@ open class NSNetService(val ptr: MemorySegment) {
     }
     
     // @property port
-    open fun port(): NSInteger {
+    open fun port(): Long {
         val sel = ObjCRuntime.sel("port")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     

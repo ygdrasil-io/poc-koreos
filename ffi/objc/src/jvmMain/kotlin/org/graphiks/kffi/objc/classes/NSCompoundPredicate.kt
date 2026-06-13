@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCompoundPredicate
  * Superclass: NSPredicate
  */
-open class NSCompoundPredicate(ptr: MemorySegment) : NSPredicate(ptr) {
+open class NSCompoundPredicate(override val ptr: MemorySegment) : NSPredicate(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCompoundPredicate") }
         
@@ -29,24 +29,24 @@ open class NSCompoundPredicate(ptr: MemorySegment) : NSPredicate(ptr) {
         
     }
     
-    fun initWithType_subpredicates(type: NSCompoundPredicateType, subpredicates: MemorySegment): MemorySegment {
+    open fun initWithType_subpredicates(type: MemorySegment, subpredicates: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithType:subpredicates:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type, subpredicates) as MemorySegment
     }
     
-    fun initWithCoder(coder: MemorySegment): MemorySegment {
+    open fun initWithCoder(coder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
     // @property compoundPredicateType
-    fun compoundPredicateType(): NSCompoundPredicateType {
+    open fun compoundPredicateType(): MemorySegment {
         val sel = ObjCRuntime.sel("compoundPredicateType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCompoundPredicateType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property subpredicates
-    fun subpredicates(): MemorySegment {
+    open fun subpredicates(): MemorySegment {
         val sel = ObjCRuntime.sel("subpredicates")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCache
  * Superclass: NSObject
  */
-open class NSCache(val ptr: MemorySegment) {
+open class NSCache(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCache") }
         
@@ -24,7 +24,7 @@ open class NSCache(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, obj, key)
     }
     
-    open fun setObject_forKey_cost(obj: MemorySegment, key: MemorySegment, g: NSUInteger): Unit {
+    open fun setObject_forKey_cost(obj: MemorySegment, key: MemorySegment, g: Long): Unit {
         val sel = ObjCRuntime.sel("setObject:forKey:cost:")
         ObjCRuntime.msgSend(null, ptr, sel, obj, key, g)
     }
@@ -67,31 +67,31 @@ open class NSCache(val ptr: MemorySegment) {
     }
     
     // @property totalCostLimit
-    open fun totalCostLimit(): NSUInteger {
+    open fun totalCostLimit(): Long {
         val sel = ObjCRuntime.sel("totalCostLimit")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setTotalCostLimit(value: NSUInteger) {
+    open fun setTotalCostLimit(value: Long) {
         val sel = ObjCRuntime.sel("setTotalCostLimit:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property countLimit
-    open fun countLimit(): NSUInteger {
+    open fun countLimit(): Long {
         val sel = ObjCRuntime.sel("countLimit")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setCountLimit(value: NSUInteger) {
+    open fun setCountLimit(value: Long) {
         val sel = ObjCRuntime.sel("setCountLimit:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property evictsObjectsWithDiscardedContent
-    open fun evictsObjectsWithDiscardedContent(): BOOL {
+    open fun evictsObjectsWithDiscardedContent(): Boolean {
         val sel = ObjCRuntime.sel("evictsObjectsWithDiscardedContent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEvictsObjectsWithDiscardedContent(value: BOOL) {
+    open fun setEvictsObjectsWithDiscardedContent(value: Boolean) {
         val sel = ObjCRuntime.sel("setEvictsObjectsWithDiscardedContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,51 +8,51 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSHost
  * Superclass: NSObject
  */
-open class NSHost(val ptr: MemorySegment) {
+open class NSHost(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSHost") }
         
-        open fun currentHost(): MemorySegment {
+        fun currentHost(): MemorySegment {
             val sel = ObjCRuntime.sel("currentHost")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun hostWithName(name: MemorySegment): MemorySegment {
+        fun hostWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("hostWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun hostWithName(name: String): MemorySegment = hostWithName(ObjCRuntime.newNSString(Arena.global(), name))
+        fun hostWithName(name: String): MemorySegment = hostWithName(ObjCRuntime.newNSString(Arena.global(), name))
         
-        open fun hostWithAddress(address: MemorySegment): MemorySegment {
+        fun hostWithAddress(address: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("hostWithAddress:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, address) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun hostWithAddress(address: String): MemorySegment = hostWithAddress(ObjCRuntime.newNSString(Arena.global(), address))
+        fun hostWithAddress(address: String): MemorySegment = hostWithAddress(ObjCRuntime.newNSString(Arena.global(), address))
         
-        open fun setHostCacheEnabled(flag: BOOL): Unit {
+        fun setHostCacheEnabled(flag: Boolean): Unit {
             val sel = ObjCRuntime.sel("setHostCacheEnabled:")
             ObjCRuntime.msgSend(null, _class, sel, flag)
         }
         
-        open fun isHostCacheEnabled(): BOOL {
+        fun isHostCacheEnabled(): Boolean {
             val sel = ObjCRuntime.sel("isHostCacheEnabled")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
-        open fun flushHostCache(): Unit {
+        fun flushHostCache(): Unit {
             val sel = ObjCRuntime.sel("flushHostCache")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
     }
     
-    open fun isEqualToHost(aHost: MemorySegment): BOOL {
+    open fun isEqualToHost(aHost: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isEqualToHost:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, aHost) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, aHost) as Boolean
     }
     
     // @property name

@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSControl
  * Protocols: NSUserInterfaceValidations, NSAccessibilityButton, NSUserInterfaceCompression
  */
-open class NSButton(ptr: MemorySegment) : NSControl(ptr) {
+open class NSButton(override val ptr: MemorySegment) : NSControl(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSButton") }
         
@@ -52,326 +52,326 @@ open class NSButton(ptr: MemorySegment) : NSControl(ptr) {
         
     }
     
-    fun setButtonType(type: NSButtonType): Unit {
+    open fun setButtonType(type: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setButtonType:")
         ObjCRuntime.msgSend(null, ptr, sel, type)
     }
     
-    fun setPeriodicDelay_interval(delay: Float, interval: Float): Unit {
+    open fun setPeriodicDelay_interval(delay: Float, interval: Float): Unit {
         val sel = ObjCRuntime.sel("setPeriodicDelay:interval:")
         ObjCRuntime.msgSend(null, ptr, sel, delay, interval)
     }
     
-    fun getPeriodicDelay_interval(delay: MemorySegment, interval: MemorySegment): Unit {
+    open fun getPeriodicDelay_interval(delay: MemorySegment, interval: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getPeriodicDelay:interval:")
         ObjCRuntime.msgSend(null, ptr, sel, delay, interval)
     }
     
-    fun setNextState(): Unit {
+    open fun setNextState(): Unit {
         val sel = ObjCRuntime.sel("setNextState")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun highlight(flag: BOOL): Unit {
+    open fun highlight(flag: Boolean): Unit {
         val sel = ObjCRuntime.sel("highlight:")
         ObjCRuntime.msgSend(null, ptr, sel, flag)
     }
     
-    fun performKeyEquivalent(key: MemorySegment): BOOL {
+    override fun performKeyEquivalent(key: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("performKeyEquivalent:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as Boolean
     }
     
-    fun compressWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): Unit {
+    open fun compressWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("compressWithPrioritizedCompressionOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, prioritizedOptions)
     }
     
-    fun minimumSizeWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): NSSize {
+    open fun minimumSizeWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("minimumSizeWithPrioritizedCompressionOptions:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, prioritizedOptions) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel, prioritizedOptions) as MemorySegment
     }
     
     // @property title
-    fun title(): MemorySegment {
+    open fun title(): MemorySegment {
         val sel = ObjCRuntime.sel("title")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTitle(value: MemorySegment) {
+    open fun setTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun titleAsString(): String = ObjCRuntime.toJavaString(title())
+    open fun titleAsString(): String = ObjCRuntime.toJavaString(title())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setTitle(value: String) = setTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property attributedTitle
-    fun attributedTitle(): MemorySegment {
+    open fun attributedTitle(): MemorySegment {
         val sel = ObjCRuntime.sel("attributedTitle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAttributedTitle(value: MemorySegment) {
+    open fun setAttributedTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAttributedTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property alternateTitle
-    fun alternateTitle(): MemorySegment {
+    open fun alternateTitle(): MemorySegment {
         val sel = ObjCRuntime.sel("alternateTitle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAlternateTitle(value: MemorySegment) {
+    open fun setAlternateTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAlternateTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun alternateTitleAsString(): String = ObjCRuntime.toJavaString(alternateTitle())
+    open fun alternateTitleAsString(): String = ObjCRuntime.toJavaString(alternateTitle())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setAlternateTitle(value: String) = setAlternateTitle(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setAlternateTitle(value: String) = setAlternateTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property attributedAlternateTitle
-    fun attributedAlternateTitle(): MemorySegment {
+    open fun attributedAlternateTitle(): MemorySegment {
         val sel = ObjCRuntime.sel("attributedAlternateTitle")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAttributedAlternateTitle(value: MemorySegment) {
+    open fun setAttributedAlternateTitle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAttributedAlternateTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hasDestructiveAction
-    fun hasDestructiveAction(): BOOL {
+    open fun hasDestructiveAction(): Boolean {
         val sel = ObjCRuntime.sel("hasDestructiveAction")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setHasDestructiveAction(value: BOOL) {
+    open fun setHasDestructiveAction(value: Boolean) {
         val sel = ObjCRuntime.sel("setHasDestructiveAction:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property sound
-    fun sound(): MemorySegment {
+    open fun sound(): MemorySegment {
         val sel = ObjCRuntime.sel("sound")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSound(value: MemorySegment) {
+    open fun setSound(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSound:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property springLoaded
-    fun isSpringLoaded(): BOOL {
+    open fun isSpringLoaded(): Boolean {
         val sel = ObjCRuntime.sel("isSpringLoaded")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSpringLoaded(value: BOOL) {
+    open fun setSpringLoaded(value: Boolean) {
         val sel = ObjCRuntime.sel("setSpringLoaded:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maxAcceleratorLevel
-    fun maxAcceleratorLevel(): NSInteger {
+    open fun maxAcceleratorLevel(): Long {
         val sel = ObjCRuntime.sel("maxAcceleratorLevel")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setMaxAcceleratorLevel(value: NSInteger) {
+    open fun setMaxAcceleratorLevel(value: Long) {
         val sel = ObjCRuntime.sel("setMaxAcceleratorLevel:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bezelStyle
-    fun bezelStyle(): NSBezelStyle {
+    open fun bezelStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("bezelStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBezelStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBezelStyle(value: NSBezelStyle) {
+    open fun setBezelStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBezelStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bordered
-    fun isBordered(): BOOL {
+    open fun isBordered(): Boolean {
         val sel = ObjCRuntime.sel("isBordered")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setBordered(value: BOOL) {
+    open fun setBordered(value: Boolean) {
         val sel = ObjCRuntime.sel("setBordered:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property transparent
-    fun isTransparent(): BOOL {
+    open fun isTransparent(): Boolean {
         val sel = ObjCRuntime.sel("isTransparent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setTransparent(value: BOOL) {
+    open fun setTransparent(value: Boolean) {
         val sel = ObjCRuntime.sel("setTransparent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsBorderOnlyWhileMouseInside
-    fun showsBorderOnlyWhileMouseInside(): BOOL {
+    open fun showsBorderOnlyWhileMouseInside(): Boolean {
         val sel = ObjCRuntime.sel("showsBorderOnlyWhileMouseInside")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsBorderOnlyWhileMouseInside(value: BOOL) {
+    open fun setShowsBorderOnlyWhileMouseInside(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsBorderOnlyWhileMouseInside:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property bezelColor
-    fun bezelColor(): MemorySegment {
+    open fun bezelColor(): MemorySegment {
         val sel = ObjCRuntime.sel("bezelColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBezelColor(value: MemorySegment) {
+    open fun setBezelColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBezelColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentTintColor
-    fun contentTintColor(): MemorySegment {
+    open fun contentTintColor(): MemorySegment {
         val sel = ObjCRuntime.sel("contentTintColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setContentTintColor(value: MemorySegment) {
+    open fun setContentTintColor(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentTintColor:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property tintProminence
-    fun tintProminence(): NSTintProminence {
+    open fun tintProminence(): MemorySegment {
         val sel = ObjCRuntime.sel("tintProminence")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTintProminence
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTintProminence(value: NSTintProminence) {
+    open fun setTintProminence(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTintProminence:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property image
-    fun image(): MemorySegment {
+    open fun image(): MemorySegment {
         val sel = ObjCRuntime.sel("image")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImage(value: MemorySegment) {
+    open fun setImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property alternateImage
-    fun alternateImage(): MemorySegment {
+    open fun alternateImage(): MemorySegment {
         val sel = ObjCRuntime.sel("alternateImage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAlternateImage(value: MemorySegment) {
+    open fun setAlternateImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAlternateImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imagePosition
-    fun imagePosition(): NSCellImagePosition {
+    open fun imagePosition(): MemorySegment {
         val sel = ObjCRuntime.sel("imagePosition")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCellImagePosition
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImagePosition(value: NSCellImagePosition) {
+    open fun setImagePosition(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImagePosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageScaling
-    fun imageScaling(): NSImageScaling {
+    open fun imageScaling(): MemorySegment {
         val sel = ObjCRuntime.sel("imageScaling")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSImageScaling
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageScaling(value: NSImageScaling) {
+    open fun setImageScaling(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageScaling:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageHugsTitle
-    fun imageHugsTitle(): BOOL {
+    open fun imageHugsTitle(): Boolean {
         val sel = ObjCRuntime.sel("imageHugsTitle")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setImageHugsTitle(value: BOOL) {
+    open fun setImageHugsTitle(value: Boolean) {
         val sel = ObjCRuntime.sel("setImageHugsTitle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property symbolConfiguration
-    fun symbolConfiguration(): MemorySegment {
+    open fun symbolConfiguration(): MemorySegment {
         val sel = ObjCRuntime.sel("symbolConfiguration")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSymbolConfiguration(value: MemorySegment) {
+    open fun setSymbolConfiguration(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSymbolConfiguration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property state
-    fun state(): NSControlStateValue {
+    open fun state(): Long {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSControlStateValue
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setState(value: NSControlStateValue) {
+    open fun setState(value: Long) {
         val sel = ObjCRuntime.sel("setState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsMixedState
-    fun allowsMixedState(): BOOL {
+    open fun allowsMixedState(): Boolean {
         val sel = ObjCRuntime.sel("allowsMixedState")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAllowsMixedState(value: BOOL) {
+    open fun setAllowsMixedState(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsMixedState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property keyEquivalent
-    fun keyEquivalent(): MemorySegment {
+    open fun keyEquivalent(): MemorySegment {
         val sel = ObjCRuntime.sel("keyEquivalent")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setKeyEquivalent(value: MemorySegment) {
+    open fun setKeyEquivalent(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setKeyEquivalent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun keyEquivalentAsString(): String = ObjCRuntime.toJavaString(keyEquivalent())
+    open fun keyEquivalentAsString(): String = ObjCRuntime.toJavaString(keyEquivalent())
     
     /** Convenience overload — accepts Kotlin [String] for the NSString property. */
-    fun setKeyEquivalent(value: String) = setKeyEquivalent(ObjCRuntime.newNSString(Arena.global(), value))
+    open fun setKeyEquivalent(value: String) = setKeyEquivalent(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property keyEquivalentModifierMask
-    fun keyEquivalentModifierMask(): NSEventModifierFlags {
+    open fun keyEquivalentModifierMask(): MemorySegment {
         val sel = ObjCRuntime.sel("keyEquivalentModifierMask")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSEventModifierFlags
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setKeyEquivalentModifierMask(value: NSEventModifierFlags) {
+    open fun setKeyEquivalentModifierMask(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setKeyEquivalentModifierMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property activeCompressionOptions
-    fun activeCompressionOptions(): MemorySegment {
+    open fun activeCompressionOptions(): MemorySegment {
         val sel = ObjCRuntime.sel("activeCompressionOptions")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property borderShape
-    fun borderShape(): NSControlBorderShape {
+    open fun borderShape(): MemorySegment {
         val sel = ObjCRuntime.sel("borderShape")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSControlBorderShape
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBorderShape(value: NSControlBorderShape) {
+    open fun setBorderShape(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBorderShape:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -382,6 +382,6 @@ open class NSButton(ptr: MemorySegment) : NSControl(ptr) {
 
 fun NSButton.setTitleWithMnemonic(stringWithAmpersand: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleWithMnemonic:")
-    ObjCRuntime.msgSend(null, ptr, sel, stringWithAmpersand)
+    ObjCRuntime.msgSend(null, this.ptr, sel, stringWithAmpersand)
 }
 

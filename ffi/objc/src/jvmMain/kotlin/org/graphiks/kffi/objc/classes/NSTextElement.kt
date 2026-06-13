@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTextElement
  * Superclass: NSObject
  */
-open class NSTextElement(val ptr: MemorySegment) {
+open class NSTextElement(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextElement") }
         
@@ -53,9 +53,9 @@ open class NSTextElement(val ptr: MemorySegment) {
     }
     
     // @property isRepresentedElement
-    open fun isRepresentedElement(): BOOL {
+    open fun isRepresentedElement(): Boolean {
         val sel = ObjCRuntime.sel("isRepresentedElement")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

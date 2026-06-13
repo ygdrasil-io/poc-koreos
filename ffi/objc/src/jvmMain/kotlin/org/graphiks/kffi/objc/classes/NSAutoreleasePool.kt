@@ -8,15 +8,20 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAutoreleasePool
  * Superclass: NSObject
  */
-open class NSAutoreleasePool(val ptr: MemorySegment) {
+open class NSAutoreleasePool(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAutoreleasePool") }
         
-        open fun addObject(anObject: MemorySegment): Unit {
+        fun addObject(anObject: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("addObject:")
             ObjCRuntime.msgSend(null, _class, sel, anObject)
         }
         
+    }
+    
+    open fun addObject(anObject: MemorySegment): Unit {
+        val sel = ObjCRuntime.sel("addObject:")
+        ObjCRuntime.msgSend(null, ptr, sel, anObject)
     }
     
     open fun drain(): Unit {

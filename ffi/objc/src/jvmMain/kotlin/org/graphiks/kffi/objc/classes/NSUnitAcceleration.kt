@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitAcceleration(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitAcceleration(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitAcceleration") }
         
@@ -26,5 +26,16 @@ open class NSUnitAcceleration(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property metersPerSecondSquared
+    open fun metersPerSecondSquared(): MemorySegment {
+        val sel = ObjCRuntime.sel("metersPerSecondSquared")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property gravity
+    open fun gravity(): MemorySegment {
+        val sel = ObjCRuntime.sel("gravity")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

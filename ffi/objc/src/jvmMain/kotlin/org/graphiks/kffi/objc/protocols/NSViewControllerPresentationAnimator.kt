@@ -8,10 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSViewControllerPresentationAnimator
  * Inherits protocols: NSObject
  */
-interface NSViewControllerPresentationAnimator : NSObject {
-    fun animatePresentationOfViewController_fromViewController(viewController: MemorySegment, fromViewController: MemorySegment)
+interface NSViewControllerPresentationAnimator {
+    fun animatePresentationOfViewController_fromViewController(viewController: MemorySegment, fromViewController: MemorySegment): Unit
     
-    fun animateDismissalOfViewController_fromViewController(viewController: MemorySegment, fromViewController: MemorySegment)
+    fun animateDismissalOfViewController_fromViewController(viewController: MemorySegment, fromViewController: MemorySegment): Unit
     
 }
 

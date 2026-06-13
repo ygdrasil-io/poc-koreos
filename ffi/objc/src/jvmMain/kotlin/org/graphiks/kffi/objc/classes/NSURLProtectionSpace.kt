@@ -9,27 +9,27 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSURLProtectionSpace(val ptr: MemorySegment) {
+open class NSURLProtectionSpace(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLProtectionSpace") }
         
     }
     
-    open fun initWithHost_port_protocol_realm_authenticationMethod(host: MemorySegment, port: NSInteger, protocol: MemorySegment, realm: MemorySegment, authenticationMethod: MemorySegment): MemorySegment {
+    open fun initWithHost_port_protocol_realm_authenticationMethod(host: MemorySegment, port: Long, protocol: MemorySegment, realm: MemorySegment, authenticationMethod: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithHost:port:protocol:realm:authenticationMethod:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, host, port, protocol, realm, authenticationMethod) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithHost_port_protocol_realm_authenticationMethod(host: String, port: NSInteger, protocol: String, realm: String, authenticationMethod: String): MemorySegment = initWithHost_port_protocol_realm_authenticationMethod(ObjCRuntime.newNSString(Arena.global(), host), port, ObjCRuntime.newNSString(Arena.global(), protocol), ObjCRuntime.newNSString(Arena.global(), realm), ObjCRuntime.newNSString(Arena.global(), authenticationMethod))
+    fun initWithHost_port_protocol_realm_authenticationMethod(host: String, port: Long, protocol: String, realm: String, authenticationMethod: String): MemorySegment = initWithHost_port_protocol_realm_authenticationMethod(ObjCRuntime.newNSString(Arena.global(), host), port, ObjCRuntime.newNSString(Arena.global(), protocol), ObjCRuntime.newNSString(Arena.global(), realm), ObjCRuntime.newNSString(Arena.global(), authenticationMethod))
     
-    open fun initWithProxyHost_port_type_realm_authenticationMethod(host: MemorySegment, port: NSInteger, type: MemorySegment, realm: MemorySegment, authenticationMethod: MemorySegment): MemorySegment {
+    open fun initWithProxyHost_port_type_realm_authenticationMethod(host: MemorySegment, port: Long, type: MemorySegment, realm: MemorySegment, authenticationMethod: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithProxyHost:port:type:realm:authenticationMethod:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, host, port, type, realm, authenticationMethod) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithProxyHost_port_type_realm_authenticationMethod(host: String, port: NSInteger, type: String, realm: String, authenticationMethod: String): MemorySegment = initWithProxyHost_port_type_realm_authenticationMethod(ObjCRuntime.newNSString(Arena.global(), host), port, ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), realm), ObjCRuntime.newNSString(Arena.global(), authenticationMethod))
+    fun initWithProxyHost_port_type_realm_authenticationMethod(host: String, port: Long, type: String, realm: String, authenticationMethod: String): MemorySegment = initWithProxyHost_port_type_realm_authenticationMethod(ObjCRuntime.newNSString(Arena.global(), host), port, ObjCRuntime.newNSString(Arena.global(), type), ObjCRuntime.newNSString(Arena.global(), realm), ObjCRuntime.newNSString(Arena.global(), authenticationMethod))
     
     // @property realm
     open fun realm(): MemorySegment {
@@ -41,15 +41,15 @@ open class NSURLProtectionSpace(val ptr: MemorySegment) {
     open fun realmAsString(): String = ObjCRuntime.toJavaString(realm())
     
     // @property receivesCredentialSecurely
-    open fun receivesCredentialSecurely(): BOOL {
+    open fun receivesCredentialSecurely(): Boolean {
         val sel = ObjCRuntime.sel("receivesCredentialSecurely")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property isProxy
-    open fun isProxy(): BOOL {
+    open fun isProxy(): Boolean {
         val sel = ObjCRuntime.sel("isProxy")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property host
@@ -62,9 +62,9 @@ open class NSURLProtectionSpace(val ptr: MemorySegment) {
     open fun hostAsString(): String = ObjCRuntime.toJavaString(host())
     
     // @property port
-    open fun port(): NSInteger {
+    open fun port(): Long {
         val sel = ObjCRuntime.sel("port")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property proxyType
@@ -104,14 +104,13 @@ open class NSURLProtectionSpace(val ptr: MemorySegment) {
 /** @return NSArray<NSData *> * */
 fun NSURLProtectionSpace.distinguishedNames(): MemorySegment {
     val sel = ObjCRuntime.sel("distinguishedNames")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property distinguishedNames
-/** @return NSArray<NSData *> * */
+// ── Category: NSServerTrustValidationSpace on NSURLProtectionSpace ─────────────────────────────────────────
+
 fun NSURLProtectionSpace.serverTrust(): MemorySegment {
     val sel = ObjCRuntime.sel("serverTrust")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property serverTrust

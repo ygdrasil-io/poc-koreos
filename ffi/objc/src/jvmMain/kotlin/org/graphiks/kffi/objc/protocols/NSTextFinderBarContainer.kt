@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextFinderBarContainer
  * Inherits protocols: NSObject
  */
-interface NSTextFinderBarContainer : NSObject {
-    fun findBarViewDidChangeHeight()
+interface NSTextFinderBarContainer {
+    fun findBarViewDidChangeHeight(): Unit
     
     // @optional
     fun contentView(): MemorySegment =
@@ -17,12 +17,11 @@ interface NSTextFinderBarContainer : NSObject {
     
     fun findBarView(): MemorySegment
     
-    fun setFindBarView(findBarView: MemorySegment)
+    fun setFindBarView(findBarView: MemorySegment): Unit
     
-    fun isFindBarVisible(): BOOL
+    fun isFindBarVisible(): Boolean
     
-    fun setFindBarVisible(findBarVisible: BOOL)
+    fun setFindBarVisible(findBarVisible: Boolean): Unit
     
-    // @property findBarView
 }
 

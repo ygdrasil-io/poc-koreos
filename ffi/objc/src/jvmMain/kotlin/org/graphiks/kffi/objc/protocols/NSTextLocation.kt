@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextLocation
  * Inherits protocols: NSObject
  */
-interface NSTextLocation : NSObject {
-    fun compare(location: MemorySegment): NSComparisonResult
+interface NSTextLocation {
+    fun compare(location: MemorySegment): MemorySegment
     
 }
 

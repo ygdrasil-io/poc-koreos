@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLDownload
  * Superclass: NSObject
  */
-open class NSURLDownload(val ptr: MemorySegment) {
+open class NSURLDownload(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLDownload") }
         
-        open fun canResumeDownloadDecodedWithEncodingMIMEType(MIMEType: MemorySegment): BOOL {
+        fun canResumeDownloadDecodedWithEncodingMIMEType(MIMEType: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("canResumeDownloadDecodedWithEncodingMIMEType:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, MIMEType) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, MIMEType) as Boolean
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun canResumeDownloadDecodedWithEncodingMIMEType(MIMEType: String): BOOL = canResumeDownloadDecodedWithEncodingMIMEType(ObjCRuntime.newNSString(Arena.global(), MIMEType))
+        fun canResumeDownloadDecodedWithEncodingMIMEType(MIMEType: String): Boolean = canResumeDownloadDecodedWithEncodingMIMEType(ObjCRuntime.newNSString(Arena.global(), MIMEType))
         
     }
     
@@ -33,20 +33,20 @@ open class NSURLDownload(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithResumeData_delegate_path(resumeData: MemorySegment, delegate: MemorySegment, path: String): MemorySegment = initWithResumeData_delegate_path(resumeData, delegate, ObjCRuntime.newNSString(Arena.global(), path))
+    fun initWithResumeData_delegate_path(resumeData: MemorySegment, delegate: MemorySegment, path: String): MemorySegment = initWithResumeData_delegate_path(resumeData, delegate, ObjCRuntime.newNSString(Arena.global(), path))
     
     open fun cancel(): Unit {
         val sel = ObjCRuntime.sel("cancel")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun setDestination_allowOverwrite(path: MemorySegment, allowOverwrite: BOOL): Unit {
+    open fun setDestination_allowOverwrite(path: MemorySegment, allowOverwrite: Boolean): Unit {
         val sel = ObjCRuntime.sel("setDestination:allowOverwrite:")
         ObjCRuntime.msgSend(null, ptr, sel, path, allowOverwrite)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setDestination_allowOverwrite(path: String, allowOverwrite: BOOL): Unit = setDestination_allowOverwrite(ObjCRuntime.newNSString(Arena.global(), path), allowOverwrite)
+    fun setDestination_allowOverwrite(path: String, allowOverwrite: Boolean): Unit = setDestination_allowOverwrite(ObjCRuntime.newNSString(Arena.global(), path), allowOverwrite)
     
     // @property request
     open fun request(): MemorySegment {
@@ -61,11 +61,11 @@ open class NSURLDownload(val ptr: MemorySegment) {
     }
     
     // @property deletesFileUponFailure
-    open fun deletesFileUponFailure(): BOOL {
+    open fun deletesFileUponFailure(): Boolean {
         val sel = ObjCRuntime.sel("deletesFileUponFailure")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDeletesFileUponFailure(value: BOOL) {
+    open fun setDeletesFileUponFailure(value: Boolean) {
         val sel = ObjCRuntime.sel("setDeletesFileUponFailure:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

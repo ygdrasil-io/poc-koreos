@@ -9,80 +9,80 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSViewController
  * Protocols: NSAnimatablePropertyContainer, NSCoding
  */
-open class NSPageController(ptr: MemorySegment) : NSViewController(ptr) {
+open class NSPageController(override val ptr: MemorySegment) : NSViewController(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPageController") }
         
     }
     
-    fun navigateForwardToObject(`object`: MemorySegment): Unit {
+    open fun navigateForwardToObject(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("navigateForwardToObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun completeTransition(): Unit {
+    open fun completeTransition(): Unit {
         val sel = ObjCRuntime.sel("completeTransition")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun navigateBack(sender: MemorySegment): Unit {
+    open fun navigateBack(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("navigateBack:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun navigateForward(sender: MemorySegment): Unit {
+    open fun navigateForward(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("navigateForward:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun takeSelectedIndexFrom(sender: MemorySegment): Unit {
+    open fun takeSelectedIndexFrom(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("takeSelectedIndexFrom:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
     // @property delegate
     /** @return id<NSPageControllerDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectedViewController
-    fun selectedViewController(): MemorySegment {
+    open fun selectedViewController(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedViewController")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property transitionStyle
-    fun transitionStyle(): NSPageControllerTransitionStyle {
+    open fun transitionStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("transitionStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPageControllerTransitionStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTransitionStyle(value: NSPageControllerTransitionStyle) {
+    open fun setTransitionStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTransitionStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property arrangedObjects
-    fun arrangedObjects(): MemorySegment {
+    open fun arrangedObjects(): MemorySegment {
         val sel = ObjCRuntime.sel("arrangedObjects")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setArrangedObjects(value: MemorySegment) {
+    open fun setArrangedObjects(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setArrangedObjects:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectedIndex
-    fun selectedIndex(): NSInteger {
+    open fun selectedIndex(): Long {
         val sel = ObjCRuntime.sel("selectedIndex")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setSelectedIndex(value: NSInteger) {
+    open fun setSelectedIndex(value: Long) {
         val sel = ObjCRuntime.sel("setSelectedIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

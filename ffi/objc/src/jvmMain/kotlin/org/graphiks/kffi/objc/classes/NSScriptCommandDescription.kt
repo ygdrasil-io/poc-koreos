@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSScriptCommandDescription(val ptr: MemorySegment) {
+open class NSScriptCommandDescription(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptCommandDescription") }
         
@@ -26,7 +26,7 @@ open class NSScriptCommandDescription(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithSuiteName_commandName_dictionary(suiteName: String, commandName: String, commandDeclaration: MemorySegment): MemorySegment = initWithSuiteName_commandName_dictionary(ObjCRuntime.newNSString(Arena.global(), suiteName), ObjCRuntime.newNSString(Arena.global(), commandName), commandDeclaration)
+    fun initWithSuiteName_commandName_dictionary(suiteName: String, commandName: String, commandDeclaration: MemorySegment): MemorySegment = initWithSuiteName_commandName_dictionary(ObjCRuntime.newNSString(Arena.global(), suiteName), ObjCRuntime.newNSString(Arena.global(), commandName), commandDeclaration)
     
     open fun initWithCoder(inCoder: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCoder:")
@@ -39,29 +39,29 @@ open class NSScriptCommandDescription(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun typeForArgumentWithNameAsString(argumentName: MemorySegment): String = ObjCRuntime.toJavaString(typeForArgumentWithName(argumentName))
+    fun typeForArgumentWithNameAsString(argumentName: MemorySegment): String = ObjCRuntime.toJavaString(typeForArgumentWithName(argumentName))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun typeForArgumentWithName(argumentName: String): MemorySegment = typeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
+    fun typeForArgumentWithName(argumentName: String): MemorySegment = typeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun typeForArgumentWithNameAsString(argumentName: String): String = ObjCRuntime.toJavaString(typeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName)))
+    fun typeForArgumentWithNameAsString(argumentName: String): String = ObjCRuntime.toJavaString(typeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName)))
     
-    open fun appleEventCodeForArgumentWithName(argumentName: MemorySegment): FourCharCode {
+    open fun appleEventCodeForArgumentWithName(argumentName: MemorySegment): Int {
         val sel = ObjCRuntime.sel("appleEventCodeForArgumentWithName:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, argumentName) as FourCharCode
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, argumentName) as Int
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun appleEventCodeForArgumentWithName(argumentName: String): FourCharCode = appleEventCodeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
+    fun appleEventCodeForArgumentWithName(argumentName: String): Int = appleEventCodeForArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
     
-    open fun isOptionalArgumentWithName(argumentName: MemorySegment): BOOL {
+    open fun isOptionalArgumentWithName(argumentName: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isOptionalArgumentWithName:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, argumentName) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, argumentName) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun isOptionalArgumentWithName(argumentName: String): BOOL = isOptionalArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
+    fun isOptionalArgumentWithName(argumentName: String): Boolean = isOptionalArgumentWithName(ObjCRuntime.newNSString(Arena.global(), argumentName))
     
     open fun createCommandInstance(): MemorySegment {
         val sel = ObjCRuntime.sel("createCommandInstance")
@@ -92,15 +92,15 @@ open class NSScriptCommandDescription(val ptr: MemorySegment) {
     open fun commandNameAsString(): String = ObjCRuntime.toJavaString(commandName())
     
     // @property appleEventClassCode
-    open fun appleEventClassCode(): FourCharCode {
+    open fun appleEventClassCode(): Int {
         val sel = ObjCRuntime.sel("appleEventClassCode")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property appleEventCode
-    open fun appleEventCode(): FourCharCode {
+    open fun appleEventCode(): Int {
         val sel = ObjCRuntime.sel("appleEventCode")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property commandClassName
@@ -122,9 +122,9 @@ open class NSScriptCommandDescription(val ptr: MemorySegment) {
     open fun returnTypeAsString(): String = ObjCRuntime.toJavaString(returnType())
     
     // @property appleEventCodeForReturnType
-    open fun appleEventCodeForReturnType(): FourCharCode {
+    open fun appleEventCodeForReturnType(): Int {
         val sel = ObjCRuntime.sel("appleEventCodeForReturnType")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as FourCharCode
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property argumentNames
@@ -138,11 +138,11 @@ open class NSScriptCommandDescription(val ptr: MemorySegment) {
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _suiteName: MemorySegment
     // ivar: _plistCommandName: MemorySegment
-    // ivar: _classAppleEventCode: FourCharCode
-    // ivar: _idAppleEventCode: FourCharCode
+    // ivar: _classAppleEventCode: Int
+    // ivar: _idAppleEventCode: Int
     // ivar: _objcClassName: MemorySegment
     // ivar: _resultTypeNameOrDescription: MemorySegment
-    // ivar: _plistResultTypeAppleEventCode: FourCharCode
+    // ivar: _plistResultTypeAppleEventCode: Int
     // ivar: _moreVars: MemorySegment
 }
 

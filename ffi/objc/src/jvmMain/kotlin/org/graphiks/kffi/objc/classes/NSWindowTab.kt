@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSWindowTab
  * Superclass: NSObject
  */
-open class NSWindowTab(val ptr: MemorySegment) {
+open class NSWindowTab(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSWindowTab") }
         

@@ -9,81 +9,81 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class CIVector(val ptr: MemorySegment) {
+open class CIVector(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("CIVector") }
         
-        open fun vectorWithValues_count(values: MemorySegment, count: size_t): MemorySegment {
+        fun vectorWithValues_count(values: MemorySegment, count: Long): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithValues:count:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, values, count) as MemorySegment
         }
         
-        open fun vectorWithX(x: CGFloat): MemorySegment {
+        fun vectorWithX(x: Double): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithX:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, x) as MemorySegment
         }
         
-        open fun vectorWithX_Y(x: CGFloat, y: CGFloat): MemorySegment {
+        fun vectorWithX_Y(x: Double, y: Double): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithX:Y:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, x, y) as MemorySegment
         }
         
-        open fun vectorWithX_Y_Z(x: CGFloat, y: CGFloat, z: CGFloat): MemorySegment {
+        fun vectorWithX_Y_Z(x: Double, y: Double, z: Double): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithX:Y:Z:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, x, y, z) as MemorySegment
         }
         
-        open fun vectorWithX_Y_Z_W(x: CGFloat, y: CGFloat, z: CGFloat, w: CGFloat): MemorySegment {
+        fun vectorWithX_Y_Z_W(x: Double, y: Double, z: Double, w: Double): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithX:Y:Z:W:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, x, y, z, w) as MemorySegment
         }
         
-        open fun vectorWithCGPoint(p: MemorySegment): MemorySegment {
+        fun vectorWithCGPoint(p: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithCGPoint:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
         }
         
-        open fun vectorWithCGRect(r: MemorySegment): MemorySegment {
+        fun vectorWithCGRect(r: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithCGRect:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
         }
         
-        open fun vectorWithCGAffineTransform(t: CGAffineTransform): MemorySegment {
+        fun vectorWithCGAffineTransform(t: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithCGAffineTransform:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, t) as MemorySegment
         }
         
-        open fun vectorWithString(representation: MemorySegment): MemorySegment {
+        fun vectorWithString(representation: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("vectorWithString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, representation) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun vectorWithString(representation: String): MemorySegment = vectorWithString(ObjCRuntime.newNSString(Arena.global(), representation))
+        fun vectorWithString(representation: String): MemorySegment = vectorWithString(ObjCRuntime.newNSString(Arena.global(), representation))
         
     }
     
-    open fun initWithValues_count(values: MemorySegment, count: size_t): MemorySegment {
+    open fun initWithValues_count(values: MemorySegment, count: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithValues:count:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, values, count) as MemorySegment
     }
     
-    open fun initWithX(x: CGFloat): MemorySegment {
+    open fun initWithX(x: Double): MemorySegment {
         val sel = ObjCRuntime.sel("initWithX:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, x) as MemorySegment
     }
     
-    open fun initWithX_Y(x: CGFloat, y: CGFloat): MemorySegment {
+    open fun initWithX_Y(x: Double, y: Double): MemorySegment {
         val sel = ObjCRuntime.sel("initWithX:Y:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, x, y) as MemorySegment
     }
     
-    open fun initWithX_Y_Z(x: CGFloat, y: CGFloat, z: CGFloat): MemorySegment {
+    open fun initWithX_Y_Z(x: Double, y: Double, z: Double): MemorySegment {
         val sel = ObjCRuntime.sel("initWithX:Y:Z:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, x, y, z) as MemorySegment
     }
     
-    open fun initWithX_Y_Z_W(x: CGFloat, y: CGFloat, z: CGFloat, w: CGFloat): MemorySegment {
+    open fun initWithX_Y_Z_W(x: Double, y: Double, z: Double, w: Double): MemorySegment {
         val sel = ObjCRuntime.sel("initWithX:Y:Z:W:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, x, y, z, w) as MemorySegment
     }
@@ -98,7 +98,7 @@ open class CIVector(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"))) as MemorySegment
     }
     
-    open fun initWithCGAffineTransform(t: CGAffineTransform): MemorySegment {
+    open fun initWithCGAffineTransform(t: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCGAffineTransform:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, t) as MemorySegment
     }
@@ -109,41 +109,41 @@ open class CIVector(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(representation: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), representation))
+    fun initWithString(representation: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), representation))
     
-    open fun valueAtIndex(index: size_t): CGFloat {
+    open fun valueAtIndex(index: Long): Double {
         val sel = ObjCRuntime.sel("valueAtIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as Double
     }
     
     // @property count
-    open fun count(): size_t {
+    open fun count(): Long {
         val sel = ObjCRuntime.sel("count")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as size_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property X
-    open fun X(): CGFloat {
+    open fun X(): Double {
         val sel = ObjCRuntime.sel("X")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property Y
-    open fun Y(): CGFloat {
+    open fun Y(): Double {
         val sel = ObjCRuntime.sel("Y")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property Z
-    open fun Z(): CGFloat {
+    open fun Z(): Double {
         val sel = ObjCRuntime.sel("Z")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property W
-    open fun W(): CGFloat {
+    open fun W(): Double {
         val sel = ObjCRuntime.sel("W")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property CGPointValue
@@ -159,9 +159,9 @@ open class CIVector(val ptr: MemorySegment) {
     }
     
     // @property CGAffineTransformValue
-    open fun CGAffineTransformValue(): CGAffineTransform {
+    open fun CGAffineTransformValue(): MemorySegment {
         val sel = ObjCRuntime.sel("CGAffineTransformValue")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CGAffineTransform
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property stringRepresentation
@@ -175,7 +175,7 @@ open class CIVector(val ptr: MemorySegment) {
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _count: size_t
+    // ivar: _count: Long
     // ivar: _u: MemorySegment
 }
 

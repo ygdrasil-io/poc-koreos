@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTabViewDelegate
  * Inherits protocols: NSObject
  */
-interface NSTabViewDelegate : NSObject {
+interface NSTabViewDelegate {
     // @optional
-    fun tabView_shouldSelectTabViewItem(tabView: MemorySegment, tabViewItem: MemorySegment): BOOL =
+    fun tabView_shouldSelectTabViewItem(tabView: MemorySegment, tabViewItem: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'tabView:shouldSelectTabViewItem:' not implemented")
     
     // @optional

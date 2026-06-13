@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSRulerMarker(val ptr: MemorySegment) {
+open class NSRulerMarker(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSRulerMarker") }
         
     }
     
-    open fun initWithRulerView_markerLocation_image_imageOrigin(ruler: MemorySegment, location: CGFloat, image: MemorySegment, imageOrigin: NSPoint): MemorySegment {
+    open fun initWithRulerView_markerLocation_image_imageOrigin(ruler: MemorySegment, location: Double, image: MemorySegment, imageOrigin: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRulerView:markerLocation:image:imageOrigin:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ruler, location, image, ObjCRuntime.ObjCStructArg(imageOrigin, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
     }
@@ -30,14 +30,14 @@ open class NSRulerMarker(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun drawRect(rect: NSRect): Unit {
+    open fun drawRect(rect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    open fun trackMouse_adding(mouseDownEvent: MemorySegment, isAdding: BOOL): BOOL {
+    open fun trackMouse_adding(mouseDownEvent: MemorySegment, isAdding: Boolean): Boolean {
         val sel = ObjCRuntime.sel("trackMouse:adding:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, mouseDownEvent, isAdding) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, mouseDownEvent, isAdding) as Boolean
     }
     
     // @property ruler
@@ -47,11 +47,11 @@ open class NSRulerMarker(val ptr: MemorySegment) {
     }
     
     // @property markerLocation
-    open fun markerLocation(): CGFloat {
+    open fun markerLocation(): Double {
         val sel = ObjCRuntime.sel("markerLocation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setMarkerLocation(value: CGFloat) {
+    open fun setMarkerLocation(value: Double) {
         val sel = ObjCRuntime.sel("setMarkerLocation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -67,39 +67,39 @@ open class NSRulerMarker(val ptr: MemorySegment) {
     }
     
     // @property imageOrigin
-    open fun imageOrigin(): NSPoint {
+    open fun imageOrigin(): MemorySegment {
         val sel = ObjCRuntime.sel("imageOrigin")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as NSPoint
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel) as MemorySegment
     }
-    open fun setImageOrigin(value: NSPoint) {
+    open fun setImageOrigin(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageOrigin:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")))
     }
     
     // @property movable
-    open fun isMovable(): BOOL {
+    open fun isMovable(): Boolean {
         val sel = ObjCRuntime.sel("isMovable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setMovable(value: BOOL) {
+    open fun setMovable(value: Boolean) {
         val sel = ObjCRuntime.sel("setMovable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property removable
-    open fun isRemovable(): BOOL {
+    open fun isRemovable(): Boolean {
         val sel = ObjCRuntime.sel("isRemovable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setRemovable(value: BOOL) {
+    open fun setRemovable(value: Boolean) {
         val sel = ObjCRuntime.sel("setRemovable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property dragging
-    open fun isDragging(): BOOL {
+    open fun isDragging(): Boolean {
         val sel = ObjCRuntime.sel("isDragging")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property representedObject
@@ -114,15 +114,15 @@ open class NSRulerMarker(val ptr: MemorySegment) {
     }
     
     // @property imageRectInRuler
-    open fun imageRectInRuler(): NSRect {
+    open fun imageRectInRuler(): MemorySegment {
         val sel = ObjCRuntime.sel("imageRectInRuler")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property thicknessRequiredInRuler
-    open fun thicknessRequiredInRuler(): CGFloat {
+    open fun thicknessRequiredInRuler(): Double {
         val sel = ObjCRuntime.sel("thicknessRequiredInRuler")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
 }

@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSURLConnectionDelegate
  * Inherits protocols: NSObject
  */
-interface NSURLConnectionDelegate : NSObject {
+interface NSURLConnectionDelegate {
     // @optional
     fun connection_didFailWithError(connection: MemorySegment, error: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'connection:didFailWithError:' not implemented")
     
     // @optional
-    fun connectionShouldUseCredentialStorage(connection: MemorySegment): BOOL =
+    fun connectionShouldUseCredentialStorage(connection: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'connectionShouldUseCredentialStorage:' not implemented")
     
     // @optional
@@ -22,7 +22,7 @@ interface NSURLConnectionDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'connection:willSendRequestForAuthenticationChallenge:' not implemented")
     
     // @optional
-    fun connection_canAuthenticateAgainstProtectionSpace(connection: MemorySegment, protectionSpace: MemorySegment): BOOL =
+    fun connection_canAuthenticateAgainstProtectionSpace(connection: MemorySegment, protectionSpace: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'connection:canAuthenticateAgainstProtectionSpace:' not implemented")
     
     // @optional

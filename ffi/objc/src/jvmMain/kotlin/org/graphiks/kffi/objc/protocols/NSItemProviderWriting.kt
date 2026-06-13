@@ -8,12 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSItemProviderWriting
  * Inherits protocols: NSObject
  */
-interface NSItemProviderWriting : NSObject {
+interface NSItemProviderWriting {
     // @optional
-    fun itemProviderVisibilityForRepresentationWithTypeIdentifier(typeIdentifier: MemorySegment): NSItemProviderRepresentationVisibility =
-        throw UnsupportedOperationException("Optional ObjC method 'itemProviderVisibilityForRepresentationWithTypeIdentifier:' not implemented")
-    
-    // @optional
+    fun itemProviderVisibilityForRepresentationWithTypeIdentifier(typeIdentifier: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'itemProviderVisibilityForRepresentationWithTypeIdentifier:' not implemented")
     
     fun loadDataWithTypeIdentifier_forItemProviderCompletionHandler(typeIdentifier: MemorySegment, completionHandler: MemorySegment): MemorySegment
@@ -21,12 +18,5 @@ interface NSItemProviderWriting : NSObject {
     /** @return NSArray<NSString *> * */
     fun writableTypeIdentifiersForItemProvider(): MemorySegment
     
-    /** @return NSArray<NSString *> * */
-    // @optional
-        throw UnsupportedOperationException("Optional ObjC method 'writableTypeIdentifiersForItemProvider' not implemented")
-    
-    // @property writableTypeIdentifiersForItemProvider
-    /** @return NSArray<NSString *> * */
-    /** @return NSArray<NSString *> * */
 }
 

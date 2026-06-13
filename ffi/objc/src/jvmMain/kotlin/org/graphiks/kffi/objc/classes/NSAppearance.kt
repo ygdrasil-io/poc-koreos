@@ -9,26 +9,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSAppearance(val ptr: MemorySegment) {
+open class NSAppearance(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAppearance") }
         
-        open fun appearanceNamed(name: NSAppearanceName): MemorySegment {
+        fun appearanceNamed(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("appearanceNamed:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
-        open fun currentAppearance(): MemorySegment {
+        fun currentAppearance(): MemorySegment {
             val sel = ObjCRuntime.sel("currentAppearance")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun setCurrentAppearance(currentAppearance: MemorySegment): Unit {
+        fun setCurrentAppearance(currentAppearance: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setCurrentAppearance:")
             ObjCRuntime.msgSend(null, _class, sel, currentAppearance)
         }
         
-        open fun currentDrawingAppearance(): MemorySegment {
+        fun currentDrawingAppearance(): MemorySegment {
             val sel = ObjCRuntime.sel("currentDrawingAppearance")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -40,7 +40,7 @@ open class NSAppearance(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, block)
     }
     
-    open fun initWithAppearanceNamed_bundle(name: NSAppearanceName, bundle: MemorySegment): MemorySegment {
+    open fun initWithAppearanceNamed_bundle(name: MemorySegment, bundle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithAppearanceNamed:bundle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, name, bundle) as MemorySegment
     }
@@ -50,21 +50,37 @@ open class NSAppearance(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, coder) as MemorySegment
     }
     
-    open fun bestMatchFromAppearancesWithNames(appearances: MemorySegment): NSAppearanceName {
+    open fun bestMatchFromAppearancesWithNames(appearances: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("bestMatchFromAppearancesWithNames:")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, appearances) as NSAppearanceName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, appearances) as MemorySegment
     }
     
     // @property name
-    open fun name(): NSAppearanceName {
+    open fun name(): MemorySegment {
         val sel = ObjCRuntime.sel("name")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAppearanceName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property currentAppearance
-    open fun allowsVibrancy(): BOOL {
+    open fun currentAppearance(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentAppearance")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    open fun setCurrentAppearance(value: MemorySegment) {
+        val sel = ObjCRuntime.sel("setCurrentAppearance:")
+        ObjCRuntime.msgSend(null, ptr, sel, value)
+    }
+    
+    // @property currentDrawingAppearance
+    open fun currentDrawingAppearance(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentDrawingAppearance")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property allowsVibrancy
+    open fun allowsVibrancy(): Boolean {
         val sel = ObjCRuntime.sel("allowsVibrancy")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

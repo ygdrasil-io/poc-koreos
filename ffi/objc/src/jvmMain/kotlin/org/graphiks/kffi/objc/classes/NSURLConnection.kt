@@ -8,23 +8,23 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLConnection
  * Superclass: NSObject
  */
-open class NSURLConnection(val ptr: MemorySegment) {
+open class NSURLConnection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLConnection") }
         
-        open fun connectionWithRequest_delegate(request: MemorySegment, delegate: MemorySegment): MemorySegment {
+        fun connectionWithRequest_delegate(request: MemorySegment, delegate: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("connectionWithRequest:delegate:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, request, delegate) as MemorySegment
         }
         
-        open fun canHandleRequest(request: MemorySegment): BOOL {
+        fun canHandleRequest(request: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("canHandleRequest:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, request) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, request) as Boolean
         }
         
     }
     
-    open fun initWithRequest_delegate_startImmediately(request: MemorySegment, delegate: MemorySegment, startImmediately: BOOL): MemorySegment {
+    open fun initWithRequest_delegate_startImmediately(request: MemorySegment, delegate: MemorySegment, startImmediately: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithRequest:delegate:startImmediately:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, request, delegate, startImmediately) as MemorySegment
     }
@@ -44,12 +44,12 @@ open class NSURLConnection(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun scheduleInRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("scheduleInRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
     
-    open fun unscheduleFromRunLoop_forMode(aRunLoop: MemorySegment, mode: NSRunLoopMode): Unit {
+    open fun unscheduleFromRunLoop_forMode(aRunLoop: MemorySegment, mode: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("unscheduleFromRunLoop:forMode:")
         ObjCRuntime.msgSend(null, ptr, sel, aRunLoop, mode)
     }
@@ -78,7 +78,7 @@ open class NSURLConnection(val ptr: MemorySegment) {
 
 // ── Category: NSURLConnectionSynchronousLoading on NSURLConnection ─────────────────────────────────────────
 
-// Class<*> method: +[NSURLConnection sendSynchronousRequest:returningResponse:error:]
+// Class method: +[NSURLConnection sendSynchronousRequest:returningResponse:error:]
 fun NSURLConnection_sendSynchronousRequest_returningResponse_error(request: MemorySegment, response: MemorySegment, error: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("sendSynchronousRequest:returningResponse:error:")
     val cls = ObjCRuntime.getClass("NSURLConnection")
@@ -87,7 +87,7 @@ fun NSURLConnection_sendSynchronousRequest_returningResponse_error(request: Memo
 
 // ── Category: NSURLConnectionQueuedLoading on NSURLConnection ─────────────────────────────────────────
 
-// Class<*> method: +[NSURLConnection sendAsynchronousRequest:queue:completionHandler:]
+// Class method: +[NSURLConnection sendAsynchronousRequest:queue:completionHandler:]
 fun NSURLConnection_sendAsynchronousRequest_queue_completionHandler(request: MemorySegment, queue: MemorySegment, handler: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("sendAsynchronousRequest:queue:completionHandler:")
     val cls = ObjCRuntime.getClass("NSURLConnection")

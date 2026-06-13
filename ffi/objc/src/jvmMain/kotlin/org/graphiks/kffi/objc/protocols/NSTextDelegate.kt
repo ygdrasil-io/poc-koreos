@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextDelegate
  * Inherits protocols: NSObject
  */
-interface NSTextDelegate : NSObject {
+interface NSTextDelegate {
     // @optional
-    fun textShouldBeginEditing(textObject: MemorySegment): BOOL =
+    fun textShouldBeginEditing(textObject: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'textShouldBeginEditing:' not implemented")
     
     // @optional
-    fun textShouldEndEditing(textObject: MemorySegment): BOOL =
+    fun textShouldEndEditing(textObject: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'textShouldEndEditing:' not implemented")
     
     // @optional

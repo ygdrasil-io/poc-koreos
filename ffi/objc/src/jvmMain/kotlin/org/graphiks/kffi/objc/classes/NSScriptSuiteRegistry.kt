@@ -8,16 +8,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSScriptSuiteRegistry
  * Superclass: NSObject
  */
-open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
+open class NSScriptSuiteRegistry(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptSuiteRegistry") }
         
-        open fun sharedScriptSuiteRegistry(): MemorySegment {
+        fun sharedScriptSuiteRegistry(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedScriptSuiteRegistry")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun setSharedScriptSuiteRegistry(registry: MemorySegment): Unit {
+        fun setSharedScriptSuiteRegistry(registry: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("setSharedScriptSuiteRegistry:")
             ObjCRuntime.msgSend(null, _class, sel, registry)
         }
@@ -44,13 +44,13 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, commandDescription)
     }
     
-    open fun appleEventCodeForSuite(suiteName: MemorySegment): FourCharCode {
+    open fun appleEventCodeForSuite(suiteName: MemorySegment): Int {
         val sel = ObjCRuntime.sel("appleEventCodeForSuite:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, suiteName) as FourCharCode
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel, suiteName) as Int
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun appleEventCodeForSuite(suiteName: String): FourCharCode = appleEventCodeForSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
+    fun appleEventCodeForSuite(suiteName: String): Int = appleEventCodeForSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
     
     open fun bundleForSuite(suiteName: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("bundleForSuite:")
@@ -58,7 +58,7 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun bundleForSuite(suiteName: String): MemorySegment = bundleForSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
+    fun bundleForSuite(suiteName: String): MemorySegment = bundleForSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
     
     /** @return NSDictionary<NSString *,NSScriptClassDescription *> * */
     open fun classDescriptionsInSuite(suiteName: MemorySegment): MemorySegment {
@@ -67,7 +67,7 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun classDescriptionsInSuite(suiteName: String): MemorySegment = classDescriptionsInSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
+    fun classDescriptionsInSuite(suiteName: String): MemorySegment = classDescriptionsInSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
     
     /** @return NSDictionary<NSString *,NSScriptCommandDescription *> * */
     open fun commandDescriptionsInSuite(suiteName: MemorySegment): MemorySegment {
@@ -76,22 +76,22 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun commandDescriptionsInSuite(suiteName: String): MemorySegment = commandDescriptionsInSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
+    fun commandDescriptionsInSuite(suiteName: String): MemorySegment = commandDescriptionsInSuite(ObjCRuntime.newNSString(Arena.global(), suiteName))
     
-    open fun suiteForAppleEventCode(appleEventCode: FourCharCode): MemorySegment {
+    open fun suiteForAppleEventCode(appleEventCode: Int): MemorySegment {
         val sel = ObjCRuntime.sel("suiteForAppleEventCode:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, appleEventCode) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun suiteForAppleEventCodeAsString(appleEventCode: FourCharCode): String = ObjCRuntime.toJavaString(suiteForAppleEventCode(appleEventCode))
+    fun suiteForAppleEventCodeAsString(appleEventCode: Int): String = ObjCRuntime.toJavaString(suiteForAppleEventCode(appleEventCode))
     
-    open fun classDescriptionWithAppleEventCode(appleEventCode: FourCharCode): MemorySegment {
+    open fun classDescriptionWithAppleEventCode(appleEventCode: Int): MemorySegment {
         val sel = ObjCRuntime.sel("classDescriptionWithAppleEventCode:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, appleEventCode) as MemorySegment
     }
     
-    open fun commandDescriptionWithAppleEventClass_andAppleEventCode(appleEventClassCode: FourCharCode, appleEventIDCode: FourCharCode): MemorySegment {
+    open fun commandDescriptionWithAppleEventClass_andAppleEventCode(appleEventClassCode: Int, appleEventIDCode: Int): MemorySegment {
         val sel = ObjCRuntime.sel("commandDescriptionWithAppleEventClass:andAppleEventCode:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, appleEventClassCode, appleEventIDCode) as MemorySegment
     }
@@ -102,7 +102,7 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun aeteResource(languageName: String): MemorySegment = aeteResource(ObjCRuntime.newNSString(Arena.global(), languageName))
+    fun aeteResource(languageName: String): MemorySegment = aeteResource(ObjCRuntime.newNSString(Arena.global(), languageName))
     
     // @property suiteNames
     /** @return NSArray<NSString *> * */
@@ -113,9 +113,9 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _isLoadingSDEFFiles: BOOL
-    // ivar: _isLoadingSecurityOverride: BOOL
-    // ivar: _hasLoadedIntrinsics: BOOL
+    // ivar: _isLoadingSDEFFiles: Boolean
+    // ivar: _isLoadingSecurityOverride: Boolean
+    // ivar: _hasLoadedIntrinsics: Boolean
     // ivar: _reserved1: MemorySegment
     // ivar: _seenBundles: MemorySegment
     // ivar: _suiteDescriptionsBeingCollected: MemorySegment
@@ -127,7 +127,7 @@ open class NSScriptSuiteRegistry(val ptr: MemorySegment) {
     // ivar: _cachedSuiteDescriptionsByName: MemorySegment
     // ivar: _complexTypeDescriptionsByName: MemorySegment
     // ivar: _listTypeDescriptionsByName: MemorySegment
-    // ivar: _nextComplexTypeAppleEventCode: Any
+    // ivar: _nextComplexTypeAppleEventCode: Int
     // ivar: _reserved2: MemorySegment
 }
 

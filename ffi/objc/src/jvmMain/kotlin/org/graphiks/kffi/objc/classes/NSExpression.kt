@@ -9,122 +9,122 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSExpression(val ptr: MemorySegment) {
+open class NSExpression(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSExpression") }
         
-        open fun expressionWithFormat_argumentArray(expressionFormat: MemorySegment, arguments: MemorySegment): MemorySegment {
+        fun expressionWithFormat_argumentArray(expressionFormat: MemorySegment, arguments: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionWithFormat:argumentArray:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, expressionFormat, arguments) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionWithFormat_argumentArray(expressionFormat: String, arguments: MemorySegment): MemorySegment = expressionWithFormat_argumentArray(ObjCRuntime.newNSString(Arena.global(), expressionFormat), arguments)
+        fun expressionWithFormat_argumentArray(expressionFormat: String, arguments: MemorySegment): MemorySegment = expressionWithFormat_argumentArray(ObjCRuntime.newNSString(Arena.global(), expressionFormat), arguments)
         
-        open fun expressionWithFormat(expressionFormat: MemorySegment): MemorySegment {
+        fun expressionWithFormat(expressionFormat: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionWithFormat:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, expressionFormat) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionWithFormat(expressionFormat: String): MemorySegment = expressionWithFormat(ObjCRuntime.newNSString(Arena.global(), expressionFormat))
+        fun expressionWithFormat(expressionFormat: String): MemorySegment = expressionWithFormat(ObjCRuntime.newNSString(Arena.global(), expressionFormat))
         
-        open fun expressionWithFormat_arguments(expressionFormat: MemorySegment, argList: MemorySegment): MemorySegment {
+        fun expressionWithFormat_arguments(expressionFormat: MemorySegment, argList: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionWithFormat:arguments:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, expressionFormat, argList) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionWithFormat_arguments(expressionFormat: String, argList: MemorySegment): MemorySegment = expressionWithFormat_arguments(ObjCRuntime.newNSString(Arena.global(), expressionFormat), argList)
+        fun expressionWithFormat_arguments(expressionFormat: String, argList: MemorySegment): MemorySegment = expressionWithFormat_arguments(ObjCRuntime.newNSString(Arena.global(), expressionFormat), argList)
         
-        open fun expressionForConstantValue(obj: MemorySegment): MemorySegment {
+        fun expressionForConstantValue(obj: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForConstantValue:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, obj) as MemorySegment
         }
         
-        open fun expressionForEvaluatedObject(): MemorySegment {
+        fun expressionForEvaluatedObject(): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForEvaluatedObject")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun expressionForVariable(string: MemorySegment): MemorySegment {
+        fun expressionForVariable(string: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForVariable:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, string) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionForVariable(string: String): MemorySegment = expressionForVariable(ObjCRuntime.newNSString(Arena.global(), string))
+        fun expressionForVariable(string: String): MemorySegment = expressionForVariable(ObjCRuntime.newNSString(Arena.global(), string))
         
-        open fun expressionForKeyPath(keyPath: MemorySegment): MemorySegment {
+        fun expressionForKeyPath(keyPath: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForKeyPath:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, keyPath) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionForKeyPath(keyPath: String): MemorySegment = expressionForKeyPath(ObjCRuntime.newNSString(Arena.global(), keyPath))
+        fun expressionForKeyPath(keyPath: String): MemorySegment = expressionForKeyPath(ObjCRuntime.newNSString(Arena.global(), keyPath))
         
-        open fun expressionForFunction_arguments(name: MemorySegment, parameters: MemorySegment): MemorySegment {
+        fun expressionForFunction_arguments(name: MemorySegment, parameters: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForFunction:arguments:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, parameters) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionForFunction_arguments(name: String, parameters: MemorySegment): MemorySegment = expressionForFunction_arguments(ObjCRuntime.newNSString(Arena.global(), name), parameters)
+        fun expressionForFunction_arguments(name: String, parameters: MemorySegment): MemorySegment = expressionForFunction_arguments(ObjCRuntime.newNSString(Arena.global(), name), parameters)
         
-        open fun expressionForAggregate(subexpressions: MemorySegment): MemorySegment {
+        fun expressionForAggregate(subexpressions: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForAggregate:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, subexpressions) as MemorySegment
         }
         
-        open fun expressionForUnionSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
+        fun expressionForUnionSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForUnionSet:with:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, left, right) as MemorySegment
         }
         
-        open fun expressionForIntersectSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
+        fun expressionForIntersectSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForIntersectSet:with:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, left, right) as MemorySegment
         }
         
-        open fun expressionForMinusSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
+        fun expressionForMinusSet_with(left: MemorySegment, right: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForMinusSet:with:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, left, right) as MemorySegment
         }
         
-        open fun expressionForSubquery_usingIteratorVariable_predicate(expression: MemorySegment, variable: MemorySegment, predicate: MemorySegment): MemorySegment {
+        fun expressionForSubquery_usingIteratorVariable_predicate(expression: MemorySegment, variable: MemorySegment, predicate: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForSubquery:usingIteratorVariable:predicate:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, expression, variable, predicate) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionForSubquery_usingIteratorVariable_predicate(expression: MemorySegment, variable: String, predicate: MemorySegment): MemorySegment = expressionForSubquery_usingIteratorVariable_predicate(expression, ObjCRuntime.newNSString(Arena.global(), variable), predicate)
+        fun expressionForSubquery_usingIteratorVariable_predicate(expression: MemorySegment, variable: String, predicate: MemorySegment): MemorySegment = expressionForSubquery_usingIteratorVariable_predicate(expression, ObjCRuntime.newNSString(Arena.global(), variable), predicate)
         
-        open fun expressionForFunction_selectorName_arguments(target: MemorySegment, name: MemorySegment, parameters: MemorySegment): MemorySegment {
+        fun expressionForFunction_selectorName_arguments(target: MemorySegment, name: MemorySegment, parameters: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForFunction:selectorName:arguments:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, target, name, parameters) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun expressionForFunction_selectorName_arguments(target: MemorySegment, name: String, parameters: MemorySegment): MemorySegment = expressionForFunction_selectorName_arguments(target, ObjCRuntime.newNSString(Arena.global(), name), parameters)
+        fun expressionForFunction_selectorName_arguments(target: MemorySegment, name: String, parameters: MemorySegment): MemorySegment = expressionForFunction_selectorName_arguments(target, ObjCRuntime.newNSString(Arena.global(), name), parameters)
         
-        open fun expressionForAnyKey(): MemorySegment {
+        fun expressionForAnyKey(): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForAnyKey")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun expressionForBlock_arguments(block: MemorySegment, arguments: MemorySegment): MemorySegment {
+        fun expressionForBlock_arguments(block: MemorySegment, arguments: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForBlock:arguments:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, block, arguments) as MemorySegment
         }
         
-        open fun expressionForConditional_trueExpression_falseExpression(predicate: MemorySegment, trueExpression: MemorySegment, falseExpression: MemorySegment): MemorySegment {
+        fun expressionForConditional_trueExpression_falseExpression(predicate: MemorySegment, trueExpression: MemorySegment, falseExpression: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("expressionForConditional:trueExpression:falseExpression:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, predicate, trueExpression, falseExpression) as MemorySegment
         }
         
     }
     
-    open fun initWithExpressionType(type: NSExpressionType): MemorySegment {
+    open fun initWithExpressionType(type: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithExpressionType:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, type) as MemorySegment
     }
@@ -145,9 +145,9 @@ open class NSExpression(val ptr: MemorySegment) {
     }
     
     // @property expressionType
-    open fun expressionType(): NSExpressionType {
+    open fun expressionType(): MemorySegment {
         val sel = ObjCRuntime.sel("expressionType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSExpressionType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property constantValue
@@ -242,7 +242,7 @@ open class NSExpression(val ptr: MemorySegment) {
     
     // ── Instance variables (direct field access not supported via Panama) ──
     // ivar: _expressionFlags: MemorySegment
-    // ivar: reserved: uint32_t
-    // ivar: _expressionType: NSExpressionType
+    // ivar: reserved: Int
+    // ivar: _expressionType: MemorySegment
 }
 

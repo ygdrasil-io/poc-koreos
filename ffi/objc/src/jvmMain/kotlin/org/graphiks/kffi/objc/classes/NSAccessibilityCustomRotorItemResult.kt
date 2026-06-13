@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAccessibilityCustomRotorItemResult
  * Superclass: NSObject
  */
-open class NSAccessibilityCustomRotorItemResult(val ptr: MemorySegment) {
+open class NSAccessibilityCustomRotorItemResult(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAccessibilityCustomRotorItemResult") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -35,7 +35,7 @@ open class NSAccessibilityCustomRotorItemResult(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithItemLoadingToken_customLabel(itemLoadingToken: MemorySegment, customLabel: String): MemorySegment = initWithItemLoadingToken_customLabel(itemLoadingToken, ObjCRuntime.newNSString(Arena.global(), customLabel))
+    fun initWithItemLoadingToken_customLabel(itemLoadingToken: MemorySegment, customLabel: String): MemorySegment = initWithItemLoadingToken_customLabel(itemLoadingToken, ObjCRuntime.newNSString(Arena.global(), customLabel))
     
     // @property targetElement
     /** @return id<NSAccessibilityElement> */
@@ -51,11 +51,11 @@ open class NSAccessibilityCustomRotorItemResult(val ptr: MemorySegment) {
     }
     
     // @property targetRange
-    open fun targetRange(): NSRange {
+    open fun targetRange(): MemorySegment {
         val sel = ObjCRuntime.sel("targetRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
-    open fun setTargetRange(value: NSRange) {
+    open fun setTargetRange(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTargetRange:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange")))
     }

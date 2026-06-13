@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSecureUnarchiveFromDataTransformer
  * Superclass: NSValueTransformer
  */
-open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTransformer(ptr) {
+open class NSSecureUnarchiveFromDataTransformer(override val ptr: MemorySegment) : NSValueTransformer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSecureUnarchiveFromDataTransformer") }
         
-        /** @return NSArray<Class<*>> * */
+        /** @return NSArray<Class> * */
         fun allowedTopLevelClasses(): MemorySegment {
             val sel = ObjCRuntime.sel("allowedTopLevelClasses")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
@@ -21,6 +21,11 @@ open class NSSecureUnarchiveFromDataTransformer(ptr: MemorySegment) : NSValueTra
     }
     
     // @property allowedTopLevelClasses
-    /** @return NSArray<Class<*>> * */
+    /** @return NSArray<Class> * */
+    open fun allowedTopLevelClasses(): MemorySegment {
+        val sel = ObjCRuntime.sel("allowedTopLevelClasses")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

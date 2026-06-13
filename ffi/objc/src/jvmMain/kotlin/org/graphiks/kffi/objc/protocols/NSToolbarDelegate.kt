@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSToolbarDelegate
  * Inherits protocols: NSObject
  */
-interface NSToolbarDelegate : NSObject {
+interface NSToolbarDelegate {
     // @optional
-    fun toolbar_itemForItemIdentifier_willBeInsertedIntoToolbar(toolbar: MemorySegment, itemIdentifier: NSToolbarItemIdentifier, flag: BOOL): MemorySegment =
+    fun toolbar_itemForItemIdentifier_willBeInsertedIntoToolbar(toolbar: MemorySegment, itemIdentifier: MemorySegment, flag: Boolean): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'toolbar:itemForItemIdentifier:willBeInsertedIntoToolbar:' not implemented")
     
     /** @return NSArray<NSToolbarItemIdentifier> * */
@@ -34,7 +34,7 @@ interface NSToolbarDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'toolbarImmovableItemIdentifiers:' not implemented")
     
     // @optional
-    fun toolbar_itemIdentifier_canBeInsertedAtIndex(toolbar: MemorySegment, itemIdentifier: NSToolbarItemIdentifier, index: NSInteger): BOOL =
+    fun toolbar_itemIdentifier_canBeInsertedAtIndex(toolbar: MemorySegment, itemIdentifier: MemorySegment, index: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'toolbar:itemIdentifier:canBeInsertedAtIndex:' not implemented")
     
     // @optional

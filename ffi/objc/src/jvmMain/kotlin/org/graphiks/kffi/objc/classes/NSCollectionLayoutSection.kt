@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSCollectionLayoutSection(val ptr: MemorySegment) {
+open class NSCollectionLayoutSection(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionLayoutSection") }
         
-        open fun sectionWithGroup(group: MemorySegment): MemorySegment {
+        fun sectionWithGroup(group: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("sectionWithGroup:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, group) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -31,31 +31,31 @@ open class NSCollectionLayoutSection(val ptr: MemorySegment) {
     }
     
     // @property contentInsets
-    open fun contentInsets(): NSDirectionalEdgeInsets {
+    open fun contentInsets(): MemorySegment {
         val sel = ObjCRuntime.sel("contentInsets")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets"), ptr, sel) as NSDirectionalEdgeInsets
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets"), ptr, sel) as MemorySegment
     }
-    open fun setContentInsets(value: NSDirectionalEdgeInsets) {
+    open fun setContentInsets(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentInsets:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("top"), ValueLayout.JAVA_DOUBLE.withName("leading"), ValueLayout.JAVA_DOUBLE.withName("bottom"), ValueLayout.JAVA_DOUBLE.withName("trailing")).withName("NSDirectionalEdgeInsets")))
     }
     
     // @property interGroupSpacing
-    open fun interGroupSpacing(): CGFloat {
+    open fun interGroupSpacing(): Double {
         val sel = ObjCRuntime.sel("interGroupSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setInterGroupSpacing(value: CGFloat) {
+    open fun setInterGroupSpacing(value: Double) {
         val sel = ObjCRuntime.sel("setInterGroupSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property orthogonalScrollingBehavior
-    open fun orthogonalScrollingBehavior(): NSCollectionLayoutSectionOrthogonalScrollingBehavior {
+    open fun orthogonalScrollingBehavior(): MemorySegment {
         val sel = ObjCRuntime.sel("orthogonalScrollingBehavior")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCollectionLayoutSectionOrthogonalScrollingBehavior
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setOrthogonalScrollingBehavior(value: NSCollectionLayoutSectionOrthogonalScrollingBehavior) {
+    open fun setOrthogonalScrollingBehavior(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setOrthogonalScrollingBehavior:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -72,11 +72,11 @@ open class NSCollectionLayoutSection(val ptr: MemorySegment) {
     }
     
     // @property supplementariesFollowContentInsets
-    open fun supplementariesFollowContentInsets(): BOOL {
+    open fun supplementariesFollowContentInsets(): Boolean {
         val sel = ObjCRuntime.sel("supplementariesFollowContentInsets")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setSupplementariesFollowContentInsets(value: BOOL) {
+    open fun setSupplementariesFollowContentInsets(value: Boolean) {
         val sel = ObjCRuntime.sel("setSupplementariesFollowContentInsets:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

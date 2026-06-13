@@ -8,36 +8,36 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSProgress
  * Superclass: NSObject
  */
-open class NSProgress(val ptr: MemorySegment) {
+open class NSProgress(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSProgress") }
         
-        open fun currentProgress(): MemorySegment {
+        fun currentProgress(): MemorySegment {
             val sel = ObjCRuntime.sel("currentProgress")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun progressWithTotalUnitCount(unitCount: int64_t): MemorySegment {
+        fun progressWithTotalUnitCount(unitCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("progressWithTotalUnitCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, unitCount) as MemorySegment
         }
         
-        open fun discreteProgressWithTotalUnitCount(unitCount: int64_t): MemorySegment {
+        fun discreteProgressWithTotalUnitCount(unitCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("discreteProgressWithTotalUnitCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, unitCount) as MemorySegment
         }
         
-        open fun progressWithTotalUnitCount_parent_pendingUnitCount(unitCount: int64_t, parent: MemorySegment, portionOfParentTotalUnitCount: int64_t): MemorySegment {
+        fun progressWithTotalUnitCount_parent_pendingUnitCount(unitCount: Long, parent: MemorySegment, portionOfParentTotalUnitCount: Long): MemorySegment {
             val sel = ObjCRuntime.sel("progressWithTotalUnitCount:parent:pendingUnitCount:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, unitCount, parent, portionOfParentTotalUnitCount) as MemorySegment
         }
         
-        open fun addSubscriberForFileURL_withPublishingHandler(url: MemorySegment, publishingHandler: MemorySegment): MemorySegment {
+        fun addSubscriberForFileURL_withPublishingHandler(url: MemorySegment, publishingHandler: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("addSubscriberForFileURL:withPublishingHandler:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, publishingHandler) as MemorySegment
         }
         
-        open fun removeSubscriber(subscriber: MemorySegment): Unit {
+        fun removeSubscriber(subscriber: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("removeSubscriber:")
             ObjCRuntime.msgSend(null, _class, sel, subscriber)
         }
@@ -49,12 +49,12 @@ open class NSProgress(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, parentProgressOrNil, userInfoOrNil) as MemorySegment
     }
     
-    open fun becomeCurrentWithPendingUnitCount(unitCount: int64_t): Unit {
+    open fun becomeCurrentWithPendingUnitCount(unitCount: Long): Unit {
         val sel = ObjCRuntime.sel("becomeCurrentWithPendingUnitCount:")
         ObjCRuntime.msgSend(null, ptr, sel, unitCount)
     }
     
-    open fun performAsCurrentWithPendingUnitCount_usingBlock(unitCount: int64_t, work: MemorySegment): Unit {
+    open fun performAsCurrentWithPendingUnitCount_usingBlock(unitCount: Long, work: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("performAsCurrentWithPendingUnitCount:usingBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, unitCount, work)
     }
@@ -64,12 +64,12 @@ open class NSProgress(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun addChild_withPendingUnitCount(child: MemorySegment, inUnitCount: int64_t): Unit {
+    open fun addChild_withPendingUnitCount(child: MemorySegment, inUnitCount: Long): Unit {
         val sel = ObjCRuntime.sel("addChild:withPendingUnitCount:")
         ObjCRuntime.msgSend(null, ptr, sel, child, inUnitCount)
     }
     
-    open fun setUserInfoObject_forKey(objectOrNil: MemorySegment, key: NSProgressUserInfoKey): Unit {
+    open fun setUserInfoObject_forKey(objectOrNil: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setUserInfoObject:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, objectOrNil, key)
     }
@@ -100,21 +100,21 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property totalUnitCount
-    open fun totalUnitCount(): int64_t {
+    open fun totalUnitCount(): Long {
         val sel = ObjCRuntime.sel("totalUnitCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setTotalUnitCount(value: int64_t) {
+    open fun setTotalUnitCount(value: Long) {
         val sel = ObjCRuntime.sel("setTotalUnitCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property completedUnitCount
-    open fun completedUnitCount(): int64_t {
+    open fun completedUnitCount(): Long {
         val sel = ObjCRuntime.sel("completedUnitCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setCompletedUnitCount(value: int64_t) {
+    open fun setCompletedUnitCount(value: Long) {
         val sel = ObjCRuntime.sel("setCompletedUnitCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -152,35 +152,35 @@ open class NSProgress(val ptr: MemorySegment) {
     open fun setLocalizedAdditionalDescription(value: String) = setLocalizedAdditionalDescription(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property cancellable
-    open fun isCancellable(): BOOL {
+    open fun isCancellable(): Boolean {
         val sel = ObjCRuntime.sel("isCancellable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setCancellable(value: BOOL) {
+    open fun setCancellable(value: Boolean) {
         val sel = ObjCRuntime.sel("setCancellable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property pausable
-    open fun isPausable(): BOOL {
+    open fun isPausable(): Boolean {
         val sel = ObjCRuntime.sel("isPausable")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setPausable(value: BOOL) {
+    open fun setPausable(value: Boolean) {
         val sel = ObjCRuntime.sel("setPausable:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cancelled
-    open fun isCancelled(): BOOL {
+    open fun isCancelled(): Boolean {
         val sel = ObjCRuntime.sel("isCancelled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property paused
-    open fun isPaused(): BOOL {
+    open fun isPaused(): Boolean {
         val sel = ObjCRuntime.sel("isPaused")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property cancellationHandler
@@ -214,9 +214,9 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property indeterminate
-    open fun isIndeterminate(): BOOL {
+    open fun isIndeterminate(): Boolean {
         val sel = ObjCRuntime.sel("isIndeterminate")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property fractionCompleted
@@ -226,9 +226,9 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property finished
-    open fun isFinished(): BOOL {
+    open fun isFinished(): Boolean {
         val sel = ObjCRuntime.sel("isFinished")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property userInfo
@@ -239,11 +239,11 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property kind
-    open fun kind(): NSProgressKind {
+    open fun kind(): MemorySegment {
         val sel = ObjCRuntime.sel("kind")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProgressKind
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setKind(value: NSProgressKind) {
+    open fun setKind(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setKind:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -269,11 +269,11 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property fileOperationKind
-    open fun fileOperationKind(): NSProgressFileOperationKind {
+    open fun fileOperationKind(): MemorySegment {
         val sel = ObjCRuntime.sel("fileOperationKind")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSProgressFileOperationKind
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setFileOperationKind(value: NSProgressFileOperationKind) {
+    open fun setFileOperationKind(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFileOperationKind:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -309,9 +309,9 @@ open class NSProgress(val ptr: MemorySegment) {
     }
     
     // @property old
-    open fun isOld(): BOOL {
+    open fun isOld(): Boolean {
         val sel = ObjCRuntime.sel("isOld")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

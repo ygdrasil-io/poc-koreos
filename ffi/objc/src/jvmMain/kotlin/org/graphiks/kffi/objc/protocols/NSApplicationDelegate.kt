@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSApplicationDelegate
  * Inherits protocols: NSObject
  */
-interface NSApplicationDelegate : NSObject {
+interface NSApplicationDelegate {
     // @optional
-    fun applicationShouldTerminate(sender: MemorySegment): NSApplicationTerminateReply =
+    fun applicationShouldTerminate(sender: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'applicationShouldTerminate:' not implemented")
     
     // @optional
@@ -18,7 +18,7 @@ interface NSApplicationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'application:openURLs:' not implemented")
     
     // @optional
-    fun application_openFile(sender: MemorySegment, filename: MemorySegment): BOOL =
+    fun application_openFile(sender: MemorySegment, filename: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:openFile:' not implemented")
     
     // @optional
@@ -26,35 +26,35 @@ interface NSApplicationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'application:openFiles:' not implemented")
     
     // @optional
-    fun application_openTempFile(sender: MemorySegment, filename: MemorySegment): BOOL =
+    fun application_openTempFile(sender: MemorySegment, filename: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:openTempFile:' not implemented")
     
     // @optional
-    fun applicationShouldOpenUntitledFile(sender: MemorySegment): BOOL =
+    fun applicationShouldOpenUntitledFile(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationShouldOpenUntitledFile:' not implemented")
     
     // @optional
-    fun applicationOpenUntitledFile(sender: MemorySegment): BOOL =
+    fun applicationOpenUntitledFile(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationOpenUntitledFile:' not implemented")
     
     // @optional
-    fun application_openFileWithoutUI(sender: MemorySegment, filename: MemorySegment): BOOL =
+    fun application_openFileWithoutUI(sender: MemorySegment, filename: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:openFileWithoutUI:' not implemented")
     
     // @optional
-    fun application_printFile(sender: MemorySegment, filename: MemorySegment): BOOL =
+    fun application_printFile(sender: MemorySegment, filename: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:printFile:' not implemented")
     
     // @optional
-    fun application_printFiles_withSettings_showPrintPanels(application: MemorySegment, fileNames: MemorySegment, printSettings: MemorySegment, showPrintPanels: BOOL): NSApplicationPrintReply =
+    fun application_printFiles_withSettings_showPrintPanels(application: MemorySegment, fileNames: MemorySegment, printSettings: MemorySegment, showPrintPanels: Boolean): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'application:printFiles:withSettings:showPrintPanels:' not implemented")
     
     // @optional
-    fun applicationShouldTerminateAfterLastWindowClosed(sender: MemorySegment): BOOL =
+    fun applicationShouldTerminateAfterLastWindowClosed(sender: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationShouldTerminateAfterLastWindowClosed:' not implemented")
     
     // @optional
-    fun applicationShouldHandleReopen_hasVisibleWindows(sender: MemorySegment, hasVisibleWindows: BOOL): BOOL =
+    fun applicationShouldHandleReopen_hasVisibleWindows(sender: MemorySegment, hasVisibleWindows: Boolean): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationShouldHandleReopen:hasVisibleWindows:' not implemented")
     
     // @optional
@@ -78,7 +78,7 @@ interface NSApplicationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'application:didReceiveRemoteNotification:' not implemented")
     
     // @optional
-    fun applicationSupportsSecureRestorableState(app: MemorySegment): BOOL =
+    fun applicationSupportsSecureRestorableState(app: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationSupportsSecureRestorableState:' not implemented")
     
     // @optional
@@ -94,11 +94,11 @@ interface NSApplicationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'application:didDecodeRestorableState:' not implemented")
     
     // @optional
-    fun application_willContinueUserActivityWithType(application: MemorySegment, userActivityType: MemorySegment): BOOL =
+    fun application_willContinueUserActivityWithType(application: MemorySegment, userActivityType: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:willContinueUserActivityWithType:' not implemented")
     
     // @optional
-    fun application_continueUserActivity_restorationHandler(application: MemorySegment, userActivity: MemorySegment, restorationHandler: MemorySegment): BOOL =
+    fun application_continueUserActivity_restorationHandler(application: MemorySegment, userActivity: MemorySegment, restorationHandler: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:continueUserActivity:restorationHandler:' not implemented")
     
     // @optional
@@ -114,11 +114,11 @@ interface NSApplicationDelegate : NSObject {
         throw UnsupportedOperationException("Optional ObjC method 'application:userDidAcceptCloudKitShareWithMetadata:' not implemented")
     
     // @optional
-    fun application_delegateHandlesKey(sender: MemorySegment, key: MemorySegment): BOOL =
+    fun application_delegateHandlesKey(sender: MemorySegment, key: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'application:delegateHandlesKey:' not implemented")
     
     // @optional
-    fun applicationShouldAutomaticallyLocalizeKeyEquivalents(application: MemorySegment): BOOL =
+    fun applicationShouldAutomaticallyLocalizeKeyEquivalents(application: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'applicationShouldAutomaticallyLocalizeKeyEquivalents:' not implemented")
     
     // @optional

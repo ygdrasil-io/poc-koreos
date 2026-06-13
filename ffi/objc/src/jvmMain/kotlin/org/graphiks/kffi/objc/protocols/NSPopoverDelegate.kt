@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSPopoverDelegate
  * Inherits protocols: NSObject
  */
-interface NSPopoverDelegate : NSObject {
+interface NSPopoverDelegate {
     // @optional
-    fun popoverShouldClose(popover: MemorySegment): BOOL =
+    fun popoverShouldClose(popover: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'popoverShouldClose:' not implemented")
     
     // @optional
-    fun popoverShouldDetach(popover: MemorySegment): BOOL =
+    fun popoverShouldDetach(popover: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'popoverShouldDetach:' not implemented")
     
     // @optional

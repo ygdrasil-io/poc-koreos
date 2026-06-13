@@ -8,33 +8,33 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSScrubberFlowLayout
  * Superclass: NSScrubberLayout
  */
-open class NSScrubberFlowLayout(ptr: MemorySegment) : NSScrubberLayout(ptr) {
+open class NSScrubberFlowLayout(override val ptr: MemorySegment) : NSScrubberLayout(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScrubberFlowLayout") }
         
     }
     
-    fun invalidateLayoutForItemsAtIndexes(invalidItemIndexes: MemorySegment): Unit {
+    open fun invalidateLayoutForItemsAtIndexes(invalidItemIndexes: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("invalidateLayoutForItemsAtIndexes:")
         ObjCRuntime.msgSend(null, ptr, sel, invalidItemIndexes)
     }
     
     // @property itemSpacing
-    fun itemSpacing(): CGFloat {
+    open fun itemSpacing(): Double {
         val sel = ObjCRuntime.sel("itemSpacing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setItemSpacing(value: CGFloat) {
+    open fun setItemSpacing(value: Double) {
         val sel = ObjCRuntime.sel("setItemSpacing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property itemSize
-    fun itemSize(): NSSize {
+    open fun itemSize(): MemorySegment {
         val sel = ObjCRuntime.sel("itemSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    fun setItemSize(value: NSSize) {
+    open fun setItemSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setItemSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }

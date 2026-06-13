@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSProgressReporting
  */
-open class NSURLSessionTask(val ptr: MemorySegment) {
+open class NSURLSessionTask(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionTask") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -41,9 +41,9 @@ open class NSURLSessionTask(val ptr: MemorySegment) {
     }
     
     // @property taskIdentifier
-    open fun taskIdentifier(): NSUInteger {
+    open fun taskIdentifier(): Long {
         val sel = ObjCRuntime.sel("taskIdentifier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property originalRequest
@@ -92,47 +92,47 @@ open class NSURLSessionTask(val ptr: MemorySegment) {
     }
     
     // @property countOfBytesClientExpectsToSend
-    open fun countOfBytesClientExpectsToSend(): int64_t {
+    open fun countOfBytesClientExpectsToSend(): Long {
         val sel = ObjCRuntime.sel("countOfBytesClientExpectsToSend")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setCountOfBytesClientExpectsToSend(value: int64_t) {
+    open fun setCountOfBytesClientExpectsToSend(value: Long) {
         val sel = ObjCRuntime.sel("setCountOfBytesClientExpectsToSend:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property countOfBytesClientExpectsToReceive
-    open fun countOfBytesClientExpectsToReceive(): int64_t {
+    open fun countOfBytesClientExpectsToReceive(): Long {
         val sel = ObjCRuntime.sel("countOfBytesClientExpectsToReceive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setCountOfBytesClientExpectsToReceive(value: int64_t) {
+    open fun setCountOfBytesClientExpectsToReceive(value: Long) {
         val sel = ObjCRuntime.sel("setCountOfBytesClientExpectsToReceive:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property countOfBytesSent
-    open fun countOfBytesSent(): int64_t {
+    open fun countOfBytesSent(): Long {
         val sel = ObjCRuntime.sel("countOfBytesSent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfBytesReceived
-    open fun countOfBytesReceived(): int64_t {
+    open fun countOfBytesReceived(): Long {
         val sel = ObjCRuntime.sel("countOfBytesReceived")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfBytesExpectedToSend
-    open fun countOfBytesExpectedToSend(): int64_t {
+    open fun countOfBytesExpectedToSend(): Long {
         val sel = ObjCRuntime.sel("countOfBytesExpectedToSend")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property countOfBytesExpectedToReceive
-    open fun countOfBytesExpectedToReceive(): int64_t {
+    open fun countOfBytesExpectedToReceive(): Long {
         val sel = ObjCRuntime.sel("countOfBytesExpectedToReceive")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as int64_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property taskDescription
@@ -152,9 +152,9 @@ open class NSURLSessionTask(val ptr: MemorySegment) {
     open fun setTaskDescription(value: String) = setTaskDescription(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property state
-    open fun state(): NSURLSessionTaskState {
+    open fun state(): MemorySegment {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLSessionTaskState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property error
@@ -174,11 +174,11 @@ open class NSURLSessionTask(val ptr: MemorySegment) {
     }
     
     // @property prefersIncrementalDelivery
-    open fun prefersIncrementalDelivery(): BOOL {
+    open fun prefersIncrementalDelivery(): Boolean {
         val sel = ObjCRuntime.sel("prefersIncrementalDelivery")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setPrefersIncrementalDelivery(value: BOOL) {
+    open fun setPrefersIncrementalDelivery(value: Boolean) {
         val sel = ObjCRuntime.sel("setPrefersIncrementalDelivery:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

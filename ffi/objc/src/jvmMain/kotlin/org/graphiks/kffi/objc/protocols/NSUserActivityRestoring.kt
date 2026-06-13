@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserActivityRestoring
  * Inherits protocols: NSObject
  */
-interface NSUserActivityRestoring : NSObject {
-    fun restoreUserActivityState(userActivity: MemorySegment)
+interface NSUserActivityRestoring {
+    fun restoreUserActivityState(userActivity: MemorySegment): Unit
     
 }
 

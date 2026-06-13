@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSTask
  * Superclass: NSObject
  */
-open class NSTask(val ptr: MemorySegment) {
+open class NSTask(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTask") }
         
@@ -19,9 +19,9 @@ open class NSTask(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun launchAndReturnError(error: MemorySegment): BOOL {
+    open fun launchAndReturnError(error: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("launchAndReturnError:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, error) as Boolean
     }
     
     open fun interrupt(): Unit {
@@ -34,14 +34,14 @@ open class NSTask(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun suspend(): BOOL {
+    open fun suspend(): Boolean {
         val sel = ObjCRuntime.sel("suspend")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
-    open fun resume(): BOOL {
+    open fun resume(): Boolean {
         val sel = ObjCRuntime.sel("resume")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property executableURL
@@ -133,9 +133,9 @@ open class NSTask(val ptr: MemorySegment) {
     }
     
     // @property running
-    open fun isRunning(): BOOL {
+    open fun isRunning(): Boolean {
         val sel = ObjCRuntime.sel("isRunning")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property terminationStatus
@@ -145,9 +145,9 @@ open class NSTask(val ptr: MemorySegment) {
     }
     
     // @property terminationReason
-    open fun terminationReason(): NSTaskTerminationReason {
+    open fun terminationReason(): MemorySegment {
         val sel = ObjCRuntime.sel("terminationReason")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTaskTerminationReason
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property terminationHandler
@@ -161,11 +161,11 @@ open class NSTask(val ptr: MemorySegment) {
     }
     
     // @property qualityOfService
-    open fun qualityOfService(): NSQualityOfService {
+    open fun qualityOfService(): MemorySegment {
         val sel = ObjCRuntime.sel("qualityOfService")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setQualityOfService(value: NSQualityOfService) {
+    open fun setQualityOfService(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQualityOfService:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -176,10 +176,10 @@ open class NSTask(val ptr: MemorySegment) {
 
 fun NSTask.waitUntilExit(): Unit {
     val sel = ObjCRuntime.sel("waitUntilExit")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
-// Class<*> method: +[NSTask launchedTaskWithExecutableURL:arguments:error:terminationHandler:]
+// Class method: +[NSTask launchedTaskWithExecutableURL:arguments:error:terminationHandler:]
 fun NSTask_launchedTaskWithExecutableURL_arguments_error_terminationHandler(url: MemorySegment, arguments: MemorySegment, error: MemorySegment, terminationHandler: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("launchedTaskWithExecutableURL:arguments:error:terminationHandler:")
     val cls = ObjCRuntime.getClass("NSTask")
@@ -190,34 +190,33 @@ fun NSTask_launchedTaskWithExecutableURL_arguments_error_terminationHandler(url:
 
 fun NSTask.launch(): Unit {
     val sel = ObjCRuntime.sel("launch")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
 fun NSTask.launchPath(): MemorySegment {
     val sel = ObjCRuntime.sel("launchPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSTask.setLaunchPath(launchPath: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setLaunchPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, launchPath)
+    ObjCRuntime.msgSend(null, this.ptr, sel, launchPath)
 }
 
 fun NSTask.currentDirectoryPath(): MemorySegment {
     val sel = ObjCRuntime.sel("currentDirectoryPath")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSTask.setCurrentDirectoryPath(currentDirectoryPath: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setCurrentDirectoryPath:")
-    ObjCRuntime.msgSend(null, ptr, sel, currentDirectoryPath)
+    ObjCRuntime.msgSend(null, this.ptr, sel, currentDirectoryPath)
 }
 
-// Class<*> method: +[NSTask launchedTaskWithLaunchPath:arguments:]
+// Class method: +[NSTask launchedTaskWithLaunchPath:arguments:]
 fun NSTask_launchedTaskWithLaunchPath_arguments(path: MemorySegment, arguments: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("launchedTaskWithLaunchPath:arguments:")
     val cls = ObjCRuntime.getClass("NSTask")
     return ObjCRuntime.msgSend(ValueLayout.ADDRESS, cls, sel, path, arguments) as MemorySegment
 }
 
-// @property launchPath

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSMetadataQueryDelegate
  * Inherits protocols: NSObject
  */
-interface NSMetadataQueryDelegate : NSObject {
+interface NSMetadataQueryDelegate {
     // @optional
     fun metadataQuery_replacementObjectForResultObject(query: MemorySegment, result: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'metadataQuery:replacementObjectForResultObject:' not implemented")

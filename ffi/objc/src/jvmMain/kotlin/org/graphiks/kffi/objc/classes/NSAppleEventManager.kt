@@ -8,30 +8,30 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSAppleEventManager
  * Superclass: NSObject
  */
-open class NSAppleEventManager(val ptr: MemorySegment) {
+open class NSAppleEventManager(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAppleEventManager") }
         
-        open fun sharedAppleEventManager(): MemorySegment {
+        fun sharedAppleEventManager(): MemorySegment {
             val sel = ObjCRuntime.sel("sharedAppleEventManager")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun setEventHandler_andSelector_forEventClass_andEventID(handler: MemorySegment, handleEventSelector: MemorySegment, eventClass: AEEventClass, eventID: AEEventID): Unit {
+    open fun setEventHandler_andSelector_forEventClass_andEventID(handler: MemorySegment, handleEventSelector: MemorySegment, eventClass: Int, eventID: Int): Unit {
         val sel = ObjCRuntime.sel("setEventHandler:andSelector:forEventClass:andEventID:")
         ObjCRuntime.msgSend(null, ptr, sel, handler, handleEventSelector, eventClass, eventID)
     }
     
-    open fun removeEventHandlerForEventClass_andEventID(eventClass: AEEventClass, eventID: AEEventID): Unit {
+    open fun removeEventHandlerForEventClass_andEventID(eventClass: Int, eventID: Int): Unit {
         val sel = ObjCRuntime.sel("removeEventHandlerForEventClass:andEventID:")
         ObjCRuntime.msgSend(null, ptr, sel, eventClass, eventID)
     }
     
-    open fun dispatchRawAppleEvent_withRawReply_handlerRefCon(theAppleEvent: MemorySegment, theReply: MemorySegment, handlerRefCon: MemorySegment): OSErr {
+    open fun dispatchRawAppleEvent_withRawReply_handlerRefCon(theAppleEvent: MemorySegment, theReply: MemorySegment, handlerRefCon: MemorySegment): Short {
         val sel = ObjCRuntime.sel("dispatchRawAppleEvent:withRawReply:handlerRefCon:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_SHORT, ptr, sel, theAppleEvent, theReply, handlerRefCon) as OSErr
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_SHORT, ptr, sel, theAppleEvent, theReply, handlerRefCon) as Short
     }
     
     open fun suspendCurrentAppleEvent(): MemorySegment {
@@ -73,7 +73,7 @@ open class NSAppleEventManager(val ptr: MemorySegment) {
     
     
     // ── Instance variables (direct field access not supported via Panama) ──
-    // ivar: _isPreparedForDispatch: BOOL
+    // ivar: _isPreparedForDispatch: Boolean
     // ivar: _padding: MemorySegment
 }
 

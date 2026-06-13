@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSTextLineFragment(val ptr: MemorySegment) {
+open class NSTextLineFragment(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextLineFragment") }
         
     }
     
-    open fun initWithAttributedString_range(attributedString: MemorySegment, range: NSRange): MemorySegment {
+    open fun initWithAttributedString_range(attributedString: MemorySegment, range: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithAttributedString:range:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, attributedString, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"))) as MemorySegment
     }
@@ -25,13 +25,13 @@ open class NSTextLineFragment(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, aDecoder) as MemorySegment
     }
     
-    open fun initWithString_attributes_range(string: MemorySegment, attributes: MemorySegment, range: NSRange): MemorySegment {
+    open fun initWithString_attributes_range(string: MemorySegment, attributes: MemorySegment, range: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:attributes:range:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, string, attributes, ObjCRuntime.ObjCStructArg(range, MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"))) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString_attributes_range(string: String, attributes: MemorySegment, range: NSRange): MemorySegment = initWithString_attributes_range(ObjCRuntime.newNSString(Arena.global(), string), attributes, range)
+    fun initWithString_attributes_range(string: String, attributes: MemorySegment, range: MemorySegment): MemorySegment = initWithString_attributes_range(ObjCRuntime.newNSString(Arena.global(), string), attributes, range)
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
@@ -43,19 +43,19 @@ open class NSTextLineFragment(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint")), context)
     }
     
-    open fun locationForCharacterAtIndex(index: NSInteger): MemorySegment {
+    open fun locationForCharacterAtIndex(index: Long): MemorySegment {
         val sel = ObjCRuntime.sel("locationForCharacterAtIndex:")
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"), ptr, sel, index) as MemorySegment
     }
     
-    open fun characterIndexForPoint(point: MemorySegment): NSInteger {
+    open fun characterIndexForPoint(point: MemorySegment): Long {
         val sel = ObjCRuntime.sel("characterIndexForPoint:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as Long
     }
     
-    open fun fractionOfDistanceThroughGlyphForPoint(point: MemorySegment): CGFloat {
+    open fun fractionOfDistanceThroughGlyphForPoint(point: MemorySegment): Double {
         val sel = ObjCRuntime.sel("fractionOfDistanceThroughGlyphForPoint:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, ObjCRuntime.ObjCStructArg(point, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as Double
     }
     
     // @property attributedString
@@ -65,9 +65,9 @@ open class NSTextLineFragment(val ptr: MemorySegment) {
     }
     
     // @property characterRange
-    open fun characterRange(): NSRange {
+    open fun characterRange(): MemorySegment {
         val sel = ObjCRuntime.sel("characterRange")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property typographicBounds

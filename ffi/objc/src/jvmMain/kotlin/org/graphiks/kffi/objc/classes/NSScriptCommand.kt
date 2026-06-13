@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSScriptCommand(val ptr: MemorySegment) {
+open class NSScriptCommand(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptCommand") }
         
-        open fun currentCommand(): MemorySegment {
+        fun currentCommand(): MemorySegment {
             val sel = ObjCRuntime.sel("currentCommand")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -101,17 +101,17 @@ open class NSScriptCommand(val ptr: MemorySegment) {
     }
     
     // @property wellFormed
-    open fun isWellFormed(): BOOL {
+    open fun isWellFormed(): Boolean {
         val sel = ObjCRuntime.sel("isWellFormed")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property scriptErrorNumber
-    open fun scriptErrorNumber(): NSInteger {
+    open fun scriptErrorNumber(): Long {
         val sel = ObjCRuntime.sel("scriptErrorNumber")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setScriptErrorNumber(value: NSInteger) {
+    open fun setScriptErrorNumber(value: Long) {
         val sel = ObjCRuntime.sel("setScriptErrorNumber:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

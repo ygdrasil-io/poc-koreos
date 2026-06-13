@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSRelativeDateTimeFormatter
  * Superclass: NSFormatter
  */
-open class NSRelativeDateTimeFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSRelativeDateTimeFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSRelativeDateTimeFormatter") }
         
     }
     
-    fun localizedStringFromDateComponents(dateComponents: MemorySegment): MemorySegment {
+    open fun localizedStringFromDateComponents(dateComponents: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("localizedStringFromDateComponents:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, dateComponents) as MemorySegment
     }
@@ -22,15 +22,15 @@ open class NSRelativeDateTimeFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun localizedStringFromDateComponentsAsString(dateComponents: MemorySegment): String = ObjCRuntime.toJavaString(localizedStringFromDateComponents(dateComponents))
     
-    fun localizedStringFromTimeInterval(timeInterval: NSTimeInterval): MemorySegment {
+    open fun localizedStringFromTimeInterval(timeInterval: Double): MemorySegment {
         val sel = ObjCRuntime.sel("localizedStringFromTimeInterval:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, timeInterval) as MemorySegment
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    fun localizedStringFromTimeIntervalAsString(timeInterval: NSTimeInterval): String = ObjCRuntime.toJavaString(localizedStringFromTimeInterval(timeInterval))
+    fun localizedStringFromTimeIntervalAsString(timeInterval: Double): String = ObjCRuntime.toJavaString(localizedStringFromTimeInterval(timeInterval))
     
-    fun localizedStringForDate_relativeToDate(date: MemorySegment, referenceDate: MemorySegment): MemorySegment {
+    open fun localizedStringForDate_relativeToDate(date: MemorySegment, referenceDate: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("localizedStringForDate:relativeToDate:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, date, referenceDate) as MemorySegment
     }
@@ -38,60 +38,57 @@ open class NSRelativeDateTimeFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun localizedStringForDate_relativeToDateAsString(date: MemorySegment, referenceDate: MemorySegment): String = ObjCRuntime.toJavaString(localizedStringForDate_relativeToDate(date, referenceDate))
     
-    override fun `stringForObjectValue`(obj: MemorySegment): MemorySegment {
+    override fun stringForObjectValue(obj: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForObjectValue:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, obj) as MemorySegment
     }
     
-    /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    override fun `stringForObjectValueAsString`(obj: MemorySegment): String = ObjCRuntime.toJavaString(stringForObjectValue(obj))
-    
     // @property dateTimeStyle
-    fun dateTimeStyle(): NSRelativeDateTimeFormatterStyle {
+    open fun dateTimeStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("dateTimeStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRelativeDateTimeFormatterStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDateTimeStyle(value: NSRelativeDateTimeFormatterStyle) {
+    open fun setDateTimeStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDateTimeStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property unitsStyle
-    fun unitsStyle(): NSRelativeDateTimeFormatterUnitsStyle {
+    open fun unitsStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("unitsStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSRelativeDateTimeFormatterUnitsStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setUnitsStyle(value: NSRelativeDateTimeFormatterUnitsStyle) {
+    open fun setUnitsStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUnitsStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property formattingContext
-    fun formattingContext(): NSFormattingContext {
+    open fun formattingContext(): MemorySegment {
         val sel = ObjCRuntime.sel("formattingContext")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFormattingContext
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFormattingContext(value: NSFormattingContext) {
+    open fun setFormattingContext(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFormattingContext:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property calendar
-    fun calendar(): MemorySegment {
+    open fun calendar(): MemorySegment {
         val sel = ObjCRuntime.sel("calendar")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setCalendar(value: MemorySegment) {
+    open fun setCalendar(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCalendar:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property locale
-    fun locale(): MemorySegment {
+    open fun locale(): MemorySegment {
         val sel = ObjCRuntime.sel("locale")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLocale(value: MemorySegment) {
+    open fun setLocale(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLocale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

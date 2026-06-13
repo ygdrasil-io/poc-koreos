@@ -9,48 +9,48 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSGestureRecognizer
  * Protocols: NSCoding
  */
-open class NSPressGestureRecognizer(ptr: MemorySegment) : NSGestureRecognizer(ptr) {
+open class NSPressGestureRecognizer(override val ptr: MemorySegment) : NSGestureRecognizer(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPressGestureRecognizer") }
         
     }
     
     // @property buttonMask
-    fun buttonMask(): NSUInteger {
+    open fun buttonMask(): Long {
         val sel = ObjCRuntime.sel("buttonMask")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setButtonMask(value: NSUInteger) {
+    open fun setButtonMask(value: Long) {
         val sel = ObjCRuntime.sel("setButtonMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minimumPressDuration
-    fun minimumPressDuration(): NSTimeInterval {
+    open fun minimumPressDuration(): Double {
         val sel = ObjCRuntime.sel("minimumPressDuration")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMinimumPressDuration(value: NSTimeInterval) {
+    open fun setMinimumPressDuration(value: Double) {
         val sel = ObjCRuntime.sel("setMinimumPressDuration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowableMovement
-    fun allowableMovement(): CGFloat {
+    open fun allowableMovement(): Double {
         val sel = ObjCRuntime.sel("allowableMovement")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setAllowableMovement(value: CGFloat) {
+    open fun setAllowableMovement(value: Double) {
         val sel = ObjCRuntime.sel("setAllowableMovement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberOfTouchesRequired
-    fun numberOfTouchesRequired(): NSInteger {
+    open fun numberOfTouchesRequired(): Long {
         val sel = ObjCRuntime.sel("numberOfTouchesRequired")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    fun setNumberOfTouchesRequired(value: NSInteger) {
+    open fun setNumberOfTouchesRequired(value: Long) {
         val sel = ObjCRuntime.sel("setNumberOfTouchesRequired:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

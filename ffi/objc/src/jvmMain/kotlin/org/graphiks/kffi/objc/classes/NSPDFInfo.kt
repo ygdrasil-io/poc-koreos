@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSPDFInfo(val ptr: MemorySegment) {
+open class NSPDFInfo(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPDFInfo") }
         
@@ -26,11 +26,11 @@ open class NSPDFInfo(val ptr: MemorySegment) {
     }
     
     // @property fileExtensionHidden
-    open fun isFileExtensionHidden(): BOOL {
+    open fun isFileExtensionHidden(): Boolean {
         val sel = ObjCRuntime.sel("isFileExtensionHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setFileExtensionHidden(value: BOOL) {
+    open fun setFileExtensionHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setFileExtensionHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -47,21 +47,21 @@ open class NSPDFInfo(val ptr: MemorySegment) {
     }
     
     // @property orientation
-    open fun orientation(): NSPaperOrientation {
+    open fun orientation(): MemorySegment {
         val sel = ObjCRuntime.sel("orientation")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSPaperOrientation
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setOrientation(value: NSPaperOrientation) {
+    open fun setOrientation(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setOrientation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property paperSize
-    open fun paperSize(): NSSize {
+    open fun paperSize(): MemorySegment {
         val sel = ObjCRuntime.sel("paperSize")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as NSSize
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize"), ptr, sel) as MemorySegment
     }
-    open fun setPaperSize(value: NSSize) {
+    open fun setPaperSize(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPaperSize:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(value, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("CGSize")))
     }

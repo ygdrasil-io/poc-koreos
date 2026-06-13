@@ -14,7 +14,7 @@ interface NSCloudSharingServiceDelegate : NSSharingServiceDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'sharingService:didCompleteForItems:error:' not implemented")
     
     // @optional
-    fun optionsForSharingService_shareProvider(cloudKitSharingService: MemorySegment, provider: MemorySegment): NSCloudKitSharingServiceOptions =
+    fun optionsForSharingService_shareProvider(cloudKitSharingService: MemorySegment, provider: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'optionsForSharingService:shareProvider:' not implemented")
     
     // @optional

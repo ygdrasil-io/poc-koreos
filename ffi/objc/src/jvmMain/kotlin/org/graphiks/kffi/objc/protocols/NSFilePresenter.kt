@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSFilePresenter
  * Inherits protocols: NSObject
  */
-interface NSFilePresenter : NSObject {
+interface NSFilePresenter {
     // @optional
     fun relinquishPresentedItemToReader(reader: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'relinquishPresentedItemToReader:' not implemented")
@@ -94,7 +94,5 @@ interface NSFilePresenter : NSObject {
     fun observedPresentedItemUbiquityAttributes(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'observedPresentedItemUbiquityAttributes' not implemented")
     
-    // @property presentedItemURL
-    /** @return NSSet<NSURLResourceKey> * */
 }
 

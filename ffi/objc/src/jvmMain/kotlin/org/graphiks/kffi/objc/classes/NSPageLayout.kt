@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSPageLayout
  * Superclass: NSObject
  */
-open class NSPageLayout(val ptr: MemorySegment) {
+open class NSPageLayout(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPageLayout") }
         
-        open fun pageLayout(): MemorySegment {
+        fun pageLayout(): MemorySegment {
             val sel = ObjCRuntime.sel("pageLayout")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -39,14 +39,14 @@ open class NSPageLayout(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, printInfo, docWindow, delegate, didEndSelector, contextInfo)
     }
     
-    open fun runModalWithPrintInfo(printInfo: MemorySegment): NSInteger {
+    open fun runModalWithPrintInfo(printInfo: MemorySegment): Long {
         val sel = ObjCRuntime.sel("runModalWithPrintInfo:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, printInfo) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, printInfo) as Long
     }
     
-    open fun runModal(): NSInteger {
+    open fun runModal(): Long {
         val sel = ObjCRuntime.sel("runModal")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property accessoryControllers
@@ -68,21 +68,21 @@ open class NSPageLayout(val ptr: MemorySegment) {
 
 fun NSPageLayout.setAccessoryView(accessoryView: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setAccessoryView:")
-    ObjCRuntime.msgSend(null, ptr, sel, accessoryView)
+    ObjCRuntime.msgSend(null, this.ptr, sel, accessoryView)
 }
 
 fun NSPageLayout.accessoryView(): MemorySegment {
     val sel = ObjCRuntime.sel("accessoryView")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSPageLayout.readPrintInfo(): Unit {
     val sel = ObjCRuntime.sel("readPrintInfo")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
 fun NSPageLayout.writePrintInfo(): Unit {
     val sel = ObjCRuntime.sel("writePrintInfo")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 

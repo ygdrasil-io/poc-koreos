@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSimpleCString
  * Superclass: NSString
  */
-open class NSSimpleCString(ptr: MemorySegment) : NSString(ptr) {
+open class NSSimpleCString(override val ptr: MemorySegment) : NSString(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSimpleCString") }
         

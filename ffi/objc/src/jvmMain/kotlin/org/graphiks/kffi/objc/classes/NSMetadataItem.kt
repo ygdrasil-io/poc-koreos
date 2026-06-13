@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMetadataItem
  * Superclass: NSObject
  */
-open class NSMetadataItem(val ptr: MemorySegment) {
+open class NSMetadataItem(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMetadataItem") }
         
@@ -25,7 +25,7 @@ open class NSMetadataItem(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun valueForAttribute(key: String): MemorySegment = valueForAttribute(ObjCRuntime.newNSString(Arena.global(), key))
+    fun valueForAttribute(key: String): MemorySegment = valueForAttribute(ObjCRuntime.newNSString(Arena.global(), key))
     
     /** @return NSDictionary<NSString *,id> * */
     open fun valuesForAttributes(keys: MemorySegment): MemorySegment {

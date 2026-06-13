@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSTableViewDataSource
  */
-open class NSTableViewDiffableDataSource(val ptr: MemorySegment) {
+open class NSTableViewDiffableDataSource(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTableViewDiffableDataSource") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -36,34 +36,34 @@ open class NSTableViewDiffableDataSource(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun applySnapshot_animatingDifferences(snapshot: MemorySegment, animatingDifferences: BOOL): Unit {
+    open fun applySnapshot_animatingDifferences(snapshot: MemorySegment, animatingDifferences: Boolean): Unit {
         val sel = ObjCRuntime.sel("applySnapshot:animatingDifferences:")
         ObjCRuntime.msgSend(null, ptr, sel, snapshot, animatingDifferences)
     }
     
-    open fun applySnapshot_animatingDifferences_completion(snapshot: MemorySegment, animatingDifferences: BOOL, completion: MemorySegment): Unit {
+    open fun applySnapshot_animatingDifferences_completion(snapshot: MemorySegment, animatingDifferences: Boolean, completion: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("applySnapshot:animatingDifferences:completion:")
         ObjCRuntime.msgSend(null, ptr, sel, snapshot, animatingDifferences, completion)
     }
     
-    open fun itemIdentifierForRow(row: NSInteger): MemorySegment {
+    open fun itemIdentifierForRow(row: Long): MemorySegment {
         val sel = ObjCRuntime.sel("itemIdentifierForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row) as MemorySegment
     }
     
-    open fun rowForItemIdentifier(identifier: MemorySegment): NSInteger {
+    open fun rowForItemIdentifier(identifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("rowForItemIdentifier:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as Long
     }
     
-    open fun sectionIdentifierForRow(row: NSInteger): MemorySegment {
+    open fun sectionIdentifierForRow(row: Long): MemorySegment {
         val sel = ObjCRuntime.sel("sectionIdentifierForRow:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, row) as MemorySegment
     }
     
-    open fun rowForSectionIdentifier(identifier: MemorySegment): NSInteger {
+    open fun rowForSectionIdentifier(identifier: MemorySegment): Long {
         val sel = ObjCRuntime.sel("rowForSectionIdentifier:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, identifier) as Long
     }
     
     // @property rowViewProvider
@@ -87,11 +87,11 @@ open class NSTableViewDiffableDataSource(val ptr: MemorySegment) {
     }
     
     // @property defaultRowAnimation
-    open fun defaultRowAnimation(): NSTableViewAnimationOptions {
+    open fun defaultRowAnimation(): MemorySegment {
         val sel = ObjCRuntime.sel("defaultRowAnimation")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTableViewAnimationOptions
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setDefaultRowAnimation(value: NSTableViewAnimationOptions) {
+    open fun setDefaultRowAnimation(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDefaultRowAnimation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,8 +8,8 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSToolbarItemValidation
  * Inherits protocols: NSObject
  */
-interface NSToolbarItemValidation : NSObject {
-    fun validateToolbarItem(item: MemorySegment): BOOL
+interface NSToolbarItemValidation {
+    fun validateToolbarItem(item: MemorySegment): Boolean
     
 }
 

@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSSliderAccessory(val ptr: MemorySegment) {
+open class NSSliderAccessory(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSliderAccessory") }
         
-        open fun accessoryWithImage(image: MemorySegment): MemorySegment {
+        fun accessoryWithImage(image: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("accessoryWithImage:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, image) as MemorySegment
         }
@@ -31,11 +31,11 @@ open class NSSliderAccessory(val ptr: MemorySegment) {
     }
     
     // @property enabled
-    open fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEnabled(value: BOOL) {
+    open fun setEnabled(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnabled:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

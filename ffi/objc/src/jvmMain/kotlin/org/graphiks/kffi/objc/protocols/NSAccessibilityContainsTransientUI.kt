@@ -8,12 +8,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityContainsTransientUI
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilityContainsTransientUI : NSAccessibilityElement {
-    fun accessibilityPerformShowAlternateUI(): BOOL
+interface NSAccessibilityContainsTransientUI {
+    fun accessibilityPerformShowAlternateUI(): Boolean
     
-    fun accessibilityPerformShowDefaultUI(): BOOL
+    fun accessibilityPerformShowDefaultUI(): Boolean
     
-    fun isAccessibilityAlternateUIVisible(): BOOL
+    fun isAccessibilityAlternateUIVisible(): Boolean
     
 }
 

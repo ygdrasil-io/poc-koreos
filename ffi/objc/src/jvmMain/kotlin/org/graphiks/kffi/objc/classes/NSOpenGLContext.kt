@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSLocking
  */
-open class NSOpenGLContext(val ptr: MemorySegment) {
+open class NSOpenGLContext(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOpenGLContext") }
         
-        open fun clearCurrentContext(): Unit {
+        fun clearCurrentContext(): Unit {
             val sel = ObjCRuntime.sel("clearCurrentContext")
             ObjCRuntime.msgSend(null, _class, sel)
         }
         
-        open fun currentContext(): MemorySegment {
+        fun currentContext(): MemorySegment {
             val sel = ObjCRuntime.sel("currentContext")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -40,7 +40,7 @@ open class NSOpenGLContext(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun setOffScreen_width_height_rowbytes(baseaddr: MemorySegment, width: GLsizei, height: GLsizei, rowbytes: GLint): Unit {
+    open fun setOffScreen_width_height_rowbytes(baseaddr: MemorySegment, width: Int, height: Int, rowbytes: Int): Unit {
         val sel = ObjCRuntime.sel("setOffScreen:width:height:rowbytes:")
         ObjCRuntime.msgSend(null, ptr, sel, baseaddr, width, height, rowbytes)
     }
@@ -65,22 +65,22 @@ open class NSOpenGLContext(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun copyAttributesFromContext_withMask(context: MemorySegment, mask: GLbitfield): Unit {
+    open fun copyAttributesFromContext_withMask(context: MemorySegment, mask: Int): Unit {
         val sel = ObjCRuntime.sel("copyAttributesFromContext:withMask:")
         ObjCRuntime.msgSend(null, ptr, sel, context, mask)
     }
     
-    open fun setValues_forParameter(vals: MemorySegment, param: NSOpenGLContextParameter): Unit {
+    open fun setValues_forParameter(vals: MemorySegment, param: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setValues:forParameter:")
         ObjCRuntime.msgSend(null, ptr, sel, vals, param)
     }
     
-    open fun getValues_forParameter(vals: MemorySegment, param: NSOpenGLContextParameter): Unit {
+    open fun getValues_forParameter(vals: MemorySegment, param: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("getValues:forParameter:")
         ObjCRuntime.msgSend(null, ptr, sel, vals, param)
     }
     
-    open fun createTexture_fromView_internalFormat(target: GLenum, view: MemorySegment, format: GLenum): Unit {
+    open fun createTexture_fromView_internalFormat(target: Int, view: MemorySegment, format: Int): Unit {
         val sel = ObjCRuntime.sel("createTexture:fromView:internalFormat:")
         ObjCRuntime.msgSend(null, ptr, sel, target, view, format)
     }
@@ -102,11 +102,17 @@ open class NSOpenGLContext(val ptr: MemorySegment) {
     }
     
     // @property currentContext
-    open fun currentVirtualScreen(): GLint {
-        val sel = ObjCRuntime.sel("currentVirtualScreen")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint
+    open fun currentContext(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentContext")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCurrentVirtualScreen(value: GLint) {
+    
+    // @property currentVirtualScreen
+    open fun currentVirtualScreen(): Int {
+        val sel = ObjCRuntime.sel("currentVirtualScreen")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
+    }
+    open fun setCurrentVirtualScreen(value: Int) {
         val sel = ObjCRuntime.sel("setCurrentVirtualScreen:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -121,28 +127,28 @@ open class NSOpenGLContext(val ptr: MemorySegment) {
 
 // ── Category: NSOpenGLPixelBuffer on NSOpenGLContext ─────────────────────────────────────────
 
-fun NSOpenGLContext.setPixelBuffer_cubeMapFace_mipMapLevel_currentVirtualScreen(pixelBuffer: MemorySegment, face: GLenum, level: GLint, screen: GLint): Unit {
+fun NSOpenGLContext.setPixelBuffer_cubeMapFace_mipMapLevel_currentVirtualScreen(pixelBuffer: MemorySegment, face: Int, level: Int, screen: Int): Unit {
     val sel = ObjCRuntime.sel("setPixelBuffer:cubeMapFace:mipMapLevel:currentVirtualScreen:")
-    ObjCRuntime.msgSend(null, ptr, sel, pixelBuffer, face, level, screen)
+    ObjCRuntime.msgSend(null, this.ptr, sel, pixelBuffer, face, level, screen)
 }
 
 fun NSOpenGLContext.pixelBuffer(): MemorySegment {
     val sel = ObjCRuntime.sel("pixelBuffer")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSOpenGLContext.pixelBufferCubeMapFace(): GLenum {
+fun NSOpenGLContext.pixelBufferCubeMapFace(): Int {
     val sel = ObjCRuntime.sel("pixelBufferCubeMapFace")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLenum
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, this.ptr, sel) as Int
 }
 
-fun NSOpenGLContext.pixelBufferMipMapLevel(): GLint {
+fun NSOpenGLContext.pixelBufferMipMapLevel(): Int {
     val sel = ObjCRuntime.sel("pixelBufferMipMapLevel")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, this.ptr, sel) as Int
 }
 
-fun NSOpenGLContext.setTextureImageToPixelBuffer_colorBuffer(pixelBuffer: MemorySegment, source: GLenum): Unit {
+fun NSOpenGLContext.setTextureImageToPixelBuffer_colorBuffer(pixelBuffer: MemorySegment, source: Int): Unit {
     val sel = ObjCRuntime.sel("setTextureImageToPixelBuffer:colorBuffer:")
-    ObjCRuntime.msgSend(null, ptr, sel, pixelBuffer, source)
+    ObjCRuntime.msgSend(null, this.ptr, sel, pixelBuffer, source)
 }
 

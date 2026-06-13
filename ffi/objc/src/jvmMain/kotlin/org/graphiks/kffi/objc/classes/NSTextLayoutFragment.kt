@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding
  */
-open class NSTextLayoutFragment(val ptr: MemorySegment) {
+open class NSTextLayoutFragment(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextLayoutFragment") }
         
@@ -30,12 +30,12 @@ open class NSTextLayoutFragment(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun textLineFragmentForVerticalOffset_requiresExactMatch(verticalOffset: CGFloat, requiresExactMatch: BOOL): MemorySegment {
+    open fun textLineFragmentForVerticalOffset_requiresExactMatch(verticalOffset: Double, requiresExactMatch: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("textLineFragmentForVerticalOffset:requiresExactMatch:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, verticalOffset, requiresExactMatch) as MemorySegment
     }
     
-    open fun textLineFragmentForTextLocation_isUpstreamAffinity(textLocation: MemorySegment, isUpstreamAffinity: BOOL): MemorySegment {
+    open fun textLineFragmentForTextLocation_isUpstreamAffinity(textLocation: MemorySegment, isUpstreamAffinity: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("textLineFragmentForTextLocation:isUpstreamAffinity:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, textLocation, isUpstreamAffinity) as MemorySegment
     }
@@ -91,9 +91,9 @@ open class NSTextLayoutFragment(val ptr: MemorySegment) {
     }
     
     // @property state
-    open fun state(): NSTextLayoutFragmentState {
+    open fun state(): MemorySegment {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTextLayoutFragmentState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property layoutFragmentFrame
@@ -109,27 +109,27 @@ open class NSTextLayoutFragment(val ptr: MemorySegment) {
     }
     
     // @property leadingPadding
-    open fun leadingPadding(): CGFloat {
+    open fun leadingPadding(): Double {
         val sel = ObjCRuntime.sel("leadingPadding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property trailingPadding
-    open fun trailingPadding(): CGFloat {
+    open fun trailingPadding(): Double {
         val sel = ObjCRuntime.sel("trailingPadding")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property topMargin
-    open fun topMargin(): CGFloat {
+    open fun topMargin(): Double {
         val sel = ObjCRuntime.sel("topMargin")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property bottomMargin
-    open fun bottomMargin(): CGFloat {
+    open fun bottomMargin(): Double {
         val sel = ObjCRuntime.sel("bottomMargin")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
     // @property textAttachmentViewProviders

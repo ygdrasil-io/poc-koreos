@@ -8,15 +8,14 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSCollectionLayoutContainer
  * Inherits protocols: NSObject
  */
-interface NSCollectionLayoutContainer : NSObject {
-    fun contentSize(): NSSize
+interface NSCollectionLayoutContainer {
+    fun contentSize(): MemorySegment
     
-    fun effectiveContentSize(): NSSize
+    fun effectiveContentSize(): MemorySegment
     
-    fun contentInsets(): NSDirectionalEdgeInsets
+    fun contentInsets(): MemorySegment
     
-    fun effectiveContentInsets(): NSDirectionalEdgeInsets
+    fun effectiveContentInsets(): MemorySegment
     
-    // @property contentSize
 }
 

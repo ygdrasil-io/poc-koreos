@@ -8,217 +8,220 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSliderCell
  * Superclass: NSActionCell
  */
-open class NSSliderCell(ptr: MemorySegment) : NSActionCell(ptr) {
+open class NSSliderCell(override val ptr: MemorySegment) : NSActionCell(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSliderCell") }
         
-        fun prefersTrackingUntilMouseUp(): BOOL {
+        fun prefersTrackingUntilMouseUp(): Boolean {
             val sel = ObjCRuntime.sel("prefersTrackingUntilMouseUp")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel) as Boolean
         }
         
     }
     
-    fun knobRectFlipped(flipped: BOOL): NSRect {
+    open fun knobRectFlipped(flipped: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("knobRectFlipped:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, flipped) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, flipped) as MemorySegment
     }
     
-    fun barRectFlipped(flipped: BOOL): NSRect {
+    open fun barRectFlipped(flipped: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("barRectFlipped:")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, flipped) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, flipped) as MemorySegment
     }
     
-    fun drawKnob(knobRect: NSRect): Unit {
+    open fun drawKnob(knobRect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawKnob:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(knobRect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun drawBarInside_flipped(rect: NSRect, flipped: BOOL): Unit {
+    open fun drawBarInside_flipped(rect: MemorySegment, flipped: Boolean): Unit {
         val sel = ObjCRuntime.sel("drawBarInside:flipped:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), flipped)
     }
     
     // @property prefersTrackingUntilMouseUp
-    fun minValue(): Double {
+    override fun prefersTrackingUntilMouseUp(): Boolean {
+        val sel = ObjCRuntime.sel("prefersTrackingUntilMouseUp")
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
+    }
+    
+    // @property minValue
+    open fun minValue(): Double {
         val sel = ObjCRuntime.sel("minValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMinValue(value: Double) {
+    open fun setMinValue(value: Double) {
         val sel = ObjCRuntime.sel("setMinValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maxValue
-    fun maxValue(): Double {
+    open fun maxValue(): Double {
         val sel = ObjCRuntime.sel("maxValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setMaxValue(value: Double) {
+    open fun setMaxValue(value: Double) {
         val sel = ObjCRuntime.sel("setMaxValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property altIncrementValue
-    fun altIncrementValue(): Double {
+    open fun altIncrementValue(): Double {
         val sel = ObjCRuntime.sel("altIncrementValue")
         return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    fun setAltIncrementValue(value: Double) {
+    open fun setAltIncrementValue(value: Double) {
         val sel = ObjCRuntime.sel("setAltIncrementValue:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property sliderType
-    fun sliderType(): NSSliderType {
+    open fun sliderType(): MemorySegment {
         val sel = ObjCRuntime.sel("sliderType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSliderType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSliderType(value: NSSliderType) {
+    open fun setSliderType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSliderType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property vertical
-    fun isVertical(): BOOL {
+    open fun isVertical(): Boolean {
         val sel = ObjCRuntime.sel("isVertical")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setVertical(value: BOOL) {
+    open fun setVertical(value: Boolean) {
         val sel = ObjCRuntime.sel("setVertical:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property trackRect
-    fun trackRect(): NSRect {
+    open fun trackRect(): MemorySegment {
         val sel = ObjCRuntime.sel("trackRect")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as NSRect
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel) as MemorySegment
     }
     
     // @property knobThickness
-    fun knobThickness(): CGFloat {
+    open fun knobThickness(): Double {
         val sel = ObjCRuntime.sel("knobThickness")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
 }
 
 // ── Category: NSSliderCellVerticalGetter on NSSliderCell ─────────────────────────────────────────
 
-fun NSSliderCell.isVertical(): BOOL {
-    val sel = ObjCRuntime.sel("isVertical")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
-}
+// ── Category: NSTickMarkSupport on NSSliderCell ─────────────────────────────────────────
 
-// @property vertical
-fun NSSliderCell.tickMarkValueAtIndex(index: NSInteger): Double {
+fun NSSliderCell.tickMarkValueAtIndex(index: Long): Double {
     val sel = ObjCRuntime.sel("tickMarkValueAtIndex:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, index) as Double
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, this.ptr, sel, index) as Double
 }
 
-fun NSSliderCell.rectOfTickMarkAtIndex(index: NSInteger): NSRect {
+fun NSSliderCell.rectOfTickMarkAtIndex(index: Long): MemorySegment {
     val sel = ObjCRuntime.sel("rectOfTickMarkAtIndex:")
-    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, index) as NSRect
+    return ObjCRuntime.msgSend(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), this.ptr, sel, index) as MemorySegment
 }
 
-fun NSSliderCell.indexOfTickMarkAtPoint(point: NSPoint): NSInteger {
+fun NSSliderCell.indexOfTickMarkAtPoint(point: MemorySegment): Long {
     val sel = ObjCRuntime.sel("indexOfTickMarkAtPoint:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel, point) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel, point) as Long
 }
 
 fun NSSliderCell.closestTickMarkValueToValue(value: Double): Double {
     val sel = ObjCRuntime.sel("closestTickMarkValueToValue:")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, value) as Double
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, this.ptr, sel, value) as Double
 }
 
 fun NSSliderCell.drawTickMarks(): Unit {
     val sel = ObjCRuntime.sel("drawTickMarks")
-    ObjCRuntime.msgSend(null, ptr, sel)
+    ObjCRuntime.msgSend(null, this.ptr, sel)
 }
 
-fun NSSliderCell.numberOfTickMarks(): NSInteger {
+fun NSSliderCell.numberOfTickMarks(): Long {
     val sel = ObjCRuntime.sel("numberOfTickMarks")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel) as Long
 }
 
-fun NSSliderCell.setNumberOfTickMarks(numberOfTickMarks: NSInteger): Unit {
+fun NSSliderCell.setNumberOfTickMarks(numberOfTickMarks: Long): Unit {
     val sel = ObjCRuntime.sel("setNumberOfTickMarks:")
-    ObjCRuntime.msgSend(null, ptr, sel, numberOfTickMarks)
+    ObjCRuntime.msgSend(null, this.ptr, sel, numberOfTickMarks)
 }
 
-fun NSSliderCell.tickMarkPosition(): NSTickMarkPosition {
+fun NSSliderCell.tickMarkPosition(): MemorySegment {
     val sel = ObjCRuntime.sel("tickMarkPosition")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSTickMarkPosition
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSSliderCell.setTickMarkPosition(tickMarkPosition: NSTickMarkPosition): Unit {
+fun NSSliderCell.setTickMarkPosition(tickMarkPosition: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTickMarkPosition:")
-    ObjCRuntime.msgSend(null, ptr, sel, tickMarkPosition)
+    ObjCRuntime.msgSend(null, this.ptr, sel, tickMarkPosition)
 }
 
-fun NSSliderCell.allowsTickMarkValuesOnly(): BOOL {
+fun NSSliderCell.allowsTickMarkValuesOnly(): Boolean {
     val sel = ObjCRuntime.sel("allowsTickMarkValuesOnly")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSSliderCell.setAllowsTickMarkValuesOnly(allowsTickMarkValuesOnly: BOOL): Unit {
+fun NSSliderCell.setAllowsTickMarkValuesOnly(allowsTickMarkValuesOnly: Boolean): Unit {
     val sel = ObjCRuntime.sel("setAllowsTickMarkValuesOnly:")
-    ObjCRuntime.msgSend(null, ptr, sel, allowsTickMarkValuesOnly)
+    ObjCRuntime.msgSend(null, this.ptr, sel, allowsTickMarkValuesOnly)
 }
 
-// @property numberOfTickMarks
+// ── Category: NSDeprecated on NSSliderCell ─────────────────────────────────────────
+
 fun NSSliderCell.setTitleCell(cell: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleCell:")
-    ObjCRuntime.msgSend(null, ptr, sel, cell)
+    ObjCRuntime.msgSend(null, this.ptr, sel, cell)
 }
 
 fun NSSliderCell.titleCell(): MemorySegment {
     val sel = ObjCRuntime.sel("titleCell")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSliderCell.setTitleColor(newColor: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleColor:")
-    ObjCRuntime.msgSend(null, ptr, sel, newColor)
+    ObjCRuntime.msgSend(null, this.ptr, sel, newColor)
 }
 
 fun NSSliderCell.titleColor(): MemorySegment {
     val sel = ObjCRuntime.sel("titleColor")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSliderCell.setTitleFont(fontObj: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitleFont:")
-    ObjCRuntime.msgSend(null, ptr, sel, fontObj)
+    ObjCRuntime.msgSend(null, this.ptr, sel, fontObj)
 }
 
 fun NSSliderCell.titleFont(): MemorySegment {
     val sel = ObjCRuntime.sel("titleFont")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSliderCell.title(): MemorySegment {
     val sel = ObjCRuntime.sel("title")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
 fun NSSliderCell.setTitle(string: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setTitle:")
-    ObjCRuntime.msgSend(null, ptr, sel, string)
+    ObjCRuntime.msgSend(null, this.ptr, sel, string)
 }
 
-fun NSSliderCell.setKnobThickness(thickness: CGFloat): Unit {
+fun NSSliderCell.setKnobThickness(thickness: Double): Unit {
     val sel = ObjCRuntime.sel("setKnobThickness:")
-    ObjCRuntime.msgSend(null, ptr, sel, thickness)
+    ObjCRuntime.msgSend(null, this.ptr, sel, thickness)
 }
 
 fun NSSliderCell.setImage(backgroundImage: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("setImage:")
-    ObjCRuntime.msgSend(null, ptr, sel, backgroundImage)
+    ObjCRuntime.msgSend(null, this.ptr, sel, backgroundImage)
 }
 
 fun NSSliderCell.image(): MemorySegment {
     val sel = ObjCRuntime.sel("image")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 

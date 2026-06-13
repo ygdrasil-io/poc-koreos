@@ -8,28 +8,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMenuToolbarItem
  * Superclass: NSToolbarItem
  */
-open class NSMenuToolbarItem(ptr: MemorySegment) : NSToolbarItem(ptr) {
+open class NSMenuToolbarItem(override val ptr: MemorySegment) : NSToolbarItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMenuToolbarItem") }
         
     }
     
     // @property menu
-    fun menu(): MemorySegment {
+    open fun menu(): MemorySegment {
         val sel = ObjCRuntime.sel("menu")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMenu(value: MemorySegment) {
+    open fun setMenu(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMenu:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property showsIndicator
-    fun showsIndicator(): BOOL {
+    open fun showsIndicator(): Boolean {
         val sel = ObjCRuntime.sel("showsIndicator")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setShowsIndicator(value: BOOL) {
+    open fun setShowsIndicator(value: Boolean) {
         val sel = ObjCRuntime.sel("setShowsIndicator:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

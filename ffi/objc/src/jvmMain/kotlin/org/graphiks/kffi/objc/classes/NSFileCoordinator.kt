@@ -8,22 +8,22 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSFileCoordinator
  * Superclass: NSObject
  */
-open class NSFileCoordinator(val ptr: MemorySegment) {
+open class NSFileCoordinator(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSFileCoordinator") }
         
-        open fun addFilePresenter(filePresenter: MemorySegment): Unit {
+        fun addFilePresenter(filePresenter: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("addFilePresenter:")
             ObjCRuntime.msgSend(null, _class, sel, filePresenter)
         }
         
-        open fun removeFilePresenter(filePresenter: MemorySegment): Unit {
+        fun removeFilePresenter(filePresenter: MemorySegment): Unit {
             val sel = ObjCRuntime.sel("removeFilePresenter:")
             ObjCRuntime.msgSend(null, _class, sel, filePresenter)
         }
         
         /** @return NSArray<id<NSFilePresenter>> * */
-        open fun filePresenters(): MemorySegment {
+        fun filePresenters(): MemorySegment {
             val sel = ObjCRuntime.sel("filePresenters")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -40,27 +40,27 @@ open class NSFileCoordinator(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, intents, queue, accessor)
     }
     
-    open fun coordinateReadingItemAtURL_options_error_byAccessor(url: MemorySegment, options: NSFileCoordinatorReadingOptions, outError: MemorySegment, reader: MemorySegment): Unit {
+    open fun coordinateReadingItemAtURL_options_error_byAccessor(url: MemorySegment, options: MemorySegment, outError: MemorySegment, reader: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("coordinateReadingItemAtURL:options:error:byAccessor:")
         ObjCRuntime.msgSend(null, ptr, sel, url, options, outError, reader)
     }
     
-    open fun coordinateWritingItemAtURL_options_error_byAccessor(url: MemorySegment, options: NSFileCoordinatorWritingOptions, outError: MemorySegment, writer: MemorySegment): Unit {
+    open fun coordinateWritingItemAtURL_options_error_byAccessor(url: MemorySegment, options: MemorySegment, outError: MemorySegment, writer: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("coordinateWritingItemAtURL:options:error:byAccessor:")
         ObjCRuntime.msgSend(null, ptr, sel, url, options, outError, writer)
     }
     
-    open fun coordinateReadingItemAtURL_options_writingItemAtURL_options_error_byAccessor(readingURL: MemorySegment, readingOptions: NSFileCoordinatorReadingOptions, writingURL: MemorySegment, writingOptions: NSFileCoordinatorWritingOptions, outError: MemorySegment, readerWriter: MemorySegment): Unit {
+    open fun coordinateReadingItemAtURL_options_writingItemAtURL_options_error_byAccessor(readingURL: MemorySegment, readingOptions: MemorySegment, writingURL: MemorySegment, writingOptions: MemorySegment, outError: MemorySegment, readerWriter: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("coordinateReadingItemAtURL:options:writingItemAtURL:options:error:byAccessor:")
         ObjCRuntime.msgSend(null, ptr, sel, readingURL, readingOptions, writingURL, writingOptions, outError, readerWriter)
     }
     
-    open fun coordinateWritingItemAtURL_options_writingItemAtURL_options_error_byAccessor(url1: MemorySegment, options1: NSFileCoordinatorWritingOptions, url2: MemorySegment, options2: NSFileCoordinatorWritingOptions, outError: MemorySegment, writer: MemorySegment): Unit {
+    open fun coordinateWritingItemAtURL_options_writingItemAtURL_options_error_byAccessor(url1: MemorySegment, options1: MemorySegment, url2: MemorySegment, options2: MemorySegment, outError: MemorySegment, writer: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("coordinateWritingItemAtURL:options:writingItemAtURL:options:error:byAccessor:")
         ObjCRuntime.msgSend(null, ptr, sel, url1, options1, url2, options2, outError, writer)
     }
     
-    open fun prepareForReadingItemsAtURLs_options_writingItemsAtURLs_options_error_byAccessor(readingURLs: MemorySegment, readingOptions: NSFileCoordinatorReadingOptions, writingURLs: MemorySegment, writingOptions: NSFileCoordinatorWritingOptions, outError: MemorySegment, batchAccessor: MemorySegment): Unit {
+    open fun prepareForReadingItemsAtURLs_options_writingItemsAtURLs_options_error_byAccessor(readingURLs: MemorySegment, readingOptions: MemorySegment, writingURLs: MemorySegment, writingOptions: MemorySegment, outError: MemorySegment, batchAccessor: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("prepareForReadingItemsAtURLs:options:writingItemsAtURLs:options:error:byAccessor:")
         ObjCRuntime.msgSend(null, ptr, sel, readingURLs, readingOptions, writingURLs, writingOptions, outError, batchAccessor)
     }
@@ -87,6 +87,12 @@ open class NSFileCoordinator(val ptr: MemorySegment) {
     
     // @property filePresenters
     /** @return NSArray<id<NSFilePresenter>> * */
+    open fun filePresenters(): MemorySegment {
+        val sel = ObjCRuntime.sel("filePresenters")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property purposeIdentifier
     open fun purposeIdentifier(): MemorySegment {
         val sel = ObjCRuntime.sel("purposeIdentifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -110,6 +116,6 @@ open class NSFileCoordinator(val ptr: MemorySegment) {
     // ivar: _recentFilePresenterURL: MemorySegment
     // ivar: _accessClaimIDOrIDs: MemorySegment
     // ivar: _movedItems: MemorySegment
-    // ivar: _isCancelled: BOOL
+    // ivar: _isCancelled: Boolean
 }
 

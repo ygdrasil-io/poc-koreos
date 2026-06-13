@@ -8,20 +8,20 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSGarbageCollector
  * Superclass: NSObject
  */
-open class NSGarbageCollector(val ptr: MemorySegment) {
+open class NSGarbageCollector(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGarbageCollector") }
         
-        open fun defaultCollector(): MemorySegment {
+        fun defaultCollector(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultCollector")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun isCollecting(): BOOL {
+    open fun isCollecting(): Boolean {
         val sel = ObjCRuntime.sel("isCollecting")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun disable(): Unit {
@@ -34,9 +34,9 @@ open class NSGarbageCollector(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun isEnabled(): BOOL {
+    open fun isEnabled(): Boolean {
         val sel = ObjCRuntime.sel("isEnabled")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun collectIfNeeded(): Unit {

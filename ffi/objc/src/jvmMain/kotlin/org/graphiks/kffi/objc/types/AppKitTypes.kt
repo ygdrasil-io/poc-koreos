@@ -7,12 +7,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
 /**
  * {@snippet lang=c : typedef SIGNED = Char __int8_t;}
  */
-typealias _int8_t = Any
+typealias _int8_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char __uint8_t;}
  */
-typealias _uint8_t = Any
+typealias _uint8_t = Byte
 
 /**
  * {@snippet lang=c : typedef Short __int16_t;}
@@ -22,7 +22,7 @@ typealias _int16_t = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short __uint16_t;}
  */
-typealias _uint16_t = Any
+typealias _uint16_t = Short
 
 /**
  * {@snippet lang=c : typedef Int __int32_t;}
@@ -32,7 +32,7 @@ typealias _int32_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __uint32_t;}
  */
-typealias _uint32_t = Any
+typealias _uint32_t = Int
 
 /**
  * {@snippet lang=c : typedef LongLong __int64_t;}
@@ -42,7 +42,7 @@ typealias _int64_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong __uint64_t;}
  */
-typealias _uint64_t = Any
+typealias _uint64_t = Long
 
 /**
  * {@snippet lang=c : typedef Long __darwin_intptr_t;}
@@ -52,7 +52,7 @@ typealias _darwin_intptr_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_natural_t;}
  */
-typealias _darwin_natural_t = Any
+typealias _darwin_natural_t = Int
 
 /**
  * {@snippet lang=c : typedef Int __darwin_ct_rune_t;}
@@ -67,7 +67,7 @@ typealias _darwin_ptrdiff_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long __darwin_size_t;}
  */
-typealias _darwin_size_t = Any
+typealias _darwin_size_t = Long
 
 /**
  * {@snippet lang=c : typedef Int __darwin_wchar_t;}
@@ -87,12 +87,12 @@ typealias _darwin_wint_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long __darwin_clock_t;}
  */
-typealias _darwin_clock_t = Any
+typealias _darwin_clock_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_socklen_t;}
  */
-typealias _darwin_socklen_t = Any
+typealias _darwin_socklen_t = Int
 
 /**
  * {@snippet lang=c : typedef Long __darwin_ssize_t;}
@@ -107,7 +107,7 @@ typealias _darwin_time_t = Long
 /**
  * {@snippet lang=c : typedef SIGNED = Char int8_t;}
  */
-typealias int8_t = Any
+typealias int8_t = Byte
 
 /**
  * {@snippet lang=c : typedef Short int16_t;}
@@ -127,22 +127,22 @@ typealias int64_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char u_int8_t;}
  */
-typealias u_int8_t = Any
+typealias u_int8_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short u_int16_t;}
  */
-typealias u_int16_t = Any
+typealias u_int16_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int u_int32_t;}
  */
-typealias u_int32_t = Any
+typealias u_int32_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong u_int64_t;}
  */
-typealias u_int64_t = Any
+typealias u_int64_t = Long
 
 /**
  * {@snippet lang=c : typedef LongLong register_t;}
@@ -157,17 +157,17 @@ typealias intptr_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long uintptr_t;}
  */
-typealias uintptr_t = Any
+typealias uintptr_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong user_addr_t;}
  */
-typealias user_addr_t = Any
+typealias user_addr_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong user_size_t;}
  */
-typealias user_size_t = Any
+typealias user_size_t = Long
 
 /**
  * {@snippet lang=c : typedef LongLong user_ssize_t;}
@@ -182,7 +182,7 @@ typealias user_long_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong user_ulong_t;}
  */
-typealias user_ulong_t = Any
+typealias user_ulong_t = Long
 
 /**
  * {@snippet lang=c : typedef LongLong user_time_t;}
@@ -197,7 +197,7 @@ typealias user_off_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong syscall_arg_t;}
  */
-typealias syscall_arg_t = Any
+typealias syscall_arg_t = Long
 
 /**
  * {@snippet lang=c : typedef LongLong __darwin_blkcnt_t;}
@@ -217,47 +217,47 @@ typealias _darwin_dev_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_fsblkcnt_t;}
  */
-typealias _darwin_fsblkcnt_t = Any
+typealias _darwin_fsblkcnt_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_fsfilcnt_t;}
  */
-typealias _darwin_fsfilcnt_t = Any
+typealias _darwin_fsfilcnt_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_gid_t;}
  */
-typealias _darwin_gid_t = Any
+typealias _darwin_gid_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_id_t;}
  */
-typealias _darwin_id_t = Any
+typealias _darwin_id_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong __darwin_ino64_t;}
  */
-typealias _darwin_ino64_t = Any
+typealias _darwin_ino64_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong __darwin_ino_t;}
  */
-typealias _darwin_ino_t = Any
+typealias _darwin_ino_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_mach_port_name_t;}
  */
-typealias _darwin_mach_port_name_t = Any
+typealias _darwin_mach_port_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_mach_port_t;}
  */
-typealias _darwin_mach_port_t = Any
+typealias _darwin_mach_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short __darwin_mode_t;}
  */
-typealias _darwin_mode_t = Any
+typealias _darwin_mode_t = Short
 
 /**
  * {@snippet lang=c : typedef LongLong __darwin_off_t;}
@@ -272,7 +272,7 @@ typealias _darwin_pid_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_sigset_t;}
  */
-typealias _darwin_sigset_t = Any
+typealias _darwin_sigset_t = Int
 
 /**
  * {@snippet lang=c : typedef Int __darwin_suseconds_t;}
@@ -282,52 +282,52 @@ typealias _darwin_suseconds_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_uid_t;}
  */
-typealias _darwin_uid_t = Any
+typealias _darwin_uid_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_useconds_t;}
  */
-typealias _darwin_useconds_t = Any
+typealias _darwin_useconds_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long __darwin_pthread_key_t;}
  */
-typealias _darwin_pthread_key_t = Any
+typealias _darwin_pthread_key_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char u_char;}
  */
-typealias u_char = Any
+typealias u_char = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short u_short;}
  */
-typealias u_short = Any
+typealias u_short = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int u_int;}
  */
-typealias u_int = Any
+typealias u_int = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long u_long;}
  */
-typealias u_long = Any
+typealias u_long = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ushort;}
  */
-typealias ushort = Any
+typealias ushort = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uint;}
  */
-typealias uint = Any
+typealias uint = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong u_quad_t;}
  */
-typealias u_quad_t = Any
+typealias u_quad_t = Long
 
 /**
  * {@snippet lang=c : typedef LongLong quad_t;}
@@ -347,7 +347,7 @@ typealias dev_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int fixpt_t;}
  */
-typealias fixpt_t = Any
+typealias fixpt_t = Int
 
 /**
  * {@snippet lang=c : typedef LongLong blkcnt_t;}
@@ -362,27 +362,27 @@ typealias blksize_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int gid_t;}
  */
-typealias gid_t = Any
+typealias gid_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int in_addr_t;}
  */
-typealias in_addr_t = Any
+typealias in_addr_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short in_port_t;}
  */
-typealias in_port_t = Any
+typealias in_port_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong ino_t;}
  */
-typealias ino_t = Any
+typealias ino_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong ino64_t;}
  */
-typealias ino64_t = Any
+typealias ino64_t = Long
 
 /**
  * {@snippet lang=c : typedef Int key_t;}
@@ -392,17 +392,17 @@ typealias key_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short mode_t;}
  */
-typealias mode_t = Any
+typealias mode_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short nlink_t;}
  */
-typealias nlink_t = Any
+typealias nlink_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int id_t;}
  */
-typealias id_t = Any
+typealias id_t = Int
 
 /**
  * {@snippet lang=c : typedef Int pid_t;}
@@ -427,17 +427,17 @@ typealias swblk_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uid_t;}
  */
-typealias uid_t = Any
+typealias uid_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long clock_t;}
  */
-typealias clock_t = Any
+typealias clock_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long size_t;}
  */
-typealias size_t = Any
+typealias size_t = Long
 
 /**
  * {@snippet lang=c : typedef Long ssize_t;}
@@ -452,7 +452,7 @@ typealias time_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int useconds_t;}
  */
-typealias useconds_t = Any
+typealias useconds_t = Int
 
 /**
  * {@snippet lang=c : typedef Int suseconds_t;}
@@ -462,7 +462,7 @@ typealias suseconds_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long rsize_t;}
  */
-typealias rsize_t = Any
+typealias rsize_t = Long
 
 /**
  * {@snippet lang=c : typedef Int errno_t;}
@@ -477,17 +477,17 @@ typealias fd_mask = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long pthread_key_t;}
  */
-typealias pthread_key_t = Any
+typealias pthread_key_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int fsblkcnt_t;}
  */
-typealias fsblkcnt_t = Any
+typealias fsblkcnt_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int fsfilcnt_t;}
  */
-typealias fsfilcnt_t = Any
+typealias fsfilcnt_t = Int
 
 /**
  * {@snippet lang=c : typedef Int __darwin_nl_item;}
@@ -502,7 +502,7 @@ typealias _darwin_wctrans_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int __darwin_wctype_t;}
  */
-typealias _darwin_wctype_t = Any
+typealias _darwin_wctype_t = Int
 
 /**
  * {@snippet lang=c : typedef Int ct_rune_t;}
@@ -542,7 +542,7 @@ typealias sig_atomic_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int sigset_t;}
  */
-typealias sigset_t = Any
+typealias sigset_t = Int
 
 /**
  * {@snippet lang=c : typedef Long ptrdiff_t;}
@@ -557,27 +557,27 @@ typealias fpos_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char uint8_t;}
  */
-typealias uint8_t = Any
+typealias uint8_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short uint16_t;}
  */
-typealias uint16_t = Any
+typealias uint16_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uint32_t;}
  */
-typealias uint32_t = Any
+typealias uint32_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong uint64_t;}
  */
-typealias uint64_t = Any
+typealias uint64_t = Long
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char int_least8_t;}
  */
-typealias int_least8_t = Any
+typealias int_least8_t = Byte
 
 /**
  * {@snippet lang=c : typedef Short int_least16_t;}
@@ -597,27 +597,27 @@ typealias int_least64_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char uint_least8_t;}
  */
-typealias uint_least8_t = Any
+typealias uint_least8_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short uint_least16_t;}
  */
-typealias uint_least16_t = Any
+typealias uint_least16_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uint_least32_t;}
  */
-typealias uint_least32_t = Any
+typealias uint_least32_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong uint_least64_t;}
  */
-typealias uint_least64_t = Any
+typealias uint_least64_t = Long
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char int_fast8_t;}
  */
-typealias int_fast8_t = Any
+typealias int_fast8_t = Byte
 
 /**
  * {@snippet lang=c : typedef Short int_fast16_t;}
@@ -637,22 +637,22 @@ typealias int_fast64_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char uint_fast8_t;}
  */
-typealias uint_fast8_t = Any
+typealias uint_fast8_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short uint_fast16_t;}
  */
-typealias uint_fast16_t = Any
+typealias uint_fast16_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uint_fast32_t;}
  */
-typealias uint_fast32_t = Any
+typealias uint_fast32_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong uint_fast64_t;}
  */
-typealias uint_fast64_t = Any
+typealias uint_fast64_t = Long
 
 /**
  * {@snippet lang=c : typedef Long intmax_t;}
@@ -662,32 +662,32 @@ typealias intmax_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long uintmax_t;}
  */
-typealias uintmax_t = Any
+typealias uintmax_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong rlim_t;}
  */
-typealias rlim_t = Any
+typealias rlim_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong malloc_type_id_t;}
  */
-typealias malloc_type_id_t = Any
+typealias malloc_type_id_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char UInt8;}
  */
-typealias UInt8 = Any
+typealias UInt8 = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char SInt8;}
  */
-typealias SInt8 = Any
+typealias SInt8 = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UInt16;}
  */
-typealias UInt16 = Any
+typealias UInt16 = Short
 
 /**
  * {@snippet lang=c : typedef Short SInt16;}
@@ -697,7 +697,7 @@ typealias SInt16 = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UInt32;}
  */
-typealias UInt32 = Any
+typealias UInt32 = Int
 
 /**
  * {@snippet lang=c : typedef Int SInt32;}
@@ -712,7 +712,7 @@ typealias SInt64 = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong UInt64;}
  */
-typealias UInt64 = Any
+typealias UInt64 = Long
 
 /**
  * {@snippet lang=c : typedef Int Fixed;}
@@ -727,7 +727,7 @@ typealias Fract = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UnsignedFixed;}
  */
-typealias UnsignedFixed = Any
+typealias UnsignedFixed = Int
 
 /**
  * {@snippet lang=c : typedef Short ShortFixed;}
@@ -762,12 +762,12 @@ typealias OSStatus = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ByteCount;}
  */
-typealias ByteCount = Any
+typealias ByteCount = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ByteOffset;}
  */
-typealias ByteOffset = Any
+typealias ByteOffset = Long
 
 /**
  * {@snippet lang=c : typedef Int Duration;}
@@ -777,17 +777,17 @@ typealias Duration = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int OptionBits;}
  */
-typealias OptionBits = Any
+typealias OptionBits = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ItemCount;}
  */
-typealias ItemCount = Any
+typealias ItemCount = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PBVersion;}
  */
-typealias PBVersion = Any
+typealias PBVersion = Int
 
 /**
  * {@snippet lang=c : typedef Short ScriptCode;}
@@ -807,52 +807,52 @@ typealias RegionCode = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FourCharCode;}
  */
-typealias FourCharCode = Any
+typealias FourCharCode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int OSType;}
  */
-typealias OSType = Any
+typealias OSType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ResType;}
  */
-typealias ResType = Any
+typealias ResType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char Boolean;}
  */
-typealias Boolean = Any
+typealias Boolean = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UnicodeScalarValue;}
  */
-typealias UnicodeScalarValue = Any
+typealias UnicodeScalarValue = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UTF32Char;}
  */
-typealias UTF32Char = Any
+typealias UTF32Char = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UniChar;}
  */
-typealias UniChar = Any
+typealias UniChar = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UTF16Char;}
  */
-typealias UTF16Char = Any
+typealias UTF16Char = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char UTF8Char;}
  */
-typealias UTF8Char = Any
+typealias UTF8Char = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long UniCharCount;}
  */
-typealias UniCharCount = Any
+typealias UniCharCount = Long
 
 /**
  * {@snippet lang=c : typedef Short CharParameter;}
@@ -862,7 +862,7 @@ typealias CharParameter = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char Style;}
  */
-typealias Style = Any
+typealias Style = Byte
 
 /**
  * {@snippet lang=c : typedef Short StyleParameter;}
@@ -872,7 +872,7 @@ typealias StyleParameter = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char StyleField;}
  */
-typealias StyleField = Any
+typealias StyleField = Byte
 
 /**
  * {@snippet lang=c : typedef Int TimeValue;}
@@ -890,39 +890,34 @@ typealias TimeScale = Int
 typealias TimeValue64 = Long
 
 /**
- * {@snippet lang=c : typedef UNSIGNED = Char Byte;}
- */
-typealias Byte = Any
-
-/**
  * {@snippet lang=c : typedef SIGNED = Char SignedByte;}
  */
-typealias SignedByte = Any
+typealias SignedByte = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char VHSelect;}
  */
-typealias VHSelect = Any
+typealias VHSelect = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CFAllocatorTypeID;}
  */
-typealias CFAllocatorTypeID = Any
+typealias CFAllocatorTypeID = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CFTypeID;}
  */
-typealias CFTypeID = Any
+typealias CFTypeID = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CFOptionFlags;}
  */
-typealias CFOptionFlags = Any
+typealias CFOptionFlags = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CFHashCode;}
  */
-typealias CFHashCode = Any
+typealias CFHashCode = Long
 
 /**
  * {@snippet lang=c : typedef Long CFIndex;}
@@ -969,32 +964,32 @@ class CFRange {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val location_VH: VarHandle = layout.varHandle(groupElement("location"))
     
     @Suppress("UNCHECKED_CAST")
-    fun location(segment: MemorySegment): CFIndex =
-        location_VH.get(segment, 0L) as CFIndex
+    fun location(segment: MemorySegment): Long =
+        location_VH.get(segment, 0L) as Long
     
-    fun location(segment: MemorySegment, value: CFIndex) =
+    fun location(segment: MemorySegment, value: Long) =
         location_VH.set(segment, 0L, value)
     
     val length_VH: VarHandle = layout.varHandle(groupElement("length"))
     
     @Suppress("UNCHECKED_CAST")
-    fun length(segment: MemorySegment): CFIndex =
-        length_VH.get(segment, 0L) as CFIndex
+    fun length(segment: MemorySegment): Long =
+        length_VH.get(segment, 0L) as Long
     
-    fun length(segment: MemorySegment, value: CFIndex) =
+    fun length(segment: MemorySegment, value: Long) =
         length_VH.set(segment, 0L, value)
 } // End class
 
@@ -1070,23 +1065,23 @@ class CFAllocatorContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -1165,12 +1160,12 @@ class CFAllocatorContext {
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ptrauth_extra_data_t;}
  */
-typealias ptrauth_extra_data_t = Any
+typealias ptrauth_extra_data_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ptrauth_generic_signature_t;}
  */
-typealias ptrauth_generic_signature_t = Any
+typealias ptrauth_generic_signature_t = Long
 
 /**
  * {@snippet lang=c : typedef ((Void)*((Declared(__CFAllocator))*,(Void)*))* CFArrayRetainCallBack;}
@@ -1215,23 +1210,23 @@ class CFArrayCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -1335,23 +1330,23 @@ class CFBagCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -1438,23 +1433,23 @@ class CFBinaryHeapCompareContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -1517,23 +1512,23 @@ class CFBinaryHeapCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -1586,7 +1581,7 @@ typealias CFBinaryHeapRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CFBit;}
  */
-typealias CFBit = Any
+typealias CFBit = Int
 
 /**
  * {@snippet lang=c : typedef (Declared(__CFBitVector))* CFBitVectorRef;}
@@ -1622,23 +1617,23 @@ class CFSwappedFloat32 {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val v_VH: VarHandle = layout.varHandle(groupElement("v"))
     
     @Suppress("UNCHECKED_CAST")
-    fun v(segment: MemorySegment): uint32_t =
-        v_VH.get(segment, 0L) as uint32_t
+    fun v(segment: MemorySegment): Int =
+        v_VH.get(segment, 0L) as Int
     
-    fun v(segment: MemorySegment, value: uint32_t) =
+    fun v(segment: MemorySegment, value: Int) =
         v_VH.set(segment, 0L, value)
 } // End class
 
@@ -1661,23 +1656,23 @@ class CFSwappedFloat64 {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val v_VH: VarHandle = layout.varHandle(groupElement("v"))
     
     @Suppress("UNCHECKED_CAST")
-    fun v(segment: MemorySegment): uint64_t =
-        v_VH.get(segment, 0L) as uint64_t
+    fun v(segment: MemorySegment): Long =
+        v_VH.get(segment, 0L) as Long
     
-    fun v(segment: MemorySegment, value: uint64_t) =
+    fun v(segment: MemorySegment, value: Long) =
         v_VH.set(segment, 0L, value)
 } // End class
 
@@ -1730,23 +1725,23 @@ class CFDictionaryKeyCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -1818,23 +1813,23 @@ class CFDictionaryValueCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -1968,59 +1963,59 @@ class CFGregorianDate {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val year_VH: VarHandle = layout.varHandle(groupElement("year"))
     
     @Suppress("UNCHECKED_CAST")
-    fun year(segment: MemorySegment): SInt32 =
-        year_VH.get(segment, 0L) as SInt32
+    fun year(segment: MemorySegment): Int =
+        year_VH.get(segment, 0L) as Int
     
-    fun year(segment: MemorySegment, value: SInt32) =
+    fun year(segment: MemorySegment, value: Int) =
         year_VH.set(segment, 0L, value)
     
     val month_VH: VarHandle = layout.varHandle(groupElement("month"))
     
     @Suppress("UNCHECKED_CAST")
-    fun month(segment: MemorySegment): SInt8 =
-        month_VH.get(segment, 0L) as SInt8
+    fun month(segment: MemorySegment): Byte =
+        month_VH.get(segment, 0L) as Byte
     
-    fun month(segment: MemorySegment, value: SInt8) =
+    fun month(segment: MemorySegment, value: Byte) =
         month_VH.set(segment, 0L, value)
     
     val day_VH: VarHandle = layout.varHandle(groupElement("day"))
     
     @Suppress("UNCHECKED_CAST")
-    fun day(segment: MemorySegment): SInt8 =
-        day_VH.get(segment, 0L) as SInt8
+    fun day(segment: MemorySegment): Byte =
+        day_VH.get(segment, 0L) as Byte
     
-    fun day(segment: MemorySegment, value: SInt8) =
+    fun day(segment: MemorySegment, value: Byte) =
         day_VH.set(segment, 0L, value)
     
     val hour_VH: VarHandle = layout.varHandle(groupElement("hour"))
     
     @Suppress("UNCHECKED_CAST")
-    fun hour(segment: MemorySegment): SInt8 =
-        hour_VH.get(segment, 0L) as SInt8
+    fun hour(segment: MemorySegment): Byte =
+        hour_VH.get(segment, 0L) as Byte
     
-    fun hour(segment: MemorySegment, value: SInt8) =
+    fun hour(segment: MemorySegment, value: Byte) =
         hour_VH.set(segment, 0L, value)
     
     val minute_VH: VarHandle = layout.varHandle(groupElement("minute"))
     
     @Suppress("UNCHECKED_CAST")
-    fun minute(segment: MemorySegment): SInt8 =
-        minute_VH.get(segment, 0L) as SInt8
+    fun minute(segment: MemorySegment): Byte =
+        minute_VH.get(segment, 0L) as Byte
     
-    fun minute(segment: MemorySegment, value: SInt8) =
+    fun minute(segment: MemorySegment, value: Byte) =
         minute_VH.set(segment, 0L, value)
     
     val second_VH: VarHandle = layout.varHandle(groupElement("second"))
@@ -2057,59 +2052,59 @@ class CFGregorianUnits {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val years_VH: VarHandle = layout.varHandle(groupElement("years"))
     
     @Suppress("UNCHECKED_CAST")
-    fun years(segment: MemorySegment): SInt32 =
-        years_VH.get(segment, 0L) as SInt32
+    fun years(segment: MemorySegment): Int =
+        years_VH.get(segment, 0L) as Int
     
-    fun years(segment: MemorySegment, value: SInt32) =
+    fun years(segment: MemorySegment, value: Int) =
         years_VH.set(segment, 0L, value)
     
     val months_VH: VarHandle = layout.varHandle(groupElement("months"))
     
     @Suppress("UNCHECKED_CAST")
-    fun months(segment: MemorySegment): SInt32 =
-        months_VH.get(segment, 0L) as SInt32
+    fun months(segment: MemorySegment): Int =
+        months_VH.get(segment, 0L) as Int
     
-    fun months(segment: MemorySegment, value: SInt32) =
+    fun months(segment: MemorySegment, value: Int) =
         months_VH.set(segment, 0L, value)
     
     val days_VH: VarHandle = layout.varHandle(groupElement("days"))
     
     @Suppress("UNCHECKED_CAST")
-    fun days(segment: MemorySegment): SInt32 =
-        days_VH.get(segment, 0L) as SInt32
+    fun days(segment: MemorySegment): Int =
+        days_VH.get(segment, 0L) as Int
     
-    fun days(segment: MemorySegment, value: SInt32) =
+    fun days(segment: MemorySegment, value: Int) =
         days_VH.set(segment, 0L, value)
     
     val hours_VH: VarHandle = layout.varHandle(groupElement("hours"))
     
     @Suppress("UNCHECKED_CAST")
-    fun hours(segment: MemorySegment): SInt32 =
-        hours_VH.get(segment, 0L) as SInt32
+    fun hours(segment: MemorySegment): Int =
+        hours_VH.get(segment, 0L) as Int
     
-    fun hours(segment: MemorySegment, value: SInt32) =
+    fun hours(segment: MemorySegment, value: Int) =
         hours_VH.set(segment, 0L, value)
     
     val minutes_VH: VarHandle = layout.varHandle(groupElement("minutes"))
     
     @Suppress("UNCHECKED_CAST")
-    fun minutes(segment: MemorySegment): SInt32 =
-        minutes_VH.get(segment, 0L) as SInt32
+    fun minutes(segment: MemorySegment): Int =
+        minutes_VH.get(segment, 0L) as Int
     
-    fun minutes(segment: MemorySegment, value: SInt32) =
+    fun minutes(segment: MemorySegment, value: Int) =
         minutes_VH.set(segment, 0L, value)
     
     val seconds_VH: VarHandle = layout.varHandle(groupElement("seconds"))
@@ -2155,7 +2150,7 @@ typealias CFErrorRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CFStringEncoding;}
  */
-typealias CFStringEncoding = Any
+typealias CFStringEncoding = Int
 
 /**
  * {@snippet lang=c : STRUCT CFStringInlineBuffer
@@ -2182,13 +2177,13 @@ class CFStringInlineBuffer {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -2225,28 +2220,28 @@ class CFStringInlineBuffer {
     val rangeToBuffer_VH: VarHandle = layout.varHandle(groupElement("rangeToBuffer"))
     
     @Suppress("UNCHECKED_CAST")
-    fun rangeToBuffer(segment: MemorySegment): CFRange =
-        rangeToBuffer_VH.get(segment, 0L) as CFRange
+    fun rangeToBuffer(segment: MemorySegment): MemorySegment =
+        rangeToBuffer_VH.get(segment, 0L) as MemorySegment
     
-    fun rangeToBuffer(segment: MemorySegment, value: CFRange) =
+    fun rangeToBuffer(segment: MemorySegment, value: MemorySegment) =
         rangeToBuffer_VH.set(segment, 0L, value)
     
     val bufferedRangeStart_VH: VarHandle = layout.varHandle(groupElement("bufferedRangeStart"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bufferedRangeStart(segment: MemorySegment): CFIndex =
-        bufferedRangeStart_VH.get(segment, 0L) as CFIndex
+    fun bufferedRangeStart(segment: MemorySegment): Long =
+        bufferedRangeStart_VH.get(segment, 0L) as Long
     
-    fun bufferedRangeStart(segment: MemorySegment, value: CFIndex) =
+    fun bufferedRangeStart(segment: MemorySegment, value: Long) =
         bufferedRangeStart_VH.set(segment, 0L, value)
     
     val bufferedRangeEnd_VH: VarHandle = layout.varHandle(groupElement("bufferedRangeEnd"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bufferedRangeEnd(segment: MemorySegment): CFIndex =
-        bufferedRangeEnd_VH.get(segment, 0L) as CFIndex
+    fun bufferedRangeEnd(segment: MemorySegment): Long =
+        bufferedRangeEnd_VH.get(segment, 0L) as Long
     
-    fun bufferedRangeEnd(segment: MemorySegment, value: CFIndex) =
+    fun bufferedRangeEnd(segment: MemorySegment, value: Long) =
         bufferedRangeEnd_VH.set(segment, 0L, value)
 } // End class
 
@@ -2261,9 +2256,9 @@ typealias CFCalendarRef = MemorySegment
 typealias CGFloat = Double
 
 /**
- * {@snippet lang=c : STRUCT MemorySegment
+ * {@snippet lang=c : STRUCT CGPoint
  */
-class MemorySegment {
+class CGPoint {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("x"),
@@ -2280,39 +2275,39 @@ class MemorySegment {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val x_VH: VarHandle = layout.varHandle(groupElement("x"))
     
     @Suppress("UNCHECKED_CAST")
-    fun x(segment: MemorySegment): CGFloat =
-        x_VH.get(segment, 0L) as CGFloat
+    fun x(segment: MemorySegment): Double =
+        x_VH.get(segment, 0L) as Double
     
-    fun x(segment: MemorySegment, value: CGFloat) =
+    fun x(segment: MemorySegment, value: Double) =
         x_VH.set(segment, 0L, value)
     
     val y_VH: VarHandle = layout.varHandle(groupElement("y"))
     
     @Suppress("UNCHECKED_CAST")
-    fun y(segment: MemorySegment): CGFloat =
-        y_VH.get(segment, 0L) as CGFloat
+    fun y(segment: MemorySegment): Double =
+        y_VH.get(segment, 0L) as Double
     
-    fun y(segment: MemorySegment, value: CGFloat) =
+    fun y(segment: MemorySegment, value: Double) =
         y_VH.set(segment, 0L, value)
 } // End class
 
 /**
- * {@snippet lang=c : STRUCT MemorySegment
+ * {@snippet lang=c : STRUCT CGSize
  */
-class MemorySegment {
+class CGSize {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("width"),
@@ -2329,32 +2324,32 @@ class MemorySegment {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val width_VH: VarHandle = layout.varHandle(groupElement("width"))
     
     @Suppress("UNCHECKED_CAST")
-    fun width(segment: MemorySegment): CGFloat =
-        width_VH.get(segment, 0L) as CGFloat
+    fun width(segment: MemorySegment): Double =
+        width_VH.get(segment, 0L) as Double
     
-    fun width(segment: MemorySegment, value: CGFloat) =
+    fun width(segment: MemorySegment, value: Double) =
         width_VH.set(segment, 0L, value)
     
     val height_VH: VarHandle = layout.varHandle(groupElement("height"))
     
     @Suppress("UNCHECKED_CAST")
-    fun height(segment: MemorySegment): CGFloat =
-        height_VH.get(segment, 0L) as CGFloat
+    fun height(segment: MemorySegment): Double =
+        height_VH.get(segment, 0L) as Double
     
-    fun height(segment: MemorySegment, value: CGFloat) =
+    fun height(segment: MemorySegment, value: Double) =
         height_VH.set(segment, 0L, value)
 } // End class
 
@@ -2378,39 +2373,39 @@ class CGVector {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val dx_VH: VarHandle = layout.varHandle(groupElement("dx"))
     
     @Suppress("UNCHECKED_CAST")
-    fun dx(segment: MemorySegment): CGFloat =
-        dx_VH.get(segment, 0L) as CGFloat
+    fun dx(segment: MemorySegment): Double =
+        dx_VH.get(segment, 0L) as Double
     
-    fun dx(segment: MemorySegment, value: CGFloat) =
+    fun dx(segment: MemorySegment, value: Double) =
         dx_VH.set(segment, 0L, value)
     
     val dy_VH: VarHandle = layout.varHandle(groupElement("dy"))
     
     @Suppress("UNCHECKED_CAST")
-    fun dy(segment: MemorySegment): CGFloat =
-        dy_VH.get(segment, 0L) as CGFloat
+    fun dy(segment: MemorySegment): Double =
+        dy_VH.get(segment, 0L) as Double
     
-    fun dy(segment: MemorySegment, value: CGFloat) =
+    fun dy(segment: MemorySegment, value: Double) =
         dy_VH.set(segment, 0L, value)
 } // End class
 
 /**
- * {@snippet lang=c : STRUCT MemorySegment
+ * {@snippet lang=c : STRUCT CGRect
  */
-class MemorySegment {
+class CGRect {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             CGPoint.layout.withName("origin"),
@@ -2427,13 +2422,13 @@ class MemorySegment {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -2480,68 +2475,68 @@ class CGAffineTransform {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val a_VH: VarHandle = layout.varHandle(groupElement("a"))
     
     @Suppress("UNCHECKED_CAST")
-    fun a(segment: MemorySegment): CGFloat =
-        a_VH.get(segment, 0L) as CGFloat
+    fun a(segment: MemorySegment): Double =
+        a_VH.get(segment, 0L) as Double
     
-    fun a(segment: MemorySegment, value: CGFloat) =
+    fun a(segment: MemorySegment, value: Double) =
         a_VH.set(segment, 0L, value)
     
     val b_VH: VarHandle = layout.varHandle(groupElement("b"))
     
     @Suppress("UNCHECKED_CAST")
-    fun b(segment: MemorySegment): CGFloat =
-        b_VH.get(segment, 0L) as CGFloat
+    fun b(segment: MemorySegment): Double =
+        b_VH.get(segment, 0L) as Double
     
-    fun b(segment: MemorySegment, value: CGFloat) =
+    fun b(segment: MemorySegment, value: Double) =
         b_VH.set(segment, 0L, value)
     
     val c_VH: VarHandle = layout.varHandle(groupElement("c"))
     
     @Suppress("UNCHECKED_CAST")
-    fun c(segment: MemorySegment): CGFloat =
-        c_VH.get(segment, 0L) as CGFloat
+    fun c(segment: MemorySegment): Double =
+        c_VH.get(segment, 0L) as Double
     
-    fun c(segment: MemorySegment, value: CGFloat) =
+    fun c(segment: MemorySegment, value: Double) =
         c_VH.set(segment, 0L, value)
     
     val d_VH: VarHandle = layout.varHandle(groupElement("d"))
     
     @Suppress("UNCHECKED_CAST")
-    fun d(segment: MemorySegment): CGFloat =
-        d_VH.get(segment, 0L) as CGFloat
+    fun d(segment: MemorySegment): Double =
+        d_VH.get(segment, 0L) as Double
     
-    fun d(segment: MemorySegment, value: CGFloat) =
+    fun d(segment: MemorySegment, value: Double) =
         d_VH.set(segment, 0L, value)
     
     val tx_VH: VarHandle = layout.varHandle(groupElement("tx"))
     
     @Suppress("UNCHECKED_CAST")
-    fun tx(segment: MemorySegment): CGFloat =
-        tx_VH.get(segment, 0L) as CGFloat
+    fun tx(segment: MemorySegment): Double =
+        tx_VH.get(segment, 0L) as Double
     
-    fun tx(segment: MemorySegment, value: CGFloat) =
+    fun tx(segment: MemorySegment, value: Double) =
         tx_VH.set(segment, 0L, value)
     
     val ty_VH: VarHandle = layout.varHandle(groupElement("ty"))
     
     @Suppress("UNCHECKED_CAST")
-    fun ty(segment: MemorySegment): CGFloat =
-        ty_VH.get(segment, 0L) as CGFloat
+    fun ty(segment: MemorySegment): Double =
+        ty_VH.get(segment, 0L) as Double
     
-    fun ty(segment: MemorySegment, value: CGFloat) =
+    fun ty(segment: MemorySegment, value: Double) =
         ty_VH.set(segment, 0L, value)
 } // End class
 
@@ -2567,13 +2562,13 @@ class CGAffineTransformComponents {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -2589,28 +2584,28 @@ class CGAffineTransformComponents {
     val horizontalShear_VH: VarHandle = layout.varHandle(groupElement("horizontalShear"))
     
     @Suppress("UNCHECKED_CAST")
-    fun horizontalShear(segment: MemorySegment): CGFloat =
-        horizontalShear_VH.get(segment, 0L) as CGFloat
+    fun horizontalShear(segment: MemorySegment): Double =
+        horizontalShear_VH.get(segment, 0L) as Double
     
-    fun horizontalShear(segment: MemorySegment, value: CGFloat) =
+    fun horizontalShear(segment: MemorySegment, value: Double) =
         horizontalShear_VH.set(segment, 0L, value)
     
     val rotation_VH: VarHandle = layout.varHandle(groupElement("rotation"))
     
     @Suppress("UNCHECKED_CAST")
-    fun rotation(segment: MemorySegment): CGFloat =
-        rotation_VH.get(segment, 0L) as CGFloat
+    fun rotation(segment: MemorySegment): Double =
+        rotation_VH.get(segment, 0L) as Double
     
-    fun rotation(segment: MemorySegment, value: CGFloat) =
+    fun rotation(segment: MemorySegment, value: Double) =
         rotation_VH.set(segment, 0L, value)
     
     val translation_VH: VarHandle = layout.varHandle(groupElement("translation"))
     
     @Suppress("UNCHECKED_CAST")
-    fun translation(segment: MemorySegment): CGVector =
-        translation_VH.get(segment, 0L) as CGVector
+    fun translation(segment: MemorySegment): MemorySegment =
+        translation_VH.get(segment, 0L) as MemorySegment
     
-    fun translation(segment: MemorySegment, value: CGVector) =
+    fun translation(segment: MemorySegment, value: MemorySegment) =
         translation_VH.set(segment, 0L, value)
 } // End class
 
@@ -2652,7 +2647,7 @@ typealias CFURLRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CFURLBookmarkFileCreationOptions;}
  */
-typealias CFURLBookmarkFileCreationOptions = Any
+typealias CFURLBookmarkFileCreationOptions = Long
 
 /**
  * {@snippet lang=c : typedef Int boolean_t;}
@@ -2662,7 +2657,7 @@ typealias boolean_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int natural_t;}
  */
-typealias natural_t = Any
+typealias natural_t = Int
 
 /**
  * {@snippet lang=c : typedef Int integer_t;}
@@ -2672,87 +2667,87 @@ typealias integer_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long vm_offset_t;}
  */
-typealias vm_offset_t = Any
+typealias vm_offset_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long vm_size_t;}
  */
-typealias vm_size_t = Any
+typealias vm_size_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong mach_vm_address_t;}
  */
-typealias mach_vm_address_t = Any
+typealias mach_vm_address_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong mach_vm_offset_t;}
  */
-typealias mach_vm_offset_t = Any
+typealias mach_vm_offset_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong mach_vm_size_t;}
  */
-typealias mach_vm_size_t = Any
+typealias mach_vm_size_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_map_offset_t;}
  */
-typealias vm_map_offset_t = Any
+typealias vm_map_offset_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_map_address_t;}
  */
-typealias vm_map_address_t = Any
+typealias vm_map_address_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_map_size_t;}
  */
-typealias vm_map_size_t = Any
+typealias vm_map_size_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm32_offset_t;}
  */
-typealias vm32_offset_t = Any
+typealias vm32_offset_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm32_address_t;}
  */
-typealias vm32_address_t = Any
+typealias vm32_address_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm32_size_t;}
  */
-typealias vm32_size_t = Any
+typealias vm32_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long mach_port_context_t;}
  */
-typealias mach_port_context_t = Any
+typealias mach_port_context_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_name_t;}
  */
-typealias mach_port_name_t = Any
+typealias mach_port_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_t;}
  */
-typealias mach_port_t = Any
+typealias mach_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_right_t;}
  */
-typealias mach_port_right_t = Any
+typealias mach_port_right_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_type_t;}
  */
-typealias mach_port_type_t = Any
+typealias mach_port_type_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_urefs_t;}
  */
-typealias mach_port_urefs_t = Any
+typealias mach_port_urefs_t = Int
 
 /**
  * {@snippet lang=c : typedef Int mach_port_delta_t;}
@@ -2762,27 +2757,27 @@ typealias mach_port_delta_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_seqno_t;}
  */
-typealias mach_port_seqno_t = Any
+typealias mach_port_seqno_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_mscount_t;}
  */
-typealias mach_port_mscount_t = Any
+typealias mach_port_mscount_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_msgcount_t;}
  */
-typealias mach_port_msgcount_t = Any
+typealias mach_port_msgcount_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_rights_t;}
  */
-typealias mach_port_rights_t = Any
+typealias mach_port_rights_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_port_srights_t;}
  */
-typealias mach_port_srights_t = Any
+typealias mach_port_srights_t = Int
 
 /**
  * {@snippet lang=c : typedef Int mach_port_flavor_t;}
@@ -2842,23 +2837,23 @@ class CFRunLoopSourceContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -2970,23 +2965,23 @@ class CFRunLoopSourceContext1 {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3085,23 +3080,23 @@ class CFRunLoopObserverContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3164,23 +3159,23 @@ class CFRunLoopTimerContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3252,41 +3247,41 @@ class CFSocketSignature {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val protocolFamily_VH: VarHandle = layout.varHandle(groupElement("protocolFamily"))
     
     @Suppress("UNCHECKED_CAST")
-    fun protocolFamily(segment: MemorySegment): SInt32 =
-        protocolFamily_VH.get(segment, 0L) as SInt32
+    fun protocolFamily(segment: MemorySegment): Int =
+        protocolFamily_VH.get(segment, 0L) as Int
     
-    fun protocolFamily(segment: MemorySegment, value: SInt32) =
+    fun protocolFamily(segment: MemorySegment, value: Int) =
         protocolFamily_VH.set(segment, 0L, value)
     
     val socketType_VH: VarHandle = layout.varHandle(groupElement("socketType"))
     
     @Suppress("UNCHECKED_CAST")
-    fun socketType(segment: MemorySegment): SInt32 =
-        socketType_VH.get(segment, 0L) as SInt32
+    fun socketType(segment: MemorySegment): Int =
+        socketType_VH.get(segment, 0L) as Int
     
-    fun socketType(segment: MemorySegment, value: SInt32) =
+    fun socketType(segment: MemorySegment, value: Int) =
         socketType_VH.set(segment, 0L, value)
     
     val protocol_VH: VarHandle = layout.varHandle(groupElement("protocol"))
     
     @Suppress("UNCHECKED_CAST")
-    fun protocol(segment: MemorySegment): SInt32 =
-        protocol_VH.get(segment, 0L) as SInt32
+    fun protocol(segment: MemorySegment): Int =
+        protocol_VH.get(segment, 0L) as Int
     
-    fun protocol(segment: MemorySegment, value: SInt32) =
+    fun protocol(segment: MemorySegment, value: Int) =
         protocol_VH.set(segment, 0L, value)
     
     val address_VH: VarHandle = layout.varHandle(groupElement("address"))
@@ -3322,23 +3317,23 @@ class CFSocketContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3396,12 +3391,12 @@ typealias NSInteger = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSUInteger;}
  */
-typealias NSUInteger = Any
+typealias NSUInteger = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int os_workgroup_index;}
  */
-typealias os_workgroup_index = Any
+typealias os_workgroup_index = Int
 
 /**
  * {@snippet lang=c : typedef Int alarm_type_t;}
@@ -3431,7 +3426,7 @@ typealias clock_res_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong dispatch_time_t;}
  */
-typealias dispatch_time_t = Any
+typealias dispatch_time_t = Long
 
 /**
  * {@snippet lang=c : typedef Long dispatch_queue_priority_t;}
@@ -3446,17 +3441,17 @@ typealias kern_return_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_timeout_t;}
  */
-typealias mach_msg_timeout_t = Any
+typealias mach_msg_timeout_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_bits_t;}
  */
-typealias mach_msg_bits_t = Any
+typealias mach_msg_bits_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_size_t;}
  */
-typealias mach_msg_size_t = Any
+typealias mach_msg_size_t = Int
 
 /**
  * {@snippet lang=c : typedef Int mach_msg_id_t;}
@@ -3466,37 +3461,37 @@ typealias mach_msg_id_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_priority_t;}
  */
-typealias mach_msg_priority_t = Any
+typealias mach_msg_priority_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_type_name_t;}
  */
-typealias mach_msg_type_name_t = Any
+typealias mach_msg_type_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_copy_options_t;}
  */
-typealias mach_msg_copy_options_t = Any
+typealias mach_msg_copy_options_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_guard_flags_t;}
  */
-typealias mach_msg_guard_flags_t = Any
+typealias mach_msg_guard_flags_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_descriptor_type_t;}
  */
-typealias mach_msg_descriptor_type_t = Any
+typealias mach_msg_descriptor_type_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_trailer_type_t;}
  */
-typealias mach_msg_trailer_type_t = Any
+typealias mach_msg_trailer_type_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_trailer_size_t;}
  */
-typealias mach_msg_trailer_size_t = Any
+typealias mach_msg_trailer_size_t = Int
 
 /**
  * {@snippet lang=c : typedef Int mach_msg_filter_id;}
@@ -3511,12 +3506,12 @@ typealias mach_msg_options_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_type_size_t;}
  */
-typealias mach_msg_type_size_t = Any
+typealias mach_msg_type_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_msg_type_number_t;}
  */
-typealias mach_msg_type_number_t = Any
+typealias mach_msg_type_number_t = Int
 
 /**
  * {@snippet lang=c : typedef Int mach_msg_option_t;}
@@ -3531,32 +3526,32 @@ typealias mach_msg_return_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_mach_send_flags_t;}
  */
-typealias dispatch_source_mach_send_flags_t = Any
+typealias dispatch_source_mach_send_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_mach_recv_flags_t;}
  */
-typealias dispatch_source_mach_recv_flags_t = Any
+typealias dispatch_source_mach_recv_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_memorypressure_flags_t;}
  */
-typealias dispatch_source_memorypressure_flags_t = Any
+typealias dispatch_source_memorypressure_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_proc_flags_t;}
  */
-typealias dispatch_source_proc_flags_t = Any
+typealias dispatch_source_proc_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_vnode_flags_t;}
  */
-typealias dispatch_source_vnode_flags_t = Any
+typealias dispatch_source_vnode_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_source_timer_flags_t;}
  */
-typealias dispatch_source_timer_flags_t = Any
+typealias dispatch_source_timer_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef Long dispatch_once_t;}
@@ -3571,17 +3566,17 @@ typealias dispatch_fd_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_io_type_t;}
  */
-typealias dispatch_io_type_t = Any
+typealias dispatch_io_type_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_io_close_flags_t;}
  */
-typealias dispatch_io_close_flags_t = Any
+typealias dispatch_io_close_flags_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long dispatch_io_interval_flags_t;}
  */
-typealias dispatch_io_interval_flags_t = Any
+typealias dispatch_io_interval_flags_t = Long
 
 /**
  * {@snippet lang=c : STRUCT CFStreamError
@@ -3603,32 +3598,32 @@ class CFStreamError {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val domain_VH: VarHandle = layout.varHandle(groupElement("domain"))
     
     @Suppress("UNCHECKED_CAST")
-    fun domain(segment: MemorySegment): CFIndex =
-        domain_VH.get(segment, 0L) as CFIndex
+    fun domain(segment: MemorySegment): Long =
+        domain_VH.get(segment, 0L) as Long
     
-    fun domain(segment: MemorySegment, value: CFIndex) =
+    fun domain(segment: MemorySegment, value: Long) =
         domain_VH.set(segment, 0L, value)
     
     val error_VH: VarHandle = layout.varHandle(groupElement("error"))
     
     @Suppress("UNCHECKED_CAST")
-    fun error(segment: MemorySegment): SInt32 =
-        error_VH.get(segment, 0L) as SInt32
+    fun error(segment: MemorySegment): Int =
+        error_VH.get(segment, 0L) as Int
     
-    fun error(segment: MemorySegment, value: SInt32) =
+    fun error(segment: MemorySegment, value: Int) =
         error_VH.set(segment, 0L, value)
 } // End class
 
@@ -3660,23 +3655,23 @@ class CFStreamClientContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3775,23 +3770,23 @@ class CFSetCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val retain_VH: VarHandle = layout.varHandle(groupElement("retain"))
@@ -3893,23 +3888,23 @@ class CFTreeContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -3998,158 +3993,158 @@ class CFUUIDBytes {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val byte0_VH: VarHandle = layout.varHandle(groupElement("byte0"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte0(segment: MemorySegment): UInt8 =
-        byte0_VH.get(segment, 0L) as UInt8
+    fun byte0(segment: MemorySegment): Byte =
+        byte0_VH.get(segment, 0L) as Byte
     
-    fun byte0(segment: MemorySegment, value: UInt8) =
+    fun byte0(segment: MemorySegment, value: Byte) =
         byte0_VH.set(segment, 0L, value)
     
     val byte1_VH: VarHandle = layout.varHandle(groupElement("byte1"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte1(segment: MemorySegment): UInt8 =
-        byte1_VH.get(segment, 0L) as UInt8
+    fun byte1(segment: MemorySegment): Byte =
+        byte1_VH.get(segment, 0L) as Byte
     
-    fun byte1(segment: MemorySegment, value: UInt8) =
+    fun byte1(segment: MemorySegment, value: Byte) =
         byte1_VH.set(segment, 0L, value)
     
     val byte2_VH: VarHandle = layout.varHandle(groupElement("byte2"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte2(segment: MemorySegment): UInt8 =
-        byte2_VH.get(segment, 0L) as UInt8
+    fun byte2(segment: MemorySegment): Byte =
+        byte2_VH.get(segment, 0L) as Byte
     
-    fun byte2(segment: MemorySegment, value: UInt8) =
+    fun byte2(segment: MemorySegment, value: Byte) =
         byte2_VH.set(segment, 0L, value)
     
     val byte3_VH: VarHandle = layout.varHandle(groupElement("byte3"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte3(segment: MemorySegment): UInt8 =
-        byte3_VH.get(segment, 0L) as UInt8
+    fun byte3(segment: MemorySegment): Byte =
+        byte3_VH.get(segment, 0L) as Byte
     
-    fun byte3(segment: MemorySegment, value: UInt8) =
+    fun byte3(segment: MemorySegment, value: Byte) =
         byte3_VH.set(segment, 0L, value)
     
     val byte4_VH: VarHandle = layout.varHandle(groupElement("byte4"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte4(segment: MemorySegment): UInt8 =
-        byte4_VH.get(segment, 0L) as UInt8
+    fun byte4(segment: MemorySegment): Byte =
+        byte4_VH.get(segment, 0L) as Byte
     
-    fun byte4(segment: MemorySegment, value: UInt8) =
+    fun byte4(segment: MemorySegment, value: Byte) =
         byte4_VH.set(segment, 0L, value)
     
     val byte5_VH: VarHandle = layout.varHandle(groupElement("byte5"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte5(segment: MemorySegment): UInt8 =
-        byte5_VH.get(segment, 0L) as UInt8
+    fun byte5(segment: MemorySegment): Byte =
+        byte5_VH.get(segment, 0L) as Byte
     
-    fun byte5(segment: MemorySegment, value: UInt8) =
+    fun byte5(segment: MemorySegment, value: Byte) =
         byte5_VH.set(segment, 0L, value)
     
     val byte6_VH: VarHandle = layout.varHandle(groupElement("byte6"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte6(segment: MemorySegment): UInt8 =
-        byte6_VH.get(segment, 0L) as UInt8
+    fun byte6(segment: MemorySegment): Byte =
+        byte6_VH.get(segment, 0L) as Byte
     
-    fun byte6(segment: MemorySegment, value: UInt8) =
+    fun byte6(segment: MemorySegment, value: Byte) =
         byte6_VH.set(segment, 0L, value)
     
     val byte7_VH: VarHandle = layout.varHandle(groupElement("byte7"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte7(segment: MemorySegment): UInt8 =
-        byte7_VH.get(segment, 0L) as UInt8
+    fun byte7(segment: MemorySegment): Byte =
+        byte7_VH.get(segment, 0L) as Byte
     
-    fun byte7(segment: MemorySegment, value: UInt8) =
+    fun byte7(segment: MemorySegment, value: Byte) =
         byte7_VH.set(segment, 0L, value)
     
     val byte8_VH: VarHandle = layout.varHandle(groupElement("byte8"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte8(segment: MemorySegment): UInt8 =
-        byte8_VH.get(segment, 0L) as UInt8
+    fun byte8(segment: MemorySegment): Byte =
+        byte8_VH.get(segment, 0L) as Byte
     
-    fun byte8(segment: MemorySegment, value: UInt8) =
+    fun byte8(segment: MemorySegment, value: Byte) =
         byte8_VH.set(segment, 0L, value)
     
     val byte9_VH: VarHandle = layout.varHandle(groupElement("byte9"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte9(segment: MemorySegment): UInt8 =
-        byte9_VH.get(segment, 0L) as UInt8
+    fun byte9(segment: MemorySegment): Byte =
+        byte9_VH.get(segment, 0L) as Byte
     
-    fun byte9(segment: MemorySegment, value: UInt8) =
+    fun byte9(segment: MemorySegment, value: Byte) =
         byte9_VH.set(segment, 0L, value)
     
     val byte10_VH: VarHandle = layout.varHandle(groupElement("byte10"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte10(segment: MemorySegment): UInt8 =
-        byte10_VH.get(segment, 0L) as UInt8
+    fun byte10(segment: MemorySegment): Byte =
+        byte10_VH.get(segment, 0L) as Byte
     
-    fun byte10(segment: MemorySegment, value: UInt8) =
+    fun byte10(segment: MemorySegment, value: Byte) =
         byte10_VH.set(segment, 0L, value)
     
     val byte11_VH: VarHandle = layout.varHandle(groupElement("byte11"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte11(segment: MemorySegment): UInt8 =
-        byte11_VH.get(segment, 0L) as UInt8
+    fun byte11(segment: MemorySegment): Byte =
+        byte11_VH.get(segment, 0L) as Byte
     
-    fun byte11(segment: MemorySegment, value: UInt8) =
+    fun byte11(segment: MemorySegment, value: Byte) =
         byte11_VH.set(segment, 0L, value)
     
     val byte12_VH: VarHandle = layout.varHandle(groupElement("byte12"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte12(segment: MemorySegment): UInt8 =
-        byte12_VH.get(segment, 0L) as UInt8
+    fun byte12(segment: MemorySegment): Byte =
+        byte12_VH.get(segment, 0L) as Byte
     
-    fun byte12(segment: MemorySegment, value: UInt8) =
+    fun byte12(segment: MemorySegment, value: Byte) =
         byte12_VH.set(segment, 0L, value)
     
     val byte13_VH: VarHandle = layout.varHandle(groupElement("byte13"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte13(segment: MemorySegment): UInt8 =
-        byte13_VH.get(segment, 0L) as UInt8
+    fun byte13(segment: MemorySegment): Byte =
+        byte13_VH.get(segment, 0L) as Byte
     
-    fun byte13(segment: MemorySegment, value: UInt8) =
+    fun byte13(segment: MemorySegment, value: Byte) =
         byte13_VH.set(segment, 0L, value)
     
     val byte14_VH: VarHandle = layout.varHandle(groupElement("byte14"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte14(segment: MemorySegment): UInt8 =
-        byte14_VH.get(segment, 0L) as UInt8
+    fun byte14(segment: MemorySegment): Byte =
+        byte14_VH.get(segment, 0L) as Byte
     
-    fun byte14(segment: MemorySegment, value: UInt8) =
+    fun byte14(segment: MemorySegment, value: Byte) =
         byte14_VH.set(segment, 0L, value)
     
     val byte15_VH: VarHandle = layout.varHandle(groupElement("byte15"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byte15(segment: MemorySegment): UInt8 =
-        byte15_VH.get(segment, 0L) as UInt8
+    fun byte15(segment: MemorySegment): Byte =
+        byte15_VH.get(segment, 0L) as Byte
     
-    fun byte15(segment: MemorySegment, value: UInt8) =
+    fun byte15(segment: MemorySegment, value: Byte) =
         byte15_VH.set(segment, 0L, value)
 } // End class
 
@@ -4211,23 +4206,23 @@ class CFMessagePortContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -4335,23 +4330,23 @@ class CFMachPortContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -4419,12 +4414,12 @@ typealias CFURLEnumeratorRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int kauth_ace_rights_t;}
  */
-typealias kauth_ace_rights_t = Any
+typealias kauth_ace_rights_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong acl_permset_mask_t;}
  */
-typealias acl_permset_mask_t = Any
+typealias acl_permset_mask_t = Long
 
 /**
  * {@snippet lang=c : typedef (Declared(__CFFileSecurity))* CFFileSecurityRef;}
@@ -4474,23 +4469,23 @@ class CFFileDescriptorContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -4572,13 +4567,13 @@ class CFXMLElementInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4603,10 +4598,10 @@ class CFXMLElementInfo {
     val isEmpty_VH: VarHandle = layout.varHandle(groupElement("isEmpty"))
     
     @Suppress("UNCHECKED_CAST")
-    fun isEmpty(segment: MemorySegment): Boolean =
-        isEmpty_VH.get(segment, 0L) as Boolean
+    fun isEmpty(segment: MemorySegment): Byte =
+        isEmpty_VH.get(segment, 0L) as Byte
     
-    fun isEmpty(segment: MemorySegment, value: Boolean) =
+    fun isEmpty(segment: MemorySegment, value: Byte) =
         isEmpty_VH.set(segment, 0L, value)
     
     fun _reserved(segment: MemorySegment): MemorySegment =
@@ -4632,13 +4627,13 @@ class CFXMLProcessingInstructionInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4672,13 +4667,13 @@ class CFXMLDocumentInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4694,10 +4689,10 @@ class CFXMLDocumentInfo {
     val encoding_VH: VarHandle = layout.varHandle(groupElement("encoding"))
     
     @Suppress("UNCHECKED_CAST")
-    fun encoding(segment: MemorySegment): CFStringEncoding =
-        encoding_VH.get(segment, 0L) as CFStringEncoding
+    fun encoding(segment: MemorySegment): Int =
+        encoding_VH.get(segment, 0L) as Int
     
-    fun encoding(segment: MemorySegment, value: CFStringEncoding) =
+    fun encoding(segment: MemorySegment, value: Int) =
         encoding_VH.set(segment, 0L, value)
 } // End class
 
@@ -4721,13 +4716,13 @@ class CFXMLExternalID {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4769,23 +4764,23 @@ class CFXMLDocumentTypeInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val externalID_VH: VarHandle = layout.varHandle(groupElement("externalID"))
     
     @Suppress("UNCHECKED_CAST")
-    fun externalID(segment: MemorySegment): CFXMLExternalID =
-        externalID_VH.get(segment, 0L) as CFXMLExternalID
+    fun externalID(segment: MemorySegment): MemorySegment =
+        externalID_VH.get(segment, 0L) as MemorySegment
     
-    fun externalID(segment: MemorySegment, value: CFXMLExternalID) =
+    fun externalID(segment: MemorySegment, value: MemorySegment) =
         externalID_VH.set(segment, 0L, value)
 } // End class
 
@@ -4808,23 +4803,23 @@ class CFXMLNotationInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val externalID_VH: VarHandle = layout.varHandle(groupElement("externalID"))
     
     @Suppress("UNCHECKED_CAST")
-    fun externalID(segment: MemorySegment): CFXMLExternalID =
-        externalID_VH.get(segment, 0L) as CFXMLExternalID
+    fun externalID(segment: MemorySegment): MemorySegment =
+        externalID_VH.get(segment, 0L) as MemorySegment
     
-    fun externalID(segment: MemorySegment, value: CFXMLExternalID) =
+    fun externalID(segment: MemorySegment, value: MemorySegment) =
         externalID_VH.set(segment, 0L, value)
 } // End class
 
@@ -4847,13 +4842,13 @@ class CFXMLElementTypeDeclarationInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4888,13 +4883,13 @@ class CFXMLAttributeDeclarationInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -4946,23 +4941,23 @@ class CFXMLAttributeListDeclarationInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val numberOfAttributes_VH: VarHandle = layout.varHandle(groupElement("numberOfAttributes"))
     
     @Suppress("UNCHECKED_CAST")
-    fun numberOfAttributes(segment: MemorySegment): CFIndex =
-        numberOfAttributes_VH.get(segment, 0L) as CFIndex
+    fun numberOfAttributes(segment: MemorySegment): Long =
+        numberOfAttributes_VH.get(segment, 0L) as Long
     
-    fun numberOfAttributes(segment: MemorySegment, value: CFIndex) =
+    fun numberOfAttributes(segment: MemorySegment, value: Long) =
         numberOfAttributes_VH.set(segment, 0L, value)
     
     val attributes_VH: VarHandle = layout.varHandle(groupElement("attributes"))
@@ -4997,23 +4992,23 @@ class CFXMLEntityInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val entityType_VH: VarHandle = layout.varHandle(groupElement("entityType"))
     
     @Suppress("UNCHECKED_CAST")
-    fun entityType(segment: MemorySegment): CFXMLEntityTypeCode =
-        entityType_VH.get(segment, 0L) as CFXMLEntityTypeCode
+    fun entityType(segment: MemorySegment): MemorySegment =
+        entityType_VH.get(segment, 0L) as MemorySegment
     
-    fun entityType(segment: MemorySegment, value: CFXMLEntityTypeCode) =
+    fun entityType(segment: MemorySegment, value: MemorySegment) =
         entityType_VH.set(segment, 0L, value)
     
     val replacementText_VH: VarHandle = layout.varHandle(groupElement("replacementText"))
@@ -5028,10 +5023,10 @@ class CFXMLEntityInfo {
     val entityID_VH: VarHandle = layout.varHandle(groupElement("entityID"))
     
     @Suppress("UNCHECKED_CAST")
-    fun entityID(segment: MemorySegment): CFXMLExternalID =
-        entityID_VH.get(segment, 0L) as CFXMLExternalID
+    fun entityID(segment: MemorySegment): MemorySegment =
+        entityID_VH.get(segment, 0L) as MemorySegment
     
-    fun entityID(segment: MemorySegment, value: CFXMLExternalID) =
+    fun entityID(segment: MemorySegment, value: MemorySegment) =
         entityID_VH.set(segment, 0L, value)
     
     val notationName_VH: VarHandle = layout.varHandle(groupElement("notationName"))
@@ -5063,23 +5058,23 @@ class CFXMLEntityReferenceInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val entityType_VH: VarHandle = layout.varHandle(groupElement("entityType"))
     
     @Suppress("UNCHECKED_CAST")
-    fun entityType(segment: MemorySegment): CFXMLEntityTypeCode =
-        entityType_VH.get(segment, 0L) as CFXMLEntityTypeCode
+    fun entityType(segment: MemorySegment): MemorySegment =
+        entityType_VH.get(segment, 0L) as MemorySegment
     
-    fun entityType(segment: MemorySegment, value: CFXMLEntityTypeCode) =
+    fun entityType(segment: MemorySegment, value: MemorySegment) =
         entityType_VH.set(segment, 0L, value)
 } // End class
 
@@ -5132,23 +5127,23 @@ class CFXMLParserCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val createXMLStructure_VH: VarHandle = layout.varHandle(groupElement("createXMLStructure"))
@@ -5235,23 +5230,23 @@ class CFXMLParserContext {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): CFIndex =
-        version_VH.get(segment, 0L) as CFIndex
+    fun version(segment: MemorySegment): Long =
+        version_VH.get(segment, 0L) as Long
     
-    fun version(segment: MemorySegment, value: CFIndex) =
+    fun version(segment: MemorySegment, value: Long) =
         version_VH.set(segment, 0L, value)
     
     val info_VH: VarHandle = layout.varHandle(groupElement("info"))
@@ -5328,23 +5323,23 @@ class NSFastEnumerationState {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val state_VH: VarHandle = layout.varHandle(groupElement("state"))
     
     @Suppress("UNCHECKED_CAST")
-    fun state(segment: MemorySegment): Any =
-        state_VH.get(segment, 0L) as Any
+    fun state(segment: MemorySegment): Long =
+        state_VH.get(segment, 0L) as Long
     
-    fun state(segment: MemorySegment, value: Any) =
+    fun state(segment: MemorySegment, value: Long) =
         state_VH.set(segment, 0L, value)
     
     val itemsPtr_VH: VarHandle = layout.varHandle(groupElement("itemsPtr"))
@@ -5389,32 +5384,32 @@ class _NSRange {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val location_VH: VarHandle = layout.varHandle(groupElement("location"))
     
     @Suppress("UNCHECKED_CAST")
-    fun location(segment: MemorySegment): NSUInteger =
-        location_VH.get(segment, 0L) as NSUInteger
+    fun location(segment: MemorySegment): Long =
+        location_VH.get(segment, 0L) as Long
     
-    fun location(segment: MemorySegment, value: NSUInteger) =
+    fun location(segment: MemorySegment, value: Long) =
         location_VH.set(segment, 0L, value)
     
     val length_VH: VarHandle = layout.varHandle(groupElement("length"))
     
     @Suppress("UNCHECKED_CAST")
-    fun length(segment: MemorySegment): NSUInteger =
-        length_VH.get(segment, 0L) as NSUInteger
+    fun length(segment: MemorySegment): Long =
+        length_VH.get(segment, 0L) as Long
     
-    fun length(segment: MemorySegment, value: NSUInteger) =
+    fun length(segment: MemorySegment, value: Long) =
         length_VH.set(segment, 0L, value)
 } // End class
 
@@ -5431,7 +5426,7 @@ typealias NSRangePointer = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short unichar;}
  */
-typealias unichar = Any
+typealias unichar = Short
 
 /**
  * {@snippet lang=c : typedef (Void)* NSItemProviderCompletionHandler;}
@@ -5446,7 +5441,7 @@ typealias NSItemProviderLoadHandler = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSStringEncoding;}
  */
-typealias NSStringEncoding = Any
+typealias NSStringEncoding = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSStringTransform;}
@@ -5507,23 +5502,23 @@ class NSSwappedFloat {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val v_VH: VarHandle = layout.varHandle(groupElement("v"))
     
     @Suppress("UNCHECKED_CAST")
-    fun v(segment: MemorySegment): Any =
-        v_VH.get(segment, 0L) as Any
+    fun v(segment: MemorySegment): Int =
+        v_VH.get(segment, 0L) as Int
     
-    fun v(segment: MemorySegment, value: Any) =
+    fun v(segment: MemorySegment, value: Int) =
         v_VH.set(segment, 0L, value)
 } // End class
 
@@ -5546,23 +5541,23 @@ class NSSwappedDouble {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val v_VH: VarHandle = layout.varHandle(groupElement("v"))
     
     @Suppress("UNCHECKED_CAST")
-    fun v(segment: MemorySegment): Any =
-        v_VH.get(segment, 0L) as Any
+    fun v(segment: MemorySegment): Long =
+        v_VH.get(segment, 0L) as Long
     
-    fun v(segment: MemorySegment, value: Any) =
+    fun v(segment: MemorySegment, value: Long) =
         v_VH.set(segment, 0L, value)
 } // End class
 
@@ -5610,13 +5605,13 @@ class NSDecimal {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -5677,7 +5672,7 @@ typealias NSURLUbiquitousSharedItemPermissions = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSURLBookmarkFileCreationOptions;}
  */
-typealias NSURLBookmarkFileCreationOptions = Any
+typealias NSURLBookmarkFileCreationOptions = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSFileAttributeKey;}
@@ -5702,7 +5697,7 @@ typealias NSFileProviderServiceName = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSHashTableOptions;}
  */
-typealias NSHashTableOptions = Any
+typealias NSHashTableOptions = Long
 
 /**
  * {@snippet lang=c : STRUCT NSHashEnumerator
@@ -5725,32 +5720,32 @@ class NSHashEnumerator {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val _pi_VH: VarHandle = layout.varHandle(groupElement("_pi"))
     
     @Suppress("UNCHECKED_CAST")
-    fun _pi(segment: MemorySegment): NSUInteger =
-        _pi_VH.get(segment, 0L) as NSUInteger
+    fun _pi(segment: MemorySegment): Long =
+        _pi_VH.get(segment, 0L) as Long
     
-    fun _pi(segment: MemorySegment, value: NSUInteger) =
+    fun _pi(segment: MemorySegment, value: Long) =
         _pi_VH.set(segment, 0L, value)
     
     val _si_VH: VarHandle = layout.varHandle(groupElement("_si"))
     
     @Suppress("UNCHECKED_CAST")
-    fun _si(segment: MemorySegment): NSUInteger =
-        _si_VH.get(segment, 0L) as NSUInteger
+    fun _si(segment: MemorySegment): Long =
+        _si_VH.get(segment, 0L) as Long
     
-    fun _si(segment: MemorySegment, value: NSUInteger) =
+    fun _si(segment: MemorySegment, value: Long) =
         _si_VH.set(segment, 0L, value)
     
     val _bs_VH: VarHandle = layout.varHandle(groupElement("_bs"))
@@ -5786,13 +5781,13 @@ class NSHashTableCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -5865,7 +5860,7 @@ typealias NSKeyValueChangeKey = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSPropertyListWriteOptions;}
  */
-typealias NSPropertyListWriteOptions = Any
+typealias NSPropertyListWriteOptions = Long
 
 /**
  * {@snippet lang=c : typedef (Declared(__IOSurface))* IOSurfaceRef;}
@@ -5873,47 +5868,47 @@ typealias NSPropertyListWriteOptions = Any
 typealias IOSurfaceRef = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(MemorySegment) NSPoint;}
+ * {@snippet lang=c : typedef Declared(CGPoint) NSPoint;}
  */
 typealias NSPoint = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSPointPointer;}
+ * {@snippet lang=c : typedef (Declared(CGPoint))* NSPointPointer;}
  */
 typealias NSPointPointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSPointArray;}
+ * {@snippet lang=c : typedef (Declared(CGPoint))* NSPointArray;}
  */
 typealias NSPointArray = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(MemorySegment) NSSize;}
+ * {@snippet lang=c : typedef Declared(CGSize) NSSize;}
  */
 typealias NSSize = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSSizePointer;}
+ * {@snippet lang=c : typedef (Declared(CGSize))* NSSizePointer;}
  */
 typealias NSSizePointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSSizeArray;}
+ * {@snippet lang=c : typedef (Declared(CGSize))* NSSizeArray;}
  */
 typealias NSSizeArray = MemorySegment
 
 /**
- * {@snippet lang=c : typedef Declared(MemorySegment) NSRect;}
+ * {@snippet lang=c : typedef Declared(CGRect) NSRect;}
  */
 typealias NSRect = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSRectPointer;}
+ * {@snippet lang=c : typedef (Declared(CGRect))* NSRectPointer;}
  */
 typealias NSRectPointer = MemorySegment
 
 /**
- * {@snippet lang=c : typedef (Declared(MemorySegment))* NSRectArray;}
+ * {@snippet lang=c : typedef (Declared(CGRect))* NSRectArray;}
  */
 typealias NSRectArray = MemorySegment
 
@@ -5939,57 +5934,57 @@ class NSEdgeInsets {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val top_VH: VarHandle = layout.varHandle(groupElement("top"))
     
     @Suppress("UNCHECKED_CAST")
-    fun top(segment: MemorySegment): CGFloat =
-        top_VH.get(segment, 0L) as CGFloat
+    fun top(segment: MemorySegment): Double =
+        top_VH.get(segment, 0L) as Double
     
-    fun top(segment: MemorySegment, value: CGFloat) =
+    fun top(segment: MemorySegment, value: Double) =
         top_VH.set(segment, 0L, value)
     
     val left_VH: VarHandle = layout.varHandle(groupElement("left"))
     
     @Suppress("UNCHECKED_CAST")
-    fun left(segment: MemorySegment): CGFloat =
-        left_VH.get(segment, 0L) as CGFloat
+    fun left(segment: MemorySegment): Double =
+        left_VH.get(segment, 0L) as Double
     
-    fun left(segment: MemorySegment, value: CGFloat) =
+    fun left(segment: MemorySegment, value: Double) =
         left_VH.set(segment, 0L, value)
     
     val bottom_VH: VarHandle = layout.varHandle(groupElement("bottom"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bottom(segment: MemorySegment): CGFloat =
-        bottom_VH.get(segment, 0L) as CGFloat
+    fun bottom(segment: MemorySegment): Double =
+        bottom_VH.get(segment, 0L) as Double
     
-    fun bottom(segment: MemorySegment, value: CGFloat) =
+    fun bottom(segment: MemorySegment, value: Double) =
         bottom_VH.set(segment, 0L, value)
     
     val right_VH: VarHandle = layout.varHandle(groupElement("right"))
     
     @Suppress("UNCHECKED_CAST")
-    fun right(segment: MemorySegment): CGFloat =
-        right_VH.get(segment, 0L) as CGFloat
+    fun right(segment: MemorySegment): Double =
+        right_VH.get(segment, 0L) as Double
     
-    fun right(segment: MemorySegment, value: CGFloat) =
+    fun right(segment: MemorySegment, value: Double) =
         right_VH.set(segment, 0L, value)
 } // End class
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSMapTableOptions;}
  */
-typealias NSMapTableOptions = Any
+typealias NSMapTableOptions = Long
 
 /**
  * {@snippet lang=c : STRUCT NSMapEnumerator
@@ -6012,32 +6007,32 @@ class NSMapEnumerator {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val _pi_VH: VarHandle = layout.varHandle(groupElement("_pi"))
     
     @Suppress("UNCHECKED_CAST")
-    fun _pi(segment: MemorySegment): NSUInteger =
-        _pi_VH.get(segment, 0L) as NSUInteger
+    fun _pi(segment: MemorySegment): Long =
+        _pi_VH.get(segment, 0L) as Long
     
-    fun _pi(segment: MemorySegment, value: NSUInteger) =
+    fun _pi(segment: MemorySegment, value: Long) =
         _pi_VH.set(segment, 0L, value)
     
     val _si_VH: VarHandle = layout.varHandle(groupElement("_si"))
     
     @Suppress("UNCHECKED_CAST")
-    fun _si(segment: MemorySegment): NSUInteger =
-        _si_VH.get(segment, 0L) as NSUInteger
+    fun _si(segment: MemorySegment): Long =
+        _si_VH.get(segment, 0L) as Long
     
-    fun _si(segment: MemorySegment, value: NSUInteger) =
+    fun _si(segment: MemorySegment, value: Long) =
         _si_VH.set(segment, 0L, value)
     
     val _bs_VH: VarHandle = layout.varHandle(groupElement("_bs"))
@@ -6074,13 +6069,13 @@ class NSMapTableKeyCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -6160,13 +6155,13 @@ class NSMapTableValueCallBacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -6224,48 +6219,48 @@ class NSOperatingSystemVersion {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val majorVersion_VH: VarHandle = layout.varHandle(groupElement("majorVersion"))
     
     @Suppress("UNCHECKED_CAST")
-    fun majorVersion(segment: MemorySegment): NSInteger =
-        majorVersion_VH.get(segment, 0L) as NSInteger
+    fun majorVersion(segment: MemorySegment): Long =
+        majorVersion_VH.get(segment, 0L) as Long
     
-    fun majorVersion(segment: MemorySegment, value: NSInteger) =
+    fun majorVersion(segment: MemorySegment, value: Long) =
         majorVersion_VH.set(segment, 0L, value)
     
     val minorVersion_VH: VarHandle = layout.varHandle(groupElement("minorVersion"))
     
     @Suppress("UNCHECKED_CAST")
-    fun minorVersion(segment: MemorySegment): NSInteger =
-        minorVersion_VH.get(segment, 0L) as NSInteger
+    fun minorVersion(segment: MemorySegment): Long =
+        minorVersion_VH.get(segment, 0L) as Long
     
-    fun minorVersion(segment: MemorySegment, value: NSInteger) =
+    fun minorVersion(segment: MemorySegment, value: Long) =
         minorVersion_VH.set(segment, 0L, value)
     
     val patchVersion_VH: VarHandle = layout.varHandle(groupElement("patchVersion"))
     
     @Suppress("UNCHECKED_CAST")
-    fun patchVersion(segment: MemorySegment): NSInteger =
-        patchVersion_VH.get(segment, 0L) as NSInteger
+    fun patchVersion(segment: MemorySegment): Long =
+        patchVersion_VH.get(segment, 0L) as Long
     
-    fun patchVersion(segment: MemorySegment, value: NSInteger) =
+    fun patchVersion(segment: MemorySegment, value: Long) =
         patchVersion_VH.set(segment, 0L, value)
 } // End class
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong NSTextCheckingTypes;}
  */
-typealias NSTextCheckingTypes = Any
+typealias NSTextCheckingTypes = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSTextCheckingKey;}
@@ -6300,12 +6295,12 @@ typealias NSStreamNetworkServiceTypeValue = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SecKeychainAttrType;}
  */
-typealias SecKeychainAttrType = Any
+typealias SecKeychainAttrType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SecKeychainStatus;}
  */
-typealias SecKeychainStatus = Any
+typealias SecKeychainStatus = Int
 
 /**
  * {@snippet lang=c : typedef LongLong sint64;}
@@ -6315,7 +6310,7 @@ typealias sint64 = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong uint64;}
  */
-typealias uint64 = Any
+typealias uint64 = Long
 
 /**
  * {@snippet lang=c : typedef Int sint32;}
@@ -6330,22 +6325,22 @@ typealias sint16 = Short
 /**
  * {@snippet lang=c : typedef SIGNED = Char sint8;}
  */
-typealias sint8 = Any
+typealias sint8 = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uint32;}
  */
-typealias uint32 = Any
+typealias uint32 = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short uint16;}
  */
-typealias uint16 = Any
+typealias uint16 = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char uint8;}
  */
-typealias uint8 = Any
+typealias uint8 = Byte
 
 /**
  * {@snippet lang=c : typedef Long CSSM_INTPTR;}
@@ -6355,7 +6350,7 @@ typealias CSSM_INTPTR = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CSSM_SIZE;}
  */
-typealias CSSM_SIZE = Any
+typealias CSSM_SIZE = Long
 
 /**
  * {@snippet lang=c : typedef Long CSSM_HANDLE;}
@@ -6365,7 +6360,7 @@ typealias CSSM_HANDLE = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CSSM_LONG_HANDLE;}
  */
-typealias CSSM_LONG_HANDLE = Any
+typealias CSSM_LONG_HANDLE = Long
 
 /**
  * {@snippet lang=c : typedef Long CSSM_MODULE_HANDLE;}
@@ -6375,7 +6370,7 @@ typealias CSSM_MODULE_HANDLE = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CSSM_CC_HANDLE;}
  */
-typealias CSSM_CC_HANDLE = Any
+typealias CSSM_CC_HANDLE = Long
 
 /**
  * {@snippet lang=c : typedef Long CSSM_CSP_HANDLE;}
@@ -6420,62 +6415,62 @@ typealias CSSM_RETURN = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_BITMASK;}
  */
-typealias CSSM_BITMASK = Any
+typealias CSSM_BITMASK = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEY_HIERARCHY;}
  */
-typealias CSSM_KEY_HIERARCHY = Any
+typealias CSSM_KEY_HIERARCHY = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PVC_MODE;}
  */
-typealias CSSM_PVC_MODE = Any
+typealias CSSM_PVC_MODE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PRIVILEGE_SCOPE;}
  */
-typealias CSSM_PRIVILEGE_SCOPE = Any
+typealias CSSM_PRIVILEGE_SCOPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_SERVICE_MASK;}
  */
-typealias CSSM_SERVICE_MASK = Any
+typealias CSSM_SERVICE_MASK = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_SERVICE_TYPE;}
  */
-typealias CSSM_SERVICE_TYPE = Any
+typealias CSSM_SERVICE_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_MODULE_EVENT;}
  */
-typealias CSSM_MODULE_EVENT = Any
+typealias CSSM_MODULE_EVENT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ATTACH_FLAGS;}
  */
-typealias CSSM_ATTACH_FLAGS = Any
+typealias CSSM_ATTACH_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CSSM_PRIVILEGE;}
  */
-typealias CSSM_PRIVILEGE = Any
+typealias CSSM_PRIVILEGE = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CSSM_USEE_TAG;}
  */
-typealias CSSM_USEE_TAG = Any
+typealias CSSM_USEE_TAG = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_NET_ADDRESS_TYPE;}
  */
-typealias CSSM_NET_ADDRESS_TYPE = Any
+typealias CSSM_NET_ADDRESS_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_NET_PROTOCOL;}
  */
-typealias CSSM_NET_PROTOCOL = Any
+typealias CSSM_NET_PROTOCOL = Int
 
 /**
  * {@snippet lang=c : typedef Int CSSM_WORDID_TYPE;}
@@ -6485,12 +6480,12 @@ typealias CSSM_WORDID_TYPE = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_LIST_ELEMENT_TYPE;}
  */
-typealias CSSM_LIST_ELEMENT_TYPE = Any
+typealias CSSM_LIST_ELEMENT_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_LIST_TYPE;}
  */
-typealias CSSM_LIST_TYPE = Any
+typealias CSSM_LIST_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef Int CSSM_SAMPLE_TYPE;}
@@ -6500,22 +6495,22 @@ typealias CSSM_SAMPLE_TYPE = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERT_TYPE;}
  */
-typealias CSSM_CERT_TYPE = Any
+typealias CSSM_CERT_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERT_ENCODING;}
  */
-typealias CSSM_CERT_ENCODING = Any
+typealias CSSM_CERT_ENCODING = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERT_PARSE_FORMAT;}
  */
-typealias CSSM_CERT_PARSE_FORMAT = Any
+typealias CSSM_CERT_PARSE_FORMAT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERTGROUP_TYPE;}
  */
-typealias CSSM_CERTGROUP_TYPE = Any
+typealias CSSM_CERTGROUP_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef Int CSSM_ACL_SUBJECT_TYPE;}
@@ -6535,277 +6530,277 @@ typealias CSSM_ACL_HANDLE = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ACL_EDIT_MODE;}
  */
-typealias CSSM_ACL_EDIT_MODE = Any
+typealias CSSM_ACL_EDIT_MODE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_HEADERVERSION;}
  */
-typealias CSSM_HEADERVERSION = Any
+typealias CSSM_HEADERVERSION = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEYBLOB_TYPE;}
  */
-typealias CSSM_KEYBLOB_TYPE = Any
+typealias CSSM_KEYBLOB_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEYBLOB_FORMAT;}
  */
-typealias CSSM_KEYBLOB_FORMAT = Any
+typealias CSSM_KEYBLOB_FORMAT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEYCLASS;}
  */
-typealias CSSM_KEYCLASS = Any
+typealias CSSM_KEYCLASS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEYATTR_FLAGS;}
  */
-typealias CSSM_KEYATTR_FLAGS = Any
+typealias CSSM_KEYATTR_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEYUSE;}
  */
-typealias CSSM_KEYUSE = Any
+typealias CSSM_KEYUSE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ALGORITHMS;}
  */
-typealias CSSM_ALGORITHMS = Any
+typealias CSSM_ALGORITHMS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ENCRYPT_MODE;}
  */
-typealias CSSM_ENCRYPT_MODE = Any
+typealias CSSM_ENCRYPT_MODE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CSPTYPE;}
  */
-typealias CSSM_CSPTYPE = Any
+typealias CSSM_CSPTYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CONTEXT_TYPE;}
  */
-typealias CSSM_CONTEXT_TYPE = Any
+typealias CSSM_CONTEXT_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ATTRIBUTE_TYPE;}
  */
-typealias CSSM_ATTRIBUTE_TYPE = Any
+typealias CSSM_ATTRIBUTE_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PADDING;}
  */
-typealias CSSM_PADDING = Any
+typealias CSSM_PADDING = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KEY_TYPE;}
  */
-typealias CSSM_KEY_TYPE = Any
+typealias CSSM_KEY_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_SC_FLAGS;}
  */
-typealias CSSM_SC_FLAGS = Any
+typealias CSSM_SC_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CSP_READER_FLAGS;}
  */
-typealias CSSM_CSP_READER_FLAGS = Any
+typealias CSSM_CSP_READER_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CSP_FLAGS;}
  */
-typealias CSSM_CSP_FLAGS = Any
+typealias CSSM_CSP_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PKCS_OAEP_MGF;}
  */
-typealias CSSM_PKCS_OAEP_MGF = Any
+typealias CSSM_PKCS_OAEP_MGF = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PKCS_OAEP_PSOURCE;}
  */
-typealias CSSM_PKCS_OAEP_PSOURCE = Any
+typealias CSSM_PKCS_OAEP_PSOURCE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_PKCS5_PBKDF2_PRF;}
  */
-typealias CSSM_PKCS5_PBKDF2_PRF = Any
+typealias CSSM_PKCS5_PBKDF2_PRF = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_AUTHORITY_REQUEST_TYPE;}
  */
-typealias CSSM_TP_AUTHORITY_REQUEST_TYPE = Any
+typealias CSSM_TP_AUTHORITY_REQUEST_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_SERVICES;}
  */
-typealias CSSM_TP_SERVICES = Any
+typealias CSSM_TP_SERVICES = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_ACTION;}
  */
-typealias CSSM_TP_ACTION = Any
+typealias CSSM_TP_ACTION = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_STOP_ON;}
  */
-typealias CSSM_TP_STOP_ON = Any
+typealias CSSM_TP_STOP_ON = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CRL_PARSE_FORMAT;}
  */
-typealias CSSM_CRL_PARSE_FORMAT = Any
+typealias CSSM_CRL_PARSE_FORMAT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CRL_TYPE;}
  */
-typealias CSSM_CRL_TYPE = Any
+typealias CSSM_CRL_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CRL_ENCODING;}
  */
-typealias CSSM_CRL_ENCODING = Any
+typealias CSSM_CRL_ENCODING = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CRLGROUP_TYPE;}
  */
-typealias CSSM_CRLGROUP_TYPE = Any
+typealias CSSM_CRLGROUP_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_EVIDENCE_FORM;}
  */
-typealias CSSM_EVIDENCE_FORM = Any
+typealias CSSM_EVIDENCE_FORM = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CONFIRM_STATUS;}
  */
-typealias CSSM_TP_CONFIRM_STATUS = Any
+typealias CSSM_TP_CONFIRM_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTISSUE_STATUS;}
  */
-typealias CSSM_TP_CERTISSUE_STATUS = Any
+typealias CSSM_TP_CERTISSUE_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTCHANGE_ACTION;}
  */
-typealias CSSM_TP_CERTCHANGE_ACTION = Any
+typealias CSSM_TP_CERTCHANGE_ACTION = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTCHANGE_REASON;}
  */
-typealias CSSM_TP_CERTCHANGE_REASON = Any
+typealias CSSM_TP_CERTCHANGE_REASON = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTCHANGE_STATUS;}
  */
-typealias CSSM_TP_CERTCHANGE_STATUS = Any
+typealias CSSM_TP_CERTCHANGE_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTVERIFY_STATUS;}
  */
-typealias CSSM_TP_CERTVERIFY_STATUS = Any
+typealias CSSM_TP_CERTVERIFY_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTNOTARIZE_STATUS;}
  */
-typealias CSSM_TP_CERTNOTARIZE_STATUS = Any
+typealias CSSM_TP_CERTNOTARIZE_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CERTRECLAIM_STATUS;}
  */
-typealias CSSM_TP_CERTRECLAIM_STATUS = Any
+typealias CSSM_TP_CERTRECLAIM_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_CRLISSUE_STATUS;}
  */
-typealias CSSM_TP_CRLISSUE_STATUS = Any
+typealias CSSM_TP_CRLISSUE_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_FORM_TYPE;}
  */
-typealias CSSM_TP_FORM_TYPE = Any
+typealias CSSM_TP_FORM_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CL_TEMPLATE_TYPE;}
  */
-typealias CSSM_CL_TEMPLATE_TYPE = Any
+typealias CSSM_CL_TEMPLATE_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERT_BUNDLE_TYPE;}
  */
-typealias CSSM_CERT_BUNDLE_TYPE = Any
+typealias CSSM_CERT_BUNDLE_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CERT_BUNDLE_ENCODING;}
  */
-typealias CSSM_CERT_BUNDLE_ENCODING = Any
+typealias CSSM_CERT_BUNDLE_ENCODING = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_ATTRIBUTE_NAME_FORMAT;}
  */
-typealias CSSM_DB_ATTRIBUTE_NAME_FORMAT = Any
+typealias CSSM_DB_ATTRIBUTE_NAME_FORMAT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_ATTRIBUTE_FORMAT;}
  */
-typealias CSSM_DB_ATTRIBUTE_FORMAT = Any
+typealias CSSM_DB_ATTRIBUTE_FORMAT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_RECORDTYPE;}
  */
-typealias CSSM_DB_RECORDTYPE = Any
+typealias CSSM_DB_RECORDTYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_INDEX_TYPE;}
  */
-typealias CSSM_DB_INDEX_TYPE = Any
+typealias CSSM_DB_INDEX_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_INDEXED_DATA_LOCATION;}
  */
-typealias CSSM_DB_INDEXED_DATA_LOCATION = Any
+typealias CSSM_DB_INDEXED_DATA_LOCATION = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_ACCESS_TYPE;}
  */
-typealias CSSM_DB_ACCESS_TYPE = Any
+typealias CSSM_DB_ACCESS_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_MODIFY_MODE;}
  */
-typealias CSSM_DB_MODIFY_MODE = Any
+typealias CSSM_DB_MODIFY_MODE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_OPERATOR;}
  */
-typealias CSSM_DB_OPERATOR = Any
+typealias CSSM_DB_OPERATOR = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_CONJUNCTIVE;}
  */
-typealias CSSM_DB_CONJUNCTIVE = Any
+typealias CSSM_DB_CONJUNCTIVE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_QUERY_FLAGS;}
  */
-typealias CSSM_QUERY_FLAGS = Any
+typealias CSSM_QUERY_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DLTYPE;}
  */
-typealias CSSM_DLTYPE = Any
+typealias CSSM_DLTYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_DB_RETRIEVAL_MODES;}
  */
-typealias CSSM_DB_RETRIEVAL_MODES = Any
+typealias CSSM_DB_RETRIEVAL_MODES = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char CSSM_BER_TAG;}
  */
-typealias CSSM_BER_TAG = Any
+typealias CSSM_BER_TAG = Byte
 
 /**
  * {@snippet lang=c : typedef Int CSSM_X509_OPTION;}
@@ -6815,97 +6810,97 @@ typealias CSSM_X509_OPTION = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SecAccessOwnerType;}
  */
-typealias SecAccessOwnerType = Any
+typealias SecAccessOwnerType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CE_KeyUsage;}
  */
-typealias CE_KeyUsage = Any
+typealias CE_KeyUsage = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CE_CrlReason;}
  */
-typealias CE_CrlReason = Any
+typealias CE_CrlReason = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CE_NetscapeCertType;}
  */
-typealias CE_NetscapeCertType = Any
+typealias CE_NetscapeCertType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char CE_CrlDistReasonFlags;}
  */
-typealias CE_CrlDistReasonFlags = Any
+typealias CE_CrlDistReasonFlags = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CE_CrlNumber;}
  */
-typealias CE_CrlNumber = Any
+typealias CE_CrlNumber = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CE_DeltaCrl;}
  */
-typealias CE_DeltaCrl = Any
+typealias CE_DeltaCrl = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CE_InhibitAnyPolicy;}
  */
-typealias CE_InhibitAnyPolicy = Any
+typealias CE_InhibitAnyPolicy = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_ACL_PREAUTH_TRACKING_STATE;}
  */
-typealias CSSM_ACL_PREAUTH_TRACKING_STATE = Any
+typealias CSSM_ACL_PREAUTH_TRACKING_STATE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_APPLE_TP_CRL_OPT_FLAGS;}
  */
-typealias CSSM_APPLE_TP_CRL_OPT_FLAGS = Any
+typealias CSSM_APPLE_TP_CRL_OPT_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_APPLE_TP_ACTION_FLAGS;}
  */
-typealias CSSM_APPLE_TP_ACTION_FLAGS = Any
+typealias CSSM_APPLE_TP_ACTION_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_TP_APPLE_CERT_STATUS;}
  */
-typealias CSSM_TP_APPLE_CERT_STATUS = Any
+typealias CSSM_TP_APPLE_CERT_STATUS = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short SSLCipherSuite;}
  */
-typealias SSLCipherSuite = Any
+typealias SSLCipherSuite = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SecuritySessionId;}
  */
-typealias SecuritySessionId = Any
+typealias SecuritySessionId = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_MANAGER_EVENT_TYPES;}
  */
-typealias CSSM_MANAGER_EVENT_TYPES = Any
+typealias CSSM_MANAGER_EVENT_TYPES = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_CONTEXT_EVENT;}
  */
-typealias CSSM_CONTEXT_EVENT = Any
+typealias CSSM_CONTEXT_EVENT = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KRSP_HANDLE;}
  */
-typealias CSSM_KRSP_HANDLE = Any
+typealias CSSM_KRSP_HANDLE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KR_POLICY_TYPE;}
  */
-typealias CSSM_KR_POLICY_TYPE = Any
+typealias CSSM_KR_POLICY_TYPE = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSSM_KR_POLICY_FLAGS;}
  */
-typealias CSSM_KR_POLICY_FLAGS = Any
+typealias CSSM_KR_POLICY_FLAGS = Int
 
 /**
  * {@snippet lang=c : typedef Long MDS_HANDLE;}
@@ -6915,12 +6910,12 @@ typealias MDS_HANDLE = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SecGuestRef;}
  */
-typealias SecGuestRef = Any
+typealias SecGuestRef = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int au_id_t;}
  */
-typealias au_id_t = Any
+typealias au_id_t = Int
 
 /**
  * {@snippet lang=c : typedef Int au_asid_t;}
@@ -6930,27 +6925,27 @@ typealias au_asid_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short au_event_t;}
  */
-typealias au_event_t = Any
+typealias au_event_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short au_emod_t;}
  */
-typealias au_emod_t = Any
+typealias au_emod_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int au_class_t;}
  */
-typealias au_class_t = Any
+typealias au_class_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong au_asflgs_t;}
  */
-typealias au_asflgs_t = Any
+typealias au_asflgs_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char au_ctlmode_t;}
  */
-typealias au_ctlmode_t = Any
+typealias au_ctlmode_t = Byte
 
 /**
  * {@snippet lang=c : typedef Long xpc_activity_state_t;}
@@ -6960,62 +6955,62 @@ typealias xpc_activity_state_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long pointer_t;}
  */
-typealias pointer_t = Any
+typealias pointer_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long vm_address_t;}
  */
-typealias vm_address_t = Any
+typealias vm_address_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong addr64_t;}
  */
-typealias addr64_t = Any
+typealias addr64_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int reg64_t;}
  */
-typealias reg64_t = Any
+typealias reg64_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ppnum_t;}
  */
-typealias ppnum_t = Any
+typealias ppnum_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_map_t;}
  */
-typealias vm_map_t = Any
+typealias vm_map_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_map_read_t;}
  */
-typealias vm_map_read_t = Any
+typealias vm_map_read_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_map_inspect_t;}
  */
-typealias vm_map_inspect_t = Any
+typealias vm_map_inspect_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int upl_t;}
  */
-typealias upl_t = Any
+typealias upl_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_named_entry_t;}
  */
-typealias vm_named_entry_t = Any
+typealias vm_named_entry_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_object_offset_t;}
  */
-typealias vm_object_offset_t = Any
+typealias vm_object_offset_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_object_size_t;}
  */
-typealias vm_object_size_t = Any
+typealias vm_object_size_t = Long
 
 /**
  * {@snippet lang=c : typedef Int host_flavor_t;}
@@ -7030,47 +7025,47 @@ typealias vm_prot_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_sync_t;}
  */
-typealias vm_sync_t = Any
+typealias vm_sync_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong memory_object_offset_t;}
  */
-typealias memory_object_offset_t = Any
+typealias memory_object_offset_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong memory_object_size_t;}
  */
-typealias memory_object_size_t = Any
+typealias memory_object_size_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int memory_object_cluster_size_t;}
  */
-typealias memory_object_cluster_size_t = Any
+typealias memory_object_cluster_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong vm_object_id_t;}
  */
-typealias vm_object_id_t = Any
+typealias vm_object_id_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int memory_object_t;}
  */
-typealias memory_object_t = Any
+typealias memory_object_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int memory_object_control_t;}
  */
-typealias memory_object_control_t = Any
+typealias memory_object_control_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int memory_object_name_t;}
  */
-typealias memory_object_name_t = Any
+typealias memory_object_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int memory_object_default_t;}
  */
-typealias memory_object_default_t = Any
+typealias memory_object_default_t = Int
 
 /**
  * {@snippet lang=c : typedef Int memory_object_copy_strategy_t;}
@@ -7115,7 +7110,7 @@ typealias exception_behavior_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int exception_mask_t;}
  */
-typealias exception_mask_t = Any
+typealias exception_mask_t = Int
 
 /**
  * {@snippet lang=c : typedef LongLong mach_exception_code_t;}
@@ -7130,107 +7125,107 @@ typealias mach_exception_subcode_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_t;}
  */
-typealias mach_voucher_t = Any
+typealias mach_voucher_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_name_t;}
  */
-typealias mach_voucher_name_t = Any
+typealias mach_voucher_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_voucher_t;}
  */
-typealias ipc_voucher_t = Any
+typealias ipc_voucher_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_selector_t;}
  */
-typealias mach_voucher_selector_t = Any
+typealias mach_voucher_selector_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_key_t;}
  */
-typealias mach_voucher_attr_key_t = Any
+typealias mach_voucher_attr_key_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_content_size_t;}
  */
-typealias mach_voucher_attr_content_size_t = Any
+typealias mach_voucher_attr_content_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_command_t;}
  */
-typealias mach_voucher_attr_command_t = Any
+typealias mach_voucher_attr_command_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_recipe_command_t;}
  */
-typealias mach_voucher_attr_recipe_command_t = Any
+typealias mach_voucher_attr_recipe_command_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_recipe_size_t;}
  */
-typealias mach_voucher_attr_recipe_size_t = Any
+typealias mach_voucher_attr_recipe_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_raw_recipe_size_t;}
  */
-typealias mach_voucher_attr_raw_recipe_size_t = Any
+typealias mach_voucher_attr_raw_recipe_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_raw_recipe_array_size_t;}
  */
-typealias mach_voucher_attr_raw_recipe_array_size_t = Any
+typealias mach_voucher_attr_raw_recipe_array_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_manager_t;}
  */
-typealias mach_voucher_attr_manager_t = Any
+typealias mach_voucher_attr_manager_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_control_t;}
  */
-typealias mach_voucher_attr_control_t = Any
+typealias mach_voucher_attr_control_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_voucher_attr_manager_t;}
  */
-typealias ipc_voucher_attr_manager_t = Any
+typealias ipc_voucher_attr_manager_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_voucher_attr_control_t;}
  */
-typealias ipc_voucher_attr_control_t = Any
+typealias ipc_voucher_attr_control_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong mach_voucher_attr_value_handle_t;}
  */
-typealias mach_voucher_attr_value_handle_t = Any
+typealias mach_voucher_attr_value_handle_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_value_handle_array_size_t;}
  */
-typealias mach_voucher_attr_value_handle_array_size_t = Any
+typealias mach_voucher_attr_value_handle_array_size_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_value_reference_t;}
  */
-typealias mach_voucher_attr_value_reference_t = Any
+typealias mach_voucher_attr_value_reference_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_value_flags_t;}
  */
-typealias mach_voucher_attr_value_flags_t = Any
+typealias mach_voucher_attr_value_flags_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_control_flags_t;}
  */
-typealias mach_voucher_attr_control_flags_t = Any
+typealias mach_voucher_attr_control_flags_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_voucher_attr_importance_refs;}
  */
-typealias mach_voucher_attr_importance_refs = Any
+typealias mach_voucher_attr_importance_refs = Int
 
 /**
  * {@snippet lang=c : typedef Int processor_flavor_t;}
@@ -7250,27 +7245,27 @@ typealias policy_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_flavor_t;}
  */
-typealias task_flavor_t = Any
+typealias task_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_exc_guard_behavior_t;}
  */
-typealias task_exc_guard_behavior_t = Any
+typealias task_exc_guard_behavior_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_corpse_forking_behavior_t;}
  */
-typealias task_corpse_forking_behavior_t = Any
+typealias task_corpse_forking_behavior_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_inspect_flavor_t;}
  */
-typealias task_inspect_flavor_t = Any
+typealias task_inspect_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_policy_flavor_t;}
  */
-typealias task_policy_flavor_t = Any
+typealias task_policy_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef Int task_latency_qos_t;}
@@ -7290,12 +7285,12 @@ typealias task_special_port_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_flavor_t;}
  */
-typealias thread_flavor_t = Any
+typealias thread_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_policy_flavor_t;}
  */
-typealias thread_policy_flavor_t = Any
+typealias thread_policy_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef Int thread_latency_qos_t;}
@@ -7310,7 +7305,7 @@ typealias thread_throughput_qos_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_machine_attribute_t;}
  */
-typealias vm_machine_attribute_t = Any
+typealias vm_machine_attribute_t = Int
 
 /**
  * {@snippet lang=c : typedef Int vm_machine_attribute_val_t;}
@@ -7320,7 +7315,7 @@ typealias vm_machine_attribute_val_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_inherit_t;}
  */
-typealias vm_inherit_t = Any
+typealias vm_inherit_t = Int
 
 /**
  * {@snippet lang=c : typedef Int vm_purgable_t;}
@@ -7335,7 +7330,7 @@ typealias vm_behavior_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm32_object_id_t;}
  */
-typealias vm32_object_id_t = Any
+typealias vm32_object_id_t = Int
 
 /**
  * {@snippet lang=c : typedef Int vm_region_flavor_t;}
@@ -7360,302 +7355,302 @@ typealias kmod_control_flavor_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_t;}
  */
-typealias task_t = Any
+typealias task_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_name_t;}
  */
-typealias task_name_t = Any
+typealias task_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_policy_set_t;}
  */
-typealias task_policy_set_t = Any
+typealias task_policy_set_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_policy_get_t;}
  */
-typealias task_policy_get_t = Any
+typealias task_policy_get_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_inspect_t;}
  */
-typealias task_inspect_t = Any
+typealias task_inspect_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_read_t;}
  */
-typealias task_read_t = Any
+typealias task_read_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_suspension_token_t;}
  */
-typealias task_suspension_token_t = Any
+typealias task_suspension_token_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_t;}
  */
-typealias thread_t = Any
+typealias thread_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_act_t;}
  */
-typealias thread_act_t = Any
+typealias thread_act_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_inspect_t;}
  */
-typealias thread_inspect_t = Any
+typealias thread_inspect_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_read_t;}
  */
-typealias thread_read_t = Any
+typealias thread_read_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_space_t;}
  */
-typealias ipc_space_t = Any
+typealias ipc_space_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_space_read_t;}
  */
-typealias ipc_space_read_t = Any
+typealias ipc_space_read_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_space_inspect_t;}
  */
-typealias ipc_space_inspect_t = Any
+typealias ipc_space_inspect_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int coalition_t;}
  */
-typealias coalition_t = Any
+typealias coalition_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int host_t;}
  */
-typealias host_t = Any
+typealias host_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int host_priv_t;}
  */
-typealias host_priv_t = Any
+typealias host_priv_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int host_security_t;}
  */
-typealias host_security_t = Any
+typealias host_security_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_t;}
  */
-typealias processor_t = Any
+typealias processor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_t;}
  */
-typealias processor_set_t = Any
+typealias processor_set_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_control_t;}
  */
-typealias processor_set_control_t = Any
+typealias processor_set_control_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int semaphore_t;}
  */
-typealias semaphore_t = Any
+typealias semaphore_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int lock_set_t;}
  */
-typealias lock_set_t = Any
+typealias lock_set_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ledger_t;}
  */
-typealias ledger_t = Any
+typealias ledger_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int alarm_t;}
  */
-typealias alarm_t = Any
+typealias alarm_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int clock_serv_t;}
  */
-typealias clock_serv_t = Any
+typealias clock_serv_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int clock_ctrl_t;}
  */
-typealias clock_ctrl_t = Any
+typealias clock_ctrl_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int arcade_register_t;}
  */
-typealias arcade_register_t = Any
+typealias arcade_register_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_eventlink_t;}
  */
-typealias ipc_eventlink_t = Any
+typealias ipc_eventlink_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_id_token_t;}
  */
-typealias task_id_token_t = Any
+typealias task_id_token_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int kcdata_object_t;}
  */
-typealias kcdata_object_t = Any
+typealias kcdata_object_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_name_t;}
  */
-typealias processor_set_name_t = Any
+typealias processor_set_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int clock_reply_t;}
  */
-typealias clock_reply_t = Any
+typealias clock_reply_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int bootstrap_t;}
  */
-typealias bootstrap_t = Any
+typealias bootstrap_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mem_entry_name_port_t;}
  */
-typealias mem_entry_name_port_t = Any
+typealias mem_entry_name_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int exception_handler_t;}
  */
-typealias exception_handler_t = Any
+typealias exception_handler_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int vm_task_entry_t;}
  */
-typealias vm_task_entry_t = Any
+typealias vm_task_entry_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_main_t;}
  */
-typealias io_main_t = Any
+typealias io_main_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UNDServerRef;}
  */
-typealias UNDServerRef = Any
+typealias UNDServerRef = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_eventlink_t;}
  */
-typealias mach_eventlink_t = Any
+typealias mach_eventlink_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int task_port_t;}
  */
-typealias task_port_t = Any
+typealias task_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_port_t;}
  */
-typealias thread_port_t = Any
+typealias thread_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ipc_space_port_t;}
  */
-typealias ipc_space_port_t = Any
+typealias ipc_space_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int host_name_t;}
  */
-typealias host_name_t = Any
+typealias host_name_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int host_name_port_t;}
  */
-typealias host_name_port_t = Any
+typealias host_name_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_port_t;}
  */
-typealias processor_set_port_t = Any
+typealias processor_set_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_name_port_t;}
  */
-typealias processor_set_name_port_t = Any
+typealias processor_set_name_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_set_control_port_t;}
  */
-typealias processor_set_control_port_t = Any
+typealias processor_set_control_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int processor_port_t;}
  */
-typealias processor_port_t = Any
+typealias processor_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int thread_act_port_t;}
  */
-typealias thread_act_port_t = Any
+typealias thread_act_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int semaphore_port_t;}
  */
-typealias semaphore_port_t = Any
+typealias semaphore_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int lock_set_port_t;}
  */
-typealias lock_set_port_t = Any
+typealias lock_set_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ledger_port_t;}
  */
-typealias ledger_port_t = Any
+typealias ledger_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int alarm_port_t;}
  */
-typealias alarm_port_t = Any
+typealias alarm_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int clock_serv_port_t;}
  */
-typealias clock_serv_port_t = Any
+typealias clock_serv_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int clock_ctrl_port_t;}
  */
-typealias clock_ctrl_port_t = Any
+typealias clock_ctrl_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int exception_port_t;}
  */
-typealias exception_port_t = Any
+typealias exception_port_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_task_flavor_t;}
  */
-typealias mach_task_flavor_t = Any
+typealias mach_task_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int mach_thread_flavor_t;}
  */
-typealias mach_thread_flavor_t = Any
+typealias mach_thread_flavor_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ledger_item_t;}
  */
-typealias ledger_item_t = Any
+typealias ledger_item_t = Int
 
 /**
  * {@snippet lang=c : typedef LongLong ledger_amount_t;}
@@ -7665,7 +7660,7 @@ typealias ledger_amount_t = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int notify_port_t;}
  */
-typealias notify_port_t = Any
+typealias notify_port_t = Int
 
 /**
  * {@snippet lang=c : typedef Int sync_policy_t;}
@@ -7680,32 +7675,32 @@ typealias mach_error_t = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int routine_arg_type;}
  */
-typealias routine_arg_type = Any
+typealias routine_arg_type = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int routine_arg_offset;}
  */
-typealias routine_arg_offset = Any
+typealias routine_arg_offset = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int routine_arg_size;}
  */
-typealias routine_arg_size = Any
+typealias routine_arg_size = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char DERByte;}
  */
-typealias DERByte = Any
+typealias DERByte = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short DERShort;}
  */
-typealias DERShort = Any
+typealias DERShort = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int DERInt;}
  */
-typealias DERInt = Any
+typealias DERInt = Int
 
 /**
  * {@snippet lang=c : typedef Int DERSignedInt;}
@@ -7715,7 +7710,7 @@ typealias DERSignedInt = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong DERLong;}
  */
-typealias DERLong = Any
+typealias DERLong = Long
 
 /**
  * {@snippet lang=c : typedef LongLong DERSignedLong;}
@@ -7725,7 +7720,7 @@ typealias DERSignedLong = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long DERSize;}
  */
-typealias DERSize = Any
+typealias DERSize = Long
 
 /**
  * {@snippet lang=c : typedef Bool DERBool;}
@@ -7735,17 +7730,17 @@ typealias DERBool = Boolean
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong DERTag;}
  */
-typealias DERTag = Any
+typealias DERTag = Long
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char DateOrders;}
  */
-typealias DateOrders = Any
+typealias DateOrders = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char TokenResults;}
  */
-typealias TokenResults = Any
+typealias TokenResults = Byte
 
 /**
  * {@snippet lang=c : typedef Short ScriptTokenType;}
@@ -7755,32 +7750,32 @@ typealias ScriptTokenType = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TextEncodingBase;}
  */
-typealias TextEncodingBase = Any
+typealias TextEncodingBase = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TextEncodingVariant;}
  */
-typealias TextEncodingVariant = Any
+typealias TextEncodingVariant = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TextEncodingFormat;}
  */
-typealias TextEncodingFormat = Any
+typealias TextEncodingFormat = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TextEncoding;}
  */
-typealias TextEncoding = Any
+typealias TextEncoding = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TextEncodingNameSelector;}
  */
-typealias TextEncodingNameSelector = Any
+typealias TextEncodingNameSelector = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long UniCharArrayOffset;}
  */
-typealias UniCharArrayOffset = Any
+typealias UniCharArrayOffset = Long
 
 /**
  * {@snippet lang=c : typedef Int UCCharPropertyType;}
@@ -7790,47 +7785,47 @@ typealias UCCharPropertyType = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UCCharPropertyValue;}
  */
-typealias UCCharPropertyValue = Any
+typealias UCCharPropertyValue = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CallingConventionType;}
  */
-typealias CallingConventionType = Any
+typealias CallingConventionType = Short
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char ISAType;}
  */
-typealias ISAType = Any
+typealias ISAType = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char RTAType;}
  */
-typealias RTAType = Any
+typealias RTAType = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short registerSelectorType;}
  */
-typealias registerSelectorType = Any
+typealias registerSelectorType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ProcInfoType;}
  */
-typealias ProcInfoType = Any
+typealias ProcInfoType = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short RoutineFlagsType;}
  */
-typealias RoutineFlagsType = Any
+typealias RoutineFlagsType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char RDFlagsType;}
  */
-typealias RDFlagsType = Any
+typealias RDFlagsType = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CollectionTag;}
  */
-typealias CollectionTag = Any
+typealias CollectionTag = Int
 
 /**
  * {@snippet lang=c : typedef Int CSDiskSpaceRecoveryOptions;}
@@ -7845,12 +7840,12 @@ typealias ToggleResults = Short
 /**
  * {@snippet lang=c : typedef SIGNED = Char LongDateField;}
  */
-typealias LongDateField = Any
+typealias LongDateField = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char DateForm;}
  */
-typealias DateForm = Any
+typealias DateForm = Byte
 
 /**
  * {@snippet lang=c : typedef Short StringToDateStatus;}
@@ -7870,12 +7865,12 @@ typealias LongDateTime = Long
 /**
  * {@snippet lang=c : typedef SIGNED = Char DateDelta;}
  */
-typealias DateDelta = Any
+typealias DateDelta = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char QTypes;}
  */
-typealias QTypes = Any
+typealias QTypes = Byte
 
 /**
  * {@snippet lang=c : typedef Int IOReturn;}
@@ -7885,7 +7880,7 @@ typealias IOReturn = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UInt;}
  */
-typealias UInt = Any
+typealias UInt = Int
 
 /**
  * {@snippet lang=c : typedef Int SInt;}
@@ -7895,7 +7890,7 @@ typealias SInt = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOOptionBits;}
  */
-typealias IOOptionBits = Any
+typealias IOOptionBits = Int
 
 /**
  * {@snippet lang=c : typedef Int IOFixed;}
@@ -7905,132 +7900,132 @@ typealias IOFixed = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOVersion;}
  */
-typealias IOVersion = Any
+typealias IOVersion = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOItemCount;}
  */
-typealias IOItemCount = Any
+typealias IOItemCount = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOCacheMode;}
  */
-typealias IOCacheMode = Any
+typealias IOCacheMode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOByteCount32;}
  */
-typealias IOByteCount32 = Any
+typealias IOByteCount32 = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOByteCount64;}
  */
-typealias IOByteCount64 = Any
+typealias IOByteCount64 = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOPhysicalAddress32;}
  */
-typealias IOPhysicalAddress32 = Any
+typealias IOPhysicalAddress32 = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOPhysicalAddress64;}
  */
-typealias IOPhysicalAddress64 = Any
+typealias IOPhysicalAddress64 = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOPhysicalLength32;}
  */
-typealias IOPhysicalLength32 = Any
+typealias IOPhysicalLength32 = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOPhysicalLength64;}
  */
-typealias IOPhysicalLength64 = Any
+typealias IOPhysicalLength64 = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOVirtualAddress;}
  */
-typealias IOVirtualAddress = Any
+typealias IOVirtualAddress = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOByteCount;}
  */
-typealias IOByteCount = Any
+typealias IOByteCount = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOLogicalAddress;}
  */
-typealias IOLogicalAddress = Any
+typealias IOLogicalAddress = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOPhysicalAddress;}
  */
-typealias IOPhysicalAddress = Any
+typealias IOPhysicalAddress = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong IOPhysicalLength;}
  */
-typealias IOPhysicalLength = Any
+typealias IOPhysicalLength = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOAlignment;}
  */
-typealias IOAlignment = Any
+typealias IOAlignment = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_object_t;}
  */
-typealias io_object_t = Any
+typealias io_object_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong io_user_scalar_t;}
  */
-typealias io_user_scalar_t = Any
+typealias io_user_scalar_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong io_user_reference_t;}
  */
-typealias io_user_reference_t = Any
+typealias io_user_reference_t = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_connect_t;}
  */
-typealias io_connect_t = Any
+typealias io_connect_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_enumerator_t;}
  */
-typealias io_enumerator_t = Any
+typealias io_enumerator_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_ident_t;}
  */
-typealias io_ident_t = Any
+typealias io_ident_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_iterator_t;}
  */
-typealias io_iterator_t = Any
+typealias io_iterator_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_registry_entry_t;}
  */
-typealias io_registry_entry_t = Any
+typealias io_registry_entry_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int io_service_t;}
  */
-typealias io_service_t = Any
+typealias io_service_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int uext_object_t;}
  */
-typealias uext_object_t = Any
+typealias uext_object_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IODeviceNumber;}
  */
-typealias IODeviceNumber = Any
+typealias IODeviceNumber = Int
 
 /**
  * {@snippet lang=c : typedef Short FSVolumeRefNum;}
@@ -8045,57 +8040,57 @@ typealias FSIORefNum = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSCatalogInfoBitmap;}
  */
-typealias FSCatalogInfoBitmap = Any
+typealias FSCatalogInfoBitmap = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSIteratorFlags;}
  */
-typealias FSIteratorFlags = Any
+typealias FSIteratorFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short FSAllocationFlags;}
  */
-typealias FSAllocationFlags = Any
+typealias FSAllocationFlags = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char FSForkInfoFlags;}
  */
-typealias FSForkInfoFlags = Any
+typealias FSForkInfoFlags = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSVolumeInfoBitmap;}
  */
-typealias FSVolumeInfoBitmap = Any
+typealias FSVolumeInfoBitmap = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int VolumeType;}
  */
-typealias VolumeType = Any
+typealias VolumeType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FNMessage;}
  */
-typealias FNMessage = Any
+typealias FNMessage = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSMountStatus;}
  */
-typealias FSMountStatus = Any
+typealias FSMountStatus = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSEjectStatus;}
  */
-typealias FSEjectStatus = Any
+typealias FSEjectStatus = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSUnmountStatus;}
  */
-typealias FSUnmountStatus = Any
+typealias FSUnmountStatus = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSFileOperationStage;}
  */
-typealias FSFileOperationStage = Any
+typealias FSFileOperationStage = Int
 
 /**
  * {@snippet lang=c : typedef Short ResID;}
@@ -8140,67 +8135,67 @@ typealias ComponentResult = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CSComponentsThreadMode;}
  */
-typealias CSComponentsThreadMode = Any
+typealias CSComponentsThreadMode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPOpaqueIDClass;}
  */
-typealias MPOpaqueIDClass = Any
+typealias MPOpaqueIDClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPTaskOptions;}
  */
-typealias MPTaskOptions = Any
+typealias MPTaskOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long TaskStorageIndex;}
  */
-typealias TaskStorageIndex = Any
+typealias TaskStorageIndex = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long MPSemaphoreCount;}
  */
-typealias MPSemaphoreCount = Any
+typealias MPSemaphoreCount = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPTaskWeight;}
  */
-typealias MPTaskWeight = Any
+typealias MPTaskWeight = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPEventFlags;}
  */
-typealias MPEventFlags = Any
+typealias MPEventFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPExceptionKind;}
  */
-typealias MPExceptionKind = Any
+typealias MPExceptionKind = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPTaskStateKind;}
  */
-typealias MPTaskStateKind = Any
+typealias MPTaskStateKind = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPPageSizeClass;}
  */
-typealias MPPageSizeClass = Any
+typealias MPPageSizeClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MPDebuggerLevel;}
  */
-typealias MPDebuggerLevel = Any
+typealias MPDebuggerLevel = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char MPRemoteContext;}
  */
-typealias MPRemoteContext = Any
+typealias MPRemoteContext = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSAliasInfoBitmap;}
  */
-typealias FSAliasInfoBitmap = Any
+typealias FSAliasInfoBitmap = Int
 
 /**
  * {@snippet lang=c : typedef Short AliasInfoType;}
@@ -8210,32 +8205,32 @@ typealias AliasInfoType = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int LocalePartMask;}
  */
-typealias LocalePartMask = Any
+typealias LocalePartMask = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int LocaleOperationClass;}
  */
-typealias LocaleOperationClass = Any
+typealias LocaleOperationClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int LocaleOperationVariant;}
  */
-typealias LocaleOperationVariant = Any
+typealias LocaleOperationVariant = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int LocaleNameMask;}
  */
-typealias LocaleNameMask = Any
+typealias LocaleNameMask = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long MemoryReferenceKind;}
  */
-typealias MemoryReferenceKind = Any
+typealias MemoryReferenceKind = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ExceptionKind;}
  */
-typealias ExceptionKind = Any
+typealias ExceptionKind = Long
 
 /**
  * {@snippet lang=c : typedef Short FormatStatus;}
@@ -8245,32 +8240,32 @@ typealias FormatStatus = Short
 /**
  * {@snippet lang=c : typedef SIGNED = Char FormatClass;}
  */
-typealias FormatClass = Any
+typealias FormatClass = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char FormatResultType;}
  */
-typealias FormatResultType = Any
+typealias FormatResultType = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UCKeyOutput;}
  */
-typealias UCKeyOutput = Any
+typealias UCKeyOutput = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UCKeyCharSeq;}
  */
-typealias UCKeyCharSeq = Any
+typealias UCKeyCharSeq = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UCCollateOptions;}
  */
-typealias UCCollateOptions = Any
+typealias UCCollateOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UCCollationValue;}
  */
-typealias UCCollationValue = Any
+typealias UCCollationValue = Int
 
 /**
  * {@snippet lang=c : typedef Int UCTypeSelectCompareResult;}
@@ -8280,22 +8275,22 @@ typealias UCTypeSelectCompareResult = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UCTSWalkDirection;}
  */
-typealias UCTSWalkDirection = Any
+typealias UCTSWalkDirection = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short UCTypeSelectOptions;}
  */
-typealias UCTypeSelectOptions = Any
+typealias UCTypeSelectOptions = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UCTextBreakType;}
  */
-typealias UCTextBreakType = Any
+typealias UCTextBreakType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UCTextBreakOptions;}
  */
-typealias UCTextBreakOptions = Any
+typealias UCTextBreakOptions = Int
 
 /**
  * {@snippet lang=c : typedef Short relop;}
@@ -8305,27 +8300,27 @@ typealias relop = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short fexcept_t;}
  */
-typealias fexcept_t = Any
+typealias fexcept_t = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TECPluginSignature;}
  */
-typealias TECPluginSignature = Any
+typealias TECPluginSignature = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TECPluginVersion;}
  */
-typealias TECPluginVersion = Any
+typealias TECPluginVersion = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TECPluginSig;}
  */
-typealias TECPluginSig = Any
+typealias TECPluginSig = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TECInternetNameUsageMask;}
  */
-typealias TECInternetNameUsageMask = Any
+typealias TECInternetNameUsageMask = Int
 
 /**
  * {@snippet lang=c : typedef Int UnicodeMapVersion;}
@@ -8335,57 +8330,57 @@ typealias UnicodeMapVersion = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ThreadState;}
  */
-typealias ThreadState = Any
+typealias ThreadState = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ThreadStyle;}
  */
-typealias ThreadStyle = Any
+typealias ThreadStyle = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long ThreadID;}
  */
-typealias ThreadID = Any
+typealias ThreadID = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ThreadOptions;}
  */
-typealias ThreadOptions = Any
+typealias ThreadOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FolderDescFlags;}
  */
-typealias FolderDescFlags = Any
+typealias FolderDescFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FolderClass;}
  */
-typealias FolderClass = Any
+typealias FolderClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FolderType;}
  */
-typealias FolderType = Any
+typealias FolderType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FolderLocation;}
  */
-typealias FolderLocation = Any
+typealias FolderLocation = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int RoutingFlags;}
  */
-typealias RoutingFlags = Any
+typealias RoutingFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PEFRelocChunk;}
  */
-typealias PEFRelocChunk = Any
+typealias PEFRelocChunk = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int HFSCatalogNodeID;}
  */
-typealias HFSCatalogNodeID = Any
+typealias HFSCatalogNodeID = Int
 
 /**
  * {@snippet lang=c : typedef Short MarkerIdType;}
@@ -8395,12 +8390,12 @@ typealias MarkerIdType = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int DescType;}
  */
-typealias DescType = Any
+typealias DescType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int AEKeyword;}
  */
-typealias AEKeyword = Any
+typealias AEKeyword = Int
 
 /**
  * {@snippet lang=c : typedef Short AEReturnID;}
@@ -8415,17 +8410,17 @@ typealias AETransactionID = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int AEEventClass;}
  */
-typealias AEEventClass = Any
+typealias AEEventClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int AEEventID;}
  */
-typealias AEEventID = Any
+typealias AEEventID = Int
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char AEArrayType;}
  */
-typealias AEArrayType = Any
+typealias AEArrayType = Byte
 
 /**
  * {@snippet lang=c : typedef Short AESendPriority;}
@@ -8440,12 +8435,12 @@ typealias AESendMode = Int
 /**
  * {@snippet lang=c : typedef SIGNED = Char AEEventSource;}
  */
-typealias AEEventSource = Any
+typealias AEEventSource = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int AEBuildErrorCode;}
  */
-typealias AEBuildErrorCode = Any
+typealias AEBuildErrorCode = Int
 
 /**
  * {@snippet lang=c : typedef Long CFNetDiagnosticStatus;}
@@ -8460,12 +8455,12 @@ typealias CSIdentityClass = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CSIdentityFlags;}
  */
-typealias CSIdentityFlags = Any
+typealias CSIdentityFlags = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long CSIdentityQueryFlags;}
  */
-typealias CSIdentityQueryFlags = Any
+typealias CSIdentityQueryFlags = Long
 
 /**
  * {@snippet lang=c : typedef Long CSIdentityQueryStringComparisonMethod;}
@@ -8480,62 +8475,62 @@ typealias CSIdentityQueryEvent = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCAttrType;}
  */
-typealias KCAttrType = Any
+typealias KCAttrType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCStatus;}
  */
-typealias KCStatus = Any
+typealias KCStatus = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short KCEvent;}
  */
-typealias KCEvent = Any
+typealias KCEvent = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short KCEventMask;}
  */
-typealias KCEventMask = Any
+typealias KCEventMask = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCItemClass;}
  */
-typealias KCItemClass = Any
+typealias KCItemClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCItemAttr;}
  */
-typealias KCItemAttr = Any
+typealias KCItemAttr = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCAuthType;}
  */
-typealias KCAuthType = Any
+typealias KCAuthType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCProtocolType;}
  */
-typealias KCProtocolType = Any
+typealias KCProtocolType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCCertAddOptions;}
  */
-typealias KCCertAddOptions = Any
+typealias KCCertAddOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short KCVerifyStopOn;}
  */
-typealias KCVerifyStopOn = Any
+typealias KCVerifyStopOn = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KCCertSearchOptions;}
  */
-typealias KCCertSearchOptions = Any
+typealias KCCertSearchOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IconServicesUsageFlags;}
  */
-typealias IconServicesUsageFlags = Any
+typealias IconServicesUsageFlags = Int
 
 /**
  * {@snippet lang=c : typedef Long SKDocumentID;}
@@ -8545,27 +8540,27 @@ typealias SKDocumentID = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SKSearchOptions;}
  */
-typealias SKSearchOptions = Any
+typealias SKSearchOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSEventStreamCreateFlags;}
  */
-typealias FSEventStreamCreateFlags = Any
+typealias FSEventStreamCreateFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FSEventStreamEventFlags;}
  */
-typealias FSEventStreamEventFlags = Any
+typealias FSEventStreamEventFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong FSEventStreamEventId;}
  */
-typealias FSEventStreamEventId = Any
+typealias FSEventStreamEventId = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int LSSharedFileListResolutionFlags;}
  */
-typealias LSSharedFileListResolutionFlags = Any
+typealias LSSharedFileListResolutionFlags = Int
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSValueTransformerName;}
@@ -8616,68 +8611,68 @@ class NSAffineTransformStruct {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val m11_VH: VarHandle = layout.varHandle(groupElement("m11"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m11(segment: MemorySegment): CGFloat =
-        m11_VH.get(segment, 0L) as CGFloat
+    fun m11(segment: MemorySegment): Double =
+        m11_VH.get(segment, 0L) as Double
     
-    fun m11(segment: MemorySegment, value: CGFloat) =
+    fun m11(segment: MemorySegment, value: Double) =
         m11_VH.set(segment, 0L, value)
     
     val m12_VH: VarHandle = layout.varHandle(groupElement("m12"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m12(segment: MemorySegment): CGFloat =
-        m12_VH.get(segment, 0L) as CGFloat
+    fun m12(segment: MemorySegment): Double =
+        m12_VH.get(segment, 0L) as Double
     
-    fun m12(segment: MemorySegment, value: CGFloat) =
+    fun m12(segment: MemorySegment, value: Double) =
         m12_VH.set(segment, 0L, value)
     
     val m21_VH: VarHandle = layout.varHandle(groupElement("m21"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m21(segment: MemorySegment): CGFloat =
-        m21_VH.get(segment, 0L) as CGFloat
+    fun m21(segment: MemorySegment): Double =
+        m21_VH.get(segment, 0L) as Double
     
-    fun m21(segment: MemorySegment, value: CGFloat) =
+    fun m21(segment: MemorySegment, value: Double) =
         m21_VH.set(segment, 0L, value)
     
     val m22_VH: VarHandle = layout.varHandle(groupElement("m22"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m22(segment: MemorySegment): CGFloat =
-        m22_VH.get(segment, 0L) as CGFloat
+    fun m22(segment: MemorySegment): Double =
+        m22_VH.get(segment, 0L) as Double
     
-    fun m22(segment: MemorySegment, value: CGFloat) =
+    fun m22(segment: MemorySegment, value: Double) =
         m22_VH.set(segment, 0L, value)
     
     val tX_VH: VarHandle = layout.varHandle(groupElement("tX"))
     
     @Suppress("UNCHECKED_CAST")
-    fun tX(segment: MemorySegment): CGFloat =
-        tX_VH.get(segment, 0L) as CGFloat
+    fun tX(segment: MemorySegment): Double =
+        tX_VH.get(segment, 0L) as Double
     
-    fun tX(segment: MemorySegment, value: CGFloat) =
+    fun tX(segment: MemorySegment, value: Double) =
         tX_VH.set(segment, 0L, value)
     
     val tY_VH: VarHandle = layout.varHandle(groupElement("tY"))
     
     @Suppress("UNCHECKED_CAST")
-    fun tY(segment: MemorySegment): CGFloat =
-        tY_VH.get(segment, 0L) as CGFloat
+    fun tY(segment: MemorySegment): Double =
+        tY_VH.get(segment, 0L) as Double
     
-    fun tY(segment: MemorySegment, value: CGFloat) =
+    fun tY(segment: MemorySegment, value: Double) =
         tY_VH.set(segment, 0L, value)
 } // End class
 
@@ -8789,23 +8784,23 @@ class CGDataProviderSequentialCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): Any =
-        version_VH.get(segment, 0L) as Any
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: Any) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val getBytes_VH: VarHandle = layout.varHandle(groupElement("getBytes"))
@@ -8883,23 +8878,23 @@ class CGDataProviderDirectCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): Any =
-        version_VH.get(segment, 0L) as Any
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: Any) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val getBytePointer_VH: VarHandle = layout.varHandle(groupElement("getBytePointer"))
@@ -8985,23 +8980,23 @@ class CGPatternCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): Any =
-        version_VH.get(segment, 0L) as Any
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: Any) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val drawPattern_VH: VarHandle = layout.varHandle(groupElement("drawPattern"))
@@ -9031,12 +9026,12 @@ typealias CGFontRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CGFontIndex;}
  */
-typealias CGFontIndex = Any
+typealias CGFontIndex = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CGGlyph;}
  */
-typealias CGGlyph = Any
+typealias CGGlyph = Short
 
 /**
  * {@snippet lang=c : typedef (Declared(CGGradient))* CGGradientRef;}
@@ -9078,23 +9073,23 @@ class CGPathElement {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val type_VH: VarHandle = layout.varHandle(groupElement("type"))
     
     @Suppress("UNCHECKED_CAST")
-    fun type(segment: MemorySegment): CGPathElementType =
-        type_VH.get(segment, 0L) as CGPathElementType
+    fun type(segment: MemorySegment): MemorySegment =
+        type_VH.get(segment, 0L) as MemorySegment
     
-    fun type(segment: MemorySegment, value: CGPathElementType) =
+    fun type(segment: MemorySegment, value: MemorySegment) =
         type_VH.set(segment, 0L, value)
     
     val points_VH: VarHandle = layout.varHandle(groupElement("points"))
@@ -9140,7 +9135,7 @@ typealias CGPDFArrayRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char CGPDFBoolean;}
  */
-typealias CGPDFBoolean = Any
+typealias CGPDFBoolean = Byte
 
 /**
  * {@snippet lang=c : typedef Long CGPDFInteger;}
@@ -9223,23 +9218,23 @@ class CGFunctionCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): Any =
-        version_VH.get(segment, 0L) as Any
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: Any) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val evaluate_VH: VarHandle = layout.varHandle(groupElement("evaluate"))
@@ -9281,23 +9276,23 @@ class CGContentToneMappingInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val method_VH: VarHandle = layout.varHandle(groupElement("method"))
     
     @Suppress("UNCHECKED_CAST")
-    fun method(segment: MemorySegment): CGToneMapping =
-        method_VH.get(segment, 0L) as CGToneMapping
+    fun method(segment: MemorySegment): MemorySegment =
+        method_VH.get(segment, 0L) as MemorySegment
     
-    fun method(segment: MemorySegment, value: CGToneMapping) =
+    fun method(segment: MemorySegment, value: MemorySegment) =
         method_VH.set(segment, 0L, value)
     
     val options_VH: VarHandle = layout.varHandle(groupElement("options"))
@@ -9398,7 +9393,7 @@ typealias NSAccessibilitySearchKey = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSAccessibilityDateTimeComponentsFlags;}
  */
-typealias NSAccessibilityDateTimeComponentsFlags = Any
+typealias NSAccessibilityDateTimeComponentsFlags = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSWorkspaceDesktopImageOptionKey;}
@@ -9418,82 +9413,82 @@ typealias NSWorkspaceLaunchConfigurationKey = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short SFNTLookupTableFormat;}
  */
-typealias SFNTLookupTableFormat = Any
+typealias SFNTLookupTableFormat = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short SFNTLookupValue;}
  */
-typealias SFNTLookupValue = Any
+typealias SFNTLookupValue = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short SFNTLookupOffset;}
  */
-typealias SFNTLookupOffset = Any
+typealias SFNTLookupOffset = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int SFNTLookupKind;}
  */
-typealias SFNTLookupKind = Any
+typealias SFNTLookupKind = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char STClass;}
  */
-typealias STClass = Any
+typealias STClass = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char STEntryIndex;}
  */
-typealias STEntryIndex = Any
+typealias STEntryIndex = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short STXClass;}
  */
-typealias STXClass = Any
+typealias STXClass = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short STXStateIndex;}
  */
-typealias STXStateIndex = Any
+typealias STXStateIndex = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short STXEntryIndex;}
  */
-typealias STXEntryIndex = Any
+typealias STXEntryIndex = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short JustPCActionType;}
  */
-typealias JustPCActionType = Any
+typealias JustPCActionType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short JustificationFlags;}
  */
-typealias JustificationFlags = Any
+typealias JustificationFlags = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short JustPCUnconditionalAddAction;}
  */
-typealias JustPCUnconditionalAddAction = Any
+typealias JustPCUnconditionalAddAction = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short OpbdTableFormat;}
  */
-typealias OpbdTableFormat = Any
+typealias OpbdTableFormat = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MortSubtableMaskFlags;}
  */
-typealias MortSubtableMaskFlags = Any
+typealias MortSubtableMaskFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int MortLigatureActionEntry;}
  */
-typealias MortLigatureActionEntry = Any
+typealias MortLigatureActionEntry = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PropCharProperties;}
  */
-typealias PropCharProperties = Any
+typealias PropCharProperties = Short
 
 /**
  * {@snippet lang=c : typedef Short TrakValue;}
@@ -9503,12 +9498,12 @@ typealias TrakValue = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char KernTableFormat;}
  */
-typealias KernTableFormat = Any
+typealias KernTableFormat = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short KernSubtableInfo;}
  */
-typealias KernSubtableInfo = Any
+typealias KernSubtableInfo = Short
 
 /**
  * {@snippet lang=c : typedef Short KernKerningValue;}
@@ -9518,32 +9513,32 @@ typealias KernKerningValue = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short KernArrayOffset;}
  */
-typealias KernArrayOffset = Any
+typealias KernArrayOffset = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KerxSubtableCoverage;}
  */
-typealias KerxSubtableCoverage = Any
+typealias KerxSubtableCoverage = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int KerxArrayOffset;}
  */
-typealias KerxArrayOffset = Any
+typealias KerxArrayOffset = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int BslnBaselineClass;}
  */
-typealias BslnBaselineClass = Any
+typealias BslnBaselineClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short BslnTableFormat;}
  */
-typealias BslnTableFormat = Any
+typealias BslnTableFormat = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FMGeneration;}
  */
-typealias FMGeneration = Any
+typealias FMGeneration = Int
 
 /**
  * {@snippet lang=c : typedef Short FMFontFamily;}
@@ -9563,42 +9558,42 @@ typealias FMFontSize = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FMFont;}
  */
-typealias FMFont = Any
+typealias FMFont = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FMFilterSelector;}
  */
-typealias FMFilterSelector = Any
+typealias FMFilterSelector = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSOptionFlags;}
  */
-typealias ATSOptionFlags = Any
+typealias ATSOptionFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSGeneration;}
  */
-typealias ATSGeneration = Any
+typealias ATSGeneration = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontContainerRef;}
  */
-typealias ATSFontContainerRef = Any
+typealias ATSFontContainerRef = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontFamilyRef;}
  */
-typealias ATSFontFamilyRef = Any
+typealias ATSFontFamilyRef = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontRef;}
  */
-typealias ATSFontRef = Any
+typealias ATSFontRef = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSGlyphRef;}
  */
-typealias ATSGlyphRef = Any
+typealias ATSGlyphRef = Short
 
 /**
  * {@snippet lang=c : typedef Double ATSFontSize;}
@@ -9608,77 +9603,77 @@ typealias ATSFontSize = Double
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontFormat;}
  */
-typealias ATSFontFormat = Any
+typealias ATSFontFormat = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSCurveType;}
  */
-typealias ATSCurveType = Any
+typealias ATSCurveType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short GlyphID;}
  */
-typealias GlyphID = Any
+typealias GlyphID = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSULayoutOperationSelector;}
  */
-typealias ATSULayoutOperationSelector = Any
+typealias ATSULayoutOperationSelector = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSULayoutOperationCallbackStatus;}
  */
-typealias ATSULayoutOperationCallbackStatus = Any
+typealias ATSULayoutOperationCallbackStatus = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSLineLayoutOptions;}
  */
-typealias ATSLineLayoutOptions = Any
+typealias ATSLineLayoutOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSStyleRenderingOptions;}
  */
-typealias ATSStyleRenderingOptions = Any
+typealias ATSStyleRenderingOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSGlyphInfoFlags;}
  */
-typealias ATSGlyphInfoFlags = Any
+typealias ATSGlyphInfoFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FontNameCode;}
  */
-typealias FontNameCode = Any
+typealias FontNameCode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FontPlatformCode;}
  */
-typealias FontPlatformCode = Any
+typealias FontPlatformCode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FontScriptCode;}
  */
-typealias FontScriptCode = Any
+typealias FontScriptCode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int FontLanguageCode;}
  */
-typealias FontLanguageCode = Any
+typealias FontLanguageCode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontContext;}
  */
-typealias ATSFontContext = Any
+typealias ATSFontContext = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFontAutoActivationSetting;}
  */
-typealias ATSFontAutoActivationSetting = Any
+typealias ATSFontAutoActivationSetting = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ColorSyncDataLayout;}
  */
-typealias ColorSyncDataLayout = Any
+typealias ColorSyncDataLayout = Int
 
 /**
  * {@snippet lang=c : typedef (Declared(CGRenderingBufferProvider))* CGRenderingBufferProviderRef;}
@@ -9713,32 +9708,32 @@ class CGContentInfo {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val deepestImageComponent_VH: VarHandle = layout.varHandle(groupElement("deepestImageComponent"))
     
     @Suppress("UNCHECKED_CAST")
-    fun deepestImageComponent(segment: MemorySegment): CGComponent =
-        deepestImageComponent_VH.get(segment, 0L) as CGComponent
+    fun deepestImageComponent(segment: MemorySegment): MemorySegment =
+        deepestImageComponent_VH.get(segment, 0L) as MemorySegment
     
-    fun deepestImageComponent(segment: MemorySegment, value: CGComponent) =
+    fun deepestImageComponent(segment: MemorySegment, value: MemorySegment) =
         deepestImageComponent_VH.set(segment, 0L, value)
     
     val contentColorModels_VH: VarHandle = layout.varHandle(groupElement("contentColorModels"))
     
     @Suppress("UNCHECKED_CAST")
-    fun contentColorModels(segment: MemorySegment): CGColorModel =
-        contentColorModels_VH.get(segment, 0L) as CGColorModel
+    fun contentColorModels(segment: MemorySegment): MemorySegment =
+        contentColorModels_VH.get(segment, 0L) as MemorySegment
     
-    fun contentColorModels(segment: MemorySegment, value: CGColorModel) =
+    fun contentColorModels(segment: MemorySegment, value: MemorySegment) =
         contentColorModels_VH.set(segment, 0L, value)
     
     val hasWideGamut_VH: VarHandle = layout.varHandle(groupElement("hasWideGamut"))
@@ -9798,77 +9793,77 @@ class CGBitmapParameters {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val width_VH: VarHandle = layout.varHandle(groupElement("width"))
     
     @Suppress("UNCHECKED_CAST")
-    fun width(segment: MemorySegment): const_size_t =
-        width_VH.get(segment, 0L) as const_size_t
+    fun width(segment: MemorySegment): Long =
+        width_VH.get(segment, 0L) as Long
     
-    fun width(segment: MemorySegment, value: const_size_t) =
+    fun width(segment: MemorySegment, value: Long) =
         width_VH.set(segment, 0L, value)
     
     val height_VH: VarHandle = layout.varHandle(groupElement("height"))
     
     @Suppress("UNCHECKED_CAST")
-    fun height(segment: MemorySegment): const_size_t =
-        height_VH.get(segment, 0L) as const_size_t
+    fun height(segment: MemorySegment): Long =
+        height_VH.get(segment, 0L) as Long
     
-    fun height(segment: MemorySegment, value: const_size_t) =
+    fun height(segment: MemorySegment, value: Long) =
         height_VH.set(segment, 0L, value)
     
     val bytesPerPixel_VH: VarHandle = layout.varHandle(groupElement("bytesPerPixel"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bytesPerPixel(segment: MemorySegment): size_t =
-        bytesPerPixel_VH.get(segment, 0L) as size_t
+    fun bytesPerPixel(segment: MemorySegment): Long =
+        bytesPerPixel_VH.get(segment, 0L) as Long
     
-    fun bytesPerPixel(segment: MemorySegment, value: size_t) =
+    fun bytesPerPixel(segment: MemorySegment, value: Long) =
         bytesPerPixel_VH.set(segment, 0L, value)
     
     val alignedBytesPerRow_VH: VarHandle = layout.varHandle(groupElement("alignedBytesPerRow"))
     
     @Suppress("UNCHECKED_CAST")
-    fun alignedBytesPerRow(segment: MemorySegment): size_t =
-        alignedBytesPerRow_VH.get(segment, 0L) as size_t
+    fun alignedBytesPerRow(segment: MemorySegment): Long =
+        alignedBytesPerRow_VH.get(segment, 0L) as Long
     
-    fun alignedBytesPerRow(segment: MemorySegment, value: size_t) =
+    fun alignedBytesPerRow(segment: MemorySegment, value: Long) =
         alignedBytesPerRow_VH.set(segment, 0L, value)
     
     val component_VH: VarHandle = layout.varHandle(groupElement("component"))
     
     @Suppress("UNCHECKED_CAST")
-    fun component(segment: MemorySegment): CGComponent =
-        component_VH.get(segment, 0L) as CGComponent
+    fun component(segment: MemorySegment): MemorySegment =
+        component_VH.get(segment, 0L) as MemorySegment
     
-    fun component(segment: MemorySegment, value: CGComponent) =
+    fun component(segment: MemorySegment, value: MemorySegment) =
         component_VH.set(segment, 0L, value)
     
     val layout_VH: VarHandle = layout.varHandle(groupElement("layout"))
     
     @Suppress("UNCHECKED_CAST")
-    fun layout(segment: MemorySegment): CGBitmapLayout =
-        layout_VH.get(segment, 0L) as CGBitmapLayout
+    fun layout(segment: MemorySegment): MemorySegment =
+        layout_VH.get(segment, 0L) as MemorySegment
     
-    fun layout(segment: MemorySegment, value: CGBitmapLayout) =
+    fun layout(segment: MemorySegment, value: MemorySegment) =
         layout_VH.set(segment, 0L, value)
     
     val format_VH: VarHandle = layout.varHandle(groupElement("format"))
     
     @Suppress("UNCHECKED_CAST")
-    fun format(segment: MemorySegment): CGImagePixelFormatInfo =
-        format_VH.get(segment, 0L) as CGImagePixelFormatInfo
+    fun format(segment: MemorySegment): MemorySegment =
+        format_VH.get(segment, 0L) as MemorySegment
     
-    fun format(segment: MemorySegment, value: CGImagePixelFormatInfo) =
+    fun format(segment: MemorySegment, value: MemorySegment) =
         format_VH.set(segment, 0L, value)
     
     val colorSpace_VH: VarHandle = layout.varHandle(groupElement("colorSpace"))
@@ -9892,10 +9887,10 @@ class CGBitmapParameters {
     val byteOrder_VH: VarHandle = layout.varHandle(groupElement("byteOrder"))
     
     @Suppress("UNCHECKED_CAST")
-    fun byteOrder(segment: MemorySegment): CFByteOrder =
-        byteOrder_VH.get(segment, 0L) as CFByteOrder
+    fun byteOrder(segment: MemorySegment): Long =
+        byteOrder_VH.get(segment, 0L) as Long
     
-    fun byteOrder(segment: MemorySegment, value: CFByteOrder) =
+    fun byteOrder(segment: MemorySegment, value: Long) =
         byteOrder_VH.set(segment, 0L, value)
     
     val edrTargetHeadroom_VH: VarHandle = layout.varHandle(groupElement("edrTargetHeadroom"))
@@ -9936,59 +9931,59 @@ class CGColorBufferFormat {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): uint32_t =
-        version_VH.get(segment, 0L) as uint32_t
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: uint32_t) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val bitmapInfo_VH: VarHandle = layout.varHandle(groupElement("bitmapInfo"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bitmapInfo(segment: MemorySegment): CGBitmapInfo =
-        bitmapInfo_VH.get(segment, 0L) as CGBitmapInfo
+    fun bitmapInfo(segment: MemorySegment): MemorySegment =
+        bitmapInfo_VH.get(segment, 0L) as MemorySegment
     
-    fun bitmapInfo(segment: MemorySegment, value: CGBitmapInfo) =
+    fun bitmapInfo(segment: MemorySegment, value: MemorySegment) =
         bitmapInfo_VH.set(segment, 0L, value)
     
     val bitsPerComponent_VH: VarHandle = layout.varHandle(groupElement("bitsPerComponent"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bitsPerComponent(segment: MemorySegment): size_t =
-        bitsPerComponent_VH.get(segment, 0L) as size_t
+    fun bitsPerComponent(segment: MemorySegment): Long =
+        bitsPerComponent_VH.get(segment, 0L) as Long
     
-    fun bitsPerComponent(segment: MemorySegment, value: size_t) =
+    fun bitsPerComponent(segment: MemorySegment, value: Long) =
         bitsPerComponent_VH.set(segment, 0L, value)
     
     val bitsPerPixel_VH: VarHandle = layout.varHandle(groupElement("bitsPerPixel"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bitsPerPixel(segment: MemorySegment): size_t =
-        bitsPerPixel_VH.get(segment, 0L) as size_t
+    fun bitsPerPixel(segment: MemorySegment): Long =
+        bitsPerPixel_VH.get(segment, 0L) as Long
     
-    fun bitsPerPixel(segment: MemorySegment, value: size_t) =
+    fun bitsPerPixel(segment: MemorySegment, value: Long) =
         bitsPerPixel_VH.set(segment, 0L, value)
     
     val bytesPerRow_VH: VarHandle = layout.varHandle(groupElement("bytesPerRow"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bytesPerRow(segment: MemorySegment): size_t =
-        bytesPerRow_VH.get(segment, 0L) as size_t
+    fun bytesPerRow(segment: MemorySegment): Long =
+        bytesPerRow_VH.get(segment, 0L) as Long
     
-    fun bytesPerRow(segment: MemorySegment, value: size_t) =
+    fun bytesPerRow(segment: MemorySegment, value: Long) =
         bytesPerRow_VH.set(segment, 0L, value)
 } // End class
 
@@ -10017,23 +10012,23 @@ class CGColorDataFormat {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): uint32_t =
-        version_VH.get(segment, 0L) as uint32_t
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: uint32_t) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val colorspace_info_VH: VarHandle = layout.varHandle(groupElement("colorspace_info"))
@@ -10048,37 +10043,37 @@ class CGColorDataFormat {
     val bitmap_info_VH: VarHandle = layout.varHandle(groupElement("bitmap_info"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bitmap_info(segment: MemorySegment): CGBitmapInfo =
-        bitmap_info_VH.get(segment, 0L) as CGBitmapInfo
+    fun bitmap_info(segment: MemorySegment): MemorySegment =
+        bitmap_info_VH.get(segment, 0L) as MemorySegment
     
-    fun bitmap_info(segment: MemorySegment, value: CGBitmapInfo) =
+    fun bitmap_info(segment: MemorySegment, value: MemorySegment) =
         bitmap_info_VH.set(segment, 0L, value)
     
     val bits_per_component_VH: VarHandle = layout.varHandle(groupElement("bits_per_component"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bits_per_component(segment: MemorySegment): size_t =
-        bits_per_component_VH.get(segment, 0L) as size_t
+    fun bits_per_component(segment: MemorySegment): Long =
+        bits_per_component_VH.get(segment, 0L) as Long
     
-    fun bits_per_component(segment: MemorySegment, value: size_t) =
+    fun bits_per_component(segment: MemorySegment, value: Long) =
         bits_per_component_VH.set(segment, 0L, value)
     
     val bytes_per_row_VH: VarHandle = layout.varHandle(groupElement("bytes_per_row"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bytes_per_row(segment: MemorySegment): size_t =
-        bytes_per_row_VH.get(segment, 0L) as size_t
+    fun bytes_per_row(segment: MemorySegment): Long =
+        bytes_per_row_VH.get(segment, 0L) as Long
     
-    fun bytes_per_row(segment: MemorySegment, value: size_t) =
+    fun bytes_per_row(segment: MemorySegment, value: Long) =
         bytes_per_row_VH.set(segment, 0L, value)
     
     val intent_VH: VarHandle = layout.varHandle(groupElement("intent"))
     
     @Suppress("UNCHECKED_CAST")
-    fun intent(segment: MemorySegment): CGColorRenderingIntent =
-        intent_VH.get(segment, 0L) as CGColorRenderingIntent
+    fun intent(segment: MemorySegment): MemorySegment =
+        intent_VH.get(segment, 0L) as MemorySegment
     
-    fun intent(segment: MemorySegment, value: CGColorRenderingIntent) =
+    fun intent(segment: MemorySegment, value: MemorySegment) =
         intent_VH.set(segment, 0L, value)
     
     val decode_VH: VarHandle = layout.varHandle(groupElement("decode"))
@@ -10126,13 +10121,13 @@ class CGDataConsumerCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -10193,7 +10188,7 @@ typealias CGPDFOperatorCallback = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGWindowID;}
  */
-typealias CGWindowID = Any
+typealias CGWindowID = Int
 
 /**
  * {@snippet lang=c : typedef Int CGWindowLevel;}
@@ -10203,12 +10198,12 @@ typealias CGWindowLevel = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGDirectDisplayID;}
  */
-typealias CGDirectDisplayID = Any
+typealias CGDirectDisplayID = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGOpenGLDisplayMask;}
  */
-typealias CGOpenGLDisplayMask = Any
+typealias CGOpenGLDisplayMask = Int
 
 /**
  * {@snippet lang=c : typedef Double CGRefreshRate;}
@@ -10228,7 +10223,7 @@ typealias CGGammaValue = Float
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGDisplayCount;}
  */
-typealias CGDisplayCount = Any
+typealias CGDisplayCount = Int
 
 /**
  * {@snippet lang=c : STRUCT CGDeviceColor
@@ -10251,13 +10246,13 @@ class CGDeviceColor {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
@@ -10297,7 +10292,7 @@ typealias CGDisplayConfigRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGDisplayFadeReservationToken;}
  */
-typealias CGDisplayFadeReservationToken = Any
+typealias CGDisplayFadeReservationToken = Int
 
 /**
  * {@snippet lang=c : typedef Float CGDisplayBlendFraction;}
@@ -10332,25 +10327,25 @@ typealias CGDisplayStreamFrameAvailableHandler = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGButtonCount;}
  */
-typealias CGButtonCount = Any
+typealias CGButtonCount = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGWheelCount;}
  */
-typealias CGWheelCount = Any
+typealias CGWheelCount = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CGCharCode;}
  */
-typealias CGCharCode = Any
+typealias CGCharCode = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CGKeyCode;}
  */
-typealias CGKeyCode = Any
+typealias CGKeyCode = Short
 
 /**
- * {@snippet lang=c : typedef (Void(UNSIGNED = Int,(Declared(MemorySegment))*,(Void)*))* CGScreenRefreshCallback;}
+ * {@snippet lang=c : typedef (Void(UNSIGNED = Int,(Declared(CGRect))*,(Void)*))* CGScreenRefreshCallback;}
  */
 typealias CGScreenRefreshCallback = MemorySegment
 
@@ -10374,44 +10369,44 @@ class CGScreenUpdateMoveDelta {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val dX_VH: VarHandle = layout.varHandle(groupElement("dX"))
     
     @Suppress("UNCHECKED_CAST")
-    fun dX(segment: MemorySegment): int32_t =
-        dX_VH.get(segment, 0L) as int32_t
+    fun dX(segment: MemorySegment): Int =
+        dX_VH.get(segment, 0L) as Int
     
-    fun dX(segment: MemorySegment, value: int32_t) =
+    fun dX(segment: MemorySegment, value: Int) =
         dX_VH.set(segment, 0L, value)
     
     val dY_VH: VarHandle = layout.varHandle(groupElement("dY"))
     
     @Suppress("UNCHECKED_CAST")
-    fun dY(segment: MemorySegment): int32_t =
-        dY_VH.get(segment, 0L) as int32_t
+    fun dY(segment: MemorySegment): Int =
+        dY_VH.get(segment, 0L) as Int
     
-    fun dY(segment: MemorySegment, value: int32_t) =
+    fun dY(segment: MemorySegment, value: Int) =
         dY_VH.set(segment, 0L, value)
 } // End class
 
 /**
- * {@snippet lang=c : typedef (Void(Declared(CGScreenUpdateMoveDelta),UNSIGNED = Long,(Declared(MemorySegment))*,(Void)*))* CGScreenUpdateMoveCallback;}
+ * {@snippet lang=c : typedef (Void(Declared(CGScreenUpdateMoveDelta),UNSIGNED = Long,(Declared(CGRect))*,(Void)*))* CGScreenUpdateMoveCallback;}
  */
 typealias CGScreenUpdateMoveCallback = MemorySegment
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGRectCount;}
  */
-typealias CGRectCount = Any
+typealias CGRectCount = Int
 
 /**
  * {@snippet lang=c : typedef LongLong OSAtomic_int64_aligned64_t;}
@@ -10431,22 +10426,22 @@ typealias IOIndex = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOSelect;}
  */
-typealias IOSelect = Any
+typealias IOSelect = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOFixed1616;}
  */
-typealias IOFixed1616 = Any
+typealias IOFixed1616 = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IODisplayVendorID;}
  */
-typealias IODisplayVendorID = Any
+typealias IODisplayVendorID = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IODisplayProductID;}
  */
-typealias IODisplayProductID = Any
+typealias IODisplayProductID = Int
 
 /**
  * {@snippet lang=c : typedef Int IODisplayModeID;}
@@ -10456,7 +10451,7 @@ typealias IODisplayModeID = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOAppleTimingID;}
  */
-typealias IOAppleTimingID = Any
+typealias IOAppleTimingID = Int
 
 /**
  * {@snippet lang=c : typedef Int IOPixelAperture;}
@@ -10466,7 +10461,7 @@ typealias IOPixelAperture = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short IOColorComponent;}
  */
-typealias IOColorComponent = Any
+typealias IOColorComponent = Short
 
 /**
  * {@snippet lang=c : typedef Float NXCoord;}
@@ -10481,12 +10476,12 @@ typealias CGEventRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CGEventTimestamp;}
  */
-typealias CGEventTimestamp = Any
+typealias CGEventTimestamp = Long
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CGEventMask;}
  */
-typealias CGEventMask = Any
+typealias CGEventMask = Long
 
 /**
  * {@snippet lang=c : typedef (Declared(__CGEventTapProxy))* CGEventTapProxy;}
@@ -10521,68 +10516,68 @@ class _CGEventTapInformation {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val eventTapID_VH: VarHandle = layout.varHandle(groupElement("eventTapID"))
     
     @Suppress("UNCHECKED_CAST")
-    fun eventTapID(segment: MemorySegment): uint32_t =
-        eventTapID_VH.get(segment, 0L) as uint32_t
+    fun eventTapID(segment: MemorySegment): Int =
+        eventTapID_VH.get(segment, 0L) as Int
     
-    fun eventTapID(segment: MemorySegment, value: uint32_t) =
+    fun eventTapID(segment: MemorySegment, value: Int) =
         eventTapID_VH.set(segment, 0L, value)
     
     val tapPoint_VH: VarHandle = layout.varHandle(groupElement("tapPoint"))
     
     @Suppress("UNCHECKED_CAST")
-    fun tapPoint(segment: MemorySegment): CGEventTapLocation =
-        tapPoint_VH.get(segment, 0L) as CGEventTapLocation
+    fun tapPoint(segment: MemorySegment): MemorySegment =
+        tapPoint_VH.get(segment, 0L) as MemorySegment
     
-    fun tapPoint(segment: MemorySegment, value: CGEventTapLocation) =
+    fun tapPoint(segment: MemorySegment, value: MemorySegment) =
         tapPoint_VH.set(segment, 0L, value)
     
     val options_VH: VarHandle = layout.varHandle(groupElement("options"))
     
     @Suppress("UNCHECKED_CAST")
-    fun options(segment: MemorySegment): CGEventTapOptions =
-        options_VH.get(segment, 0L) as CGEventTapOptions
+    fun options(segment: MemorySegment): MemorySegment =
+        options_VH.get(segment, 0L) as MemorySegment
     
-    fun options(segment: MemorySegment, value: CGEventTapOptions) =
+    fun options(segment: MemorySegment, value: MemorySegment) =
         options_VH.set(segment, 0L, value)
     
     val eventsOfInterest_VH: VarHandle = layout.varHandle(groupElement("eventsOfInterest"))
     
     @Suppress("UNCHECKED_CAST")
-    fun eventsOfInterest(segment: MemorySegment): CGEventMask =
-        eventsOfInterest_VH.get(segment, 0L) as CGEventMask
+    fun eventsOfInterest(segment: MemorySegment): Long =
+        eventsOfInterest_VH.get(segment, 0L) as Long
     
-    fun eventsOfInterest(segment: MemorySegment, value: CGEventMask) =
+    fun eventsOfInterest(segment: MemorySegment, value: Long) =
         eventsOfInterest_VH.set(segment, 0L, value)
     
     val tappingProcess_VH: VarHandle = layout.varHandle(groupElement("tappingProcess"))
     
     @Suppress("UNCHECKED_CAST")
-    fun tappingProcess(segment: MemorySegment): pid_t =
-        tappingProcess_VH.get(segment, 0L) as pid_t
+    fun tappingProcess(segment: MemorySegment): Int =
+        tappingProcess_VH.get(segment, 0L) as Int
     
-    fun tappingProcess(segment: MemorySegment, value: pid_t) =
+    fun tappingProcess(segment: MemorySegment, value: Int) =
         tappingProcess_VH.set(segment, 0L, value)
     
     val processBeingTapped_VH: VarHandle = layout.varHandle(groupElement("processBeingTapped"))
     
     @Suppress("UNCHECKED_CAST")
-    fun processBeingTapped(segment: MemorySegment): pid_t =
-        processBeingTapped_VH.get(segment, 0L) as pid_t
+    fun processBeingTapped(segment: MemorySegment): Int =
+        processBeingTapped_VH.get(segment, 0L) as Int
     
-    fun processBeingTapped(segment: MemorySegment, value: pid_t) =
+    fun processBeingTapped(segment: MemorySegment, value: Int) =
         processBeingTapped_VH.set(segment, 0L, value)
     
     val enabled_VH: VarHandle = layout.varHandle(groupElement("enabled"))
@@ -10635,7 +10630,7 @@ typealias CGEventSourceRef = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CGEventSourceKeyboardType;}
  */
-typealias CGEventSourceKeyboardType = Any
+typealias CGEventSourceKeyboardType = Int
 
 /**
  * {@snippet lang=c : typedef (Declared(CGPSConverter))* CGPSConverterRef;}
@@ -10703,23 +10698,23 @@ class CGPSConverterCallbacks {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val version_VH: VarHandle = layout.varHandle(groupElement("version"))
     
     @Suppress("UNCHECKED_CAST")
-    fun version(segment: MemorySegment): Any =
-        version_VH.get(segment, 0L) as Any
+    fun version(segment: MemorySegment): Int =
+        version_VH.get(segment, 0L) as Int
     
-    fun version(segment: MemorySegment, value: Any) =
+    fun version(segment: MemorySegment, value: Int) =
         version_VH.set(segment, 0L, value)
     
     val beginDocument_VH: VarHandle = layout.varHandle(groupElement("beginDocument"))
@@ -10789,52 +10784,52 @@ class CGPSConverterCallbacks {
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CTFontPriority;}
  */
-typealias CTFontPriority = Any
+typealias CTFontPriority = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CTFontTableTag;}
  */
-typealias CTFontTableTag = Any
+typealias CTFontTableTag = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short CMXYZComponent;}
  */
-typealias CMXYZComponent = Any
+typealias CMXYZComponent = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMDisplayIDType;}
  */
-typealias CMDisplayIDType = Any
+typealias CMDisplayIDType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMChromaticAdaptation;}
  */
-typealias CMChromaticAdaptation = Any
+typealias CMChromaticAdaptation = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMBitmapColorSpace;}
  */
-typealias CMBitmapColorSpace = Any
+typealias CMBitmapColorSpace = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMDeviceState;}
  */
-typealias CMDeviceState = Any
+typealias CMDeviceState = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMDeviceID;}
  */
-typealias CMDeviceID = Any
+typealias CMDeviceID = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMDeviceProfileID;}
  */
-typealias CMDeviceProfileID = Any
+typealias CMDeviceProfileID = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int CMDeviceClass;}
  */
-typealias CMDeviceClass = Any
+typealias CMDeviceClass = Int
 
 /**
  * {@snippet lang=c : typedef Short QDErr;}
@@ -10844,7 +10839,7 @@ typealias QDErr = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long GWorldFlags;}
  */
-typealias GWorldFlags = Any
+typealias GWorldFlags = Long
 
 /**
  * {@snippet lang=c : typedef Int QDRegionParseDirection;}
@@ -10859,12 +10854,12 @@ typealias TruncCode = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short DragConstraint;}
  */
-typealias DragConstraint = Any
+typealias DragConstraint = Short
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char GrafVerb;}
  */
-typealias GrafVerb = Any
+typealias GrafVerb = Byte
 
 /**
  * {@snippet lang=c : typedef Int PrinterStatusOpcode;}
@@ -10884,22 +10879,22 @@ typealias IconTransformType = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IconSelectorValue;}
  */
-typealias IconSelectorValue = Any
+typealias IconSelectorValue = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PlotIconRefFlags;}
  */
-typealias PlotIconRefFlags = Any
+typealias PlotIconRefFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ICAttr;}
  */
-typealias ICAttr = Any
+typealias ICAttr = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char ICPerm;}
  */
-typealias ICPerm = Any
+typealias ICPerm = Byte
 
 /**
  * {@snippet lang=c : typedef Int ICProfileID;}
@@ -10924,137 +10919,137 @@ typealias ICServiceEntryFlags = Short
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short LaunchFlags;}
  */
-typealias LaunchFlags = Any
+typealias LaunchFlags = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ProcessApplicationTransformState;}
  */
-typealias ProcessApplicationTransformState = Any
+typealias ProcessApplicationTransformState = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int TranslationFlags;}
  */
-typealias TranslationFlags = Any
+typealias TranslationFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UAZoomChangeFocusType;}
  */
-typealias UAZoomChangeFocusType = Any
+typealias UAZoomChangeFocusType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMDestinationType;}
  */
-typealias PMDestinationType = Any
+typealias PMDestinationType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMOrientation;}
  */
-typealias PMOrientation = Any
+typealias PMOrientation = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMPrinterState;}
  */
-typealias PMPrinterState = Any
+typealias PMPrinterState = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PMColorSpaceModel;}
  */
-typealias PMColorSpaceModel = Any
+typealias PMColorSpaceModel = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PMQualityMode;}
  */
-typealias PMQualityMode = Any
+typealias PMQualityMode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PMPaperType;}
  */
-typealias PMPaperType = Any
+typealias PMPaperType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMScalingAlignment;}
  */
-typealias PMScalingAlignment = Any
+typealias PMScalingAlignment = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PMDuplexMode;}
  */
-typealias PMDuplexMode = Any
+typealias PMDuplexMode = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMLayoutDirection;}
  */
-typealias PMLayoutDirection = Any
+typealias PMLayoutDirection = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMBorderType;}
  */
-typealias PMBorderType = Any
+typealias PMBorderType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int PMPrintDialogOptionFlags;}
  */
-typealias PMPrintDialogOptionFlags = Any
+typealias PMPrintDialogOptionFlags = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short PMPPDDomain;}
  */
-typealias PMPPDDomain = Any
+typealias PMPPDDomain = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char sa_family_t;}
  */
-typealias sa_family_t = Any
+typealias sa_family_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int socklen_t;}
  */
-typealias socklen_t = Any
+typealias socklen_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int sae_associd_t;}
  */
-typealias sae_associd_t = Any
+typealias sae_associd_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int sae_connid_t;}
  */
-typealias sae_connid_t = Any
+typealias sae_connid_t = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short n_short;}
  */
-typealias n_short = Any
+typealias n_short = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int n_long;}
  */
-typealias n_long = Any
+typealias n_long = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int n_time;}
  */
-typealias n_time = Any
+typealias n_time = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int tcp_seq;}
  */
-typealias tcp_seq = Any
+typealias tcp_seq = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int tcp_cc;}
  */
-typealias tcp_cc = Any
+typealias tcp_cc = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char ipp_uchar_t;}
  */
-typealias ipp_uchar_t = Any
+typealias ipp_uchar_t = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int cups_ptype_t;}
  */
-typealias cups_ptype_t = Any
+typealias cups_ptype_t = Int
 
 /**
  * {@snippet lang=c : typedef Int ATSUTextMeasurement;}
@@ -11064,22 +11059,22 @@ typealias ATSUTextMeasurement = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUFontID;}
  */
-typealias ATSUFontID = Any
+typealias ATSUFontID = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUFontFeatureType;}
  */
-typealias ATSUFontFeatureType = Any
+typealias ATSUFontFeatureType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUFontFeatureSelector;}
  */
-typealias ATSUFontFeatureSelector = Any
+typealias ATSUFontFeatureSelector = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUFontVariationAxis;}
  */
-typealias ATSUFontVariationAxis = Any
+typealias ATSUFontVariationAxis = Int
 
 /**
  * {@snippet lang=c : typedef Int ATSUFontVariationValue;}
@@ -11089,82 +11084,82 @@ typealias ATSUFontVariationValue = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUAttributeTag;}
  */
-typealias ATSUAttributeTag = Any
+typealias ATSUAttributeTag = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUCursorMovementType;}
  */
-typealias ATSUCursorMovementType = Any
+typealias ATSUCursorMovementType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSULineTruncation;}
  */
-typealias ATSULineTruncation = Any
+typealias ATSULineTruncation = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUStyleLineCountType;}
  */
-typealias ATSUStyleLineCountType = Any
+typealias ATSUStyleLineCountType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUVerticalCharacterType;}
  */
-typealias ATSUVerticalCharacterType = Any
+typealias ATSUVerticalCharacterType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUStyleComparison;}
  */
-typealias ATSUStyleComparison = Any
+typealias ATSUStyleComparison = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUFontFallbackMethod;}
  */
-typealias ATSUFontFallbackMethod = Any
+typealias ATSUFontFallbackMethod = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short ATSUTabType;}
  */
-typealias ATSUTabType = Any
+typealias ATSUTabType = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short GlyphCollection;}
  */
-typealias GlyphCollection = Any
+typealias GlyphCollection = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUHighlightMethod;}
  */
-typealias ATSUHighlightMethod = Any
+typealias ATSUHighlightMethod = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUBackgroundDataType;}
  */
-typealias ATSUBackgroundDataType = Any
+typealias ATSUBackgroundDataType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUFlattenedDataStreamFormat;}
  */
-typealias ATSUFlattenedDataStreamFormat = Any
+typealias ATSUFlattenedDataStreamFormat = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUFlattenStyleRunOptions;}
  */
-typealias ATSUFlattenStyleRunOptions = Any
+typealias ATSUFlattenStyleRunOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUUnFlattenStyleRunOptions;}
  */
-typealias ATSUUnFlattenStyleRunOptions = Any
+typealias ATSUUnFlattenStyleRunOptions = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSFlatDataFontSpeciferType;}
  */
-typealias ATSFlatDataFontSpeciferType = Any
+typealias ATSFlatDataFontSpeciferType = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int ATSUDirectDataSelector;}
  */
-typealias ATSUDirectDataSelector = Any
+typealias ATSUDirectDataSelector = Int
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSPasteboardType;}
@@ -11428,50 +11423,50 @@ class NSDirectionalEdgeInsets {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val top_VH: VarHandle = layout.varHandle(groupElement("top"))
     
     @Suppress("UNCHECKED_CAST")
-    fun top(segment: MemorySegment): CGFloat =
-        top_VH.get(segment, 0L) as CGFloat
+    fun top(segment: MemorySegment): Double =
+        top_VH.get(segment, 0L) as Double
     
-    fun top(segment: MemorySegment, value: CGFloat) =
+    fun top(segment: MemorySegment, value: Double) =
         top_VH.set(segment, 0L, value)
     
     val leading_VH: VarHandle = layout.varHandle(groupElement("leading"))
     
     @Suppress("UNCHECKED_CAST")
-    fun leading(segment: MemorySegment): CGFloat =
-        leading_VH.get(segment, 0L) as CGFloat
+    fun leading(segment: MemorySegment): Double =
+        leading_VH.get(segment, 0L) as Double
     
-    fun leading(segment: MemorySegment, value: CGFloat) =
+    fun leading(segment: MemorySegment, value: Double) =
         leading_VH.set(segment, 0L, value)
     
     val bottom_VH: VarHandle = layout.varHandle(groupElement("bottom"))
     
     @Suppress("UNCHECKED_CAST")
-    fun bottom(segment: MemorySegment): CGFloat =
-        bottom_VH.get(segment, 0L) as CGFloat
+    fun bottom(segment: MemorySegment): Double =
+        bottom_VH.get(segment, 0L) as Double
     
-    fun bottom(segment: MemorySegment, value: CGFloat) =
+    fun bottom(segment: MemorySegment, value: Double) =
         bottom_VH.set(segment, 0L, value)
     
     val trailing_VH: VarHandle = layout.varHandle(groupElement("trailing"))
     
     @Suppress("UNCHECKED_CAST")
-    fun trailing(segment: MemorySegment): CGFloat =
-        trailing_VH.get(segment, 0L) as CGFloat
+    fun trailing(segment: MemorySegment): Double =
+        trailing_VH.get(segment, 0L) as Double
     
-    fun trailing(segment: MemorySegment, value: CGFloat) =
+    fun trailing(segment: MemorySegment, value: Double) =
         trailing_VH.set(segment, 0L, value)
 } // End class
 
@@ -11508,7 +11503,7 @@ typealias NSCollectionViewDiffableDataSourceSupplementaryViewProvider = MemorySe
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int NSFontSymbolicTraits;}
  */
-typealias NSFontSymbolicTraits = Any
+typealias NSFontSymbolicTraits = Int
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSFontDescriptorAttributeName;}
@@ -11558,12 +11553,12 @@ typealias NSFontTextStyleOptionKey = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int NSFontFamilyClass;}
  */
-typealias NSFontFamilyClass = Any
+typealias NSFontFamilyClass = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int NSGlyph;}
  */
-typealias NSGlyph = Any
+typealias NSGlyph = Int
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSFontCollectionMatchingOptionKey;}
@@ -11623,7 +11618,7 @@ typealias NSBrowserColumnsAutosaveName = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong CVOptionFlags;}
  */
-typealias CVOptionFlags = Any
+typealias CVOptionFlags = Long
 
 /**
  * {@snippet lang=c : typedef Int CVReturn;}
@@ -11633,17 +11628,17 @@ typealias CVReturn = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int GLbitfield;}
  */
-typealias GLbitfield = Any
+typealias GLbitfield = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char GLboolean;}
  */
-typealias GLboolean = Any
+typealias GLboolean = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char GLbyte;}
  */
-typealias GLbyte = Any
+typealias GLbyte = Byte
 
 /**
  * {@snippet lang=c : typedef Float GLclampf;}
@@ -11653,7 +11648,7 @@ typealias GLclampf = Float
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int GLenum;}
  */
-typealias GLenum = Any
+typealias GLenum = Int
 
 /**
  * {@snippet lang=c : typedef Float GLfloat;}
@@ -11678,17 +11673,17 @@ typealias GLsizei = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char GLubyte;}
  */
-typealias GLubyte = Any
+typealias GLubyte = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int GLuint;}
  */
-typealias GLuint = Any
+typealias GLuint = Int
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short GLushort;}
  */
-typealias GLushort = Any
+typealias GLushort = Short
 
 /**
  * {@snippet lang=c : typedef Char GLchar;}
@@ -11718,12 +11713,12 @@ typealias GLfixed = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short GLhalf;}
  */
-typealias GLhalf = Any
+typealias GLhalf = Short
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Short GLhalfARB;}
  */
-typealias GLhalfARB = Any
+typealias GLhalfARB = Short
 
 /**
  * {@snippet lang=c : typedef LongLong GLint64;}
@@ -11733,7 +11728,7 @@ typealias GLint64 = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong GLuint64;}
  */
-typealias GLuint64 = Any
+typealias GLuint64 = Long
 
 /**
  * {@snippet lang=c : typedef LongLong GLint64EXT;}
@@ -11743,7 +11738,7 @@ typealias GLint64EXT = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong GLuint64EXT;}
  */
-typealias GLuint64EXT = Any
+typealias GLuint64EXT = Long
 
 /**
  * {@snippet lang=c : typedef Long GLintptr;}
@@ -11768,7 +11763,7 @@ typealias GLsizeiptrARB = Long
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int IOSurfaceID;}
  */
-typealias IOSurfaceID = Any
+typealias IOSurfaceID = Int
 
 /**
  * {@snippet lang=c : typedef Int CIFormat;}
@@ -11938,7 +11933,7 @@ typealias NSAttributedStringDocumentReadingOptionKey = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSTextStorageEditedOptions;}
  */
-typealias NSTextStorageEditedOptions = Any
+typealias NSTextStorageEditedOptions = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSToolbarIdentifier;}
@@ -11993,7 +11988,7 @@ typealias NSRulerViewUnitName = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Long NSInterfaceStyle;}
  */
-typealias NSInterfaceStyle = Any
+typealias NSInterfaceStyle = Long
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* NSStatusItemAutosaveName;}
@@ -12013,7 +12008,7 @@ typealias NSSoundPlaybackDeviceIdentifier = MemorySegment
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int NSOpenGLPixelFormatAttribute;}
  */
-typealias NSOpenGLPixelFormatAttribute = Any
+typealias NSOpenGLPixelFormatAttribute = Int
 
 /**
  * {@snippet lang=c : typedef typedef NSString = (Void)* CAMediaTimingFillMode;}
@@ -12021,9 +12016,9 @@ typealias NSOpenGLPixelFormatAttribute = Any
 typealias CAMediaTimingFillMode = MemorySegment
 
 /**
- * {@snippet lang=c : STRUCT MemorySegment
+ * {@snippet lang=c : STRUCT CATransform3D
  */
-class MemorySegment {
+class CATransform3D {
     companion object {
         val layout: GroupLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_DOUBLE.withName("m11"),
@@ -12054,158 +12049,158 @@ class MemorySegment {
             allocator.allocate(MemoryLayout.sequenceLayout(elementCount, layout))
         
         fun asSlice(array: MemorySegment, index: Long): MemorySegment =
-            array.asSlice(layout.byteSize * index)
+            array.asSlice(byteSize * index)
         
         fun reinterpret(addr: MemorySegment): MemorySegment =
-            addr.reinterpret(layout.byteSize)
+            addr.reinterpret(byteSize)
         
         fun reinterpret(addr: MemorySegment, elementCount: Long): MemorySegment =
-            addr.reinterpret(layout.byteSize * elementCount)
+            addr.reinterpret(byteSize * elementCount)
         
     } // End companion object
     
     val m11_VH: VarHandle = layout.varHandle(groupElement("m11"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m11(segment: MemorySegment): CGFloat =
-        m11_VH.get(segment, 0L) as CGFloat
+    fun m11(segment: MemorySegment): Double =
+        m11_VH.get(segment, 0L) as Double
     
-    fun m11(segment: MemorySegment, value: CGFloat) =
+    fun m11(segment: MemorySegment, value: Double) =
         m11_VH.set(segment, 0L, value)
     
     val m12_VH: VarHandle = layout.varHandle(groupElement("m12"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m12(segment: MemorySegment): CGFloat =
-        m12_VH.get(segment, 0L) as CGFloat
+    fun m12(segment: MemorySegment): Double =
+        m12_VH.get(segment, 0L) as Double
     
-    fun m12(segment: MemorySegment, value: CGFloat) =
+    fun m12(segment: MemorySegment, value: Double) =
         m12_VH.set(segment, 0L, value)
     
     val m13_VH: VarHandle = layout.varHandle(groupElement("m13"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m13(segment: MemorySegment): CGFloat =
-        m13_VH.get(segment, 0L) as CGFloat
+    fun m13(segment: MemorySegment): Double =
+        m13_VH.get(segment, 0L) as Double
     
-    fun m13(segment: MemorySegment, value: CGFloat) =
+    fun m13(segment: MemorySegment, value: Double) =
         m13_VH.set(segment, 0L, value)
     
     val m14_VH: VarHandle = layout.varHandle(groupElement("m14"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m14(segment: MemorySegment): CGFloat =
-        m14_VH.get(segment, 0L) as CGFloat
+    fun m14(segment: MemorySegment): Double =
+        m14_VH.get(segment, 0L) as Double
     
-    fun m14(segment: MemorySegment, value: CGFloat) =
+    fun m14(segment: MemorySegment, value: Double) =
         m14_VH.set(segment, 0L, value)
     
     val m21_VH: VarHandle = layout.varHandle(groupElement("m21"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m21(segment: MemorySegment): CGFloat =
-        m21_VH.get(segment, 0L) as CGFloat
+    fun m21(segment: MemorySegment): Double =
+        m21_VH.get(segment, 0L) as Double
     
-    fun m21(segment: MemorySegment, value: CGFloat) =
+    fun m21(segment: MemorySegment, value: Double) =
         m21_VH.set(segment, 0L, value)
     
     val m22_VH: VarHandle = layout.varHandle(groupElement("m22"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m22(segment: MemorySegment): CGFloat =
-        m22_VH.get(segment, 0L) as CGFloat
+    fun m22(segment: MemorySegment): Double =
+        m22_VH.get(segment, 0L) as Double
     
-    fun m22(segment: MemorySegment, value: CGFloat) =
+    fun m22(segment: MemorySegment, value: Double) =
         m22_VH.set(segment, 0L, value)
     
     val m23_VH: VarHandle = layout.varHandle(groupElement("m23"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m23(segment: MemorySegment): CGFloat =
-        m23_VH.get(segment, 0L) as CGFloat
+    fun m23(segment: MemorySegment): Double =
+        m23_VH.get(segment, 0L) as Double
     
-    fun m23(segment: MemorySegment, value: CGFloat) =
+    fun m23(segment: MemorySegment, value: Double) =
         m23_VH.set(segment, 0L, value)
     
     val m24_VH: VarHandle = layout.varHandle(groupElement("m24"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m24(segment: MemorySegment): CGFloat =
-        m24_VH.get(segment, 0L) as CGFloat
+    fun m24(segment: MemorySegment): Double =
+        m24_VH.get(segment, 0L) as Double
     
-    fun m24(segment: MemorySegment, value: CGFloat) =
+    fun m24(segment: MemorySegment, value: Double) =
         m24_VH.set(segment, 0L, value)
     
     val m31_VH: VarHandle = layout.varHandle(groupElement("m31"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m31(segment: MemorySegment): CGFloat =
-        m31_VH.get(segment, 0L) as CGFloat
+    fun m31(segment: MemorySegment): Double =
+        m31_VH.get(segment, 0L) as Double
     
-    fun m31(segment: MemorySegment, value: CGFloat) =
+    fun m31(segment: MemorySegment, value: Double) =
         m31_VH.set(segment, 0L, value)
     
     val m32_VH: VarHandle = layout.varHandle(groupElement("m32"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m32(segment: MemorySegment): CGFloat =
-        m32_VH.get(segment, 0L) as CGFloat
+    fun m32(segment: MemorySegment): Double =
+        m32_VH.get(segment, 0L) as Double
     
-    fun m32(segment: MemorySegment, value: CGFloat) =
+    fun m32(segment: MemorySegment, value: Double) =
         m32_VH.set(segment, 0L, value)
     
     val m33_VH: VarHandle = layout.varHandle(groupElement("m33"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m33(segment: MemorySegment): CGFloat =
-        m33_VH.get(segment, 0L) as CGFloat
+    fun m33(segment: MemorySegment): Double =
+        m33_VH.get(segment, 0L) as Double
     
-    fun m33(segment: MemorySegment, value: CGFloat) =
+    fun m33(segment: MemorySegment, value: Double) =
         m33_VH.set(segment, 0L, value)
     
     val m34_VH: VarHandle = layout.varHandle(groupElement("m34"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m34(segment: MemorySegment): CGFloat =
-        m34_VH.get(segment, 0L) as CGFloat
+    fun m34(segment: MemorySegment): Double =
+        m34_VH.get(segment, 0L) as Double
     
-    fun m34(segment: MemorySegment, value: CGFloat) =
+    fun m34(segment: MemorySegment, value: Double) =
         m34_VH.set(segment, 0L, value)
     
     val m41_VH: VarHandle = layout.varHandle(groupElement("m41"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m41(segment: MemorySegment): CGFloat =
-        m41_VH.get(segment, 0L) as CGFloat
+    fun m41(segment: MemorySegment): Double =
+        m41_VH.get(segment, 0L) as Double
     
-    fun m41(segment: MemorySegment, value: CGFloat) =
+    fun m41(segment: MemorySegment, value: Double) =
         m41_VH.set(segment, 0L, value)
     
     val m42_VH: VarHandle = layout.varHandle(groupElement("m42"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m42(segment: MemorySegment): CGFloat =
-        m42_VH.get(segment, 0L) as CGFloat
+    fun m42(segment: MemorySegment): Double =
+        m42_VH.get(segment, 0L) as Double
     
-    fun m42(segment: MemorySegment, value: CGFloat) =
+    fun m42(segment: MemorySegment, value: Double) =
         m42_VH.set(segment, 0L, value)
     
     val m43_VH: VarHandle = layout.varHandle(groupElement("m43"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m43(segment: MemorySegment): CGFloat =
-        m43_VH.get(segment, 0L) as CGFloat
+    fun m43(segment: MemorySegment): Double =
+        m43_VH.get(segment, 0L) as Double
     
-    fun m43(segment: MemorySegment, value: CGFloat) =
+    fun m43(segment: MemorySegment, value: Double) =
         m43_VH.set(segment, 0L, value)
     
     val m44_VH: VarHandle = layout.varHandle(groupElement("m44"))
     
     @Suppress("UNCHECKED_CAST")
-    fun m44(segment: MemorySegment): CGFloat =
-        m44_VH.get(segment, 0L) as CGFloat
+    fun m44(segment: MemorySegment): Double =
+        m44_VH.get(segment, 0L) as Double
     
-    fun m44(segment: MemorySegment, value: CGFloat) =
+    fun m44(segment: MemorySegment, value: Double) =
         m44_VH.set(segment, 0L, value)
 } // End class
 

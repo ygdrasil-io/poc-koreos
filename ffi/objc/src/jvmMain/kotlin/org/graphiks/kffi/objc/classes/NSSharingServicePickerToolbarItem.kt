@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSharingServicePickerToolbarItem
  * Superclass: NSToolbarItem
  */
-open class NSSharingServicePickerToolbarItem(ptr: MemorySegment) : NSToolbarItem(ptr) {
+open class NSSharingServicePickerToolbarItem(override val ptr: MemorySegment) : NSToolbarItem(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSharingServicePickerToolbarItem") }
         
@@ -16,11 +16,11 @@ open class NSSharingServicePickerToolbarItem(ptr: MemorySegment) : NSToolbarItem
     
     // @property delegate
     /** @return id<NSSharingServicePickerToolbarItemDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

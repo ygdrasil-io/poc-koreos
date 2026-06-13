@@ -9,31 +9,31 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSUserInterfaceCompressionOptions(val ptr: MemorySegment) {
+open class NSUserInterfaceCompressionOptions(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUserInterfaceCompressionOptions") }
         
-        open fun hideImagesOption(): MemorySegment {
+        fun hideImagesOption(): MemorySegment {
             val sel = ObjCRuntime.sel("hideImagesOption")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun hideTextOption(): MemorySegment {
+        fun hideTextOption(): MemorySegment {
             val sel = ObjCRuntime.sel("hideTextOption")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun reduceMetricsOption(): MemorySegment {
+        fun reduceMetricsOption(): MemorySegment {
             val sel = ObjCRuntime.sel("reduceMetricsOption")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun breakEqualWidthsOption(): MemorySegment {
+        fun breakEqualWidthsOption(): MemorySegment {
             val sel = ObjCRuntime.sel("breakEqualWidthsOption")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun standardOptions(): MemorySegment {
+        fun standardOptions(): MemorySegment {
             val sel = ObjCRuntime.sel("standardOptions")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -56,21 +56,21 @@ open class NSUserInterfaceCompressionOptions(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithIdentifier(identifier: String): MemorySegment = initWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
+    fun initWithIdentifier(identifier: String): MemorySegment = initWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
     
     open fun initWithCompressionOptions(options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithCompressionOptions:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options) as MemorySegment
     }
     
-    open fun containsOptions(options: MemorySegment): BOOL {
+    open fun containsOptions(options: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsOptions:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, options) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, options) as Boolean
     }
     
-    open fun intersectsOptions(options: MemorySegment): BOOL {
+    open fun intersectsOptions(options: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("intersectsOptions:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, options) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, options) as Boolean
     }
     
     open fun optionsByAddingOptions(options: MemorySegment): MemorySegment {
@@ -84,11 +84,40 @@ open class NSUserInterfaceCompressionOptions(val ptr: MemorySegment) {
     }
     
     // @property empty
-    open fun isEmpty(): BOOL {
+    open fun isEmpty(): Boolean {
         val sel = ObjCRuntime.sel("isEmpty")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property hideImagesOption
+    open fun hideImagesOption(): MemorySegment {
+        val sel = ObjCRuntime.sel("hideImagesOption")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property hideTextOption
+    open fun hideTextOption(): MemorySegment {
+        val sel = ObjCRuntime.sel("hideTextOption")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property reduceMetricsOption
+    open fun reduceMetricsOption(): MemorySegment {
+        val sel = ObjCRuntime.sel("reduceMetricsOption")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property breakEqualWidthsOption
+    open fun breakEqualWidthsOption(): MemorySegment {
+        val sel = ObjCRuntime.sel("breakEqualWidthsOption")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property standardOptions
+    open fun standardOptions(): MemorySegment {
+        val sel = ObjCRuntime.sel("standardOptions")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

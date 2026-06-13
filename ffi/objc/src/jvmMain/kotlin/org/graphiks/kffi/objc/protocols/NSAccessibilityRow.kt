@@ -9,10 +9,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Inherits protocols: NSAccessibilityGroup
  */
 interface NSAccessibilityRow : NSAccessibilityGroup {
-    fun accessibilityIndex(): NSInteger
+    fun accessibilityIndex(): Long
     
     // @optional
-    fun accessibilityDisclosureLevel(): NSInteger =
+    fun accessibilityDisclosureLevel(): Long =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityDisclosureLevel' not implemented")
     
 }

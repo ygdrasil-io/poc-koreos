@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSIgnoreMisspelledWords
  */
 interface NSIgnoreMisspelledWords {
-    fun ignoreSpelling(sender: MemorySegment)
+    fun ignoreSpelling(sender: MemorySegment): Unit
     
 }
 

@@ -8,10 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserInterfaceItemIdentification
  */
 interface NSUserInterfaceItemIdentification {
-    fun identifier(): NSUserInterfaceItemIdentifier
+    fun identifier(): MemorySegment
     
-    fun setIdentifier(identifier: NSUserInterfaceItemIdentifier)
+    fun setIdentifier(identifier: MemorySegment): Unit
     
-    // @property identifier
 }
 

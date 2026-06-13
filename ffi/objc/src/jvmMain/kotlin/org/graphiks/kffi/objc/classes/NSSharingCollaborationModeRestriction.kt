@@ -9,45 +9,45 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSCopying
  */
-open class NSSharingCollaborationModeRestriction(val ptr: MemorySegment) {
+open class NSSharingCollaborationModeRestriction(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSharingCollaborationModeRestriction") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    open fun initWithDisabledMode(disabledMode: NSSharingCollaborationMode): MemorySegment {
+    open fun initWithDisabledMode(disabledMode: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDisabledMode:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, disabledMode) as MemorySegment
     }
     
-    open fun initWithDisabledMode_alertTitle_alertMessage(disabledMode: NSSharingCollaborationMode, alertTitle: MemorySegment, alertMessage: MemorySegment): MemorySegment {
+    open fun initWithDisabledMode_alertTitle_alertMessage(disabledMode: MemorySegment, alertTitle: MemorySegment, alertMessage: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDisabledMode:alertTitle:alertMessage:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, disabledMode, alertTitle, alertMessage) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDisabledMode_alertTitle_alertMessage(disabledMode: NSSharingCollaborationMode, alertTitle: String, alertMessage: String): MemorySegment = initWithDisabledMode_alertTitle_alertMessage(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage))
+    fun initWithDisabledMode_alertTitle_alertMessage(disabledMode: MemorySegment, alertTitle: String, alertMessage: String): MemorySegment = initWithDisabledMode_alertTitle_alertMessage(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage))
     
-    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode: NSSharingCollaborationMode, alertTitle: MemorySegment, alertMessage: MemorySegment, alertDismissButtonTitle: MemorySegment): MemorySegment {
+    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode: MemorySegment, alertTitle: MemorySegment, alertMessage: MemorySegment, alertDismissButtonTitle: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDisabledMode:alertTitle:alertMessage:alertDismissButtonTitle:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, disabledMode, alertTitle, alertMessage, alertDismissButtonTitle) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode: NSSharingCollaborationMode, alertTitle: String, alertMessage: String, alertDismissButtonTitle: String): MemorySegment = initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage), ObjCRuntime.newNSString(Arena.global(), alertDismissButtonTitle))
+    fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode: MemorySegment, alertTitle: String, alertMessage: String, alertDismissButtonTitle: String): MemorySegment = initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage), ObjCRuntime.newNSString(Arena.global(), alertDismissButtonTitle))
     
-    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode: NSSharingCollaborationMode, alertTitle: MemorySegment, alertMessage: MemorySegment, alertDismissButtonTitle: MemorySegment, alertRecoverySuggestionButtonTitle: MemorySegment, alertRecoverySuggestionButtonLaunchURL: MemorySegment): MemorySegment {
+    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode: MemorySegment, alertTitle: MemorySegment, alertMessage: MemorySegment, alertDismissButtonTitle: MemorySegment, alertRecoverySuggestionButtonTitle: MemorySegment, alertRecoverySuggestionButtonLaunchURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDisabledMode:alertTitle:alertMessage:alertDismissButtonTitle:alertRecoverySuggestionButtonTitle:alertRecoverySuggestionButtonLaunchURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, disabledMode, alertTitle, alertMessage, alertDismissButtonTitle, alertRecoverySuggestionButtonTitle, alertRecoverySuggestionButtonLaunchURL) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode: NSSharingCollaborationMode, alertTitle: String, alertMessage: String, alertDismissButtonTitle: String, alertRecoverySuggestionButtonTitle: String, alertRecoverySuggestionButtonLaunchURL: MemorySegment): MemorySegment = initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage), ObjCRuntime.newNSString(Arena.global(), alertDismissButtonTitle), ObjCRuntime.newNSString(Arena.global(), alertRecoverySuggestionButtonTitle), alertRecoverySuggestionButtonLaunchURL)
+    fun initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode: MemorySegment, alertTitle: String, alertMessage: String, alertDismissButtonTitle: String, alertRecoverySuggestionButtonTitle: String, alertRecoverySuggestionButtonLaunchURL: MemorySegment): MemorySegment = initWithDisabledMode_alertTitle_alertMessage_alertDismissButtonTitle_alertRecoverySuggestionButtonTitle_alertRecoverySuggestionButtonLaunchURL(disabledMode, ObjCRuntime.newNSString(Arena.global(), alertTitle), ObjCRuntime.newNSString(Arena.global(), alertMessage), ObjCRuntime.newNSString(Arena.global(), alertDismissButtonTitle), ObjCRuntime.newNSString(Arena.global(), alertRecoverySuggestionButtonTitle), alertRecoverySuggestionButtonLaunchURL)
     
     open fun init(): MemorySegment {
         val sel = ObjCRuntime.sel("init")
@@ -55,9 +55,9 @@ open class NSSharingCollaborationModeRestriction(val ptr: MemorySegment) {
     }
     
     // @property disabledMode
-    open fun disabledMode(): NSSharingCollaborationMode {
+    open fun disabledMode(): MemorySegment {
         val sel = ObjCRuntime.sel("disabledMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSharingCollaborationMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property alertTitle

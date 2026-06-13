@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSWorkspaceOpenConfiguration(val ptr: MemorySegment) {
+open class NSWorkspaceOpenConfiguration(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSWorkspaceOpenConfiguration") }
         
-        open fun configuration(): MemorySegment {
+        fun configuration(): MemorySegment {
             val sel = ObjCRuntime.sel("configuration")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -21,81 +21,81 @@ open class NSWorkspaceOpenConfiguration(val ptr: MemorySegment) {
     }
     
     // @property promptsUserIfNeeded
-    open fun promptsUserIfNeeded(): BOOL {
+    open fun promptsUserIfNeeded(): Boolean {
         val sel = ObjCRuntime.sel("promptsUserIfNeeded")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setPromptsUserIfNeeded(value: BOOL) {
+    open fun setPromptsUserIfNeeded(value: Boolean) {
         val sel = ObjCRuntime.sel("setPromptsUserIfNeeded:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property addsToRecentItems
-    open fun addsToRecentItems(): BOOL {
+    open fun addsToRecentItems(): Boolean {
         val sel = ObjCRuntime.sel("addsToRecentItems")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAddsToRecentItems(value: BOOL) {
+    open fun setAddsToRecentItems(value: Boolean) {
         val sel = ObjCRuntime.sel("setAddsToRecentItems:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property activates
-    open fun activates(): BOOL {
+    open fun activates(): Boolean {
         val sel = ObjCRuntime.sel("activates")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setActivates(value: BOOL) {
+    open fun setActivates(value: Boolean) {
         val sel = ObjCRuntime.sel("setActivates:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hides
-    open fun hides(): BOOL {
+    open fun hides(): Boolean {
         val sel = ObjCRuntime.sel("hides")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHides(value: BOOL) {
+    open fun setHides(value: Boolean) {
         val sel = ObjCRuntime.sel("setHides:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property hidesOthers
-    open fun hidesOthers(): BOOL {
+    open fun hidesOthers(): Boolean {
         val sel = ObjCRuntime.sel("hidesOthers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHidesOthers(value: BOOL) {
+    open fun setHidesOthers(value: Boolean) {
         val sel = ObjCRuntime.sel("setHidesOthers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property forPrinting
-    open fun isForPrinting(): BOOL {
+    open fun isForPrinting(): Boolean {
         val sel = ObjCRuntime.sel("isForPrinting")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setForPrinting(value: BOOL) {
+    open fun setForPrinting(value: Boolean) {
         val sel = ObjCRuntime.sel("setForPrinting:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property createsNewApplicationInstance
-    open fun createsNewApplicationInstance(): BOOL {
+    open fun createsNewApplicationInstance(): Boolean {
         val sel = ObjCRuntime.sel("createsNewApplicationInstance")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setCreatesNewApplicationInstance(value: BOOL) {
+    open fun setCreatesNewApplicationInstance(value: Boolean) {
         val sel = ObjCRuntime.sel("setCreatesNewApplicationInstance:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsRunningApplicationSubstitution
-    open fun allowsRunningApplicationSubstitution(): BOOL {
+    open fun allowsRunningApplicationSubstitution(): Boolean {
         val sel = ObjCRuntime.sel("allowsRunningApplicationSubstitution")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsRunningApplicationSubstitution(value: BOOL) {
+    open fun setAllowsRunningApplicationSubstitution(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsRunningApplicationSubstitution:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -133,21 +133,21 @@ open class NSWorkspaceOpenConfiguration(val ptr: MemorySegment) {
     }
     
     // @property architecture
-    open fun architecture(): cpu_type_t {
+    open fun architecture(): Int {
         val sel = ObjCRuntime.sel("architecture")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as cpu_type_t
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
-    open fun setArchitecture(value: cpu_type_t) {
+    open fun setArchitecture(value: Int) {
         val sel = ObjCRuntime.sel("setArchitecture:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property requiresUniversalLinks
-    open fun requiresUniversalLinks(): BOOL {
+    open fun requiresUniversalLinks(): Boolean {
         val sel = ObjCRuntime.sel("requiresUniversalLinks")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setRequiresUniversalLinks(value: BOOL) {
+    open fun setRequiresUniversalLinks(value: Boolean) {
         val sel = ObjCRuntime.sel("setRequiresUniversalLinks:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

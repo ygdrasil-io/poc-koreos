@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSMutableData
  * Protocols: NSDiscardableContent
  */
-open class NSPurgeableData(ptr: MemorySegment) : NSMutableData(ptr) {
+open class NSPurgeableData(override val ptr: MemorySegment) : NSMutableData(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPurgeableData") }
         

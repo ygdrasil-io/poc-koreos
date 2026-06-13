@@ -9,29 +9,29 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSURLSessionConfiguration(val ptr: MemorySegment) {
+open class NSURLSessionConfiguration(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionConfiguration") }
         
-        open fun backgroundSessionConfigurationWithIdentifier(identifier: MemorySegment): MemorySegment {
+        fun backgroundSessionConfigurationWithIdentifier(identifier: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("backgroundSessionConfigurationWithIdentifier:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, identifier) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun backgroundSessionConfigurationWithIdentifier(identifier: String): MemorySegment = backgroundSessionConfigurationWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
+        fun backgroundSessionConfigurationWithIdentifier(identifier: String): MemorySegment = backgroundSessionConfigurationWithIdentifier(ObjCRuntime.newNSString(Arena.global(), identifier))
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun defaultSessionConfiguration(): MemorySegment {
+        fun defaultSessionConfiguration(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultSessionConfiguration")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun ephemeralSessionConfiguration(): MemorySegment {
+        fun ephemeralSessionConfiguration(): MemorySegment {
             val sel = ObjCRuntime.sel("ephemeralSessionConfiguration")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -44,6 +44,18 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property defaultSessionConfiguration
+    open fun defaultSessionConfiguration(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultSessionConfiguration")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property ephemeralSessionConfiguration
+    open fun ephemeralSessionConfiguration(): MemorySegment {
+        val sel = ObjCRuntime.sel("ephemeralSessionConfiguration")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property identifier
     open fun identifier(): MemorySegment {
         val sel = ObjCRuntime.sel("identifier")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -53,111 +65,111 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     open fun identifierAsString(): String = ObjCRuntime.toJavaString(identifier())
     
     // @property requestCachePolicy
-    open fun requestCachePolicy(): NSURLRequestCachePolicy {
+    open fun requestCachePolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("requestCachePolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestCachePolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setRequestCachePolicy(value: NSURLRequestCachePolicy) {
+    open fun setRequestCachePolicy(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRequestCachePolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property timeoutIntervalForRequest
-    open fun timeoutIntervalForRequest(): NSTimeInterval {
+    open fun timeoutIntervalForRequest(): Double {
         val sel = ObjCRuntime.sel("timeoutIntervalForRequest")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setTimeoutIntervalForRequest(value: NSTimeInterval) {
+    open fun setTimeoutIntervalForRequest(value: Double) {
         val sel = ObjCRuntime.sel("setTimeoutIntervalForRequest:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property timeoutIntervalForResource
-    open fun timeoutIntervalForResource(): NSTimeInterval {
+    open fun timeoutIntervalForResource(): Double {
         val sel = ObjCRuntime.sel("timeoutIntervalForResource")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setTimeoutIntervalForResource(value: NSTimeInterval) {
+    open fun setTimeoutIntervalForResource(value: Double) {
         val sel = ObjCRuntime.sel("setTimeoutIntervalForResource:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property networkServiceType
-    open fun networkServiceType(): NSURLRequestNetworkServiceType {
+    open fun networkServiceType(): MemorySegment {
         val sel = ObjCRuntime.sel("networkServiceType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLRequestNetworkServiceType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setNetworkServiceType(value: NSURLRequestNetworkServiceType) {
+    open fun setNetworkServiceType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNetworkServiceType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsCellularAccess
-    open fun allowsCellularAccess(): BOOL {
+    open fun allowsCellularAccess(): Boolean {
         val sel = ObjCRuntime.sel("allowsCellularAccess")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsCellularAccess(value: BOOL) {
+    open fun setAllowsCellularAccess(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsCellularAccess:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsExpensiveNetworkAccess
-    open fun allowsExpensiveNetworkAccess(): BOOL {
+    open fun allowsExpensiveNetworkAccess(): Boolean {
         val sel = ObjCRuntime.sel("allowsExpensiveNetworkAccess")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsExpensiveNetworkAccess(value: BOOL) {
+    open fun setAllowsExpensiveNetworkAccess(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsExpensiveNetworkAccess:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsConstrainedNetworkAccess
-    open fun allowsConstrainedNetworkAccess(): BOOL {
+    open fun allowsConstrainedNetworkAccess(): Boolean {
         val sel = ObjCRuntime.sel("allowsConstrainedNetworkAccess")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsConstrainedNetworkAccess(value: BOOL) {
+    open fun setAllowsConstrainedNetworkAccess(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsConstrainedNetworkAccess:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsUltraConstrainedNetworkAccess
-    open fun allowsUltraConstrainedNetworkAccess(): BOOL {
+    open fun allowsUltraConstrainedNetworkAccess(): Boolean {
         val sel = ObjCRuntime.sel("allowsUltraConstrainedNetworkAccess")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsUltraConstrainedNetworkAccess(value: BOOL) {
+    open fun setAllowsUltraConstrainedNetworkAccess(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsUltraConstrainedNetworkAccess:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property requiresDNSSECValidation
-    open fun requiresDNSSECValidation(): BOOL {
+    open fun requiresDNSSECValidation(): Boolean {
         val sel = ObjCRuntime.sel("requiresDNSSECValidation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setRequiresDNSSECValidation(value: BOOL) {
+    open fun setRequiresDNSSECValidation(value: Boolean) {
         val sel = ObjCRuntime.sel("setRequiresDNSSECValidation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property waitsForConnectivity
-    open fun waitsForConnectivity(): BOOL {
+    open fun waitsForConnectivity(): Boolean {
         val sel = ObjCRuntime.sel("waitsForConnectivity")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setWaitsForConnectivity(value: BOOL) {
+    open fun setWaitsForConnectivity(value: Boolean) {
         val sel = ObjCRuntime.sel("setWaitsForConnectivity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property discretionary
-    open fun isDiscretionary(): BOOL {
+    open fun isDiscretionary(): Boolean {
         val sel = ObjCRuntime.sel("isDiscretionary")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDiscretionary(value: BOOL) {
+    open fun setDiscretionary(value: Boolean) {
         val sel = ObjCRuntime.sel("setDiscretionary:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -179,11 +191,11 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     open fun setSharedContainerIdentifier(value: String) = setSharedContainerIdentifier(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property sessionSendsLaunchEvents
-    open fun sessionSendsLaunchEvents(): BOOL {
+    open fun sessionSendsLaunchEvents(): Boolean {
         val sel = ObjCRuntime.sel("sessionSendsLaunchEvents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setSessionSendsLaunchEvents(value: BOOL) {
+    open fun setSessionSendsLaunchEvents(value: Boolean) {
         val sel = ObjCRuntime.sel("setSessionSendsLaunchEvents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -199,71 +211,71 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property TLSMinimumSupportedProtocol
-    open fun TLSMinimumSupportedProtocol(): SSLProtocol {
+    open fun TLSMinimumSupportedProtocol(): MemorySegment {
         val sel = ObjCRuntime.sel("TLSMinimumSupportedProtocol")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as SSLProtocol
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setTLSMinimumSupportedProtocol(value: SSLProtocol) {
+    open fun setTLSMinimumSupportedProtocol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTLSMinimumSupportedProtocol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property TLSMaximumSupportedProtocol
-    open fun TLSMaximumSupportedProtocol(): SSLProtocol {
+    open fun TLSMaximumSupportedProtocol(): MemorySegment {
         val sel = ObjCRuntime.sel("TLSMaximumSupportedProtocol")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as SSLProtocol
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setTLSMaximumSupportedProtocol(value: SSLProtocol) {
+    open fun setTLSMaximumSupportedProtocol(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTLSMaximumSupportedProtocol:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property TLSMinimumSupportedProtocolVersion
-    open fun TLSMinimumSupportedProtocolVersion(): tls_protocol_version_t {
+    open fun TLSMinimumSupportedProtocolVersion(): MemorySegment {
         val sel = ObjCRuntime.sel("TLSMinimumSupportedProtocolVersion")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as tls_protocol_version_t
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setTLSMinimumSupportedProtocolVersion(value: tls_protocol_version_t) {
+    open fun setTLSMinimumSupportedProtocolVersion(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTLSMinimumSupportedProtocolVersion:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property TLSMaximumSupportedProtocolVersion
-    open fun TLSMaximumSupportedProtocolVersion(): tls_protocol_version_t {
+    open fun TLSMaximumSupportedProtocolVersion(): MemorySegment {
         val sel = ObjCRuntime.sel("TLSMaximumSupportedProtocolVersion")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as tls_protocol_version_t
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setTLSMaximumSupportedProtocolVersion(value: tls_protocol_version_t) {
+    open fun setTLSMaximumSupportedProtocolVersion(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTLSMaximumSupportedProtocolVersion:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property HTTPShouldUsePipelining
-    open fun HTTPShouldUsePipelining(): BOOL {
+    open fun HTTPShouldUsePipelining(): Boolean {
         val sel = ObjCRuntime.sel("HTTPShouldUsePipelining")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHTTPShouldUsePipelining(value: BOOL) {
+    open fun setHTTPShouldUsePipelining(value: Boolean) {
         val sel = ObjCRuntime.sel("setHTTPShouldUsePipelining:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property HTTPShouldSetCookies
-    open fun HTTPShouldSetCookies(): BOOL {
+    open fun HTTPShouldSetCookies(): Boolean {
         val sel = ObjCRuntime.sel("HTTPShouldSetCookies")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHTTPShouldSetCookies(value: BOOL) {
+    open fun setHTTPShouldSetCookies(value: Boolean) {
         val sel = ObjCRuntime.sel("setHTTPShouldSetCookies:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property HTTPCookieAcceptPolicy
-    open fun HTTPCookieAcceptPolicy(): NSHTTPCookieAcceptPolicy {
+    open fun HTTPCookieAcceptPolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("HTTPCookieAcceptPolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSHTTPCookieAcceptPolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setHTTPCookieAcceptPolicy(value: NSHTTPCookieAcceptPolicy) {
+    open fun setHTTPCookieAcceptPolicy(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setHTTPCookieAcceptPolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -279,11 +291,11 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property HTTPMaximumConnectionsPerHost
-    open fun HTTPMaximumConnectionsPerHost(): NSInteger {
+    open fun HTTPMaximumConnectionsPerHost(): Long {
         val sel = ObjCRuntime.sel("HTTPMaximumConnectionsPerHost")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setHTTPMaximumConnectionsPerHost(value: NSInteger) {
+    open fun setHTTPMaximumConnectionsPerHost(value: Long) {
         val sel = ObjCRuntime.sel("setHTTPMaximumConnectionsPerHost:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -319,17 +331,17 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property shouldUseExtendedBackgroundIdleMode
-    open fun shouldUseExtendedBackgroundIdleMode(): BOOL {
+    open fun shouldUseExtendedBackgroundIdleMode(): Boolean {
         val sel = ObjCRuntime.sel("shouldUseExtendedBackgroundIdleMode")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShouldUseExtendedBackgroundIdleMode(value: BOOL) {
+    open fun setShouldUseExtendedBackgroundIdleMode(value: Boolean) {
         val sel = ObjCRuntime.sel("setShouldUseExtendedBackgroundIdleMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property protocolClasses
-    /** @return NSArray<Class<*>> * */
+    /** @return NSArray<Class> * */
     open fun protocolClasses(): MemorySegment {
         val sel = ObjCRuntime.sel("protocolClasses")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -340,31 +352,31 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
     }
     
     // @property multipathServiceType
-    open fun multipathServiceType(): NSURLSessionMultipathServiceType {
+    open fun multipathServiceType(): MemorySegment {
         val sel = ObjCRuntime.sel("multipathServiceType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSURLSessionMultipathServiceType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setMultipathServiceType(value: NSURLSessionMultipathServiceType) {
+    open fun setMultipathServiceType(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMultipathServiceType:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesClassicLoadingMode
-    open fun usesClassicLoadingMode(): BOOL {
+    open fun usesClassicLoadingMode(): Boolean {
         val sel = ObjCRuntime.sel("usesClassicLoadingMode")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesClassicLoadingMode(value: BOOL) {
+    open fun setUsesClassicLoadingMode(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesClassicLoadingMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property enablesEarlyData
-    open fun enablesEarlyData(): BOOL {
+    open fun enablesEarlyData(): Boolean {
         val sel = ObjCRuntime.sel("enablesEarlyData")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setEnablesEarlyData(value: BOOL) {
+    open fun setEnablesEarlyData(value: Boolean) {
         val sel = ObjCRuntime.sel("setEnablesEarlyData:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -373,7 +385,7 @@ open class NSURLSessionConfiguration(val ptr: MemorySegment) {
 
 // ── Category: NSURLSessionDeprecated on NSURLSessionConfiguration ─────────────────────────────────────────
 
-// Class<*> method: +[NSURLSessionConfiguration backgroundSessionConfiguration:]
+// Class method: +[NSURLSessionConfiguration backgroundSessionConfiguration:]
 fun NSURLSessionConfiguration_backgroundSessionConfiguration(identifier: MemorySegment): MemorySegment {
     val sel = ObjCRuntime.sel("backgroundSessionConfiguration:")
     val cls = ObjCRuntime.getClass("NSURLSessionConfiguration")

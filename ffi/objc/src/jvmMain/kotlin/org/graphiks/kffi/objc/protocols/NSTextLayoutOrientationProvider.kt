@@ -8,8 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextLayoutOrientationProvider
  */
 interface NSTextLayoutOrientationProvider {
-    fun layoutOrientation(): NSTextLayoutOrientation
+    fun layoutOrientation(): MemorySegment
     
-    // @property layoutOrientation
 }
 

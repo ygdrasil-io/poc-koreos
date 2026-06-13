@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSFormatter
  * Protocols: NSSecureCoding
  */
-open class NSMeasurementFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
+open class NSMeasurementFormatter(override val ptr: MemorySegment) : NSFormatter(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMeasurementFormatter") }
         
     }
     
-    fun stringFromMeasurement(measurement: MemorySegment): MemorySegment {
+    open fun stringFromMeasurement(measurement: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromMeasurement:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, measurement) as MemorySegment
     }
@@ -23,7 +23,7 @@ open class NSMeasurementFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
     fun stringFromMeasurementAsString(measurement: MemorySegment): String = ObjCRuntime.toJavaString(stringFromMeasurement(measurement))
     
-    fun stringFromUnit(unit: MemorySegment): MemorySegment {
+    open fun stringFromUnit(unit: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringFromUnit:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, unit) as MemorySegment
     }
@@ -32,41 +32,41 @@ open class NSMeasurementFormatter(ptr: MemorySegment) : NSFormatter(ptr) {
     fun stringFromUnitAsString(unit: MemorySegment): String = ObjCRuntime.toJavaString(stringFromUnit(unit))
     
     // @property unitOptions
-    fun unitOptions(): NSMeasurementFormatterUnitOptions {
+    open fun unitOptions(): MemorySegment {
         val sel = ObjCRuntime.sel("unitOptions")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSMeasurementFormatterUnitOptions
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setUnitOptions(value: NSMeasurementFormatterUnitOptions) {
+    open fun setUnitOptions(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUnitOptions:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property unitStyle
-    fun unitStyle(): NSFormattingUnitStyle {
+    open fun unitStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("unitStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSFormattingUnitStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setUnitStyle(value: NSFormattingUnitStyle) {
+    open fun setUnitStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setUnitStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property locale
-    fun locale(): MemorySegment {
+    open fun locale(): MemorySegment {
         val sel = ObjCRuntime.sel("locale")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setLocale(value: MemorySegment) {
+    open fun setLocale(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setLocale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property numberFormatter
-    fun numberFormatter(): MemorySegment {
+    open fun numberFormatter(): MemorySegment {
         val sel = ObjCRuntime.sel("numberFormatter")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setNumberFormatter(value: MemorySegment) {
+    open fun setNumberFormatter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setNumberFormatter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

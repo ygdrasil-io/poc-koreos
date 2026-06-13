@@ -9,30 +9,30 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSURLComponents(val ptr: MemorySegment) {
+open class NSURLComponents(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLComponents") }
         
-        open fun componentsWithURL_resolvingAgainstBaseURL(url: MemorySegment, resolve: BOOL): MemorySegment {
+        fun componentsWithURL_resolvingAgainstBaseURL(url: MemorySegment, resolve: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("componentsWithURL:resolvingAgainstBaseURL:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, url, resolve) as MemorySegment
         }
         
-        open fun componentsWithString(URLString: MemorySegment): MemorySegment {
+        fun componentsWithString(URLString: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("componentsWithString:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URLString) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun componentsWithString(URLString: String): MemorySegment = componentsWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
+        fun componentsWithString(URLString: String): MemorySegment = componentsWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
         
-        open fun componentsWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: BOOL): MemorySegment {
+        fun componentsWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: Boolean): MemorySegment {
             val sel = ObjCRuntime.sel("componentsWithString:encodingInvalidCharacters:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, URLString, encodingInvalidCharacters) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun componentsWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: BOOL): MemorySegment = componentsWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
+        fun componentsWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: Boolean): MemorySegment = componentsWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
         
     }
     
@@ -41,7 +41,7 @@ open class NSURLComponents(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun initWithURL_resolvingAgainstBaseURL(url: MemorySegment, resolve: BOOL): MemorySegment {
+    open fun initWithURL_resolvingAgainstBaseURL(url: MemorySegment, resolve: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithURL:resolvingAgainstBaseURL:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, url, resolve) as MemorySegment
     }
@@ -52,15 +52,15 @@ open class NSURLComponents(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString(URLString: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
+    fun initWithString(URLString: String): MemorySegment = initWithString(ObjCRuntime.newNSString(Arena.global(), URLString))
     
-    open fun initWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: BOOL): MemorySegment {
+    open fun initWithString_encodingInvalidCharacters(URLString: MemorySegment, encodingInvalidCharacters: Boolean): MemorySegment {
         val sel = ObjCRuntime.sel("initWithString:encodingInvalidCharacters:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, URLString, encodingInvalidCharacters) as MemorySegment
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun initWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: BOOL): MemorySegment = initWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
+    fun initWithString_encodingInvalidCharacters(URLString: String, encodingInvalidCharacters: Boolean): MemorySegment = initWithString_encodingInvalidCharacters(ObjCRuntime.newNSString(Arena.global(), URLString), encodingInvalidCharacters)
     
     open fun URLRelativeToURL(baseURL: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("URLRelativeToURL:")
@@ -317,51 +317,51 @@ open class NSURLComponents(val ptr: MemorySegment) {
     open fun setEncodedHost(value: String) = setEncodedHost(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property rangeOfScheme
-    open fun rangeOfScheme(): NSRange {
+    open fun rangeOfScheme(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfScheme")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfUser
-    open fun rangeOfUser(): NSRange {
+    open fun rangeOfUser(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfUser")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfPassword
-    open fun rangeOfPassword(): NSRange {
+    open fun rangeOfPassword(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfPassword")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfHost
-    open fun rangeOfHost(): NSRange {
+    open fun rangeOfHost(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfHost")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfPort
-    open fun rangeOfPort(): NSRange {
+    open fun rangeOfPort(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfPort")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfPath
-    open fun rangeOfPath(): NSRange {
+    open fun rangeOfPath(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfPath")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfQuery
-    open fun rangeOfQuery(): NSRange {
+    open fun rangeOfQuery(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfQuery")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property rangeOfFragment
-    open fun rangeOfFragment(): NSRange {
+    open fun rangeOfFragment(): MemorySegment {
         val sel = ObjCRuntime.sel("rangeOfFragment")
-        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as NSRange
+        return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(ValueLayout.JAVA_LONG.withName("location"), ValueLayout.JAVA_LONG.withName("length")).withName("_NSRange"), ptr, sel) as MemorySegment
     }
     
     // @property queryItems

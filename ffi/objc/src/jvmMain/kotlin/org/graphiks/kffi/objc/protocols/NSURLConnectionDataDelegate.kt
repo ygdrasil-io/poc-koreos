@@ -26,7 +26,7 @@ interface NSURLConnectionDataDelegate : NSURLConnectionDelegate {
         throw UnsupportedOperationException("Optional ObjC method 'connection:needNewBodyStream:' not implemented")
     
     // @optional
-    fun connection_didSendBodyData_totalBytesWritten_totalBytesExpectedToWrite(connection: MemorySegment, bytesWritten: NSInteger, totalBytesWritten: NSInteger, totalBytesExpectedToWrite: NSInteger): Unit =
+    fun connection_didSendBodyData_totalBytesWritten_totalBytesExpectedToWrite(connection: MemorySegment, bytesWritten: Long, totalBytesWritten: Long, totalBytesExpectedToWrite: Long): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'connection:didSendBodyData:totalBytesWritten:totalBytesExpectedToWrite:' not implemented")
     
     // @optional

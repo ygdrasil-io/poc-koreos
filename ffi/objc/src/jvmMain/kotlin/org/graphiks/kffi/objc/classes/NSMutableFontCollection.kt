@@ -8,65 +8,71 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSMutableFontCollection
  * Superclass: NSFontCollection
  */
-open class NSMutableFontCollection(ptr: MemorySegment) : NSFontCollection(ptr) {
+open class NSMutableFontCollection(override val ptr: MemorySegment) : NSFontCollection(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMutableFontCollection") }
         
-        override fun `fontCollectionWithDescriptors`(queryDescriptors: MemorySegment): MemorySegment {
+        fun fontCollectionWithDescriptors(queryDescriptors: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithDescriptors:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, queryDescriptors) as MemorySegment
         }
         
-        override fun `fontCollectionWithLocale`(locale: MemorySegment): MemorySegment {
+        fun fontCollectionWithLocale(locale: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithLocale:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, locale) as MemorySegment
         }
         
-        override fun `fontCollectionWithName`(name: NSFontCollectionName): MemorySegment {
+        fun fontCollectionWithName(name: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithName:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name) as MemorySegment
         }
         
-        override fun `fontCollectionWithName_visibility`(name: NSFontCollectionName, visibility: NSFontCollectionVisibility): MemorySegment {
+        fun fontCollectionWithName_visibility(name: MemorySegment, visibility: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithName:visibility:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, name, visibility) as MemorySegment
         }
         
-        override fun `fontCollectionWithAllAvailableDescriptors`(): MemorySegment {
+        fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
             val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
     }
     
-    fun addQueryForDescriptors(descriptors: MemorySegment): Unit {
+    open fun addQueryForDescriptors(descriptors: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addQueryForDescriptors:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptors)
     }
     
-    fun removeQueryForDescriptors(descriptors: MemorySegment): Unit {
+    open fun removeQueryForDescriptors(descriptors: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeQueryForDescriptors:")
         ObjCRuntime.msgSend(null, ptr, sel, descriptors)
     }
     
     // @property fontCollectionWithAllAvailableDescriptors
+    override fun fontCollectionWithAllAvailableDescriptors(): MemorySegment {
+        val sel = ObjCRuntime.sel("fontCollectionWithAllAvailableDescriptors")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property queryDescriptors
     /** @return NSArray<NSFontDescriptor *> * */
-    override fun `queryDescriptors`(): MemorySegment {
+    override fun queryDescriptors(): MemorySegment {
         val sel = ObjCRuntime.sel("queryDescriptors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setQueryDescriptors(value: MemorySegment) {
+    open fun setQueryDescriptors(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQueryDescriptors:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property exclusionDescriptors
     /** @return NSArray<NSFontDescriptor *> * */
-    override fun `exclusionDescriptors`(): MemorySegment {
+    override fun exclusionDescriptors(): MemorySegment {
         val sel = ObjCRuntime.sel("exclusionDescriptors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setExclusionDescriptors(value: MemorySegment) {
+    open fun setExclusionDescriptors(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setExclusionDescriptors:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,21 +8,21 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSViewLayoutRegion
  * Superclass: NSObject
  */
-open class NSViewLayoutRegion(val ptr: MemorySegment) {
+open class NSViewLayoutRegion(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSViewLayoutRegion") }
         
-        open fun safeAreaLayoutRegionWithCornerAdaptation(adaptivityAxis: NSViewLayoutRegionAdaptivityAxis): MemorySegment {
+        fun safeAreaLayoutRegionWithCornerAdaptation(adaptivityAxis: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("safeAreaLayoutRegionWithCornerAdaptation:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, adaptivityAxis) as MemorySegment
         }
         
-        open fun marginsLayoutRegionWithCornerAdaptation(adaptivityAxis: NSViewLayoutRegionAdaptivityAxis): MemorySegment {
+        fun marginsLayoutRegionWithCornerAdaptation(adaptivityAxis: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("marginsLayoutRegionWithCornerAdaptation:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, adaptivityAxis) as MemorySegment
         }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }

@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSURLSessionTaskMetrics
  * Superclass: NSObject
  */
-open class NSURLSessionTaskMetrics(val ptr: MemorySegment) {
+open class NSURLSessionTaskMetrics(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSURLSessionTaskMetrics") }
         
-        open fun new(): MemorySegment {
+        fun new(): MemorySegment {
             val sel = ObjCRuntime.sel("new")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -38,9 +38,9 @@ open class NSURLSessionTaskMetrics(val ptr: MemorySegment) {
     }
     
     // @property redirectCount
-    open fun redirectCount(): NSUInteger {
+    open fun redirectCount(): Long {
         val sel = ObjCRuntime.sel("redirectCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
 }

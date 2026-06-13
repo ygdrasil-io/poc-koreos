@@ -9,61 +9,61 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSViewController
  * Protocols: NSCopying, NSCollectionViewElement
  */
-open class NSCollectionViewItem(ptr: MemorySegment) : NSViewController(ptr) {
+open class NSCollectionViewItem(override val ptr: MemorySegment) : NSViewController(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewItem") }
         
     }
     
     // @property collectionView
-    fun collectionView(): MemorySegment {
+    open fun collectionView(): MemorySegment {
         val sel = ObjCRuntime.sel("collectionView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selected
-    fun isSelected(): BOOL {
+    open fun isSelected(): Boolean {
         val sel = ObjCRuntime.sel("isSelected")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSelected(value: BOOL) {
+    open fun setSelected(value: Boolean) {
         val sel = ObjCRuntime.sel("setSelected:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property highlightState
-    fun highlightState(): NSCollectionViewItemHighlightState {
+    open fun highlightState(): MemorySegment {
         val sel = ObjCRuntime.sel("highlightState")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSCollectionViewItemHighlightState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setHighlightState(value: NSCollectionViewItemHighlightState) {
+    open fun setHighlightState(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setHighlightState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property imageView
-    fun imageView(): MemorySegment {
+    open fun imageView(): MemorySegment {
         val sel = ObjCRuntime.sel("imageView")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setImageView(value: MemorySegment) {
+    open fun setImageView(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setImageView:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property textField
-    fun textField(): MemorySegment {
+    open fun textField(): MemorySegment {
         val sel = ObjCRuntime.sel("textField")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setTextField(value: MemorySegment) {
+    open fun setTextField(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setTextField:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property draggingImageComponents
     /** @return NSArray<NSDraggingImageComponent *> * */
-    fun draggingImageComponents(): MemorySegment {
+    open fun draggingImageComponents(): MemorySegment {
         val sel = ObjCRuntime.sel("draggingImageComponents")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }

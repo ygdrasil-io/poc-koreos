@@ -9,15 +9,15 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSScriptWhoseTest(val ptr: MemorySegment) {
+open class NSScriptWhoseTest(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSScriptWhoseTest") }
         
     }
     
-    open fun isTrue(): BOOL {
+    open fun isTrue(): Boolean {
         val sel = ObjCRuntime.sel("isTrue")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun init(): MemorySegment {

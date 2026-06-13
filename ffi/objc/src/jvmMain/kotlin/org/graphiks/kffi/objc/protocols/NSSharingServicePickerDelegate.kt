@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSSharingServicePickerDelegate
  * Inherits protocols: NSObject
  */
-interface NSSharingServicePickerDelegate : NSObject {
+interface NSSharingServicePickerDelegate {
     /** @return NSArray<NSSharingService *> * */
     // @optional
     fun sharingServicePicker_sharingServicesForItems_proposedSharingServices(sharingServicePicker: MemorySegment, items: MemorySegment, proposedServices: MemorySegment): MemorySegment =

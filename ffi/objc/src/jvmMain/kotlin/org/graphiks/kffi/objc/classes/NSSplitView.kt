@@ -8,103 +8,103 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSplitView
  * Superclass: NSView
  */
-open class NSSplitView(ptr: MemorySegment) : NSView(ptr) {
+open class NSSplitView(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSplitView") }
         
     }
     
-    fun drawDividerInRect(rect: NSRect): Unit {
+    open fun drawDividerInRect(rect: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("drawDividerInRect:")
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(rect, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    fun adjustSubviews(): Unit {
+    open fun adjustSubviews(): Unit {
         val sel = ObjCRuntime.sel("adjustSubviews")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun isSubviewCollapsed(subview: MemorySegment): BOOL {
+    open fun isSubviewCollapsed(subview: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("isSubviewCollapsed:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, subview) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, subview) as Boolean
     }
     
-    fun minPossiblePositionOfDividerAtIndex(dividerIndex: NSInteger): CGFloat {
+    open fun minPossiblePositionOfDividerAtIndex(dividerIndex: Long): Double {
         val sel = ObjCRuntime.sel("minPossiblePositionOfDividerAtIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, dividerIndex) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, dividerIndex) as Double
     }
     
-    fun maxPossiblePositionOfDividerAtIndex(dividerIndex: NSInteger): CGFloat {
+    open fun maxPossiblePositionOfDividerAtIndex(dividerIndex: Long): Double {
         val sel = ObjCRuntime.sel("maxPossiblePositionOfDividerAtIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, dividerIndex) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, dividerIndex) as Double
     }
     
-    fun setPosition_ofDividerAtIndex(position: CGFloat, dividerIndex: NSInteger): Unit {
+    open fun setPosition_ofDividerAtIndex(position: Double, dividerIndex: Long): Unit {
         val sel = ObjCRuntime.sel("setPosition:ofDividerAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, position, dividerIndex)
     }
     
-    fun holdingPriorityForSubviewAtIndex(subviewIndex: NSInteger): NSLayoutPriority {
+    open fun holdingPriorityForSubviewAtIndex(subviewIndex: Long): Float {
         val sel = ObjCRuntime.sel("holdingPriorityForSubviewAtIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel, subviewIndex) as NSLayoutPriority
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel, subviewIndex) as Float
     }
     
-    fun setHoldingPriority_forSubviewAtIndex(priority: NSLayoutPriority, subviewIndex: NSInteger): Unit {
+    open fun setHoldingPriority_forSubviewAtIndex(priority: Float, subviewIndex: Long): Unit {
         val sel = ObjCRuntime.sel("setHoldingPriority:forSubviewAtIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, priority, subviewIndex)
     }
     
     // @property vertical
-    fun isVertical(): BOOL {
+    open fun isVertical(): Boolean {
         val sel = ObjCRuntime.sel("isVertical")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setVertical(value: BOOL) {
+    open fun setVertical(value: Boolean) {
         val sel = ObjCRuntime.sel("setVertical:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property dividerStyle
-    fun dividerStyle(): NSSplitViewDividerStyle {
+    open fun dividerStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("dividerStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSplitViewDividerStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDividerStyle(value: NSSplitViewDividerStyle) {
+    open fun setDividerStyle(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDividerStyle:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property autosaveName
-    fun autosaveName(): NSSplitViewAutosaveName {
+    open fun autosaveName(): MemorySegment {
         val sel = ObjCRuntime.sel("autosaveName")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSSplitViewAutosaveName
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setAutosaveName(value: NSSplitViewAutosaveName) {
+    open fun setAutosaveName(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAutosaveName:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property delegate
     /** @return id<NSSplitViewDelegate> */
-    fun delegate(): MemorySegment {
+    open fun delegate(): MemorySegment {
         val sel = ObjCRuntime.sel("delegate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setDelegate(value: MemorySegment) {
+    open fun setDelegate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setDelegate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property dividerColor
-    fun dividerColor(): MemorySegment {
+    open fun dividerColor(): MemorySegment {
         val sel = ObjCRuntime.sel("dividerColor")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property dividerThickness
-    fun dividerThickness(): CGFloat {
+    open fun dividerThickness(): Double {
         val sel = ObjCRuntime.sel("dividerThickness")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
     
 }
@@ -113,44 +113,44 @@ open class NSSplitView(ptr: MemorySegment) : NSView(ptr) {
 
 fun NSSplitView.addArrangedSubview(view: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("addArrangedSubview:")
-    ObjCRuntime.msgSend(null, ptr, sel, view)
+    ObjCRuntime.msgSend(null, this.ptr, sel, view)
 }
 
-fun NSSplitView.insertArrangedSubview_atIndex(view: MemorySegment, index: NSInteger): Unit {
+fun NSSplitView.insertArrangedSubview_atIndex(view: MemorySegment, index: Long): Unit {
     val sel = ObjCRuntime.sel("insertArrangedSubview:atIndex:")
-    ObjCRuntime.msgSend(null, ptr, sel, view, index)
+    ObjCRuntime.msgSend(null, this.ptr, sel, view, index)
 }
 
 fun NSSplitView.removeArrangedSubview(view: MemorySegment): Unit {
     val sel = ObjCRuntime.sel("removeArrangedSubview:")
-    ObjCRuntime.msgSend(null, ptr, sel, view)
+    ObjCRuntime.msgSend(null, this.ptr, sel, view)
 }
 
-fun NSSplitView.arrangesAllSubviews(): BOOL {
+fun NSSplitView.arrangesAllSubviews(): Boolean {
     val sel = ObjCRuntime.sel("arrangesAllSubviews")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 
-fun NSSplitView.setArrangesAllSubviews(arrangesAllSubviews: BOOL): Unit {
+fun NSSplitView.setArrangesAllSubviews(arrangesAllSubviews: Boolean): Unit {
     val sel = ObjCRuntime.sel("setArrangesAllSubviews:")
-    ObjCRuntime.msgSend(null, ptr, sel, arrangesAllSubviews)
+    ObjCRuntime.msgSend(null, this.ptr, sel, arrangesAllSubviews)
 }
 
 /** @return NSArray<__kindof NSView *> * */
 fun NSSplitView.arrangedSubviews(): MemorySegment {
     val sel = ObjCRuntime.sel("arrangedSubviews")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-// @property arrangesAllSubviews
-/** @return NSArray<__kindof NSView *> * */
-fun NSSplitView.setIsPaneSplitter(flag: BOOL): Unit {
+// ── Category: NSDeprecated on NSSplitView ─────────────────────────────────────────
+
+fun NSSplitView.setIsPaneSplitter(flag: Boolean): Unit {
     val sel = ObjCRuntime.sel("setIsPaneSplitter:")
-    ObjCRuntime.msgSend(null, ptr, sel, flag)
+    ObjCRuntime.msgSend(null, this.ptr, sel, flag)
 }
 
-fun NSSplitView.isPaneSplitter(): BOOL {
+fun NSSplitView.isPaneSplitter(): Boolean {
     val sel = ObjCRuntime.sel("isPaneSplitter")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, this.ptr, sel) as Boolean
 }
 

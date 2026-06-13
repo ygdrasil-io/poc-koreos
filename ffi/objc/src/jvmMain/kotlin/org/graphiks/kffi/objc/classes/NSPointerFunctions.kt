@@ -9,18 +9,18 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSPointerFunctions(val ptr: MemorySegment) {
+open class NSPointerFunctions(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPointerFunctions") }
         
-        open fun pointerFunctionsWithOptions(options: NSPointerFunctionsOptions): MemorySegment {
+        fun pointerFunctionsWithOptions(options: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("pointerFunctionsWithOptions:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, options) as MemorySegment
         }
         
     }
     
-    open fun initWithOptions(options: NSPointerFunctionsOptions): MemorySegment {
+    open fun initWithOptions(options: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithOptions:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, options) as MemorySegment
     }
@@ -86,21 +86,21 @@ open class NSPointerFunctions(val ptr: MemorySegment) {
     }
     
     // @property usesStrongWriteBarrier
-    open fun usesStrongWriteBarrier(): BOOL {
+    open fun usesStrongWriteBarrier(): Boolean {
         val sel = ObjCRuntime.sel("usesStrongWriteBarrier")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesStrongWriteBarrier(value: BOOL) {
+    open fun setUsesStrongWriteBarrier(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesStrongWriteBarrier:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesWeakReadAndWriteBarriers
-    open fun usesWeakReadAndWriteBarriers(): BOOL {
+    open fun usesWeakReadAndWriteBarriers(): Boolean {
         val sel = ObjCRuntime.sel("usesWeakReadAndWriteBarriers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesWeakReadAndWriteBarriers(value: BOOL) {
+    open fun setUsesWeakReadAndWriteBarriers(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesWeakReadAndWriteBarriers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

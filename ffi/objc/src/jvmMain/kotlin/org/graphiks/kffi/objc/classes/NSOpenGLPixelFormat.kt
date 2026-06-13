@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSOpenGLPixelFormat(val ptr: MemorySegment) {
+open class NSOpenGLPixelFormat(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOpenGLPixelFormat") }
         
@@ -40,15 +40,15 @@ open class NSOpenGLPixelFormat(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, attribs)
     }
     
-    open fun getValues_forAttribute_forVirtualScreen(vals: MemorySegment, attrib: NSOpenGLPixelFormatAttribute, screen: GLint): Unit {
+    open fun getValues_forAttribute_forVirtualScreen(vals: MemorySegment, attrib: Int, screen: Int): Unit {
         val sel = ObjCRuntime.sel("getValues:forAttribute:forVirtualScreen:")
         ObjCRuntime.msgSend(null, ptr, sel, vals, attrib, screen)
     }
     
     // @property numberOfVirtualScreens
-    open fun numberOfVirtualScreens(): GLint {
+    open fun numberOfVirtualScreens(): Int {
         val sel = ObjCRuntime.sel("numberOfVirtualScreens")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as GLint
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_INT, ptr, sel) as Int
     }
     
     // @property CGLPixelFormatObj

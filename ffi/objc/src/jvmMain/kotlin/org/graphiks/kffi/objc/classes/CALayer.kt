@@ -9,44 +9,44 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, CAMediaTiming
  */
-open class CALayer(val ptr: MemorySegment) {
+open class CALayer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("CALayer") }
         
-        open fun layer(): MemorySegment {
+        fun layer(): MemorySegment {
             val sel = ObjCRuntime.sel("layer")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun defaultValueForKey(key: MemorySegment): MemorySegment {
+        fun defaultValueForKey(key: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("defaultValueForKey:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, key) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun defaultValueForKey(key: String): MemorySegment = defaultValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
+        fun defaultValueForKey(key: String): MemorySegment = defaultValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
         
-        open fun needsDisplayForKey(key: MemorySegment): BOOL {
+        fun needsDisplayForKey(key: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("needsDisplayForKey:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, key) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, key) as Boolean
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun needsDisplayForKey(key: String): BOOL = needsDisplayForKey(ObjCRuntime.newNSString(Arena.global(), key))
+        fun needsDisplayForKey(key: String): Boolean = needsDisplayForKey(ObjCRuntime.newNSString(Arena.global(), key))
         
-        open fun cornerCurveExpansionFactor(curve: CALayerCornerCurve): CGFloat {
+        fun cornerCurveExpansionFactor(curve: MemorySegment): Double {
             val sel = ObjCRuntime.sel("cornerCurveExpansionFactor:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, _class, sel, curve) as CGFloat
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, _class, sel, curve) as Double
         }
         
         /** @return id<CAAction> */
-        open fun defaultActionForKey(event: MemorySegment): MemorySegment {
+        fun defaultActionForKey(event: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("defaultActionForKey:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, event) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun defaultActionForKey(event: String): MemorySegment = defaultActionForKey(ObjCRuntime.newNSString(Arena.global(), event))
+        fun defaultActionForKey(event: String): MemorySegment = defaultActionForKey(ObjCRuntime.newNSString(Arena.global(), event))
         
     }
     
@@ -70,27 +70,27 @@ open class CALayer(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun shouldArchiveValueForKey(key: MemorySegment): BOOL {
+    open fun shouldArchiveValueForKey(key: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("shouldArchiveValueForKey:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, key) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun shouldArchiveValueForKey(key: String): BOOL = shouldArchiveValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    fun shouldArchiveValueForKey(key: String): Boolean = shouldArchiveValueForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
-    open fun affineTransform(): CGAffineTransform {
+    open fun affineTransform(): MemorySegment {
         val sel = ObjCRuntime.sel("affineTransform")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CGAffineTransform
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
-    open fun setAffineTransform(m: CGAffineTransform): Unit {
+    open fun setAffineTransform(m: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setAffineTransform:")
         ObjCRuntime.msgSend(null, ptr, sel, m)
     }
     
-    open fun contentsAreFlipped(): BOOL {
+    open fun contentsAreFlipped(): Boolean {
         val sel = ObjCRuntime.sel("contentsAreFlipped")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun removeFromSuperlayer(): Unit {
@@ -103,7 +103,7 @@ open class CALayer(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, layer)
     }
     
-    open fun insertSublayer_atIndex(layer: MemorySegment, idx: Any): Unit {
+    open fun insertSublayer_atIndex(layer: MemorySegment, idx: Int): Unit {
         val sel = ObjCRuntime.sel("insertSublayer:atIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, layer, idx)
     }
@@ -143,14 +143,14 @@ open class CALayer(val ptr: MemorySegment) {
         return ObjCRuntime.msgSendStret(MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect"), ptr, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")), l) as MemorySegment
     }
     
-    open fun convertTime_fromLayer(t: CFTimeInterval, l: MemorySegment): CFTimeInterval {
+    open fun convertTime_fromLayer(t: Double, l: MemorySegment): Double {
         val sel = ObjCRuntime.sel("convertTime:fromLayer:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, t, l) as CFTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, t, l) as Double
     }
     
-    open fun convertTime_toLayer(t: CFTimeInterval, l: MemorySegment): CFTimeInterval {
+    open fun convertTime_toLayer(t: Double, l: MemorySegment): Double {
         val sel = ObjCRuntime.sel("convertTime:toLayer:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, t, l) as CFTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel, t, l) as Double
     }
     
     open fun hitTest(p: MemorySegment): MemorySegment {
@@ -158,9 +158,9 @@ open class CALayer(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as MemorySegment
     }
     
-    open fun containsPoint(p: MemorySegment): BOOL {
+    open fun containsPoint(p: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("containsPoint:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, ObjCRuntime.ObjCStructArg(p, MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("CGPoint"))) as Boolean
     }
     
     open fun display(): Unit {
@@ -178,9 +178,9 @@ open class CALayer(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, ObjCRuntime.ObjCStructArg(r, MemoryLayout.structLayout(MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("x"), ValueLayout.JAVA_DOUBLE.withName("y")).withName("origin"), MemoryLayout.structLayout(ValueLayout.JAVA_DOUBLE.withName("width"), ValueLayout.JAVA_DOUBLE.withName("height")).withName("size")).withName("CGRect")))
     }
     
-    open fun needsDisplay(): BOOL {
+    open fun needsDisplay(): Boolean {
         val sel = ObjCRuntime.sel("needsDisplay")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun displayIfNeeded(): Unit {
@@ -208,9 +208,9 @@ open class CALayer(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun needsLayout(): BOOL {
+    open fun needsLayout(): Boolean {
         val sel = ObjCRuntime.sel("needsLayout")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     open fun layoutIfNeeded(): Unit {
@@ -240,7 +240,7 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun actionForKey(event: String): MemorySegment = actionForKey(ObjCRuntime.newNSString(Arena.global(), event))
+    fun actionForKey(event: String): MemorySegment = actionForKey(ObjCRuntime.newNSString(Arena.global(), event))
     
     open fun addAnimation_forKey(anim: MemorySegment, key: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addAnimation:forKey:")
@@ -248,7 +248,7 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun addAnimation_forKey(anim: MemorySegment, key: String): Unit = addAnimation_forKey(anim, ObjCRuntime.newNSString(Arena.global(), key))
+    fun addAnimation_forKey(anim: MemorySegment, key: String): Unit = addAnimation_forKey(anim, ObjCRuntime.newNSString(Arena.global(), key))
     
     open fun removeAllAnimations(): Unit {
         val sel = ObjCRuntime.sel("removeAllAnimations")
@@ -261,7 +261,7 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removeAnimationForKey(key: String): Unit = removeAnimationForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    fun removeAnimationForKey(key: String): Unit = removeAnimationForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     /** @return NSArray<NSString *> * */
     open fun animationKeys(): MemorySegment {
@@ -275,7 +275,7 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun animationForKey(key: String): MemorySegment = animationForKey(ObjCRuntime.newNSString(Arena.global(), key))
+    fun animationForKey(key: String): MemorySegment = animationForKey(ObjCRuntime.newNSString(Arena.global(), key))
     
     // @property bounds
     open fun bounds(): MemorySegment {
@@ -298,11 +298,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property zPosition
-    open fun zPosition(): CGFloat {
+    open fun zPosition(): Double {
         val sel = ObjCRuntime.sel("zPosition")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setZPosition(value: CGFloat) {
+    open fun setZPosition(value: Double) {
         val sel = ObjCRuntime.sel("setZPosition:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -318,11 +318,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property anchorPointZ
-    open fun anchorPointZ(): CGFloat {
+    open fun anchorPointZ(): Double {
         val sel = ObjCRuntime.sel("anchorPointZ")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setAnchorPointZ(value: CGFloat) {
+    open fun setAnchorPointZ(value: Double) {
         val sel = ObjCRuntime.sel("setAnchorPointZ:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -348,31 +348,31 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property hidden
-    open fun isHidden(): BOOL {
+    open fun isHidden(): Boolean {
         val sel = ObjCRuntime.sel("isHidden")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setHidden(value: BOOL) {
+    open fun setHidden(value: Boolean) {
         val sel = ObjCRuntime.sel("setHidden:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property doubleSided
-    open fun isDoubleSided(): BOOL {
+    open fun isDoubleSided(): Boolean {
         val sel = ObjCRuntime.sel("isDoubleSided")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDoubleSided(value: BOOL) {
+    open fun setDoubleSided(value: Boolean) {
         val sel = ObjCRuntime.sel("setDoubleSided:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property geometryFlipped
-    open fun isGeometryFlipped(): BOOL {
+    open fun isGeometryFlipped(): Boolean {
         val sel = ObjCRuntime.sel("isGeometryFlipped")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setGeometryFlipped(value: BOOL) {
+    open fun setGeometryFlipped(value: Boolean) {
         val sel = ObjCRuntime.sel("setGeometryFlipped:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -415,11 +415,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property masksToBounds
-    open fun masksToBounds(): BOOL {
+    open fun masksToBounds(): Boolean {
         val sel = ObjCRuntime.sel("masksToBounds")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setMasksToBounds(value: BOOL) {
+    open fun setMasksToBounds(value: Boolean) {
         val sel = ObjCRuntime.sel("setMasksToBounds:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -445,21 +445,21 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property contentsGravity
-    open fun contentsGravity(): CALayerContentsGravity {
+    open fun contentsGravity(): MemorySegment {
         val sel = ObjCRuntime.sel("contentsGravity")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CALayerContentsGravity
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setContentsGravity(value: CALayerContentsGravity) {
+    open fun setContentsGravity(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentsGravity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentsScale
-    open fun contentsScale(): CGFloat {
+    open fun contentsScale(): Double {
         val sel = ObjCRuntime.sel("contentsScale")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setContentsScale(value: CGFloat) {
+    open fun setContentsScale(value: Double) {
         val sel = ObjCRuntime.sel("setContentsScale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -475,81 +475,81 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property contentsFormat
-    open fun contentsFormat(): CALayerContentsFormat {
+    open fun contentsFormat(): MemorySegment {
         val sel = ObjCRuntime.sel("contentsFormat")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CALayerContentsFormat
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setContentsFormat(value: CALayerContentsFormat) {
+    open fun setContentsFormat(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setContentsFormat:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property wantsExtendedDynamicRangeContent
-    open fun wantsExtendedDynamicRangeContent(): BOOL {
+    open fun wantsExtendedDynamicRangeContent(): Boolean {
         val sel = ObjCRuntime.sel("wantsExtendedDynamicRangeContent")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setWantsExtendedDynamicRangeContent(value: BOOL) {
+    open fun setWantsExtendedDynamicRangeContent(value: Boolean) {
         val sel = ObjCRuntime.sel("setWantsExtendedDynamicRangeContent:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property toneMapMode
-    open fun toneMapMode(): CAToneMapMode {
+    open fun toneMapMode(): MemorySegment {
         val sel = ObjCRuntime.sel("toneMapMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CAToneMapMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setToneMapMode(value: CAToneMapMode) {
+    open fun setToneMapMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setToneMapMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preferredDynamicRange
-    open fun preferredDynamicRange(): CADynamicRange {
+    open fun preferredDynamicRange(): MemorySegment {
         val sel = ObjCRuntime.sel("preferredDynamicRange")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CADynamicRange
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setPreferredDynamicRange(value: CADynamicRange) {
+    open fun setPreferredDynamicRange(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setPreferredDynamicRange:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property contentsHeadroom
-    open fun contentsHeadroom(): CGFloat {
+    open fun contentsHeadroom(): Double {
         val sel = ObjCRuntime.sel("contentsHeadroom")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setContentsHeadroom(value: CGFloat) {
+    open fun setContentsHeadroom(value: Double) {
         val sel = ObjCRuntime.sel("setContentsHeadroom:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property wantsDynamicContentScaling
-    open fun wantsDynamicContentScaling(): BOOL {
+    open fun wantsDynamicContentScaling(): Boolean {
         val sel = ObjCRuntime.sel("wantsDynamicContentScaling")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setWantsDynamicContentScaling(value: BOOL) {
+    open fun setWantsDynamicContentScaling(value: Boolean) {
         val sel = ObjCRuntime.sel("setWantsDynamicContentScaling:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property minificationFilter
-    open fun minificationFilter(): CALayerContentsFilter {
+    open fun minificationFilter(): MemorySegment {
         val sel = ObjCRuntime.sel("minificationFilter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CALayerContentsFilter
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setMinificationFilter(value: CALayerContentsFilter) {
+    open fun setMinificationFilter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMinificationFilter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property magnificationFilter
-    open fun magnificationFilter(): CALayerContentsFilter {
+    open fun magnificationFilter(): MemorySegment {
         val sel = ObjCRuntime.sel("magnificationFilter")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CALayerContentsFilter
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setMagnificationFilter(value: CALayerContentsFilter) {
+    open fun setMagnificationFilter(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMagnificationFilter:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -565,51 +565,51 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property opaque
-    open fun isOpaque(): BOOL {
+    open fun isOpaque(): Boolean {
         val sel = ObjCRuntime.sel("isOpaque")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setOpaque(value: BOOL) {
+    open fun setOpaque(value: Boolean) {
         val sel = ObjCRuntime.sel("setOpaque:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property needsDisplayOnBoundsChange
-    open fun needsDisplayOnBoundsChange(): BOOL {
+    open fun needsDisplayOnBoundsChange(): Boolean {
         val sel = ObjCRuntime.sel("needsDisplayOnBoundsChange")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setNeedsDisplayOnBoundsChange(value: BOOL) {
+    open fun setNeedsDisplayOnBoundsChange(value: Boolean) {
         val sel = ObjCRuntime.sel("setNeedsDisplayOnBoundsChange:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property drawsAsynchronously
-    open fun drawsAsynchronously(): BOOL {
+    open fun drawsAsynchronously(): Boolean {
         val sel = ObjCRuntime.sel("drawsAsynchronously")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setDrawsAsynchronously(value: BOOL) {
+    open fun setDrawsAsynchronously(value: Boolean) {
         val sel = ObjCRuntime.sel("setDrawsAsynchronously:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property edgeAntialiasingMask
-    open fun edgeAntialiasingMask(): CAEdgeAntialiasingMask {
+    open fun edgeAntialiasingMask(): MemorySegment {
         val sel = ObjCRuntime.sel("edgeAntialiasingMask")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CAEdgeAntialiasingMask
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setEdgeAntialiasingMask(value: CAEdgeAntialiasingMask) {
+    open fun setEdgeAntialiasingMask(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setEdgeAntialiasingMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property allowsEdgeAntialiasing
-    open fun allowsEdgeAntialiasing(): BOOL {
+    open fun allowsEdgeAntialiasing(): Boolean {
         val sel = ObjCRuntime.sel("allowsEdgeAntialiasing")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsEdgeAntialiasing(value: BOOL) {
+    open fun setAllowsEdgeAntialiasing(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsEdgeAntialiasing:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -625,41 +625,41 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property cornerRadius
-    open fun cornerRadius(): CGFloat {
+    open fun cornerRadius(): Double {
         val sel = ObjCRuntime.sel("cornerRadius")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setCornerRadius(value: CGFloat) {
+    open fun setCornerRadius(value: Double) {
         val sel = ObjCRuntime.sel("setCornerRadius:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maskedCorners
-    open fun maskedCorners(): CACornerMask {
+    open fun maskedCorners(): MemorySegment {
         val sel = ObjCRuntime.sel("maskedCorners")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CACornerMask
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setMaskedCorners(value: CACornerMask) {
+    open fun setMaskedCorners(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMaskedCorners:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property cornerCurve
-    open fun cornerCurve(): CALayerCornerCurve {
+    open fun cornerCurve(): MemorySegment {
         val sel = ObjCRuntime.sel("cornerCurve")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CALayerCornerCurve
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setCornerCurve(value: CALayerCornerCurve) {
+    open fun setCornerCurve(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setCornerCurve:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property borderWidth
-    open fun borderWidth(): CGFloat {
+    open fun borderWidth(): Double {
         val sel = ObjCRuntime.sel("borderWidth")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setBorderWidth(value: CGFloat) {
+    open fun setBorderWidth(value: Double) {
         val sel = ObjCRuntime.sel("setBorderWidth:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -685,11 +685,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property allowsGroupOpacity
-    open fun allowsGroupOpacity(): BOOL {
+    open fun allowsGroupOpacity(): Boolean {
         val sel = ObjCRuntime.sel("allowsGroupOpacity")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsGroupOpacity(value: BOOL) {
+    open fun setAllowsGroupOpacity(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsGroupOpacity:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -725,21 +725,21 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property shouldRasterize
-    open fun shouldRasterize(): BOOL {
+    open fun shouldRasterize(): Boolean {
         val sel = ObjCRuntime.sel("shouldRasterize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setShouldRasterize(value: BOOL) {
+    open fun setShouldRasterize(value: Boolean) {
         val sel = ObjCRuntime.sel("setShouldRasterize:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rasterizationScale
-    open fun rasterizationScale(): CGFloat {
+    open fun rasterizationScale(): Double {
         val sel = ObjCRuntime.sel("rasterizationScale")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setRasterizationScale(value: CGFloat) {
+    open fun setRasterizationScale(value: Double) {
         val sel = ObjCRuntime.sel("setRasterizationScale:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -775,11 +775,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property shadowRadius
-    open fun shadowRadius(): CGFloat {
+    open fun shadowRadius(): Double {
         val sel = ObjCRuntime.sel("shadowRadius")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as CGFloat
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setShadowRadius(value: CGFloat) {
+    open fun setShadowRadius(value: Double) {
         val sel = ObjCRuntime.sel("setShadowRadius:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -795,11 +795,11 @@ open class CALayer(val ptr: MemorySegment) {
     }
     
     // @property autoresizingMask
-    open fun autoresizingMask(): CAAutoresizingMask {
+    open fun autoresizingMask(): MemorySegment {
         val sel = ObjCRuntime.sel("autoresizingMask")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as CAAutoresizingMask
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setAutoresizingMask(value: CAAutoresizingMask) {
+    open fun setAutoresizingMask(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAutoresizingMask:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

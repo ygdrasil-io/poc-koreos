@@ -9,16 +9,16 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSProgressReporting
  */
-open class NSOperationQueue(val ptr: MemorySegment) {
+open class NSOperationQueue(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSOperationQueue") }
         
-        open fun currentQueue(): MemorySegment {
+        fun currentQueue(): MemorySegment {
             val sel = ObjCRuntime.sel("currentQueue")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
         
-        open fun mainQueue(): MemorySegment {
+        fun mainQueue(): MemorySegment {
             val sel = ObjCRuntime.sel("mainQueue")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -30,7 +30,7 @@ open class NSOperationQueue(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, op)
     }
     
-    open fun addOperations_waitUntilFinished(ops: MemorySegment, wait: BOOL): Unit {
+    open fun addOperations_waitUntilFinished(ops: MemorySegment, wait: Boolean): Unit {
         val sel = ObjCRuntime.sel("addOperations:waitUntilFinished:")
         ObjCRuntime.msgSend(null, ptr, sel, ops, wait)
     }
@@ -62,21 +62,21 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     }
     
     // @property maxConcurrentOperationCount
-    open fun maxConcurrentOperationCount(): NSInteger {
+    open fun maxConcurrentOperationCount(): Long {
         val sel = ObjCRuntime.sel("maxConcurrentOperationCount")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
-    open fun setMaxConcurrentOperationCount(value: NSInteger) {
+    open fun setMaxConcurrentOperationCount(value: Long) {
         val sel = ObjCRuntime.sel("setMaxConcurrentOperationCount:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property suspended
-    open fun isSuspended(): BOOL {
+    open fun isSuspended(): Boolean {
         val sel = ObjCRuntime.sel("isSuspended")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setSuspended(value: BOOL) {
+    open fun setSuspended(value: Boolean) {
         val sel = ObjCRuntime.sel("setSuspended:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -98,11 +98,11 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     open fun setName(value: String) = setName(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property qualityOfService
-    open fun qualityOfService(): NSQualityOfService {
+    open fun qualityOfService(): MemorySegment {
         val sel = ObjCRuntime.sel("qualityOfService")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSQualityOfService
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setQualityOfService(value: NSQualityOfService) {
+    open fun setQualityOfService(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setQualityOfService:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -118,6 +118,17 @@ open class NSOperationQueue(val ptr: MemorySegment) {
     }
     
     // @property currentQueue
+    open fun currentQueue(): MemorySegment {
+        val sel = ObjCRuntime.sel("currentQueue")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property mainQueue
+    open fun mainQueue(): MemorySegment {
+        val sel = ObjCRuntime.sel("mainQueue")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 
 // ── Category: NSDeprecated on NSOperationQueue ─────────────────────────────────────────
@@ -125,13 +136,11 @@ open class NSOperationQueue(val ptr: MemorySegment) {
 /** @return NSArray<__kindof NSOperation *> * */
 fun NSOperationQueue.operations(): MemorySegment {
     val sel = ObjCRuntime.sel("operations")
-    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    return ObjCRuntime.msgSend(ValueLayout.ADDRESS, this.ptr, sel) as MemorySegment
 }
 
-fun NSOperationQueue.operationCount(): NSUInteger {
+fun NSOperationQueue.operationCount(): Long {
     val sel = ObjCRuntime.sel("operationCount")
-    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+    return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, this.ptr, sel) as Long
 }
 
-// @property operations
-/** @return NSArray<__kindof NSOperation *> * */

@@ -8,12 +8,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityStepper
  * Inherits protocols: NSAccessibilityElement
  */
-interface NSAccessibilityStepper : NSAccessibilityElement {
+interface NSAccessibilityStepper {
     fun accessibilityLabel(): MemorySegment
     
-    fun accessibilityPerformIncrement(): BOOL
+    fun accessibilityPerformIncrement(): Boolean
     
-    fun accessibilityPerformDecrement(): BOOL
+    fun accessibilityPerformDecrement(): Boolean
     
     // @optional
     fun accessibilityValue(): MemorySegment =

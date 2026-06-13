@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying
  */
-open class NSAttributedStringMarkdownParsingOptions(val ptr: MemorySegment) {
+open class NSAttributedStringMarkdownParsingOptions(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAttributedStringMarkdownParsingOptions") }
         
@@ -21,31 +21,31 @@ open class NSAttributedStringMarkdownParsingOptions(val ptr: MemorySegment) {
     }
     
     // @property allowsExtendedAttributes
-    open fun allowsExtendedAttributes(): BOOL {
+    open fun allowsExtendedAttributes(): Boolean {
         val sel = ObjCRuntime.sel("allowsExtendedAttributes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAllowsExtendedAttributes(value: BOOL) {
+    open fun setAllowsExtendedAttributes(value: Boolean) {
         val sel = ObjCRuntime.sel("setAllowsExtendedAttributes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interpretedSyntax
-    open fun interpretedSyntax(): NSAttributedStringMarkdownInterpretedSyntax {
+    open fun interpretedSyntax(): MemorySegment {
         val sel = ObjCRuntime.sel("interpretedSyntax")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAttributedStringMarkdownInterpretedSyntax
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setInterpretedSyntax(value: NSAttributedStringMarkdownInterpretedSyntax) {
+    open fun setInterpretedSyntax(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setInterpretedSyntax:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property failurePolicy
-    open fun failurePolicy(): NSAttributedStringMarkdownParsingFailurePolicy {
+    open fun failurePolicy(): MemorySegment {
         val sel = ObjCRuntime.sel("failurePolicy")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAttributedStringMarkdownParsingFailurePolicy
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setFailurePolicy(value: NSAttributedStringMarkdownParsingFailurePolicy) {
+    open fun setFailurePolicy(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFailurePolicy:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -67,11 +67,11 @@ open class NSAttributedStringMarkdownParsingOptions(val ptr: MemorySegment) {
     open fun setLanguageCode(value: String) = setLanguageCode(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property appliesSourcePositionAttributes
-    open fun appliesSourcePositionAttributes(): BOOL {
+    open fun appliesSourcePositionAttributes(): Boolean {
         val sel = ObjCRuntime.sel("appliesSourcePositionAttributes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setAppliesSourcePositionAttributes(value: BOOL) {
+    open fun setAppliesSourcePositionAttributes(value: Boolean) {
         val sel = ObjCRuntime.sel("setAppliesSourcePositionAttributes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

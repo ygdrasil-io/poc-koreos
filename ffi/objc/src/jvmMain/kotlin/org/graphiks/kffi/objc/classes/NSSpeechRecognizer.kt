@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSSpeechRecognizer
  * Superclass: NSObject
  */
-open class NSSpeechRecognizer(val ptr: MemorySegment) {
+open class NSSpeechRecognizer(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSSpeechRecognizer") }
         
@@ -68,21 +68,21 @@ open class NSSpeechRecognizer(val ptr: MemorySegment) {
     open fun setDisplayedCommandsTitle(value: String) = setDisplayedCommandsTitle(ObjCRuntime.newNSString(Arena.global(), value))
     
     // @property listensInForegroundOnly
-    open fun listensInForegroundOnly(): BOOL {
+    open fun listensInForegroundOnly(): Boolean {
         val sel = ObjCRuntime.sel("listensInForegroundOnly")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setListensInForegroundOnly(value: BOOL) {
+    open fun setListensInForegroundOnly(value: Boolean) {
         val sel = ObjCRuntime.sel("setListensInForegroundOnly:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property blocksOtherRecognizers
-    open fun blocksOtherRecognizers(): BOOL {
+    open fun blocksOtherRecognizers(): Boolean {
         val sel = ObjCRuntime.sel("blocksOtherRecognizers")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setBlocksOtherRecognizers(value: BOOL) {
+    open fun setBlocksOtherRecognizers(value: Boolean) {
         val sel = ObjCRuntime.sel("setBlocksOtherRecognizers:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

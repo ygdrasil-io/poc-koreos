@@ -9,11 +9,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding
  */
-open class NSGridCell(val ptr: MemorySegment) {
+open class NSGridCell(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSGridCell") }
         
-        open fun emptyContentView(): MemorySegment {
+        fun emptyContentView(): MemorySegment {
             val sel = ObjCRuntime.sel("emptyContentView")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -31,6 +31,12 @@ open class NSGridCell(val ptr: MemorySegment) {
     }
     
     // @property emptyContentView
+    open fun emptyContentView(): MemorySegment {
+        val sel = ObjCRuntime.sel("emptyContentView")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property row
     open fun row(): MemorySegment {
         val sel = ObjCRuntime.sel("row")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
@@ -43,31 +49,31 @@ open class NSGridCell(val ptr: MemorySegment) {
     }
     
     // @property xPlacement
-    open fun xPlacement(): NSGridCellPlacement {
+    open fun xPlacement(): MemorySegment {
         val sel = ObjCRuntime.sel("xPlacement")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridCellPlacement
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setXPlacement(value: NSGridCellPlacement) {
+    open fun setXPlacement(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setXPlacement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property yPlacement
-    open fun yPlacement(): NSGridCellPlacement {
+    open fun yPlacement(): MemorySegment {
         val sel = ObjCRuntime.sel("yPlacement")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridCellPlacement
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setYPlacement(value: NSGridCellPlacement) {
+    open fun setYPlacement(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setYPlacement:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property rowAlignment
-    open fun rowAlignment(): NSGridRowAlignment {
+    open fun rowAlignment(): MemorySegment {
         val sel = ObjCRuntime.sel("rowAlignment")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSGridRowAlignment
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setRowAlignment(value: NSGridRowAlignment) {
+    open fun setRowAlignment(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setRowAlignment:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

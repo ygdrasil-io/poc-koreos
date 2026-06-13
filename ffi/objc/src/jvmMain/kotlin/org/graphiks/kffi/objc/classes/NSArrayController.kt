@@ -8,255 +8,255 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSArrayController
  * Superclass: NSObjectController
  */
-open class NSArrayController(ptr: MemorySegment) : NSObjectController(ptr) {
+open class NSArrayController(override val ptr: MemorySegment) : NSObjectController(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSArrayController") }
         
     }
     
-    fun rearrangeObjects(): Unit {
+    open fun rearrangeObjects(): Unit {
         val sel = ObjCRuntime.sel("rearrangeObjects")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun didChangeArrangementCriteria(): Unit {
+    open fun didChangeArrangementCriteria(): Unit {
         val sel = ObjCRuntime.sel("didChangeArrangementCriteria")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    fun arrangeObjects(objects: MemorySegment): MemorySegment {
+    open fun arrangeObjects(objects: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("arrangeObjects:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, objects) as MemorySegment
     }
     
-    fun setSelectionIndexes(indexes: MemorySegment): BOOL {
+    open fun setSelectionIndexes(indexes: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setSelectionIndexes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as Boolean
     }
     
-    fun setSelectionIndex(index: NSUInteger): BOOL {
+    open fun setSelectionIndex(index: Long): Boolean {
         val sel = ObjCRuntime.sel("setSelectionIndex:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, index) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, index) as Boolean
     }
     
-    fun addSelectionIndexes(indexes: MemorySegment): BOOL {
+    open fun addSelectionIndexes(indexes: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("addSelectionIndexes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as Boolean
     }
     
-    fun removeSelectionIndexes(indexes: MemorySegment): BOOL {
+    open fun removeSelectionIndexes(indexes: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("removeSelectionIndexes:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, indexes) as Boolean
     }
     
-    fun setSelectedObjects(objects: MemorySegment): BOOL {
+    open fun setSelectedObjects(objects: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("setSelectedObjects:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as Boolean
     }
     
-    fun addSelectedObjects(objects: MemorySegment): BOOL {
+    open fun addSelectedObjects(objects: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("addSelectedObjects:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as Boolean
     }
     
-    fun removeSelectedObjects(objects: MemorySegment): BOOL {
+    open fun removeSelectedObjects(objects: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("removeSelectedObjects:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, objects) as Boolean
     }
     
-    override fun `add`(sender: MemorySegment): Unit {
+    override fun add(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("add:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    override fun `remove`(sender: MemorySegment): Unit {
+    override fun remove(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("remove:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun insert(sender: MemorySegment): Unit {
+    open fun insert(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("insert:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectNext(sender: MemorySegment): Unit {
+    open fun selectNext(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectNext:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    fun selectPrevious(sender: MemorySegment): Unit {
+    open fun selectPrevious(sender: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("selectPrevious:")
         ObjCRuntime.msgSend(null, ptr, sel, sender)
     }
     
-    override fun `addObject`(`object`: MemorySegment): Unit {
+    override fun addObject(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun addObjects(objects: MemorySegment): Unit {
+    open fun addObjects(objects: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addObjects:")
         ObjCRuntime.msgSend(null, ptr, sel, objects)
     }
     
-    fun insertObject_atArrangedObjectIndex(`object`: MemorySegment, index: NSUInteger): Unit {
+    open fun insertObject_atArrangedObjectIndex(`object`: MemorySegment, index: Long): Unit {
         val sel = ObjCRuntime.sel("insertObject:atArrangedObjectIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`, index)
     }
     
-    fun insertObjects_atArrangedObjectIndexes(objects: MemorySegment, indexes: MemorySegment): Unit {
+    open fun insertObjects_atArrangedObjectIndexes(objects: MemorySegment, indexes: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("insertObjects:atArrangedObjectIndexes:")
         ObjCRuntime.msgSend(null, ptr, sel, objects, indexes)
     }
     
-    fun removeObjectAtArrangedObjectIndex(index: NSUInteger): Unit {
+    open fun removeObjectAtArrangedObjectIndex(index: Long): Unit {
         val sel = ObjCRuntime.sel("removeObjectAtArrangedObjectIndex:")
         ObjCRuntime.msgSend(null, ptr, sel, index)
     }
     
-    fun removeObjectsAtArrangedObjectIndexes(indexes: MemorySegment): Unit {
+    open fun removeObjectsAtArrangedObjectIndexes(indexes: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObjectsAtArrangedObjectIndexes:")
         ObjCRuntime.msgSend(null, ptr, sel, indexes)
     }
     
-    override fun `removeObject`(`object`: MemorySegment): Unit {
+    override fun removeObject(`object`: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObject:")
         ObjCRuntime.msgSend(null, ptr, sel, `object`)
     }
     
-    fun removeObjects(objects: MemorySegment): Unit {
+    open fun removeObjects(objects: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObjects:")
         ObjCRuntime.msgSend(null, ptr, sel, objects)
     }
     
     // @property automaticallyRearrangesObjects
-    fun automaticallyRearrangesObjects(): BOOL {
+    open fun automaticallyRearrangesObjects(): Boolean {
         val sel = ObjCRuntime.sel("automaticallyRearrangesObjects")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAutomaticallyRearrangesObjects(value: BOOL) {
+    open fun setAutomaticallyRearrangesObjects(value: Boolean) {
         val sel = ObjCRuntime.sel("setAutomaticallyRearrangesObjects:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property automaticRearrangementKeyPaths
     /** @return NSArray<NSString *> * */
-    fun automaticRearrangementKeyPaths(): MemorySegment {
+    open fun automaticRearrangementKeyPaths(): MemorySegment {
         val sel = ObjCRuntime.sel("automaticRearrangementKeyPaths")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property sortDescriptors
     /** @return NSArray<NSSortDescriptor *> * */
-    fun sortDescriptors(): MemorySegment {
+    open fun sortDescriptors(): MemorySegment {
         val sel = ObjCRuntime.sel("sortDescriptors")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setSortDescriptors(value: MemorySegment) {
+    open fun setSortDescriptors(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setSortDescriptors:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property filterPredicate
-    fun filterPredicate(): MemorySegment {
+    open fun filterPredicate(): MemorySegment {
         val sel = ObjCRuntime.sel("filterPredicate")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setFilterPredicate(value: MemorySegment) {
+    open fun setFilterPredicate(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setFilterPredicate:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property clearsFilterPredicateOnInsertion
-    fun clearsFilterPredicateOnInsertion(): BOOL {
+    open fun clearsFilterPredicateOnInsertion(): Boolean {
         val sel = ObjCRuntime.sel("clearsFilterPredicateOnInsertion")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setClearsFilterPredicateOnInsertion(value: BOOL) {
+    open fun setClearsFilterPredicateOnInsertion(value: Boolean) {
         val sel = ObjCRuntime.sel("setClearsFilterPredicateOnInsertion:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property arrangedObjects
-    fun arrangedObjects(): MemorySegment {
+    open fun arrangedObjects(): MemorySegment {
         val sel = ObjCRuntime.sel("arrangedObjects")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property avoidsEmptySelection
-    fun avoidsEmptySelection(): BOOL {
+    open fun avoidsEmptySelection(): Boolean {
         val sel = ObjCRuntime.sel("avoidsEmptySelection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAvoidsEmptySelection(value: BOOL) {
+    open fun setAvoidsEmptySelection(value: Boolean) {
         val sel = ObjCRuntime.sel("setAvoidsEmptySelection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property preservesSelection
-    fun preservesSelection(): BOOL {
+    open fun preservesSelection(): Boolean {
         val sel = ObjCRuntime.sel("preservesSelection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setPreservesSelection(value: BOOL) {
+    open fun setPreservesSelection(value: Boolean) {
         val sel = ObjCRuntime.sel("setPreservesSelection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectsInsertedObjects
-    fun selectsInsertedObjects(): BOOL {
+    open fun selectsInsertedObjects(): Boolean {
         val sel = ObjCRuntime.sel("selectsInsertedObjects")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setSelectsInsertedObjects(value: BOOL) {
+    open fun setSelectsInsertedObjects(value: Boolean) {
         val sel = ObjCRuntime.sel("setSelectsInsertedObjects:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property alwaysUsesMultipleValuesMarker
-    fun alwaysUsesMultipleValuesMarker(): BOOL {
+    open fun alwaysUsesMultipleValuesMarker(): Boolean {
         val sel = ObjCRuntime.sel("alwaysUsesMultipleValuesMarker")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setAlwaysUsesMultipleValuesMarker(value: BOOL) {
+    open fun setAlwaysUsesMultipleValuesMarker(value: Boolean) {
         val sel = ObjCRuntime.sel("setAlwaysUsesMultipleValuesMarker:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property selectionIndexes
-    fun selectionIndexes(): MemorySegment {
+    open fun selectionIndexes(): MemorySegment {
         val sel = ObjCRuntime.sel("selectionIndexes")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property selectionIndex
-    fun selectionIndex(): NSUInteger {
+    open fun selectionIndex(): Long {
         val sel = ObjCRuntime.sel("selectionIndex")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property selectedObjects
-    override fun `selectedObjects`(): MemorySegment {
+    override fun selectedObjects(): MemorySegment {
         val sel = ObjCRuntime.sel("selectedObjects")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property canInsert
-    fun canInsert(): BOOL {
+    open fun canInsert(): Boolean {
         val sel = ObjCRuntime.sel("canInsert")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property canSelectNext
-    fun canSelectNext(): BOOL {
+    open fun canSelectNext(): Boolean {
         val sel = ObjCRuntime.sel("canSelectNext")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property canSelectPrevious
-    fun canSelectPrevious(): BOOL {
+    open fun canSelectPrevious(): Boolean {
         val sel = ObjCRuntime.sel("canSelectPrevious")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
 }

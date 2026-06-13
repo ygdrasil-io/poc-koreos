@@ -8,74 +8,74 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSVisualEffectView
  * Superclass: NSView
  */
-open class NSVisualEffectView(ptr: MemorySegment) : NSView(ptr) {
+open class NSVisualEffectView(override val ptr: MemorySegment) : NSView(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSVisualEffectView") }
         
     }
     
-    override fun `viewDidMoveToWindow`(): Unit {
+    override fun viewDidMoveToWindow(): Unit {
         val sel = ObjCRuntime.sel("viewDidMoveToWindow")
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    override fun `viewWillMoveToWindow`(newWindow: MemorySegment): Unit {
+    override fun viewWillMoveToWindow(newWindow: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("viewWillMoveToWindow:")
         ObjCRuntime.msgSend(null, ptr, sel, newWindow)
     }
     
     // @property material
-    fun material(): NSVisualEffectMaterial {
+    open fun material(): MemorySegment {
         val sel = ObjCRuntime.sel("material")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSVisualEffectMaterial
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMaterial(value: NSVisualEffectMaterial) {
+    open fun setMaterial(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMaterial:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property interiorBackgroundStyle
-    fun interiorBackgroundStyle(): NSBackgroundStyle {
+    open fun interiorBackgroundStyle(): MemorySegment {
         val sel = ObjCRuntime.sel("interiorBackgroundStyle")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSBackgroundStyle
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property blendingMode
-    fun blendingMode(): NSVisualEffectBlendingMode {
+    open fun blendingMode(): MemorySegment {
         val sel = ObjCRuntime.sel("blendingMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSVisualEffectBlendingMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setBlendingMode(value: NSVisualEffectBlendingMode) {
+    open fun setBlendingMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setBlendingMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property state
-    fun state(): NSVisualEffectState {
+    open fun state(): MemorySegment {
         val sel = ObjCRuntime.sel("state")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSVisualEffectState
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setState(value: NSVisualEffectState) {
+    open fun setState(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setState:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property maskImage
-    fun maskImage(): MemorySegment {
+    open fun maskImage(): MemorySegment {
         val sel = ObjCRuntime.sel("maskImage")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    fun setMaskImage(value: MemorySegment) {
+    open fun setMaskImage(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setMaskImage:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property emphasized
-    fun isEmphasized(): BOOL {
+    open fun isEmphasized(): Boolean {
         val sel = ObjCRuntime.sel("isEmphasized")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setEmphasized(value: BOOL) {
+    open fun setEmphasized(value: Boolean) {
         val sel = ObjCRuntime.sel("setEmphasized:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

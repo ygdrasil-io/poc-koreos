@@ -8,11 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSUbiquitousKeyValueStore
  * Superclass: NSObject
  */
-open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
+open class NSUbiquitousKeyValueStore(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUbiquitousKeyValueStore") }
         
-        open fun defaultStore(): MemorySegment {
+        fun defaultStore(): MemorySegment {
             val sel = ObjCRuntime.sel("defaultStore")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -25,7 +25,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun objectForKey(aKey: String): MemorySegment = objectForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun objectForKey(aKey: String): MemorySegment = objectForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setObject_forKey(anObject: MemorySegment, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setObject:forKey:")
@@ -33,7 +33,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setObject_forKey(anObject: MemorySegment, aKey: String): Unit = setObject_forKey(anObject, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setObject_forKey(anObject: MemorySegment, aKey: String): Unit = setObject_forKey(anObject, ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun removeObjectForKey(aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeObjectForKey:")
@@ -41,7 +41,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun removeObjectForKey(aKey: String): Unit = removeObjectForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun removeObjectForKey(aKey: String): Unit = removeObjectForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun stringForKey(aKey: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("stringForKey:")
@@ -49,13 +49,13 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — returns Kotlin [String] by converting the NSString via UTF8String. */
-    open fun stringForKeyAsString(aKey: MemorySegment): String = ObjCRuntime.toJavaString(stringForKey(aKey))
+    fun stringForKeyAsString(aKey: MemorySegment): String = ObjCRuntime.toJavaString(stringForKey(aKey))
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun stringForKey(aKey: String): MemorySegment = stringForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun stringForKey(aKey: String): MemorySegment = stringForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     /** Convenience overload — [String] parameters and [String] return type. */
-    open fun stringForKeyAsString(aKey: String): String = ObjCRuntime.toJavaString(stringForKey(ObjCRuntime.newNSString(Arena.global(), aKey)))
+    fun stringForKeyAsString(aKey: String): String = ObjCRuntime.toJavaString(stringForKey(ObjCRuntime.newNSString(Arena.global(), aKey)))
     
     open fun arrayForKey(aKey: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("arrayForKey:")
@@ -63,7 +63,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun arrayForKey(aKey: String): MemorySegment = arrayForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun arrayForKey(aKey: String): MemorySegment = arrayForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     /** @return NSDictionary<NSString *,id> * */
     open fun dictionaryForKey(aKey: MemorySegment): MemorySegment {
@@ -72,7 +72,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun dictionaryForKey(aKey: String): MemorySegment = dictionaryForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun dictionaryForKey(aKey: String): MemorySegment = dictionaryForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun dataForKey(aKey: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("dataForKey:")
@@ -80,7 +80,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun dataForKey(aKey: String): MemorySegment = dataForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun dataForKey(aKey: String): MemorySegment = dataForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun longLongForKey(aKey: MemorySegment): Long {
         val sel = ObjCRuntime.sel("longLongForKey:")
@@ -88,7 +88,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun longLongForKey(aKey: String): Long = longLongForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun longLongForKey(aKey: String): Long = longLongForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun doubleForKey(aKey: MemorySegment): Double {
         val sel = ObjCRuntime.sel("doubleForKey:")
@@ -96,15 +96,15 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun doubleForKey(aKey: String): Double = doubleForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun doubleForKey(aKey: String): Double = doubleForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
-    open fun boolForKey(aKey: MemorySegment): BOOL {
+    open fun boolForKey(aKey: MemorySegment): Boolean {
         val sel = ObjCRuntime.sel("boolForKey:")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, aKey) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel, aKey) as Boolean
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun boolForKey(aKey: String): BOOL = boolForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun boolForKey(aKey: String): Boolean = boolForKey(ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setString_forKey(aString: MemorySegment, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setString:forKey:")
@@ -112,7 +112,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setString_forKey(aString: String, aKey: String): Unit = setString_forKey(ObjCRuntime.newNSString(Arena.global(), aString), ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setString_forKey(aString: String, aKey: String): Unit = setString_forKey(ObjCRuntime.newNSString(Arena.global(), aString), ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setData_forKey(aData: MemorySegment, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setData:forKey:")
@@ -120,7 +120,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setData_forKey(aData: MemorySegment, aKey: String): Unit = setData_forKey(aData, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setData_forKey(aData: MemorySegment, aKey: String): Unit = setData_forKey(aData, ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setArray_forKey(anArray: MemorySegment, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setArray:forKey:")
@@ -128,7 +128,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setArray_forKey(anArray: MemorySegment, aKey: String): Unit = setArray_forKey(anArray, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setArray_forKey(anArray: MemorySegment, aKey: String): Unit = setArray_forKey(anArray, ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setDictionary_forKey(aDictionary: MemorySegment, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDictionary:forKey:")
@@ -136,7 +136,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setDictionary_forKey(aDictionary: MemorySegment, aKey: String): Unit = setDictionary_forKey(aDictionary, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setDictionary_forKey(aDictionary: MemorySegment, aKey: String): Unit = setDictionary_forKey(aDictionary, ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setLongLong_forKey(value: Long, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setLongLong:forKey:")
@@ -144,7 +144,7 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setLongLong_forKey(value: Long, aKey: String): Unit = setLongLong_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setLongLong_forKey(value: Long, aKey: String): Unit = setLongLong_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
     
     open fun setDouble_forKey(value: Double, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setDouble:forKey:")
@@ -152,22 +152,28 @@ open class NSUbiquitousKeyValueStore(val ptr: MemorySegment) {
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setDouble_forKey(value: Double, aKey: String): Unit = setDouble_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setDouble_forKey(value: Double, aKey: String): Unit = setDouble_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
     
-    open fun setBool_forKey(value: BOOL, aKey: MemorySegment): Unit {
+    open fun setBool_forKey(value: Boolean, aKey: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("setBool:forKey:")
         ObjCRuntime.msgSend(null, ptr, sel, value, aKey)
     }
     
     /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-    open fun setBool_forKey(value: BOOL, aKey: String): Unit = setBool_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
+    fun setBool_forKey(value: Boolean, aKey: String): Unit = setBool_forKey(value, ObjCRuntime.newNSString(Arena.global(), aKey))
     
-    open fun synchronize(): BOOL {
+    open fun synchronize(): Boolean {
         val sel = ObjCRuntime.sel("synchronize")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property defaultStore
+    open fun defaultStore(): MemorySegment {
+        val sel = ObjCRuntime.sel("defaultStore")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property dictionaryRepresentation
     /** @return NSDictionary<NSString *,id> * */
     open fun dictionaryRepresentation(): MemorySegment {
         val sel = ObjCRuntime.sel("dictionaryRepresentation")

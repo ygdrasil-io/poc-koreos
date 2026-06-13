@@ -8,10 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextViewportLayoutControllerDelegate
  * Inherits protocols: NSObject
  */
-interface NSTextViewportLayoutControllerDelegate : NSObject {
+interface NSTextViewportLayoutControllerDelegate {
     fun viewportBoundsForTextViewportLayoutController(textViewportLayoutController: MemorySegment): MemorySegment
     
-    fun textViewportLayoutController_configureRenderingSurfaceForTextLayoutFragment(textViewportLayoutController: MemorySegment, textLayoutFragment: MemorySegment)
+    fun textViewportLayoutController_configureRenderingSurfaceForTextLayoutFragment(textViewportLayoutController: MemorySegment, textLayoutFragment: MemorySegment): Unit
     
     // @optional
     fun textViewportLayoutControllerWillLayout(textViewportLayoutController: MemorySegment): Unit =

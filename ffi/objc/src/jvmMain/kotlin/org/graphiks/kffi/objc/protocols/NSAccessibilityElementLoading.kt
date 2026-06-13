@@ -8,12 +8,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSAccessibilityElementLoading
  * Inherits protocols: NSObject
  */
-interface NSAccessibilityElementLoading : NSObject {
+interface NSAccessibilityElementLoading {
     /** @return id<NSAccessibilityElement> */
     fun accessibilityElementWithToken(token: MemorySegment): MemorySegment
     
     // @optional
-    fun accessibilityRangeInTargetElementWithToken(token: MemorySegment): NSRange =
+    fun accessibilityRangeInTargetElementWithToken(token: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'accessibilityRangeInTargetElementWithToken:' not implemented")
     
 }

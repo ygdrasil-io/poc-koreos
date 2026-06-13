@@ -9,12 +9,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSSecureCoding, NSTextSelectionDataSource
  */
-open class NSTextLayoutManager(val ptr: MemorySegment) {
+open class NSTextLayoutManager(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSTextLayoutManager") }
         
         /** @return NSDictionary<NSAttributedStringKey,id> * */
-        open fun linkRenderingAttributes(): MemorySegment {
+        fun linkRenderingAttributes(): MemorySegment {
             val sel = ObjCRuntime.sel("linkRenderingAttributes")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel) as MemorySegment
         }
@@ -62,12 +62,12 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     }
     
     /** @return id<NSTextLocation> */
-    open fun enumerateTextLayoutFragmentsFromLocation_options_usingBlock(location: MemorySegment, options: NSTextLayoutFragmentEnumerationOptions, block: MemorySegment): MemorySegment {
+    open fun enumerateTextLayoutFragmentsFromLocation_options_usingBlock(location: MemorySegment, options: MemorySegment, block: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("enumerateTextLayoutFragmentsFromLocation:options:usingBlock:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, location, options, block) as MemorySegment
     }
     
-    open fun enumerateRenderingAttributesFromLocation_reverse_usingBlock(location: MemorySegment, reverse: BOOL, block: MemorySegment): Unit {
+    open fun enumerateRenderingAttributesFromLocation_reverse_usingBlock(location: MemorySegment, reverse: Boolean, block: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("enumerateRenderingAttributesFromLocation:reverse:usingBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, location, reverse, block)
     }
@@ -77,12 +77,12 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel, renderingAttributes, textRange)
     }
     
-    open fun addRenderingAttribute_value_forTextRange(renderingAttribute: NSAttributedStringKey, value: MemorySegment, textRange: MemorySegment): Unit {
+    open fun addRenderingAttribute_value_forTextRange(renderingAttribute: MemorySegment, value: MemorySegment, textRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("addRenderingAttribute:value:forTextRange:")
         ObjCRuntime.msgSend(null, ptr, sel, renderingAttribute, value, textRange)
     }
     
-    open fun removeRenderingAttribute_forTextRange(renderingAttribute: NSAttributedStringKey, textRange: MemorySegment): Unit {
+    open fun removeRenderingAttribute_forTextRange(renderingAttribute: MemorySegment, textRange: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("removeRenderingAttribute:forTextRange:")
         ObjCRuntime.msgSend(null, ptr, sel, renderingAttribute, textRange)
     }
@@ -98,7 +98,7 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, link, location) as MemorySegment
     }
     
-    open fun enumerateTextSegmentsInRange_type_options_usingBlock(textRange: MemorySegment, type: NSTextLayoutManagerSegmentType, options: NSTextLayoutManagerSegmentOptions, block: MemorySegment): Unit {
+    open fun enumerateTextSegmentsInRange_type_options_usingBlock(textRange: MemorySegment, type: MemorySegment, options: MemorySegment, block: MemorySegment): Unit {
         val sel = ObjCRuntime.sel("enumerateTextSegmentsInRange:type:options:usingBlock:")
         ObjCRuntime.msgSend(null, ptr, sel, textRange, type, options, block)
     }
@@ -125,41 +125,41 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     }
     
     // @property usesFontLeading
-    open fun usesFontLeading(): BOOL {
+    open fun usesFontLeading(): Boolean {
         val sel = ObjCRuntime.sel("usesFontLeading")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesFontLeading(value: BOOL) {
+    open fun setUsesFontLeading(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesFontLeading:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property limitsLayoutForSuspiciousContents
-    open fun limitsLayoutForSuspiciousContents(): BOOL {
+    open fun limitsLayoutForSuspiciousContents(): Boolean {
         val sel = ObjCRuntime.sel("limitsLayoutForSuspiciousContents")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setLimitsLayoutForSuspiciousContents(value: BOOL) {
+    open fun setLimitsLayoutForSuspiciousContents(value: Boolean) {
         val sel = ObjCRuntime.sel("setLimitsLayoutForSuspiciousContents:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property usesHyphenation
-    open fun usesHyphenation(): BOOL {
+    open fun usesHyphenation(): Boolean {
         val sel = ObjCRuntime.sel("usesHyphenation")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setUsesHyphenation(value: BOOL) {
+    open fun setUsesHyphenation(value: Boolean) {
         val sel = ObjCRuntime.sel("setUsesHyphenation:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property resolvesNaturalAlignmentWithBaseWritingDirection
-    open fun resolvesNaturalAlignmentWithBaseWritingDirection(): BOOL {
+    open fun resolvesNaturalAlignmentWithBaseWritingDirection(): Boolean {
         val sel = ObjCRuntime.sel("resolvesNaturalAlignmentWithBaseWritingDirection")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    open fun setResolvesNaturalAlignmentWithBaseWritingDirection(value: BOOL) {
+    open fun setResolvesNaturalAlignmentWithBaseWritingDirection(value: Boolean) {
         val sel = ObjCRuntime.sel("setResolvesNaturalAlignmentWithBaseWritingDirection:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -235,5 +235,10 @@ open class NSTextLayoutManager(val ptr: MemorySegment) {
     
     // @property linkRenderingAttributes
     /** @return NSDictionary<NSAttributedStringKey,id> * */
+    open fun linkRenderingAttributes(): MemorySegment {
+        val sel = ObjCRuntime.sel("linkRenderingAttributes")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

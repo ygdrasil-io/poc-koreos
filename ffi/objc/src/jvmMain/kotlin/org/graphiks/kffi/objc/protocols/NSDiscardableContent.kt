@@ -8,13 +8,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSDiscardableContent
  */
 interface NSDiscardableContent {
-    fun beginContentAccess(): BOOL
+    fun beginContentAccess(): Boolean
     
-    fun endContentAccess()
+    fun endContentAccess(): Unit
     
-    fun discardContentIfPossible()
+    fun discardContentIfPossible(): Unit
     
-    fun isContentDiscarded(): BOOL
+    fun isContentDiscarded(): Boolean
     
 }
 

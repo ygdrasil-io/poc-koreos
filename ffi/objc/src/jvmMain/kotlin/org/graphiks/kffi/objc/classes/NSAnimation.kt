@@ -9,13 +9,13 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSCoding
  */
-open class NSAnimation(val ptr: MemorySegment) {
+open class NSAnimation(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSAnimation") }
         
     }
     
-    open fun initWithDuration_animationCurve(duration: NSTimeInterval, animationCurve: NSAnimationCurve): MemorySegment {
+    open fun initWithDuration_animationCurve(duration: Double, animationCurve: MemorySegment): MemorySegment {
         val sel = ObjCRuntime.sel("initWithDuration:animationCurve:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, duration, animationCurve) as MemorySegment
     }
@@ -35,22 +35,22 @@ open class NSAnimation(val ptr: MemorySegment) {
         ObjCRuntime.msgSend(null, ptr, sel)
     }
     
-    open fun addProgressMark(progressMark: NSAnimationProgress): Unit {
+    open fun addProgressMark(progressMark: Float): Unit {
         val sel = ObjCRuntime.sel("addProgressMark:")
         ObjCRuntime.msgSend(null, ptr, sel, progressMark)
     }
     
-    open fun removeProgressMark(progressMark: NSAnimationProgress): Unit {
+    open fun removeProgressMark(progressMark: Float): Unit {
         val sel = ObjCRuntime.sel("removeProgressMark:")
         ObjCRuntime.msgSend(null, ptr, sel, progressMark)
     }
     
-    open fun startWhenAnimation_reachesProgress(animation: MemorySegment, startProgress: NSAnimationProgress): Unit {
+    open fun startWhenAnimation_reachesProgress(animation: MemorySegment, startProgress: Float): Unit {
         val sel = ObjCRuntime.sel("startWhenAnimation:reachesProgress:")
         ObjCRuntime.msgSend(null, ptr, sel, animation, startProgress)
     }
     
-    open fun stopWhenAnimation_reachesProgress(animation: MemorySegment, stopProgress: NSAnimationProgress): Unit {
+    open fun stopWhenAnimation_reachesProgress(animation: MemorySegment, stopProgress: Float): Unit {
         val sel = ObjCRuntime.sel("stopWhenAnimation:reachesProgress:")
         ObjCRuntime.msgSend(null, ptr, sel, animation, stopProgress)
     }
@@ -66,37 +66,37 @@ open class NSAnimation(val ptr: MemorySegment) {
     }
     
     // @property animating
-    open fun isAnimating(): BOOL {
+    open fun isAnimating(): Boolean {
         val sel = ObjCRuntime.sel("isAnimating")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
     
     // @property currentProgress
-    open fun currentProgress(): NSAnimationProgress {
+    open fun currentProgress(): Float {
         val sel = ObjCRuntime.sel("currentProgress")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as NSAnimationProgress
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_FLOAT, ptr, sel) as Float
     }
-    open fun setCurrentProgress(value: NSAnimationProgress) {
+    open fun setCurrentProgress(value: Float) {
         val sel = ObjCRuntime.sel("setCurrentProgress:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property duration
-    open fun duration(): NSTimeInterval {
+    open fun duration(): Double {
         val sel = ObjCRuntime.sel("duration")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as NSTimeInterval
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_DOUBLE, ptr, sel) as Double
     }
-    open fun setDuration(value: NSTimeInterval) {
+    open fun setDuration(value: Double) {
         val sel = ObjCRuntime.sel("setDuration:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property animationBlockingMode
-    open fun animationBlockingMode(): NSAnimationBlockingMode {
+    open fun animationBlockingMode(): MemorySegment {
         val sel = ObjCRuntime.sel("animationBlockingMode")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAnimationBlockingMode
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setAnimationBlockingMode(value: NSAnimationBlockingMode) {
+    open fun setAnimationBlockingMode(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAnimationBlockingMode:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
@@ -112,11 +112,11 @@ open class NSAnimation(val ptr: MemorySegment) {
     }
     
     // @property animationCurve
-    open fun animationCurve(): NSAnimationCurve {
+    open fun animationCurve(): MemorySegment {
         val sel = ObjCRuntime.sel("animationCurve")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAnimationCurve
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
-    open fun setAnimationCurve(value: NSAnimationCurve) {
+    open fun setAnimationCurve(value: MemorySegment) {
         val sel = ObjCRuntime.sel("setAnimationCurve:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

@@ -8,7 +8,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSChangeSpelling
  */
 interface NSChangeSpelling {
-    fun changeSpelling(sender: MemorySegment)
+    fun changeSpelling(sender: MemorySegment): Unit
     
 }
 

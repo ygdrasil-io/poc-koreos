@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSDimension
  * Protocols: NSSecureCoding
  */
-open class NSUnitConcentrationMass(ptr: MemorySegment) : NSDimension(ptr) {
+open class NSUnitConcentrationMass(override val ptr: MemorySegment) : NSDimension(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSUnitConcentrationMass") }
         
@@ -31,5 +31,16 @@ open class NSUnitConcentrationMass(ptr: MemorySegment) : NSDimension(ptr) {
     }
     
     // @property gramsPerLiter
+    open fun gramsPerLiter(): MemorySegment {
+        val sel = ObjCRuntime.sel("gramsPerLiter")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
+    // @property milligramsPerDeciliter
+    open fun milligramsPerDeciliter(): MemorySegment {
+        val sel = ObjCRuntime.sel("milligramsPerDeciliter")
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
+    }
+    
 }
 

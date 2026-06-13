@@ -8,69 +8,68 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextInputClient
  */
 interface NSTextInputClient {
-    fun insertText_replacementRange(string: MemorySegment, replacementRange: NSRange)
+    fun insertText_replacementRange(string: MemorySegment, replacementRange: MemorySegment): Unit
     
-    fun doCommandBySelector(selector: MemorySegment)
+    fun doCommandBySelector(selector: MemorySegment): Unit
     
-    fun setMarkedText_selectedRange_replacementRange(string: MemorySegment, selectedRange: NSRange, replacementRange: NSRange)
+    fun setMarkedText_selectedRange_replacementRange(string: MemorySegment, selectedRange: MemorySegment, replacementRange: MemorySegment): Unit
     
-    fun unmarkText()
+    fun unmarkText(): Unit
     
-    fun selectedRange(): NSRange
+    fun selectedRange(): MemorySegment
     
-    fun markedRange(): NSRange
+    fun markedRange(): MemorySegment
     
-    fun hasMarkedText(): BOOL
+    fun hasMarkedText(): Boolean
     
-    fun attributedSubstringForProposedRange_actualRange(range: NSRange, actualRange: MemorySegment): MemorySegment
+    fun attributedSubstringForProposedRange_actualRange(range: MemorySegment, actualRange: MemorySegment): MemorySegment
     
     /** @return NSArray<NSAttributedStringKey> * */
     fun validAttributesForMarkedText(): MemorySegment
     
-    fun firstRectForCharacterRange_actualRange(range: NSRange, actualRange: MemorySegment): NSRect
+    fun firstRectForCharacterRange_actualRange(range: MemorySegment, actualRange: MemorySegment): MemorySegment
     
-    fun characterIndexForPoint(point: NSPoint): NSUInteger
+    fun characterIndexForPoint(point: MemorySegment): Long
     
     // @optional
     fun attributedString(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'attributedString' not implemented")
     
     // @optional
-    fun fractionOfDistanceThroughGlyphForPoint(point: NSPoint): CGFloat =
+    fun fractionOfDistanceThroughGlyphForPoint(point: MemorySegment): Double =
         throw UnsupportedOperationException("Optional ObjC method 'fractionOfDistanceThroughGlyphForPoint:' not implemented")
     
     // @optional
-    fun baselineDeltaForCharacterAtIndex(anIndex: NSUInteger): CGFloat =
+    fun baselineDeltaForCharacterAtIndex(anIndex: Long): Double =
         throw UnsupportedOperationException("Optional ObjC method 'baselineDeltaForCharacterAtIndex:' not implemented")
     
     // @optional
-    fun windowLevel(): NSInteger =
+    fun windowLevel(): Long =
         throw UnsupportedOperationException("Optional ObjC method 'windowLevel' not implemented")
     
     // @optional
-    fun drawsVerticallyForCharacterAtIndex(charIndex: NSUInteger): BOOL =
+    fun drawsVerticallyForCharacterAtIndex(charIndex: Long): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'drawsVerticallyForCharacterAtIndex:' not implemented")
     
     // @optional
-    fun preferredTextAccessoryPlacement(): NSTextCursorAccessoryPlacement =
+    fun preferredTextAccessoryPlacement(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'preferredTextAccessoryPlacement' not implemented")
     
     // @optional
-    fun insertAdaptiveImageGlyph_replacementRange(adaptiveImageGlyph: MemorySegment, replacementRange: NSRange): Unit =
+    fun insertAdaptiveImageGlyph_replacementRange(adaptiveImageGlyph: MemorySegment, replacementRange: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'insertAdaptiveImageGlyph:replacementRange:' not implemented")
     
     // @optional
-    fun unionRectInVisibleSelectedRange(): NSRect =
+    fun unionRectInVisibleSelectedRange(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'unionRectInVisibleSelectedRange' not implemented")
     
     // @optional
-    fun documentVisibleRect(): NSRect =
+    fun documentVisibleRect(): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'documentVisibleRect' not implemented")
     
     // @optional
-    fun supportsAdaptiveImageGlyph(): BOOL =
+    fun supportsAdaptiveImageGlyph(): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'supportsAdaptiveImageGlyph' not implemented")
     
-    // @property unionRectInVisibleSelectedRange
 }
 

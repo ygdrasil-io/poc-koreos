@@ -9,12 +9,12 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCoding, NSCopying
  */
-open class NSPredicateEditorRowTemplate(val ptr: MemorySegment) {
+open class NSPredicateEditorRowTemplate(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSPredicateEditorRowTemplate") }
         
         /** @return NSArray<NSPredicateEditorRowTemplate *> * */
-        open fun templatesWithAttributeKeyPaths_inEntityDescription(keyPaths: MemorySegment, entityDescription: MemorySegment): MemorySegment {
+        fun templatesWithAttributeKeyPaths_inEntityDescription(keyPaths: MemorySegment, entityDescription: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("templatesWithAttributeKeyPaths:inEntityDescription:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, keyPaths, entityDescription) as MemorySegment
         }
@@ -42,12 +42,12 @@ open class NSPredicateEditorRowTemplate(val ptr: MemorySegment) {
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, predicate) as MemorySegment
     }
     
-    open fun initWithLeftExpressions_rightExpressions_modifier_operators_options(leftExpressions: MemorySegment, rightExpressions: MemorySegment, modifier: NSComparisonPredicateModifier, operators: MemorySegment, options: NSUInteger): MemorySegment {
+    open fun initWithLeftExpressions_rightExpressions_modifier_operators_options(leftExpressions: MemorySegment, rightExpressions: MemorySegment, modifier: MemorySegment, operators: MemorySegment, options: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLeftExpressions:rightExpressions:modifier:operators:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, leftExpressions, rightExpressions, modifier, operators, options) as MemorySegment
     }
     
-    open fun initWithLeftExpressions_rightExpressionAttributeType_modifier_operators_options(leftExpressions: MemorySegment, attributeType: NSAttributeType, modifier: NSComparisonPredicateModifier, operators: MemorySegment, options: NSUInteger): MemorySegment {
+    open fun initWithLeftExpressions_rightExpressionAttributeType_modifier_operators_options(leftExpressions: MemorySegment, attributeType: MemorySegment, modifier: MemorySegment, operators: MemorySegment, options: Long): MemorySegment {
         val sel = ObjCRuntime.sel("initWithLeftExpressions:rightExpressionAttributeType:modifier:operators:options:")
         return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel, leftExpressions, attributeType, modifier, operators, options) as MemorySegment
     }
@@ -79,15 +79,15 @@ open class NSPredicateEditorRowTemplate(val ptr: MemorySegment) {
     }
     
     // @property rightExpressionAttributeType
-    open fun rightExpressionAttributeType(): NSAttributeType {
+    open fun rightExpressionAttributeType(): MemorySegment {
         val sel = ObjCRuntime.sel("rightExpressionAttributeType")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSAttributeType
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property modifier
-    open fun modifier(): NSComparisonPredicateModifier {
+    open fun modifier(): MemorySegment {
         val sel = ObjCRuntime.sel("modifier")
-        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as NSComparisonPredicateModifier
+        return ObjCRuntime.msgSend(ValueLayout.ADDRESS, ptr, sel) as MemorySegment
     }
     
     // @property operators
@@ -98,9 +98,9 @@ open class NSPredicateEditorRowTemplate(val ptr: MemorySegment) {
     }
     
     // @property options
-    open fun options(): NSUInteger {
+    open fun options(): Long {
         val sel = ObjCRuntime.sel("options")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as NSUInteger
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, ptr, sel) as Long
     }
     
     // @property compoundTypes

@@ -10,7 +10,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  */
 interface NSAccessibilityLayoutItem : NSAccessibilityGroup {
     // @optional
-    fun setAccessibilityFrame(frame: NSRect): Unit =
+    fun setAccessibilityFrame(frame: MemorySegment): Unit =
         throw UnsupportedOperationException("Optional ObjC method 'setAccessibilityFrame:' not implemented")
     
 }

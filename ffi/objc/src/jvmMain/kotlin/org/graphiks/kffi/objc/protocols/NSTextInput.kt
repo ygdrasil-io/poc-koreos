@@ -8,27 +8,27 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSTextInput
  */
 interface NSTextInput {
-    fun insertText(string: MemorySegment)
+    fun insertText(string: MemorySegment): Unit
     
-    fun doCommandBySelector(selector: MemorySegment)
+    fun doCommandBySelector(selector: MemorySegment): Unit
     
-    fun setMarkedText_selectedRange(string: MemorySegment, selRange: NSRange)
+    fun setMarkedText_selectedRange(string: MemorySegment, selRange: MemorySegment): Unit
     
-    fun unmarkText()
+    fun unmarkText(): Unit
     
-    fun hasMarkedText(): BOOL
+    fun hasMarkedText(): Boolean
     
-    fun conversationIdentifier(): NSInteger
+    fun conversationIdentifier(): Long
     
-    fun attributedSubstringFromRange(range: NSRange): MemorySegment
+    fun attributedSubstringFromRange(range: MemorySegment): MemorySegment
     
-    fun markedRange(): NSRange
+    fun markedRange(): MemorySegment
     
-    fun selectedRange(): NSRange
+    fun selectedRange(): MemorySegment
     
-    fun firstRectForCharacterRange(range: NSRange): NSRect
+    fun firstRectForCharacterRange(range: MemorySegment): MemorySegment
     
-    fun characterIndexForPoint(point: NSPoint): NSUInteger
+    fun characterIndexForPoint(point: MemorySegment): Long
     
     fun validAttributesForMarkedText(): MemorySegment
     

@@ -8,12 +8,11 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSUserInterfaceCompression
  */
 interface NSUserInterfaceCompression {
-    fun compressWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment)
+    fun compressWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): Unit
     
-    fun minimumSizeWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): NSSize
+    fun minimumSizeWithPrioritizedCompressionOptions(prioritizedOptions: MemorySegment): MemorySegment
     
     fun activeCompressionOptions(): MemorySegment
     
-    // @property activeCompressionOptions
 }
 

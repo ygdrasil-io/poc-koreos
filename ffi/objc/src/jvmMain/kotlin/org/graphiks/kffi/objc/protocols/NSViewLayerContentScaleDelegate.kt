@@ -8,9 +8,9 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSViewLayerContentScaleDelegate
  * Inherits protocols: NSObject
  */
-interface NSViewLayerContentScaleDelegate : NSObject {
+interface NSViewLayerContentScaleDelegate {
     // @optional
-    fun layer_shouldInheritContentsScale_fromWindow(layer: MemorySegment, newScale: CGFloat, window: MemorySegment): BOOL =
+    fun layer_shouldInheritContentsScale_fromWindow(layer: MemorySegment, newScale: Double, window: MemorySegment): Boolean =
         throw UnsupportedOperationException("Optional ObjC method 'layer:shouldInheritContentsScale:fromWindow:' not implemented")
     
 }

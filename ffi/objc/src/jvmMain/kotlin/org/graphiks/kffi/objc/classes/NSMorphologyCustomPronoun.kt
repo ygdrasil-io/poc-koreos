@@ -9,26 +9,26 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSCopying, NSSecureCoding
  */
-open class NSMorphologyCustomPronoun(val ptr: MemorySegment) {
+open class NSMorphologyCustomPronoun(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSMorphologyCustomPronoun") }
         
-        open fun isSupportedForLanguage(language: MemorySegment): BOOL {
+        fun isSupportedForLanguage(language: MemorySegment): Boolean {
             val sel = ObjCRuntime.sel("isSupportedForLanguage:")
-            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, language) as BOOL
+            return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, _class, sel, language) as Boolean
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun isSupportedForLanguage(language: String): BOOL = isSupportedForLanguage(ObjCRuntime.newNSString(Arena.global(), language))
+        fun isSupportedForLanguage(language: String): Boolean = isSupportedForLanguage(ObjCRuntime.newNSString(Arena.global(), language))
         
         /** @return NSArray<NSString *> * */
-        open fun requiredKeysForLanguage(language: MemorySegment): MemorySegment {
+        fun requiredKeysForLanguage(language: MemorySegment): MemorySegment {
             val sel = ObjCRuntime.sel("requiredKeysForLanguage:")
             return ObjCRuntime.msgSend(ValueLayout.ADDRESS, _class, sel, language) as MemorySegment
         }
         
         /** Convenience overload — accepts Kotlin [String] for NSString parameters. */
-        open fun requiredKeysForLanguage(language: String): MemorySegment = requiredKeysForLanguage(ObjCRuntime.newNSString(Arena.global(), language))
+        fun requiredKeysForLanguage(language: String): MemorySegment = requiredKeysForLanguage(ObjCRuntime.newNSString(Arena.global(), language))
         
     }
     

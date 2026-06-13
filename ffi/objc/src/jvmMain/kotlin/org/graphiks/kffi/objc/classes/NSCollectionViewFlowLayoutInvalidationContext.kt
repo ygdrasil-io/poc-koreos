@@ -8,28 +8,28 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM wrapper for Objective-C class: NSCollectionViewFlowLayoutInvalidationContext
  * Superclass: NSCollectionViewLayoutInvalidationContext
  */
-open class NSCollectionViewFlowLayoutInvalidationContext(ptr: MemorySegment) : NSCollectionViewLayoutInvalidationContext(ptr) {
+open class NSCollectionViewFlowLayoutInvalidationContext(override val ptr: MemorySegment) : NSCollectionViewLayoutInvalidationContext(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSCollectionViewFlowLayoutInvalidationContext") }
         
     }
     
     // @property invalidateFlowLayoutDelegateMetrics
-    fun invalidateFlowLayoutDelegateMetrics(): BOOL {
+    open fun invalidateFlowLayoutDelegateMetrics(): Boolean {
         val sel = ObjCRuntime.sel("invalidateFlowLayoutDelegateMetrics")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setInvalidateFlowLayoutDelegateMetrics(value: BOOL) {
+    open fun setInvalidateFlowLayoutDelegateMetrics(value: Boolean) {
         val sel = ObjCRuntime.sel("setInvalidateFlowLayoutDelegateMetrics:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }
     
     // @property invalidateFlowLayoutAttributes
-    fun invalidateFlowLayoutAttributes(): BOOL {
+    open fun invalidateFlowLayoutAttributes(): Boolean {
         val sel = ObjCRuntime.sel("invalidateFlowLayoutAttributes")
-        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as BOOL
+        return ObjCRuntime.msgSend(ValueLayout.JAVA_BOOLEAN, ptr, sel) as Boolean
     }
-    fun setInvalidateFlowLayoutAttributes(value: BOOL) {
+    open fun setInvalidateFlowLayoutAttributes(value: Boolean) {
         val sel = ObjCRuntime.sel("setInvalidateFlowLayoutAttributes:")
         ObjCRuntime.msgSend(null, ptr, sel, value)
     }

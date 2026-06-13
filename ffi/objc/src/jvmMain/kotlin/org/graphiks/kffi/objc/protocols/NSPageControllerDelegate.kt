@@ -8,17 +8,17 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSPageControllerDelegate
  * Inherits protocols: NSObject
  */
-interface NSPageControllerDelegate : NSObject {
+interface NSPageControllerDelegate {
     // @optional
-    fun pageController_identifierForObject(pageController: MemorySegment, `object`: MemorySegment): NSPageControllerObjectIdentifier =
+    fun pageController_identifierForObject(pageController: MemorySegment, `object`: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'pageController:identifierForObject:' not implemented")
     
     // @optional
-    fun pageController_viewControllerForIdentifier(pageController: MemorySegment, identifier: NSPageControllerObjectIdentifier): MemorySegment =
+    fun pageController_viewControllerForIdentifier(pageController: MemorySegment, identifier: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'pageController:viewControllerForIdentifier:' not implemented")
     
     // @optional
-    fun pageController_frameForObject(pageController: MemorySegment, `object`: MemorySegment): NSRect =
+    fun pageController_frameForObject(pageController: MemorySegment, `object`: MemorySegment): MemorySegment =
         throw UnsupportedOperationException("Optional ObjC method 'pageController:frameForObject:' not implemented")
     
     // @optional

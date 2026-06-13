@@ -9,7 +9,7 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Superclass: NSObject
  * Protocols: NSProgressReporting
  */
-open class NSBundleResourceRequest(val ptr: MemorySegment) {
+open class NSBundleResourceRequest(override val ptr: MemorySegment) : NSObject(ptr) {
     companion object {
         private val _class: MemorySegment by lazy { ObjCRuntime.getClass("NSBundleResourceRequest") }
         

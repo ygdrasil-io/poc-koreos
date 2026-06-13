@@ -8,10 +8,10 @@ import java.lang.foreign.MemoryLayout.PathElement.*
  * Kotlin/JVM interface for Objective-C protocol: NSFilePromiseProviderDelegate
  * Inherits protocols: NSObject
  */
-interface NSFilePromiseProviderDelegate : NSObject {
+interface NSFilePromiseProviderDelegate {
     fun filePromiseProvider_fileNameForType(filePromiseProvider: MemorySegment, fileType: MemorySegment): MemorySegment
     
-    fun filePromiseProvider_writePromiseToURL_completionHandler(filePromiseProvider: MemorySegment, url: MemorySegment, completionHandler: MemorySegment)
+    fun filePromiseProvider_writePromiseToURL_completionHandler(filePromiseProvider: MemorySegment, url: MemorySegment, completionHandler: MemorySegment): Unit
     
     // @optional
     fun operationQueueForFilePromiseProvider(filePromiseProvider: MemorySegment): MemorySegment =
