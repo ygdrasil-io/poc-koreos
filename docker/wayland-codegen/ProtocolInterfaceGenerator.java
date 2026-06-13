@@ -168,39 +168,38 @@ public class ProtocolInterfaceGenerator {
         sb.append("import java.lang.foreign.ValueLayout.*\n");
         sb.append("import java.lang.foreign.MemoryLayout.PathElement.*\n\n");
 
-        sb.append("object XdgShellProtocolInterfaces {\n");
-        sb.append("    private val ARENA = Arena.ofAuto()\n\n");
+        sb.append("private val ARENA = Arena.ofAuto()\n\n");
 
         for (WlInterface iface : interfaces.values()) {
-            sb.append("    val ").append(ifaceValName(iface.name))
+            sb.append("val ").append(ifaceValName(iface.name))
               .append(": MemorySegment by lazy { ").append(safeBuildName(iface.name)).append("() }\n");
         }
         sb.append("\n");
 
         if (!externalRefs.isEmpty()) {
-            sb.append("    private val libWayland = SymbolLookup.libraryLookup(\"libwayland-client.so.0\", ARENA)\n");
+            sb.append("private val libWayland = SymbolLookup.libraryLookup(\"libwayland-client.so.0\", ARENA)\n");
             for (String ext : externalRefs) {
-                sb.append("    private val ").append(ifaceValName(ext))
+                sb.append("private val ").append(ifaceValName(ext))
                   .append(": MemorySegment = libWayland.find(\"").append(ifaceValName(ext))
                   .append("\").orElseThrow()\n");
             }
             sb.append("\n");
         }
 
-        sb.append("    private val MSG_LAYOUT = MemoryLayout.structLayout(\n");
-        sb.append("        ADDRESS.withName(\"name\"), ADDRESS.withName(\"signature\"), ADDRESS.withName(\"types\"))\n");
-        sb.append("    private val IFACE_LAYOUT = MemoryLayout.structLayout(\n");
-        sb.append("        ADDRESS.withName(\"name\"), JAVA_INT.withName(\"version\"), JAVA_INT.withName(\"method_count\"),\n");
-        sb.append("        ADDRESS.withName(\"methods\"), JAVA_INT.withName(\"event_count\"), ADDRESS.withName(\"events\"))\n\n");
+        sb.append("private val MSG_LAYOUT = MemoryLayout.structLayout(\n");
+        sb.append("    ADDRESS.withName(\"name\"), ADDRESS.withName(\"signature\"), ADDRESS.withName(\"types\"))\n");
+        sb.append("private val IFACE_LAYOUT = MemoryLayout.structLayout(\n");
+        sb.append("    ADDRESS.withName(\"name\"), JAVA_INT.withName(\"version\"), JAVA_INT.withName(\"method_count\"),\n");
+        sb.append("    ADDRESS.withName(\"methods\"), JAVA_INT.withName(\"event_count\"), ADDRESS.withName(\"events\"))\n\n");
 
         for (WlInterface iface : interfaces.values()) {
-            sb.append("    private fun ").append(safeBuildName(iface.name))
+            sb.append("private fun ").append(safeBuildName(iface.name))
               .append("(): MemorySegment = iface(\"").append(iface.name)
               .append("\", ").append(iface.version).append(", arrayOf(\n");
 
             for (int i = 0; i < iface.requests.size(); i++) {
                 Message msg = iface.requests.get(i);
-                sb.append("        msg(\"").append(msg.name).append("\", \"")
+                sb.append("    msg(\"").append(msg.name).append("\", \"")
                   .append(buildSignature(msg.args)).append("\"");
                 sb.append(buildTypesVarargs(msg.args));
                 sb.append(")");
@@ -208,11 +207,11 @@ public class ProtocolInterfaceGenerator {
                 sb.append("\n");
             }
 
-            sb.append("    ), arrayOf(\n");
+            sb.append("), arrayOf(\n");
 
             for (int i = 0; i < iface.events.size(); i++) {
                 Message msg = iface.events.get(i);
-                sb.append("        msg(\"").append(msg.name).append("\", \"")
+                sb.append("    msg(\"").append(msg.name).append("\", \"")
                   .append(buildSignature(msg.args)).append("\"");
                 sb.append(buildTypesVarargs(msg.args));
                 sb.append(")");
@@ -220,51 +219,49 @@ public class ProtocolInterfaceGenerator {
                 sb.append("\n");
             }
 
-            sb.append("    ))\n\n");
+            sb.append("))\n\n");
         }
 
-        sb.append("    private fun msg(name: String, signature: String, vararg types: MemorySegment): MemorySegment {\n");
-        sb.append("        val seg = ARENA.allocate(MSG_LAYOUT)\n");
-        sb.append("        seg.set(ADDRESS, 0L, ARENA.allocateFrom(name))\n");
-        sb.append("        seg.set(ADDRESS, 8L, ARENA.allocateFrom(signature))\n");
-        sb.append("        if (types.isEmpty()) {\n");
-        sb.append("            seg.set(ADDRESS, 16L, MemorySegment.NULL)\n");
-        sb.append("        } else {\n");
-        sb.append("            val arr = ARENA.allocate(ADDRESS, (types.size + 1).toLong())\n");
-        sb.append("            for (i in types.indices) arr.set(ADDRESS, (i * 8).toLong(), types[i])\n");
-        sb.append("            arr.set(ADDRESS, (types.size * 8).toLong(), MemorySegment.NULL)\n");
-        sb.append("            seg.set(ADDRESS, 16L, arr)\n");
-        sb.append("        }\n");
-        sb.append("        return seg\n");
-        sb.append("    }\n\n");
-
-        sb.append("    private fun iface(\n");
-        sb.append("        name: String, version: Int,\n");
-        sb.append("        methods: Array<MemorySegment>,\n");
-        sb.append("        events: Array<MemorySegment>\n");
-        sb.append("    ): MemorySegment {\n");
-        sb.append("        val seg = ARENA.allocate(IFACE_LAYOUT)\n");
-        sb.append("        seg.set(ADDRESS, 0L, ARENA.allocateFrom(name))\n");
-        sb.append("        seg.set(JAVA_INT, 8L, version)\n");
-        sb.append("        seg.set(JAVA_INT, 12L, methods.size)\n");
-        sb.append("        if (methods.isNotEmpty()) {\n");
-        sb.append("            val arr = ARENA.allocate(MSG_LAYOUT, methods.size.toLong())\n");
-        sb.append("            for (i in methods.indices) arr.asSlice(i * 24L).copyFrom(methods[i])\n");
-        sb.append("            seg.set(ADDRESS, 16L, arr)\n");
-        sb.append("        } else {\n");
-        sb.append("            seg.set(ADDRESS, 16L, MemorySegment.NULL)\n");
-        sb.append("        }\n");
-        sb.append("        seg.set(JAVA_INT, 24L, events.size)\n");
-        sb.append("        if (events.isNotEmpty()) {\n");
-        sb.append("            val arr = ARENA.allocate(MSG_LAYOUT, events.size.toLong())\n");
-        sb.append("            for (i in events.indices) arr.asSlice(i * 24L).copyFrom(events[i])\n");
-        sb.append("            seg.set(ADDRESS, 32L, arr)\n");
-        sb.append("        } else {\n");
-        sb.append("            seg.set(ADDRESS, 32L, MemorySegment.NULL)\n");
-        sb.append("        }\n");
-        sb.append("        return seg\n");
+        sb.append("private fun msg(name: String, signature: String, vararg types: MemorySegment): MemorySegment {\n");
+        sb.append("    val seg = ARENA.allocate(MSG_LAYOUT)\n");
+        sb.append("    seg.set(ADDRESS, 0L, ARENA.allocateFrom(name))\n");
+        sb.append("    seg.set(ADDRESS, 8L, ARENA.allocateFrom(signature))\n");
+        sb.append("    if (types.isEmpty()) {\n");
+        sb.append("        seg.set(ADDRESS, 16L, MemorySegment.NULL)\n");
+        sb.append("    } else {\n");
+        sb.append("        val arr = ARENA.allocate(ADDRESS, (types.size + 1).toLong())\n");
+        sb.append("        for (i in types.indices) arr.set(ADDRESS, (i * 8).toLong(), types[i])\n");
+        sb.append("        arr.set(ADDRESS, (types.size * 8).toLong(), MemorySegment.NULL)\n");
+        sb.append("        seg.set(ADDRESS, 16L, arr)\n");
         sb.append("    }\n");
+        sb.append("    return seg\n");
+        sb.append("}\n\n");
 
+        sb.append("private fun iface(\n");
+        sb.append("    name: String, version: Int,\n");
+        sb.append("    methods: Array<MemorySegment>,\n");
+        sb.append("    events: Array<MemorySegment>\n");
+        sb.append("): MemorySegment {\n");
+        sb.append("    val seg = ARENA.allocate(IFACE_LAYOUT)\n");
+        sb.append("    seg.set(ADDRESS, 0L, ARENA.allocateFrom(name))\n");
+        sb.append("    seg.set(JAVA_INT, 8L, version)\n");
+        sb.append("    seg.set(JAVA_INT, 12L, methods.size)\n");
+        sb.append("    if (methods.isNotEmpty()) {\n");
+        sb.append("        val arr = ARENA.allocate(MSG_LAYOUT, methods.size.toLong())\n");
+        sb.append("        for (i in methods.indices) arr.asSlice(i * 24L).copyFrom(methods[i])\n");
+        sb.append("        seg.set(ADDRESS, 16L, arr)\n");
+        sb.append("    } else {\n");
+        sb.append("        seg.set(ADDRESS, 16L, MemorySegment.NULL)\n");
+        sb.append("    }\n");
+        sb.append("    seg.set(JAVA_INT, 24L, events.size)\n");
+        sb.append("    if (events.isNotEmpty()) {\n");
+        sb.append("        val arr = ARENA.allocate(MSG_LAYOUT, events.size.toLong())\n");
+        sb.append("        for (i in events.indices) arr.asSlice(i * 24L).copyFrom(events[i])\n");
+        sb.append("        seg.set(ADDRESS, 32L, arr)\n");
+        sb.append("    } else {\n");
+        sb.append("        seg.set(ADDRESS, 32L, MemorySegment.NULL)\n");
+        sb.append("    }\n");
+        sb.append("    return seg\n");
         sb.append("}\n");
 
         Path outPath = Paths.get(outputPath);
