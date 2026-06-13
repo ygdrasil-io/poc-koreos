@@ -13,3 +13,4 @@ __pycache__/
 .kotlin/
 winit/
 hs_err_*.log
+*.class
