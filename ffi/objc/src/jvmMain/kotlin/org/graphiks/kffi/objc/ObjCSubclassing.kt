@@ -1,14 +1,4 @@
-/**
- * Primitives for dynamically creating Objective-C subclasses
- * from Kotlin/JVM via Panama FFM.
- *
- * Wraps the ObjC runtime functions required to register classes:
- * objc_allocateClassPair, class_addMethod, class_addProtocol,
- * objc_registerClassPair.
- *
- * Consumed by the `kadre-appkit` module for ObjC subclass creation.
- */
-package org.graphiks.kadre.ffi.objc
+package org.graphiks.kffi.objc
 
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
@@ -17,6 +7,14 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 
+/**
+ * Primitives for dynamically creating Objective-C subclasses
+ * from Kotlin/JVM via Panama FFM.
+ *
+ * Wraps the ObjC runtime functions required to register classes:
+ * objc_allocateClassPair, class_addMethod, class_addProtocol,
+ * objc_registerClassPair.
+ */
 object ObjCSubclassing {
 
     private val arena: Arena = Arena.global()
@@ -85,7 +83,7 @@ object ObjCSubclassing {
     /**
      * Allocates an ObjC class pair (class + metaclass) derived
      * from [superclassName]. The class must then be registered
-     * via [registerClass] after adding the methods/protocols.
+     * via [registerClass] after adding methods/protocols.
      */
     fun allocateClass(superclassName: String, subclassName: String): MemorySegment {
         val superclass = ObjCRuntime.getClass(superclassName)
@@ -111,7 +109,7 @@ object ObjCSubclassing {
 
     /**
      * Registers the class pair with the ObjC runtime.
-     * No call to [addMethod]/[addProtocol] is possible after this call.
+     * No further calls to [addMethod]/[addProtocol] are valid after this.
      */
     fun registerClass(cls: MemorySegment) {
         registerClassPair.invokeExact(cls)
@@ -124,7 +122,7 @@ object ObjCSubclassing {
     fun addProtocol(cls: MemorySegment, protocolName: String): Boolean {
         val nameCStr = arena.allocateFrom(protocolName)
         val proto = objcGetProtocol.invokeExact(nameCStr) as MemorySegment
-        if (proto == MemorySegment.NULL) return false
+        if (proto == MemorySegment.NULL) return false as Boolean
         return classAddProtocol.invokeExact(cls, proto) as Boolean
     }
 }
