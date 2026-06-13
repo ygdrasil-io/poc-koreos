@@ -8,17 +8,17 @@
  */
 package org.graphiks.kadre.appkit
 
-import org.graphiks.kadre.ffi.objc.NSBackingStoreType
-import org.graphiks.kadre.ffi.objc.NSApplication
-import org.graphiks.kadre.ffi.objc.NSWindowTitleVisibility
-import org.graphiks.kadre.ffi.objc.NSRequestUserAttentionType
-import org.graphiks.kadre.ffi.objc.NSRect
-import org.graphiks.kadre.ffi.objc.NSView
-import org.graphiks.kadre.ffi.objc.NSWindow
-import org.graphiks.kadre.ffi.objc.NSWindowButton
-import org.graphiks.kadre.ffi.objc.NSWindowSharingType
-import org.graphiks.kadre.ffi.objc.NSWindowStyleMask
-import org.graphiks.kadre.ffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSWindowTitleVisibility
+import org.graphiks.kffi.objc.NSRequestUserAttentionType
+import org.graphiks.kffi.objc.NSRect
+import org.graphiks.kffi.objc.NSView
+import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowButton
+import org.graphiks.kffi.objc.NSWindowSharingType
+import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.CursorGrabMode
