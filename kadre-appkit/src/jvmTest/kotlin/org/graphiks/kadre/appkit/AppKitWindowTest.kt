@@ -169,8 +169,8 @@ class AppKitWindowTest {
         assertNotNull(nsWindowClass.getMethod("isKeyWindow"))
         assertNotNull(nsWindowClass.getMethod("isMiniaturized"))
         assertNotNull(nsWindowClass.getMethod("isVisible"))
-        assertNotNull(nsWindowClass.getMethod("setSharingType", NSWindowSharingType::class.java))
-        assertNotNull(nsWindowClass.getMethod("standardWindowButton", NSWindowButton::class.java))
+        assertNotNull(nsWindowClass.getMethod("setSharingType", java.lang.foreign.MemorySegment::class.java))
+        assertNotNull(nsWindowClass.getMethod("standardWindowButton", java.lang.foreign.MemorySegment::class.java))
     }
 
     @Test

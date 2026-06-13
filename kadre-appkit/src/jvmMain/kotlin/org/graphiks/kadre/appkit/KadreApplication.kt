@@ -472,7 +472,7 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 val nsEvent = NSEvent(event)
                 val deltaX = nsEvent.scrollingDeltaX()
                 val rawY = nsEvent.scrollingDeltaY()
-                val inverted = nsEvent.isDirectionInvertedFromDevice()
+                val inverted = nsEvent.isDirectionInvertedFromDevice() != 0.toByte()
                 val deltaY = if (inverted) -rawY else rawY
                 loop.handler.windowEvent(loop, appKitWindow.id, WindowEvent.MouseWheel(DeviceId(0L), deltaX, deltaY, TouchPhase.Moved))
                 return
