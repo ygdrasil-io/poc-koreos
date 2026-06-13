@@ -951,21 +951,6 @@ enum class wl_subsurface_error(val value: Long) {
 }
 
 /**
- * {@snippet lang=c : xdg_wm_base_interface Declared(wl_interface)
- */
-val xdg_wm_base_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_wm_base_interface").orElseThrow()
-
-/**
- * {@snippet lang=c : xdg_surface_interface Declared(wl_interface)
- */
-val xdg_surface_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_surface_interface").orElseThrow()
-
-/**
- * {@snippet lang=c : xdg_toplevel_interface Declared(wl_interface)
- */
-val xdg_toplevel_interface: MemorySegment = SymbolLookup.loaderLookup().find("xdg_toplevel_interface").orElseThrow()
-
-/**
  * NS_ENUM: {@snippet lang=c : enum xdg_wm_base_error}
  */
 enum class xdg_wm_base_error(val value: Long) {
@@ -1096,16 +1081,6 @@ enum class xdg_popup_error(val value: Long) {
             ?: error("Unknown xdg_popup_error value: $v")
     }
 }
-
-/**
- * {@snippet lang=c : zxdg_decoration_manager_v1_interface Declared(wl_interface)
- */
-val zxdg_decoration_manager_v1_interface: MemorySegment = SymbolLookup.loaderLookup().find("zxdg_decoration_manager_v1_interface").orElseThrow()
-
-/**
- * {@snippet lang=c : zxdg_toplevel_decoration_v1_interface Declared(wl_interface)
- */
-val zxdg_toplevel_decoration_v1_interface: MemorySegment = SymbolLookup.loaderLookup().find("zxdg_toplevel_decoration_v1_interface").orElseThrow()
 
 /**
  * NS_ENUM: {@snippet lang=c : enum zxdg_toplevel_decoration_v1_error}

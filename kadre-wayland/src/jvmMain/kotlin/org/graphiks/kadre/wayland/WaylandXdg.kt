@@ -4,8 +4,7 @@
  *
  * xdg_shell is a protocol extension: its request opcodes are known ([XdgShellConstants]) but the
  * `xdg_*_interface` tables needed by `wl_proxy_marshal_flags` are not exported by
- * libwayland-client. They come from the kextract-generated bindings ([generated] package) backed
- * by libkadre-xdg.so ([WaylandXdgLib]).
+ * libwayland-client. They come from the kextract-generated bindings ([generated] package).
  *
  * Handshake (xdg-shell protocol):
  *   xdg_wm_base.get_xdg_surface(surface)  → xdg_surface
@@ -282,7 +281,7 @@ internal class XdgToplevel private constructor(
         /**
          * Performs the xdg_shell handshake for [surfacePtr] under [wmBasePtr], wiring the
          * configure/close listeners to [onResized]/[onClose]. Returns null if the bindings are
-         * unavailable (non-Wayland, missing libkadre-xdg.so) or any step fails.
+         * unavailable or any step fails.
          */
         fun create(
             displayPtr: Long,
@@ -295,7 +294,6 @@ internal class XdgToplevel private constructor(
             decorated: Boolean = true,
         ): XdgToplevel? {
             if (wmBasePtr == 0L || surfacePtr == 0L) return null
-            if (!WaylandXdgLib.loaded) return null
             val getXdgSurface = wlProxyMarshalFlagsGetXdgSurface ?: return null
             // get_toplevel is a plain new_id request (6-arg marshal) — reuse the create_surface form.
             val getToplevel = wlCompositorCreateSurface ?: return null

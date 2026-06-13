@@ -21,6 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Compile the protocol XML → Kotlin generator (zero external deps, just JDK)
+WORKDIR /build
+COPY ProtocolInterfaceGenerator.java .
+RUN javac ProtocolInterfaceGenerator.java
+
 ENV JDK_HOME=/opt/java/openjdk \
     LLVM_HOME=/usr/lib/llvm-18
 

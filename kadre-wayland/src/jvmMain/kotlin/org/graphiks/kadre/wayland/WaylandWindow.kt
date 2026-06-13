@@ -479,6 +479,7 @@ class WaylandWindow private constructor(
 
     /** Convenience: flush the Wayland display connection. */
     private fun flushDisplay() {
+        if (displayPtr == 0L) return
         wlDisplayFlush?.let { flush ->
             try {
                 val displaySeg = MemorySegment.ofAddress(displayPtr)
@@ -1031,7 +1032,7 @@ class WaylandWindow private constructor(
             window.setTransparent(attrs.transparent)
 
             // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
-            if (surface != 0L && xdgWmBase != 0L && WaylandXdgLib.loaded) {
+            if (surface != 0L && xdgWmBase != 0L) {
                 window.xdg = XdgToplevel.create(
                     displayPtr = display,
                     wmBasePtr = xdgWmBase,
