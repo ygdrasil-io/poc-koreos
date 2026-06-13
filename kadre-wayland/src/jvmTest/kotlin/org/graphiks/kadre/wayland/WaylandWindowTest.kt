@@ -586,13 +586,13 @@ class WaylandWindowTest {
 
     @Test
     fun `Wayland blurManager setBlur does not crash with mock pointers`() {
+        if (libWaylandClient != null) return // Skip on Wayland Linux — requires real proxies
         val window = WaylandWindow.createForTest(
             surface = 1L,
             extBackgroundEffectManagerPtr = 100L,
         )
         val blur = window.blurManager
         assertNotNull(blur)
-        // Must not throw — FFM calls will gracefully fail without libwayland
         blur.setBlur(true)
         blur.setBlur(false)
         blur.setBlur(true)
@@ -600,6 +600,7 @@ class WaylandWindowTest {
 
     @Test
     fun `Wayland blurManager kwin fallback setBlur does not crash with mock pointers`() {
+        if (libWaylandClient != null) return
         val window = WaylandWindow.createForTest(
             surface = 1L,
             kwinBlurManagerPtr = 200L,
@@ -627,8 +628,8 @@ class WaylandWindowTest {
 
     @Test
     fun `WaylandActivationToken activate does not crash with mock pointers`() {
+        if (libWaylandClient != null) return
         val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 300L)
-        // FFM calls will gracefully return without libwayland
         act.activate("test-token", surfacePtr = 100L)
     }
 
@@ -699,6 +700,7 @@ class WaylandWindowTest {
 
     @Test
     fun `setImeAllowed does not crash with mock pointers`() {
+        if (libWaylandClient != null) return
         val window = WaylandWindow.createForTest()
         window.setImeAllowed(true)
         window.setImeAllowed(false)
@@ -706,12 +708,14 @@ class WaylandWindowTest {
 
     @Test
     fun `setImeCursorArea does not crash with mock pointers`() {
+        if (libWaylandClient != null) return
         val window = WaylandWindow.createForTest()
         window.setImeCursorArea(PhysicalPosition(10, 20), PhysicalSize(100, 30))
     }
 
     @Test
     fun `setImePurpose does not crash with mock pointers`() {
+        if (libWaylandClient != null) return
         val window = WaylandWindow.createForTest()
         window.setImePurpose(ImePurpose.Normal)
         window.setImePurpose(ImePurpose.Password)
