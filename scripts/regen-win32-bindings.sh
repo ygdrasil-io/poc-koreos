@@ -92,14 +92,15 @@ for dll in "${DLLS[@]}"; do
     done
     kextractArgs+=("$HEADER")
 
-    echo "    Running: $KEXTRACT"
-    "$KEXTRACT" "${kextractArgs[@]}" 2>&1 || {
+    echo "    Running: java -cp ... KextractTool"
+    "$JAVA" --enable-native-access=ALL-UNNAMED \
+        "-Djava.library.path=$NATIVE_PATH" \
+        -Dkextract.debug=true \
+        -cp "$CLASSPATH" \
+        org.graphiks.kextract.pipeline.KextractTool \
+        "${kextractArgs[@]}" 2>&1 || {
         rc=$?
         echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
-        # Check for JVM crash log
-        for f in hs_err_pid*.log; do
-            [ -f "$f" ] && echo "=== JVM crash log: $f ===" && cat "$f" && echo "==="
-        done
         exit $rc
     }
 done
