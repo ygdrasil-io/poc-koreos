@@ -28,13 +28,16 @@ for jar in "$LIBS_DIR"/*.jar; do
         CLASSPATH="$jar"
     fi
 done
+# Include System32 on Windows so System.loadLibrary("kernel32") works
+NATIVE_PATH="$LIBS_DIR"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT\\System32" ;; esac
+
 # Quick test: verify kextract starts
 echo "  Java: $JAVA"
-echo "  JARs:"
-ls "$LIBS_DIR"/*.jar 2>&1 || true
+echo "  NATIVE_PATH: $NATIVE_PATH"
 echo "  Testing: $JAVA -cp ... KextractTool --help"
 "$JAVA" --enable-native-access=ALL-UNNAMED \
-    "-Djava.library.path=$LIBS_DIR" \
+    "-Djava.library.path=$NATIVE_PATH" \
     -cp "$CLASSPATH" \
     org.graphiks.kextract.pipeline.KextractTool \
     --help 2>&1 | head -20 || true
@@ -97,7 +100,7 @@ for dll in "${DLLS[@]}"; do
 
     echo "    Running: java -cp ... KextractTool"
     "$JAVA" --enable-native-access=ALL-UNNAMED \
-        "-Djava.library.path=$LIBS_DIR" \
+        "-Djava.library.path=$NATIVE_PATH" \
         -cp "$CLASSPATH" \
         org.graphiks.kextract.pipeline.KextractTool \
         "${kextractArgs[@]}" 2>&1 || {
