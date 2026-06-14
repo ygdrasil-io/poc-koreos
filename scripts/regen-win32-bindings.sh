@@ -90,8 +90,10 @@ for dll in "${DLLS[@]}"; do
     kextractArgs+=("$HEADER")
 
     echo "    Running: java -cp ... KextractTool"
-    "$JAVA" --enable-native-access=ALL-UNNAMED \
+    "$JAVA" -Xrs --enable-native-access=ALL-UNNAMED \
         "-Djava.library.path=$NATIVE_PATH" \
+        -Dkextract.debug=true \
+        -Dlibclang.debug=true \
         -cp "$CLASSPATH" \
         org.graphiks.kextract.pipeline.KextractTool \
         "${kextractArgs[@]}" 2>&1 || {
