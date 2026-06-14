@@ -17,10 +17,38 @@ KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
 # On Windows the distribution ships a .bat launcher
 if [ ! -x "$KEXTRACT" ] && [ -f "${KEXTRACT}.bat" ]; then
     KEXTRACT="${KEXTRACT}.bat"
+elif [ ! -x "$KEXTRACT" ] && [ -f "${KEXTRACT}.ps1" ]; then
+    # Fallback to PowerShell launcher
+    KEXTRACT="${KEXTRACT}.ps1"
 elif [ ! -x "$KEXTRACT" ]; then
     echo "kextract binary not executable: $KEXTRACT" >&2
+    # List the distribution directory for debugging
+    echo "Distribution contents:"
+    ls -la "$(dirname "$KEXTRACT")/.." 2>&1 || true
+    ls -la "$(dirname "$KEXTRACT")" 2>&1 || true
     exit 1
 fi
+
+# Debug: list distribution contents
+echo "  Kextract binary: $KEXTRACT"
+echo "  Distribution dir:"
+ls -la "$(dirname "$KEXTRACT")/.." 2>&1 || true
+echo "  Bin dir:"
+ls -la "$(dirname "$KEXTRACT")" 2>&1 || true
+echo "  Runtime dir:"
+ls -la "$(dirname "$KEXTRACT")/../runtime/bin" 2>&1 || true
+
+echo "  Testing kextract --help..."
+if [[ "$KEXTRACT" == *.ps1 ]]; then
+    powershell -File "$KEXTRACT" --help 2>&1 | head -20 || true
+elif [[ "$KEXTRACT" == *.bat ]]; then
+    # On Windows, run .bat via cmd (convert path to Windows format)
+    WINPATH=$(cygpath -w "$KEXTRACT" 2>/dev/null || echo "$KEXTRACT")
+    cmd //c "$WINPATH" --help 2>&1 | head -20 || true
+else
+    "$KEXTRACT" --help 2>&1 | head -20 || true
+fi
+echo ""
 
 # Only runs on Windows — <windows.h> is Windows SDK only
 case "$(uname -s)" in
