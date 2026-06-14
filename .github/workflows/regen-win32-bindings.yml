@@ -65,6 +65,9 @@ jobs:
           BRANCH="regen/win32-bindings-$(date +%Y%m%d-%H%M%S)"
           git config user.name "Kadre Bot"
           git config user.email "bot@graphiks.org"
+          # Use token-authenticated URL for push
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote set-url origin "$REPO_URL"
           git checkout -b "$BRANCH"
           git add ffi/win32/
           git commit -m "regen: update Win32 FFM bindings from kextract $(git -C third_party/kextract rev-parse --short HEAD)"
