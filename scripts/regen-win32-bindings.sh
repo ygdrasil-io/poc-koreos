@@ -69,7 +69,10 @@ for dll in "${DLLS[@]}"; do
     ls -la "$yaml" 2>&1 || echo "    YAML FILE NOT FOUND"
 
     # Extract function names from the YAML mapping
-    IFS=$'\n' read -r -d '' -a functions < <(
+    functions=()
+    while IFS= read -r line; do
+        functions+=("$line")
+    done < <(
         sed -n '/^    functions:/,/^    structs:/{
             /^    functions:/d
             /^    structs:/d
@@ -78,7 +81,7 @@ for dll in "${DLLS[@]}"; do
                 p
             }
         }' "$yaml"
-    )
+    ) || true
     echo "    Functions: ${#functions[@]}"
     echo "    YAML: $yaml"
     echo "    HEADER: $HEADER"
