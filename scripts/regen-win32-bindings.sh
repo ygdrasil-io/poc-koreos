@@ -97,7 +97,7 @@ for dll in "${DLLS[@]}"; do
         -Dlibclang.debug=true \
         -cp "$CLASSPATH" \
         org.graphiks.kextract.pipeline.KextractTool \
-        "${kextractArgs[@]}" > /tmp/kextract_stdout.txt 2>/tmp/kextract_stderr.txt && rc=$? || rc=$?
+        "${kextractArgs[@]}" > /tmp/kextract_stdout.txt 2>/tmp/kextract_stderr.txt || rc=$?
     echo "    stdout:"
     cat /tmp/kextract_stdout.txt 2>&1 || true
     echo "    stderr:"
