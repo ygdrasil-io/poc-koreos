@@ -1,6 +1,8 @@
 /**
  * FFM bindings for the Win32 functions required for window management.
  *
+ * TODO-REGEN: this file will be replaced by kextract-generated bindings.
+ *
  * Loads user32.dll and kernel32.dll via SymbolLookup.libraryLookup with a
  * tryCreate pattern (try/catch Throwable) so the build passes on macOS/Linux.
  *
