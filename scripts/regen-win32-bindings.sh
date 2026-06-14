@@ -65,6 +65,8 @@ for dll in "${DLLS[@]}"; do
     yaml="$DLL_MAP_DIR/${dll}.yaml"
     echo ""
     echo "  Processing $dll..."
+    echo "    yaml path: $yaml"
+    ls -la "$yaml" 2>&1 || echo "    YAML FILE NOT FOUND"
 
     # Extract function names from the YAML mapping
     IFS=$'\n' read -r -d '' -a functions < <(
