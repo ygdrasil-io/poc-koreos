@@ -13,41 +13,34 @@
 set -euo pipefail
 
 KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
+DIST_DIR="$(dirname "$KEXTRACT")/.."
 
-# On Windows the distribution ships a .bat launcher
-if [ ! -x "$KEXTRACT" ] && [ -f "${KEXTRACT}.bat" ]; then
-    KEXTRACT="${KEXTRACT}.bat"
-elif [ ! -x "$KEXTRACT" ] && [ -f "${KEXTRACT}.ps1" ]; then
-    # Fallback to PowerShell launcher
-    KEXTRACT="${KEXTRACT}.ps1"
-elif [ ! -x "$KEXTRACT" ]; then
-    echo "kextract binary not executable: $KEXTRACT" >&2
-    # List the distribution directory for debugging
-    echo "Distribution contents:"
-    ls -la "$(dirname "$KEXTRACT")/.." 2>&1 || true
-    ls -la "$(dirname "$KEXTRACT")" 2>&1 || true
-    exit 1
-fi
+# On Windows the distribution ships a .bat launcher - use it to find the JRE
+JAVA="$DIST_DIR/runtime/bin/java"
+LIBS_DIR="$DIST_DIR/lib"
 
-# Debug: list distribution contents
-echo "  Kextract binary: $KEXTRACT"
-echo "  Distribution dir:"
-ls -la "$(dirname "$KEXTRACT")/.." 2>&1 || true
-echo "  Bin dir:"
-ls -la "$(dirname "$KEXTRACT")" 2>&1 || true
-echo "  Runtime dir:"
-ls -la "$(dirname "$KEXTRACT")/../runtime/bin" 2>&1 || true
+# Build classpath manually (JARs may have version suffixes)
+CLASSPATH=""
+for jar in "$LIBS_DIR"/*.jar; do
+    if [ -n "$CLASSPATH" ]; then
+        CLASSPATH="$CLASSPATH;$jar"
+    else
+        CLASSPATH="$jar"
+    fi
+done
+# Include System32 on Windows so System.loadLibrary("kernel32") works
+NATIVE_PATH="$LIBS_DIR"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT\\System32" ;; esac
 
-echo "  Testing kextract --help..."
-if [[ "$KEXTRACT" == *.ps1 ]]; then
-    powershell -File "$KEXTRACT" --help 2>&1 | head -20 || true
-elif [[ "$KEXTRACT" == *.bat ]]; then
-    # On Windows, run .bat via cmd (convert path to Windows format)
-    WINPATH=$(cygpath -w "$KEXTRACT" 2>/dev/null || echo "$KEXTRACT")
-    cmd //c "$WINPATH" --help 2>&1 | head -20 || true
-else
-    "$KEXTRACT" --help 2>&1 | head -20 || true
-fi
+# Quick test: verify kextract starts
+echo "  Java: $JAVA"
+echo "  NATIVE_PATH: $NATIVE_PATH"
+echo "  Testing: $JAVA -cp ... KextractTool --help"
+"$JAVA" --enable-native-access=ALL-UNNAMED \
+    "-Djava.library.path=$NATIVE_PATH" \
+    -cp "$CLASSPATH" \
+    org.graphiks.kextract.pipeline.KextractTool \
+    --help 2>&1 | head -20 || true
 echo ""
 
 # Only runs on Windows — <windows.h> is Windows SDK only
@@ -105,8 +98,12 @@ for dll in "${DLLS[@]}"; do
     done
     kextractArgs+=("$HEADER")
 
-    echo "    Running: $KEXTRACT"
-    "$KEXTRACT" "${kextractArgs[@]}" 2>&1 || {
+    echo "    Running: java -cp ... KextractTool"
+    "$JAVA" --enable-native-access=ALL-UNNAMED \
+        "-Djava.library.path=$NATIVE_PATH" \
+        -cp "$CLASSPATH" \
+        org.graphiks.kextract.pipeline.KextractTool \
+        "${kextractArgs[@]}" 2>&1 || {
         rc=$?
         echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
         exit $rc
