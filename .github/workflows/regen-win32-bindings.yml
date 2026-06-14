@@ -26,16 +26,19 @@ jobs:
           cache: 'gradle'
 
       - name: Grant execute permission
+        shell: bash
         run: |
           chmod +x gradlew
           chmod +x third_party/kextract/gradlew
 
       - name: Build kextract
         working-directory: third_party/kextract
+        shell: bash
         run: |
           ./gradlew createKextractImage --no-daemon --stacktrace
 
       - name: Regenerate Win32 bindings
+        shell: bash
         run: |
           scripts/regen-win32-bindings.sh third_party/kextract/build/kextract/bin/kextract
 
@@ -43,10 +46,10 @@ jobs:
         id: changes
         shell: bash
         run: |
-          if git diff --stat -- 'ffi/win32/' | grep -q .; then
+          if git status --porcelain -- 'ffi/win32/' | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "stats<<EOF" >> "$GITHUB_OUTPUT"
-            git diff --stat -- 'ffi/win32/' >> "$GITHUB_OUTPUT"
+            git status --porcelain -- 'ffi/win32/' >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
