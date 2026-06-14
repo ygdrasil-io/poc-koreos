@@ -13,7 +13,14 @@
 set -euo pipefail
 
 KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
-[ -x "$KEXTRACT" ] || { echo "kextract binary not executable: $KEXTRACT" >&2; exit 1; }
+
+# On Windows the distribution ships a .bat launcher
+if [ ! -x "$KEXTRACT" ] && [ -f "${KEXTRACT}.bat" ]; then
+    KEXTRACT="${KEXTRACT}.bat"
+elif [ ! -x "$KEXTRACT" ]; then
+    echo "kextract binary not executable: $KEXTRACT" >&2
+    exit 1
+fi
 
 # Only runs on Windows — <windows.h> is Windows SDK only
 case "$(uname -s)" in
@@ -42,7 +49,7 @@ for dll in "${DLLS[@]}"; do
     yaml="$DLL_MAP_DIR/${dll}.yaml"
     echo "  Processing $dll..."
 
-    # Extract function names from the YAML mapping (lines under "functions:" until next section)
+    # Extract function names from the YAML mapping
     IFS=$'\n' read -r -d '' -a functions < <(
         sed -n '/^    functions:/,/^    structs:/{
             /^    functions:/d
