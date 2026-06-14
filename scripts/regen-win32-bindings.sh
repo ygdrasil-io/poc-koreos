@@ -89,23 +89,12 @@ for dll in "${DLLS[@]}"; do
     done
     kextractArgs+=("$HEADER")
 
-    echo "    Running: java -cp ... KextractTool"
-    rc=0
-    "$JAVA" -Xrs --enable-native-access=ALL-UNNAMED \
-        "-Djava.library.path=$NATIVE_PATH" \
-        -Dkextract.debug=true \
-        -Dlibclang.debug=true \
-        -cp "$CLASSPATH" \
-        org.graphiks.kextract.pipeline.KextractTool \
-        "${kextractArgs[@]}" > /tmp/kextract_stdout.txt 2>/tmp/kextract_stderr.txt || rc=$?
-    echo "    stdout:"
-    cat /tmp/kextract_stdout.txt 2>&1 || true
-    echo "    stderr:"
-    cat /tmp/kextract_stderr.txt 2>&1 || true
-    if [ $rc -ne 0 ]; then
+    echo "    Running: $KEXTRACT"
+    "$KEXTRACT" "${kextractArgs[@]}" 2>&1 || {
+        rc=$?
         echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
         exit $rc
-    fi
+    }
 done
 
 echo ""
