@@ -78,6 +78,9 @@ for dll in "${DLLS[@]}"; do
         }' "$yaml"
     )
     echo "    Functions: ${#functions[@]}"
+    echo "    YAML: $yaml"
+    echo "    HEADER: $HEADER"
+    echo "    OUT_DIR: $OUT_DIR"
 
     kextractArgs=(
         --win32
