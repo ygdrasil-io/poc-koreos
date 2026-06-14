@@ -34,19 +34,21 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DLL_MAP_DIR="$SCRIPT_DIR/ffi/win32"
-OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin/org/graphiks/kadre/ffi/win32/generated"
+OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin"
 PACKAGE="org.graphiks.kadre.ffi.win32.generated"
 HEADER="<windows.h>"
 
 DLLS=(user32 kernel32 gdi32 dwmapi)
 
 echo "→ Regenerating Win32 bindings for ${#DLLS[@]} DLLs"
-echo "  Output  = $OUT_DIR"
+echo "  Output base: $OUT_DIR"
+echo "  Package:     $PACKAGE"
 
 mkdir -p "$OUT_DIR"
 
 for dll in "${DLLS[@]}"; do
     yaml="$DLL_MAP_DIR/${dll}.yaml"
+    echo ""
     echo "  Processing $dll..."
 
     # Extract function names from the YAML mapping
@@ -60,10 +62,12 @@ for dll in "${DLLS[@]}"; do
             }
         }' "$yaml"
     )
+    echo "    Functions: ${#functions[@]}"
 
     kextractArgs=(
         --win32
         --dll-map "$yaml"
+        --verbose
         -o "$OUT_DIR"
         -t "$PACKAGE"
     )
@@ -73,7 +77,13 @@ for dll in "${DLLS[@]}"; do
     done
     kextractArgs+=("$HEADER")
 
-    "$KEXTRACT" "${kextractArgs[@]}"
+    echo "    Running: $KEXTRACT"
+    "$KEXTRACT" "${kextractArgs[@]}" 2>&1 || {
+        rc=$?
+        echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
+        exit $rc
+    }
 done
 
-echo "✓ Done. Regenerated bindings at $OUT_DIR/"
+echo ""
+echo "✓ Done. Regenerated bindings at $OUT_DIR/$PACKAGE/"
