@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 #
 # Regenerates Win32 FFM bindings for DLLs needed by Kadre on Windows.
-# Uses --win32 and --dll-map to generate per-DLL bindings from <windows.h>.
+# Uses --win32 and --dll-map to generate per-DLL bindings from win32_api.h.
 #
 # Usage:
 #   scripts/regen-win32-bindings.sh /path/to/kextract/bin/kextract
 #
 # Requires:
-#   - Windows SDK (cl.exe/clang-cl must work)
 #   - kextract with --win32 and --dll-map support
 #
 set -euo pipefail
@@ -43,21 +42,13 @@ echo "  Testing: $JAVA -cp ... KextractTool --help"
     --help 2>&1 | head -20 || true
 echo ""
 
-# Only runs on Windows — <windows.h> is Windows SDK only
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) ;;
-    *)
-        echo "This script can only run on Windows (requires the Windows SDK for <windows.h>)." >&2
-        echo "Current OS: $(uname -s)" >&2
-        exit 0
-        ;;
-esac
+
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DLL_MAP_DIR="$SCRIPT_DIR/ffi/win32"
 OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin"
 PACKAGE="org.graphiks.kadre.ffi.win32.generated"
-HEADER="<windows.h>"
+HEADER="$SCRIPT_DIR/ffi/win32/win32_api.h"
 
 DLLS=(user32 kernel32 gdi32 dwmapi)
 
