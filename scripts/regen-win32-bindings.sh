@@ -96,6 +96,10 @@ for dll in "${DLLS[@]}"; do
     "$KEXTRACT" "${kextractArgs[@]}" 2>&1 || {
         rc=$?
         echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
+        # Check for JVM crash log
+        for f in hs_err_pid*.log; do
+            [ -f "$f" ] && echo "=== JVM crash log: $f ===" && cat "$f" && echo "==="
+        done
         exit $rc
     }
 done
