@@ -34,7 +34,7 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DLL_MAP_DIR="$SCRIPT_DIR/ffi/win32"
-OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin/org/graphiks/kadre/ffi/win32/generated"
+OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin"
 PACKAGE="org.graphiks.kadre.ffi.win32.generated"
 HEADER="<windows.h>"
 
