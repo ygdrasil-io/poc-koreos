@@ -34,12 +34,15 @@ case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) NATIVE_PATH="$NATIVE_PATH;$SYSTEMROO
 # Quick test: verify kextract starts
 echo "  Java: $JAVA"
 echo "  NATIVE_PATH: $NATIVE_PATH"
+echo "  Testing: java -version"
+"$JAVA" -version 2>&1 || true
+
 echo "  Testing: $JAVA -cp ... KextractTool --help"
 "$JAVA" --enable-native-access=ALL-UNNAMED \
     "-Djava.library.path=$NATIVE_PATH" \
     -cp "$CLASSPATH" \
     org.graphiks.kextract.pipeline.KextractTool \
-    --help 2>&1 | head -20 || true
+    --help 2>&1 | head -30 || true
 echo ""
 
 
