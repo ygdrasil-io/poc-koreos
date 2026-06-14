@@ -4,6 +4,10 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 concurrency:
   group: regen-win32-bindings-${{ github.ref }}
   cancel-in-progress: true
