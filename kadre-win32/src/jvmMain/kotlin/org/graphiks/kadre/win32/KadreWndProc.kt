@@ -37,6 +37,7 @@
 package org.graphiks.kadre.win32
 
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.KeyEvent
@@ -56,8 +57,42 @@ import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
+import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
+
+// ── Non-generated function bindings ────────────────────────────────────────────
+
+private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
+    return try {
+        val lookup = SymbolLookup.libraryLookup(libName, Arena.global())
+        lookup.find(symbol).map { Linker.nativeLinker().downcallHandle(it, desc) }.orElse(null)
+    } catch (_: Throwable) { null }
+}
+
+private val immGetCompositionStringW: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmGetCompositionStringW",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+private val dragQueryFileW: MethodHandle? by lazy {
+    lookupDowncall("shell32.dll", "DragQueryFileW",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+private val dragQueryPoint: MethodHandle? by lazy {
+    lookupDowncall("shell32.dll", "DragQueryPoint",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val dragFinish: MethodHandle? by lazy {
+    lookupDowncall("shell32.dll", "DragFinish",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
+}
 
 // ── Handler interface ─────────────────────────────────────────────────────────
 
@@ -480,9 +515,8 @@ object KadreWndProc {
      * @return Return value of DefWindowProcW, or 0 if the binding is unavailable.
      */
     private fun defWindowProcW(hwnd: Long, msg: Int, wParam: Long, lParam: Long): Long {
-        val handle = defWindowProcW ?: return 0L
         val hwndSeg = MemorySegment.ofAddress(hwnd)
-        return handle.invokeExact(hwndSeg, msg, wParam, lParam) as Long
+        return DefWindowProcW(hwndSeg, msg, wParam, lParam)
     }
 
     /**
@@ -493,7 +527,7 @@ object KadreWndProc {
      * @param nExitCode Exit code (0 = normal success).
      */
     private fun postQuitMessage(nExitCode: Int) {
-        postQuitMessage?.invoke(nExitCode)
+        PostQuitMessage(nExitCode)
     }
 
     /**
@@ -505,14 +539,13 @@ object KadreWndProc {
      * @return [KeyboardModifiers] representing the active modifiers.
      */
     private fun currentModifiers(): KeyboardModifiers {
-        if (getKeyState == null) return KeyboardModifiers.NONE
         var bits = 0
         // GetKeyState returns a Short: bit 15 = key down, bit 0 = toggle
-        if ((getKeyState!!.invokeExact(VK_SHIFT)   as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.SHIFT
-        if ((getKeyState!!.invokeExact(VK_CONTROL) as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.CTRL
-        if ((getKeyState!!.invokeExact(VK_MENU)    as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.ALT
-        if ((getKeyState!!.invokeExact(VK_LWIN)    as Short).toInt() and 0x8000 != 0 ||
-            (getKeyState!!.invokeExact(VK_RWIN)    as Short).toInt() and 0x8000 != 0) bits = bits or KeyboardModifiers.META
+        if ((GetKeyState(VK_SHIFT).toInt() and 0x8000) != 0) bits = bits or KeyboardModifiers.SHIFT
+        if ((GetKeyState(VK_CONTROL).toInt() and 0x8000) != 0) bits = bits or KeyboardModifiers.CTRL
+        if ((GetKeyState(VK_MENU).toInt() and 0x8000) != 0) bits = bits or KeyboardModifiers.ALT
+        if ((GetKeyState(VK_LWIN).toInt() and 0x8000) != 0 ||
+            (GetKeyState(VK_RWIN).toInt() and 0x8000) != 0) bits = bits or KeyboardModifiers.META
         return KeyboardModifiers(bits)
     }
 
@@ -612,19 +645,15 @@ object KadreWndProc {
      * @param hwndAddr Integer address of the HWND (MemorySegment.address()).
      */
     private fun armMouseLeaveTracking(hwndAddr: Long) {
-        val handle = trackMouseEvent ?: return
         try {
             val hwndSeg = MemorySegment.ofAddress(hwndAddr)
-            // Allocate TRACKMOUSEEVENT on the stack (auto-freed confined arena)
-            // Layout: DWORD cbSize (4) + DWORD dwFlags (4) + HWND hwndTrack (8) + DWORD dwHoverTime (4) + pad(4) = 24 bytes
-            val tme = MemorySegment.ofArray(LongArray(3)) // 24 bytes, 8-aligned
-            tme.set(ValueLayout.JAVA_INT,  0L, TRACKMOUSEEVENT_SIZE)  // cbSize
-            tme.set(ValueLayout.JAVA_INT,  4L, TME_LEAVE)             // dwFlags
-            tme.set(ValueLayout.ADDRESS,   8L, hwndSeg)               // hwndTrack
-            tme.set(ValueLayout.JAVA_INT, 16L, 0)                     // dwHoverTime (HOVER_DEFAULT)
-            handle.invokeExact(tme) as Int
+            val tme = MemorySegment.ofArray(LongArray(3))
+            tme.set(ValueLayout.JAVA_INT,  0L, TRACKMOUSEEVENT_SIZE)
+            tme.set(ValueLayout.JAVA_INT,  4L, TME_LEAVE)
+            tme.set(ValueLayout.ADDRESS,   8L, hwndSeg)
+            tme.set(ValueLayout.JAVA_INT, 16L, 0)
+            TrackMouseEvent(tme)
         } catch (_: Throwable) {
-            // Graceful degradation: WM_MOUSELEAVE will not be received
         }
     }
 
@@ -640,7 +669,6 @@ object KadreWndProc {
      * @param lParam WM_TOUCH lParam — HTOUCHINPUT handle.
      */
     private fun handleTouch(hwnd: Long, wParam: Long, lParam: Long) {
-        val getInfo = getTouchInputInfo ?: return
         val cInputs = (wParam and 0xFFFF).toInt()
         if (cInputs <= 0) return
 
@@ -649,22 +677,20 @@ object KadreWndProc {
             val arena = java.lang.foreign.Arena.ofConfined()
             arena.use {
                 val buffer = arena.allocate(cInputs.toLong() * TOUCHINPUT_SIZE, 8L)
-                val ok = getInfo.invokeExact(
+                val ok = GetTouchInputInfo(
                     hTouchInput,
                     cInputs,
                     buffer,
                     TOUCHINPUT_SIZE,
-                ) as Int
+                )
                 if (ok != 0) {
                     for (i in 0 until cInputs) {
                         decodeTouchInput(hwnd, buffer, i).forEach { event -> emit(hwnd, event) }
                     }
                 }
             }
-            // The handle must be closed exactly once whether or not the read succeeded.
-            closeTouchInputHandle?.invokeExact(hTouchInput) as Int?
+            CloseTouchInputHandle(hTouchInput)
         } catch (_: Throwable) {
-            // Graceful degradation: the touch contacts are dropped for this message.
         }
     }
 
@@ -770,13 +796,12 @@ object KadreWndProc {
     }
 
     private fun screenToClientTouchPoint(hwnd: Long, screenX: Int, screenY: Int): PhysicalPosition<Int>? {
-        val handle = screenToClient ?: return null
         return try {
             java.lang.foreign.Arena.ofConfined().use { arena ->
                 val point = arena.allocate(8L, 4L)
                 point.set(ValueLayout.JAVA_INT, 0L, screenX)
                 point.set(ValueLayout.JAVA_INT, 4L, screenY)
-                val ok = handle.invokeExact(MemorySegment.ofAddress(hwnd), point) as Int
+                val ok = ScreenToClient(MemorySegment.ofAddress(hwnd), point)
                 if (ok == 0) return@use null
                 PhysicalPosition(
                     point.get(ValueLayout.JAVA_INT, 0L),
@@ -898,8 +923,6 @@ object KadreWndProc {
      * @param lParam WM_GESTURE lParam — HGESTUREINFO handle.
      */
     private fun handleGesture(hwnd: Long, lParam: Long) {
-        val getInfo = getGestureInfo ?: return
-        val close = closeGestureInfoHandle ?: return
         if (lParam == 0L) return
 
         try {
@@ -908,7 +931,7 @@ object KadreWndProc {
                 val info = arena.allocate(GESTUREINFO_SIZE.toLong(), 8L)
                 info.set(ValueLayout.JAVA_INT, 0L, GESTUREINFO_SIZE)
 
-                val ok = getInfo.invokeExact(hGestureInfo, info) as Int
+                val ok = GetGestureInfo(hGestureInfo, info)
                 if (ok == 0) return@use
 
                 val dwFlags = info.get(ValueLayout.JAVA_INT, GESTUREINFO_OFFSET_FLAGS)
@@ -960,11 +983,10 @@ object KadreWndProc {
                 }
             }
         } catch (_: Throwable) {
-            // Graceful degradation: gesture is dropped for this message
         } finally {
             try {
                 val hGestureInfo = MemorySegment.ofAddress(lParam)
-                close.invokeExact(hGestureInfo) as Int
+                CloseGestureInfoHandle(hGestureInfo)
             } catch (_: Throwable) {}
         }
     }

@@ -85,6 +85,10 @@ private const val MONITORINFOEX_SZ_DEVICE_OFFSET: Long = 40L    // WCHAR[32] = 6
 
 // ── Lazy MethodHandles ────────────────────────────────────────────────────────
 
+private val user32: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("user32.dll", Arena.global()) } catch (_: Throwable) { null }
+}
+
 private val linkerW32: Linker = Linker.nativeLinker()
 
 private fun SymbolLookup?.downcallW32(name: String, desc: FunctionDescriptor): MethodHandle? {

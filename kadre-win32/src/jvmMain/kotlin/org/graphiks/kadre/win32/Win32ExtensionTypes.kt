@@ -11,7 +11,11 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowRequestResult
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 
 // ── Extension enums ────────────────────────────────────────────────────────────
 
@@ -171,6 +175,20 @@ internal fun CornerPreference.toDwmValue(): Int = when (this) {
     CornerPreference.DoNotRound -> 1
     CornerPreference.Round -> 2
     CornerPreference.RoundSmall -> 3
+}
+
+// ── DWM function binding ───────────────────────────────────────────────────────
+
+private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
+    return try {
+        val lookup = SymbolLookup.libraryLookup(libName, Arena.global())
+        lookup.find(symbol).map { Linker.nativeLinker().downcallHandle(it, desc) }.orElse(null)
+    } catch (_: Throwable) { null }
+}
+
+val dwmSetWindowAttribute: MethodHandle? by lazy {
+    lookupDowncall("dwmapi.dll", "DwmSetWindowAttribute",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
 }
 
 // ── Internal helper: apply DWM attribute ───────────────────────────────────────

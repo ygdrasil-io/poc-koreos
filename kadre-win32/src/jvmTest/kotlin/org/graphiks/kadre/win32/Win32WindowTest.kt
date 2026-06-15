@@ -108,8 +108,8 @@ class Win32WindowTest {
 
     @Test
     fun `enabled window buttons use winit close menu flags`() {
-        assertEquals(MF_BYCOMMAND or MF_ENABLED, win32CloseMenuState(enabled = true))
-        assertEquals(MF_BYCOMMAND or MF_DISABLED, win32CloseMenuState(enabled = false))
+        assertEquals(MF_BYCOMMAND or MFS_ENABLED, win32CloseMenuState(enabled = true))
+        assertEquals(MF_BYCOMMAND or MFS_DISABLED, win32CloseMenuState(enabled = false))
     }
 
     @Test
@@ -221,27 +221,6 @@ class Win32WindowTest {
         assertEquals(0xA4, VK_LMENU)
         assertEquals(0x12, VK_MENU)
         assertEquals(0, MAPVK_VK_TO_VSC)
-    }
-
-    @Test
-    fun `user32 and kernel32 are null on non-Windows platform`() {
-        if (isWindows()) return  // skip on Windows (the libs exist)
-        // On macOS/Linux, the lazy loaders must return null
-        assertNull(user32)
-        assertNull(kernel32)
-    }
-
-    @Test
-    fun `the FFM MethodHandles are null on non-Windows platform`() {
-        if (isWindows()) return
-        assertNull(registerClassExW)
-        assertNull(createWindowExW)
-        assertNull(showWindow)
-        assertNull(updateWindow)
-        assertNull(destroyWindow)
-        assertNull(defWindowProcW)
-        assertNull(setWindowTextW)
-        assertNull(getModuleHandleW)
     }
 
     @Test

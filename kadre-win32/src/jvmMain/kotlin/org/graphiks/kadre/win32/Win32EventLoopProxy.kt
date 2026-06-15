@@ -13,12 +13,14 @@
  */
 package org.graphiks.kadre.win32
 
-import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
 import org.graphiks.kadre.core.EventLoopProxy
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 
 /**
  * WM_NULL — Win32 null message, ignored by the WndProc.
@@ -29,22 +31,11 @@ import java.lang.foreign.ValueLayout
 private const val WM_NULL: Int = 0x0000
 
 /**
- * Lazy binding for GetCurrentThreadId (kernel32).
- *
- * Returns the identifier of the calling thread.
+ * Local SymbolLookup for user32.dll — needed for PostThreadMessageW
+ * which is not part of the generated bindings.
  */
-private val getCurrentThreadId by lazy {
-    kernel32?.let { lookup ->
-        try {
-            val linker = java.lang.foreign.Linker.nativeLinker()
-            lookup.find("GetCurrentThreadId").map { sym ->
-                linker.downcallHandle(
-                    sym,
-                    FunctionDescriptor.of(ValueLayout.JAVA_INT)
-                )
-            }.orElse(null)
-        } catch (_: Throwable) { null }
-    }
+private val user32: SymbolLookup? by lazy {
+    try { SymbolLookup.libraryLookup("user32", Arena.global()) } catch (_: Throwable) { null }
 }
 
 /**
@@ -106,7 +97,7 @@ internal class Win32EventLoopProxy(
          */
         fun create(): Win32EventLoopProxy {
             val threadId = try {
-                getCurrentThreadId?.let { it.invokeExact() as Int } ?: 0
+                GetCurrentThreadId().toInt()
             } catch (_: Throwable) { 0 }
             return Win32EventLoopProxy(threadId)
         }
