@@ -1,7 +1,6 @@
 name: Regenerate Win32 bindings
 
 on:
-  push:
   workflow_dispatch:
 
 permissions:
