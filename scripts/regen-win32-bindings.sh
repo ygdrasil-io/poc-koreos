@@ -59,19 +59,12 @@ for dll in "${DLLS[@]}"; do
 done
 echo "  Total functions: ${#ALL_FUNCTIONS[@]}"
 
-# Combine all DLL YAMLs into one --dll-map (merge all DLL mappings)
+# Merge all DLL YAMLs into one
 COMBINED_YAML="/tmp/combined_win32.yaml"
-python3 -c "
-import yaml, sys
-data = {'dllMap': {}}
-for dll in '${DLLS[@]}'.split():
-    with open('$PWD/ffi/win32/' + dll + '.yaml') as f:
-        d = yaml.safe_load(f)
-        data['dllMap'].update(d.get('dllMap', {}))
-with open('$COMBINED_YAML', 'w') as f:
-    yaml.dump(data, f, default_flow_style=False)
-"
-echo "  Combined YAML: $(python3 -c "import yaml; d=yaml.safe_load(open('$COMBINED_YAML')); print(sum(len(v.get('functions',[])) for v in d['dllMap'].values()))") functions"
+printf 'dllMap:\n' > "$COMBINED_YAML"
+for dll in "${DLLS[@]}"; do
+    awk '/^  "/{found=1} found' "$PWD/ffi/win32/${dll}.yaml" >> "$COMBINED_YAML"
+done
 
 # Single temp header (name determines output filename)
 TMP_HDR="/tmp/win32_all.h"
