@@ -80,5 +80,4 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "regen: Win32 FFM bindings $(date +%Y-%m-%d)" \
-            --body "Automated regeneration of Win32 FFM bindings via kextract --win32 --dll-map." \
-            --label "automated"
+            --body "Automated regeneration of Win32 FFM bindings via kextract --win32 --dll-map."
