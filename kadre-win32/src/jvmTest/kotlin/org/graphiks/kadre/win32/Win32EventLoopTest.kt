@@ -184,38 +184,6 @@ class Win32EventLoopTest {
         assertEquals(40, MsgLayout.OFFSET_PT_Y)
     }
 
-    // ── FFM bindings — null on non-Windows ────────────────────────────────────
-
-    @Test
-    fun `peekMessageW is null on non-Windows platform`() {
-        if (isWindows()) return
-        assertEquals(null, peekMessageW)
-    }
-
-    @Test
-    fun `getMessageW is null on non-Windows platform`() {
-        if (isWindows()) return
-        assertEquals(null, getMessageW)
-    }
-
-    @Test
-    fun `translateMessage is null on non-Windows platform`() {
-        if (isWindows()) return
-        assertEquals(null, translateMessage)
-    }
-
-    @Test
-    fun `dispatchMessageW is null on non-Windows platform`() {
-        if (isWindows()) return
-        assertEquals(null, dispatchMessageW)
-    }
-
-    @Test
-    fun `msgWaitForMultipleObjectsEx is null on non-Windows platform`() {
-        if (isWindows()) return
-        assertEquals(null, msgWaitForMultipleObjectsEx)
-    }
-
     // ── runApp — singleton lock ───────────────────────────────────────────────
 
     @Test

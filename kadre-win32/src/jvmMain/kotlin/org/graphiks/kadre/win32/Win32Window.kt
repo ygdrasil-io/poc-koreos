@@ -41,6 +41,7 @@ import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
@@ -48,6 +49,89 @@ import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
+
+private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
+    return try {
+        val lookup = SymbolLookup.libraryLookup(libName, Arena.global())
+        lookup.find(symbol).map { Linker.nativeLinker().downcallHandle(it, desc) }.orElse(null)
+    } catch (_: Throwable) { null }
+}
+
+private val dwmExtendFrameIntoClientArea: MethodHandle? by lazy {
+    lookupDowncall("dwmapi.dll", "DwmExtendFrameIntoClientArea",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val dwmEnableBlurBehindWindow: MethodHandle? by lazy {
+    lookupDowncall("dwmapi.dll", "DwmEnableBlurBehindWindow",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val setWindowDisplayAffinity: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "SetWindowDisplayAffinity",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+private val flashWindowEx: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "FlashWindowEx",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+private val getActiveWindow: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetActiveWindow",
+        FunctionDescriptor.of(ValueLayout.ADDRESS))
+}
+
+private val setLayeredWindowAttributes: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "SetLayeredWindowAttributes",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_INT))
+}
+
+private val dragAcceptFiles: MethodHandle? by lazy {
+    lookupDowncall("shell32.dll", "DragAcceptFiles",
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+internal val toUnicode: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "ToUnicode",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
+}
+
+internal val getKeyboardState: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetKeyboardState",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+private val immAssociateContextEx: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmAssociateContextEx",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+internal val immGetContext: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmGetContext",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+internal val immReleaseContext: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmReleaseContext",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val immSetCompositionWindow: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmSetCompositionWindow",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val immSetCandidateWindow: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmSetCandidateWindow",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val immSetConversionStatus: MethodHandle? by lazy {
+    lookupDowncall("imm32.dll", "ImmSetConversionStatus",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
+}
 
 /**
  * Native Win32 window implementing [Window].
@@ -65,18 +149,11 @@ class Win32Window private constructor(
     private val ownerThreadId: Int,
 ) : Window {
 
-    // ── R2 fullscreen state ──────────────────────────────────────────────────
+    // -- R2 fullscreen state --
 
-    /** In-memory fullscreen state (R2). */
     @Volatile private var _fullscreen: Fullscreen? = attrs.fullscreen
-
-    /** Saved window style before entering borderless fullscreen (for restoration). */
     @Volatile private var _savedStyle: Long? = null
-
-    /** Saved window rect before entering borderless fullscreen (for restoration). */
     @Volatile private var _savedRect: IntArray? = null
-
-    /** Tracks enabled title-bar/system-menu buttons, matching winit's WindowButtons model. */
     @Volatile private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
     private val iconLock = Any()
@@ -96,9 +173,6 @@ class Win32Window private constructor(
     override fun inputCapabilities(): InputCapabilities =
         InputCapabilities(touch = true)
 
-    /**
-     * Redraw flag — set by [requestRedraw], consumed by the message loop.
-     */
     @Volatile
     private var needsRedraw: Boolean = false
 
@@ -107,46 +181,23 @@ class Win32Window private constructor(
     }
 
     override fun setTitle(title: String) {
-        val handle = setWindowTextW ?: return
         Arena.ofConfined().use { arena ->
             val titleW = arena.allocateWString(title)
-            handle.invokeExact(hwnd, titleW) as Int
+            SetWindowTextW(hwnd, titleW)
         }
     }
 
-    /**
-     * Inner size (render surface) in physical pixels.
-     *
-     * Calls GetClientRect(hwnd) directly so the value is always fresh,
-     * even between WM_SIZE messages. Falls back to the attributes size
-     * (or 800×600) if the handle is unavailable or the call fails.
-     */
     override val innerSize: PhysicalSize<Int>
-        get() = rectToSize(getClientRect) ?: attrs.size ?: PhysicalSize(800, 600)
+        get() = rectToSize { GetClientRect(hwnd, it) } ?: attrs.size ?: PhysicalSize(800, 600)
 
-    /**
-     * Outer size (window + decorations) in physical pixels.
-     *
-     * Calls GetWindowRect(hwnd) directly so the value is always fresh.
-     * Falls back to the attributes size (or 800×600) on failure.
-     */
     override val outerSize: PhysicalSize<Int>
-        get() = rectToSize(getWindowRect) ?: attrs.size ?: PhysicalSize(800, 600)
+        get() = rectToSize { GetWindowRect(hwnd, it) } ?: attrs.size ?: PhysicalSize(800, 600)
 
-    /**
-     * Calls the given Win32 rect-filling function (GetClientRect or GetWindowRect)
-     * and converts the resulting RECT into a [PhysicalSize].
-     *
-     * Allocates a 16-byte RECT in a confined arena for the duration of the call.
-     *
-     * @return the measured size, or null if the handle is null or the call returns 0.
-     */
-    private fun rectToSize(handle: MethodHandle?): PhysicalSize<Int>? {
-        handle ?: return null
+    private fun rectToSize(fillRect: (MemorySegment) -> Int): PhysicalSize<Int>? {
         return try {
             Arena.ofConfined().use { arena ->
                 val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                val ok = handle.invokeExact(hwnd, rect) as Int
+                val ok = fillRect(rect)
                 if (ok == 0) return@use null
                 val width  = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_RIGHT)  -
                              rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
@@ -159,20 +210,9 @@ class Win32Window private constructor(
         }
     }
 
-    /**
-     * DPI scale factor of this window.
-     *
-     * Calls GetDpiForWindow(hwnd) and divides by 96 (Windows reference logical
-     * DPI). Returns 1.0 when unavailable (non-Windows or invalid window)
-     * for graceful cross-platform behavior.
-     *
-     * GRA-12: DPI awareness PerMonitorV2.
-     */
     override val scaleFactor: Double
         get() = try {
-            // GetDpiForWindow returns UINT; capture as Int (an `as? Int` would make invokeExact
-            // expect an Object return and throw WrongMethodTypeException, silently forcing 1.0).
-            val dpi = getDpiForWindow?.let { it.invokeExact(hwnd) as Int } ?: 0
+            val dpi = GetDpiForWindow(hwnd)
             if (dpi > 0) dpi.toDouble() / 96.0 else 1.0
         } catch (_: Throwable) {
             1.0
@@ -183,16 +223,15 @@ class Win32Window private constructor(
             return try {
                 Arena.ofConfined().use { arena ->
                     val windowRect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                    val wrOk = getWindowRect?.invokeExact(hwnd, windowRect) as? Int ?: 0
+                    val wrOk = GetWindowRect(hwnd, windowRect)
                     if (wrOk == 0) return@use Insets(0, 0, 0, 0)
 
                     val clientRect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                    val crOk = getClientRect?.invokeExact(hwnd, clientRect) as? Int ?: 0
+                    val crOk = GetClientRect(hwnd, clientRect)
                     if (crOk == 0) return@use Insets(0, 0, 0, 0)
 
                     val clientTopLeft = arena.allocate(POINT_SIZE, POINT_ALIGN)
-                    val cts = clientToScreen ?: return@use Insets(0, 0, 0, 0)
-                    val ctsOk = cts.invokeExact(hwnd, clientTopLeft) as? Int ?: 0
+                    val ctsOk = ClientToScreen(hwnd, clientTopLeft)
                     if (ctsOk == 0) return@use Insets(0, 0, 0, 0)
 
                     val clientLeft = clientTopLeft.get(ValueLayout.JAVA_INT, POINT_OFFSET_X)
@@ -219,27 +258,24 @@ class Win32Window private constructor(
         }
 
     override fun setVisible(visible: Boolean) {
-        val handle = showWindow ?: return
         val nCmdShow = if (visible) SW_SHOW else SW_HIDE
-        handle.invokeExact(hwnd, nCmdShow) as Int
+        ShowWindow(hwnd, nCmdShow)
     }
 
     override fun close() {
-        val handle = destroyWindow ?: return
         setWindowIcon(null)
         KadreWndProc.unregisterConstraints(hwnd.address())
-        handle.invokeExact(hwnd) as Int
+        DestroyWindow(hwnd)
     }
 
-    // ── R1: window state & geometry ───────────────────────────────────────────
+    // -- R1: window state & geometry --
 
     override val title: String
         get() {
-            val handle = getWindowTextW ?: return attrs.title
             return try {
                 Arena.ofConfined().use { arena ->
                     val buf = arena.allocate(512L, 2L)
-                    val len = handle.invokeExact(hwnd, buf, 256) as Int
+                    val len = GetWindowTextW(hwnd, buf, 256)
                     if (len <= 0) return@use ""
                     val chars = CharArray(len) {
                         buf.getAtIndex(ValueLayout.JAVA_SHORT, it.toLong()).toInt().toChar()
@@ -251,23 +287,17 @@ class Win32Window private constructor(
 
     override val isVisible: Boolean?
         get() = try {
-            isWindowVisible?.let { (it.invokeExact(hwnd) as Int) != 0 }
+            IsWindowVisible(hwnd) != 0
         } catch (_: Throwable) { null }
 
-    /** Returns the current Win32 GWL_STYLE value, or 0 on failure. */
     private fun getWindowStyle(): Long = try {
-        getWindowLongPtrW?.invokeExact(hwnd, GWL_STYLE) as? Long ?: 0L
+        GetWindowLongPtrW(hwnd, GWL_STYLE)
     } catch (_: Throwable) { 0L }
 
-    /** Applies a new GWL_STYLE value and forces a non-client redraw. */
     private fun setWindowStyle(style: Long) {
         try {
-            setWindowLongPtrW?.invokeExact(hwnd, GWL_STYLE, style) as? Long
-            // SWP with no-op move/size forces the frame to redraw immediately.
-            setWindowPos?.invokeExact(
-                hwnd, MemorySegment.NULL, 0, 0, 0, 0,
-                WIN32_STYLE_UPDATE_FLAGS,
-            ) as? Int
+            SetWindowLongPtrW(hwnd, GWL_STYLE, style)
+            SetWindowPos(hwnd, MemorySegment.NULL, 0, 0, 0, 0, WIN32_STYLE_UPDATE_FLAGS)
         } catch (_: Throwable) {}
     }
 
@@ -284,25 +314,25 @@ class Win32Window private constructor(
     override fun setMinimized(minimized: Boolean) {
         try {
             val nCmd = if (minimized) SW_MINIMIZE else SW_RESTORE
-            showWindow?.invokeExact(hwnd, nCmd) as? Int
+            ShowWindow(hwnd, nCmd)
         } catch (_: Throwable) {}
     }
 
     override val isMinimized: Boolean?
         get() = try {
-            isIconic?.let { (it.invokeExact(hwnd) as Int) != 0 }
+            IsIconic(hwnd) != 0
         } catch (_: Throwable) { null }
 
     override fun setMaximized(maximized: Boolean) {
         try {
             val nCmd = if (maximized) SW_MAXIMIZE else SW_RESTORE
-            showWindow?.invokeExact(hwnd, nCmd) as? Int
+            ShowWindow(hwnd, nCmd)
         } catch (_: Throwable) {}
     }
 
     override val isMaximized: Boolean
         get() = try {
-            (isZoomed?.invokeExact(hwnd) as? Int ?: 0) != 0
+            IsZoomed(hwnd) != 0
         } catch (_: Throwable) { false }
 
     override fun setDecorations(decorated: Boolean) {
@@ -341,13 +371,9 @@ class Win32Window private constructor(
 
     private fun updateCloseMenuItem(enabled: Boolean) {
         try {
-            val menu = getSystemMenu?.invokeExact(hwnd, 0) as? MemorySegment ?: return
+            val menu = GetSystemMenu(hwnd, 0)
             if (menu == MemorySegment.NULL) return
-            enableMenuItem?.invokeExact(
-                menu,
-                SC_CLOSE,
-                win32CloseMenuState(enabled),
-            ) as? Int
+            EnableMenuItem(menu, SC_CLOSE, win32CloseMenuState(enabled))
         } catch (_: Throwable) {}
     }
 
@@ -388,7 +414,7 @@ class Win32Window private constructor(
         get() = try {
             Arena.ofConfined().use { arena ->
                 val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                val ok = getWindowRect?.invokeExact(hwnd, rect) as? Int ?: 0
+                val ok = GetWindowRect(hwnd, rect)
                 if (ok == 0) return@use PhysicalPosition(0, 0)
                 val x = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
                 val y = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP)
@@ -398,25 +424,18 @@ class Win32Window private constructor(
 
     override fun setOuterPosition(position: PhysicalPosition<Int>) {
         try {
-            setWindowPos?.invokeExact(
+            SetWindowPos(
                 hwnd, MemorySegment.NULL,
                 position.x, position.y, 0, 0,
                 SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE,
-            ) as? Int
+            )
         } catch (_: Throwable) {}
     }
 
-    /**
-     * No-op on Win32: there is no equivalent to Wayland's `wl_surface.pre_commit`.
-     */
     override fun prePresentNotify() { /* no-op on Win32 */ }
 
-    // ── R2: monitor & fullscreen ──────────────────────────────────────────────
+    // -- R2: monitor & fullscreen --
 
-    /**
-     * Returns the monitor that contains the majority of this Win32 window
-     * via MonitorFromWindow(MONITOR_DEFAULTTONEAREST).
-     */
     override fun currentMonitor(): MonitorHandle? = win32MonitorFromHwnd(hwnd)
 
     override fun availableMonitors(): List<MonitorHandle> =
@@ -443,38 +462,20 @@ class Win32Window private constructor(
 
     private fun isForegroundWindow(): Boolean =
         try {
-            val foreground = getForegroundWindow?.invokeExact() as? MemorySegment ?: return false
+            val foreground = GetForegroundWindow()
             foreground.address() == hwnd.address()
         } catch (_: Throwable) {
             false
         }
 
-    /**
-     * Enters or exits fullscreen mode on Win32.
-     *
-     * **Borderless** fullscreen: saves the current window style and rect, switches the
-     * window to WS_POPUP, and stretches it to cover the target monitor's virtual rect.
-     * Exiting restores the saved style and rect.
-     *
-     * **Exclusive** fullscreen: calls ChangeDisplaySettingsExW to request a mode change on
-     * the target monitor, then enters borderless mode covering the full monitor. Exiting
-     * calls ChangeDisplaySettingsExW with NULL to restore the original mode.
-     *
-     * Note: ChangeDisplaySettings is not wired here because it requires a DEVMODEW upcall
-     * and is only relevant on hardware running Windows; it is documented as not yet
-     * implemented and falls back to borderless.
-     */
     override fun setFullscreen(fullscreen: Fullscreen?) {
         try {
             when (fullscreen) {
                 null -> exitFullscreen()
                 is Fullscreen.Borderless -> enterBorderless(fullscreen.monitor)
                 is Fullscreen.Exclusive  -> {
-                    // Exclusive on Win32 would require ChangeDisplaySettingsExW.
-                    // Fallback to borderless and document the limitation.
-                    // TODO(R2-win32-exclusive): implement via ChangeDisplaySettingsExW.
                     enterBorderless(fullscreen.monitor)
-                    _fullscreen = fullscreen // report back the requested mode
+                    _fullscreen = fullscreen
                 }
             }
         } catch (_: Throwable) {}
@@ -482,12 +483,11 @@ class Win32Window private constructor(
 
     private fun enterBorderless(monitor: MonitorHandle?) {
         if (_savedStyle == null) {
-            // Save current state for restoration
             _savedStyle = getWindowStyle()
             _savedRect = try {
                 Arena.ofConfined().use { arena ->
                     val rect = arena.allocate(16L, 4L)
-                    val ok = getWindowRect?.invokeExact(hwnd, rect) as? Int ?: 0
+                    val ok = GetWindowRect(hwnd, rect)
                     if (ok != 0) intArrayOf(
                         rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT),
                         rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP),
@@ -498,7 +498,6 @@ class Win32Window private constructor(
             } catch (_: Throwable) { null }
         }
 
-        // Determine target monitor rect
         val targetMonitor: Win32MonitorHandle? = when (monitor) {
             is Win32MonitorHandle -> monitor
             null -> win32MonitorFromHwnd(hwnd)
@@ -513,13 +512,12 @@ class Win32Window private constructor(
             intArrayOf(0, 0, 1920, 1080)
         }
 
-        // Switch to WS_POPUP (borderless)
         setWindowStyle(0x80000000L.toLong() or WS_VISIBLE.toLong())
-        setWindowPos?.invokeExact(
+        SetWindowPos(
             hwnd, HWND_TOP,
             mx, my, mw, mh,
             SWP_NOACTIVATE or SWP_FRAMECHANGED,
-        ) as? Int
+        )
 
         _fullscreen = Fullscreen.Borderless(monitor)
     }
@@ -532,11 +530,11 @@ class Win32Window private constructor(
             if (savedRect != null) {
                 val w = savedRect[2] - savedRect[0]
                 val h = savedRect[3] - savedRect[1]
-                setWindowPos?.invokeExact(
+                SetWindowPos(
                     hwnd, HWND_TOP,
                     savedRect[0], savedRect[1], w, h,
                     SWP_NOACTIVATE or SWP_FRAMECHANGED,
-                ) as? Int
+                )
             }
             _savedStyle = null
             _savedRect  = null
@@ -544,83 +542,47 @@ class Win32Window private constructor(
         _fullscreen = null
     }
 
-    // ── R3: cursor, theme & appearance ───────────────────────────────────────
+    // -- R3: cursor, theme & appearance --
 
-    /** Current cursor handle (loaded via LoadCursorW). */
     @Volatile private var _cursorHandle: MemorySegment? = null
 
-    /**
-     * Sets the cursor shape by loading the system cursor via LoadCursorW.
-     *
-     * The cursor is set immediately and takes effect on the next WM_SETCURSOR.
-     */
     override fun setCursor(cursor: CursorIcon) {
         try {
             val id = cursorIdcResource(cursor)
-            val hCursor = loadCursorW?.invokeExact(
-                MemorySegment.NULL,
-                MemorySegment.ofAddress(id),
-            ) as? MemorySegment ?: return
+            val hCursor = LoadCursorW(MemorySegment.NULL, MemorySegment.ofAddress(id))
+            if (hCursor == MemorySegment.NULL) return
             _cursorHandle = hCursor
-            setCursor?.invokeExact(hCursor) as? MemorySegment
+            SetCursor(hCursor)
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Applies a previously created custom cursor to this window.
-     */
     override fun setCustomCursor(cursor: CustomCursor) {
         try {
             val hCursor = MemorySegment.ofAddress(cursor.id)
             _cursorHandle = hCursor
-            setCursor?.invokeExact(hCursor) as? MemorySegment
+            SetCursor(hCursor)
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Shows or hides the system cursor via ShowCursor.
-     *
-     * Note: ShowCursor uses a display counter — multiple hide calls require
-     * multiple show calls. We call it once each way as a best-effort.
-     */
     override fun setCursorVisible(visible: Boolean) {
         try {
-            showCursorHandle?.invokeExact(if (visible) 1 else 0) as? Int
+            ShowCursor(if (visible) 1 else 0)
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Sets the cursor grab mode.
-     *
-     * - [CursorGrabMode.Confined]: calls ClipCursor with the client rect.
-     * - [CursorGrabMode.Locked]:   same (no Pointer Lock API on Win32; raw input
-     *   would be the full implementation, flagged as TODO).
-     * - [CursorGrabMode.None]:     releases the clip via ClipCursor(NULL).
-     *
-     * Note: Risk FFM — ClipCursor writes a RECT via the pointer; layout must
-     * be exact (16 bytes, 4-byte aligned).
-     */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
         try {
-            val clip = clipCursor ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 ClipCursor is unavailable"),
-            )
             when (mode) {
                 CursorGrabMode.None -> {
-                    val ok = clip.invokeExact(MemorySegment.NULL) as Int
+                    val ok = ClipCursor(MemorySegment.NULL)
                     if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("ClipCursor(NULL) failed"))
                 }
                 CursorGrabMode.Confined, CursorGrabMode.Locked -> {
-                    val getRect = getWindowRect ?: return WindowRequestResult.Failure(
-                        RequestError.Unsupported("Win32 GetWindowRect is unavailable"),
-                    )
-                    // ClipCursor expects SCREEN coordinates → GetWindowRect (not GetClientRect,
-                    // whose top-left is always 0,0 and would confine to the screen corner).
                     Arena.ofConfined().use { arena ->
                         val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                        val rectOk = getRect.invokeExact(hwnd, rect) as Int
+                        val rectOk = GetWindowRect(hwnd, rect)
                         if (rectOk == 0) return WindowRequestResult.Failure(RequestError.OsError("GetWindowRect failed for cursor grab"))
-                        val clipOk = clip.invokeExact(rect) as Int
+                        val clipOk = ClipCursor(rect)
                         if (clipOk == 0) return WindowRequestResult.Failure(RequestError.OsError("ClipCursor failed"))
                     }
                 }
@@ -630,26 +592,16 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor grab failed"))
         }
 
-    /**
-     * Moves the cursor to the specified window-relative position via SetCursorPos.
-     */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
         try {
-            val getRect = getWindowRect ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 GetWindowRect is unavailable"),
-            )
-            val setPos = setCursorPos ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 SetCursorPos is unavailable"),
-            )
-            // Convert window-client coords to screen coords via GetWindowRect
             val (screenX, screenY) = Arena.ofConfined().use { arena ->
                 val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                val ok = getRect.invokeExact(hwnd, rect) as Int
+                val ok = GetWindowRect(hwnd, rect)
                 if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("GetWindowRect failed for cursor position"))
                 rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT) + position.x to
                     rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP) + position.y
             }
-            val ok = setPos.invokeExact(screenX, screenY) as Int
+            val ok = SetCursorPos(screenX, screenY)
             if (ok == 0) {
                 WindowRequestResult.Failure(RequestError.OsError("SetCursorPos failed"))
             } else {
@@ -659,34 +611,23 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor position failed"))
         }
 
-    /**
-     * Enables or disables click-through via WS_EX_TRANSPARENT (extended style).
-     *
-     * Note: WS_EX_TRANSPARENT makes the window transparent to mouse input.
-     */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
         try {
-            val getStyle = getWindowLongPtrW ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 GetWindowLongPtrW is unavailable"),
-            )
-            val setStyle = setWindowLongPtrW ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 SetWindowLongPtrW is unavailable"),
-            )
-            setLastError?.invoke(0)
-            val exStyle = getStyle.invokeExact(hwnd, GWL_EXSTYLE) as Long
+            SetLastError(0L)
+            val exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
             if (exStyle == 0L) {
-                val error = try { getLastError?.invokeExact() as? Int ?: 0 } catch (_: Throwable) { 0 }
+                val error = GetLastError().toInt()
                 if (error != 0) {
                     return WindowRequestResult.Failure(RequestError.OsError("GetWindowLongPtrW failed: $error"))
                 }
             }
-            val transparentFlag = 0x00000020L // WS_EX_TRANSPARENT
+            val transparentFlag = 0x00000020L
             val newStyle = if (!hittest) exStyle or transparentFlag
                            else exStyle and transparentFlag.inv()
-            setLastError?.invoke(0)
-            val previous = setStyle.invokeExact(hwnd, GWL_EXSTYLE, newStyle) as Long
+            SetLastError(0L)
+            val previous = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, newStyle)
             if (previous == 0L) {
-                val error = try { getLastError?.invokeExact() as? Int ?: 0 } catch (_: Throwable) { 0 }
+                val error = GetLastError().toInt()
                 if (error != 0) {
                     return WindowRequestResult.Failure(RequestError.OsError("SetWindowLongPtrW failed: $error"))
                 }
@@ -696,24 +637,9 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor hit-testing failed"))
         }
 
-    /**
-     * Shows the native Win32 system menu at a window-relative physical position.
-     */
     override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
         try {
-            val menuHandle = getSystemMenu ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 GetSystemMenu is unavailable"),
-            )
-            val trackMenu = trackPopupMenu ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 TrackPopupMenu is unavailable"),
-            )
-            val postMessage = postMessageW ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 PostMessageW is unavailable"),
-            )
-            val toScreen = clientToScreen ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 ClientToScreen is unavailable"),
-            )
-            val menu = menuHandle.invokeExact(hwnd, 0) as MemorySegment
+            val menu = GetSystemMenu(hwnd, 0)
             if (menu == MemorySegment.NULL) {
                 return WindowRequestResult.Success
             }
@@ -722,12 +648,12 @@ class Win32Window private constructor(
                 val point = arena.allocate(POINT_SIZE, POINT_ALIGN)
                 point.set(ValueLayout.JAVA_INT, POINT_OFFSET_X, position.x)
                 point.set(ValueLayout.JAVA_INT, POINT_OFFSET_Y, position.y)
-                val ok = toScreen.invokeExact(hwnd, point) as Int
+                val ok = ClientToScreen(hwnd, point)
                 if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("ClientToScreen failed for window menu"))
                 point.get(ValueLayout.JAVA_INT, POINT_OFFSET_X) to
                     point.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
             }
-            val command = trackMenu.invokeExact(
+            val command = TrackPopupMenu(
                 menu,
                 TPM_RETURNCMD or TPM_LEFTALIGN,
                 screenX,
@@ -735,9 +661,9 @@ class Win32Window private constructor(
                 0,
                 hwnd,
                 MemorySegment.NULL,
-            ) as Int
+            )
             if (command != 0) {
-                val ok = postMessage.invokeExact(hwnd, WM_SYSCOMMAND, command.toLong(), 0L) as Int
+                val ok = PostMessageW(hwnd, WM_SYSCOMMAND, command.toLong(), 0L)
                 if (ok == 0) return WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_SYSCOMMAND) failed"))
             }
             WindowRequestResult.Success
@@ -745,25 +671,16 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 window menu failed"))
         }
 
-    /**
-     * Starts a native system move drag from the current pointer position.
-     */
     override fun dragWindow(): WindowRequestResult =
         sendNonClientDrag(HTCAPTION, "Win32 window drag failed")
 
-    /**
-     * Starts a native system resize drag for the requested border/corner.
-     */
     override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
         sendNonClientDrag(direction.toWin32HitTest(), "Win32 resize drag failed")
 
     private fun sendNonClientDrag(hitTest: Long, failureMessage: String): WindowRequestResult =
         try {
-            val postMessage = postMessageW ?: return WindowRequestResult.Failure(
-                RequestError.Unsupported("Win32 PostMessageW is unavailable"),
-            )
             if (!isOwnerThread()) {
-                val ok = postMessage.invokeExact(hwnd, WM_KADRE_NON_CLIENT_DRAG, hitTest, 0L) as Int
+                val ok = PostMessageW(hwnd, WM_KADRE_NON_CLIENT_DRAG, hitTest, 0L)
                 return if (ok == 0) {
                     WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_KADRE_NON_CLIENT_DRAG) failed"))
                 } else {
@@ -782,20 +699,17 @@ class Win32Window private constructor(
 
     private fun syncSystemMenuState(menu: MemorySegment) {
         try {
-            val enableItem = enableMenuItem ?: return
             fun state(enabled: Boolean): Int = if (enabled) MFS_ENABLED else MFS_DISABLED
             val maximized = isMaximized
             val resizable = isResizable
-            enableItem.invokeExact(menu, SC_RESTORE, MF_BYCOMMAND or state(maximized && resizable)) as Int
-            enableItem.invokeExact(menu, SC_MOVE, MF_BYCOMMAND or state(!maximized)) as Int
-            enableItem.invokeExact(menu, SC_SIZE, MF_BYCOMMAND or state(!maximized && resizable)) as Int
-            enableItem.invokeExact(menu, SC_MINIMIZE, MF_BYCOMMAND or MFS_ENABLED) as Int
-            enableItem.invokeExact(menu, SC_MAXIMIZE, MF_BYCOMMAND or state(!maximized && resizable)) as Int
-            enableItem.invokeExact(menu, SC_CLOSE, MF_BYCOMMAND or MFS_ENABLED) as Int
-            setMenuDefaultItem?.let { it.invokeExact(menu, SC_CLOSE, 0) as Int }
-        } catch (_: Throwable) {
-            // Menu state synchronization is best-effort; showing the menu is still useful.
-        }
+            EnableMenuItem(menu, SC_RESTORE, MF_BYCOMMAND or state(maximized && resizable))
+            EnableMenuItem(menu, SC_MOVE, MF_BYCOMMAND or state(!maximized))
+            EnableMenuItem(menu, SC_SIZE, MF_BYCOMMAND or state(!maximized && resizable))
+            EnableMenuItem(menu, SC_MINIMIZE, MF_BYCOMMAND or MFS_ENABLED)
+            EnableMenuItem(menu, SC_MAXIMIZE, MF_BYCOMMAND or state(!maximized && resizable))
+            EnableMenuItem(menu, SC_CLOSE, MF_BYCOMMAND or MFS_ENABLED)
+            SetMenuDefaultItem(menu, SC_CLOSE, 0)
+        } catch (_: Throwable) {}
     }
 
     private fun ResizeDirection.toWin32HitTest(): Long =
@@ -810,22 +724,11 @@ class Win32Window private constructor(
             ResizeDirection.West -> HTLEFT
         }
 
-    /** In-memory theme for this window. */
     @Volatile private var _theme: Theme? = attrs.preferredTheme
 
-    /**
-     * Returns the current theme by reading the registry `AppsUseLightTheme`.
-     */
     override val theme: Theme?
         get() = Win32ThemeHelper.systemThemeFromRegistry() ?: _theme
 
-    /**
-     * Applies a theme via DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE).
-     *
-     * No-op on Windows < 11 where the attribute is not supported.
-     * Risk FFM: DwmSetWindowAttribute passes a pointer to a BOOL; the layout is
-     * a single 4-byte INT.
-     */
     override fun setTheme(theme: Theme?) {
         _theme = theme
         try {
@@ -833,109 +736,63 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Sets the Z-order level via SetWindowPos with HWND_TOPMOST / HWND_BOTTOM.
-     */
     override fun setWindowLevel(level: WindowLevel) {
         try {
-            // Change Z-order via insertAfter → must NOT pass SWP_NOZORDER.
-            setWindowPos?.invokeExact(
+            SetWindowPos(
                 hwnd, win32WindowLevelInsertAfter(level),
                 0, 0, 0, 0,
                 SWP_NOSIZE or SWP_NOMOVE or SWP_NOACTIVATE,
-            ) as? Int
+            )
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Makes the window background transparent via WS_EX_LAYERED +
-     * SetLayeredWindowAttributes with LWA_ALPHA and alpha=255 (fully opaque
-     * but with per-pixel alpha when the renderer uses alpha < 1).
-     *
-     * Note: actual transparency requires the renderer to paint with alpha < 1.
-     */
     override fun setTransparent(transparent: Boolean) {
         try {
             val exStyle = try {
-                getWindowLongPtrW?.invokeExact(hwnd, GWL_EXSTYLE) as? Long ?: 0L
+                GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
             } catch (_: Throwable) { 0L }
             val newStyle = if (transparent) exStyle or WS_EX_LAYERED.toLong()
                            else exStyle and WS_EX_LAYERED.toLong().inv()
-            setWindowLongPtrW?.invokeExact(hwnd, GWL_EXSTYLE, newStyle) as? Long
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, newStyle)
             if (transparent) {
-                // LWA_ALPHA = 0x2, bAlpha = 255 (use per-pixel alpha from compositor)
                 setLayeredWindowAttributes?.invokeExact(hwnd, 0, 255.toByte(), 0x2) as? Int
             }
         } catch (_: Throwable) {}
     }
 
-    /**
-     * No-op on Win32: blur requires third-party compositor extensions (ACRYLIC)
-     * which are not exposed via standard Win32 API. Documented no-op.
-     *
-     * Runtime setter intentionally stays no-op for winit parity; the initial
-     * transparent-window path may still use DwmEnableBlurBehindWindow.
-     */
     override fun setBlur(blur: Boolean) {
         if (!win32RuntimeBlurRequiresNativeUpdate(blur)) return
-        // No-op: Win32 does not expose a standard blur API. DwmEnableBlurBehindWindow
-        // was deprecated in Windows 8 and does not work on modern builds.
     }
 
-    // ── Platform extensions ────────────────────────────────────────────────────
+    // -- Platform extensions --
 
-    /**
-     * Sets the system backdrop type via DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE).
-     */
     internal fun setSystemBackdrop(backdrop: SystemBackdrop): WindowRequestResult =
         win32ApplyDwmAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, backdrop.toDwmValue())
 
-    /**
-     * Sets the window corner preference via DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE).
-     */
     internal fun setCornerPreference(preference: CornerPreference): WindowRequestResult =
         win32ApplyDwmAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, preference.toDwmValue())
 
-    /**
-     * Sets the window border color via DwmSetWindowAttribute(DWMWA_BORDER_COLOR).
-     */
     internal fun setBorderColor(color: Long?): WindowRequestResult =
         win32ApplyDwmAttribute(hwnd, DWMWA_BORDER_COLOR, (color ?: -1L).toInt())
 
-    /**
-     * Sets the title bar background color via DwmSetWindowAttribute(DWMWA_CAPTION_COLOR).
-     */
     internal fun setTitleBackgroundColor(color: Long?): WindowRequestResult =
         win32ApplyDwmAttribute(hwnd, DWMWA_CAPTION_COLOR, (color ?: -1L).toInt())
 
-    /**
-     * Sets the title bar text color via DwmSetWindowAttribute(DWMWA_TEXT_COLOR).
-     */
     internal fun setTitleTextColor(color: Long?): WindowRequestResult =
         win32ApplyDwmAttribute(hwnd, DWMWA_TEXT_COLOR, (color ?: -1L).toInt())
 
-    /**
-     * Shows or hides the window from the taskbar using WS_EX_TOOLWINDOW style.
-     */
     internal fun setSkipTaskbar(skip: Boolean): WindowRequestResult = try {
-        val getStyle = getWindowLongPtrW ?: return WindowRequestResult.Failure(
-            RequestError.Unsupported("GetWindowLongPtrW is unavailable")
-        )
-        val setStyle = setWindowLongPtrW ?: return WindowRequestResult.Failure(
-            RequestError.Unsupported("SetWindowLongPtrW is unavailable")
-        )
-        val exStyle = getStyle.invokeExact(hwnd, GWL_EXSTYLE) as Long
+        val exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
         val newStyle = if (skip) {
             (exStyle and WS_EX_APPWINDOW.toLong().inv()) or WS_EX_TOOLWINDOW.toLong()
         } else {
             (exStyle and WS_EX_TOOLWINDOW.toLong().inv()) or WS_EX_APPWINDOW.toLong()
         }
-        setStyle.invokeExact(hwnd, GWL_EXSTYLE, newStyle) as Long
-        // Force the window to be redrawn with the new style
-        setWindowPos?.invokeExact(
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, newStyle)
+        SetWindowPos(
             hwnd, MemorySegment.NULL, 0, 0, 0, 0,
             SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_FRAMECHANGED or SWP_NOACTIVATE,
-        ) as? Int
+        )
         WindowRequestResult.Success
     } catch (t: Throwable) {
         WindowRequestResult.Failure(
@@ -943,23 +800,18 @@ class Win32Window private constructor(
         )
     }
 
-    /**
-     * Shows or hides the shadow on undecorated windows via DwmExtendFrameIntoClientArea.
-     */
     internal fun setUndecoratedShadow(show: Boolean): WindowRequestResult = try {
         val handle = dwmExtendFrameIntoClientArea ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("DwmExtendFrameIntoClientArea is unavailable")
         )
         Arena.ofConfined().use { arena ->
-            val margins = arena.allocate(16L, 4L) // MARGINS: 4 INTs
+            val margins = arena.allocate(16L, 4L)
             if (show) {
-                // -1 margins extend the glass frame (including shadow) to the client area
                 margins.set(ValueLayout.JAVA_INT, 0L, -1)
                 margins.set(ValueLayout.JAVA_INT, 4L, -1)
                 margins.set(ValueLayout.JAVA_INT, 8L, -1)
                 margins.set(ValueLayout.JAVA_INT, 12L, -1)
             } else {
-                // Zero margins = no glass frame extension
                 margins.set(ValueLayout.JAVA_INT, 0L, 0)
                 margins.set(ValueLayout.JAVA_INT, 4L, 0)
                 margins.set(ValueLayout.JAVA_INT, 8L, 0)
@@ -977,39 +829,24 @@ class Win32Window private constructor(
         )
     }
 
-    /**
-     * Enables or disables input to the window via EnableWindow.
-     */
     internal fun setEnabled(enabled: Boolean): WindowRequestResult = try {
-        val handle = enableWindow ?: return WindowRequestResult.Failure(
-            RequestError.Unsupported("EnableWindow is unavailable")
-        )
-        val ok = handle.invokeExact(hwnd, if (enabled) 1 else 0) as Int
+        val ok = EnableWindow(hwnd, if (enabled) 1 else 0)
         if (ok != 0) WindowRequestResult.Success
-        else WindowRequestResult.Failure(
-            RequestError.OsError("EnableWindow failed")
-        )
+        else WindowRequestResult.Failure(RequestError.OsError("EnableWindow failed"))
     } catch (t: Throwable) {
         WindowRequestResult.Failure(
             RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 enable window failed")
         )
     }
 
-    /**
-     * Sets the window icon via WM_SETICON.
-     *
-     * Mirrors winit's Win32 RGBA path: Kadre's RGBA bytes are converted to
-     * BGRA color bits and paired with an inverted-alpha AND mask for CreateIcon.
-     */
     override fun setWindowIcon(icon: Icon?) {
         var newHandle = MemorySegment.NULL
         try {
             if (icon != null) {
                 newHandle = win32CreateIcon(hInstance, icon) ?: return
             }
-            val send = sendMessageW ?: return
             synchronized(iconLock) {
-                send.invokeExact(hwnd, WM_SETICON, ICON_SMALL, newHandle.address()) as Long
+                SendMessageW(hwnd, WM_SETICON, ICON_SMALL, newHandle.address())
                 val oldHandle = ownedWindowIconHandle
                 ownedWindowIconHandle = newHandle
                 win32DestroyIcon(oldHandle)
@@ -1065,42 +902,22 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 user attention failed"))
         }
 
-    // ── R4: keyboard ──────────────────────────────────────────────────────────
+    // -- R4: keyboard --
 
-    /**
-     * Resets any pending dead-key state by calling ToUnicode with a dummy key.
-     *
-     * Win32 maintains a dead-key state in the thread's key buffer. Calling
-     * ToUnicode with VK_SPACE and the scan code 0x39 is the canonical way to
-     * flush that state without producing visible text.
-     *
-     * **FFM risk (R4)**: if [toUnicode] is not available (non-Windows), this is a no-op.
-     */
     override fun resetDeadKeys() {
         try {
             val handle = toUnicode ?: return
             Arena.ofConfined().use { arena ->
-                val keyState = arena.allocate(256L, 1L)  // BYTE[256], native
+                val keyState = arena.allocate(256L, 1L)
                 getKeyboardState?.invoke(keyState)
-                val buf = arena.allocate(16L, 2L)        // 8 WCHARs
-                // Flush dead-key buffer by translating VK_SPACE (0x20), scan 0x39
+                val buf = arena.allocate(16L, 2L)
                 handle.invokeExact(0x20, 0x39, keyState, buf, 8, 0) as Int
             }
-        } catch (_: Throwable) {
-            // Best-effort only
-        }
+        } catch (_: Throwable) {}
     }
 
-    // ── IME ────────────────────────────────────────────────────────────────────
+    // -- IME --
 
-    /**
-     * Enables or disables the IME for this window via ImmAssociateContextEx.
-     *
-     * When [allowed] is true, the default IME context is associated with the
-     * window and IME events (WM_IME_STARTCOMPOSITION, WM_IME_COMPOSITION, …)
-     * will be delivered. When false, the context is disassociated and IME input
-     * is suppressed.
-     */
     override fun setImeAllowed(allowed: Boolean) {
         val associate = immAssociateContextEx ?: return
         try {
@@ -1112,16 +929,6 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
-    /**
-     * Positions the IME composition and candidate windows.
-     *
-     * Calls ImmSetCompositionWindow and ImmSetCandidateWindow with the given
-     * cursor area rectangle. The composition window is positioned just below
-     * the cursor area (via CFS_POINT), and the candidate window is positioned
-     * to exclude the cursor area (via CFS_EXCLUDE).
-     *
-     * The IME context is obtained and released for each call.
-     */
     override fun setImeCursorArea(position: PhysicalPosition<Int>, size: PhysicalSize<Int>) {
         val getCtx = immGetContext ?: return
         val relCtx = immReleaseContext ?: return
@@ -1134,7 +941,6 @@ class Win32Window private constructor(
         if (himc == MemorySegment.NULL) return
         try {
             java.lang.foreign.Arena.ofConfined().use { arena ->
-                // ── COMPOSITIONFORM — position inline composition below cursor ──
                 val cf = arena.allocate(COMPOSITIONFORM_SIZE, COMPOSITIONFORM_ALIGN)
                 cf.set(ValueLayout.JAVA_INT, COMPOSITIONFORM_OFFSET_DWSTYLE, CFS_POINT)
                 cf.set(ValueLayout.JAVA_INT, COMPOSITIONFORM_OFFSET_PT_X, position.x)
@@ -1145,7 +951,6 @@ class Win32Window private constructor(
                 cf.set(ValueLayout.JAVA_INT, COMPOSITIONFORM_OFFSET_RC_BOTTOM, position.y + size.height)
                 setComp.invokeExact(himc, cf) as Int
 
-                // ── CANDIDATEFORM — exclude cursor area from candidate window ──
                 val cand = arena.allocate(CANDIDATEFORM_SIZE, CANDIDATEFORM_ALIGN)
                 cand.set(ValueLayout.JAVA_INT, CANDIDATEFORM_OFFSET_DWINDEX, 0)
                 cand.set(ValueLayout.JAVA_INT, CANDIDATEFORM_OFFSET_DWSTYLE, CFS_EXCLUDE)
@@ -1158,20 +963,11 @@ class Win32Window private constructor(
                 setCand.invokeExact(himc, cand) as Int
             }
         } catch (_: Throwable) {
-            // IME cursor area is best-effort
         } finally {
             try { relCtx.invokeExact(hwndSeg, himc) as Int } catch (_: Throwable) {}
         }
     }
 
-    /**
-     * Hints the IME about the intended purpose of the text field.
-     *
-     * Sets the IME conversion status via ImmSetConversionStatus:
-     *   - [ImePurpose.Normal]   → native IME conversion (IME_CMODE_NATIVE)
-     *   - [ImePurpose.Password] → alphanumeric only, effectively disabling IME
-     *   - [ImePurpose.Terminal] → alphanumeric only, same as Password
-     */
     override fun setImePurpose(purpose: ImePurpose) {
         val setConversion = immSetConversionStatus ?: return
         val getCtx = immGetContext ?: return
@@ -1189,29 +985,21 @@ class Win32Window private constructor(
             }
             setConversion.invokeExact(himc, conversion, sentence) as Int
         } catch (_: Throwable) {
-            // IME purpose is best-effort
         } finally {
             try { relCtx.invokeExact(hwndSeg, himc) as Int } catch (_: Throwable) {}
         }
     }
 
-    // ── Companion ─────────────────────────────────────────────────────────────
+    // -- Companion --
 
     companion object {
 
-        /** Name of the registered Win32 window class. */
         private const val CLASS_NAME = "KadreWin32Window"
 
         internal fun performNonClientDrag(hwnd: MemorySegment, hitTest: Long): WindowRequestResult =
             try {
-                val release = releaseCapture ?: return WindowRequestResult.Failure(
-                    RequestError.Unsupported("Win32 ReleaseCapture is unavailable"),
-                )
-                val postMessage = postMessageW ?: return WindowRequestResult.Failure(
-                    RequestError.Unsupported("Win32 PostMessageW is unavailable"),
-                )
-                release.invokeExact() as Int
-                val ok = postMessage.invokeExact(hwnd, WM_NCLBUTTONDOWN, hitTest, currentCursorLParam()) as Int
+                ReleaseCapture()
+                val ok = PostMessageW(hwnd, WM_NCLBUTTONDOWN, hitTest, currentCursorLParam())
                 if (ok == 0) {
                     WindowRequestResult.Failure(RequestError.OsError("PostMessageW(WM_NCLBUTTONDOWN) failed"))
                 } else {
@@ -1225,10 +1013,9 @@ class Win32Window private constructor(
 
         private fun currentCursorLParam(): Long =
             try {
-                val cursor = getCursorPos ?: return 0L
                 Arena.ofConfined().use { arena ->
                     val point = arena.allocate(POINT_SIZE, POINT_ALIGN)
-                    val ok = cursor.invokeExact(point) as Int
+                    val ok = GetCursorPos(point)
                     if (ok == 0) return@use 0L
                     val x = point.get(ValueLayout.JAVA_INT, POINT_OFFSET_X)
                     val y = point.get(ValueLayout.JAVA_INT, POINT_OFFSET_Y)
@@ -1238,38 +1025,14 @@ class Win32Window private constructor(
                 0L
             }
 
-        /**
-         * Atomic guard for window class registration.
-         *
-         * RegisterClassExW must be called only once per process
-         * for a given class name.
-         */
         private val classRegistered = AtomicBoolean(false)
 
-        /**
-         * Upcall stub for the WndProc — must stay alive as long
-         * as windows of this class exist.
-         *
-         * Allocated in [Win32WndProcArena.arena] (Arena.ofShared).
-         */
         @Volatile
         private var wndProcStub: MemorySegment? = null
 
-        /**
-         * Registers the Win32 window class only once.
-         *
-         * Thread-safe via [classRegistered] (AtomicBoolean compare-and-set).
-         * No-op on macOS/Linux (the MethodHandles are null).
-         *
-         * @param hInstance Handle of the current module.
-         * @param classNamePtr Wide-string pointer to the class name.
-         */
         private fun registerClassOnce(hInstance: MemorySegment, classNamePtr: MemorySegment) {
             if (!classRegistered.compareAndSet(false, true)) return
 
-            val registerHandle = registerClassExW ?: return
-
-            // Create the upcall stub for the WndProc
             val wndProcMH = MethodHandles.lookup().findStatic(
                 Win32Window::class.java,
                 "wndProc",
@@ -1277,18 +1040,17 @@ class Win32Window private constructor(
             )
 
             val wndProcDesc = FunctionDescriptor.of(
-                ValueLayout.JAVA_LONG,  // LRESULT
-                ValueLayout.ADDRESS,    // HWND
-                ValueLayout.JAVA_INT,   // UINT (message)
-                ValueLayout.JAVA_LONG,  // WPARAM
-                ValueLayout.JAVA_LONG,  // LPARAM
+                ValueLayout.JAVA_LONG,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.JAVA_LONG,
             )
 
             val linker = Linker.nativeLinker()
             val stub = linker.upcallStub(wndProcMH, wndProcDesc, Win32WndProcArena.arena)
             wndProcStub = stub
 
-            // Allocate and fill the WNDCLASSEXW structure in a temporary arena
             Arena.ofConfined().use { arena ->
                 val wndClass = WndClassExW(arena)
                 wndClass.cbSize = WndClassExW.SIZEOF
@@ -1298,20 +1060,14 @@ class Win32Window private constructor(
                 wndClass.cbWndExtra = 0
                 wndClass.hInstance = hInstance
                 wndClass.hIcon = MemorySegment.NULL
-                // Give the class the standard arrow cursor (IDC_ARROW). Without it, Windows never
-                // resets the cursor over the client area, leaving the resize cursor "stuck" from
-                // the window border. MAKEINTRESOURCE(IDC_ARROW=32512) is encoded as a small address.
-                wndClass.hCursor = loadCursorW
-                    ?.let { it.invokeExact(MemorySegment.NULL, MemorySegment.ofAddress(IDC_ARROW)) as MemorySegment }
-                    ?: MemorySegment.NULL
+                wndClass.hCursor = LoadCursorW(MemorySegment.NULL, MemorySegment.ofAddress(IDC_ARROW))
                 wndClass.hbrBackground = MemorySegment.NULL
                 wndClass.lpszMenuName = MemorySegment.NULL
                 wndClass.lpszClassName = classNamePtr
                 wndClass.hIconSm = MemorySegment.NULL
 
-                val atom = registerHandle.invokeExact(wndClass.segment) as Short
+                val atom = RegisterClassExW(wndClass.segment)
                 if (atom.toInt() == 0) {
-                    // Reset to allow a future attempt
                     classRegistered.set(false)
                     wndProcStub = null
                     error("RegisterClassExW failed (atom = 0)")
@@ -1319,79 +1075,48 @@ class Win32Window private constructor(
             }
         }
 
-        /**
-         * Win32 window procedure (WndProc).
-         *
-         * Called by the Windows system for each message sent to a window
-         * of the KadreWin32Window class. Delegates the entire dispatch to
-         * [KadreWndProc.dispatch] which translates the Win32 messages into kadre
-         * [WindowEvent]s and forwards them to the installed handler.
-         *
-         * ⚠️ This method is called from the Win32 message thread —
-         * it must be @JvmStatic so that MethodHandles.lookup() can find it.
-         */
         @JvmStatic
         fun wndProc(hwnd: MemorySegment, msg: Int, wParam: Long, lParam: Long): Long {
             return KadreWndProc.dispatch(hwnd.address(), msg, wParam, lParam)
         }
 
-        /**
-         * Creates a native Win32 window.
-         *
-         * Registers the window class if necessary, then calls
-         * CreateWindowExW to create the native window.
-         *
-         * @param attrs Window attributes (title, size, visibility, etc.).
-         * @return The created window, or null if the Win32 bindings are not available
-         *         (macOS/Linux) or if creation fails.
-         */
         fun create(attrs: WindowAttributes): Win32Window? {
-            // Check the availability of the Win32 bindings
-            val createHandle = createWindowExW ?: return null
-            val getModuleHandle = getModuleHandleW ?: return null
-
-            // Get the handle of the current module (GetModuleHandleW(NULL))
-            val hInstance = getModuleHandle.invokeExact(MemorySegment.NULL) as MemorySegment
+            val hInstance = GetModuleHandleW(MemorySegment.NULL)
             if (hInstance == MemorySegment.NULL) return null
 
-            // Allocate the class name in a long-lived arena
-            // (must stay valid for the entire lifetime of the windows of this class)
             val classArena = Win32WndProcArena.arena
             val classNamePtr = classArena.allocateWString(CLASS_NAME)
 
-            // Register the class only once
             registerClassOnce(hInstance, classNamePtr)
 
-            // Create the window
             val width = attrs.size?.width ?: 800
             val height = attrs.size?.height ?: 600
             val posX = attrs.position?.x ?: 100
             val posY = attrs.position?.y ?: 100
 
-            // Build the base style from attrs.decorations / attrs.resizable.
             val baseStyle = if (attrs.decorations) {
                 WS_OVERLAPPEDWINDOW and (if (attrs.resizable) Int.MAX_VALUE else WS_THICKFRAME.inv())
             } else {
-                0x80000000.toInt() // WS_POPUP — borderless, no caption
+                0x80000000.toInt()
             }
             val buttonStyle = win32StyleWithEnabledButtons(baseStyle, attrs.enabledButtons, attrs.decorations)
 
             val hwnd: MemorySegment = Arena.ofConfined().use { arena ->
                 val titlePtr = arena.allocateWString(attrs.title)
-                createHandle.invokeExact(
-                    win32InitialExtendedStyle(attrs.transparent), // dwExStyle
-                    classNamePtr,           // lpClassName
-                    titlePtr,               // lpWindowName
-                    buttonStyle,            // dwStyle
-                    posX,                   // X
-                    posY,                   // Y
-                    width,                  // nWidth
-                    height,                 // nHeight
-                    MemorySegment.NULL,     // hWndParent
-                    MemorySegment.NULL,     // hMenu
-                    hInstance,              // hInstance
-                    MemorySegment.NULL,     // lpParam
-                ) as MemorySegment
+                CreateWindowExW(
+                    win32InitialExtendedStyle(attrs.transparent).toLong(),
+                    classNamePtr,
+                    titlePtr,
+                    buttonStyle.toLong(),
+                    posX,
+                    posY,
+                    width,
+                    height,
+                    MemorySegment.NULL,
+                    MemorySegment.NULL,
+                    hInstance,
+                    MemorySegment.NULL,
+                )
             }
 
             if (hwnd == MemorySegment.NULL) return null
@@ -1407,25 +1132,14 @@ class Win32Window private constructor(
                 enableWin32TransparentBlurBehind(hwnd)
             }
 
-            // Register for WM_TOUCH so touchscreen contacts arrive as touch events
-            // instead of being emulated as mouse input. Best-effort: ignored on
-            // platforms/devices without touch support.
-            registerTouchWindow?.let { it.invokeExact(hwnd, 0) as Int }
+            RegisterTouchWindow(hwnd, 0L)
 
-            // Register for file drag-and-drop via DragAcceptFiles (WM_DROPFILES).
-            // This enables the window to receive WM_DROPFILES when the user drops
-            // files onto the client area.
             dragAcceptFiles?.invoke(hwnd, 1)
 
-            // Initial display.
-            // ShowWindow/UpdateWindow return BOOL (int) — invokeExact requires the exact
-            // return type, so the result must be captured (as Int) or it throws
-            // WrongMethodTypeException ("…)int but found …)void").
             if (attrs.visible) {
                 val showCmd = if (attrs.maximized) SW_MAXIMIZE else SW_SHOW
-                @Suppress("UNUSED_EXPRESSION")
-                showWindow?.let { it.invokeExact(hwnd, showCmd) as Int }
-                updateWindow?.let { it.invokeExact(hwnd) as Int }
+                ShowWindow(hwnd, showCmd)
+                UpdateWindow(hwnd)
             }
 
             return window
@@ -1480,54 +1194,38 @@ internal object Win32FocusState {
         get() = active && focused
 }
 
-/**
- * Maps a [CursorIcon] to the Win32 IDC_* resource id for LoadCursorW.
- */
 internal fun cursorIdcResource(cursor: CursorIcon): Long = when (cursor) {
     CursorIcon.Default        -> IDC_ARROW
     CursorIcon.Pointer        -> IDC_HAND
     CursorIcon.Text           -> IDC_IBEAM
     CursorIcon.Crosshair      -> IDC_CROSS
     CursorIcon.Move           -> IDC_SIZEALL
-    CursorIcon.ResizeNorth,
-    CursorIcon.ResizeSouth,
-    CursorIcon.NsResize,
-    CursorIcon.RowResize      -> IDC_SIZENS
-    CursorIcon.ResizeEast,
-    CursorIcon.ResizeWest,
-    CursorIcon.EwResize,
-    CursorIcon.ColResize      -> IDC_SIZEWE
-    CursorIcon.ResizeNorthEast,
-    CursorIcon.ResizeSouthWest,
-    CursorIcon.NeswResize     -> IDC_SIZENESW
-    CursorIcon.ResizeNorthWest,
-    CursorIcon.ResizeSouthEast,
-    CursorIcon.NwseResize     -> IDC_SIZENWSE
+    CursorIcon.ResizeNorth, CursorIcon.ResizeSouth, CursorIcon.NsResize, CursorIcon.RowResize -> IDC_SIZENS
+    CursorIcon.ResizeEast, CursorIcon.ResizeWest, CursorIcon.EwResize, CursorIcon.ColResize -> IDC_SIZEWE
+    CursorIcon.ResizeNorthEast, CursorIcon.ResizeSouthWest, CursorIcon.NeswResize -> IDC_SIZENESW
+    CursorIcon.ResizeNorthWest, CursorIcon.ResizeSouthEast, CursorIcon.NwseResize -> IDC_SIZENWSE
     CursorIcon.NotAllowed     -> IDC_NO
-    CursorIcon.Grab,
-    CursorIcon.Grabbing       -> IDC_SIZEALL
+    CursorIcon.Grab, CursorIcon.Grabbing -> IDC_SIZEALL
     CursorIcon.Wait           -> IDC_WAIT
     CursorIcon.Progress       -> IDC_APPSTARTING
     CursorIcon.AllScroll      -> IDC_SIZEALL
-    CursorIcon.ZoomIn,
-    CursorIcon.ZoomOut        -> IDC_CROSS
-    CursorIcon.Copy,
-    CursorIcon.Alias          -> IDC_ARROW            // No dedicated IDC_
-    CursorIcon.ContextMenu    -> IDC_ARROW            // No dedicated IDC_
+    CursorIcon.ZoomIn, CursorIcon.ZoomOut -> IDC_CROSS
+    CursorIcon.Copy, CursorIcon.Alias -> IDC_ARROW
+    CursorIcon.ContextMenu    -> IDC_ARROW
     CursorIcon.Cell           -> IDC_CROSS
     CursorIcon.NoDrop         -> IDC_NO
     CursorIcon.Help           -> IDC_HELP
-    CursorIcon.Hidden         -> IDC_ARROW            // Just placeholder; invisible
-    CursorIcon.NoneReset      -> IDC_ARROW            // Reset to default
-    CursorIcon.WaitCursor     -> IDC_WAIT             // Same as Wait
-    CursorIcon.VerticalText   -> IDC_IBEAM            // No vertical-text on Win32
+    CursorIcon.Hidden         -> IDC_ARROW
+    CursorIcon.NoneReset      -> IDC_ARROW
+    CursorIcon.WaitCursor     -> IDC_WAIT
+    CursorIcon.VerticalText   -> IDC_IBEAM
 }
 
 internal const val WIN32_STYLE_UPDATE_FLAGS: Int =
     SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or SWP_FRAMECHANGED
 
 internal fun win32CloseMenuState(enabled: Boolean): Int =
-    MF_BYCOMMAND or if (enabled) MF_ENABLED else MF_DISABLED
+    MF_BYCOMMAND or if (enabled) MFS_ENABLED else MFS_DISABLED
 
 internal fun win32ShouldFocusWindow(
     isVisible: Boolean,
@@ -1550,11 +1248,10 @@ internal fun win32TransparentBlurBehindFlags(): Int =
 internal fun win32RuntimeBlurRequiresNativeUpdate(blur: Boolean): Boolean = false
 
 internal fun enableWin32TransparentBlurBehind(hwnd: MemorySegment): Boolean {
-    val createRegion = createRectRgn ?: return false
     val enableBlur = dwmEnableBlurBehindWindow ?: return false
     var region = MemorySegment.NULL
     return try {
-        region = createRegion.invokeExact(0, 0, -1, -1) as MemorySegment
+        region = CreateRectRgn(0, 0, -1, -1)
         if (region == MemorySegment.NULL) return false
         Arena.ofConfined().use { arena ->
             val blurBehind = arena.allocate(DWM_BLURBEHIND_SIZE, DWM_BLURBEHIND_ALIGN)
@@ -1570,7 +1267,7 @@ internal fun enableWin32TransparentBlurBehind(hwnd: MemorySegment): Boolean {
     } finally {
         if (region != MemorySegment.NULL) {
             try {
-                deleteObject?.let { it.invokeExact(region) as Int }
+                DeleteObject(region)
             } catch (_: Throwable) {}
         }
     }
@@ -1604,12 +1301,9 @@ private fun Long.withStyleBit(bit: Long, enabled: Boolean): Long =
     if (enabled) this or bit else this and bit.inv()
 
 private fun forceWindowActive(hwnd: MemorySegment) {
-    val setForeground = setForegroundWindow ?: return
-    val send = sendInput
-    val map = mapVirtualKeyW
-    if (send != null && map != null) {
-        try {
-            val scanCode = map.invokeExact(VK_MENU, MAPVK_VK_TO_VSC) as Int
+    try {
+        val scanCode = MapVirtualKeyW(VK_MENU, MAPVK_VK_TO_VSC)
+        if (scanCode != 0) {
             Arena.ofConfined().use { arena ->
                 val inputs = arena.allocate(INPUT_SIZE * 2, INPUT_ALIGN)
                 fillKeyboardInput(inputs, index = 0, scanCode = scanCode, flags = KEYEVENTF_EXTENDEDKEY)
@@ -1619,13 +1313,12 @@ private fun forceWindowActive(hwnd: MemorySegment) {
                     scanCode = scanCode,
                     flags = KEYEVENTF_EXTENDEDKEY or KEYEVENTF_KEYUP,
                 )
-                send.invokeExact(2, inputs, INPUT_SIZE.toInt()) as Int
+                SendInput(2, inputs, INPUT_SIZE.toInt())
             }
-        } catch (_: Throwable) {
-            // Fall through to SetForegroundWindow; the Alt-key permission hack is best-effort.
         }
+    } catch (_: Throwable) {
     }
-    setForeground.invokeExact(hwnd) as Int
+    SetForegroundWindow(hwnd)
 }
 
 private fun fillKeyboardInput(inputs: MemorySegment, index: Int, scanCode: Int, flags: Int) {
@@ -1674,7 +1367,6 @@ internal fun win32IconBuffers(icon: Icon): Win32IconBuffers? {
 }
 
 private fun win32CreateIcon(hInstance: MemorySegment, icon: Icon): MemorySegment? {
-    val create = createIcon ?: return null
     val buffers = win32IconBuffers(icon) ?: return null
     return Arena.ofConfined().use { arena ->
         val andMask = arena.allocate(buffers.andMask.size.toLong(), 1L)
@@ -1685,7 +1377,7 @@ private fun win32CreateIcon(hInstance: MemorySegment, icon: Icon): MemorySegment
         for (index in buffers.bgra.indices) {
             bgra.setAtIndex(ValueLayout.JAVA_BYTE, index.toLong(), buffers.bgra[index])
         }
-        val handle = create.invokeExact(
+        val handle = CreateIcon(
             hInstance,
             icon.width,
             icon.height,
@@ -1693,7 +1385,7 @@ private fun win32CreateIcon(hInstance: MemorySegment, icon: Icon): MemorySegment
             32.toByte(),
             andMask,
             bgra,
-        ) as MemorySegment
+        )
         handle.takeUnless { it == MemorySegment.NULL }
     }
 }
@@ -1701,19 +1393,11 @@ private fun win32CreateIcon(hInstance: MemorySegment, icon: Icon): MemorySegment
 private fun win32DestroyIcon(handle: MemorySegment) {
     if (handle == MemorySegment.NULL) return
     try {
-        destroyIcon?.invokeExact(handle) as? Int
+        DestroyIcon(handle)
     } catch (_: Throwable) {}
 }
 
-/**
- * Creates a Win32 HCURSOR (via CreateIcon, compatible with SetCursor)
- * from RGBA pixel data.
- *
- * The image format matches [win32IconBuffers] — BGRA with inverted-alpha AND mask.
- * Returns null on failure.
- */
 internal fun win32CreateCursorFromImage(image: CursorImage): MemorySegment? {
-    val create = createIcon ?: return null
     if (image.width <= 0 || image.height <= 0) return null
     val pixelCount = image.width.toLong() * image.height.toLong()
     val byteCount = pixelCount * 4L
@@ -1749,10 +1433,9 @@ internal fun win32CreateCursorFromImage(image: CursorImage): MemorySegment? {
             bgraSeg.setAtIndex(ValueLayout.JAVA_BYTE, index.toLong(), bgra[index])
         }
         val hInstance = try {
-            val getModuleHandle = getModuleHandleW ?: return@use null
-            getModuleHandle.invokeExact(MemorySegment.NULL) as MemorySegment
+            GetModuleHandleW(MemorySegment.NULL)
         } catch (_: Throwable) { return@use null }
-        val handle = create.invokeExact(
+        val handle = CreateIcon(
             hInstance,
             image.width,
             image.height,
@@ -1760,7 +1443,7 @@ internal fun win32CreateCursorFromImage(image: CursorImage): MemorySegment? {
             32.toByte(),
             andSeg,
             bgraSeg,
-        ) as MemorySegment
+        )
         handle.takeUnless { it == MemorySegment.NULL }
     }
 }

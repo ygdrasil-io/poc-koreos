@@ -38,6 +38,7 @@ import java.lang.foreign.MemorySegment
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
 
@@ -86,8 +87,7 @@ internal class Win32EventLoop : ActiveEventLoop {
      */
     private val _hinstance: Long by lazy {
         try {
-            val handle = getModuleHandleW ?: return@lazy 0L
-            (handle.invokeExact(MemorySegment.NULL) as MemorySegment).address()
+            GetModuleHandleW(MemorySegment.NULL).address()
         } catch (_: Throwable) {
             0L
         }
@@ -160,7 +160,7 @@ internal class Win32EventLoop : ActiveEventLoop {
      */
     override fun exit() {
         _isExiting = true
-        postQuitMessage?.invoke(0)
+        PostQuitMessage(0)
     }
 
     /**
@@ -281,23 +281,17 @@ internal class Win32EventLoop : ActiveEventLoop {
      * and returns immediately even if the queue is empty.
      */
     private fun dispatchPoll(msg: MemorySegment, handler: ApplicationHandler): StartCause {
-        val peekHandle = peekMessageW
-        val translateHandle = translateMessage
-        val dispatchHandle = dispatchMessageW
-
-        if (peekHandle != null && translateHandle != null && dispatchHandle != null) {
-            while (!_isExiting) {
-                val hasMsg = peekHandle.invokeExact(
-                    msg,
-                    MemorySegment.NULL,  // hWnd: NULL = all thread messages
-                    0,                   // wMsgFilterMin: no filter
-                    0,                   // wMsgFilterMax: no filter
-                    PM_REMOVE,           // wRemoveMsg: remove from the queue
-                ) as Int
-                if (hasMsg == 0) break  // queue empty, exit the pump
-                translateHandle.invokeExact(msg) as Int
-                dispatchHandle.invokeExact(msg) as Long
-            }
+        while (!_isExiting) {
+            val hasMsg = PeekMessageW(
+                msg,
+                MemorySegment.NULL,  // hWnd: NULL = all thread messages
+                0,                   // wMsgFilterMin: no filter
+                0,                   // wMsgFilterMax: no filter
+                PM_REMOVE,           // wRemoveMsg: remove from the queue
+            )
+            if (hasMsg == 0) break  // queue empty, exit the pump
+            TranslateMessage(msg)
+            DispatchMessageW(msg)
         }
         return StartCause.Poll
     }
@@ -309,30 +303,24 @@ internal class Win32EventLoop : ActiveEventLoop {
      * Returns false (StartCause.WaitCancelled) if WM_QUIT is received.
      */
     private fun dispatchWait(msg: MemorySegment, handler: ApplicationHandler): StartCause {
-        val getHandle = getMessageW
-        val translateHandle = translateMessage
-        val dispatchHandle = dispatchMessageW
+        val result = GetMessageW(
+            msg,
+            MemorySegment.NULL,  // hWnd: NULL = all thread messages
+            0,                   // wMsgFilterMin
+            0,                   // wMsgFilterMax
+        )
 
-        if (getHandle != null && translateHandle != null && dispatchHandle != null) {
-            val result = getHandle.invokeExact(
-                msg,
-                MemorySegment.NULL,  // hWnd: NULL = all thread messages
-                0,                   // wMsgFilterMin
-                0,                   // wMsgFilterMax
-            ) as Int
-
-            when {
-                result > 0 -> {
-                    // Normal message → translate + dispatch
-                    translateHandle.invokeExact(msg) as Int
-                    dispatchHandle.invokeExact(msg) as Long
-                }
-                result == 0 -> {
-                    // WM_QUIT → clean exit
-                    _isExiting = true
-                }
-                // result < 0: error — ignore and continue
+        when {
+            result > 0 -> {
+                // Normal message → translate + dispatch
+                TranslateMessage(msg)
+                DispatchMessageW(msg)
             }
+            result == 0 -> {
+                // WM_QUIT → clean exit
+                _isExiting = true
+            }
+            // result < 0: error — ignore and continue
         }
         return StartCause.WaitCancelled()
     }
@@ -350,56 +338,44 @@ internal class Win32EventLoop : ActiveEventLoop {
         handler: ApplicationHandler,
         targetInstant: Long,
     ): StartCause {
-        val waitHandle = msgWaitForMultipleObjectsEx
-        val peekHandle = peekMessageW
-        val translateHandle = translateMessage
-        val dispatchHandle = dispatchMessageW
-
         val now = System.currentTimeMillis()
         val timeoutMs = (targetInstant - now).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
 
-        if (waitHandle != null) {
-            val result = waitHandle.invokeExact(
-                0,                   // nCount: no kernel object to wait on
-                MemorySegment.NULL,  // pHandles: NULL because nCount = 0
-                timeoutMs,           // dwMilliseconds: computed timeout
-                QS_ALLINPUT,         // dwWakeMask: all input messages
-                MWMO_INPUTAVAILABLE, // dwFlags: wake up if messages already available
-            ) as Int
+        val result = MsgWaitForMultipleObjectsEx(
+            0L,                   // nCount: no kernel object to wait on
+            MemorySegment.NULL,  // pHandles: NULL because nCount = 0
+            timeoutMs.toLong(),  // dwMilliseconds: computed timeout
+            QS_ALLINPUT.toLong(), // dwWakeMask: all input messages
+            MWMO_INPUTAVAILABLE.toLong(), // dwFlags: wake up if messages already available
+        )
 
-            when (result) {
-                WAIT_OBJECT_0 -> {
-                    // Messages available → pump with PeekMessageW
-                    if (peekHandle != null && translateHandle != null && dispatchHandle != null) {
-                        while (!_isExiting) {
-                            val hasMsg = peekHandle.invokeExact(
-                                msg,
-                                MemorySegment.NULL,
-                                0, 0,
-                                PM_REMOVE,
-                            ) as Int
-                            if (hasMsg == 0) break
-                            translateHandle.invokeExact(msg) as Int
-                            dispatchHandle.invokeExact(msg) as Long
-                        }
-                    }
-                    return StartCause.WaitCancelled(targetInstant)
-                }
-                WAIT_TIMEOUT -> {
-                    // Timeout expired → target instant reached
-                    return StartCause.ResumeTimeReached(
-                        requestedResume = targetInstant,
-                        start = System.currentTimeMillis(),
+        when (result) {
+            WAIT_OBJECT_0.toLong() -> {
+                // Messages available → pump with PeekMessageW
+                while (!_isExiting) {
+                    val hasMsg = PeekMessageW(
+                        msg,
+                        MemorySegment.NULL,
+                        0, 0,
+                        PM_REMOVE,
                     )
+                    if (hasMsg == 0) break
+                    TranslateMessage(msg)
+                    DispatchMessageW(msg)
                 }
-                else -> {
-                    // Other return code (error or unexpected signal)
-                    return StartCause.WaitCancelled(targetInstant)
-                }
+                return StartCause.WaitCancelled(targetInstant)
             }
-        } else {
-            // Bindings unavailable (macOS/Linux) — simulate Poll
-            return StartCause.Poll
+            WAIT_TIMEOUT.toLong() -> {
+                // Timeout expired → target instant reached
+                return StartCause.ResumeTimeReached(
+                    requestedResume = targetInstant,
+                    start = System.currentTimeMillis(),
+                )
+            }
+            else -> {
+                // Other return code (error or unexpected signal)
+                return StartCause.WaitCancelled(targetInstant)
+            }
         }
     }
 }

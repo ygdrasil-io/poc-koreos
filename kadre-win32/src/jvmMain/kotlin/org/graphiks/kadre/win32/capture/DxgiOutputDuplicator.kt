@@ -4,9 +4,61 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.PixelFormat
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
+
+private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
+    return try {
+        val lookup = SymbolLookup.libraryLookup(libName, Arena.global())
+        lookup.find(symbol).map { Linker.nativeLinker().downcallHandle(it, desc) }.orElse(null)
+    } catch (_: Throwable) { null }
+}
+
+private val getDC: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetDC",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val createCompatibleDC: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "CreateCompatibleDC",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val createCompatibleBitmap: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "CreateCompatibleBitmap",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
+}
+
+private val selectObject: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "SelectObject",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val bitBlt: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "BitBlt",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
+}
+
+private val getDIBits: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "GetDIBits",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+private val releaseDC: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "ReleaseDC",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val deleteDC: MethodHandle? by lazy {
+    lookupDowncall("gdi32.dll", "DeleteDC",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
 
 class DxgiOutputDuplicator(
     displayId: Long,
@@ -24,12 +76,11 @@ internal class GdiWindowCapture(
 ) : AutoCloseable {
 
     fun acquireFrame(): CaptureFrame? {
-        val getWR = getWindowRect ?: return null
         val arena = Arena.ofConfined()
         return try {
             val hwndSeg = MemorySegment.ofAddress(hwnd)
             val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-            val rectOk = getWR.invokeExact(hwndSeg, rect) as Int
+            val rectOk = GetWindowRect(hwndSeg, rect)
             if (rectOk == 0) return null
 
             val left = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
@@ -79,7 +130,6 @@ internal fun captureRectFromScreen(
     val dib = getDIBits ?: return null
     val relDC = releaseDC ?: return null
     val delDC = deleteDC ?: return null
-    val delObj = deleteObject ?: return null
 
     var hdcScreen: MemorySegment? = null
     var hdcMem: MemorySegment? = null
@@ -138,7 +188,7 @@ internal fun captureRectFromScreen(
         null
     } finally {
         try { if (hdcMem != null && hdcMem.address() != 0L && oldBitmap != null && oldBitmap.address() != 0L) selObj.invokeExact(hdcMem, oldBitmap) } catch (_: Throwable) {}
-        try { if (hBitmap != null && hBitmap.address() != 0L) delObj.invokeExact(hBitmap) } catch (_: Throwable) {}
+        try { if (hBitmap != null && hBitmap.address() != 0L) DeleteObject(hBitmap) } catch (_: Throwable) {}
         try { if (hdcMem != null && hdcMem.address() != 0L) delDC.invokeExact(hdcMem) } catch (_: Throwable) {}
         try { if (hdcScreen != null && hdcScreen.address() != 0L) relDC.invokeExact(MemorySegment.NULL, hdcScreen) } catch (_: Throwable) {}
     }

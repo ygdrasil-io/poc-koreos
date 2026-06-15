@@ -4,11 +4,57 @@ import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.*
 import org.graphiks.kadre.win32.*
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
+
+private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
+    return try {
+        val lookup = SymbolLookup.libraryLookup(libName, Arena.global())
+        lookup.find(symbol).map { Linker.nativeLinker().downcallHandle(it, desc) }.orElse(null)
+    } catch (_: Throwable) { null }
+}
+
+private val getDesktopWindow: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetDesktopWindow",
+        FunctionDescriptor.of(ValueLayout.ADDRESS))
+}
+
+private val getWindow: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetWindow",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
+private val getWindowThreadProcessId: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetWindowThreadProcessId",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val openProcess: MethodHandle? by lazy {
+    lookupDowncall("kernel32.dll", "OpenProcess",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
+}
+
+private val queryFullProcessImageNameW: MethodHandle? by lazy {
+    lookupDowncall("kernel32.dll", "QueryFullProcessImageNameW",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
+
+private val closeHandle: MethodHandle? by lazy {
+    lookupDowncall("kernel32.dll", "CloseHandle",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+private val getMonitorInfoW: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetMonitorInfoW",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+}
 
 class Win32ScreenCapturer : ScreenCapturer {
 
@@ -29,9 +75,6 @@ class Win32ScreenCapturer : ScreenCapturer {
     override suspend fun enumerateWindows(): List<WindowInfo> {
         val getDesktop = getDesktopWindow ?: return emptyList()
         val getWin = getWindow ?: return emptyList()
-        val getWR = getWindowRect ?: return emptyList()
-        val getWT = getWindowTextW ?: return emptyList()
-        val isVis = isWindowVisible ?: return emptyList()
         val getWTPid = getWindowThreadProcessId ?: return emptyList()
 
         return try {
@@ -39,13 +82,13 @@ class Win32ScreenCapturer : ScreenCapturer {
             val windows = mutableListOf<WindowInfo>()
 
             Arena.ofConfined().use { arena ->
-                    var hwnd = getWin.invokeExact(desktop, GW_CHILD) as MemorySegment
-                    var iterations = 0
-                    while (hwnd.address() != 0L && iterations < 10000) {
-                    val visible = (isVis.invokeExact(hwnd) as Int) != 0
+                var hwnd = getWin.invokeExact(desktop, GW_CHILD) as MemorySegment
+                var iterations = 0
+                while (hwnd.address() != 0L && iterations < 10000) {
+                    val visible = IsWindowVisible(hwnd) != 0
                     if (visible) {
                         val rect = arena.allocate(RECT_SIZE, RECT_ALIGN)
-                        val rectOk = getWR.invokeExact(hwnd, rect) as Int
+                        val rectOk = GetWindowRect(hwnd, rect)
                         if (rectOk != 0) {
                             val left = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT)
                             val top = rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP)
@@ -55,7 +98,7 @@ class Win32ScreenCapturer : ScreenCapturer {
                             val height = bottom - top
 
                             val titleBuf = arena.allocate(512L, 2L)
-                            val chars = getWT.invokeExact(hwnd, titleBuf, 256) as Int
+                            val chars = GetWindowTextW(hwnd, titleBuf, 256)
 
                             val title = if (chars > 0) {
                                 readWideString(titleBuf, chars)

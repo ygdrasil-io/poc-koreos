@@ -37,15 +37,21 @@ private val _DLL_USER32_DLL: SymbolLookup? = try {
     null
 }
 
-private fun _lookup(symbol: String): SymbolLookup {
-    return when (symbol) {
-        "RegisterClassExW", "CreateWindowExW", "ShowWindow", "UpdateWindow", "DestroyWindow", "DefWindowProcW", "SetWindowTextW", "PostQuitMessage", "GetKeyState", "PeekMessageW", "GetMessageW", "TranslateMessage", "DispatchMessageW", "MsgWaitForMultipleObjectsEx", "LoadCursorW", "SetProcessDpiAwarenessContext", "GetDpiForWindow", "TrackMouseEvent", "RegisterTouchWindow", "GetTouchInputInfo", "CloseTouchInputHandle", "GetGestureInfo", "CloseGestureInfoHandle", "ScreenToClient", "ClientToScreen", "GetCursorPos", "GetSystemMenu", "TrackPopupMenu", "EnableMenuItem", "SetMenuDefaultItem", "ReleaseCapture", "EnableWindow", "GetClientRect", "GetWindowRect", "SetWindowLongPtrW", "GetWindowLongPtrW", "IsZoomed", "IsIconic", "IsWindowVisible", "GetWindowTextW", "SetWindowPos", "GetForegroundWindow", "SetForegroundWindow", "MapVirtualKeyW", "SendInput", "SetCursorPos", "SetCursor", "ShowCursor", "ClipCursor", "PostMessageW", "SendMessageW", "CreateIcon", "DestroyIcon" -> _DLL_USER32_DLL ?: SymbolLookup.loaderLookup()
-        "GetCurrentThreadId", "GetModuleHandleW", "SetLastError", "GetLastError" -> _DLL_KERNEL32_DLL ?: SymbolLookup.loaderLookup()
-        "CreateRectRgn", "DeleteObject" -> _DLL_GDI32_DLL ?: SymbolLookup.loaderLookup()
-        "DwmSetWindowAttribute", "DwmEnableBlurBehindWindow", "DwmExtendFrameIntoClientArea" -> _DLL_DWMAPI_DLL ?: SymbolLookup.loaderLookup()
-        else -> SymbolLookup.loaderLookup()
+private fun _findAddress(symbol: String): MemorySegment? {
+    val lookup: SymbolLookup? = when (symbol) {
+        "RegisterClassExW", "CreateWindowExW", "ShowWindow", "UpdateWindow", "DestroyWindow", "DefWindowProcW", "SetWindowTextW", "PostQuitMessage", "GetKeyState", "PeekMessageW", "GetMessageW", "TranslateMessage", "DispatchMessageW", "MsgWaitForMultipleObjectsEx", "LoadCursorW", "SetProcessDpiAwarenessContext", "GetDpiForWindow", "TrackMouseEvent", "RegisterTouchWindow", "GetTouchInputInfo", "CloseTouchInputHandle", "GetGestureInfo", "CloseGestureInfoHandle", "ScreenToClient", "ClientToScreen", "GetCursorPos", "GetSystemMenu", "TrackPopupMenu", "EnableMenuItem", "SetMenuDefaultItem", "ReleaseCapture", "EnableWindow", "GetClientRect", "GetWindowRect", "SetWindowLongPtrW", "GetWindowLongPtrW", "IsZoomed", "IsIconic", "IsWindowVisible", "GetWindowTextW", "SetWindowPos", "GetForegroundWindow", "SetForegroundWindow", "MapVirtualKeyW", "SendInput", "SetCursorPos", "SetCursor", "ShowCursor", "ClipCursor", "PostMessageW", "SendMessageW", "CreateIcon", "DestroyIcon" -> _DLL_USER32_DLL
+        "GetCurrentThreadId", "GetModuleHandleW", "SetLastError", "GetLastError" -> _DLL_KERNEL32_DLL
+        "CreateRectRgn", "DeleteObject" -> _DLL_GDI32_DLL
+        "DwmSetWindowAttribute", "DwmEnableBlurBehindWindow", "DwmExtendFrameIntoClientArea" -> _DLL_DWMAPI_DLL
+        else -> null
+    }
+    return try {
+        lookup?.find(symbol)?.orElse(null)
+    } catch (_: Throwable) {
+        null
     }
 }
+
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = LongLong uintptr_t;}
@@ -1550,12 +1556,13 @@ enum class DIRECTORY_FLAGS(val value: Long) {
  * {@snippet lang=c : GetLastError typedef DWORD = UNSIGNED = Long()
  */
 private val GetLastError_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG)
-private val GetLastError_ADDR: MemorySegment = _lookup("GetLastError").find("GetLastError").orElseThrow()
-private val GetLastError_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetLastError_ADDR, GetLastError_DESC)
+private val GetLastError_ADDR: MemorySegment? by lazy { _findAddress("GetLastError") }
+private val GetLastError_HANDLE: MethodHandle? by lazy { val a = GetLastError_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetLastError_DESC) } catch (_: Throwable) { null } }
 
 fun GetLastError(): Long {
+    val handle = GetLastError_HANDLE ?: return 0L
     try {
-        return GetLastError_HANDLE.invokeExact() as Long
+        return handle.invokeExact() as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -1569,12 +1576,13 @@ fun GetLastError(): Long {
  * {@snippet lang=c : SetLastError Void(typedef DWORD = UNSIGNED = Long)
  */
 private val SetLastError_DESC: FunctionDescriptor = FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG)
-private val SetLastError_ADDR: MemorySegment = _lookup("SetLastError").find("SetLastError").orElseThrow()
-private val SetLastError_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetLastError_ADDR, SetLastError_DESC)
+private val SetLastError_ADDR: MemorySegment? by lazy { _findAddress("SetLastError") }
+private val SetLastError_HANDLE: MethodHandle? by lazy { val a = SetLastError_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetLastError_DESC) } catch (_: Throwable) { null } }
 
 fun SetLastError(arg0: Long): Unit {
+    val handle = SetLastError_HANDLE ?: return
     try {
-        SetLastError_HANDLE.invokeExact(arg0)
+        handle.invokeExact(arg0)
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -1600,12 +1608,13 @@ enum class _QUEUE_USER_APC_FLAGS(val value: Long) {
  * {@snippet lang=c : GetCurrentThreadId typedef DWORD = UNSIGNED = Long()
  */
 private val GetCurrentThreadId_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG)
-private val GetCurrentThreadId_ADDR: MemorySegment = _lookup("GetCurrentThreadId").find("GetCurrentThreadId").orElseThrow()
-private val GetCurrentThreadId_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetCurrentThreadId_ADDR, GetCurrentThreadId_DESC)
+private val GetCurrentThreadId_ADDR: MemorySegment? by lazy { _findAddress("GetCurrentThreadId") }
+private val GetCurrentThreadId_HANDLE: MethodHandle? by lazy { val a = GetCurrentThreadId_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetCurrentThreadId_DESC) } catch (_: Throwable) { null } }
 
 fun GetCurrentThreadId(): Long {
+    val handle = GetCurrentThreadId_HANDLE ?: return 0L
     try {
-        return GetCurrentThreadId_HANDLE.invokeExact() as Long
+        return handle.invokeExact() as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -1739,12 +1748,13 @@ enum class WIN32_MEMORY_PARTITION_INFORMATION_CLASS(val value: Long) {
  * {@snippet lang=c : GetModuleHandleW typedef HMODULE = (Declared(HINSTANCE__))*(typedef LPCWSTR = (UNSIGNED = Short)*)
  */
 private val GetModuleHandleW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val GetModuleHandleW_ADDR: MemorySegment = _lookup("GetModuleHandleW").find("GetModuleHandleW").orElseThrow()
-private val GetModuleHandleW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetModuleHandleW_ADDR, GetModuleHandleW_DESC)
+private val GetModuleHandleW_ADDR: MemorySegment? by lazy { _findAddress("GetModuleHandleW") }
+private val GetModuleHandleW_HANDLE: MethodHandle? by lazy { val a = GetModuleHandleW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetModuleHandleW_DESC) } catch (_: Throwable) { null } }
 
 fun GetModuleHandleW(arg0: MemorySegment): MemorySegment {
+    val handle = GetModuleHandleW_HANDLE ?: return MemorySegment.NULL
     try {
-        return GetModuleHandleW_HANDLE.invokeExact(arg0) as MemorySegment
+        return handle.invokeExact(arg0) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2016,12 +2026,13 @@ enum class _DISPLAYCONFIG_ADVANCED_COLOR_MODE(val value: Long) {
  * {@snippet lang=c : CreateRectRgn typedef HRGN = (Declared(HRGN__))*(Int,Int,Int,Int)
  */
 private val CreateRectRgn_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val CreateRectRgn_ADDR: MemorySegment = _lookup("CreateRectRgn").find("CreateRectRgn").orElseThrow()
-private val CreateRectRgn_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(CreateRectRgn_ADDR, CreateRectRgn_DESC)
+private val CreateRectRgn_ADDR: MemorySegment? by lazy { _findAddress("CreateRectRgn") }
+private val CreateRectRgn_HANDLE: MethodHandle? by lazy { val a = CreateRectRgn_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, CreateRectRgn_DESC) } catch (_: Throwable) { null } }
 
 fun CreateRectRgn(arg0: Int, arg1: Int, arg2: Int, arg3: Int): MemorySegment {
+    val handle = CreateRectRgn_HANDLE ?: return MemorySegment.NULL
     try {
-        return CreateRectRgn_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as MemorySegment
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2035,12 +2046,13 @@ fun CreateRectRgn(arg0: Int, arg1: Int, arg2: Int, arg3: Int): MemorySegment {
  * {@snippet lang=c : DeleteObject typedef BOOL = Int(typedef HGDIOBJ = (Void)*)
  */
 private val DeleteObject_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val DeleteObject_ADDR: MemorySegment = _lookup("DeleteObject").find("DeleteObject").orElseThrow()
-private val DeleteObject_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(DeleteObject_ADDR, DeleteObject_DESC)
+private val DeleteObject_ADDR: MemorySegment? by lazy { _findAddress("DeleteObject") }
+private val DeleteObject_HANDLE: MethodHandle? by lazy { val a = DeleteObject_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, DeleteObject_DESC) } catch (_: Throwable) { null } }
 
 fun DeleteObject(arg0: MemorySegment): Int {
+    val handle = DeleteObject_HANDLE ?: return 0
     try {
-        return DeleteObject_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2059,12 +2071,13 @@ typealias COLOR16 = Short
  * {@snippet lang=c : TrackMouseEvent typedef BOOL = Int(typedef LPTRACKMOUSEEVENT = (Declared(tagTRACKMOUSEEVENT))*)
  */
 private val TrackMouseEvent_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val TrackMouseEvent_ADDR: MemorySegment = _lookup("TrackMouseEvent").find("TrackMouseEvent").orElseThrow()
-private val TrackMouseEvent_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(TrackMouseEvent_ADDR, TrackMouseEvent_DESC)
+private val TrackMouseEvent_ADDR: MemorySegment? by lazy { _findAddress("TrackMouseEvent") }
+private val TrackMouseEvent_HANDLE: MethodHandle? by lazy { val a = TrackMouseEvent_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, TrackMouseEvent_DESC) } catch (_: Throwable) { null } }
 
 fun TrackMouseEvent(arg0: MemorySegment): Int {
+    val handle = TrackMouseEvent_HANDLE ?: return 0
     try {
-        return TrackMouseEvent_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2078,12 +2091,13 @@ fun TrackMouseEvent(arg0: MemorySegment): Int {
  * {@snippet lang=c : GetMessageW typedef BOOL = Int(typedef LPMSG = (Declared(tagMSG))*,typedef HWND = (Declared(HWND__))*,typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int)
  */
 private val GetMessageW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val GetMessageW_ADDR: MemorySegment = _lookup("GetMessageW").find("GetMessageW").orElseThrow()
-private val GetMessageW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetMessageW_ADDR, GetMessageW_DESC)
+private val GetMessageW_ADDR: MemorySegment? by lazy { _findAddress("GetMessageW") }
+private val GetMessageW_HANDLE: MethodHandle? by lazy { val a = GetMessageW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetMessageW_DESC) } catch (_: Throwable) { null } }
 
 fun GetMessageW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int): Int {
+    val handle = GetMessageW_HANDLE ?: return 0
     try {
-        return GetMessageW_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2097,12 +2111,13 @@ fun GetMessageW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int):
  * {@snippet lang=c : TranslateMessage typedef BOOL = Int((typedef MSG = Declared(tagMSG))*)
  */
 private val TranslateMessage_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val TranslateMessage_ADDR: MemorySegment = _lookup("TranslateMessage").find("TranslateMessage").orElseThrow()
-private val TranslateMessage_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(TranslateMessage_ADDR, TranslateMessage_DESC)
+private val TranslateMessage_ADDR: MemorySegment? by lazy { _findAddress("TranslateMessage") }
+private val TranslateMessage_HANDLE: MethodHandle? by lazy { val a = TranslateMessage_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, TranslateMessage_DESC) } catch (_: Throwable) { null } }
 
 fun TranslateMessage(arg0: MemorySegment): Int {
+    val handle = TranslateMessage_HANDLE ?: return 0
     try {
-        return TranslateMessage_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2116,12 +2131,13 @@ fun TranslateMessage(arg0: MemorySegment): Int {
  * {@snippet lang=c : DispatchMessageW typedef LRESULT = LongLong((typedef MSG = Declared(tagMSG))*)
  */
 private val DispatchMessageW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS)
-private val DispatchMessageW_ADDR: MemorySegment = _lookup("DispatchMessageW").find("DispatchMessageW").orElseThrow()
-private val DispatchMessageW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(DispatchMessageW_ADDR, DispatchMessageW_DESC)
+private val DispatchMessageW_ADDR: MemorySegment? by lazy { _findAddress("DispatchMessageW") }
+private val DispatchMessageW_HANDLE: MethodHandle? by lazy { val a = DispatchMessageW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, DispatchMessageW_DESC) } catch (_: Throwable) { null } }
 
 fun DispatchMessageW(arg0: MemorySegment): Long {
+    val handle = DispatchMessageW_HANDLE ?: return 0L
     try {
-        return DispatchMessageW_HANDLE.invokeExact(arg0) as Long
+        return handle.invokeExact(arg0) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2135,12 +2151,13 @@ fun DispatchMessageW(arg0: MemorySegment): Long {
  * {@snippet lang=c : PeekMessageW typedef BOOL = Int(typedef LPMSG = (Declared(tagMSG))*,typedef HWND = (Declared(HWND__))*,typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int)
  */
 private val PeekMessageW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val PeekMessageW_ADDR: MemorySegment = _lookup("PeekMessageW").find("PeekMessageW").orElseThrow()
-private val PeekMessageW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(PeekMessageW_ADDR, PeekMessageW_DESC)
+private val PeekMessageW_ADDR: MemorySegment? by lazy { _findAddress("PeekMessageW") }
+private val PeekMessageW_HANDLE: MethodHandle? by lazy { val a = PeekMessageW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, PeekMessageW_DESC) } catch (_: Throwable) { null } }
 
 fun PeekMessageW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int, arg4: Int): Int {
+    val handle = PeekMessageW_HANDLE ?: return 0
     try {
-        return PeekMessageW_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2154,12 +2171,13 @@ fun PeekMessageW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int,
  * {@snippet lang=c : SendMessageW typedef LRESULT = LongLong(typedef HWND = (Declared(HWND__))*,typedef UINT = UNSIGNED = Int,typedef WPARAM = UNSIGNED = LongLong,typedef LPARAM = LongLong)
  */
 private val SendMessageW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG)
-private val SendMessageW_ADDR: MemorySegment = _lookup("SendMessageW").find("SendMessageW").orElseThrow()
-private val SendMessageW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SendMessageW_ADDR, SendMessageW_DESC)
+private val SendMessageW_ADDR: MemorySegment? by lazy { _findAddress("SendMessageW") }
+private val SendMessageW_HANDLE: MethodHandle? by lazy { val a = SendMessageW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SendMessageW_DESC) } catch (_: Throwable) { null } }
 
 fun SendMessageW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Long {
+    val handle = SendMessageW_HANDLE ?: return 0L
     try {
-        return SendMessageW_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as Long
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2173,12 +2191,13 @@ fun SendMessageW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Long {
  * {@snippet lang=c : PostMessageW typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef UINT = UNSIGNED = Int,typedef WPARAM = UNSIGNED = LongLong,typedef LPARAM = LongLong)
  */
 private val PostMessageW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG)
-private val PostMessageW_ADDR: MemorySegment = _lookup("PostMessageW").find("PostMessageW").orElseThrow()
-private val PostMessageW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(PostMessageW_ADDR, PostMessageW_DESC)
+private val PostMessageW_ADDR: MemorySegment? by lazy { _findAddress("PostMessageW") }
+private val PostMessageW_HANDLE: MethodHandle? by lazy { val a = PostMessageW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, PostMessageW_DESC) } catch (_: Throwable) { null } }
 
 fun PostMessageW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Int {
+    val handle = PostMessageW_HANDLE ?: return 0
     try {
-        return PostMessageW_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2192,12 +2211,13 @@ fun PostMessageW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Int {
  * {@snippet lang=c : DefWindowProcW typedef LRESULT = LongLong(typedef HWND = (Declared(HWND__))*,typedef UINT = UNSIGNED = Int,typedef WPARAM = UNSIGNED = LongLong,typedef LPARAM = LongLong)
  */
 private val DefWindowProcW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG)
-private val DefWindowProcW_ADDR: MemorySegment = _lookup("DefWindowProcW").find("DefWindowProcW").orElseThrow()
-private val DefWindowProcW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(DefWindowProcW_ADDR, DefWindowProcW_DESC)
+private val DefWindowProcW_ADDR: MemorySegment? by lazy { _findAddress("DefWindowProcW") }
+private val DefWindowProcW_HANDLE: MethodHandle? by lazy { val a = DefWindowProcW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, DefWindowProcW_DESC) } catch (_: Throwable) { null } }
 
 fun DefWindowProcW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Long {
+    val handle = DefWindowProcW_HANDLE ?: return 0L
     try {
-        return DefWindowProcW_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as Long
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2211,12 +2231,13 @@ fun DefWindowProcW(arg0: MemorySegment, arg1: Int, arg2: Long, arg3: Long): Long
  * {@snippet lang=c : PostQuitMessage Void(Int)
  */
 private val PostQuitMessage_DESC: FunctionDescriptor = FunctionDescriptor.ofVoid(ValueLayout.JAVA_INT)
-private val PostQuitMessage_ADDR: MemorySegment = _lookup("PostQuitMessage").find("PostQuitMessage").orElseThrow()
-private val PostQuitMessage_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(PostQuitMessage_ADDR, PostQuitMessage_DESC)
+private val PostQuitMessage_ADDR: MemorySegment? by lazy { _findAddress("PostQuitMessage") }
+private val PostQuitMessage_HANDLE: MethodHandle? by lazy { val a = PostQuitMessage_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, PostQuitMessage_DESC) } catch (_: Throwable) { null } }
 
 fun PostQuitMessage(arg0: Int): Unit {
+    val handle = PostQuitMessage_HANDLE ?: return
     try {
-        PostQuitMessage_HANDLE.invokeExact(arg0)
+        handle.invokeExact(arg0)
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2230,12 +2251,13 @@ fun PostQuitMessage(arg0: Int): Unit {
  * {@snippet lang=c : RegisterClassExW typedef ATOM = UNSIGNED = Short((typedef WNDCLASSEXW = Declared(tagWNDCLASSEXW))*)
  */
 private val RegisterClassExW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS)
-private val RegisterClassExW_ADDR: MemorySegment = _lookup("RegisterClassExW").find("RegisterClassExW").orElseThrow()
-private val RegisterClassExW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(RegisterClassExW_ADDR, RegisterClassExW_DESC)
+private val RegisterClassExW_ADDR: MemorySegment? by lazy { _findAddress("RegisterClassExW") }
+private val RegisterClassExW_HANDLE: MethodHandle? by lazy { val a = RegisterClassExW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, RegisterClassExW_DESC) } catch (_: Throwable) { null } }
 
 fun RegisterClassExW(arg0: MemorySegment): Short {
+    val handle = RegisterClassExW_HANDLE ?: return 0
     try {
-        return RegisterClassExW_HANDLE.invokeExact(arg0) as Short
+        return handle.invokeExact(arg0) as Short
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2249,12 +2271,13 @@ fun RegisterClassExW(arg0: MemorySegment): Short {
  * {@snippet lang=c : CreateWindowExW typedef HWND = (Declared(HWND__))*(typedef DWORD = UNSIGNED = Long,typedef LPCWSTR = (UNSIGNED = Short)*,typedef LPCWSTR = (UNSIGNED = Short)*,typedef DWORD = UNSIGNED = Long,Int,Int,Int,Int,typedef HWND = (Declared(HWND__))*,typedef HMENU = (Declared(HMENU__))*,typedef HINSTANCE = (Declared(HINSTANCE__))*,typedef LPVOID = (Void)*)
  */
 private val CreateWindowExW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val CreateWindowExW_ADDR: MemorySegment = _lookup("CreateWindowExW").find("CreateWindowExW").orElseThrow()
-private val CreateWindowExW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(CreateWindowExW_ADDR, CreateWindowExW_DESC)
+private val CreateWindowExW_ADDR: MemorySegment? by lazy { _findAddress("CreateWindowExW") }
+private val CreateWindowExW_HANDLE: MethodHandle? by lazy { val a = CreateWindowExW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, CreateWindowExW_DESC) } catch (_: Throwable) { null } }
 
 fun CreateWindowExW(arg0: Long, arg1: MemorySegment, arg2: MemorySegment, arg3: Long, arg4: Int, arg5: Int, arg6: Int, arg7: Int, arg8: MemorySegment, arg9: MemorySegment, arg10: MemorySegment, arg11: MemorySegment): MemorySegment {
+    val handle = CreateWindowExW_HANDLE ?: return MemorySegment.NULL
     try {
-        return CreateWindowExW_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11) as MemorySegment
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2268,12 +2291,13 @@ fun CreateWindowExW(arg0: Long, arg1: MemorySegment, arg2: MemorySegment, arg3: 
  * {@snippet lang=c : DestroyWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val DestroyWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val DestroyWindow_ADDR: MemorySegment = _lookup("DestroyWindow").find("DestroyWindow").orElseThrow()
-private val DestroyWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(DestroyWindow_ADDR, DestroyWindow_DESC)
+private val DestroyWindow_ADDR: MemorySegment? by lazy { _findAddress("DestroyWindow") }
+private val DestroyWindow_HANDLE: MethodHandle? by lazy { val a = DestroyWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, DestroyWindow_DESC) } catch (_: Throwable) { null } }
 
 fun DestroyWindow(arg0: MemorySegment): Int {
+    val handle = DestroyWindow_HANDLE ?: return 0
     try {
-        return DestroyWindow_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2287,12 +2311,13 @@ fun DestroyWindow(arg0: MemorySegment): Int {
  * {@snippet lang=c : ShowWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,Int)
  */
 private val ShowWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val ShowWindow_ADDR: MemorySegment = _lookup("ShowWindow").find("ShowWindow").orElseThrow()
-private val ShowWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ShowWindow_ADDR, ShowWindow_DESC)
+private val ShowWindow_ADDR: MemorySegment? by lazy { _findAddress("ShowWindow") }
+private val ShowWindow_HANDLE: MethodHandle? by lazy { val a = ShowWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ShowWindow_DESC) } catch (_: Throwable) { null } }
 
 fun ShowWindow(arg0: MemorySegment, arg1: Int): Int {
+    val handle = ShowWindow_HANDLE ?: return 0
     try {
-        return ShowWindow_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2306,12 +2331,13 @@ fun ShowWindow(arg0: MemorySegment, arg1: Int): Int {
  * {@snippet lang=c : SetWindowPos typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef HWND = (Declared(HWND__))*,Int,Int,Int,Int,typedef UINT = UNSIGNED = Int)
  */
 private val SetWindowPos_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val SetWindowPos_ADDR: MemorySegment = _lookup("SetWindowPos").find("SetWindowPos").orElseThrow()
-private val SetWindowPos_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetWindowPos_ADDR, SetWindowPos_DESC)
+private val SetWindowPos_ADDR: MemorySegment? by lazy { _findAddress("SetWindowPos") }
+private val SetWindowPos_HANDLE: MethodHandle? by lazy { val a = SetWindowPos_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetWindowPos_DESC) } catch (_: Throwable) { null } }
 
 fun SetWindowPos(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int, arg4: Int, arg5: Int, arg6: Int): Int {
+    val handle = SetWindowPos_HANDLE ?: return 0
     try {
-        return SetWindowPos_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2325,12 +2351,13 @@ fun SetWindowPos(arg0: MemorySegment, arg1: MemorySegment, arg2: Int, arg3: Int,
  * {@snippet lang=c : IsWindowVisible typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val IsWindowVisible_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val IsWindowVisible_ADDR: MemorySegment = _lookup("IsWindowVisible").find("IsWindowVisible").orElseThrow()
-private val IsWindowVisible_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(IsWindowVisible_ADDR, IsWindowVisible_DESC)
+private val IsWindowVisible_ADDR: MemorySegment? by lazy { _findAddress("IsWindowVisible") }
+private val IsWindowVisible_HANDLE: MethodHandle? by lazy { val a = IsWindowVisible_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, IsWindowVisible_DESC) } catch (_: Throwable) { null } }
 
 fun IsWindowVisible(arg0: MemorySegment): Int {
+    val handle = IsWindowVisible_HANDLE ?: return 0
     try {
-        return IsWindowVisible_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2344,12 +2371,13 @@ fun IsWindowVisible(arg0: MemorySegment): Int {
  * {@snippet lang=c : IsIconic typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val IsIconic_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val IsIconic_ADDR: MemorySegment = _lookup("IsIconic").find("IsIconic").orElseThrow()
-private val IsIconic_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(IsIconic_ADDR, IsIconic_DESC)
+private val IsIconic_ADDR: MemorySegment? by lazy { _findAddress("IsIconic") }
+private val IsIconic_HANDLE: MethodHandle? by lazy { val a = IsIconic_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, IsIconic_DESC) } catch (_: Throwable) { null } }
 
 fun IsIconic(arg0: MemorySegment): Int {
+    val handle = IsIconic_HANDLE ?: return 0
     try {
-        return IsIconic_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2363,12 +2391,13 @@ fun IsIconic(arg0: MemorySegment): Int {
  * {@snippet lang=c : IsZoomed typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val IsZoomed_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val IsZoomed_ADDR: MemorySegment = _lookup("IsZoomed").find("IsZoomed").orElseThrow()
-private val IsZoomed_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(IsZoomed_ADDR, IsZoomed_DESC)
+private val IsZoomed_ADDR: MemorySegment? by lazy { _findAddress("IsZoomed") }
+private val IsZoomed_HANDLE: MethodHandle? by lazy { val a = IsZoomed_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, IsZoomed_DESC) } catch (_: Throwable) { null } }
 
 fun IsZoomed(arg0: MemorySegment): Int {
+    val handle = IsZoomed_HANDLE ?: return 0
     try {
-        return IsZoomed_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2406,12 +2435,13 @@ enum class DIALOG_DPI_CHANGE_BEHAVIORS(val value: Long) {
  * {@snippet lang=c : GetKeyState typedef SHORT = Short(Int)
  */
 private val GetKeyState_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_SHORT, ValueLayout.JAVA_INT)
-private val GetKeyState_ADDR: MemorySegment = _lookup("GetKeyState").find("GetKeyState").orElseThrow()
-private val GetKeyState_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetKeyState_ADDR, GetKeyState_DESC)
+private val GetKeyState_ADDR: MemorySegment? by lazy { _findAddress("GetKeyState") }
+private val GetKeyState_HANDLE: MethodHandle? by lazy { val a = GetKeyState_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetKeyState_DESC) } catch (_: Throwable) { null } }
 
 fun GetKeyState(arg0: Int): Short {
+    val handle = GetKeyState_HANDLE ?: return 0
     try {
-        return GetKeyState_HANDLE.invokeExact(arg0) as Short
+        return handle.invokeExact(arg0) as Short
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2425,12 +2455,13 @@ fun GetKeyState(arg0: Int): Short {
  * {@snippet lang=c : SendInput typedef UINT = UNSIGNED = Int(typedef UINT = UNSIGNED = Int,typedef LPINPUT = (Declared(tagINPUT))*,Int)
  */
 private val SendInput_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val SendInput_ADDR: MemorySegment = _lookup("SendInput").find("SendInput").orElseThrow()
-private val SendInput_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SendInput_ADDR, SendInput_DESC)
+private val SendInput_ADDR: MemorySegment? by lazy { _findAddress("SendInput") }
+private val SendInput_HANDLE: MethodHandle? by lazy { val a = SendInput_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SendInput_DESC) } catch (_: Throwable) { null } }
 
 fun SendInput(arg0: Int, arg1: MemorySegment, arg2: Int): Int {
+    val handle = SendInput_HANDLE ?: return 0
     try {
-        return SendInput_HANDLE.invokeExact(arg0, arg1, arg2) as Int
+        return handle.invokeExact(arg0, arg1, arg2) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2444,12 +2475,13 @@ fun SendInput(arg0: Int, arg1: MemorySegment, arg2: Int): Int {
  * {@snippet lang=c : GetTouchInputInfo typedef BOOL = Int(typedef HTOUCHINPUT = (Declared(HTOUCHINPUT__))*,typedef UINT = UNSIGNED = Int,typedef PTOUCHINPUT = (Declared(tagTOUCHINPUT))*,Int)
  */
 private val GetTouchInputInfo_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val GetTouchInputInfo_ADDR: MemorySegment = _lookup("GetTouchInputInfo").find("GetTouchInputInfo").orElseThrow()
-private val GetTouchInputInfo_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetTouchInputInfo_ADDR, GetTouchInputInfo_DESC)
+private val GetTouchInputInfo_ADDR: MemorySegment? by lazy { _findAddress("GetTouchInputInfo") }
+private val GetTouchInputInfo_HANDLE: MethodHandle? by lazy { val a = GetTouchInputInfo_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetTouchInputInfo_DESC) } catch (_: Throwable) { null } }
 
 fun GetTouchInputInfo(arg0: MemorySegment, arg1: Int, arg2: MemorySegment, arg3: Int): Int {
+    val handle = GetTouchInputInfo_HANDLE ?: return 0
     try {
-        return GetTouchInputInfo_HANDLE.invokeExact(arg0, arg1, arg2, arg3) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2463,12 +2495,13 @@ fun GetTouchInputInfo(arg0: MemorySegment, arg1: Int, arg2: MemorySegment, arg3:
  * {@snippet lang=c : CloseTouchInputHandle typedef BOOL = Int(typedef HTOUCHINPUT = (Declared(HTOUCHINPUT__))*)
  */
 private val CloseTouchInputHandle_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val CloseTouchInputHandle_ADDR: MemorySegment = _lookup("CloseTouchInputHandle").find("CloseTouchInputHandle").orElseThrow()
-private val CloseTouchInputHandle_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(CloseTouchInputHandle_ADDR, CloseTouchInputHandle_DESC)
+private val CloseTouchInputHandle_ADDR: MemorySegment? by lazy { _findAddress("CloseTouchInputHandle") }
+private val CloseTouchInputHandle_HANDLE: MethodHandle? by lazy { val a = CloseTouchInputHandle_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, CloseTouchInputHandle_DESC) } catch (_: Throwable) { null } }
 
 fun CloseTouchInputHandle(arg0: MemorySegment): Int {
+    val handle = CloseTouchInputHandle_HANDLE ?: return 0
     try {
-        return CloseTouchInputHandle_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2482,12 +2515,13 @@ fun CloseTouchInputHandle(arg0: MemorySegment): Int {
  * {@snippet lang=c : RegisterTouchWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef ULONG = UNSIGNED = Long)
  */
 private val RegisterTouchWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG)
-private val RegisterTouchWindow_ADDR: MemorySegment = _lookup("RegisterTouchWindow").find("RegisterTouchWindow").orElseThrow()
-private val RegisterTouchWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(RegisterTouchWindow_ADDR, RegisterTouchWindow_DESC)
+private val RegisterTouchWindow_ADDR: MemorySegment? by lazy { _findAddress("RegisterTouchWindow") }
+private val RegisterTouchWindow_HANDLE: MethodHandle? by lazy { val a = RegisterTouchWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, RegisterTouchWindow_DESC) } catch (_: Throwable) { null } }
 
 fun RegisterTouchWindow(arg0: MemorySegment, arg1: Long): Int {
+    val handle = RegisterTouchWindow_HANDLE ?: return 0
     try {
-        return RegisterTouchWindow_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2579,12 +2613,13 @@ enum class tagFEEDBACK_TYPE(val value: Long) {
  * {@snippet lang=c : MapVirtualKeyW typedef UINT = UNSIGNED = Int(typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int)
  */
 private val MapVirtualKeyW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val MapVirtualKeyW_ADDR: MemorySegment = _lookup("MapVirtualKeyW").find("MapVirtualKeyW").orElseThrow()
-private val MapVirtualKeyW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(MapVirtualKeyW_ADDR, MapVirtualKeyW_DESC)
+private val MapVirtualKeyW_ADDR: MemorySegment? by lazy { _findAddress("MapVirtualKeyW") }
+private val MapVirtualKeyW_HANDLE: MethodHandle? by lazy { val a = MapVirtualKeyW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, MapVirtualKeyW_DESC) } catch (_: Throwable) { null } }
 
 fun MapVirtualKeyW(arg0: Int, arg1: Int): Int {
+    val handle = MapVirtualKeyW_HANDLE ?: return 0
     try {
-        return MapVirtualKeyW_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2598,12 +2633,13 @@ fun MapVirtualKeyW(arg0: Int, arg1: Int): Int {
  * {@snippet lang=c : ReleaseCapture typedef BOOL = Int()
  */
 private val ReleaseCapture_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT)
-private val ReleaseCapture_ADDR: MemorySegment = _lookup("ReleaseCapture").find("ReleaseCapture").orElseThrow()
-private val ReleaseCapture_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ReleaseCapture_ADDR, ReleaseCapture_DESC)
+private val ReleaseCapture_ADDR: MemorySegment? by lazy { _findAddress("ReleaseCapture") }
+private val ReleaseCapture_HANDLE: MethodHandle? by lazy { val a = ReleaseCapture_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ReleaseCapture_DESC) } catch (_: Throwable) { null } }
 
 fun ReleaseCapture(): Int {
+    val handle = ReleaseCapture_HANDLE ?: return 0
     try {
-        return ReleaseCapture_HANDLE.invokeExact() as Int
+        return handle.invokeExact() as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2617,12 +2653,13 @@ fun ReleaseCapture(): Int {
  * {@snippet lang=c : MsgWaitForMultipleObjectsEx typedef DWORD = UNSIGNED = Long(typedef DWORD = UNSIGNED = Long,(typedef HANDLE = (Void)*)*,typedef DWORD = UNSIGNED = Long,typedef DWORD = UNSIGNED = Long,typedef DWORD = UNSIGNED = Long)
  */
 private val MsgWaitForMultipleObjectsEx_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG)
-private val MsgWaitForMultipleObjectsEx_ADDR: MemorySegment = _lookup("MsgWaitForMultipleObjectsEx").find("MsgWaitForMultipleObjectsEx").orElseThrow()
-private val MsgWaitForMultipleObjectsEx_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(MsgWaitForMultipleObjectsEx_ADDR, MsgWaitForMultipleObjectsEx_DESC)
+private val MsgWaitForMultipleObjectsEx_ADDR: MemorySegment? by lazy { _findAddress("MsgWaitForMultipleObjectsEx") }
+private val MsgWaitForMultipleObjectsEx_HANDLE: MethodHandle? by lazy { val a = MsgWaitForMultipleObjectsEx_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, MsgWaitForMultipleObjectsEx_DESC) } catch (_: Throwable) { null } }
 
 fun MsgWaitForMultipleObjectsEx(arg0: Long, arg1: MemorySegment, arg2: Long, arg3: Long, arg4: Long): Long {
+    val handle = MsgWaitForMultipleObjectsEx_HANDLE ?: return 0L
     try {
-        return MsgWaitForMultipleObjectsEx_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4) as Long
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2636,12 +2673,13 @@ fun MsgWaitForMultipleObjectsEx(arg0: Long, arg1: MemorySegment, arg2: Long, arg
  * {@snippet lang=c : EnableWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef BOOL = Int)
  */
 private val EnableWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val EnableWindow_ADDR: MemorySegment = _lookup("EnableWindow").find("EnableWindow").orElseThrow()
-private val EnableWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(EnableWindow_ADDR, EnableWindow_DESC)
+private val EnableWindow_ADDR: MemorySegment? by lazy { _findAddress("EnableWindow") }
+private val EnableWindow_HANDLE: MethodHandle? by lazy { val a = EnableWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, EnableWindow_DESC) } catch (_: Throwable) { null } }
 
 fun EnableWindow(arg0: MemorySegment, arg1: Int): Int {
+    val handle = EnableWindow_HANDLE ?: return 0
     try {
-        return EnableWindow_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2655,12 +2693,13 @@ fun EnableWindow(arg0: MemorySegment, arg1: Int): Int {
  * {@snippet lang=c : GetSystemMenu typedef HMENU = (Declared(HMENU__))*(typedef HWND = (Declared(HWND__))*,typedef BOOL = Int)
  */
 private val GetSystemMenu_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val GetSystemMenu_ADDR: MemorySegment = _lookup("GetSystemMenu").find("GetSystemMenu").orElseThrow()
-private val GetSystemMenu_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetSystemMenu_ADDR, GetSystemMenu_DESC)
+private val GetSystemMenu_ADDR: MemorySegment? by lazy { _findAddress("GetSystemMenu") }
+private val GetSystemMenu_HANDLE: MethodHandle? by lazy { val a = GetSystemMenu_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetSystemMenu_DESC) } catch (_: Throwable) { null } }
 
 fun GetSystemMenu(arg0: MemorySegment, arg1: Int): MemorySegment {
+    val handle = GetSystemMenu_HANDLE ?: return MemorySegment.NULL
     try {
-        return GetSystemMenu_HANDLE.invokeExact(arg0, arg1) as MemorySegment
+        return handle.invokeExact(arg0, arg1) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2674,12 +2713,13 @@ fun GetSystemMenu(arg0: MemorySegment, arg1: Int): MemorySegment {
  * {@snippet lang=c : EnableMenuItem typedef BOOL = Int(typedef HMENU = (Declared(HMENU__))*,typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int)
  */
 private val EnableMenuItem_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val EnableMenuItem_ADDR: MemorySegment = _lookup("EnableMenuItem").find("EnableMenuItem").orElseThrow()
-private val EnableMenuItem_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(EnableMenuItem_ADDR, EnableMenuItem_DESC)
+private val EnableMenuItem_ADDR: MemorySegment? by lazy { _findAddress("EnableMenuItem") }
+private val EnableMenuItem_HANDLE: MethodHandle? by lazy { val a = EnableMenuItem_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, EnableMenuItem_DESC) } catch (_: Throwable) { null } }
 
 fun EnableMenuItem(arg0: MemorySegment, arg1: Int, arg2: Int): Int {
+    val handle = EnableMenuItem_HANDLE ?: return 0
     try {
-        return EnableMenuItem_HANDLE.invokeExact(arg0, arg1, arg2) as Int
+        return handle.invokeExact(arg0, arg1, arg2) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2693,12 +2733,13 @@ fun EnableMenuItem(arg0: MemorySegment, arg1: Int, arg2: Int): Int {
  * {@snippet lang=c : TrackPopupMenu typedef BOOL = Int(typedef HMENU = (Declared(HMENU__))*,typedef UINT = UNSIGNED = Int,Int,Int,Int,typedef HWND = (Declared(HWND__))*,(typedef RECT = Declared(tagRECT))*)
  */
 private val TrackPopupMenu_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val TrackPopupMenu_ADDR: MemorySegment = _lookup("TrackPopupMenu").find("TrackPopupMenu").orElseThrow()
-private val TrackPopupMenu_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(TrackPopupMenu_ADDR, TrackPopupMenu_DESC)
+private val TrackPopupMenu_ADDR: MemorySegment? by lazy { _findAddress("TrackPopupMenu") }
+private val TrackPopupMenu_HANDLE: MethodHandle? by lazy { val a = TrackPopupMenu_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, TrackPopupMenu_DESC) } catch (_: Throwable) { null } }
 
 fun TrackPopupMenu(arg0: MemorySegment, arg1: Int, arg2: Int, arg3: Int, arg4: Int, arg5: MemorySegment, arg6: MemorySegment): Int {
+    val handle = TrackPopupMenu_HANDLE ?: return 0
     try {
-        return TrackPopupMenu_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as Int
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2712,12 +2753,13 @@ fun TrackPopupMenu(arg0: MemorySegment, arg1: Int, arg2: Int, arg3: Int, arg4: I
  * {@snippet lang=c : SetMenuDefaultItem typedef BOOL = Int(typedef HMENU = (Declared(HMENU__))*,typedef UINT = UNSIGNED = Int,typedef UINT = UNSIGNED = Int)
  */
 private val SetMenuDefaultItem_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val SetMenuDefaultItem_ADDR: MemorySegment = _lookup("SetMenuDefaultItem").find("SetMenuDefaultItem").orElseThrow()
-private val SetMenuDefaultItem_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetMenuDefaultItem_ADDR, SetMenuDefaultItem_DESC)
+private val SetMenuDefaultItem_ADDR: MemorySegment? by lazy { _findAddress("SetMenuDefaultItem") }
+private val SetMenuDefaultItem_HANDLE: MethodHandle? by lazy { val a = SetMenuDefaultItem_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetMenuDefaultItem_DESC) } catch (_: Throwable) { null } }
 
 fun SetMenuDefaultItem(arg0: MemorySegment, arg1: Int, arg2: Int): Int {
+    val handle = SetMenuDefaultItem_HANDLE ?: return 0
     try {
-        return SetMenuDefaultItem_HANDLE.invokeExact(arg0, arg1, arg2) as Int
+        return handle.invokeExact(arg0, arg1, arg2) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2731,12 +2773,13 @@ fun SetMenuDefaultItem(arg0: MemorySegment, arg1: Int, arg2: Int): Int {
  * {@snippet lang=c : UpdateWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val UpdateWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val UpdateWindow_ADDR: MemorySegment = _lookup("UpdateWindow").find("UpdateWindow").orElseThrow()
-private val UpdateWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(UpdateWindow_ADDR, UpdateWindow_DESC)
+private val UpdateWindow_ADDR: MemorySegment? by lazy { _findAddress("UpdateWindow") }
+private val UpdateWindow_HANDLE: MethodHandle? by lazy { val a = UpdateWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, UpdateWindow_DESC) } catch (_: Throwable) { null } }
 
 fun UpdateWindow(arg0: MemorySegment): Int {
+    val handle = UpdateWindow_HANDLE ?: return 0
     try {
-        return UpdateWindow_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2750,12 +2793,13 @@ fun UpdateWindow(arg0: MemorySegment): Int {
  * {@snippet lang=c : GetForegroundWindow typedef HWND = (Declared(HWND__))*()
  */
 private val GetForegroundWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS)
-private val GetForegroundWindow_ADDR: MemorySegment = _lookup("GetForegroundWindow").find("GetForegroundWindow").orElseThrow()
-private val GetForegroundWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetForegroundWindow_ADDR, GetForegroundWindow_DESC)
+private val GetForegroundWindow_ADDR: MemorySegment? by lazy { _findAddress("GetForegroundWindow") }
+private val GetForegroundWindow_HANDLE: MethodHandle? by lazy { val a = GetForegroundWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetForegroundWindow_DESC) } catch (_: Throwable) { null } }
 
 fun GetForegroundWindow(): MemorySegment {
+    val handle = GetForegroundWindow_HANDLE ?: return MemorySegment.NULL
     try {
-        return GetForegroundWindow_HANDLE.invokeExact() as MemorySegment
+        return handle.invokeExact() as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2769,12 +2813,13 @@ fun GetForegroundWindow(): MemorySegment {
  * {@snippet lang=c : SetForegroundWindow typedef BOOL = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val SetForegroundWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val SetForegroundWindow_ADDR: MemorySegment = _lookup("SetForegroundWindow").find("SetForegroundWindow").orElseThrow()
-private val SetForegroundWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetForegroundWindow_ADDR, SetForegroundWindow_DESC)
+private val SetForegroundWindow_ADDR: MemorySegment? by lazy { _findAddress("SetForegroundWindow") }
+private val SetForegroundWindow_HANDLE: MethodHandle? by lazy { val a = SetForegroundWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetForegroundWindow_DESC) } catch (_: Throwable) { null } }
 
 fun SetForegroundWindow(arg0: MemorySegment): Int {
+    val handle = SetForegroundWindow_HANDLE ?: return 0
     try {
-        return SetForegroundWindow_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2788,12 +2833,13 @@ fun SetForegroundWindow(arg0: MemorySegment): Int {
  * {@snippet lang=c : SetWindowTextW typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef LPCWSTR = (UNSIGNED = Short)*)
  */
 private val SetWindowTextW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val SetWindowTextW_ADDR: MemorySegment = _lookup("SetWindowTextW").find("SetWindowTextW").orElseThrow()
-private val SetWindowTextW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetWindowTextW_ADDR, SetWindowTextW_DESC)
+private val SetWindowTextW_ADDR: MemorySegment? by lazy { _findAddress("SetWindowTextW") }
+private val SetWindowTextW_HANDLE: MethodHandle? by lazy { val a = SetWindowTextW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetWindowTextW_DESC) } catch (_: Throwable) { null } }
 
 fun SetWindowTextW(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = SetWindowTextW_HANDLE ?: return 0
     try {
-        return SetWindowTextW_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2807,12 +2853,13 @@ fun SetWindowTextW(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : GetWindowTextW Int(typedef HWND = (Declared(HWND__))*,typedef LPWSTR = (UNSIGNED = Short)*,Int)
  */
 private val GetWindowTextW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val GetWindowTextW_ADDR: MemorySegment = _lookup("GetWindowTextW").find("GetWindowTextW").orElseThrow()
-private val GetWindowTextW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetWindowTextW_ADDR, GetWindowTextW_DESC)
+private val GetWindowTextW_ADDR: MemorySegment? by lazy { _findAddress("GetWindowTextW") }
+private val GetWindowTextW_HANDLE: MethodHandle? by lazy { val a = GetWindowTextW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetWindowTextW_DESC) } catch (_: Throwable) { null } }
 
 fun GetWindowTextW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int): Int {
+    val handle = GetWindowTextW_HANDLE ?: return 0
     try {
-        return GetWindowTextW_HANDLE.invokeExact(arg0, arg1, arg2) as Int
+        return handle.invokeExact(arg0, arg1, arg2) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2826,12 +2873,13 @@ fun GetWindowTextW(arg0: MemorySegment, arg1: MemorySegment, arg2: Int): Int {
  * {@snippet lang=c : GetClientRect typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef LPRECT = (Declared(tagRECT))*)
  */
 private val GetClientRect_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val GetClientRect_ADDR: MemorySegment = _lookup("GetClientRect").find("GetClientRect").orElseThrow()
-private val GetClientRect_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetClientRect_ADDR, GetClientRect_DESC)
+private val GetClientRect_ADDR: MemorySegment? by lazy { _findAddress("GetClientRect") }
+private val GetClientRect_HANDLE: MethodHandle? by lazy { val a = GetClientRect_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetClientRect_DESC) } catch (_: Throwable) { null } }
 
 fun GetClientRect(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = GetClientRect_HANDLE ?: return 0
     try {
-        return GetClientRect_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2845,12 +2893,13 @@ fun GetClientRect(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : GetWindowRect typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef LPRECT = (Declared(tagRECT))*)
  */
 private val GetWindowRect_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val GetWindowRect_ADDR: MemorySegment = _lookup("GetWindowRect").find("GetWindowRect").orElseThrow()
-private val GetWindowRect_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetWindowRect_ADDR, GetWindowRect_DESC)
+private val GetWindowRect_ADDR: MemorySegment? by lazy { _findAddress("GetWindowRect") }
+private val GetWindowRect_HANDLE: MethodHandle? by lazy { val a = GetWindowRect_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetWindowRect_DESC) } catch (_: Throwable) { null } }
 
 fun GetWindowRect(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = GetWindowRect_HANDLE ?: return 0
     try {
-        return GetWindowRect_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2864,12 +2913,13 @@ fun GetWindowRect(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : ShowCursor Int(typedef BOOL = Int)
  */
 private val ShowCursor_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val ShowCursor_ADDR: MemorySegment = _lookup("ShowCursor").find("ShowCursor").orElseThrow()
-private val ShowCursor_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ShowCursor_ADDR, ShowCursor_DESC)
+private val ShowCursor_ADDR: MemorySegment? by lazy { _findAddress("ShowCursor") }
+private val ShowCursor_HANDLE: MethodHandle? by lazy { val a = ShowCursor_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ShowCursor_DESC) } catch (_: Throwable) { null } }
 
 fun ShowCursor(arg0: Int): Int {
+    val handle = ShowCursor_HANDLE ?: return 0
     try {
-        return ShowCursor_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2883,12 +2933,13 @@ fun ShowCursor(arg0: Int): Int {
  * {@snippet lang=c : SetCursorPos typedef BOOL = Int(Int,Int)
  */
 private val SetCursorPos_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
-private val SetCursorPos_ADDR: MemorySegment = _lookup("SetCursorPos").find("SetCursorPos").orElseThrow()
-private val SetCursorPos_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetCursorPos_ADDR, SetCursorPos_DESC)
+private val SetCursorPos_ADDR: MemorySegment? by lazy { _findAddress("SetCursorPos") }
+private val SetCursorPos_HANDLE: MethodHandle? by lazy { val a = SetCursorPos_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetCursorPos_DESC) } catch (_: Throwable) { null } }
 
 fun SetCursorPos(arg0: Int, arg1: Int): Int {
+    val handle = SetCursorPos_HANDLE ?: return 0
     try {
-        return SetCursorPos_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2902,12 +2953,13 @@ fun SetCursorPos(arg0: Int, arg1: Int): Int {
  * {@snippet lang=c : SetCursor typedef HCURSOR = (Declared(HICON__))*(typedef HCURSOR = (Declared(HICON__))*)
  */
 private val SetCursor_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val SetCursor_ADDR: MemorySegment = _lookup("SetCursor").find("SetCursor").orElseThrow()
-private val SetCursor_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetCursor_ADDR, SetCursor_DESC)
+private val SetCursor_ADDR: MemorySegment? by lazy { _findAddress("SetCursor") }
+private val SetCursor_HANDLE: MethodHandle? by lazy { val a = SetCursor_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetCursor_DESC) } catch (_: Throwable) { null } }
 
 fun SetCursor(arg0: MemorySegment): MemorySegment {
+    val handle = SetCursor_HANDLE ?: return MemorySegment.NULL
     try {
-        return SetCursor_HANDLE.invokeExact(arg0) as MemorySegment
+        return handle.invokeExact(arg0) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2921,12 +2973,13 @@ fun SetCursor(arg0: MemorySegment): MemorySegment {
  * {@snippet lang=c : GetCursorPos typedef BOOL = Int(typedef LPPOINT = (Declared(tagPOINT))*)
  */
 private val GetCursorPos_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val GetCursorPos_ADDR: MemorySegment = _lookup("GetCursorPos").find("GetCursorPos").orElseThrow()
-private val GetCursorPos_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetCursorPos_ADDR, GetCursorPos_DESC)
+private val GetCursorPos_ADDR: MemorySegment? by lazy { _findAddress("GetCursorPos") }
+private val GetCursorPos_HANDLE: MethodHandle? by lazy { val a = GetCursorPos_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetCursorPos_DESC) } catch (_: Throwable) { null } }
 
 fun GetCursorPos(arg0: MemorySegment): Int {
+    val handle = GetCursorPos_HANDLE ?: return 0
     try {
-        return GetCursorPos_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2940,12 +2993,13 @@ fun GetCursorPos(arg0: MemorySegment): Int {
  * {@snippet lang=c : ClientToScreen typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef LPPOINT = (Declared(tagPOINT))*)
  */
 private val ClientToScreen_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val ClientToScreen_ADDR: MemorySegment = _lookup("ClientToScreen").find("ClientToScreen").orElseThrow()
-private val ClientToScreen_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ClientToScreen_ADDR, ClientToScreen_DESC)
+private val ClientToScreen_ADDR: MemorySegment? by lazy { _findAddress("ClientToScreen") }
+private val ClientToScreen_HANDLE: MethodHandle? by lazy { val a = ClientToScreen_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ClientToScreen_DESC) } catch (_: Throwable) { null } }
 
 fun ClientToScreen(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = ClientToScreen_HANDLE ?: return 0
     try {
-        return ClientToScreen_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2959,12 +3013,13 @@ fun ClientToScreen(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : ScreenToClient typedef BOOL = Int(typedef HWND = (Declared(HWND__))*,typedef LPPOINT = (Declared(tagPOINT))*)
  */
 private val ScreenToClient_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val ScreenToClient_ADDR: MemorySegment = _lookup("ScreenToClient").find("ScreenToClient").orElseThrow()
-private val ScreenToClient_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ScreenToClient_ADDR, ScreenToClient_DESC)
+private val ScreenToClient_ADDR: MemorySegment? by lazy { _findAddress("ScreenToClient") }
+private val ScreenToClient_HANDLE: MethodHandle? by lazy { val a = ScreenToClient_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ScreenToClient_DESC) } catch (_: Throwable) { null } }
 
 fun ScreenToClient(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = ScreenToClient_HANDLE ?: return 0
     try {
-        return ScreenToClient_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2978,12 +3033,13 @@ fun ScreenToClient(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : ClipCursor typedef BOOL = Int((typedef RECT = Declared(tagRECT))*)
  */
 private val ClipCursor_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val ClipCursor_ADDR: MemorySegment = _lookup("ClipCursor").find("ClipCursor").orElseThrow()
-private val ClipCursor_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(ClipCursor_ADDR, ClipCursor_DESC)
+private val ClipCursor_ADDR: MemorySegment? by lazy { _findAddress("ClipCursor") }
+private val ClipCursor_HANDLE: MethodHandle? by lazy { val a = ClipCursor_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, ClipCursor_DESC) } catch (_: Throwable) { null } }
 
 fun ClipCursor(arg0: MemorySegment): Int {
+    val handle = ClipCursor_HANDLE ?: return 0
     try {
-        return ClipCursor_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -2997,12 +3053,13 @@ fun ClipCursor(arg0: MemorySegment): Int {
  * {@snippet lang=c : GetWindowLongPtrW typedef LONG_PTR = LongLong(typedef HWND = (Declared(HWND__))*,Int)
  */
 private val GetWindowLongPtrW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
-private val GetWindowLongPtrW_ADDR: MemorySegment = _lookup("GetWindowLongPtrW").find("GetWindowLongPtrW").orElseThrow()
-private val GetWindowLongPtrW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetWindowLongPtrW_ADDR, GetWindowLongPtrW_DESC)
+private val GetWindowLongPtrW_ADDR: MemorySegment? by lazy { _findAddress("GetWindowLongPtrW") }
+private val GetWindowLongPtrW_HANDLE: MethodHandle? by lazy { val a = GetWindowLongPtrW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetWindowLongPtrW_DESC) } catch (_: Throwable) { null } }
 
 fun GetWindowLongPtrW(arg0: MemorySegment, arg1: Int): Long {
+    val handle = GetWindowLongPtrW_HANDLE ?: return 0L
     try {
-        return GetWindowLongPtrW_HANDLE.invokeExact(arg0, arg1) as Long
+        return handle.invokeExact(arg0, arg1) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3016,12 +3073,13 @@ fun GetWindowLongPtrW(arg0: MemorySegment, arg1: Int): Long {
  * {@snippet lang=c : SetWindowLongPtrW typedef LONG_PTR = LongLong(typedef HWND = (Declared(HWND__))*,Int,typedef LONG_PTR = LongLong)
  */
 private val SetWindowLongPtrW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG)
-private val SetWindowLongPtrW_ADDR: MemorySegment = _lookup("SetWindowLongPtrW").find("SetWindowLongPtrW").orElseThrow()
-private val SetWindowLongPtrW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetWindowLongPtrW_ADDR, SetWindowLongPtrW_DESC)
+private val SetWindowLongPtrW_ADDR: MemorySegment? by lazy { _findAddress("SetWindowLongPtrW") }
+private val SetWindowLongPtrW_HANDLE: MethodHandle? by lazy { val a = SetWindowLongPtrW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetWindowLongPtrW_DESC) } catch (_: Throwable) { null } }
 
 fun SetWindowLongPtrW(arg0: MemorySegment, arg1: Int, arg2: Long): Long {
+    val handle = SetWindowLongPtrW_HANDLE ?: return 0L
     try {
-        return SetWindowLongPtrW_HANDLE.invokeExact(arg0, arg1, arg2) as Long
+        return handle.invokeExact(arg0, arg1, arg2) as Long
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3035,12 +3093,13 @@ fun SetWindowLongPtrW(arg0: MemorySegment, arg1: Int, arg2: Long): Long {
  * {@snippet lang=c : LoadCursorW typedef HCURSOR = (Declared(HICON__))*(typedef HINSTANCE = (Declared(HINSTANCE__))*,typedef LPCWSTR = (UNSIGNED = Short)*)
  */
 private val LoadCursorW_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val LoadCursorW_ADDR: MemorySegment = _lookup("LoadCursorW").find("LoadCursorW").orElseThrow()
-private val LoadCursorW_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(LoadCursorW_ADDR, LoadCursorW_DESC)
+private val LoadCursorW_ADDR: MemorySegment? by lazy { _findAddress("LoadCursorW") }
+private val LoadCursorW_HANDLE: MethodHandle? by lazy { val a = LoadCursorW_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, LoadCursorW_DESC) } catch (_: Throwable) { null } }
 
 fun LoadCursorW(arg0: MemorySegment, arg1: MemorySegment): MemorySegment {
+    val handle = LoadCursorW_HANDLE ?: return MemorySegment.NULL
     try {
-        return LoadCursorW_HANDLE.invokeExact(arg0, arg1) as MemorySegment
+        return handle.invokeExact(arg0, arg1) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3054,12 +3113,13 @@ fun LoadCursorW(arg0: MemorySegment, arg1: MemorySegment): MemorySegment {
  * {@snippet lang=c : CreateIcon typedef HICON = (Declared(HICON__))*(typedef HINSTANCE = (Declared(HINSTANCE__))*,Int,Int,typedef BYTE = UNSIGNED = Char,typedef BYTE = UNSIGNED = Char,(typedef BYTE = UNSIGNED = Char)*,(typedef BYTE = UNSIGNED = Char)*)
  */
 private val CreateIcon_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_BYTE, ValueLayout.JAVA_BYTE, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val CreateIcon_ADDR: MemorySegment = _lookup("CreateIcon").find("CreateIcon").orElseThrow()
-private val CreateIcon_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(CreateIcon_ADDR, CreateIcon_DESC)
+private val CreateIcon_ADDR: MemorySegment? by lazy { _findAddress("CreateIcon") }
+private val CreateIcon_HANDLE: MethodHandle? by lazy { val a = CreateIcon_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, CreateIcon_DESC) } catch (_: Throwable) { null } }
 
 fun CreateIcon(arg0: MemorySegment, arg1: Int, arg2: Int, arg3: Byte, arg4: Byte, arg5: MemorySegment, arg6: MemorySegment): MemorySegment {
+    val handle = CreateIcon_HANDLE ?: return MemorySegment.NULL
     try {
-        return CreateIcon_HANDLE.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as MemorySegment
+        return handle.invokeExact(arg0, arg1, arg2, arg3, arg4, arg5, arg6) as MemorySegment
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3073,12 +3133,13 @@ fun CreateIcon(arg0: MemorySegment, arg1: Int, arg2: Int, arg3: Byte, arg4: Byte
  * {@snippet lang=c : DestroyIcon typedef BOOL = Int(typedef HICON = (Declared(HICON__))*)
  */
 private val DestroyIcon_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val DestroyIcon_ADDR: MemorySegment = _lookup("DestroyIcon").find("DestroyIcon").orElseThrow()
-private val DestroyIcon_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(DestroyIcon_ADDR, DestroyIcon_DESC)
+private val DestroyIcon_ADDR: MemorySegment? by lazy { _findAddress("DestroyIcon") }
+private val DestroyIcon_HANDLE: MethodHandle? by lazy { val a = DestroyIcon_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, DestroyIcon_DESC) } catch (_: Throwable) { null } }
 
 fun DestroyIcon(arg0: MemorySegment): Int {
+    val handle = DestroyIcon_HANDLE ?: return 0
     try {
-        return DestroyIcon_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3121,12 +3182,13 @@ enum class tagHANDEDNESS(val value: Long) {
  * {@snippet lang=c : GetDpiForWindow typedef UINT = UNSIGNED = Int(typedef HWND = (Declared(HWND__))*)
  */
 private val GetDpiForWindow_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val GetDpiForWindow_ADDR: MemorySegment = _lookup("GetDpiForWindow").find("GetDpiForWindow").orElseThrow()
-private val GetDpiForWindow_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetDpiForWindow_ADDR, GetDpiForWindow_DESC)
+private val GetDpiForWindow_ADDR: MemorySegment? by lazy { _findAddress("GetDpiForWindow") }
+private val GetDpiForWindow_HANDLE: MethodHandle? by lazy { val a = GetDpiForWindow_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetDpiForWindow_DESC) } catch (_: Throwable) { null } }
 
 fun GetDpiForWindow(arg0: MemorySegment): Int {
+    val handle = GetDpiForWindow_HANDLE ?: return 0
     try {
-        return GetDpiForWindow_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3140,12 +3202,13 @@ fun GetDpiForWindow(arg0: MemorySegment): Int {
  * {@snippet lang=c : SetProcessDpiAwarenessContext typedef BOOL = Int(typedef DPI_AWARENESS_CONTEXT = (Declared(DPI_AWARENESS_CONTEXT__))*)
  */
 private val SetProcessDpiAwarenessContext_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val SetProcessDpiAwarenessContext_ADDR: MemorySegment = _lookup("SetProcessDpiAwarenessContext").find("SetProcessDpiAwarenessContext").orElseThrow()
-private val SetProcessDpiAwarenessContext_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(SetProcessDpiAwarenessContext_ADDR, SetProcessDpiAwarenessContext_DESC)
+private val SetProcessDpiAwarenessContext_ADDR: MemorySegment? by lazy { _findAddress("SetProcessDpiAwarenessContext") }
+private val SetProcessDpiAwarenessContext_HANDLE: MethodHandle? by lazy { val a = SetProcessDpiAwarenessContext_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, SetProcessDpiAwarenessContext_DESC) } catch (_: Throwable) { null } }
 
 fun SetProcessDpiAwarenessContext(arg0: MemorySegment): Int {
+    val handle = SetProcessDpiAwarenessContext_HANDLE ?: return 0
     try {
-        return SetProcessDpiAwarenessContext_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3207,12 +3270,13 @@ enum class TOUCHPAD_SENSITIVITY_LEVEL(val value: Long) {
  * {@snippet lang=c : GetGestureInfo typedef BOOL = Int(typedef HGESTUREINFO = (Declared(HGESTUREINFO__))*,typedef PGESTUREINFO = (Declared(tagGESTUREINFO))*)
  */
 private val GetGestureInfo_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
-private val GetGestureInfo_ADDR: MemorySegment = _lookup("GetGestureInfo").find("GetGestureInfo").orElseThrow()
-private val GetGestureInfo_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(GetGestureInfo_ADDR, GetGestureInfo_DESC)
+private val GetGestureInfo_ADDR: MemorySegment? by lazy { _findAddress("GetGestureInfo") }
+private val GetGestureInfo_HANDLE: MethodHandle? by lazy { val a = GetGestureInfo_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, GetGestureInfo_DESC) } catch (_: Throwable) { null } }
 
 fun GetGestureInfo(arg0: MemorySegment, arg1: MemorySegment): Int {
+    val handle = GetGestureInfo_HANDLE ?: return 0
     try {
-        return GetGestureInfo_HANDLE.invokeExact(arg0, arg1) as Int
+        return handle.invokeExact(arg0, arg1) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {
@@ -3226,12 +3290,13 @@ fun GetGestureInfo(arg0: MemorySegment, arg1: MemorySegment): Int {
  * {@snippet lang=c : CloseGestureInfoHandle typedef BOOL = Int(typedef HGESTUREINFO = (Declared(HGESTUREINFO__))*)
  */
 private val CloseGestureInfoHandle_DESC: FunctionDescriptor = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
-private val CloseGestureInfoHandle_ADDR: MemorySegment = _lookup("CloseGestureInfoHandle").find("CloseGestureInfoHandle").orElseThrow()
-private val CloseGestureInfoHandle_HANDLE: MethodHandle = Linker.nativeLinker().downcallHandle(CloseGestureInfoHandle_ADDR, CloseGestureInfoHandle_DESC)
+private val CloseGestureInfoHandle_ADDR: MemorySegment? by lazy { _findAddress("CloseGestureInfoHandle") }
+private val CloseGestureInfoHandle_HANDLE: MethodHandle? by lazy { val a = CloseGestureInfoHandle_ADDR; if (a == null) null else try { Linker.nativeLinker().downcallHandle(a, CloseGestureInfoHandle_DESC) } catch (_: Throwable) { null } }
 
 fun CloseGestureInfoHandle(arg0: MemorySegment): Int {
+    val handle = CloseGestureInfoHandle_HANDLE ?: return 0
     try {
-        return CloseGestureInfoHandle_HANDLE.invokeExact(arg0) as Int
+        return handle.invokeExact(arg0) as Int
     } catch (ex: Error) {
         throw ex
     } catch (ex: RuntimeException) {

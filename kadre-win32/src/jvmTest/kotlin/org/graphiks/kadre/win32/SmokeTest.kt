@@ -36,10 +36,10 @@ class SmokeTest {
     fun `the Win32 type aliases compile and are assignable`() {
         // Verifies that the typealiases are usable as ordinary Kotlin types
         val dword: DWORD = 0xFFFF_FFFFL
-        val word: WORD = 0xFFFF
-        val uint: UINT = 0L
+        val word: WORD = 0xFFFF.toShort()
+        val uint: UINT = 0
         val ulongPtr: ULONG_PTR = 0L
-        val long: LONG = -1
+        val long: LONG = -1L
         val longPtr: LONG_PTR = -1L
         val lresult: LRESULT = 0L
         val wparam: WPARAM = 0L
@@ -50,7 +50,7 @@ class SmokeTest {
         val hmodule: HMODULE = 0L
         val hdc: HDC = 0L
         val hmenu: HMENU = 0L
-        val atom: ATOM = 0
+        val atom: ATOM = 0.toShort()
 
         assertNotNull(dword)
         assertNotNull(word)

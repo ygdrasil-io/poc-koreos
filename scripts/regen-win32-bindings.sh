@@ -73,7 +73,7 @@ echo '#define NOMINMAX' >> "$TMP_HDR"
 echo '#include <windows.h>' >> "$TMP_HDR"
 
 kextractArgs=(
-    --win32 --dll-map "$COMBINED_YAML" --verbose
+    --win32 --init-method --dll-map "$COMBINED_YAML" --verbose
     -o "$OUT_DIR" -t "$PACKAGE"
 )
 for fn in "${ALL_FUNCTIONS[@]}"; do
