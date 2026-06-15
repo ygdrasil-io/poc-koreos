@@ -1,117 +1,87 @@
 #!/usr/bin/env bash
 #
 # Regenerates Win32 FFM bindings for DLLs needed by Kadre on Windows.
-# Uses --win32 and --dll-map to generate per-DLL bindings from win32_api.h.
+# Uses --win32 and --dll-map with <windows.h> from the Windows SDK.
+# Creates one temp C header per DLL so kextract generates one file per DLL.
 #
 # Usage:
 #   scripts/regen-win32-bindings.sh /path/to/kextract/bin/kextract
-#
-# Requires:
-#   - kextract with --win32 and --dll-map support
 #
 set -euo pipefail
 
 KEXTRACT="${1:?Usage: $0 /path/to/kextract/bin/kextract}"
 DIST_DIR="$(dirname "$KEXTRACT")/.."
-
-# On Windows the distribution ships a .bat launcher - use it to find the JRE
 JAVA="$DIST_DIR/runtime/bin/java"
 LIBS_DIR="$DIST_DIR/lib"
 
-# Build classpath manually (JARs may have version suffixes)
+# Build classpath
 CLASSPATH=""
 for jar in "$LIBS_DIR"/*.jar; do
-    if [ -n "$CLASSPATH" ]; then
-        CLASSPATH="$CLASSPATH;$jar"
-    else
-        CLASSPATH="$jar"
-    fi
+    [ -n "$CLASSPATH" ] && CLASSPATH="$CLASSPATH;$jar" || CLASSPATH="$jar"
 done
-# Include System32 on Windows so System.loadLibrary("kernel32") works
 NATIVE_PATH="$LIBS_DIR"
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT\\System32" ;; esac
 
-# Quick test: verify kextract starts
-echo "  Java: $JAVA"
-echo "  NATIVE_PATH: $NATIVE_PATH"
-echo "  Testing: java -version"
-"$JAVA" -version 2>&1 || true
-
-echo "  Testing: $JAVA -cp ... KextractTool --help"
-"$JAVA" --enable-native-access=ALL-UNNAMED \
-    "-Djava.library.path=$NATIVE_PATH" \
-    -cp "$CLASSPATH" \
-    org.graphiks.kextract.pipeline.KextractTool \
-    --help 2>&1 | head -30 || true
-echo ""
-
-
-
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DLL_MAP_DIR="$SCRIPT_DIR/ffi/win32"
-OUT_DIR="$DLL_MAP_DIR/src/jvmMain/kotlin"
 PACKAGE="org.graphiks.kadre.ffi.win32.generated"
-HEADER="$SCRIPT_DIR/ffi/win32/win32_api.h"
-
+OUT_DIR="$PWD/ffi/win32/src/jvmMain/kotlin"
 DLLS=(user32 kernel32 gdi32 dwmapi)
 
-echo "→ Regenerating Win32 bindings for ${#DLLS[@]} DLLs"
-echo "  Output base: $OUT_DIR"
-echo "  Package:     $PACKAGE"
+# Detect Windows SDK include path
+SDK_INCLUDE=""
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
+    NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT/System32"
+    WIN_KITS="C:/Program Files (x86)/Windows Kits/10/Include"
+    for ver in $(ls -d "$WIN_KITS"/* 2>/dev/null | sort -r); do
+        [ -d "$ver/um" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/um"
+        [ -d "$ver/shared" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/shared"
+        [ -d "$ver/ucrt" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/ucrt"
+    done
+    # MSVC include paths (for standard headers)
+    MSVC_DIRS=$(ls -d "C:/Program Files (x86)/Microsoft Visual Studio"/*/VC/Tools/MSVC/*/include 2>/dev/null)
+    for d in $MSVC_DIRS; do SDK_INCLUDE="$SDK_INCLUDE -isystem $d"; done
+;; esac
 
+echo "→ Regenerating Win32 bindings for ${#DLLS[@]} DLLs"
+echo "  SDK include: ${SDK_INCLUDE:-(none)}"
+echo "  Output: $OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 for dll in "${DLLS[@]}"; do
-    yaml="$DLL_MAP_DIR/${dll}.yaml"
-    echo ""
-    echo "  Processing $dll..."
-    echo "    yaml path: $yaml"
-    ls -la "$yaml" 2>&1 || echo "    YAML FILE NOT FOUND"
+    yaml="$PWD/ffi/win32/${dll}.yaml"
+    # Temp header per DLL → kextract generates unique filenames (e.g. user32_h.kt)
+    TMP_HDR="/tmp/${dll}.h"
+    echo '#define WIN32_LEAN_AND_MEAN' > "$TMP_HDR"
+    echo '#include <windows.h>' >> "$TMP_HDR"
 
-    # Extract function names from the YAML mapping
+    # Extract function names
     functions=()
     while IFS= read -r line; do
         functions+=("$line")
-    done < <(
-        sed -n '/^    functions:/,/^    structs:/{
-            /^    functions:/d
-            /^    structs:/d
-            /^      - /{
-                s/^      - //
-                p
-            }
-        }' "$yaml"
-    ) || true
-    echo "    Functions: ${#functions[@]}"
-    echo "    YAML: $yaml"
-    echo "    HEADER: $HEADER"
-    echo "    OUT_DIR: $OUT_DIR"
+    done < <(sed -n '/^    functions:/,/^    structs:/{
+        /^    functions:/d; /^    structs:/d; /^      - /{s/^      - //; p}
+    }' "$yaml") || true
+    echo "  $dll: ${#functions[@]} functions"
 
     kextractArgs=(
-        --win32
-        --dll-map "$yaml"
-        --verbose
-        -o "$OUT_DIR"
-        -t "$PACKAGE"
+        --win32 --dll-map "$yaml" --verbose
+        -o "$OUT_DIR" -t "$PACKAGE"
     )
-
     for fn in "${functions[@]}"; do
         kextractArgs+=(--include-function "$fn")
     done
-    kextractArgs+=("$HEADER")
+    # Add SDK include paths so clang finds <windows.h>
+    for arg in $SDK_INCLUDE; do
+        kextractArgs+=(-A "$arg")
+    done
+    kextractArgs+=("$TMP_HDR")
 
-    echo "    Running: java -cp ... KextractTool"
+    echo "    Running kextract for $dll..."
     "$JAVA" --enable-native-access=ALL-UNNAMED \
         "-Djava.library.path=$NATIVE_PATH" \
-        -Dkextract.debug=true \
         -cp "$CLASSPATH" \
         org.graphiks.kextract.pipeline.KextractTool \
-        "${kextractArgs[@]}" 2>&1 || {
-        rc=$?
-        echo "  ERROR: kextract failed for $dll (exit code $rc)" >&2
-        exit $rc
-    }
+        "${kextractArgs[@]}" 2>&1 || { rc=$?; echo "ERROR: kextract failed for $dll (exit $rc)" >&2; exit $rc; }
+
+    rm -f "$TMP_HDR"
 done
 
-echo ""
 echo "✓ Done. Regenerated bindings at $OUT_DIR/$PACKAGE/"
