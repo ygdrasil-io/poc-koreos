@@ -26,27 +26,24 @@ OUT_DIR="$PWD/ffi/win32/src/jvmMain/kotlin"
 DLLS=(user32 kernel32 gdi32 dwmapi)
 
 # Detect Windows SDK include paths
-SDK_INCLUDE=""
+SDK_ARGS=()
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
     NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT/System32"
-    # Try common Windows SDK include paths
     for base in \
         "C:/Program Files (x86)/Windows Kits/10/Include" \
         "C:/Program Files/Windows Kits/10/Include"; do
         [ -d "$base" ] || continue
         for ver in "$base"/*/; do
-            [ -d "${ver}um" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}um"
-            [ -d "${ver}shared" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}shared"
-            [ -d "${ver}ucrt" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}ucrt"
+            [ -d "${ver}um" ]     && SDK_ARGS+=(-isystem "${ver}um")
+            [ -d "${ver}shared" ] && SDK_ARGS+=(-isystem "${ver}shared")
+            [ -d "${ver}ucrt" ]   && SDK_ARGS+=(-isystem "${ver}ucrt")
         done
-        break  # use first found
+        break
     done
 ;; esac
-# Also try clang's built-in SDK detection by adding nothing
-# (libclang on Windows can auto-detect SDK if INCLUDE env var is set)
 
 echo "→ Regenerating Win32 bindings for ${#DLLS[@]} DLLs"
-echo "  SDK include: ${SDK_INCLUDE:-(none)}"
+echo "  SDK args (${#SDK_ARGS[@]}): ${SDK_ARGS[*]:-(none)}"
 echo "  Output: $OUT_DIR"
 mkdir -p "$OUT_DIR"
 
@@ -74,7 +71,7 @@ for dll in "${DLLS[@]}"; do
         kextractArgs+=(--include-function "$fn")
     done
     # Add SDK include paths so clang finds <windows.h>
-    for arg in $SDK_INCLUDE; do
+    for arg in "${SDK_ARGS[@]}"; do
         kextractArgs+=(-A "$arg")
     done
     kextractArgs+=("$TMP_HDR")
