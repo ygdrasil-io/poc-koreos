@@ -25,20 +25,25 @@ PACKAGE="org.graphiks.kadre.ffi.win32.generated"
 OUT_DIR="$PWD/ffi/win32/src/jvmMain/kotlin"
 DLLS=(user32 kernel32 gdi32 dwmapi)
 
-# Detect Windows SDK include path
+# Detect Windows SDK include paths
 SDK_INCLUDE=""
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
     NATIVE_PATH="$NATIVE_PATH;$SYSTEMROOT/System32"
-    WIN_KITS="C:/Program Files (x86)/Windows Kits/10/Include"
-    for ver in $(ls -d "$WIN_KITS"/* 2>/dev/null | sort -r); do
-        [ -d "$ver/um" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/um"
-        [ -d "$ver/shared" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/shared"
-        [ -d "$ver/ucrt" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem $ver/ucrt"
+    # Try common Windows SDK include paths
+    for base in \
+        "C:/Program Files (x86)/Windows Kits/10/Include" \
+        "C:/Program Files/Windows Kits/10/Include"; do
+        [ -d "$base" ] || continue
+        for ver in "$base"/*/; do
+            [ -d "${ver}um" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}um"
+            [ -d "${ver}shared" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}shared"
+            [ -d "${ver}ucrt" ] && SDK_INCLUDE="$SDK_INCLUDE -isystem ${ver}ucrt"
+        done
+        break  # use first found
     done
-    # MSVC include paths (for standard headers)
-    MSVC_DIRS=$(ls -d "C:/Program Files (x86)/Microsoft Visual Studio"/*/VC/Tools/MSVC/*/include 2>/dev/null)
-    for d in $MSVC_DIRS; do SDK_INCLUDE="$SDK_INCLUDE -isystem $d"; done
 ;; esac
+# Also try clang's built-in SDK detection by adding nothing
+# (libclang on Windows can auto-detect SDK if INCLUDE env var is set)
 
 echo "→ Regenerating Win32 bindings for ${#DLLS[@]} DLLs"
 echo "  SDK include: ${SDK_INCLUDE:-(none)}"
