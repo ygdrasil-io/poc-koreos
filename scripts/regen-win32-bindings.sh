@@ -47,43 +47,57 @@ echo "  SDK args (${#SDK_ARGS[@]}): ${SDK_ARGS[*]:-(none)}"
 echo "  Output: $OUT_DIR"
 mkdir -p "$OUT_DIR"
 
+# Combine all DLL YAMLs into one --include-function list
+ALL_FUNCTIONS=()
 for dll in "${DLLS[@]}"; do
     yaml="$PWD/ffi/win32/${dll}.yaml"
-    # Temp header per DLL → kextract generates unique filenames (e.g. user32_h.kt)
-    TMP_HDR="/tmp/${dll}.h"
-    echo '#define WIN32_LEAN_AND_MEAN' > "$TMP_HDR"
-    echo '#include <windows.h>' >> "$TMP_HDR"
-
-    # Extract function names
-    functions=()
     while IFS= read -r line; do
-        functions+=("$line")
+        ALL_FUNCTIONS+=("$line")
     done < <(sed -n '/^    functions:/,/^    structs:/{
         /^    functions:/d; /^    structs:/d; /^      - /{s/^      - //; p}
     }' "$yaml") || true
-    echo "  $dll: ${#functions[@]} functions"
-
-    kextractArgs=(
-        --win32 --dll-map "$yaml" --verbose
-        -o "$OUT_DIR" -t "$PACKAGE"
-    )
-    for fn in "${functions[@]}"; do
-        kextractArgs+=(--include-function "$fn")
-    done
-    # Add SDK include paths so clang finds <windows.h>
-    for arg in "${SDK_ARGS[@]}"; do
-        kextractArgs+=(-A "$arg")
-    done
-    kextractArgs+=("$TMP_HDR")
-
-    echo "    Running kextract for $dll..."
-    "$JAVA" --enable-native-access=ALL-UNNAMED \
-        "-Djava.library.path=$NATIVE_PATH" \
-        -cp "$CLASSPATH" \
-        org.graphiks.kextract.pipeline.KextractTool \
-        "${kextractArgs[@]}" 2>&1 || { rc=$?; echo "ERROR: kextract failed for $dll (exit $rc)" >&2; exit $rc; }
-
-    rm -f "$TMP_HDR"
 done
+echo "  Total functions: ${#ALL_FUNCTIONS[@]}"
+
+# Combine all DLL YAMLs into one --dll-map (merge all DLL mappings)
+COMBINED_YAML="/tmp/combined_win32.yaml"
+python3 -c "
+import yaml, sys
+data = {'dllMap': {}}
+for dll in '${DLLS[@]}'.split():
+    with open('$PWD/ffi/win32/' + dll + '.yaml') as f:
+        d = yaml.safe_load(f)
+        data['dllMap'].update(d.get('dllMap', {}))
+with open('$COMBINED_YAML', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False)
+"
+echo "  Combined YAML: $(python3 -c "import yaml; d=yaml.safe_load(open('$COMBINED_YAML')); print(sum(len(v.get('functions',[])) for v in d['dllMap'].values()))") functions"
+
+# Single temp header (name determines output filename)
+TMP_HDR="/tmp/win32_all.h"
+echo '#define WIN32_LEAN_AND_MEAN' > "$TMP_HDR"
+echo '#define NOMINMAX' >> "$TMP_HDR"
+echo '#include <windows.h>' >> "$TMP_HDR"
+
+kextractArgs=(
+    --win32 --dll-map "$COMBINED_YAML" --verbose
+    -o "$OUT_DIR" -t "$PACKAGE"
+)
+for fn in "${ALL_FUNCTIONS[@]}"; do
+    kextractArgs+=(--include-function "$fn")
+done
+for arg in "${SDK_ARGS[@]}"; do
+    kextractArgs+=(-A "$arg")
+done
+kextractArgs+=("$TMP_HDR")
+
+echo "  Running kextract for all DLLs..."
+"$JAVA" --enable-native-access=ALL-UNNAMED \
+    "-Djava.library.path=$NATIVE_PATH" \
+    -cp "$CLASSPATH" \
+    org.graphiks.kextract.pipeline.KextractTool \
+    "${kextractArgs[@]}" 2>&1 || { rc=$?; echo "ERROR: kextract failed (exit $rc)" >&2; exit $rc; }
+
+rm -f "$TMP_HDR" "$COMBINED_YAML"
 
 echo "✓ Done. Regenerated bindings at $OUT_DIR/$PACKAGE/"
