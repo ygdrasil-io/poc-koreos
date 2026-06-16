@@ -1081,6 +1081,7 @@ class Win32Window private constructor(
         }
 
         fun create(attrs: WindowAttributes): Win32Window? {
+            init()
             val hInstance = GetModuleHandleW(MemorySegment.NULL)
             if (hInstance == MemorySegment.NULL) return null
 

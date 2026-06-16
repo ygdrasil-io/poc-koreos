@@ -137,6 +137,7 @@ fun interface WindowEventHandler {
  * ```
  */
 object KadreWndProc {
+    init { init() }
 
     /**
      * Handler installed by the caller via [install].
