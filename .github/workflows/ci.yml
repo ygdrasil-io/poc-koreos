@@ -418,16 +418,15 @@ jobs:
   # ── Job 7: linux-wayland-build ──────────────────────────────────────────
   #
   # Builds the kadre-wayland module and runs the Wayland JVM tests.
-  # Uses ubuntu-latest with the Wayland dev packages.
+  # Uses ubuntu-latest with the Wayland dev packages and Weston headless.
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
   #   • push or PR on claude/** or codex/** branches (CI feature branches)
   #
-  # Note: no Wayland server available in CI — wl_display_connect()
-  # returns null and the tests requiring a Wayland compositor are skipped
-  # automatically. The job validates compilation and the compositor-independent
-  # tests.
+  # Note: Weston headless provides a real Wayland compositor in CI, so
+  # wl_display_connect() runtime smoke tests execute against the compositor
+  # without adding GPU or visual coverage.
   linux-wayland-build:
     name: linux-wayland-build
     runs-on: ubuntu-latest
@@ -450,21 +449,18 @@ jobs:
           java-version: '25'
           cache: 'gradle'
 
-      # Install the Wayland dependencies required by kadre-wayland (FFM + JNI).
+      # Install the Wayland dependencies required by kadre-wayland (FFM + JNI)
+      # and Weston for headless runtime smoke tests.
       - name: Install Wayland dependencies
-        run: sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev
+        run: sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev weston
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Run the Wayland JVM tests. libwayland-client.so is installed on
-      # ubuntu-latest so the Linux-gated FFM-binding tests resolve symbols.
-      # No compositor runs in CI, so wl_display_connect tests are skipped.
+      # Start Weston headless and run the Wayland JVM tests against its socket.
       - name: Build Wayland modules + JVM tests
-        env:
-          KADRE_WAYLAND_DISABLE_NATIVE: '1'
         run: |
-          ./gradlew \
+          scripts/ci-wayland-runtime.sh ./gradlew \
             :kadre-core:jvmTest \
             :kadre-wayland:jvmTest \
             --no-daemon \
