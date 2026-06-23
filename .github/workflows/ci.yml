@@ -465,3 +465,13 @@ jobs:
             :kadre-wayland:jvmTest \
             --no-daemon \
             --stacktrace
+
+      - name: Upload Weston logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayland-weston-logs
+          path: |
+            /tmp/kadre-weston.log
+            /tmp/kadre-weston.stdout
+          if-no-files-found: ignore
