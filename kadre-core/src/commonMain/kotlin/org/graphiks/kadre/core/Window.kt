@@ -320,7 +320,10 @@ interface Window {
      * AppKit supports [CursorGrabMode.Locked] and [CursorGrabMode.None], but
      * reports [RequestError.Unsupported] for [CursorGrabMode.Confined], matching winit.
      * Wayland accepts [CursorGrabMode.None] as a success no-op like winit when
-     * pointer constraints are unavailable.
+     * pointer constraints are unavailable. It attempts [CursorGrabMode.Confined]
+     * and [CursorGrabMode.Locked] only when `zwp_pointer_constraints_v1` is
+     * advertised and a current `wl_pointer` enter serial exists; otherwise those
+     * modes return [RequestError.Unsupported].
      *
      * @param mode New grab mode.
      */
