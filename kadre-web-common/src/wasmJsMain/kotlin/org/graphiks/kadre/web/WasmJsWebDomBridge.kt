@@ -1,7 +1,7 @@
 /**
  * wasmJs implementation of [WebDomBridge].
  *
- * Provides a functional stub based on Wasm JS interop (external interface).
+ * Provides DOM access based on Wasm JS interop (external interface).
  * DOM listeners are registered via [JsAny] and Wasm [addEventListener],
  * and event fields are extracted via the external interfaces below.
  *
@@ -302,6 +302,22 @@ private external fun jsRequestFullscreen(el: JsEventTarget)
 /** Calls document.exitFullscreen (handles vendor prefixes). */
 @JsFun("() => { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }")
 private external fun jsExitFullscreen()
+
+/** Sets the CSS cursor style on the given element. */
+@JsFun("(el, value) => { el.style.cursor = value; }")
+private external fun jsSetCssCursor(el: JsEventTarget, value: String)
+
+/** Sets the CSS pointer-events style on the given element. */
+@JsFun("(el, value) => { el.style.pointerEvents = value; }")
+private external fun jsSetPointerEvents(el: JsEventTarget, value: String)
+
+/** Calls requestPointerLock on the given element (handles vendor prefixes). */
+@JsFun("(el) => { if (el.requestPointerLock) el.requestPointerLock(); else if (el.webkitRequestPointerLock) el.webkitRequestPointerLock(); }")
+private external fun jsRequestPointerLock(el: JsEventTarget)
+
+/** Calls document.exitPointerLock (handles vendor prefixes). */
+@JsFun("() => { if (document.exitPointerLock) document.exitPointerLock(); else if (document.webkitExitPointerLock) document.webkitExitPointerLock(); }")
+private external fun jsExitPointerLock()
 
 // ── Task 14: safeArea insets + ownedDisplayHandle ──────────────────────────
 
@@ -757,6 +773,35 @@ class WasmJsWebDomBridge : WebDomBridge {
     override fun exitFullscreen() {
         try {
             jsExitFullscreen()
+        } catch (_: Throwable) {}
+    }
+
+    // ── R3: Cursor and Pointer Lock ──────────────────────────────────────────
+
+    override fun setCssCursor(canvasId: String, cssCursorValue: String) {
+        try {
+            val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
+            jsSetCssCursor(el, cssCursorValue)
+        } catch (_: Throwable) {}
+    }
+
+    override fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
+        try {
+            val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
+            jsSetPointerEvents(el, pointerEventsValue)
+        } catch (_: Throwable) {}
+    }
+
+    override fun requestPointerLock(canvasId: String) {
+        try {
+            val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
+            jsRequestPointerLock(el)
+        } catch (_: Throwable) {}
+    }
+
+    override fun exitPointerLock() {
+        try {
+            jsExitPointerLock()
         } catch (_: Throwable) {}
     }
 

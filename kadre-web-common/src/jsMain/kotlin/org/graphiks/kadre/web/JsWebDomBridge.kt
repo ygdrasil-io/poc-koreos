@@ -530,6 +530,39 @@ class JsWebDomBridge : WebDomBridge {
         return ((screen.availWidth as Int).toLong() shl 32) or (screen.availHeight as Int).toLong()
     }
 
+    // ── R3: Cursor and Pointer Lock ──────────────────────────────────────────
+
+    override fun setCssCursor(canvasId: String, cssCursorValue: String) {
+        val el = document.getElementById(canvasId) ?: targetElement ?: return
+        el.asDynamic().style.cursor = cssCursorValue
+    }
+
+    override fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
+        val el = document.getElementById(canvasId) ?: targetElement ?: return
+        el.asDynamic().style.pointerEvents = pointerEventsValue
+    }
+
+    override fun requestPointerLock(canvasId: String) {
+        val el = document.getElementById(canvasId) ?: targetElement ?: return
+        try {
+            val d = el.asDynamic()
+            when {
+                d.requestPointerLock != null -> d.requestPointerLock()
+                d.webkitRequestPointerLock != null -> d.webkitRequestPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    override fun exitPointerLock() {
+        try {
+            val d = document.asDynamic()
+            when {
+                d.exitPointerLock != null -> d.exitPointerLock()
+                d.webkitExitPointerLock != null -> d.webkitExitPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
     // ── R2: Fullscreen API ────────────────────────────────────────────────────
 
     /**

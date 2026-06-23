@@ -471,15 +471,14 @@ interface Window {
      * Applies a previously created custom cursor to this window.
      *
      * The [cursor] must have been obtained via [ActiveEventLoop.createCustomCursor].
-     * Default implementation is a no-op — backends will override.
+     * Default implementation is a no-op. Backends with custom cursor support
+     * override this method.
      * No-op on iOS and Android (platform does not support custom cursors).
      * Never throws.
      *
-     * TODO R5-CustomCursor: wire in each backend (AppKit, Win32, X11, Wayland, Web).
-     *
      * @param cursor Custom cursor handle to apply.
      */
-    fun setCustomCursor(cursor: CustomCursor) { /* no-op by default, TODO R5-CustomCursor */ }
+    fun setCustomCursor(cursor: CustomCursor) { /* no-op by default */ }
 
     // ── R5-MiscWindow ─────────────────────────────────────────────────────────
 

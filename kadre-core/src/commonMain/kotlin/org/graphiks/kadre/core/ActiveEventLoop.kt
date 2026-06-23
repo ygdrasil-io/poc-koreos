@@ -137,11 +137,9 @@ interface ActiveEventLoop {
      * Returns null if the backend does not support custom cursors (iOS, Android)
      * or if cursor creation failed (e.g. invalid image dimensions).
      *
-     * Default implementation returns null — backends that support custom cursors
-     * will override this method.
+     * Default implementation returns null. Backends that support custom cursors
+     * override this method.
      * Never throws.
-     *
-     * TODO R5-CustomCursor: wire in AppKit, Win32, X11, Wayland, and Web backends.
      *
      * @param image RGBA image data with hot-spot information.
      * @return An opaque [CustomCursor] handle, or null on unsupported platforms.

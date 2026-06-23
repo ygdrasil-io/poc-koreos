@@ -163,6 +163,15 @@ interface WebDomBridge {
     fun setCssCursor(canvasId: String, cssCursorValue: String) { /* no-op by default */ }
 
     /**
+     * Sets the CSS `pointer-events` style on the canvas identified by [canvasId].
+     *
+     * Used by [WebWindow.setCursorHittest] to let pointer input pass through
+     * the canvas (`"none"`) or restore normal hit-testing (`"auto"`).
+     * Default: no-op (test / non-browser bridge).
+     */
+    fun setPointerEvents(canvasId: String, pointerEventsValue: String) { /* no-op by default */ }
+
+    /**
      * Requests Pointer Lock on the canvas element (for [CursorGrabMode.Locked]).
      *
      * The browser may require a user gesture. Asynchronous — the lock is granted

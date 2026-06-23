@@ -394,15 +394,13 @@ class WebWindow(
     /**
      * Sets the cursor grab mode.
      *
-     * - [CursorGrabMode.Locked]: unsupported until Pointer Lock is wired in concrete bridges.
+     * - [CursorGrabMode.Locked]: requests browser Pointer Lock on the canvas.
      * - [CursorGrabMode.Confined]: no-op (browsers do not expose canvas-confined grab).
      * - [CursorGrabMode.None]: calls `exitPointerLock()`.
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult {
         when (mode) {
-            CursorGrabMode.Locked -> return WindowRequestResult.Failure(
-                RequestError.Unsupported("Web Pointer Lock is not wired in the DOM bridges"),
-            )
+            CursorGrabMode.Locked -> bridge.requestPointerLock(canvasElementId)
             CursorGrabMode.Confined -> return WindowRequestResult.Failure(
                 RequestError.Unsupported("Browsers do not expose canvas-confined cursor grab"),
             )
@@ -418,12 +416,12 @@ class WebWindow(
         WindowRequestResult.Failure(RequestError.Unsupported("Browsers do not allow cursor warping"))
 
     /**
-     * No-op on Web.
-     *
-     * TODO(R3-web-hittest): implement via CSS pointer-events: none.
+     * Controls whether the canvas participates in CSS pointer hit-testing.
      */
-    override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Web cursor hit-testing is not implemented"))
+    override fun setCursorHittest(hittest: Boolean): WindowRequestResult {
+        bridge.setPointerEvents(canvasElementId, if (hittest) "auto" else "none")
+        return WindowRequestResult.Success
+    }
 
     /**
      * Returns the system theme via the bridge's `prefersDarkColorScheme`.

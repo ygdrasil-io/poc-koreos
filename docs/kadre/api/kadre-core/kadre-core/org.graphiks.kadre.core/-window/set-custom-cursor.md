@@ -7,9 +7,7 @@ open fun [setCustomCursor](set-custom-cursor.md)(cursor: [CustomCursor](../-cust
 
 Applies a previously created custom cursor to this window.
 
-The [cursor](set-custom-cursor.md) must have been obtained via [ActiveEventLoop.createCustomCursor](../-active-event-loop/create-custom-cursor.md). Default implementation is a no-op — backends will override. No-op on iOS and Android (platform does not support custom cursors). Never throws.
-
-TODO R5-CustomCursor: wire in each backend (AppKit, Win32, X11, Wayland, Web).
+The [cursor](set-custom-cursor.md) must have been obtained via [ActiveEventLoop.createCustomCursor](../-active-event-loop/create-custom-cursor.md). Default implementation is a no-op. Backends with custom cursor support override this method. No-op on iOS and Android (platform does not support custom cursors). Never throws.
 
 #### Parameters
 
