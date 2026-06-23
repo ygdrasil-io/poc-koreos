@@ -64,4 +64,4 @@ The ABI dumps were regenerated (`updateKotlinAbi`) and committed as part of R0.1
 
 All subsequent rounds (R1: window state/monitors/fullscreen; R2: window icon; R3: cursor/theme/appearance; R4: keyboard richness/ModifiersChanged/MouseWheel device; R5: DnD/gestures/custom cursors/misc window/IME) added **new sealed variants and new interface methods** only — no existing signatures were removed or changed. Each addition required running `./gradlew updateKotlinAbi` and committing the updated `api/` files (PRs #171–#184).
 
-For the full list of items that were intentionally deferred (no-op implementations, unimitted events, partial native backends), see [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+For the full list of items that remain intentionally partial, backend-dependent, or unsupported, see [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
