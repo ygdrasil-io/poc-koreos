@@ -234,11 +234,36 @@ Run: `git diff -- .github/workflows/ci.yml scripts/ci-wayland-runtime.sh kadre-w
 
 Expected: only the planned runtime CI changes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
-Deferred to the controller; implementation subagent must not commit.
+Completed by the controller after implementation and subagent review.
 
 ```bash
 git add .github/workflows/ci.yml scripts/ci-wayland-runtime.sh kadre-wayland/src/jvmTest/kotlin/org/graphiks/kadre/wayland/WaylandSmokeTest.kt docs/superpowers/plans/2026-06-23-wayland-runtime-ci.md
 git commit -m "ci: run Wayland tests against headless Weston"
 ```
+
+### Task 5: Review, PR, And Merge
+
+**Files:**
+- No additional implementation files.
+
+- [x] **Step 1: Run implementation subagent**
+
+Expected: implementation subagent updates the test, runner, workflow, and plan doc.
+
+- [x] **Step 2: Run review subagents**
+
+Expected: independent reviewers inspect spec compliance and code quality before merge.
+
+- [x] **Step 3: Push branch and open PR**
+
+Expected: branch `codex/wayland-runtime-ci` is pushed and a PR targets `master`.
+
+- [x] **Step 4: Verify CI**
+
+Expected: GitHub Actions passes, including `linux-wayland-build` against headless Weston.
+
+- [ ] **Step 5: Merge PR**
+
+Expected: merge after all required checks are green.
