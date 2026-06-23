@@ -51,7 +51,7 @@ Consolidated list of features that are missing, deferred, or only partially impl
 | Event | Status | Backends |
 |-------|--------|----------|
 | `ThemeChanged` | ⚠️ Partial | Only AppKit, Win32 |
-| `Occluded` | ⚠️ Partial | AppKit, X11, Web, Android, iOS |
+| `Occluded` | ⚠️ Partial | AppKit, X11, Web, iOS |
 | `Ime` events | ⚠️ Partial (historically deferred) | All backends now emit in latest code |
 | `DragEntered/Moved/Dropped/Left` | ⚠️ Partial | Win32, X11, Wayland, Web, iOS; AppKit partial |
 | Gestures (Pinch/Pan/Rotation/DoubleTap) | ⚠️ Partial | AppKit/Win32/UIKit only |
@@ -73,11 +73,15 @@ Consolidated list of features that are missing, deferred, or only partially impl
 
 #### Web (JS/Wasm)
 
+Web DOM bridges are implemented for JS and wasmJs. Pointer Lock requests and
+cursor hit-testing are wired; browser-granted Pointer Lock remains asynchronous
+and user-gesture dependent (see [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md)).
+
 | Gap | Blocked by |
 |-----|-----------|
-| Wasm interop opt-ins | The Wasm bridge is implemented, but uses experimental Wasm JS interop APIs that still emit compiler opt-in warnings |
-| `setCursorGrab(Locked)` | Pointer Lock API bridge not wired |
-| `setCursorHittest` | CSS `pointer-events` not wired |
+| `setCursorGrab(Confined)` | Browsers do not expose canvas-confined cursor grab |
+| `setCursorPosition()` | Browsers do not allow direct cursor warping |
+| Raw mouse input | Browser cursor sovereignty; use Pointer Lock where granted |
 
 #### AppKit (macOS)
 
@@ -126,7 +130,7 @@ Consolidated list of features that are missing, deferred, or only partially impl
 | **Wayland (Linux)** | ~80% | Best protocol negotiation; keyboard `text` is main gap |
 | **UIKit (iOS)** | ~55% | Good for mobile; gesture opt-in, IME working |
 | **Android** | ~50% | Functional; Choreographer-based event loop |
-| **Web (JS/Wasm)** | ~70% | DOM bridges are present; Pointer Lock, cursor hit-testing, and some browser payload fidelity remain gaps |
+| **Web (JS/Wasm)** | ~75% | DOM bridges implemented; remaining gaps are browser/platform limits |
 
 ## Reference
 

@@ -35,14 +35,14 @@
 | Monitor enumeration | **REAL** | **REAL** | **REAL** | synthetic | synthetic | synthetic | synthetic |
 | Fullscreen Borderless | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
 | Fullscreen Exclusive | **REAL** | **partial** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **NO-OP** |
-| CursorIcon (25 shapes) | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** |
-| CursorGrab Confined | unsupported | **REAL** | **REAL** | **REAL** | unsupported | **NO-OP** | **NO-OP** |
-| CursorGrab Locked | **REAL** | **REAL** | **REAL** | **REAL** | unsupported | **NO-OP** | **NO-OP** |
-| CursorVisible | **REAL** | **partial** | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** |
+| CursorIcon (25 shapes) | **REAL** | **REAL** | **REAL** | **partial** | **REAL** | **NO-OP** | **NO-OP** |
+| CursorGrab Confined | unsupported | **REAL** | **REAL** | **partial** | unsupported | **NO-OP** | **NO-OP** |
+| CursorGrab Locked | **REAL** | **REAL** | **REAL** | **partial** | **REAL** (request) | **NO-OP** | **NO-OP** |
+| CursorVisible | **REAL** | **partial** | **REAL** | **partial** | **REAL** | **NO-OP** | **NO-OP** |
 | CursorPosition (warp) | **partial** | **REAL** | **REAL** | unsupported | unsupported | unsupported | unsupported |
-| CustomCursor (RGBA) | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** |
-| CursorHittest | **REAL** | **REAL** | **REAL** | **REAL** | unsupported | unsupported | unsupported |
-| systemTheme() | **REAL** | **REAL** | null | partial | **REAL** | **REAL** | **REAL** |
+| CustomCursor (RGBA) | **REAL** | **REAL** | **REAL** | **partial** | **REAL** | **NO-OP** | **NO-OP** |
+| CursorHittest | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | unsupported | unsupported |
+| systemTheme() | **REAL** | **REAL** | null | **REAL** | **REAL** | **REAL** | null |
 | setTheme() per-window | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** |
 | ThemeChanged event | **REAL** | **REAL** | — | **REAL** | — | — | — |
 | setWindowLevel | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **NO-OP** |
@@ -52,9 +52,9 @@
 | ModifiersChanged | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
 | Keyboard text | **REAL** | **REAL** | null | null | **REAL** | **REAL** | **REAL** |
 | IME events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
-| DnD events | **REAL** | partial | **REAL** | **REAL** | **REAL** | **REAL** | partial |
+| DnD events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | — | **REAL** |
 | Gesture events | **REAL** | **REAL** | Pinch only | — | Gesture evts | — | **REAL** (opt-in) |
-| Occluded event | **REAL** | — | **REAL** | — | **REAL** | **REAL** | **REAL** |
+| Occluded event | **REAL** | — | **REAL** | — | **REAL** | — | **REAL** |
 | listenDeviceEvents | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** |
 | dragWindow | **REAL** | **REAL** | **REAL** | **REAL** | — | — | — |
 | dragResizeWindow | unsupported | **REAL** | **REAL** | **REAL** | — | — | — |
@@ -70,4 +70,4 @@
 4. **Wayland (Linux)** — ~80% features; best protocol negotiation; keyboard `text` is null
 5. **UIKit (iOS)** — ~55% features; good for mobile, gesture opt-in, IME
 6. **Android** — ~50% features; functional, Choreographer-based
-7. **Web (JS/Wasm)** — ~70% features; DOM bridges are present, with Pointer Lock and cursor hit-testing still pending
+7. **Web (JS/Wasm)** — ~75% features; DOM bridges are implemented, with remaining gaps mostly from browser/platform limits

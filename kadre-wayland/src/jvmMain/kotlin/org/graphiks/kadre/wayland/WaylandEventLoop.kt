@@ -256,10 +256,9 @@ class WaylandEventLoop internal constructor(
     /**
      * Stores the [CursorImage] data and returns a [CustomCursor] handle.
      *
-     * The full cursor-surface path (wl_shm buffer + wl_pointer.set_cursor) is
-     * deferred. The returned handle can be passed to [Window.setCustomCursor]
-     * which will look up the stored image data and apply it when the cursor
-     * surface path is wired.
+     * The returned handle can be passed to [Window.setCustomCursor], which will
+     * look up the stored image data and apply it through a `wl_shm` cursor
+     * surface when the window has a current `wl_pointer` enter serial.
      */
     override fun createCustomCursor(image: CursorImage): CustomCursor? {
         if (image.width <= 0 || image.height <= 0 || image.rgba.isEmpty()) return null

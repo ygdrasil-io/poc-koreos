@@ -151,7 +151,7 @@
 | `primary_monitor()` | `primaryMonitor(): MonitorHandle?` | ✅ Implemented | |
 | `owned_display_handle()` | `ownedDisplayHandle(): OwnedDisplayHandle?` | 🔶 Deferred | winit non-null; Kadre nullable |
 | `system_theme()` | `systemTheme(): Theme?` | ✅ Implemented | |
-| `create_custom_cursor(CursorImage)` | `createCustomCursor(CursorImage): CustomCursor?` | 🔶 Deferred | No-op by default |
+| `create_custom_cursor(CursorImage)` | `createCustomCursor(CursorImage): CustomCursor?` | ✅ Implemented | Backend-dependent; returns null on unsupported platforms |
 | `listen_device_events(DeviceEvents)` | `listenDeviceEvents(DeviceEvents)` | ✅ Implemented | |
 
 ## `MonitorHandle` & `VideoMode`

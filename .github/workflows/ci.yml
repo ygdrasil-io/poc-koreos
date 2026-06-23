@@ -8,7 +8,7 @@
 #   │  macos-build     AppKit + macOS samples — feedback < 5 min            │
 #   └─────────────────────────────────────────────────────────────────────────┘
 #
-#   ┌─ Deep-Testing (PR → master, push master, or claude/** branches)  ───────┐
+#   ┌─ Deep-Testing (PR → master, push master, claude/**, or codex/**) ───────┐
 #   │  build-and-test      JVM + allTests (macos-15, iOS simulator)          │
 #   │  ios-build           iOS simulator arm64 — build + link + tests        │
 #   │  android-build       Android (ubuntu-latest) — build + assembleDebug   │
@@ -20,7 +20,7 @@
 #   Note: ios-build and android-build are expensive jobs (macOS / Ubuntu
 #   runners + native compilation). They are triggered on:
 #     • push / PR to master (historical Deep-Testing)
-#     • push / PR on claude/** branches (CI feature branches)
+#     • push / PR on claude/** or codex/** branches (CI feature branches)
 #   On the other branches, only the Fast-Track JVM runs (<10 s).
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -39,7 +39,8 @@ jobs:
   # ── Job 1: build-and-test ─────────────────────────────────────────────────
   #
   # Fast-Track   : JVM only (non-master branches)
-  # Deep-Testing : allTests including the iOS simulator (PR to master / master)
+  # Deep-Testing : allTests including the iOS simulator
+  #                (PR to master / master / claude/** / codex/**)
   #
   # Uses macos-15 because this runner includes the iOS simulator required for
   # the iosSimulatorArm64 Kotlin/Native tests in Deep mode.
@@ -65,9 +66,14 @@ jobs:
       - name: Determine test strategy
         id: strategy
         run: |
-          if [[ "${{ github.base_ref }}" == "master" || "${{ github.ref }}" == "refs/heads/master" ]]; then
+          if [[ "${{ github.base_ref }}" == "master" ||
+                "${{ github.ref }}" == "refs/heads/master" ||
+                "${{ github.ref }}" == refs/heads/claude/* ||
+                "${{ github.head_ref }}" == claude/* ||
+                "${{ github.ref }}" == refs/heads/codex/* ||
+                "${{ github.head_ref }}" == codex/* ]]; then
             echo "mode=deep" >> $GITHUB_OUTPUT
-            echo "→ Deep-Testing (all targets) — PR to master or master branch"
+            echo "→ Deep-Testing (all targets) — master, claude/**, or codex/**"
           else
             echo "mode=fast-track" >> $GITHUB_OUTPUT
             echo "→ Fast-Track JVM only"
@@ -161,7 +167,7 @@ jobs:
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
-  #   • push or PR on claude/** branches (CI feature branches)
+  #   • push or PR on claude/** or codex/** branches (CI feature branches)
   # Avoids consuming the expensive macOS runners on all the other branches.
   ios-build:
     name: ios-build
@@ -170,7 +176,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout
@@ -215,7 +223,7 @@ jobs:
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
-  #   • push or PR on claude/** branches (CI feature branches)
+  #   • push or PR on claude/** or codex/** branches (CI feature branches)
   #
   # Instrumented tests: the Kadre modules do not yet have Robolectric
   # tests — the job validates compilation and APK packaging.
@@ -227,7 +235,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout
@@ -273,7 +283,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout
@@ -312,7 +324,7 @@ jobs:
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
-  #   • push or PR on claude/** branches (CI feature branches)
+  #   • push or PR on claude/** or codex/** branches (CI feature branches)
   #
   # Uses shell: bash (Git Bash, available on windows-latest) to run
   # ./gradlew in a way compatible with the other jobs.
@@ -323,7 +335,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout
@@ -356,7 +370,7 @@ jobs:
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
-  #   • push or PR on claude/** branches (CI feature branches)
+  #   • push or PR on claude/** or codex/** branches (CI feature branches)
   #
   # Note: kadre-x11:jvmTest automatically detects the absence of a display and
   # skips the tests requiring an X server — xvfb-run -a provides a stable
@@ -369,7 +383,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout
@@ -406,7 +422,7 @@ jobs:
   #
   # Runs on Deep-Testing:
   #   • PRs to master / push to master
-  #   • push or PR on claude/** branches (CI feature branches)
+  #   • push or PR on claude/** or codex/** branches (CI feature branches)
   #
   # Note: no Wayland server available in CI — wl_display_connect()
   # returns null and the tests requiring a Wayland compositor are skipped
@@ -419,7 +435,9 @@ jobs:
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
       startsWith(github.ref, 'refs/heads/claude/') ||
-      startsWith(github.head_ref, 'claude/')
+      startsWith(github.head_ref, 'claude/') ||
+      startsWith(github.ref, 'refs/heads/codex/') ||
+      startsWith(github.head_ref, 'codex/')
 
     steps:
       - name: Checkout

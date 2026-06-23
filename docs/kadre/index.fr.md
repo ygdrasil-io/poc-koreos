@@ -25,15 +25,15 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 - **État & géométrie fenêtre** — contraintes de taille, min/max, redimensionnable, minimisé, maximisé, décorations, position extérieure, pre-present notify
 - **Énumération des moniteurs** — `availableMonitors()` / `primaryMonitor()` avec données `VideoMode`
 - **Plein écran** — `Fullscreen.Borderless` (tous backends) et `Fullscreen.Exclusive` (desktop ; fallback borderless sur Wayland/Web/mobile)
-- **Curseur** — 25 formes `CursorIcon`, visibilité, grab (Confined/Locked), warp, hit-testing ; curseurs custom RGBA (`CursorImage` / `CustomCursor`) sur desktop/Web, no-op documenté sur mobile
+- **Curseur** — 25 formes `CursorIcon`, visibilité, grab, warp, hit-testing ; curseurs custom RGBA (`CursorImage` / `CustomCursor`, dépendants des backends)
 - **Thème & apparence** — `Theme` (Light/Dark), override par fenêtre, événement `ThemeChanged`, `WindowLevel`, transparence, flou, icône de fenêtre
 - **Richesse clavier** — `PhysicalKey`, `LogicalKey`, `text`, `textWithAllModifiers`, `keyWithoutModifiers`, `KeyLocation`, `repeat`, `synthetic` ; `ModifiersChanged` ; reset dead-key
 - **Événements device** — `DeviceEvent.MouseWheel` ; filtre via `listenDeviceEvents(DeviceEvents.Always/WhenFocused/Never)`
-- **IME** — `setImeAllowed`, `setImeCursorArea`, `setImePurpose(ImePurpose)` ; cycle de vie `ImeEvent` complet (Enabled/Preedit/Commit/DeleteSurrounding/Disabled) câblé par les backends actuels, avec capacités détaillées encore dépendantes des plateformes
-- **Drag & drop** — événements `DragEntered/Moved/Dropped/Left` câblés sur desktop/Web/mobile, avec fidélité de payload variable selon le backend
-- **Gestes** — Pinch, Pan, Rotation, DoubleTap, TouchpadPressure — AppKit câblé ; recognizers UIKit opt-in ; autres backends partiels ou unsupported
-- **Occluded** — événement de changement de visibilité câblé sur AppKit, X11, Web, Android et UIKit
-- **Fenêtre divers** — les APIs attention utilisateur, protection contenu, menu fenêtre et drag/resize-window restent dépendantes des backends et retournent des `WindowRequestResult` typés (cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md))
+- **IME** — `setImeAllowed`, `setImeCursorArea`, `setImePurpose(ImePurpose)` ; cycle de vie `ImeEvent` complet (Enabled/Preedit/Commit/DeleteSurrounding/Disabled) — API définie, émission TODO
+- **Drag & drop** — événements `DragEntered/Moved/Dropped/Left` — API définie, émission TODO
+- **Gestes** — Pinch, Pan, Rotation, DoubleTap, TouchpadPressure — AppKit câblé ; recognizers UIKit opt-in ; autres backends TODO
+- **Occluded** — événement de changement de visibilité — API définie, émission TODO
+- **Fenêtre divers** — les APIs attention utilisateur et protection contenu restent dépendantes des backends; menu fenêtre et drag/resize-window retournent désormais des résultats unsupported typés jusqu'au câblage natif (cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md))
 
 ## Matrice de capacités par plateforme
 
@@ -43,9 +43,10 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 | Énumération moniteurs | réel | réel | réel | réel | synthétique | synthétique | synthétique |
 | Plein écran Borderless | réel | réel | réel | réel | réel | réel | réel |
 | Plein écran Exclusive | réel | partiel | réel | no-op | no-op | no-op | no-op |
-| CursorIcon | réel | réel | réel | réel* | réel (CSS) | no-op | no-op |
-| CursorGrab Confined/Locked | réel | réel | réel | partiel* | partiel* | no-op | no-op |
-| CursorVisible | réel | partiel* | no-op* | no-op | réel | no-op | no-op |
+| CursorIcon | réel | réel | réel | partiel* | réel (CSS) | no-op | no-op |
+| CursorGrab Locked | réel | réel | réel | partiel* | réel* | unsupported | unsupported |
+| CursorGrab Confined | unsupported* | réel | réel | partiel* | unsupported | unsupported | unsupported |
+| CursorVisible | réel | partiel* | réel | partiel* | réel | no-op | no-op |
 | CursorPosition (warp) | partiel* | réel | réel | no-op | no-op | no-op | no-op |
 | systemTheme() | réel | réel | null | null | réel | réel | réel |
 | setTheme() par fenêtre | réel | réel | réel (_GTK_THEME_VARIANT) | no-op | no-op | no-op | no-op |
@@ -53,13 +54,13 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 | setBlur() | réel | no-op runtime | no-op | deferred protocole optionnel | no-op | no-op | no-op |
 | setWindowIcon() | no-op | réel | réel | deferred protocole optionnel | no-op | no-op | no-op |
 | Événement ModifiersChanged | réel | réel | réel* | réel* | réel | réel | réel |
-| IME (setImeAllowed etc.) | réel | réel | réel | réel* | réel | réel | réel |
-| Événements DnD | partiel* | partiel* | réel | réel | réel* | réel | partiel* |
-| Événements gestes | réel | partiel* | — | — | partiel* | — | opt-in |
-| Événement Occluded | réel | — | réel | — | réel | réel | réel |
-| Curseurs custom | réel | réel | réel | réel* | réel | no-op | no-op |
+| IME (setImeAllowed etc.) | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
+| Événements DnD | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
+| Événements gestes | réel | TODO | — | — | TODO | — | opt-in |
+| Événement Occluded | TODO | — | — | — | TODO | — | — |
+| Curseurs custom | réel | réel | partiel* | partiel* | réel | no-op | no-op |
 
-`réel` = implémenté. `partiel*` / `no-op*` = partiel ou no-op documenté, cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md). `—` = non applicable sur cette plateforme. Sous Linux, `ModifiersChanged` est câblé pour les transitions de touches et le reset/réhydratation de focus ; la sémantique XKB locked/latched reste future.
+`réel` = implémenté. `réel*` / `partiel*` / `no-op*` = implémenté ou documenté avec des limites plateforme, cf. [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md). `TODO` = API définie, câblage backend en attente. `—` = non applicable sur cette plateforme. Sur Web, `CursorGrab Locked` soumet une requête Pointer Lock ; l'accord du navigateur est asynchrone et dépend d'un geste utilisateur. Le hit-testing curseur Web utilise CSS `pointer-events`. Sous Linux, `ModifiersChanged` est câblé pour les transitions de touches et le reset/réhydratation de focus ; la sémantique XKB locked/latched reste future.
 
 ## Plateformes
 
@@ -76,4 +77,4 @@ Objectif : exposer des handles natifs (`NSView`, `UIView`, `android.view.Surface
 
 **Publié** — `org.graphiks.kadre:kadre:1.0.0` sur Maven Central.
 
-Les éléments résiduels reportés relèvent surtout des capacités et de la fidélité backend : reporting IME détaillé, payload DnD, couverture gestes hors Apple, protocoles Wayland optionnels, Pointer Lock/hit-testing Web, et no-ops desktop sur mobile. Liste complète : [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+Éléments résiduels reportés (API définie, câblage backend en attente ou limite plateforme) : APIs riches IME, lacunes backend DnD/gestes/Occluded, couverture Wayland des protocoles optionnels/runtime, et lacunes natives. Liste complète : [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
