@@ -51,7 +51,7 @@ Consolidated list of features that are missing, deferred, or only partially impl
 | Event | Status | Backends |
 |-------|--------|----------|
 | `ThemeChanged` | ⚠️ Partial | Only AppKit, Win32 |
-| `Occluded` | ⚠️ Partial | AppKit, X11, Web, iOS |
+| `Occluded` | ⚠️ Partial | AppKit, X11, Web, Android, iOS |
 | `Ime` events | ⚠️ Partial (historically deferred) | All backends now emit in latest code |
 | `DragEntered/Moved/Dropped/Left` | ⚠️ Partial | Win32, X11, Wayland, Web, iOS; AppKit partial |
 | Gestures (Pinch/Pan/Rotation/DoubleTap) | ⚠️ Partial | AppKit/Win32/UIKit only |
@@ -75,7 +75,7 @@ Consolidated list of features that are missing, deferred, or only partially impl
 
 | Gap | Blocked by |
 |-----|-----------|
-| **Bridges are stubs** | `JsWebDomBridge` and `WasmJsWebDomBridge` implementations not in workspace |
+| Wasm interop opt-ins | The Wasm bridge is implemented, but uses experimental Wasm JS interop APIs that still emit compiler opt-in warnings |
 | `setCursorGrab(Locked)` | Pointer Lock API bridge not wired |
 | `setCursorHittest` | CSS `pointer-events` not wired |
 
@@ -126,7 +126,7 @@ Consolidated list of features that are missing, deferred, or only partially impl
 | **Wayland (Linux)** | ~80% | Best protocol negotiation; keyboard `text` is main gap |
 | **UIKit (iOS)** | ~55% | Good for mobile; gesture opt-in, IME working |
 | **Android** | ~50% | Functional; Choreographer-based event loop |
-| **Web (JS/Wasm)** | ~60% | DOM bridges are stubs — real implementation TBD |
+| **Web (JS/Wasm)** | ~70% | DOM bridges are present; Pointer Lock, cursor hit-testing, and some browser payload fidelity remain gaps |
 
 ## Reference
 

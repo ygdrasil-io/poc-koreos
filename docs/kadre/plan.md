@@ -368,4 +368,4 @@ After 1.0.0, a gap analysis against the full winit API surface was conducted. Si
 | **R4** | Input richness — `KeyEvent`, `PhysicalKey`, `LogicalKey`, `RawKeyEvent`, `ModifiersChanged` event, `MouseWheel` device event, `DeviceEvent` variants | #181 |
 | **R5** | Advanced events & misc — DnD events, gesture events, IME API (`ImePurpose`, `setIme*`), `requestUserAttention`, `setContentProtected`, `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `memoryWarning`, `Occluded` event | #182–#184 |
 
-Items that were intentionally deferred (no-op implementations, unemitted events, partial native backends) are tracked in [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+Items that remain intentionally partial, backend-dependent, or unsupported are tracked in [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).

@@ -368,7 +368,7 @@ Après la 1.0.0, une analyse des écarts avec l'API complète de winit a été c
 | **R4** | Richesse des entrées — `KeyEvent`, `PhysicalKey`, `LogicalKey`, `RawKeyEvent`, événement `ModifiersChanged`, événement device `MouseWheel`, variants `DeviceEvent` | #181 |
 | **R5** | Events avancés & divers — événements DnD, gestes, API IME (`ImePurpose`, `setIme*`), `requestUserAttention`, `setContentProtected`, `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `memoryWarning`, événement `Occluded` | #182–#184 |
 
-Les éléments volontairement reportés (implémentations no-op, événements non émis, backends natifs partiels) sont suivis dans [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+Les éléments qui restent volontairement partiels, dépendants des backends ou unsupported sont suivis dans [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
 ---
 
 ## 12. Plan incubation — parité winit input

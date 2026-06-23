@@ -42,7 +42,7 @@
 | CursorPosition (warp) | **partial** | **REAL** | **REAL** | unsupported | unsupported | unsupported | unsupported |
 | CustomCursor (RGBA) | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** |
 | CursorHittest | **REAL** | **REAL** | **REAL** | **REAL** | unsupported | unsupported | unsupported |
-| systemTheme() | **REAL** | **REAL** | null | **REAL** | **REAL** | **REAL** | null |
+| systemTheme() | **REAL** | **REAL** | null | partial | **REAL** | **REAL** | **REAL** |
 | setTheme() per-window | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** |
 | ThemeChanged event | **REAL** | **REAL** | — | **REAL** | — | — | — |
 | setWindowLevel | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **NO-OP** |
@@ -52,9 +52,9 @@
 | ModifiersChanged | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
 | Keyboard text | **REAL** | **REAL** | null | null | **REAL** | **REAL** | **REAL** |
 | IME events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
-| DnD events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | — | **REAL** |
+| DnD events | **REAL** | partial | **REAL** | **REAL** | **REAL** | **REAL** | partial |
 | Gesture events | **REAL** | **REAL** | Pinch only | — | Gesture evts | — | **REAL** (opt-in) |
-| Occluded event | **REAL** | — | **REAL** | — | **REAL** | — | **REAL** |
+| Occluded event | **REAL** | — | **REAL** | — | **REAL** | **REAL** | **REAL** |
 | listenDeviceEvents | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** |
 | dragWindow | **REAL** | **REAL** | **REAL** | **REAL** | — | — | — |
 | dragResizeWindow | unsupported | **REAL** | **REAL** | **REAL** | — | — | — |
@@ -70,4 +70,4 @@
 4. **Wayland (Linux)** — ~80% features; best protocol negotiation; keyboard `text` is null
 5. **UIKit (iOS)** — ~55% features; good for mobile, gesture opt-in, IME
 6. **Android** — ~50% features; functional, Choreographer-based
-7. **Web (JS/Wasm)** — ~60% features; DOM bridges are stubs in this workspace
+7. **Web (JS/Wasm)** — ~70% features; DOM bridges are present, with Pointer Lock and cursor hit-testing still pending

@@ -654,14 +654,14 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 
 | Fonctionnalité | appkit | win32 | x11 | wayland | web | android | uikit |
 |----------------|--------|-------|-----|---------|-----|---------|-------|
-| `setCursor(CursorIcon)` | réel | réel | réel | no-op (libwayland-cursor TODO) | réel (CSS cursor) | no-op | no-op |
+| `setCursor(CursorIcon)` | réel | réel | réel | réel (libwayland-cursor) | réel (CSS cursor) | no-op | no-op |
 | `setCursorVisible()` | réel | partiel (`ShowCursor` non rééquilibré — DEFERRED.md) | réel | no-op | réel (CSS) | no-op | no-op |
 | `setCursorGrab(None)` | réel | réel | réel | success no-op (parité winit) | réel | no-op | no-op |
-| `setCursorGrab(Confined)` | unsupported (parité winit) | réel | réel | unsupported (pointer-constraints TODO) | unsupported | unsupported | unsupported |
-| `setCursorGrab(Locked)` | réel | réel | réel | unsupported | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
+| `setCursorGrab(Confined)` | unsupported (parité winit) | réel | réel | partiel (protocole pointer-constraints dépendant du compositor) | unsupported | unsupported | unsupported |
+| `setCursorGrab(Locked)` | réel | réel | réel | partiel (protocole pointer-constraints dépendant du compositor) | unsupported (bridge Pointer Lock TODO) | unsupported | unsupported |
 | `setCursorPosition()` | partiel (CGWarpMouseCursorPosition, cast scalaire) | réel | réel | unsupported | unsupported | unsupported | unsupported |
 | `setCursorHittest()` | réel | réel | réel (extension Shape) | réel (`wl_surface.set_input_region`) | unsupported | unsupported | unsupported |
-| `setCustomCursor()` | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op (TODO R5) | no-op | no-op |
+| `setCustomCursor()` | réel | réel | réel | réel (buffer wl_shm, dépendant protocole) | réel (data URL CSS) | no-op | no-op |
 
 **Matrice plateforme — thème :**
 
@@ -694,13 +694,13 @@ Le plein écran se configure par fenêtre : `window.setFullscreen(Fullscreen.Bor
 - `native: NativeKeyInfo` — codes backend bruts pour debug et fallback.
 
 `KeyboardModifierState` est émis par `WindowEvent.ModifiersChanged` et combine bitflags logiques et état physique gauche/droite.
-**État d'émission** : AppKit, Win32, Web — réel. X11, Wayland, Android, UIKit — TODO/partiel (cf. DEFERRED.md).
+**État d'émission** : `ModifiersChanged` est émis par les backends actifs AppKit, Win32, Web, X11, Wayland, Android et UIKit. Les champs texte riches restent dépendants des backends (cf. DEFERRED.md).
 
 `DeviceEvent.Key` transporte `RawKeyEvent(physicalKey, state, native)` pour l'entrée clavier brute, avec accesseurs legacy `scancode/state` pour les backends existants. `DeviceEvent.MouseWheel(deltaX, deltaY)` est dispatché en parallèle de `WindowEvent.MouseWheel` selon le filtre `ActiveEventLoop.listenDeviceEvents(DeviceEvents.Always/WhenFocused/Never)`.
 
 ### 3.10 Événements avancés : IME, DnD, gestes, Occluded
 
-> **Note :** l'API est entièrement définie en `commonMain`. L'émission IME, drag-and-drop, Occluded et gestes hors Apple reste **reportée**. Voir [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
+> **Note :** l'API est entièrement définie en `commonMain`. L'émission IME et drag-and-drop est désormais câblée par les backends actuels, tandis que la fidélité des payloads, le reporting fin de capacités, certains chemins Occluded et la couverture gestes hors Apple restent **partiels**. Voir [DEFERRED.md](https://github.com/ygdrasil-io/poc-koreos/blob/master/DEFERRED.md).
 
 #### IME
 
@@ -927,12 +927,12 @@ Voir la liste de référence : [DEFERRED.md](https://github.com/ygdrasil-io/poc-
 
 Points résiduels clés :
 
-- **Events IME** (Enabled/Preedit/Commit/DeleteSurrounding/Disabled) : API définie, aucun backend n'émet encore.
-- **Events DnD** (DragEntered/Moved/Dropped/Left) : API définie, tous les backends = no-op.
-- **Events gestes** (Pinch/Pan/Rotation/DoubleTap/TouchpadPressure) : émis sur AppKit et sur UIKit après opt-in explicite ; les autres backends restent non câblés.
-- **Event Occluded** : API définie ; AppKit et Web prévoient de l'émettre.
+- **Events IME** (Enabled/Preedit/Commit/DeleteSurrounding/Disabled) : câblés par les backends actuels ; le reporting fin de capacités reste reporté.
+- **Events DnD** (DragEntered/Moved/Dropped/Left) : câblés sur desktop, Web, Android et UIKit ; la fidélité des chemins de fichiers varie selon le backend.
+- **Events gestes** (Pinch/Pan/Rotation/DoubleTap/TouchpadPressure) : émis sur AppKit et sur UIKit après opt-in explicite ; Win32 possède un câblage partiel ; les autres backends restent limités.
+- **Event Occluded** : émis par AppKit, X11, Web, Android et UIKit ; Win32 et Wayland restent non câblés.
 - **ModifiersChanged** : émis sur AppKit/Win32/Web/Android/UIKit/X11/Wayland pour les transitions de touches modificatrices ; la sémantique XKB locked/latched sous Linux reste future.
-- **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : no-op sur tous les backends (impl interface par défaut).
+- **Curseurs custom** (`createCustomCursor` / `setCustomCursor`) : implémentés sur AppKit, Win32, X11, Wayland et Web ; les backends mobiles restent des no-ops documentés.
 - **Méthodes fenêtre diverses** : `showWindowMenu`, `dragWindow`, `dragResizeWindow`, `requestUserAttention` et `setContentProtected` retournent maintenant `WindowRequestResult` et signalent `RequestError.Unsupported` par défaut ; AppKit câble l’attention Dock, la protection de contenu et les boutons de fenêtre activés, Win32 câble le menu natif, les drags move/resize, les boutons de fenêtre activés, l’attention utilisateur et la protection de contenu, X11 câble l’attention utilisateur via le flag urgent `WM_HINTS` et signale la protection de contenu en success no-op comme winit, Wayland signale la protection de contenu en success no-op comme winit mais n'a pas encore le chemin optionnel winit `xdg_activation_v1`, AppKit et X11 signalent le menu fenetre en success no-op comme winit, et Wayland câble menu/move/resize localement.
 - **Couverture clavier** : le modèle public suit maintenant winit (`PhysicalKey` / `LogicalKey` / `NamedKey` / `Dead`), mais `KeyCode` et `NamedKey` ne sont pas encore exhaustifs et les champs riches restent dépendants des backends.
 - **Stylet / tablette** : non supporté (MouseInput + Touch conservés au lieu du modèle unifié PointerButton/PointerKind).
@@ -981,7 +981,7 @@ Points résiduels clés :
 | `Theme` (Light/Dark) | `Theme` (Light/Dark) |
 | `WindowLevel` (AlwaysOnBottom/Normal/AlwaysOnTop) | `WindowLevel` (AlwaysOnBottom/Normal/AlwaysOnTop) |
 | `Icon` (RGBA) | `Icon(rgba, width, height)` |
-| `CustomCursor` / `CursorImage` | `CustomCursor` (handle opaque) / `CursorImage(rgba, width, height, hotspotX, hotspotY)` — tous backends no-op (cf. DEFERRED.md) |
+| `CustomCursor` / `CursorImage` | `CustomCursor` (handle opaque) / `CursorImage(rgba, width, height, hotspotX, hotspotY)` — implémentés sur AppKit, Win32, X11, Wayland et Web ; mobile no-op (cf. DEFERRED.md) |
 | `Window::set_cursor()` | `Window.setCursor(cursor: CursorIcon)` |
 | `Window::set_cursor_visible()` | `Window.setCursorVisible(visible: Boolean)` |
 | `Window::set_cursor_grab()` | `Window.setCursorGrab(mode: CursorGrabMode): WindowRequestResult` |
@@ -993,8 +993,8 @@ Points résiduels clés :
 | `Window::set_blur()` | `Window.setBlur(blur: Boolean)` |
 | `Window::set_window_icon()` | `Window.setWindowIcon(icon: Icon?)` |
 | `ActiveEventLoop::system_theme()` | `ActiveEventLoop.systemTheme(): Theme?` |
-| `ActiveEventLoop::create_custom_cursor()` | `ActiveEventLoop.createCustomCursor(image: CursorImage): CustomCursor?` — no-op (cf. DEFERRED.md) |
-| `Window::set_custom_cursor()` | `Window.setCustomCursor(cursor: CustomCursor)` — no-op (cf. DEFERRED.md) |
+| `ActiveEventLoop::create_custom_cursor()` | `ActiveEventLoop.createCustomCursor(image: CursorImage): CustomCursor?` — retourne null sur les backends unsupported (cf. DEFERRED.md) |
+| `Window::set_custom_cursor()` | `Window.setCustomCursor(cursor: CustomCursor)` — no-op sur les backends unsupported (cf. DEFERRED.md) |
 
 #### Richesse clavier (R4)
 
@@ -1016,16 +1016,16 @@ Points résiduels clés :
 | winit (Rust) | Kadre |
 |--------------|-------|
 | `ImePurpose` (Normal/Password/Terminal) | `ImePurpose` (Normal/Password/Terminal) |
-| `Window::set_ime_allowed()` | `Window.setImeAllowed(allowed: Boolean)` — no-op, backends TODO |
-| `Window::set_ime_cursor_area()` | `Window.setImeCursorArea(position, size)` — no-op, backends TODO |
-| `Window::set_ime_purpose()` | `Window.setImePurpose(purpose: ImePurpose)` — no-op, backends TODO |
-| `WindowEvent::Ime(Enabled/Preedit/Commit/DeleteSurrounding/Disabled)` | `WindowEvent.Ime(ImeEvent.*)` — non émis (cf. DEFERRED.md) |
+| `Window::set_ime_allowed()` | `Window.setImeAllowed(allowed: Boolean)` — implémentation native dépendante du backend |
+| `Window::set_ime_cursor_area()` | `Window.setImeCursorArea(position, size)` — implémentation native dépendante du backend |
+| `Window::set_ime_purpose()` | `Window.setImePurpose(purpose: ImePurpose)` — implémentation native dépendante du backend |
+| `WindowEvent::Ime(Enabled/Preedit/Commit/DeleteSurrounding/Disabled)` | `WindowEvent.Ime(ImeEvent.*)` |
 
 #### Drag & drop (R5-DnD)
 
 | winit (Rust) | Kadre |
 |--------------|-------|
-| `WindowEvent::DroppedFile` / `HoveredFile` / `HoveredFileCancelled` | `WindowEvent.DragEntered/DragMoved/DragDropped/DragLeft` — non émis (cf. DEFERRED.md) |
+| `WindowEvent::DroppedFile` / `HoveredFile` / `HoveredFileCancelled` | `WindowEvent.DragEntered/DragMoved/DragDropped/DragLeft` — fidélité du payload dépendante du backend |
 
 #### Gestes (R5-Gestures)
 
@@ -1041,7 +1041,7 @@ Points résiduels clés :
 
 | winit (Rust) | Kadre |
 |--------------|-------|
-| `WindowEvent::Occluded` | `WindowEvent.Occluded(occluded: Boolean)` — non émis (cf. DEFERRED.md) |
+| `WindowEvent::Occluded` | `WindowEvent.Occluded(occluded: Boolean)` — émis par AppKit, X11, Web, Android et UIKit |
 | `Window::request_user_attention()` | `Window.requestUserAttention(requestType: UserAttentionType?): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit, Win32 et X11 sont câblés localement (cf. DEFERRED.md) |
 | `Window::set_content_protected()` | `Window.setContentProtected(protected: Boolean): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit et Win32 sont câblés localement, tandis que X11 et Wayland sont des success no-op comme winit (cf. DEFERRED.md) |
 | `Window::drag_window()` | `Window.dragWindow(): WindowRequestResult` — `RequestError.Unsupported` par défaut; AppKit peut retourner `RequestError.Ignored`; Win32/X11/Wayland sont câblés localement (cf. DEFERRED.md) |
