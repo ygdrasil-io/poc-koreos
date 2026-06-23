@@ -16,7 +16,7 @@ Sets the cursor grab mode for this window.
 
 Backends that do not support a given mode return [WindowRequestResult.Failure](../-window-request-result/-failure/index.md) with [RequestError.Unsupported](../-request-error/-unsupported/index.md). Never throws.
 AppKit supports [CursorGrabMode.Locked](../-cursor-grab-mode/-locked/index.md) and [CursorGrabMode.None](../-cursor-grab-mode/-none/index.md), but reports [RequestError.Unsupported](../-request-error/-unsupported/index.md) for [CursorGrabMode.Confined](../-cursor-grab-mode/-confined/index.md), matching winit.
-Wayland accepts [CursorGrabMode.None](../-cursor-grab-mode/-none/index.md) as a success no-op like winit when pointer constraints are unavailable; [CursorGrabMode.Confined](../-cursor-grab-mode/-confined/index.md) and [CursorGrabMode.Locked](../-cursor-grab-mode/-locked/index.md) remain unsupported until `zwp_pointer_constraints_v1` is wired.
+Wayland accepts [CursorGrabMode.None](../-cursor-grab-mode/-none/index.md) as a success no-op like winit when pointer constraints are unavailable. It attempts [CursorGrabMode.Confined](../-cursor-grab-mode/-confined/index.md) and [CursorGrabMode.Locked](../-cursor-grab-mode/-locked/index.md) only when `zwp_pointer_constraints_v1` is advertised and a current `wl_pointer` enter serial exists; otherwise those modes return [RequestError.Unsupported](../-request-error/-unsupported/index.md).
 
 #### Parameters
 

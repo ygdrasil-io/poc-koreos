@@ -12,7 +12,17 @@ class X11NativeIntegrationTest {
         System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
 
     private fun hasDisplay(): Boolean =
-        System.getenv("DISPLAY") != null
+        !System.getenv("DISPLAY").isNullOrBlank()
+
+    private fun openDisplayOrNull(): MemorySegment? {
+        val display = xOpenDisplay?.invokeExact(MemorySegment.NULL) as? MemorySegment ?: return null
+        return if (display == MemorySegment.NULL || display.address() == 0L) null else display
+    }
+
+    private fun closeDisplay(display: MemorySegment?) {
+        if (display == null || display == MemorySegment.NULL || display.address() == 0L) return
+        xCloseDisplay?.invokeExact(display) as? Int
+    }
 
     @Test
     fun `X11 library symbols resolve on Linux`() {
@@ -26,7 +36,7 @@ class X11NativeIntegrationTest {
     @Test
     fun `Xdnd atoms are defined correctly`() {
         if (!isLinux() || !hasDisplay()) return
-        val display = xOpenDisplay?.invokeExact(MemorySegment.NULL) as? MemorySegment ?: return
+        val display = openDisplayOrNull() ?: return
         try {
             assertTrue(x11DragAndDropAtom(display, "XdndAware") != 0L)
             assertTrue(x11DragAndDropAtom(display, "XdndEnter") != 0L)
@@ -38,7 +48,7 @@ class X11NativeIntegrationTest {
             assertTrue(x11DragAndDropAtom(display, "XdndFinished") != 0L)
             assertTrue(x11DragAndDropAtom(display, "text/uri-list") != 0L)
         } finally {
-            xCloseDisplay?.invokeExact(display) as? Int
+            closeDisplay(display)
         }
     }
 
@@ -51,8 +61,8 @@ class X11NativeIntegrationTest {
     @Test
     fun `X11 display connection works when DISPLAY is set`() {
         if (!isLinux() || !hasDisplay()) return
-        val display = xOpenDisplay?.invokeExact(MemorySegment.NULL) as? MemorySegment
+        val display = openDisplayOrNull()
         assertNotNull(display)
-        xCloseDisplay?.invokeExact(display) as? Int
+        closeDisplay(display)
     }
 }

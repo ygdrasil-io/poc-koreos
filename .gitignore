@@ -9,6 +9,10 @@ local.properties
 .claude/
 __pycache__/
 
+# Local planning artifacts
+docs/superpowers/plans/
+docs/superpowers/specs/
+
 # Kotlin compiler daemon session dir
 .kotlin/
 winit/
