@@ -3,8 +3,12 @@ package org.graphiks.kadre.ffi.wayland.generated
 import java.lang.foreign.*
 import java.lang.foreign.ValueLayout.*
 import java.lang.foreign.MemoryLayout.PathElement.*
+import org.graphiks.kadre.ffi.wayland.libWaylandClient
 
-private val ARENA = Arena.ofAuto()
+// Arena.global() — wl_interface structs live for the process lifetime;
+// libwayland holds pointers to them. A scoped/auto arena would risk
+// use-after-free when the GC reclaims the arena.
+private val ARENA = Arena.global()
 
 val xdg_wm_base_interface: MemorySegment by lazy { build_xdg_wm_base() }
 val xdg_positioner_interface: MemorySegment by lazy { build_xdg_positioner() }
@@ -14,16 +18,31 @@ val xdg_popup_interface: MemorySegment by lazy { build_xdg_popup() }
 val zxdg_decoration_manager_v1_interface: MemorySegment by lazy { build_zxdg_decoration_manager_v1() }
 val zxdg_toplevel_decoration_v1_interface: MemorySegment by lazy { build_zxdg_toplevel_decoration_v1() }
 
-private val libWayland = SymbolLookup.libraryLookup("libwayland-client.so.0", ARENA)
-private val wl_output_interface: MemorySegment = libWayland.find("wl_output_interface").orElseThrow()
-private val wl_seat_interface: MemorySegment = libWayland.find("wl_seat_interface").orElseThrow()
-private val wl_surface_interface: MemorySegment = libWayland.find("wl_surface_interface").orElseThrow()
+private val wl_output_interface: MemorySegment by lazy {
+    val lib = libWaylandClient ?: error("libwayland-client.so.0 not available")
+    lib.find("wl_output_interface").orElseThrow()
+}
+private val wl_seat_interface: MemorySegment by lazy {
+    val lib = libWaylandClient ?: error("libwayland-client.so.0 not available")
+    lib.find("wl_seat_interface").orElseThrow()
+}
+private val wl_surface_interface: MemorySegment by lazy {
+    val lib = libWaylandClient ?: error("libwayland-client.so.0 not available")
+    lib.find("wl_surface_interface").orElseThrow()
+}
 
 private val MSG_LAYOUT = MemoryLayout.structLayout(
     ADDRESS.withName("name"), ADDRESS.withName("signature"), ADDRESS.withName("types"))
+    .withByteAlignment(8)
 private val IFACE_LAYOUT = MemoryLayout.structLayout(
-    ADDRESS.withName("name"), JAVA_INT.withName("version"), JAVA_INT.withName("method_count"),
-    ADDRESS.withName("methods"), JAVA_INT.withName("event_count"), ADDRESS.withName("events"))
+    ADDRESS.withName("name"),
+    JAVA_INT.withName("version"),
+    JAVA_INT.withName("method_count"),
+    ADDRESS.withName("methods").withByteAlignment(8),
+    JAVA_INT.withName("event_count"),
+    MemoryLayout.paddingLayout(4),
+    ADDRESS.withName("events").withByteAlignment(8))
+    .withByteAlignment(8)
 
 private fun build_xdg_wm_base(): MemorySegment = iface("xdg_wm_base", 7, arrayOf(
     msg("destroy", ""),
@@ -51,7 +70,7 @@ private fun build_xdg_positioner(): MemorySegment = iface("xdg_positioner", 7, a
 private fun build_xdg_surface(): MemorySegment = iface("xdg_surface", 7, arrayOf(
     msg("destroy", ""),
     msg("get_toplevel", "n", xdg_toplevel_interface),
-    msg("get_popup", "noo", xdg_popup_interface, xdg_surface_interface, xdg_positioner_interface),
+    msg("get_popup", "noo", xdg_popup_interface, MemorySegment.NULL, xdg_positioner_interface),
     msg("set_window_geometry", "iiii", MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL),
     msg("ack_configure", "u", MemorySegment.NULL)
 ), arrayOf(
@@ -60,7 +79,7 @@ private fun build_xdg_surface(): MemorySegment = iface("xdg_surface", 7, arrayOf
 
 private fun build_xdg_toplevel(): MemorySegment = iface("xdg_toplevel", 7, arrayOf(
     msg("destroy", ""),
-    msg("set_parent", "o", xdg_toplevel_interface),
+    msg("set_parent", "o", MemorySegment.NULL),
     msg("set_title", "s", MemorySegment.NULL),
     msg("set_app_id", "s", MemorySegment.NULL),
     msg("show_window_menu", "ouii", wl_seat_interface, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL),
