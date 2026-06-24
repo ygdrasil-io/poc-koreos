@@ -1140,6 +1140,10 @@ class WaylandWindow private constructor(
     internal fun xdgToplevelPtr(): Long =
         xdg?.xdgToplevelPtr ?: 0L
 
+    /** True after the initial xdg_surface.configure has been acknowledged. */
+    internal fun hasReceivedInitialXdgConfigure(): Boolean =
+        xdg?.hasReceivedInitialConfigure() == true
+
     /**
      * Sets the client-side decoration preference.
      * When preferCsd=true, requests client-side decorations (CSD);

@@ -44,6 +44,8 @@ internal class XdgToplevel private constructor(
     private val onClose: () -> Unit,
     private val arena: Arena,
 ) {
+    @Volatile
+    private var receivedInitialConfigure: Boolean = false
 
     // ── Native upcall targets (invoked by the compositor through the listener vtables) ──────
 
@@ -58,9 +60,13 @@ internal class XdgToplevel private constructor(
                 MemorySegment.ofAddress(xdgSurfacePtr), XDG_SURFACE_ACK_CONFIGURE,
                 MemorySegment.NULL, version, 0, serial,
             )
+            receivedInitialConfigure = true
             wlDisplayFlush?.let { it.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int }
         }
     }
+
+    fun hasReceivedInitialConfigure(): Boolean =
+        receivedInitialConfigure
 
     /** xdg_toplevel.configure(width, height, states): a (0,0) size means "pick your own". */
     @Suppress("UNUSED_PARAMETER")

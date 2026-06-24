@@ -166,9 +166,13 @@ public class ProtocolInterfaceGenerator {
         sb.append("package org.graphiks.kadre.ffi.wayland.generated\n\n");
         sb.append("import java.lang.foreign.*\n");
         sb.append("import java.lang.foreign.ValueLayout.*\n");
-        sb.append("import java.lang.foreign.MemoryLayout.PathElement.*\n\n");
+        sb.append("import java.lang.foreign.MemoryLayout.PathElement.*\n");
+        sb.append("import org.graphiks.kadre.ffi.wayland.libWaylandClient\n\n");
 
-        sb.append("private val ARENA = Arena.ofAuto()\n\n");
+        sb.append("// Arena.global() — wl_interface structs live for the process lifetime;\n");
+        sb.append("// libwayland holds pointers to them. A scoped/auto arena would risk\n");
+        sb.append("// use-after-free when the GC reclaims the arena.\n");
+        sb.append("private val ARENA = Arena.global()\n\n");
 
         for (WlInterface iface : interfaces.values()) {
             sb.append("val ").append(ifaceValName(iface.name))
@@ -177,20 +181,28 @@ public class ProtocolInterfaceGenerator {
         sb.append("\n");
 
         if (!externalRefs.isEmpty()) {
-            sb.append("private val libWayland = SymbolLookup.libraryLookup(\"libwayland-client.so.0\", ARENA)\n");
             for (String ext : externalRefs) {
                 sb.append("private val ").append(ifaceValName(ext))
-                  .append(": MemorySegment = libWayland.find(\"").append(ifaceValName(ext))
-                  .append("\").orElseThrow()\n");
+                  .append(": MemorySegment by lazy {\n");
+                sb.append("    val lib = libWaylandClient ?: error(\"libwayland-client.so.0 not available\")\n");
+                sb.append("    lib.find(\"").append(ext).append("_interface\").orElseThrow()\n");
+                sb.append("}\n");
             }
             sb.append("\n");
         }
 
         sb.append("private val MSG_LAYOUT = MemoryLayout.structLayout(\n");
         sb.append("    ADDRESS.withName(\"name\"), ADDRESS.withName(\"signature\"), ADDRESS.withName(\"types\"))\n");
+        sb.append("    .withByteAlignment(8)\n");
         sb.append("private val IFACE_LAYOUT = MemoryLayout.structLayout(\n");
-        sb.append("    ADDRESS.withName(\"name\"), JAVA_INT.withName(\"version\"), JAVA_INT.withName(\"method_count\"),\n");
-        sb.append("    ADDRESS.withName(\"methods\"), JAVA_INT.withName(\"event_count\"), ADDRESS.withName(\"events\"))\n\n");
+        sb.append("    ADDRESS.withName(\"name\"),\n");
+        sb.append("    JAVA_INT.withName(\"version\"),\n");
+        sb.append("    JAVA_INT.withName(\"method_count\"),\n");
+        sb.append("    ADDRESS.withName(\"methods\").withByteAlignment(8),\n");
+        sb.append("    JAVA_INT.withName(\"event_count\"),\n");
+        sb.append("    MemoryLayout.paddingLayout(4),\n");
+        sb.append("    ADDRESS.withName(\"events\").withByteAlignment(8))\n");
+        sb.append("    .withByteAlignment(8)\n\n");
 
         for (WlInterface iface : interfaces.values()) {
             sb.append("private fun ").append(safeBuildName(iface.name))
@@ -201,7 +213,7 @@ public class ProtocolInterfaceGenerator {
                 Message msg = iface.requests.get(i);
                 sb.append("    msg(\"").append(msg.name).append("\", \"")
                   .append(buildSignature(msg.args)).append("\"");
-                sb.append(buildTypesVarargs(msg.args));
+                sb.append(buildTypesVarargs(msg.args, iface.name));
                 sb.append(")");
                 if (i < iface.requests.size() - 1) sb.append(",");
                 sb.append("\n");
@@ -213,7 +225,7 @@ public class ProtocolInterfaceGenerator {
                 Message msg = iface.events.get(i);
                 sb.append("    msg(\"").append(msg.name).append("\", \"")
                   .append(buildSignature(msg.args)).append("\"");
-                sb.append(buildTypesVarargs(msg.args));
+                sb.append(buildTypesVarargs(msg.args, iface.name));
                 sb.append(")");
                 if (i < iface.events.size() - 1) sb.append(",");
                 sb.append("\n");
@@ -271,11 +283,11 @@ public class ProtocolInterfaceGenerator {
         System.out.println("Generated: " + outputPath);
     }
 
-    static String buildTypesVarargs(List<Arg> args) {
+    static String buildTypesVarargs(List<Arg> args, String currentIfaceName) {
         if (args.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (Arg arg : args) {
-            if (arg.iface != null) {
+            if (arg.iface != null && !arg.iface.equals(currentIfaceName)) {
                 sb.append(", ").append(ifaceValName(arg.iface));
             } else {
                 sb.append(", MemorySegment.NULL");
