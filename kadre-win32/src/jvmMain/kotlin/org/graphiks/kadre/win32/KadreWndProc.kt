@@ -40,11 +40,15 @@ import org.graphiks.kadre.ffi.win32.*
 import org.graphiks.kadre.ffi.win32.generated.*
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.FingerId
+import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.LogicalKey
+import org.graphiks.kadre.core.ModifierKeyState
+import org.graphiks.kadre.core.ModifierKeys
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.NativeKeyCode
@@ -296,14 +300,28 @@ object KadreWndProc {
                 val vkCode   = wParam.toInt()
                 val isRepeat = (lParam and KF_REPEAT) != 0L
                 val mods     = currentModifiers()
+                val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
+                val extended = (lParam and KF_EXTENDED) != 0L
+                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
+                    val newPhysical = updatePhysicalModifiers(resolvedKeyCode, KeyState.Pressed)
+                    emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
+                }
                 emit(hwnd, keyEvent(vkCode, KeyState.Pressed, mods, isRepeat, lParam))
                 0L
             }
 
             WM_KEYUP.toUInt(),
             WM_SYSKEYUP.toUInt() -> {
-                val vkCode = wParam.toInt()
-                val mods   = currentModifiers()
+                val vkCode   = wParam.toInt()
+                val mods     = currentModifiers()
+                val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
+                val extended = (lParam and KF_EXTENDED) != 0L
+                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
+                    val newPhysical = updatePhysicalModifiers(resolvedKeyCode, KeyState.Released)
+                    emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
+                }
                 emit(hwnd, keyEvent(vkCode, KeyState.Released, mods, isRepeat = false, lParam))
                 0L
             }
@@ -550,6 +568,36 @@ object KadreWndProc {
         return KeyboardModifiers(bits)
     }
 
+    /** Physical left/right modifier state tracked across key events. */
+    private var physicalModifierState: ModifierKeys = ModifierKeys()
+
+    private fun isModifierKeyCode(keyCode: KeyCode): Boolean = keyCode in setOf(
+        KeyCode.ShiftLeft, KeyCode.ShiftRight,
+        KeyCode.ControlLeft, KeyCode.ControlRight,
+        KeyCode.AltLeft, KeyCode.AltRight,
+        KeyCode.MetaLeft, KeyCode.MetaRight,
+    )
+
+    private fun updatePhysicalModifiers(keyCode: KeyCode, state: KeyState): ModifierKeys {
+        val modifierState = when (state) {
+            KeyState.Pressed -> ModifierKeyState.Pressed
+            KeyState.Released -> ModifierKeyState.Released
+        }
+        val newState = when (keyCode) {
+            KeyCode.ShiftLeft   -> physicalModifierState.copy(leftShift = modifierState)
+            KeyCode.ShiftRight  -> physicalModifierState.copy(rightShift = modifierState)
+            KeyCode.ControlLeft -> physicalModifierState.copy(leftCtrl = modifierState)
+            KeyCode.ControlRight -> physicalModifierState.copy(rightCtrl = modifierState)
+            KeyCode.AltLeft     -> physicalModifierState.copy(leftAlt = modifierState)
+            KeyCode.AltRight    -> physicalModifierState.copy(rightAlt = modifierState)
+            KeyCode.MetaLeft    -> physicalModifierState.copy(leftMeta = modifierState)
+            KeyCode.MetaRight   -> physicalModifierState.copy(rightMeta = modifierState)
+            else -> return physicalModifierState
+        }
+        physicalModifierState = newState
+        return newState
+    }
+
     private fun keyEvent(
         vkCode: Int,
         state: KeyState,
@@ -571,6 +619,7 @@ object KadreWndProc {
             nativeKey = NativeLogicalKey.Win32(vkCode.toLong()),
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+        val win32Text = if (!isRepeat) win32KeyText(vkCode, rawScanCode.toInt()) else null
         return WindowEvent.KeyInput(
             event = KeyEvent(
                 physicalKey = Win32KeyMapper.physicalKey(vkCode, rawScanCode.toInt(), extended),
@@ -578,8 +627,8 @@ object KadreWndProc {
                 state = state,
                 modifiers = modifiers,
                 repeat = isRepeat,
-                text = mappedCode?.defaultText(),
-                textWithAllModifiers = mappedCode?.defaultText(),
+                text = win32Text ?: mappedCode?.defaultText(),
+                textWithAllModifiers = win32Text ?: mappedCode?.defaultText(),
                 keyWithoutModifiers = mappedCode?.defaultText(),
                 native = native,
             ),
