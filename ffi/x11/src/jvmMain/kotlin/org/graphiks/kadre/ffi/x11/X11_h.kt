@@ -477,6 +477,25 @@ val xChangeProperty: MethodHandle? by lazy {
     )
 }
 
+// ── XDeleteProperty ───────────────────────────────────────────────────────────
+
+/**
+ * int XDeleteProperty(Display* display, Window w, Atom property);
+ *
+ * Deletes a property from a window.
+ */
+val xDeleteProperty: MethodHandle? by lazy {
+    libX11.downcall(
+        "XDeleteProperty",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+        )
+    )
+}
+
 // ── XGetWindowProperty / XFree ───────────────────────────────────────────────
 
 /**

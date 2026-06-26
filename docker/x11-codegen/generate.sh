@@ -97,6 +97,7 @@ KEXTRACT="$KEXTRACT_DIR/build/kextract/bin/kextract"
     --include-function XkbSetDetectableAutoRepeat \
     --include-function XKeysymToKeycode \
     --include-function XLookupKeysym \
+    --include-function XLookupString \
     --include-function XGetKeyboardMapping \
     --include-function XFreeStringList \
     --include-function XQueryKeymap \
