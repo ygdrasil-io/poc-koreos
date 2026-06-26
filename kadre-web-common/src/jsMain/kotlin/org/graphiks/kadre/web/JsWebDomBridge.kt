@@ -581,6 +581,56 @@ class JsWebDomBridge : WebDomBridge {
         } catch (_: Throwable) {}
     }
 
+    // ── R3: cursor, pointer lock, hit-test ───────────────────────────────────
+
+    /**
+     * Sets `style.cursor` on the canvas element identified by [canvasId].
+     */
+    override fun setCssCursor(canvasId: String, cssCursorValue: String) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        el.asDynamic().style.cursor = cssCursorValue
+    }
+
+    /**
+     * Requests Pointer Lock on the canvas element (handles vendor prefixes).
+     *
+     * The browser may require a user gesture; the lock is granted asynchronously
+     * via a `pointerlockchange` event.
+     */
+    override fun requestPointerLock(canvasId: String) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        try {
+            val d = el.asDynamic()
+            when {
+                d.requestPointerLock != null -> d.requestPointerLock()
+                d.webkitRequestPointerLock != null -> d.webkitRequestPointerLock()
+                d.mozRequestPointerLock != null -> d.mozRequestPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Calls `document.exitPointerLock()` (handles vendor prefixes).
+     */
+    override fun exitPointerLock() {
+        try {
+            val d = document.asDynamic()
+            when {
+                d.exitPointerLock != null -> d.exitPointerLock()
+                d.webkitExitPointerLock != null -> d.webkitExitPointerLock()
+                d.mozExitPointerLock != null -> d.mozExitPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
+     */
+    override fun setCursorHittest(canvasId: String, hittest: Boolean) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        el.asDynamic().style.pointerEvents = if (hittest) "auto" else "none"
+    }
+
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
 
     /**

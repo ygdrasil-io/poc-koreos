@@ -417,6 +417,9 @@ class WebWindow(
 
     /**
      * Controls whether the canvas participates in CSS pointer hit-testing.
+     *
+     * When [hittest] is false the canvas lets pointer events fall through to
+     * elements beneath it; when true it captures them normally.
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult {
         bridge.setPointerEvents(canvasElementId, if (hittest) "auto" else "none")

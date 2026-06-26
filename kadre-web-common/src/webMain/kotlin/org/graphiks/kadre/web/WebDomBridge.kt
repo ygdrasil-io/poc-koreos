@@ -188,6 +188,18 @@ interface WebDomBridge {
     fun exitPointerLock() { /* no-op by default */ }
 
     /**
+     * Enables or disables cursor hit-testing on the canvas identified by [canvasId]
+     * via the CSS `pointer-events` property.
+     *
+     * When [hittest] is `false` the canvas becomes transparent to pointer events
+     * (`pointer-events: none`), letting clicks fall through to elements beneath it.
+     * When `true` the canvas captures pointer events normally (`pointer-events: auto`).
+     *
+     * Default: no-op (test / non-browser bridge).
+     */
+    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* no-op by default */ }
+
+    /**
      * Returns true if `window.matchMedia('(prefers-color-scheme: dark)')` matches.
      *
      * Used by [WebEventLoop.systemTheme] to detect the system theme.
