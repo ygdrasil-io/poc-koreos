@@ -188,6 +188,14 @@ interface WebDomBridge {
     fun exitPointerLock() { /* no-op by default */ }
 
     /**
+     * Returns true if any element currently holds Pointer Lock
+     * (`document.pointerLockElement != null`).
+     *
+     * Default: false (test / non-browser bridge).
+     */
+    fun isPointerLocked(): Boolean = false
+
+    /**
      * Enables or disables cursor hit-testing on the canvas identified by [canvasId]
      * via the CSS `pointer-events` property.
      *
