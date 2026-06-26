@@ -379,11 +379,11 @@ class AndroidWindow internal constructor(
     /**
      * Sets the cursor grab mode for this window.
      *
-     * **Platform note (Android):** Documented no-op — touch-first platform with no system cursor.
-     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     * **Platform note (Android):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Success
+        WindowRequestResult.Failure(RequestError.Unsupported("Android has no system cursor"))
 
     /**
      * Warps the cursor to the given position.
@@ -397,11 +397,11 @@ class AndroidWindow internal constructor(
     /**
      * Enables or disables cursor hit-testing for this window.
      *
-     * **Platform note (Android):** Documented no-op — touch-first platform with no system cursor.
-     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     * **Platform note (Android):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Success
+        WindowRequestResult.Failure(RequestError.Unsupported("Android has no system cursor"))
 
     /**
      * Returns the current UI theme via UiModeManager.

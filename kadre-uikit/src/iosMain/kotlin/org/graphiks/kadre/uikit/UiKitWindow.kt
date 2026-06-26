@@ -1028,11 +1028,11 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     /**
      * Sets the cursor grab mode for this window.
      *
-     * **Platform note (iOS):** Documented no-op — touch-first platform with no system cursor.
-     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     * **Platform note (iOS):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Success
+        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
 
     /**
      * Warps the cursor to the given position.
@@ -1046,11 +1046,11 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     /**
      * Enables or disables cursor hit-testing for this window.
      *
-     * **Platform note (iOS):** Documented no-op — touch-first platform with no system cursor.
-     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     * **Platform note (iOS):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Success
+        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
 
     /**
      * Returns the current theme via the view controller's traitCollection.
