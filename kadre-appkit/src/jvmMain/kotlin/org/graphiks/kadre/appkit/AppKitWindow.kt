@@ -35,6 +35,7 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
@@ -848,6 +849,15 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         } catch (t: Throwable) {
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit window drag failed"))
         }
+
+    /**
+     * Unsupported on AppKit, matching winit.
+     *
+     * NSWindow does not expose an interactive resize-from-code equivalent
+     * to the Win32/X11/Wayland path. winit reports this as unsupported.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("AppKit NSWindow does not support drag-resize"))
 
     /**
      * No-op on AppKit, matching winit.

@@ -27,6 +27,8 @@ import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.OwnedDisplayHandle
+import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.StartCause
@@ -99,6 +101,12 @@ class WaylandEventLoop internal constructor(
      * Activation token for xdg_activation_v1, set via [setActivationToken] extension.
      */
     internal var _activationToken: String? = null
+
+    /**
+     * Returns an [OwnedDisplayHandle] wrapping [RawDisplayHandle.Wayland].
+     */
+    override fun ownedDisplayHandle(): OwnedDisplayHandle? =
+        OwnedDisplayHandle(RawDisplayHandle.Wayland(display = displayPtr))
 
     @Volatile private var _isExiting = false
     override val isExiting: Boolean get() = _isExiting

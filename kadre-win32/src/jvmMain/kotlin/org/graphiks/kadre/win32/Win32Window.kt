@@ -760,6 +760,12 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    /**
+     * No-op on Win32.
+     *
+     * DWM window blur (DwmEnableBlurBehindWindow) is deprecated since Windows 8
+     * and has no visual effect on Windows 10/11. winit treats this as a no-op.
+     */
     override fun setBlur(blur: Boolean) {
         if (!win32RuntimeBlurRequiresNativeUpdate(blur)) return
     }
