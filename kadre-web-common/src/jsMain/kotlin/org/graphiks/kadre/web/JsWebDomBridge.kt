@@ -624,9 +624,9 @@ class JsWebDomBridge : WebDomBridge {
     }
 
     /**
-     * Returns true if any element currently holds Pointer Lock.
+     * Returns true if the canvas element currently holds Pointer Lock.
      */
-    override fun isPointerLocked(): Boolean = document.asDynamic().pointerLockElement != null
+    override fun isPointerLocked(): Boolean = document.asDynamic().pointerLockElement == canvasElement
 
     /**
      * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.

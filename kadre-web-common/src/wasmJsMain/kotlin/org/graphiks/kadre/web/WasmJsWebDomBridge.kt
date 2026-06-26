@@ -321,9 +321,9 @@ private external fun jsRequestPointerLock(el: JsEventTarget)
 @JsFun("() => { if (document.exitPointerLock) document.exitPointerLock(); else if (document.webkitExitPointerLock) document.webkitExitPointerLock(); else if (document.mozExitPointerLock) document.mozExitPointerLock(); }")
 private external fun jsExitPointerLock()
 
-/** Returns true if any element currently holds Pointer Lock. */
-@JsFun("() => document.pointerLockElement != null")
-private external fun jsIsPointerLocked(): Boolean
+/** Returns true if the given element currently holds Pointer Lock. */
+@JsFun("(canvas) => document.pointerLockElement === canvas")
+private external fun jsIsPointerLocked(canvas: JsEventTarget?): Boolean
 
 // ── Task 14: safeArea insets + ownedDisplayHandle ──────────────────────────
 
@@ -824,9 +824,9 @@ class WasmJsWebDomBridge : WebDomBridge {
     }
 
     /**
-     * Returns true if any element currently holds Pointer Lock.
+     * Returns true if the canvas element currently holds Pointer Lock.
      */
-    override fun isPointerLocked(): Boolean = jsIsPointerLocked()
+    override fun isPointerLocked(): Boolean = jsIsPointerLocked(targetElement)
 
     /**
      * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
