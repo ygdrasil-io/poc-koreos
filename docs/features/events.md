@@ -13,8 +13,8 @@
 | `ModifiersChanged(Modifiers)` | `ModifiersChanged(state: KeyboardModifierState)` | ✅ All backends |
 | `RedrawRequested` | `RedrawRequested` | ✅ All backends |
 | `Destroyed` | `Destroyed` | ✅ All backends |
-| `ThemeChanged(Theme)` | `ThemeChanged(theme: Theme)` | ⚠️ AppKit, Win32 only |
-| `Occluded(occluded)` | `Occluded(occluded: Boolean)` | ⚠️ AppKit, X11, Web, iOS |
+| `ThemeChanged(Theme)` | `ThemeChanged(theme: Theme)` | ✅ All backends (X11: not emitted — no standard protocol) |
+| `Occluded(occluded)` | `Occluded(occluded: Boolean)` | ✅ All backends (Wayland: not emitted) |
 | `Ime(ime)` | `Ime(ImeEvent)` | ⚠️ All backends emit (was deferred) |
 | `DroppedFile(path)` / `HoveredFile(path)` / `HoveredFileCancelled` | `DragEntered(position, paths)` / `DragMoved(position)` / `DragDropped(position, paths)` / `DragLeft` | ⚠️ Win32, X11, Wayland, Web, iOS; AppKit partial |
 | `PinchGesture(delta, phase)` | `PinchGesture(deviceId, delta, phase)` | ⚠️ AppKit, Win32; UIKit opt-in |
@@ -64,11 +64,11 @@ Kadre uses a **unified pointer model** where winit separates `MouseInput` / `Tou
 |---------|:--------------:|
 | AppKit | ✅ REAL |
 | Win32 | ✅ REAL |
-| X11 | — not emitted |
+| X11 | — not emitted (no standard protocol) |
 | Wayland | ✅ REAL (via portal) |
-| Web | — not emitted |
-| Android | — not emitted |
-| UIKit | — not emitted |
+| Web | ✅ REAL |
+| Android | ✅ REAL |
+| UIKit | ✅ REAL |
 
 ### Gestures
 

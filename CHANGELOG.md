@@ -7,9 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [1.2.0] — 2026-06-26
+
+**100% winit API parity** achieved across all 7 Kadre backends.
 
 ### Added
+
+#### Gap Closure — 100% winit API Parity
+
+- **Keyboard text support on X11 and Wayland** via `XLookupString` (X11) and `xkb_state_key_get_utf8` (Wayland). Resolves a critical gap where `keyEvent.text` was always null on Linux.
+- **Web DOM bridges** — Pointer Lock API for `CursorGrab.Locked` on `<canvas>`, CSS `pointer-events` toggling for `CursorHittest`, and `isPointerLocked()` scoped to the window's canvas element.
+- **Mobile NO-OP APIs** — All cursor methods (`setCursorIcon`, `setCursorGrab`, `setCursorVisible`, `createCustomCursor`), window management (`dragWindow`, `dragResizeWindow`, `showWindowMenu`), and appearance setters are now documented and tested as proper NO-OPs on UIKit and Android.
+- **Event emission** — `ThemeChanged` now emitted on Web, Android, and UIKit (X11: not emitted, no standard protocol). `Occluded` now emitted on Win32 and Android (Wayland: not emitted). ~15 backends × events gaps filled.
+- **Window API finalization** — `ActiveEventLoop.ownedDisplayHandle()` returns non-null on all desktop backends (AppKit, Win32, X11, Wayland). `dragWindow()`, `dragResizeWindow()`, `showWindowMenu()` fully implemented. Appearance setters `requestUserAttention` and `setContentProtected` wired.
+- **ModifierKeys improvements** — X11/Wayland left/right modifier tracking via XKB. Win32 `ModifiersChanged` reliably emitted and `win32KeyText` wired into keyEvent. `ModifierKeys` left/right tracking improved on desktop backends.
+
+#### Coroutines & Compose
 
 - **Module `kadre-coroutines`** — a coroutine-friendly layer over the event loop, with no Compose/rendering dependency. Provides `EventLoopDispatcher` (a main-thread `CoroutineDispatcher` backed by the loop, with `Delay` mapped to `ControlFlow.WaitUntil` so `delay()` parks the loop instead of spinning), a `kadreApplication { }` builder that runs the loop in a loop-scoped `CoroutineScope`, and `KadreWindow.events: Flow<WindowEvent>`. Lets apps be written with `launch`/`delay`/`Flow.collect` instead of implementing `ApplicationHandler`. JVM target for now (the public API is platform-neutral and can be hoisted to commonMain later).
 - **Sample `hello-compose`** — embeds an interactive **Jetpack Compose (Compose Multiplatform 1.11.0)** UI inside a native Kadre window on macOS. A low-level `ComposeScene` is rendered via **Skiko/Skia on Metal** directly into the `CAMetalLayer` exposed by Kadre (`DirectContext.makeMetal` → `nextDrawable` → `BackendRenderTarget.makeMetal` → `Surface` → `render` → `presentDrawable`), without AWT/Swing. Kadre mouse **and keyboard** events are forwarded to the scene; keyboard events are converted to real `java.awt.event.KeyEvent`s (required for text-field input) without initializing the AWT toolkit, keeping compatibility with `-XstartOnFirstThread`. A `--capture <path>` mode renders the UI to an offscreen raster PNG and `--keytest` self-tests the keyboard path (both headless, useful for CI). Run with: `./gradlew :samples:hello-compose:run`.
@@ -17,6 +30,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - `compose-multiplatform` 1.7.3 → **1.11.0** (compatible with Kotlin 2.3.21); added the `skiko` 0.144.6 version and the `skiko-awt-runtime-macos-arm64` native runtime to the version catalog.
+- `docs/features/`: All feature documents rewritten to reflect 100% winit parity coverage (`gaps.md`, `architecture.md`, `cursor.md`, `events.md`, `keyboard.md`, `window-api.md`).
+
+### Notes
+
+- ABI dumps (`*.api` / `*.klib.api`) regenerated after Wave 1–3 gap closures (`./gradlew updateKotlinAbi`).
+- Remaining items are deferred by design (`ime_capabilities`, `request_ime_update`, `Fullscreen.Exclusive` on non-desktop) or are platform limitations (AppKit `outerPosition` coord conversion, Win32 `ChangeDisplaySettingsExW`).
 
 ---
 

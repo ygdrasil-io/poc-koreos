@@ -44,17 +44,17 @@
 | CursorHittest | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | unsupported | unsupported |
 | systemTheme() | **REAL** | **REAL** | null | **REAL** | **REAL** | **REAL** | null |
 | setTheme() per-window | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** |
-| ThemeChanged event | **REAL** | **REAL** | — | **REAL** | — | — | — |
+| ThemeChanged event | **REAL** | **REAL** | — | **REAL** | **REAL** | **REAL** | **REAL** |
 | setWindowLevel | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** | **NO-OP** |
-| setTransparent | **REAL** | **REAL** | **NO-OP** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** |
+| setTransparent | **REAL** | **REAL** | **REAL** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** |
 | setBlur | **REAL** | **NO-OP** | **NO-OP** | **REAL** (opt) | **NO-OP** | **NO-OP** | **NO-OP** |
 | setWindowIcon | **NO-OP** | **REAL** | **REAL** | **REAL** (opt) | **NO-OP** | **NO-OP** | **NO-OP** |
 | ModifiersChanged | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
-| Keyboard text | **REAL** | **REAL** | null | null | **REAL** | **REAL** | **REAL** |
+| Keyboard text | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
 | IME events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** |
 | DnD events | **REAL** | **REAL** | **REAL** | **REAL** | **REAL** | — | **REAL** |
 | Gesture events | **REAL** | **REAL** | Pinch only | — | Gesture evts | — | **REAL** (opt-in) |
-| Occluded event | **REAL** | — | **REAL** | — | **REAL** | — | **REAL** |
+| Occluded event | **REAL** | **REAL** | **REAL** | — | **REAL** | **REAL** | **REAL** |
 | listenDeviceEvents | **NO-OP** | **NO-OP** | **NO-OP** | **REAL** | **NO-OP** | **NO-OP** | **NO-OP** |
 | dragWindow | **REAL** | **REAL** | **REAL** | **REAL** | — | — | — |
 | dragResizeWindow | unsupported | **REAL** | **REAL** | **REAL** | — | — | — |
@@ -66,8 +66,8 @@
 
 1. **AppKit (macOS)** — ~95% features; custom cursors, gestures, IME, blur all wired
 2. **Win32 (Windows)** — ~90% features; richest extension API (DWM backdrop, corners, borders)
-3. **X11 (Linux)** — ~85% features; Xdnd DnD, XIM IME; keyboard `text` is null
-4. **Wayland (Linux)** — ~80% features; best protocol negotiation; keyboard `text` is null
+3. **X11 (Linux)** — ~85% features; Xdnd DnD, XIM IME; keyboard `text` is main gap
+4. **Wayland (Linux)** — ~80% features; best protocol negotiation; keyboard `text` is main gap
 5. **UIKit (iOS)** — ~55% features; good for mobile, gesture opt-in, IME
 6. **Android** — ~50% features; functional, Choreographer-based
 7. **Web (JS/Wasm)** — ~75% features; DOM bridges are implemented, with remaining gaps mostly from browser/platform limits

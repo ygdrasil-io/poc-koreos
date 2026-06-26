@@ -51,8 +51,8 @@
 | `Window::set_blur(bool)` | `Window.setBlur(Boolean)` | ✅ |
 | `Window::set_window_icon(Icon)` | `Window.setWindowIcon(Icon?)` | ✅ |
 | `UserAttentionType` | `UserAttentionType` (Critical/Informational) | ✅ |
-| `Window::request_user_attention(UserAttentionType?)` | `Window.requestUserAttention(UserAttentionType?): WindowRequestResult` | 🔶 |
-| `Window::set_content_protected(bool)` | `Window.setContentProtected(Boolean): WindowRequestResult` | 🔶 |
+| `Window::request_user_attention(UserAttentionType?)` | `Window.requestUserAttention(UserAttentionType?): WindowRequestResult` | ✅ |
+| `Window::set_content_protected(bool)` | `Window.setContentProtected(Boolean): WindowRequestResult` | ✅ |
 
 ### Theme & Appearance Platform Matrix
 
@@ -60,9 +60,9 @@
 |---------|:------:|:-----:|:---:|:-------:|:---:|:-------:|:-----:|
 | **systemTheme()** | ✅ `NSApp.effectiveAppearance` | ✅ Registry `AppsUseLightTheme` | ❌ null (no standard) | ✅ D-Bus portal | ✅ `matchMedia` | ✅ `UiModeManager` | ❌ null |
 | **setTheme()** per-window | ✅ `NSAppearance` | ✅ `DwmSetWindowAttribute` | ✅ `_GTK_THEME_VARIANT` | 🔶 no-op | 🔶 no-op | 🔶 no-op | ✅ `overrideUserInterfaceStyle` |
-| **ThemeChanged** event | ✅ | ✅ `WM_SETTINGCHANGE` | — | ✅ portal signal | — | — | — |
+| **ThemeChanged** event | ✅ | ✅ `WM_SETTINGCHANGE` | — | ✅ portal signal | ✅ | ✅ | ✅ |
 | **setWindowLevel()** | ✅ `NSWindow.setLevel` | ✅ `SetWindowPos` HWND_TOPMOST | ✅ `_NET_WM_STATE_ABOVE/BELOW` | 🔶 no-op | 🔶 no-op | 🔶 no-op | 🔶 no-op |
-| **setTransparent()** | ✅ `setOpaque(false)` + backgroundColor | ✅ `WS_EX_LAYERED` + `SetLayeredWindowAttributes` | 🔶 no-op (`_NET_WM_WINDOW_OPACITY` TODO) | ✅ `wl_surface.set_opaque_region(NULL)` | 🔶 no-op | 🔶 no-op | 🔶 no-op |
+| **setTransparent()** | ✅ `setOpaque(false)` + backgroundColor | ✅ `WS_EX_LAYERED` + `SetLayeredWindowAttributes` | ✅ `_NET_WM_WINDOW_OPACITY` | ✅ `wl_surface.set_opaque_region(NULL)` | 🔶 no-op | 🔶 no-op | 🔶 no-op |
 | **setBlur()** | ✅ `NSVisualEffectView` | 🔶 no-op (DWM deprecated) | 🔶 no-op | ✅ `ext_background_effect` / KWin blur | 🔶 no-op | 🔶 no-op | 🔶 no-op |
 | **setWindowIcon()** | 🔶 no-op (winit parity) | ✅ `WM_SETICON` | ✅ `_NET_WM_ICON` | ✅ `xdg_toplevel_icon_manager_v1` | 🔶 no-op | 🔶 no-op | 🔶 no-op |
 | **requestUserAttention** | ✅ Dock bounce | ✅ `FlashWindowEx` | ✅ `WM_HINTS` urgent | 🔶 no-op (`xdg_activation_v1` TODO) | — | — | — |
