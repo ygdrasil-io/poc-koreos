@@ -297,9 +297,27 @@ class X11EventLoop internal constructor(
      * The xsettings daemon exposes `Net/ThemeName` but there is no standardised
      * Light/Dark distinction. Documented null.
      *
+     * **ThemeChanged not emitted on X11** — there is no standard protocol for
+     * system theme change notifications. The xsettings manager could be polled,
+     * but polling introduces overhead for a low-value signal.
+     *
      * TODO(R3-x11-theme): query xsettings or GTK_THEME env variable.
      */
     override fun systemTheme(): Theme? = null
+
+    // ── R6: gestures ──────────────────────────────────────────────────────────
+
+    /**
+     * Gesture events ([WindowEvent.PinchGesture], [WindowEvent.PanGesture],
+     * [WindowEvent.RotationGesture], [WindowEvent.DoubleTapGesture]) are
+     * **not emitted on X11**.
+     *
+     * X11 has no standard gesture protocol. Ctrl+scroll is dispatched as
+     * [WindowEvent.PinchGesture] as a convenient software fallback (see
+     * [ButtonPress] handling in [dispatchEvent]), but proper multi-touch
+     * gesture recognition requires hardware-specific extensions (Xi2 touch
+     * events) that are not universally available on X11 servers.
+     */
 
     // ── R4: device event filter ───────────────────────────────────────────────
 

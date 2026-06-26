@@ -283,6 +283,25 @@ private external fun touchPreventDefault(e: JsAny)
 private external fun observeDevicePixelRatioJs(cb: JsAny, isAttached: JsAny)
 
 /**
+ * Observes `prefers-color-scheme` via `matchMedia` and calls `cb(dark: Boolean)`
+ * when the user toggles between dark and light mode.
+ */
+@JsFun(
+    """(cb) => {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener('change', function() { cb(mq.matches); });
+    }"""
+)
+private external fun observeColorSchemeJs(cb: JsAny)
+
+/**
+ * Wraps a Kotlin `(Boolean) -> Unit` lambda into a JS function callable from
+ * `addEventListener`.
+ */
+@JsFun("(fn) => fn")
+private external fun wrapBoolCallback(fn: (Boolean) -> Unit): JsAny
+
+/**
  * Wraps a Kotlin `(JsAny) -> Unit` lambda into a JS function callable from
  * `addEventListener`. The `(fn) => fn` of the `@JsFun` triggers the conversion by the
  * Kotlin/Wasm compiler, which produces a real JS closure — equivalent to the pattern
@@ -388,6 +407,8 @@ private external fun ensureCanvasInDom(
 class WasmJsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
+
+    override var onThemeChange: ((Boolean) -> Unit)? = null
 
     override var preventDefaultEnabled: Boolean = true
 
@@ -641,6 +662,11 @@ class WasmJsWebDomBridge : WebDomBridge {
         observeDevicePixelRatioJs(
             cb = wrapDoubleCallback { factor -> dispatch(WebWindowEvent.ScaleFactorChanged(factor)) },
             isAttached = wrapBoolSupplier { attached },
+        )
+
+        // --- prefers-color-scheme changes → ThemeChanged ---
+        observeColorSchemeJs(
+            cb = wrapBoolCallback { dark -> onThemeChange?.invoke(dark) },
         )
     }
 

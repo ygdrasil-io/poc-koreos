@@ -215,6 +215,18 @@ interface WebDomBridge {
      */
     fun prefersDarkColorScheme(): Boolean = false
 
+    /**
+     * Callback invoked when `prefers-color-scheme` changes.
+     *
+     * The parameter is `true` when the browser reports a dark color scheme,
+     * `false` when light. Set by [WebEventLoop] when creating a window;
+     * the bridge implementation fires it on `matchMedia('(prefers-color-scheme: dark)')` change.
+     * Default: no-op (test / non-browser bridge).
+     */
+    var onThemeChange: ((dark: Boolean) -> Unit)?
+        get() = null
+        set(_) { /* no-op by default; overridden in JsWebDomBridge / WasmJsWebDomBridge */ }
+
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
 
     /**

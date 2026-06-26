@@ -139,7 +139,22 @@ open class WebEventLoop : ActiveEventLoop {
      */
     fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
-        if (primaryBridge == null) primaryBridge = bridge
+        if (primaryBridge == null) {
+            primaryBridge = bridge
+            // Wire the theme change listener on the primary bridge.
+            // Each window receives ThemeChanged whenever prefers-color-scheme toggles.
+            bridge.onThemeChange = { dark ->
+                val theme = if (dark) Theme.Dark else Theme.Light
+                // Dispatch ThemeChanged for every window attached to this event loop.
+                for (win in windows) {
+                    pendingEvents.add(Pair(win.id, WindowEvent.ThemeChanged(theme)))
+                }
+                // In Wait mode, wake the loop immediately
+                if (_controlFlow is ControlFlow.Wait) {
+                    scheduleWakeUp()
+                }
+            }
+        }
         val canvasId = bridge.ensureCanvas(attrs)
         val window = WebWindow(
             id = WindowId(nextWindowId++),

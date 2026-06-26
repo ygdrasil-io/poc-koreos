@@ -15,6 +15,9 @@ package org.graphiks.kadre.win32
 
 /** WM_CLOSE — window close request (× button, Alt+F4). */
 internal const val WM_CLOSE: Int = 0x0010
+/** WM_SHOWWINDOW — the window is about to be shown or hidden. wParam = TRUE (shown) / FALSE (hidden). */
+internal const val WM_SHOWWINDOW: Int = 0x0018
+
 /** WM_GETMINMAXINFO — the window size/position is about to change; lParam points to a MINMAXINFO struct. */
 
 internal const val WM_GETMINMAXINFO: Int = 0x0024

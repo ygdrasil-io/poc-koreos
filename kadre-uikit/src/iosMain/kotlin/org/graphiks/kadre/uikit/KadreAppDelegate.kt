@@ -96,6 +96,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         eventLoop?.let {
             it.handler.resumed(it)
             it.dispatchWindowFocused(gained = true)
+            it.dispatchThemeChangedIfNeeded()
         }
     }
 

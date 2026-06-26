@@ -5,6 +5,7 @@ import kotlinx.cinterop.useContents
 import org.graphiks.kadre.core.*
 import platform.UIKit.UIScreen
 import platform.UIKit.UIUserInterfaceStyle
+import platform.UIKit.UITraitCollection
 
 
 /**
@@ -21,6 +22,9 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
 
     /** Windows created by this loop, used to scope app-level lifecycle events. */
     private val windows = mutableListOf<UiKitWindow>()
+
+    /** Last observed system theme, used to detect changes across app activation. */
+    internal var lastTheme: Theme? = null
 
     override fun createWindow(attributes: WindowAttributes): Window =
         UiKitWindow(attributes, this).also { windows.add(it) }
@@ -110,16 +114,37 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /**
      * Returns the current system theme via UITraitCollection.
      *
+     * Uses the main screen's `traitCollection.userInterfaceStyle`:
      * - UIUserInterfaceStyleLight (1) → [Theme.Light]
      * - UIUserInterfaceStyleDark  (2) → [Theme.Dark]
      * - otherwise                     → null
      */
+    @OptIn(ExperimentalForeignApi::class)
     override fun systemTheme(): Theme? = try {
-        // UITraitCollection.currentTraitCollection is not available in Kotlin/Native bindings.
-        // Use the main screen's traitCollection as a best-effort fallback via the window.
-        // TODO(R3-uikit-theme): access via UIApplication.shared.keyWindow?.traitCollection
-        null // documented no-op until proper API access is established
+        val style = UIScreen.mainScreen.traitCollection.userInterfaceStyle
+        when (style) {
+            UIUserInterfaceStyle.UIUserInterfaceStyleLight -> Theme.Light
+            UIUserInterfaceStyle.UIUserInterfaceStyleDark  -> Theme.Dark
+            else -> null
+        }
     } catch (_: Throwable) { null }
+
+    /**
+     * Dispatches [WindowEvent.ThemeChanged] to all windows if the current
+     * system theme differs from the last cached value.
+     *
+     * Called by [KadreAppDelegate] on app activation to catch theme changes
+     * that may have occurred while the app was in the background.
+     */
+    internal fun dispatchThemeChangedIfNeeded() {
+        val current = systemTheme()
+        if (current != null && current != lastTheme) {
+            lastTheme = current
+            windows.forEach {
+                handler.windowEvent(this, it.id, WindowEvent.ThemeChanged(current))
+            }
+        }
+    }
 
     // ── R4: device event filter ───────────────────────────────────────────────
 

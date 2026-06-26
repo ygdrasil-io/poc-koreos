@@ -41,6 +41,8 @@ class JsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
 
+    override var onThemeChange: ((Boolean) -> Unit)? = null
+
     override var preventDefaultEnabled: Boolean = true
 
     override fun readDevicePixelRatio(): Double = window.devicePixelRatio
@@ -302,6 +304,9 @@ class JsWebDomBridge : WebDomBridge {
 
         // --- devicePixelRatio changes → ScaleFactorChanged ---
         observeDevicePixelRatio()
+
+        // --- prefers-color-scheme changes → ThemeChanged ---
+        observeColorScheme()
     }
 
     /**
@@ -354,6 +359,29 @@ class JsWebDomBridge : WebDomBridge {
                 arm();
             })(function(f) { self.dispatchScaleFactor(f); }, function() { return self.isAttached(); })"""
         )
+    }
+
+    /**
+     * Observes `prefers-color-scheme` via `matchMedia` and calls [onThemeChange]
+     * when the user toggles between dark and light mode.
+     */
+    private fun observeColorScheme() {
+        val self = this
+        js(
+            """(function(cb) {
+                var mq = window.matchMedia('(prefers-color-scheme: dark)');
+                var handler = function() {
+                    cb(mq.matches);
+                };
+                mq.addEventListener('change', handler);
+            })(function(dark) { self.dispatchThemeChanged(dark); })"""
+        )
+    }
+
+    /** Called from the matchMedia handler when prefers-color-scheme toggles. */
+    @JsName("dispatchThemeChanged")
+    fun dispatchThemeChanged(dark: Boolean) {
+        onThemeChange?.invoke(dark)
     }
 
     /** Called from the re-arming matchMedia handler with the new devicePixelRatio. */

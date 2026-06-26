@@ -429,6 +429,14 @@ object KadreWndProc {
                 0L
             }
 
+            // ── Visibility (Occluded) ───────────────────────────────────────────
+            // WM_SHOWWINDOW fires when ShowWindow is called (including minimize/restore).
+            // wParam = TRUE → window becoming visible, FALSE → window becoming hidden.
+            WM_SHOWWINDOW.toUInt() -> {
+                emit(hwnd, WindowEvent.Occluded(wParam == 0L))
+                defWindowProcW(hwnd, msg, wParam, lParam)
+            }
+
             // ── Destroy ───────────────────────────────────────────────────────
             WM_DESTROY.toUInt() -> {
                 emit(hwnd, WindowEvent.Destroyed)

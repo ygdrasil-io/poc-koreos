@@ -242,6 +242,18 @@ class WaylandEventLoop internal constructor(
         }
     }
 
+    // ── R3b: occlusion ───────────────────────────────────────────────────────
+
+    /**
+     * [WindowEvent.Occluded] is **not emitted on Wayland**.
+     *
+     * The xdg-shell protocol does not expose surface occlusion information.
+     * The compositor is a separate process and does not inform clients when
+     * their windows are fully obscured by other surfaces. This is an
+     * intentional non-emission — there is no standard Wayland protocol to
+     * query or subscribe to occlusion state.
+     */
+
     // ── R4: device event filter ───────────────────────────────────────────────
 
     /**
@@ -258,6 +270,20 @@ class WaylandEventLoop internal constructor(
         deviceEventFilter = mode
 
     }
+
+    // ── R6: gestures ──────────────────────────────────────────────────────────
+
+    /**
+     * Gesture events ([WindowEvent.PinchGesture], [WindowEvent.PanGesture],
+     * [WindowEvent.RotationGesture], [WindowEvent.DoubleTapGesture]) are
+     * **not emitted on Wayland**.
+     *
+     * The wl_pointer / wl_touch protocols expose raw pointer coordinates and
+     * touch points but do NOT include gesture recognition. Gesture recognition
+     * is typically performed by the compositor (e.g. libinput) and not forwarded
+     * to individual clients. There is no standard Wayland protocol for gesture
+     * events.
+     */
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
 
