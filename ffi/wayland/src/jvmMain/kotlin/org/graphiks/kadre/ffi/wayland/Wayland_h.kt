@@ -812,47 +812,6 @@ val xkbStateUnref: MethodHandle? by lazy {
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS))
 }
 
-/**
- * int xkb_state_key_get_utf8(struct xkb_state *state, xkb_keycode_t key,
- *     char *buffer, size_t size);
- *
- * Returns the UTF-8 string produced by pressing `key` in the current state,
- * written into `buffer`. The return value is the number of bytes required
- * (excluding the NUL terminator); calling with a NULL/zero buffer first yields
- * the size to allocate. Note: `key` is an xkb keycode = evdev keycode + 8.
- */
-val xkbStateKeyGetUtf8: MethodHandle? by lazy {
-    libXkbCommon.downcall("xkb_state_key_get_utf8",
-        FunctionDescriptor.of(ValueLayout.JAVA_INT,
-            ValueLayout.ADDRESS,   // struct xkb_state*
-            ValueLayout.JAVA_INT,  // xkb_keycode_t key
-            ValueLayout.ADDRESS,   // char* buffer
-            ValueLayout.JAVA_LONG, // size_t size
-        ))
-}
-
-/**
- * enum xkb_state_component xkb_state_update_mask(struct xkb_state *state,
- *     xkb_mod_mask_t depressed_mods, xkb_mod_mask_t latched_mods, xkb_mod_mask_t locked_mods,
- *     xkb_layout_index_t depressed_layout, xkb_layout_index_t latched_layout,
- *     xkb_layout_index_t locked_layout);
- *
- * Keeps the xkb_state in sync with the compositor's wl_keyboard.modifiers event
- * so that [xkbStateKeyGetUtf8] produces correctly shifted / dead-key characters.
- */
-val xkbStateUpdateMask: MethodHandle? by lazy {
-    libXkbCommon.downcall("xkb_state_update_mask",
-        FunctionDescriptor.of(ValueLayout.JAVA_INT,
-            ValueLayout.ADDRESS,   // struct xkb_state*
-            ValueLayout.JAVA_INT,  // depressed_mods
-            ValueLayout.JAVA_INT,  // latched_mods
-            ValueLayout.JAVA_INT,  // locked_mods
-            ValueLayout.JAVA_INT,  // depressed_layout
-            ValueLayout.JAVA_INT,  // latched_layout
-            ValueLayout.JAVA_INT,  // locked_layout
-        ))
-}
-
 val xkbComposeTableNewFromLocale: MethodHandle? by lazy {
     libXkbCommon.downcall("xkb_compose_table_new_from_locale",
         FunctionDescriptor.of(ValueLayout.ADDRESS,

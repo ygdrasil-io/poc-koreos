@@ -25,8 +25,12 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 
 internal const val WL_KEY_RELEASED: Int = 0
 internal const val WL_KEY_PRESSED: Int = 1
@@ -110,6 +114,16 @@ fun linuxKeycodeToKeyCode(keycode: Int): KeyCode? = KEYCODE_TABLE[keycode]
  * Offset added to an evdev keycode to obtain an XKB keycode (XKB convention).
  */
 private const val XKB_EVDEV_OFFSET: Int = 8
+
+private val linker: Linker = Linker.nativeLinker()
+
+private val xkbStateKeyGetUtf8: MethodHandle? by lazy {
+    try {
+        SymbolLookup.libraryLookup("libxkbcommon.so.0", Arena.global()).find("xkb_state_key_get_utf8")
+            .map { linker.downcallHandle(it, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG)) }
+            .orElse(null)
+    } catch (_: Throwable) { null }
+}
 
 /**
  * Best-effort keyboard text for a key via `xkb_state_key_get_utf8`.

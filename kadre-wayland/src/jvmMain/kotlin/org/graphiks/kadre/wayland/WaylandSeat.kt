@@ -41,10 +41,21 @@ import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.WindowEvent
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+
+private val xkbStateUpdateMask: MethodHandle? by lazy {
+    try {
+        SymbolLookup.libraryLookup("libxkbcommon.so.0", Arena.global()).find("xkb_state_update_mask")
+            .map { Linker.nativeLinker().downcallHandle(it, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)) }
+            .orElse(null)
+    } catch (_: Throwable) { null }
+}
 
 private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
 private typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
