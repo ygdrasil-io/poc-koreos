@@ -546,6 +546,14 @@ class Win32Window private constructor(
 
     @Volatile private var _cursorHandle: MemorySegment? = null
 
+    /**
+     * Sets the cursor shape by loading the matching system IDC_* resource via
+     * LoadCursorW and applying it with SetCursor.
+     *
+     * Win32-specific: SetCursor only takes effect while the pointer is over the
+     * window; the cached handle is re-applied from the WM_SETCURSOR handler.
+     * Silently no-ops if the cursor resource cannot be loaded.
+     */
     override fun setCursor(cursor: CursorIcon) {
         try {
             val id = cursorIdcResource(cursor)
@@ -556,6 +564,13 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    /**
+     * Applies a previously created custom cursor by treating [CustomCursor.id] as
+     * a native HCURSOR handle and passing it to SetCursor.
+     *
+     * Win32-specific: the caller owns the HCURSOR lifetime; this only references
+     * it. As with [setCursor], the handle is re-applied from WM_SETCURSOR.
+     */
     override fun setCustomCursor(cursor: CustomCursor) {
         try {
             val hCursor = MemorySegment.ofAddress(cursor.id)
@@ -564,12 +579,29 @@ class Win32Window private constructor(
         } catch (_: Throwable) {}
     }
 
+    /**
+     * Shows or hides the cursor via ShowCursor.
+     *
+     * Win32-specific: ShowCursor maintains a process-wide internal display
+     * counter rather than a boolean, so visibility is shared across all windows
+     * in the process and balanced show/hide calls are expected.
+     */
     override fun setCursorVisible(visible: Boolean) {
         try {
             ShowCursor(if (visible) 1 else 0)
         } catch (_: Throwable) {}
     }
 
+    /**
+     * Confines or releases the cursor via ClipCursor.
+     *
+     * Win32-specific: [CursorGrabMode.None] removes any clip rectangle, while
+     * [CursorGrabMode.Confined] clips the cursor to the window's screen rect.
+     * Win32 has no true cursor-lock primitive, so [CursorGrabMode.Locked] is
+     * treated the same as [CursorGrabMode.Confined]. Returns
+     * [WindowRequestResult.Failure] with [RequestError.OsError] if the Win32
+     * call fails.
+     */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
         try {
             when (mode) {
@@ -592,6 +624,14 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor grab failed"))
         }
 
+    /**
+     * Moves the cursor to a window-client-relative [position] via SetCursorPos.
+     *
+     * Win32-specific: SetCursorPos operates in screen coordinates, so the
+     * client-relative position is translated using the window's screen rect
+     * (GetWindowRect). Returns [WindowRequestResult.Failure] with
+     * [RequestError.OsError] if the coordinate lookup or move fails.
+     */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
         try {
             val (screenX, screenY) = Arena.ofConfined().use { arena ->
@@ -611,6 +651,16 @@ class Win32Window private constructor(
             WindowRequestResult.Failure(RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 cursor position failed"))
         }
 
+    /**
+     * Enables or disables cursor hit-testing by toggling the WS_EX_TRANSPARENT
+     * extended window style via SetWindowLongPtrW.
+     *
+     * Win32-specific: when [hittest] is false the WS_EX_TRANSPARENT flag is set
+     * so pointer events pass through to windows underneath; when true the flag is
+     * cleared so the window receives hit-testing again. Returns
+     * [WindowRequestResult.Failure] with [RequestError.OsError] if reading or
+     * updating the extended style fails.
+     */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
         try {
             SetLastError(0L)

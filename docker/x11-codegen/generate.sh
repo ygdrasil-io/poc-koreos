@@ -52,6 +52,7 @@ KEXTRACT="$KEXTRACT_DIR/build/kextract/bin/kextract"
     --include-function XMoveWindow \
     --include-function XIconifyWindow \
     --include-function XChangeProperty \
+    --include-function XDeleteProperty \
     --include-function XGetWindowProperty \
     --include-function XFree \
     --include-function XGetGeometry \

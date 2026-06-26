@@ -911,12 +911,14 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * No-op on Wayland.
+     * Requests user attention; always returns a failure on Wayland.
      *
-     * xdg_activation_v1 token-based activation requires an asynchronous
-     * token-generation roundtrip not yet wired in Kadre. When the compositor
-     * exposes the protocol extension this returns [RequestError.Ignored];
-     * otherwise [RequestError.Unsupported], matching winit.
+     * Attention requests rely on xdg_activation_v1, whose token-based activation
+     * needs an asynchronous token-generation roundtrip not yet wired in Kadre.
+     * When the compositor exposes the protocol extension this returns
+     * [WindowRequestResult.Failure] with [RequestError.Ignored]; otherwise it
+     * returns [WindowRequestResult.Failure] with [RequestError.Unsupported],
+     * matching winit's behaviour.
      */
     override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
         if (activationManager != null) {

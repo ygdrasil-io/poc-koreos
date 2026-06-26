@@ -931,11 +931,13 @@ class X11Window private constructor(
      * window level); actual per-pixel transparency is handled by the ARGB render
      * buffer. The property signals to the compositor that alpha blending is allowed.
      *
-     * When [transparent] is false, deletes the property so the compositor reverts to
-     * default fully opaque behaviour.
+     * When [transparent] is false, deletes the property via XDeleteProperty so the
+     * compositor reverts to default fully opaque behaviour. Removing the property
+     * entirely (rather than overwriting it with a zero-length value) reliably
+     * triggers a PropertyNotify/Delete so all WMs recalculate window opacity.
      *
-     * Best-effort: silently no-ops when XChangeProperty is unavailable or the atoms
-     * cannot be interned.
+     * Best-effort: silently no-ops when XChangeProperty/XDeleteProperty are
+     * unavailable or the atoms cannot be interned.
      */
     override fun setTransparent(transparent: Boolean) {
         val display = MemorySegment.ofAddress(displayPtr)
@@ -956,11 +958,8 @@ class X11Window private constructor(
                     xFlush?.invokeExact(display) as? Int
                 }
             } else {
-                xChangeProperty?.invokeExact(
-                    display, xWindowId,
-                    opacityAtom, cardinalAtom,
-                    32, 0 /* PropModeReplace */,
-                    MemorySegment.NULL, 0,
+                xDeleteProperty?.invokeExact(
+                    display, xWindowId, opacityAtom,
                 ) as? Int
                 xFlush?.invokeExact(display) as? Int
             }

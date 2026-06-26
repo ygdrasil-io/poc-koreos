@@ -477,6 +477,28 @@ val xChangeProperty: MethodHandle? by lazy {
     )
 }
 
+// ── XDeleteProperty ───────────────────────────────────────────────────────────
+
+/**
+ * int XDeleteProperty(Display *display, Window w, Atom property);
+ *
+ * Deletes a property on a window. Unlike XChangeProperty with a NULL/zero-length
+ * value, this removes the property entry entirely, which reliably triggers a
+ * PropertyNotify with state Delete so compositors recalculate derived state
+ * (e.g. window opacity after _NET_WM_WINDOW_OPACITY removal).
+ */
+val xDeleteProperty: MethodHandle? by lazy {
+    libX11.downcall(
+        "XDeleteProperty",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int return
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window (XID)
+            ValueLayout.JAVA_LONG,  // Atom property
+        )
+    )
+}
+
 // ── XGetWindowProperty / XFree ───────────────────────────────────────────────
 
 /**
