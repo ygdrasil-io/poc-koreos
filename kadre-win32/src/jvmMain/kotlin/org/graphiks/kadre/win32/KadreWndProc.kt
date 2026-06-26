@@ -40,11 +40,15 @@ import org.graphiks.kadre.ffi.win32.*
 import org.graphiks.kadre.ffi.win32.generated.*
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.FingerId
+import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.KeyboardModifiers
 import org.graphiks.kadre.core.LogicalKey
+import org.graphiks.kadre.core.ModifierKeyState
+import org.graphiks.kadre.core.ModifierKeys
 import org.graphiks.kadre.core.MouseButton
 import org.graphiks.kadre.core.NativeKeyInfo
 import org.graphiks.kadre.core.NativeKeyCode
@@ -184,6 +188,13 @@ object KadreWndProc {
     }
 
     /**
+     * Removes physical modifier state for the given window (called when the window is destroyed).
+     */
+    fun unregisterPhysicalModifiers(hwnd: Long) {
+        physicalModifierStates.remove(hwnd)
+    }
+
+    /**
      * Aligns [value] up to the nearest multiple of [increment].
      * Returns the original value when [increment] is null, zero, or negative.
      */
@@ -296,14 +307,28 @@ object KadreWndProc {
                 val vkCode   = wParam.toInt()
                 val isRepeat = (lParam and KF_REPEAT) != 0L
                 val mods     = currentModifiers()
+                val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
+                val extended = (lParam and KF_EXTENDED) != 0L
+                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
+                    val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Pressed)
+                    emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
+                }
                 emit(hwnd, keyEvent(vkCode, KeyState.Pressed, mods, isRepeat, lParam))
                 0L
             }
 
             WM_KEYUP.toUInt(),
             WM_SYSKEYUP.toUInt() -> {
-                val vkCode = wParam.toInt()
-                val mods   = currentModifiers()
+                val vkCode   = wParam.toInt()
+                val mods     = currentModifiers()
+                val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
+                val extended = (lParam and KF_EXTENDED) != 0L
+                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
+                    val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Released)
+                    emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
+                }
                 emit(hwnd, keyEvent(vkCode, KeyState.Released, mods, isRepeat = false, lParam))
                 0L
             }
@@ -411,11 +436,20 @@ object KadreWndProc {
                 0L
             }
 
+            // ── Visibility (Occluded) ───────────────────────────────────────────
+            // WM_SHOWWINDOW fires when ShowWindow is called (including minimize/restore).
+            // wParam = TRUE → window becoming visible, FALSE → window becoming hidden.
+            WM_SHOWWINDOW.toUInt() -> {
+                emit(hwnd, WindowEvent.Occluded(wParam == 0L))
+                defWindowProcW(hwnd, msg, wParam, lParam)
+            }
+
             // ── Destroy ───────────────────────────────────────────────────────
             WM_DESTROY.toUInt() -> {
                 emit(hwnd, WindowEvent.Destroyed)
                 Win32FocusState.unregister(hwnd)
                 unregisterConstraints(hwnd)
+                unregisterPhysicalModifiers(hwnd)
                 // PostQuitMessage(0) — signal to end the Win32 message loop.
                 postQuitMessage(0)
                 0L
@@ -550,6 +584,37 @@ object KadreWndProc {
         return KeyboardModifiers(bits)
     }
 
+    /** Per-window physical left/right modifier state tracked across key events. */
+    private val physicalModifierStates = java.util.concurrent.ConcurrentHashMap<Long, ModifierKeys>()
+
+    private fun isModifierKeyCode(keyCode: KeyCode): Boolean = keyCode in setOf(
+        KeyCode.ShiftLeft, KeyCode.ShiftRight,
+        KeyCode.ControlLeft, KeyCode.ControlRight,
+        KeyCode.AltLeft, KeyCode.AltRight,
+        KeyCode.MetaLeft, KeyCode.MetaRight,
+    )
+
+    private fun updatePhysicalModifiers(hwnd: Long, keyCode: KeyCode, state: KeyState): ModifierKeys {
+        val current = physicalModifierStates.getOrDefault(hwnd, ModifierKeys())
+        val modifierState = when (state) {
+            KeyState.Pressed -> ModifierKeyState.Pressed
+            KeyState.Released -> ModifierKeyState.Released
+        }
+        val newState = when (keyCode) {
+            KeyCode.ShiftLeft   -> current.copy(leftShift = modifierState)
+            KeyCode.ShiftRight  -> current.copy(rightShift = modifierState)
+            KeyCode.ControlLeft -> current.copy(leftCtrl = modifierState)
+            KeyCode.ControlRight -> current.copy(rightCtrl = modifierState)
+            KeyCode.AltLeft     -> current.copy(leftAlt = modifierState)
+            KeyCode.AltRight    -> current.copy(rightAlt = modifierState)
+            KeyCode.MetaLeft    -> current.copy(leftMeta = modifierState)
+            KeyCode.MetaRight   -> current.copy(rightMeta = modifierState)
+            else -> return current
+        }
+        physicalModifierStates[hwnd] = newState
+        return newState
+    }
+
     private fun keyEvent(
         vkCode: Int,
         state: KeyState,
@@ -557,11 +622,12 @@ object KadreWndProc {
         isRepeat: Boolean,
         lParam: Long = 0L,
     ): WindowEvent.KeyInput {
-        val mappedCode = Win32KeyMapper.keyCode(vkCode)
         val rawScanCode = (lParam ushr 16) and 0xFF
+        val extended = (lParam and KF_EXTENDED) != 0L
+        val mappedCode = Win32KeyMapper.keyCode(vkCode, rawScanCode.toInt(), extended)
         val scanCode = rawScanCode
             .takeIf { it != 0L }
-            ?.let { if ((lParam and KF_EXTENDED) != 0L) 0xE000L or it else it }
+            ?.let { if (extended) 0xE000L or it else it }
         val native = NativeKeyInfo(
             platform = KeyPlatform.Win32,
             scanCode = scanCode,
@@ -570,15 +636,16 @@ object KadreWndProc {
             nativeKey = NativeLogicalKey.Win32(vkCode.toLong()),
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+        val win32Text = if (!isRepeat) win32KeyText(vkCode, rawScanCode.toInt()) else null
         return WindowEvent.KeyInput(
             event = KeyEvent(
-                physicalKey = Win32KeyMapper.physicalKey(vkCode),
+                physicalKey = Win32KeyMapper.physicalKey(vkCode, rawScanCode.toInt(), extended),
                 logicalKey = logicalKey,
                 state = state,
                 modifiers = modifiers,
                 repeat = isRepeat,
-                text = mappedCode?.defaultText(),
-                textWithAllModifiers = mappedCode?.defaultText(),
+                text = win32Text ?: mappedCode?.defaultText(),
+                textWithAllModifiers = win32Text ?: mappedCode?.defaultText(),
                 keyWithoutModifiers = mappedCode?.defaultText(),
                 native = native,
             ),

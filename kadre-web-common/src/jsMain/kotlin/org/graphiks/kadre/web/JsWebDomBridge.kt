@@ -41,6 +41,8 @@ class JsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
 
+    override var onThemeChange: ((Boolean) -> Unit)? = null
+
     override var preventDefaultEnabled: Boolean = true
 
     override fun readDevicePixelRatio(): Double = window.devicePixelRatio
@@ -302,6 +304,9 @@ class JsWebDomBridge : WebDomBridge {
 
         // --- devicePixelRatio changes → ScaleFactorChanged ---
         observeDevicePixelRatio()
+
+        // --- prefers-color-scheme changes → ThemeChanged ---
+        observeColorScheme()
     }
 
     /**
@@ -354,6 +359,29 @@ class JsWebDomBridge : WebDomBridge {
                 arm();
             })(function(f) { self.dispatchScaleFactor(f); }, function() { return self.isAttached(); })"""
         )
+    }
+
+    /**
+     * Observes `prefers-color-scheme` via `matchMedia` and calls [onThemeChange]
+     * when the user toggles between dark and light mode.
+     */
+    private fun observeColorScheme() {
+        val self = this
+        js(
+            """(function(cb) {
+                var mq = window.matchMedia('(prefers-color-scheme: dark)');
+                var handler = function() {
+                    cb(mq.matches);
+                };
+                mq.addEventListener('change', handler);
+            })(function(dark) { self.dispatchThemeChanged(dark); })"""
+        )
+    }
+
+    /** Called from the matchMedia handler when prefers-color-scheme toggles. */
+    @JsName("dispatchThemeChanged")
+    fun dispatchThemeChanged(dark: Boolean) {
+        onThemeChange?.invoke(dark)
     }
 
     /** Called from the re-arming matchMedia handler with the new devicePixelRatio. */
@@ -530,39 +558,6 @@ class JsWebDomBridge : WebDomBridge {
         return ((screen.availWidth as Int).toLong() shl 32) or (screen.availHeight as Int).toLong()
     }
 
-    // ── R3: Cursor and Pointer Lock ──────────────────────────────────────────
-
-    override fun setCssCursor(canvasId: String, cssCursorValue: String) {
-        val el = document.getElementById(canvasId) ?: targetElement ?: return
-        el.asDynamic().style.cursor = cssCursorValue
-    }
-
-    override fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
-        val el = document.getElementById(canvasId) ?: targetElement ?: return
-        el.asDynamic().style.pointerEvents = pointerEventsValue
-    }
-
-    override fun requestPointerLock(canvasId: String) {
-        val el = document.getElementById(canvasId) ?: targetElement ?: return
-        try {
-            val d = el.asDynamic()
-            when {
-                d.requestPointerLock != null -> d.requestPointerLock()
-                d.webkitRequestPointerLock != null -> d.webkitRequestPointerLock()
-            }
-        } catch (_: Throwable) {}
-    }
-
-    override fun exitPointerLock() {
-        try {
-            val d = document.asDynamic()
-            when {
-                d.exitPointerLock != null -> d.exitPointerLock()
-                d.webkitExitPointerLock != null -> d.webkitExitPointerLock()
-            }
-        } catch (_: Throwable) {}
-    }
-
     // ── R2: Fullscreen API ────────────────────────────────────────────────────
 
     /**
@@ -579,6 +574,61 @@ class JsWebDomBridge : WebDomBridge {
                 d.mozRequestFullScreen != null -> d.mozRequestFullScreen()
             }
         } catch (_: Throwable) {}
+    }
+
+    // ── R3: cursor, pointer lock, hit-test ───────────────────────────────────
+
+    /**
+     * Sets `style.cursor` on the canvas element identified by [canvasId].
+     */
+    override fun setCssCursor(canvasId: String, cssCursorValue: String) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        el.asDynamic().style.cursor = cssCursorValue
+    }
+
+    /**
+     * Requests Pointer Lock on the canvas element (handles vendor prefixes).
+     *
+     * The browser may require a user gesture; the lock is granted asynchronously
+     * via a `pointerlockchange` event.
+     */
+    override fun requestPointerLock(canvasId: String) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        try {
+            val d = el.asDynamic()
+            when {
+                d.requestPointerLock != null -> d.requestPointerLock()
+                d.webkitRequestPointerLock != null -> d.webkitRequestPointerLock()
+                d.mozRequestPointerLock != null -> d.mozRequestPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Calls `document.exitPointerLock()` (handles vendor prefixes).
+     */
+    override fun exitPointerLock() {
+        try {
+            val d = document.asDynamic()
+            when {
+                d.exitPointerLock != null -> d.exitPointerLock()
+                d.webkitExitPointerLock != null -> d.webkitExitPointerLock()
+                d.mozExitPointerLock != null -> d.mozExitPointerLock()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Returns true if the canvas element currently holds Pointer Lock.
+     */
+    override fun isPointerLocked(): Boolean = document.asDynamic().pointerLockElement == canvasElement
+
+    /**
+     * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
+     */
+    override fun setCursorHittest(canvasId: String, hittest: Boolean) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        el.asDynamic().style.pointerEvents = if (hittest) "auto" else "none"
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.ImePurpose
@@ -18,7 +19,9 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -373,17 +376,32 @@ class AndroidWindow internal constructor(
     /** No-op on Android: there is no visible cursor. */
     override fun setCursorVisible(visible: Boolean) { /* no-op: Android has no cursor */ }
 
-    /** Unsupported on Android: there is no cursor to grab. */
+    /**
+     * Sets the cursor grab mode for this window.
+     *
+     * **Platform note (Android):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Android has no cursor to grab"))
+        WindowRequestResult.Failure(RequestError.Unsupported("Android has no system cursor"))
 
-    /** Unsupported on Android: there is no cursor to warp. */
+    /**
+     * Warps the cursor to the given position.
+     *
+     * **Platform note (Android):** Touch-first platform with no system cursor.
+     * Cursor warping is unsupported; returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("Android has no cursor to warp"))
 
-    /** Unsupported on Android. */
+    /**
+     * Enables or disables cursor hit-testing for this window.
+     *
+     * **Platform note (Android):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Android does not support cursor hit-testing"))
+        WindowRequestResult.Failure(RequestError.Unsupported("Android has no system cursor"))
 
     /**
      * Returns the current UI theme via UiModeManager.
@@ -474,4 +492,61 @@ class AndroidWindow internal constructor(
     override fun resetDeadKeys() {
         // no-op: Android IME state is managed by InputMethodManager
     }
+
+    // ── R5-CustomCursor ───────────────────────────────────────────────────────
+
+    /**
+     * Applies a previously created custom cursor to this window.
+     *
+     * **Platform note (Android):** No-op — touch-first platform with no system cursor.
+     */
+    override fun setCustomCursor(cursor: CustomCursor) { /* no-op on Android */ }
+
+    // ── R5-MiscWindow ─────────────────────────────────────────────────────────
+
+    /**
+     * Requests the platform to attract the user's attention (taskbar / dock icon).
+     *
+     * **Platform note (Android):** Documented no-op — Android does not have a
+     * per-window user-attention API. Applications should use
+     * [android.app.Notification] for user alerts.
+     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     */
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        WindowRequestResult.Success
+
+    /**
+     * Enables or disables screen-capture protection for this window.
+     *
+     * **Platform note (Android):** Unsupported. Android's
+     * [android.view.WindowManager.LayoutParams.FLAG_SECURE] disables screenshots
+     * at the Activity level, not at the SurfaceView window level.
+     */
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Content protection is unsupported on Android"))
+
+    /**
+     * Shows the platform window menu (system / title-bar context menu) at the given position.
+     *
+     * **Platform note (Android):** Unsupported — Android has no system window menu concept.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window menu is unsupported on Android"))
+
+    /**
+     * Initiates a user-driven window drag from the current cursor position.
+     *
+     * **Platform note (Android):** Unsupported — Android has no windowing model
+     * with user-draggable windows.
+     */
+    override fun dragWindow(): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported on Android"))
+
+    /**
+     * Initiates a user-driven window resize from the current cursor position.
+     *
+     * **Platform note (Android):** Unsupported — Android windows are not user-resizable.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window resizing is unsupported on Android"))
 }

@@ -24,6 +24,7 @@ import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -105,6 +106,50 @@ private val KEYCODE_TABLE: Map<Int, KeyCode> = mapOf(
 
 fun linuxKeycodeToKeyCode(keycode: Int): KeyCode? = KEYCODE_TABLE[keycode]
 
+/**
+ * Offset added to an evdev keycode to obtain an XKB keycode (XKB convention).
+ */
+private const val XKB_EVDEV_OFFSET: Int = 8
+
+/**
+ * Best-effort keyboard text for a key via `xkb_state_key_get_utf8`.
+ *
+ * Returns the UTF-8 text produced by the key in the current xkb state, or
+ * `null` when:
+ * - no xkb state is available ([xkbStatePtr] is 0 — libxkbcommon missing or the
+ *   keymap could not be parsed),
+ * - the key produces no printable text (control chars, modifiers, etc.).
+ *
+ * This fills [org.graphiks.kadre.core.KeyEvent.text] which was previously always
+ * null on Wayland. The caller must keep the xkb state updated via
+ * `xkb_state_update_mask` (done from the wl_keyboard.modifiers handler) so that
+ * shifted / dead-key characters resolve correctly.
+ *
+ * @param xkbStatePtr Address of the `struct xkb_state*`, or 0 if unavailable.
+ * @param keycode     The evdev keycode from wl_keyboard.key (xkb adds 8).
+ */
+internal fun waylandKeyText(xkbStatePtr: Long, keycode: Int): String? {
+    if (xkbStatePtr == 0L) return null
+    val handle = xkbStateKeyGetUtf8 ?: return null
+    val xkbKeycode = keycode + XKB_EVDEV_OFFSET
+    return try {
+        val state = MemorySegment.ofAddress(xkbStatePtr)
+        Arena.ofConfined().use { arena ->
+            val size = handle.invokeExact(state, xkbKeycode, MemorySegment.NULL, 0L) as Int
+            if (size <= 0) return@use null
+            val capacity = (size + 1).toLong()
+            val buffer = arena.allocate(capacity, 1L)
+            handle.invokeExact(state, xkbKeycode, buffer, capacity) as Int
+            val bytes = ByteArray(size) { index -> buffer.get(ValueLayout.JAVA_BYTE, index.toLong()) }
+            val text = String(bytes, Charsets.UTF_8)
+            // Filter out control characters that are not user-visible text.
+            if (text.isNotEmpty() && text.all { it.code >= 0x20 && it.code != 0x7F }) text else null
+        }
+    } catch (_: Throwable) {
+        null
+    }
+}
+
 internal fun waylandInitialModifierState(): KeyboardModifierState =
     KeyboardModifierState(
         logical = KeyboardModifiers.NONE,
@@ -158,6 +203,7 @@ fun mapWaylandKeyEvent(
     keycode: Int,
     state: Int,
     modifiers: KeyboardModifiers = KeyboardModifiers.NONE,
+    text: String? = null,
 ): WindowEvent.KeyInput {
     val mappedCode = linuxKeycodeToKeyCode(keycode)
     val native = NativeKeyInfo(
@@ -167,6 +213,7 @@ fun mapWaylandKeyEvent(
         nativeKey = NativeLogicalKey.Wayland(keysym = null),
     )
     val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+    val resolvedText = text ?: mappedCode?.defaultText()
     return WindowEvent.KeyInput(
         event = KeyEvent(
             physicalKey = linuxKeycodeToPhysicalKey(keycode),
@@ -174,8 +221,8 @@ fun mapWaylandKeyEvent(
             state = waylandKeyStateToKeyState(state),
             modifiers = modifiers,
             repeat = state == WL_KEY_REPEATED,
-            text = mappedCode?.defaultText(),
-            textWithAllModifiers = mappedCode?.defaultText(),
+            text = resolvedText,
+            textWithAllModifiers = resolvedText,
             keyWithoutModifiers = mappedCode?.defaultText(),
             native = native,
         ),
@@ -230,7 +277,7 @@ internal class WaylandKeyboardModifierTracker {
         return events
     }
 
-    fun mapKey(keycode: Int, state: Int): List<WindowEvent> {
+    fun mapKey(keycode: Int, state: Int, xkbStatePtr: Long = 0L): List<WindowEvent> {
         val keyState = waylandKeyStateToKeyState(state)
         val nextModifierState = if (isWaylandModifierKey(keycode)) {
             waylandModifierStateFrom(modifierState, keycode, keyState)
@@ -242,10 +289,12 @@ internal class WaylandKeyboardModifierTracker {
             modifierState = nextModifierState
             events += WindowEvent.ModifiersChanged(nextModifierState)
         }
+        val text = if (state != WL_KEY_RELEASED) waylandKeyText(xkbStatePtr, keycode) else null
         events += mapWaylandKeyEvent(
             keycode = keycode,
             state = state,
             modifiers = modifierState.logical,
+            text = text,
         )
         return events
     }

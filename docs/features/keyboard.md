@@ -46,9 +46,9 @@
 | Capability | Web | AppKit | Win32 | Android | X11 | Wayland | UIKit |
 |-----------|:---:|:------:|:-----:|:-------:|:---:|:-------:|:-----:|
 | Physical key mapping | ✅ DOM `code` | ⚠️ QWERTY | ✅ VK map | ✅ keycode map | ⚠️ hardcoded table | ✅ evdev table | ✅ HID usage |
-| `text` | ✅ | ✅ | ✅ | ✅ | ❌ null | ❌ null | ✅ |
-| `textWithAllModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ❌ | ❌ | ⚠️ partial |
-| `keyWithoutModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ❌ | ❌ | ⚠️ partial |
+| `text` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `textWithAllModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ⚠️ partial |
+| `keyWithoutModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ⚠️ partial |
 | `ModifiersChanged` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ModifierKeys` left/right | ❌ | ⚠️ limited | ⚠️ generic VK | ❌ | ✅ tracked | ✅ tracked | ❌ |
 | `repeat` detection | ✅ DOM | ✅ | ✅ lParam | ✅ | ✅ XKB | ✅ | ✅ |

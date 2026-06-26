@@ -477,6 +477,28 @@ val xChangeProperty: MethodHandle? by lazy {
     )
 }
 
+// ── XDeleteProperty ───────────────────────────────────────────────────────────
+
+/**
+ * int XDeleteProperty(Display *display, Window w, Atom property);
+ *
+ * Deletes a property on a window. Unlike XChangeProperty with a NULL/zero-length
+ * value, this removes the property entry entirely, which reliably triggers a
+ * PropertyNotify with state Delete so compositors recalculate derived state
+ * (e.g. window opacity after _NET_WM_WINDOW_OPACITY removal).
+ */
+val xDeleteProperty: MethodHandle? by lazy {
+    libX11.downcall(
+        "XDeleteProperty",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int return
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Window (XID)
+            ValueLayout.JAVA_LONG,  // Atom property
+        )
+    )
+}
+
 // ── XGetWindowProperty / XFree ───────────────────────────────────────────────
 
 /**
@@ -607,6 +629,34 @@ val xkbSetDetectableAutoRepeat: MethodHandle? by lazy {
             ValueLayout.ADDRESS,    // Display*
             ValueLayout.JAVA_INT,   // Bool detectable
             ValueLayout.ADDRESS,    // Bool* supported_rtrn (may be NULL)
+        )
+    )
+}
+
+// ── XLookupString ─────────────────────────────────────────────────────────────
+
+/**
+ * int XLookupString(XKeyEvent *event_struct, char *buffer_return, int bytes_buffer,
+ *     KeySym *keysym_return, XComposeStatus *status_in_out);
+ *
+ * Translates a KeyPress/KeyRelease event into the ISO Latin-1 text it produces
+ * (taking the current modifier state stored in the event into account). The
+ * returned count is the number of bytes written into `buffer_return`.
+ *
+ * This is the simplest way to populate [org.graphiks.kadre.core.KeyEvent.text]
+ * for plain ASCII / Latin-1 typing without a full input method (XIM/XIC).
+ * Composed / multibyte text continues to flow through the XIM path.
+ */
+val xLookupString: MethodHandle? by lazy {
+    libX11.downcall(
+        "XLookupString",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int return (number of bytes written)
+            ValueLayout.ADDRESS,    // XKeyEvent* event_struct
+            ValueLayout.ADDRESS,    // char* buffer_return
+            ValueLayout.JAVA_INT,   // int bytes_buffer
+            ValueLayout.ADDRESS,    // KeySym* keysym_return (or NULL)
+            ValueLayout.ADDRESS,    // XComposeStatus* status_in_out (or NULL)
         )
     )
 }

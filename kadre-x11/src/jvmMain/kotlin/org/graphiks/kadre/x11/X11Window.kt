@@ -925,24 +925,54 @@ class X11Window private constructor(
     }
 
     /**
-     * No-op on X11.
+     * Sets the _NET_WM_WINDOW_OPACITY property to signal transparency to the compositor.
      *
-     * Window transparency requires compositor support (e.g. compton/picom)
-     * and the _NET_WM_WINDOW_OPACITY property or a compositor-specific API.
-     * Documented no-op.
+     * When [transparent] is true, sets opacity to 0xFFFFFFFF (fully opaque at the
+     * window level); actual per-pixel transparency is handled by the ARGB render
+     * buffer. The property signals to the compositor that alpha blending is allowed.
      *
-     * TODO(R3-x11-transparent): set _NET_WM_WINDOW_OPACITY or request ARGB visual.
+     * When [transparent] is false, deletes the property via XDeleteProperty so the
+     * compositor reverts to default fully opaque behaviour. Removing the property
+     * entirely (rather than overwriting it with a zero-length value) reliably
+     * triggers a PropertyNotify/Delete so all WMs recalculate window opacity.
+     *
+     * Best-effort: silently no-ops when XChangeProperty/XDeleteProperty are
+     * unavailable or the atoms cannot be interned.
      */
     override fun setTransparent(transparent: Boolean) {
-        if (!x11TransparencyRequiresNativeUpdate(transparent)) return
-        // No-op on X11: standard transparency requires compositor-specific APIs.
+        val display = MemorySegment.ofAddress(displayPtr)
+        val opacityAtom = internAtom(displayPtr, "_NET_WM_WINDOW_OPACITY")
+        val cardinalAtom = internAtom(displayPtr, "CARDINAL")
+        if (opacityAtom == 0L || cardinalAtom == 0L) return
+        try {
+            if (transparent) {
+                Arena.ofConfined().use { arena ->
+                    val data = arena.allocate(ValueLayout.JAVA_LONG, 1L)
+                    data.set(ValueLayout.JAVA_LONG, 0L, 0xFFFFFFFF.toLong())
+                    xChangeProperty?.invokeExact(
+                        display, xWindowId,
+                        opacityAtom, cardinalAtom,
+                        32, 0 /* PropModeReplace */,
+                        data, 1,
+                    ) as? Int
+                    xFlush?.invokeExact(display) as? Int
+                }
+            } else {
+                xDeleteProperty?.invokeExact(
+                    display, xWindowId, opacityAtom,
+                ) as? Int
+                xFlush?.invokeExact(display) as? Int
+            }
+        } catch (_: Throwable) {}
     }
 
     /**
      * No-op on X11.
      *
-     * Blur requires compositor-specific APIs (e.g. KDE Blur, _KDE_NET_WM_BLUR_BEHIND_REGION).
-     * Documented no-op.
+     * Blur requires compositor-specific APIs (e.g. KDE Blur,
+     * _KDE_NET_WM_BLUR_BEHIND_REGION). No standardized X11 blur protocol exists;
+     * each compositor (KWin, compton/picom, compiz) uses its own extension.
+     * winit treats this as a no-op.
      */
     override fun setBlur(blur: Boolean) {
         if (!x11BlurRequiresNativeUpdate(blur)) return

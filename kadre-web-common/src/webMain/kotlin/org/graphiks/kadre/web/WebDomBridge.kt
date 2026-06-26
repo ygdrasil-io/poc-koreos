@@ -188,12 +188,44 @@ interface WebDomBridge {
     fun exitPointerLock() { /* no-op by default */ }
 
     /**
+     * Returns true if any element currently holds Pointer Lock
+     * (`document.pointerLockElement != null`).
+     *
+     * Default: false (test / non-browser bridge).
+     */
+    fun isPointerLocked(): Boolean = false
+
+    /**
+     * Enables or disables cursor hit-testing on the canvas identified by [canvasId]
+     * via the CSS `pointer-events` property.
+     *
+     * When [hittest] is `false` the canvas becomes transparent to pointer events
+     * (`pointer-events: none`), letting clicks fall through to elements beneath it.
+     * When `true` the canvas captures pointer events normally (`pointer-events: auto`).
+     *
+     * Default: no-op (test / non-browser bridge).
+     */
+    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* no-op by default */ }
+
+    /**
      * Returns true if `window.matchMedia('(prefers-color-scheme: dark)')` matches.
      *
      * Used by [WebEventLoop.systemTheme] to detect the system theme.
      * Default: false (test / non-browser bridge).
      */
     fun prefersDarkColorScheme(): Boolean = false
+
+    /**
+     * Callback invoked when `prefers-color-scheme` changes.
+     *
+     * The parameter is `true` when the browser reports a dark color scheme,
+     * `false` when light. Set by [WebEventLoop] when creating a window;
+     * the bridge implementation fires it on `matchMedia('(prefers-color-scheme: dark)')` change.
+     * Default: no-op (test / non-browser bridge).
+     */
+    var onThemeChange: ((dark: Boolean) -> Unit)?
+        get() = null
+        set(_) { /* no-op by default; overridden in JsWebDomBridge / WasmJsWebDomBridge */ }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
 

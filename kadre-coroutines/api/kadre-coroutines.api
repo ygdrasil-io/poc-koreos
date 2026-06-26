@@ -12,6 +12,7 @@ public abstract interface class org/graphiks/kadre/coroutines/KadreAppScope : ko
 	public abstract fun createWindow (Lorg/graphiks/kadre/core/WindowAttributes;)Lorg/graphiks/kadre/coroutines/KadreWindow;
 	public abstract fun exit ()V
 	public abstract fun getDispatcher ()Lorg/graphiks/kadre/coroutines/EventLoopDispatcher;
+	public abstract fun getEventLoop ()Lorg/graphiks/kadre/core/ActiveEventLoop;
 }
 
 public final class org/graphiks/kadre/coroutines/KadreApplicationKt {

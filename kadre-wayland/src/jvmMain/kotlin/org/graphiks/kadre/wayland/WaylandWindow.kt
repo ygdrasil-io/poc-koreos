@@ -33,6 +33,7 @@ import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -908,6 +909,23 @@ class WaylandWindow private constructor(
         if (toplevelPtr == 0L) return
         mgr.setWindowIcon(icon, toplevelPtr)
     }
+
+    /**
+     * Requests user attention; always returns a failure on Wayland.
+     *
+     * Attention requests rely on xdg_activation_v1, whose token-based activation
+     * needs an asynchronous token-generation roundtrip not yet wired in Kadre.
+     * When the compositor exposes the protocol extension this returns
+     * [WindowRequestResult.Failure] with [RequestError.Ignored]; otherwise it
+     * returns [WindowRequestResult.Failure] with [RequestError.Unsupported],
+     * matching winit's behaviour.
+     */
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        if (activationManager != null) {
+            WindowRequestResult.Failure(RequestError.Ignored("Wayland xdg_activation_v1 token flow not yet wired"))
+        } else {
+            WindowRequestResult.Failure(RequestError.Unsupported("Wayland xdg_activation_v1 is unavailable"))
+        }
 
     /**
      * No-op on Wayland, matching winit.

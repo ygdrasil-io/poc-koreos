@@ -24,6 +24,7 @@ import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.TouchForce
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
@@ -115,6 +116,9 @@ abstract class KadreActivity : ComponentActivity() {
 
     /** Last observed keyboard modifier state, used to suppress duplicate notifications. */
     private var lastKeyboardModifierState = AndroidKeyMapper.initialModifierState()
+
+    /** Last observed system theme, used to detect theme changes and emit [WindowEvent.ThemeChanged]. */
+    private var lastTheme: Theme? = null
 
     /** Scale gesture detector for pinch-zoom support. */
     private var scaleGestureDetector: ScaleGestureDetector? = null
@@ -284,6 +288,7 @@ abstract class KadreActivity : ComponentActivity() {
         handler.resumed(eventLoop)
         eventLoop.pendingWindow?.let { window ->
             handler.windowEvent(eventLoop, window.id, WindowEvent.Occluded(false))
+            dispatchThemeChangedIfNeeded(window)
             eventLoop.scheduleFrameIfNeeded(window)
         }
     }
@@ -490,6 +495,8 @@ abstract class KadreActivity : ComponentActivity() {
             lastScaleFactor = density
             handler.windowEvent(eventLoop, window.id, WindowEvent.ScaleFactorChanged(density))
         }
+        // Detect system theme changes (dark/light mode) via UiModeManager
+        dispatchThemeChangedIfNeeded(window)
     }
 
     // ── Focus (window-level) ──────────────────────────────────────────────────
@@ -515,6 +522,20 @@ abstract class KadreActivity : ComponentActivity() {
         if (modifierState == lastKeyboardModifierState) return
         lastKeyboardModifierState = modifierState
         handler.windowEvent(eventLoop, window.id, WindowEvent.ModifiersChanged(modifierState))
+    }
+
+    /**
+     * Detects system theme changes (dark/light mode) via UiModeManager and emits
+     * [WindowEvent.ThemeChanged] if the theme differs from the last cached value.
+     */
+    private fun dispatchThemeChangedIfNeeded(window: AndroidWindow) {
+        val currentTheme = eventLoop.systemTheme()
+        if (currentTheme != lastTheme) {
+            lastTheme = currentTheme
+            if (currentTheme != null) {
+                handler.windowEvent(eventLoop, window.id, WindowEvent.ThemeChanged(currentTheme))
+            }
+        }
     }
 
     override fun onDestroy() {

@@ -283,6 +283,25 @@ private external fun touchPreventDefault(e: JsAny)
 private external fun observeDevicePixelRatioJs(cb: JsAny, isAttached: JsAny)
 
 /**
+ * Observes `prefers-color-scheme` via `matchMedia` and calls `cb(dark: Boolean)`
+ * when the user toggles between dark and light mode.
+ */
+@JsFun(
+    """(cb) => {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener('change', function() { cb(mq.matches); });
+    }"""
+)
+private external fun observeColorSchemeJs(cb: JsAny)
+
+/**
+ * Wraps a Kotlin `(Boolean) -> Unit` lambda into a JS function callable from
+ * `addEventListener`.
+ */
+@JsFun("(fn) => fn")
+private external fun wrapBoolCallback(fn: (Boolean) -> Unit): JsAny
+
+/**
  * Wraps a Kotlin `(JsAny) -> Unit` lambda into a JS function callable from
  * `addEventListener`. The `(fn) => fn` of the `@JsFun` triggers the conversion by the
  * Kotlin/Wasm compiler, which produces a real JS closure — equivalent to the pattern
@@ -303,6 +322,8 @@ private external fun jsRequestFullscreen(el: JsEventTarget)
 @JsFun("() => { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }")
 private external fun jsExitFullscreen()
 
+// ── R3: cursor, pointer lock, hit-test ─────────────────────────────────────
+
 /** Sets the CSS cursor style on the given element. */
 @JsFun("(el, value) => { el.style.cursor = value; }")
 private external fun jsSetCssCursor(el: JsEventTarget, value: String)
@@ -312,12 +333,16 @@ private external fun jsSetCssCursor(el: JsEventTarget, value: String)
 private external fun jsSetPointerEvents(el: JsEventTarget, value: String)
 
 /** Calls requestPointerLock on the given element (handles vendor prefixes). */
-@JsFun("(el) => { if (el.requestPointerLock) el.requestPointerLock(); else if (el.webkitRequestPointerLock) el.webkitRequestPointerLock(); }")
+@JsFun("(el) => { if (el.requestPointerLock) el.requestPointerLock(); else if (el.webkitRequestPointerLock) el.webkitRequestPointerLock(); else if (el.mozRequestPointerLock) el.mozRequestPointerLock(); }")
 private external fun jsRequestPointerLock(el: JsEventTarget)
 
 /** Calls document.exitPointerLock (handles vendor prefixes). */
-@JsFun("() => { if (document.exitPointerLock) document.exitPointerLock(); else if (document.webkitExitPointerLock) document.webkitExitPointerLock(); }")
+@JsFun("() => { if (document.exitPointerLock) document.exitPointerLock(); else if (document.webkitExitPointerLock) document.webkitExitPointerLock(); else if (document.mozExitPointerLock) document.mozExitPointerLock(); }")
 private external fun jsExitPointerLock()
+
+/** Returns true if the given element currently holds Pointer Lock. */
+@JsFun("(canvas) => document.pointerLockElement === canvas")
+private external fun jsIsPointerLocked(canvas: JsEventTarget?): Boolean
 
 // ── Task 14: safeArea insets + ownedDisplayHandle ──────────────────────────
 
@@ -382,6 +407,8 @@ private external fun ensureCanvasInDom(
 class WasmJsWebDomBridge : WebDomBridge {
 
     override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
+
+    override var onThemeChange: ((Boolean) -> Unit)? = null
 
     override var preventDefaultEnabled: Boolean = true
 
@@ -636,6 +663,11 @@ class WasmJsWebDomBridge : WebDomBridge {
             cb = wrapDoubleCallback { factor -> dispatch(WebWindowEvent.ScaleFactorChanged(factor)) },
             isAttached = wrapBoolSupplier { attached },
         )
+
+        // --- prefers-color-scheme changes → ThemeChanged ---
+        observeColorSchemeJs(
+            cb = wrapBoolCallback { dark -> onThemeChange?.invoke(dark) },
+        )
     }
 
     /**
@@ -778,6 +810,9 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     // ── R3: Cursor and Pointer Lock ──────────────────────────────────────────
 
+    /**
+     * Sets `style.cursor` on the canvas element identified by [canvasId].
+     */
     override fun setCssCursor(canvasId: String, cssCursorValue: String) {
         try {
             val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
@@ -792,6 +827,12 @@ class WasmJsWebDomBridge : WebDomBridge {
         } catch (_: Throwable) {}
     }
 
+    /**
+     * Requests Pointer Lock on the canvas element (handles vendor prefixes).
+     *
+     * The browser may require a user gesture; the lock is granted asynchronously
+     * via a `pointerlockchange` event.
+     */
     override fun requestPointerLock(canvasId: String) {
         try {
             val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
@@ -799,10 +840,26 @@ class WasmJsWebDomBridge : WebDomBridge {
         } catch (_: Throwable) {}
     }
 
+    /**
+     * Calls `document.exitPointerLock()` (handles vendor prefixes).
+     */
     override fun exitPointerLock() {
         try {
             jsExitPointerLock()
         } catch (_: Throwable) {}
+    }
+
+    /**
+     * Returns true if the canvas element currently holds Pointer Lock.
+     */
+    override fun isPointerLocked(): Boolean = jsIsPointerLocked(targetElement)
+
+    /**
+     * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
+     */
+    override fun setCursorHittest(canvasId: String, hittest: Boolean) {
+        val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
+        jsSetPointerEvents(el, if (hittest) "auto" else "none")
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────

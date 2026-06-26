@@ -297,9 +297,27 @@ class X11EventLoop internal constructor(
      * The xsettings daemon exposes `Net/ThemeName` but there is no standardised
      * Light/Dark distinction. Documented null.
      *
+     * **ThemeChanged not emitted on X11** — there is no standard protocol for
+     * system theme change notifications. The xsettings manager could be polled,
+     * but polling introduces overhead for a low-value signal.
+     *
      * TODO(R3-x11-theme): query xsettings or GTK_THEME env variable.
      */
     override fun systemTheme(): Theme? = null
+
+    // ── R6: gestures ──────────────────────────────────────────────────────────
+
+    /**
+     * Gesture events ([WindowEvent.PinchGesture], [WindowEvent.PanGesture],
+     * [WindowEvent.RotationGesture], [WindowEvent.DoubleTapGesture]) are
+     * **not emitted on X11**.
+     *
+     * X11 has no standard gesture protocol. Ctrl+scroll is dispatched as
+     * [WindowEvent.PinchGesture] as a convenient software fallback (see
+     * [ButtonPress] handling in [dispatchEvent]), but proper multi-touch
+     * gesture recognition requires hardware-specific extensions (Xi2 touch
+     * events) that are not universally available on X11 servers.
+     */
 
     // ── R4: device event filter ───────────────────────────────────────────────
 
@@ -546,6 +564,7 @@ private fun x11KeyInput(
     state: KeyState,
     modifiers: KeyboardModifiers,
     repeat: Boolean = false,
+    text: String? = null,
 ): WindowEvent.KeyInput {
     val native = NativeKeyInfo(
         platform = KeyPlatform.X11,
@@ -555,6 +574,7 @@ private fun x11KeyInput(
         nativeKey = NativeLogicalKey.X11(keysym.toLong()),
     )
     val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
+    val resolvedText = text ?: mappedCode?.defaultText()
     return WindowEvent.KeyInput(
         event = KeyEvent(
             physicalKey = mappedCode?.let(PhysicalKey::Code) ?: PhysicalKey.Native(NativeKeyCode.X11(keycode.toLong())),
@@ -562,8 +582,8 @@ private fun x11KeyInput(
             state = state,
             modifiers = modifiers,
             repeat = repeat,
-            text = mappedCode?.defaultText(),
-            textWithAllModifiers = mappedCode?.defaultText(),
+            text = resolvedText,
+            textWithAllModifiers = resolvedText,
             keyWithoutModifiers = mappedCode?.defaultText(),
             native = native,
         ),
@@ -734,7 +754,8 @@ private fun dispatchEvent(
             loop.keyboardModifierTracker.modifiersChangedIfNeeded(modifierState)?.let { handler.windowEvent(loop, windowId, it) }
             val mods = modifierState?.logical ?: x11StateToModifiers(state)
             val repeat = X11LiveRepeatTracker.update(keycode, KeyState.Pressed)
-            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Pressed, mods, repeat))
+            val text = lookupX11Text(eventBuf)
+            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Pressed, mods, repeat, text))
         }
 
         KeyRelease -> {

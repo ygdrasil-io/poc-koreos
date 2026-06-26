@@ -23,11 +23,20 @@ import org.graphiks.kadre.core.PhysicalKey
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
 private const val OFFSET_STATE: Long = 64L
 private const val OFFSET_KEYCODE: Long = 68L
+
+/**
+ * Offset of the `Display *display` field inside XAnyEvent (LP64 layout):
+ * `type(4) + pad(4) + serial(8) + send_event(4) + pad(4) = 24`.
+ * Used to skip [lookupX11Text] for synthetic events whose display is NULL
+ * (e.g. unit-test segments), where XLookupString would dereference NULL.
+ */
+private const val OFFSET_DISPLAY: Long = 24L
 
 private const val SHIFT_MASK: Int = 0x01
 private const val CONTROL_MASK: Int = 0x04
@@ -89,6 +98,48 @@ internal fun stateToModifiers(state: Int): KeyboardModifiers {
     if (state and MOD1_MASK != 0) bits = bits or KeyboardModifiers.ALT
     if (state and MOD4_MASK != 0) bits = bits or KeyboardModifiers.META
     return KeyboardModifiers(bits)
+}
+
+/**
+ * Best-effort keyboard text for a KeyPress event via `XLookupString`.
+ *
+ * Returns the ISO Latin-1 text produced by the key (honouring the modifier
+ * state stored in the event), or `null` when:
+ * - libX11 is unavailable (non-Linux) — the handle is null,
+ * - the event has no display attached (synthetic test events),
+ * - the key produces no printable text (control chars, modifiers, etc.).
+ *
+ * Composed / multibyte input is handled separately through the XIM path
+ * (XFilterEvent + XIC); this only covers the common ASCII/Latin-1 case so the
+ * [org.graphiks.kadre.core.KeyEvent.text] field is no longer always null.
+ *
+ * @param eventSegment Native pointer to the XKeyEvent (XEvent buffer).
+ */
+internal fun lookupX11Text(eventSegment: MemorySegment): String? {
+    val handle = xLookupString ?: return null
+    // Guard against synthetic events with a NULL display (XLookupString would crash).
+    val displayPtr = try {
+        eventSegment.get(ValueLayout.JAVA_LONG, OFFSET_DISPLAY)
+    } catch (_: Throwable) {
+        return null
+    }
+    if (displayPtr == 0L) return null
+    return try {
+        Arena.ofConfined().use { arena ->
+            val buffer = arena.allocate(32L, 1L)
+            val keysymOut = arena.allocate(ValueLayout.JAVA_LONG)
+            val count = handle.invokeExact(
+                eventSegment, buffer, 32, keysymOut, MemorySegment.NULL,
+            ) as Int
+            if (count <= 0) return@use null
+            val bytes = ByteArray(count) { index -> buffer.get(ValueLayout.JAVA_BYTE, index.toLong()) }
+            val text = String(bytes, Charsets.ISO_8859_1)
+            // Filter out control characters (NUL, DEL, etc.) that are not user-visible text.
+            if (text.isNotEmpty() && text.all { it.code >= 0x20 && it.code != 0x7F }) text else null
+        }
+    } catch (_: Throwable) {
+        null
+    }
 }
 
 object X11KeyMapper {
@@ -195,6 +246,9 @@ object X11KeyMapper {
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
 
+        val lookupText = if (isPressed) lookupX11Text(eventSegment) else null
+        val resolvedText = lookupText ?: mappedCode?.defaultText()
+
         return WindowEvent.KeyInput(
             event = KeyEvent(
                 physicalKey = mappedCode?.let(PhysicalKey::Code) ?: PhysicalKey.Native(NativeKeyCode.X11(keycode.toLong())),
@@ -202,8 +256,8 @@ object X11KeyMapper {
                 state = keyState,
                 modifiers = modifiers,
                 repeat = isRepeat,
-                text = mappedCode?.defaultText(),
-                textWithAllModifiers = mappedCode?.defaultText(),
+                text = resolvedText,
+                textWithAllModifiers = resolvedText,
                 keyWithoutModifiers = mappedCode?.defaultText(),
                 native = native,
             ),

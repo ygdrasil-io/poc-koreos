@@ -27,6 +27,8 @@ import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.EventLoopProxy
 import org.graphiks.kadre.core.MonitorHandle
+import org.graphiks.kadre.core.OwnedDisplayHandle
+import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.StartCause
@@ -99,6 +101,12 @@ class WaylandEventLoop internal constructor(
      * Activation token for xdg_activation_v1, set via [setActivationToken] extension.
      */
     internal var _activationToken: String? = null
+
+    /**
+     * Returns an [OwnedDisplayHandle] wrapping [RawDisplayHandle.Wayland].
+     */
+    override fun ownedDisplayHandle(): OwnedDisplayHandle? =
+        OwnedDisplayHandle(RawDisplayHandle.Wayland(display = displayPtr))
 
     @Volatile private var _isExiting = false
     override val isExiting: Boolean get() = _isExiting
@@ -234,6 +242,18 @@ class WaylandEventLoop internal constructor(
         }
     }
 
+    // ── R3b: occlusion ───────────────────────────────────────────────────────
+
+    /**
+     * [WindowEvent.Occluded] is **not emitted on Wayland**.
+     *
+     * The xdg-shell protocol does not expose surface occlusion information.
+     * The compositor is a separate process and does not inform clients when
+     * their windows are fully obscured by other surfaces. This is an
+     * intentional non-emission — there is no standard Wayland protocol to
+     * query or subscribe to occlusion state.
+     */
+
     // ── R4: device event filter ───────────────────────────────────────────────
 
     /**
@@ -250,6 +270,20 @@ class WaylandEventLoop internal constructor(
         deviceEventFilter = mode
 
     }
+
+    // ── R6: gestures ──────────────────────────────────────────────────────────
+
+    /**
+     * Gesture events ([WindowEvent.PinchGesture], [WindowEvent.PanGesture],
+     * [WindowEvent.RotationGesture], [WindowEvent.DoubleTapGesture]) are
+     * **not emitted on Wayland**.
+     *
+     * The wl_pointer / wl_touch protocols expose raw pointer coordinates and
+     * touch points but do NOT include gesture recognition. Gesture recognition
+     * is typically performed by the compositor (e.g. libinput) and not forwarded
+     * to individual clients. There is no standard Wayland protocol for gesture
+     * events.
+     */
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────
 

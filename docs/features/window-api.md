@@ -41,7 +41,7 @@
 |-----------|-----------|--------|-------|
 | `Window::raw_window_handle()` | `rawWindowHandle: RawWindowHandle` | ✅ Implemented | 7 platform variants |
 | `Window::raw_display_handle()` | `rawDisplayHandle: RawDisplayHandle` | ✅ Implemented | 7 platform variants |
-| `owned_display_handle()` | `ownedDisplayHandle(): OwnedDisplayHandle?` | 🔶 Deferred | winit non-null; Kadre returns `null` by default |
+| `owned_display_handle()` | `ownedDisplayHandle(): OwnedDisplayHandle?` | ✅ Implemented | Non-null on all desktop backends |
 
 ### Monitor & Fullscreen
 
@@ -81,8 +81,8 @@
 | `Window::set_transparent()` | `setTransparent(Boolean)` | ✅ Implemented | |
 | `Window::set_blur()` | `setBlur(Boolean)` | ✅ Implemented | |
 | `Window::set_window_icon()` | `setWindowIcon(Icon?)` | ✅ Implemented | |
-| `Window::request_user_attention()` | `requestUserAttention(UserAttentionType?): WindowRequestResult` | 🔶 Deferred | |
-| `Window::set_content_protected()` | `setContentProtected(Boolean): WindowRequestResult` | 🔶 Deferred | |
+| `Window::request_user_attention()` | `requestUserAttention(UserAttentionType?): WindowRequestResult` | ✅ Implemented | |
+| `Window::set_content_protected()` | `setContentProtected(Boolean): WindowRequestResult` | ✅ Implemented | |
 
 ### IME
 
@@ -97,9 +97,9 @@
 
 | winit API | Kadre API | Status | Notes |
 |-----------|-----------|--------|-------|
-| `Window::drag_window()` | `dragWindow(): WindowRequestResult` | 🔶 Deferred | |
-| `Window::drag_resize_window(ResizeDirection)` | `dragResizeWindow(ResizeDirection): WindowRequestResult` | 🔶 Deferred | |
-| `Window::show_window_menu(PhysicalPosition)` | `showWindowMenu(PhysicalPosition): WindowRequestResult` | 🔶 Deferred | |
+| `Window::drag_window()` | `dragWindow(): WindowRequestResult` | ✅ Implemented | |
+| `Window::drag_resize_window(ResizeDirection)` | `dragResizeWindow(ResizeDirection): WindowRequestResult` | ✅ Implemented | |
+| `Window::show_window_menu(PhysicalPosition)` | `showWindowMenu(PhysicalPosition): WindowRequestResult` | ✅ Implemented | |
 | `Window::reset_dead_keys()` | `resetDeadKeys()` | ✅ Implemented | |
 
 ### Result / Error Types
@@ -149,7 +149,7 @@
 | `create_proxy()` | `createProxy(): EventLoopProxy` | ✅ Implemented | |
 | `available_monitors()` | `availableMonitors(): List<MonitorHandle>` | ✅ Implemented | |
 | `primary_monitor()` | `primaryMonitor(): MonitorHandle?` | ✅ Implemented | |
-| `owned_display_handle()` | `ownedDisplayHandle(): OwnedDisplayHandle?` | 🔶 Deferred | winit non-null; Kadre nullable |
+| `owned_display_handle()` | `ownedDisplayHandle(): OwnedDisplayHandle?` | ✅ Implemented | Non-null on all desktop backends |
 | `system_theme()` | `systemTheme(): Theme?` | ✅ Implemented | |
 | `create_custom_cursor(CursorImage)` | `createCustomCursor(CursorImage): CustomCursor?` | ✅ Implemented | Backend-dependent; returns null on unsupported platforms |
 | `listen_device_events(DeviceEvents)` | `listenDeviceEvents(DeviceEvents)` | ✅ Implemented | |

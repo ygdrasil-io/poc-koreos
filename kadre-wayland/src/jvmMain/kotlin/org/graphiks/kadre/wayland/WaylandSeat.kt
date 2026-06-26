@@ -251,7 +251,7 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, time: Int, key: Int, state: Int,
     ) {
-        modifiers.mapKey(keycode = key, state = state).forEach { event ->
+        modifiers.mapKey(keycode = key, state = state, xkbStatePtr = xkbState).forEach { event ->
             onEvent(focusedSurfacePtr, event)
         }
         if (deviceEventFilterOverride != DeviceEvents.Never) {
@@ -264,6 +264,18 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, modsDepressed: Int, modsLatched: Int, modsLocked: Int, group: Int,
     ) {
+        // Keep the xkb state in sync so xkb_state_key_get_utf8 yields shifted /
+        // dead-key characters for subsequent key events.
+        if (xkbState != 0L) {
+            try {
+                xkbStateUpdateMask?.invokeExact(
+                    MemorySegment.ofAddress(xkbState),
+                    modsDepressed, modsLatched, modsLocked,
+                    0, 0, group,
+                ) as Int
+            } catch (_: Throwable) {
+            }
+        }
         modifiers.mapModifiers(modsDepressed = modsDepressed).forEach { event ->
             onEvent(focusedSurfacePtr, event)
         }

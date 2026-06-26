@@ -8,6 +8,7 @@ import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
+import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Insets
@@ -24,8 +25,10 @@ import org.graphiks.kadre.core.PointerSource
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
+import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -1022,17 +1025,32 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     /** No-op on iOS. */
     override fun setCursorVisible(visible: Boolean) { /* no-op: iOS has no cursor */ }
 
-    /** Unsupported on iOS. */
+    /**
+     * Sets the cursor grab mode for this window.
+     *
+     * **Platform note (iOS):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no cursor to grab"))
+        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
 
-    /** Unsupported on iOS. */
+    /**
+     * Warps the cursor to the given position.
+     *
+     * **Platform note (iOS):** Touch-first platform with no system cursor.
+     * Cursor warping is unsupported; returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
         WindowRequestResult.Failure(RequestError.Unsupported("iOS has no cursor to warp"))
 
-    /** Unsupported on iOS. */
+    /**
+     * Enables or disables cursor hit-testing for this window.
+     *
+     * **Platform note (iOS):** Unsupported — touch-first platform with no system cursor.
+     * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
+     */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS does not support cursor hit-testing"))
+        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
 
     /**
      * Returns the current theme via the view controller's traitCollection.
@@ -1150,4 +1168,59 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     override fun resetDeadKeys() {
         // no-op: UIKit manages dead-key state internally
     }
+
+    // ── R5-CustomCursor ───────────────────────────────────────────────────────
+
+    /**
+     * Applies a previously created custom cursor to this window.
+     *
+     * **Platform note (iOS):** No-op — touch-first platform with no system cursor.
+     */
+    override fun setCustomCursor(cursor: CustomCursor) { /* no-op on iOS */ }
+
+    // ── R5-MiscWindow ─────────────────────────────────────────────────────────
+
+    /**
+     * Requests the platform to attract the user's attention (taskbar / dock icon).
+     *
+     * **Platform note (iOS):** Documented no-op — iOS does not have a taskbar
+     * or dock-level notification API at the UIWindow level.
+     * Returns [WindowRequestResult.Success] to match local winit semantics.
+     */
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        WindowRequestResult.Success
+
+    /**
+     * Enables or disables screen-capture protection for this window.
+     *
+     * **Platform note (iOS):** Unsupported. UIKit does not expose a portable
+     * capture-protection mechanism at the UIWindow level.
+     */
+    override fun setContentProtected(protected: Boolean): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Content protection is unsupported on iOS"))
+
+    /**
+     * Shows the platform window menu (system / title-bar context menu) at the given position.
+     *
+     * **Platform note (iOS):** Unsupported — UIKit has no system window menu concept.
+     */
+    override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window menu is unsupported on iOS"))
+
+    /**
+     * Initiates a user-driven window drag from the current cursor position.
+     *
+     * **Platform note (iOS):** Unsupported — UIKit has no windowing model
+     * with user-draggable windows.
+     */
+    override fun dragWindow(): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported on iOS"))
+
+    /**
+     * Initiates a user-driven window resize from the current cursor position.
+     *
+     * **Platform note (iOS):** Unsupported — UIKit windows are not user-resizable.
+     */
+    override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported("Window resizing is unsupported on iOS"))
 }
