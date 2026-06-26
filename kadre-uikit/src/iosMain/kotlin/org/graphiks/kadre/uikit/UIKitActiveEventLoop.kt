@@ -4,8 +4,6 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import org.graphiks.kadre.core.*
 import platform.UIKit.UIScreen
-import platform.UIKit.UIUserInterfaceStyle
-import platform.UIKit.UITraitCollection
 
 
 /**
@@ -112,21 +110,17 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     // ── R3: system theme ──────────────────────────────────────────────────────
 
     /**
-     * Returns the current system theme via UITraitCollection.
+     * Returns the current system theme via the first available window's trait collection.
      *
-     * Uses the main screen's `traitCollection.userInterfaceStyle`:
+     * Uses the view controller's `traitCollection.userInterfaceStyle` (replacing
+     * deprecated `UIScreen.mainScreen.traitCollection`):
      * - UIUserInterfaceStyleLight (1) → [Theme.Light]
      * - UIUserInterfaceStyleDark  (2) → [Theme.Dark]
      * - otherwise                     → null
      */
     @OptIn(ExperimentalForeignApi::class)
     override fun systemTheme(): Theme? = try {
-        val style = UIScreen.mainScreen.traitCollection.userInterfaceStyle
-        when (style) {
-            UIUserInterfaceStyle.UIUserInterfaceStyleLight -> Theme.Light
-            UIUserInterfaceStyle.UIUserInterfaceStyleDark  -> Theme.Dark
-            else -> null
-        }
+        windows.firstOrNull()?.let { it.theme }
     } catch (_: Throwable) { null }
 
     /**
