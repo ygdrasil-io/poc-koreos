@@ -312,7 +312,12 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                     loop.handler.windowEvent(
                         loop,
                         appKitWindow.id,
-                        WindowEvent.ModifiersChanged(KeyboardModifierState(logical = modifiers)),
+                        WindowEvent.ModifiersChanged(
+                            KeyboardModifierState(
+                                logical = modifiers,
+                                physical = AppKitKeyMapper.modifierKeys(modFlags),
+                            )
+                        ),
                     )
                 }
                 return

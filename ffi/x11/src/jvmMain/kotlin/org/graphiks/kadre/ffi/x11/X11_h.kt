@@ -611,6 +611,34 @@ val xkbSetDetectableAutoRepeat: MethodHandle? by lazy {
     )
 }
 
+// ── XLookupString ─────────────────────────────────────────────────────────────
+
+/**
+ * int XLookupString(XKeyEvent *event_struct, char *buffer_return, int bytes_buffer,
+ *     KeySym *keysym_return, XComposeStatus *status_in_out);
+ *
+ * Translates a KeyPress/KeyRelease event into the ISO Latin-1 text it produces
+ * (taking the current modifier state stored in the event into account). The
+ * returned count is the number of bytes written into `buffer_return`.
+ *
+ * This is the simplest way to populate [org.graphiks.kadre.core.KeyEvent.text]
+ * for plain ASCII / Latin-1 typing without a full input method (XIM/XIC).
+ * Composed / multibyte text continues to flow through the XIM path.
+ */
+val xLookupString: MethodHandle? by lazy {
+    libX11.downcall(
+        "XLookupString",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // int return (number of bytes written)
+            ValueLayout.ADDRESS,    // XKeyEvent* event_struct
+            ValueLayout.ADDRESS,    // char* buffer_return
+            ValueLayout.JAVA_INT,   // int bytes_buffer
+            ValueLayout.ADDRESS,    // KeySym* keysym_return (or NULL)
+            ValueLayout.ADDRESS,    // XComposeStatus* status_in_out (or NULL)
+        )
+    )
+}
+
 // ── XResourceManagerString ────────────────────────────────────────────────────
 
 /**

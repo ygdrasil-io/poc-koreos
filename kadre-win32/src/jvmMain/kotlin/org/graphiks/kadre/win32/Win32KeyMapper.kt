@@ -12,6 +12,17 @@ package org.graphiks.kadre.win32
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.NativeKeyCode
 import org.graphiks.kadre.core.PhysicalKey
+import org.graphiks.kadre.ffi.win32.generated.MapVirtualKeyW
+
+/**
+ * `MapVirtualKeyW` translation type: scan code → virtual key, distinguishing
+ * left/right variants (VK_LSHIFT/VK_RSHIFT, etc.). Not defined in the generated
+ * Win32 constants, so declared here.
+ */
+private const val MAPVK_VSC_TO_VK_EX: Int = 3
+
+/** Hardware scan code of the right Shift key (used as a fallback heuristic). */
+private const val SCANCODE_RIGHT_SHIFT: Int = 0x36
 
 /**
  * Converts a Win32 virtual key code (VK_*) into a kadre [KeyCode].
@@ -116,6 +127,67 @@ internal object Win32KeyMapper {
      */
     fun keyCode(vkCode: Int): KeyCode? = table[vkCode]
 
+    /**
+     * Resolves a [KeyCode] preferring scan code / extended-key information over
+     * the raw virtual key, which improves accuracy on non-US layouts and lets
+     * left/right modifier variants be distinguished.
+     *
+     * Windows reports the generic `VK_SHIFT` / `VK_CONTROL` / `VK_MENU` for both
+     * sides in WM_KEY* messages. The side is recovered from:
+     * - the **extended-key flag** (bit 24 of lParam) for Ctrl (→ Right) and
+     *   Alt/AltGr (→ Right);
+     * - `MapVirtualKeyW(scanCode, MAPVK_VSC_TO_VK_EX)` for Shift (falling back to
+     *   the right-Shift scan code `0x36` when the native call is unavailable).
+     *
+     * Non-modifier keys fall through to the regular VK table.
+     *
+     * @param vkCode   Virtual key code (wParam of a WM_KEY* message).
+     * @param scanCode Hardware scan code (bits 16-23 of lParam).
+     * @param extended Extended-key flag (bit 24 of lParam).
+     */
+    fun keyCode(vkCode: Int, scanCode: Int, extended: Boolean): KeyCode? = when (vkCode) {
+        VK_SHIFT -> resolveShift(scanCode)
+        VK_CONTROL -> if (extended) KeyCode.ControlRight else KeyCode.ControlLeft
+        VK_MENU -> if (extended) KeyCode.AltRight else KeyCode.AltLeft
+        else -> table[vkCode]
+    }
+
     fun physicalKey(vkCode: Int): PhysicalKey = keyCode(vkCode)?.let(PhysicalKey::Code)
         ?: PhysicalKey.Native(NativeKeyCode.Win32(scanCode = null, virtualKey = vkCode.toLong()))
+
+    /**
+     * Scan-code / extended-key aware variant of [physicalKey]. See
+     * [keyCode] (3-arg) for the resolution rules.
+     */
+    fun physicalKey(vkCode: Int, scanCode: Int, extended: Boolean): PhysicalKey =
+        keyCode(vkCode, scanCode, extended)?.let(PhysicalKey::Code)
+            ?: PhysicalKey.Native(
+                NativeKeyCode.Win32(
+                    scanCode = scanCode.takeIf { it != 0 }?.toLong(),
+                    virtualKey = vkCode.toLong(),
+                )
+            )
+
+    /**
+     * Distinguishes left vs. right Shift. Shift is not an extended key, so the
+     * side is derived from the scan code via `MapVirtualKeyW(.., MAPVK_VSC_TO_VK_EX)`,
+     * with a scan-code heuristic fallback for non-Windows / uninitialised cases.
+     */
+    private fun resolveShift(scanCode: Int): KeyCode {
+        return when (mapScanCodeToVkEx(scanCode)) {
+            VK_RSHIFT -> KeyCode.ShiftRight
+            VK_LSHIFT -> KeyCode.ShiftLeft
+            else -> if (scanCode == SCANCODE_RIGHT_SHIFT) KeyCode.ShiftRight else KeyCode.ShiftLeft
+        }
+    }
+
+    /**
+     * Calls `MapVirtualKeyW(scanCode, MAPVK_VSC_TO_VK_EX)`; returns 0 when the
+     * native binding is unavailable (non-Windows) or not yet initialised.
+     */
+    private fun mapScanCodeToVkEx(scanCode: Int): Int = try {
+        if (scanCode == 0) 0 else MapVirtualKeyW(scanCode, MAPVK_VSC_TO_VK_EX)
+    } catch (_: Throwable) {
+        0
+    }
 }

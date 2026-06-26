@@ -557,11 +557,12 @@ object KadreWndProc {
         isRepeat: Boolean,
         lParam: Long = 0L,
     ): WindowEvent.KeyInput {
-        val mappedCode = Win32KeyMapper.keyCode(vkCode)
         val rawScanCode = (lParam ushr 16) and 0xFF
+        val extended = (lParam and KF_EXTENDED) != 0L
+        val mappedCode = Win32KeyMapper.keyCode(vkCode, rawScanCode.toInt(), extended)
         val scanCode = rawScanCode
             .takeIf { it != 0L }
-            ?.let { if ((lParam and KF_EXTENDED) != 0L) 0xE000L or it else it }
+            ?.let { if (extended) 0xE000L or it else it }
         val native = NativeKeyInfo(
             platform = KeyPlatform.Win32,
             scanCode = scanCode,
@@ -572,7 +573,7 @@ object KadreWndProc {
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
         return WindowEvent.KeyInput(
             event = KeyEvent(
-                physicalKey = Win32KeyMapper.physicalKey(vkCode),
+                physicalKey = Win32KeyMapper.physicalKey(vkCode, rawScanCode.toInt(), extended),
                 logicalKey = logicalKey,
                 state = state,
                 modifiers = modifiers,

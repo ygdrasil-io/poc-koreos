@@ -1,18 +1,34 @@
 /**
  * Mapping of macOS key codes (NSEvent.keyCode) to Kadre keyboard types.
  *
- * Reference: QWERTY US keyboard layout.
+ * NSEvent.keyCode is a **physical / positional** hardware code: it identifies a
+ * key by its location on the keyboard and is **independent of the active layout**
+ * (e.g. key 0 is always the bottom-left letter key — "A" on QWERTY, "Q" on
+ * AZERTY). The table below therefore maps physical positions, not the produced
+ * characters, which is correct for [PhysicalKey] across all keyboard layouts.
+ *
+ * Layout-dependent *text* (the logical character a key produces) is sourced from
+ * `[NSEvent characters]` in [KadreApplication], so non-QWERTY layouts emit the
+ * right `KeyEvent.text` without a separate translation table here.
+ *
+ * TODO(appkit-logical-key): for layout-aware *named* logical keys (rather than
+ *  text), use `UCKeyTranslate` with the current `TISCopyCurrentKeyboardLayoutInputSource`
+ *  layout data. Not required for text input, which already works via NSEvent.characters.
  */
 package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyboardModifiers
+import org.graphiks.kadre.core.ModifierKeyState
+import org.graphiks.kadre.core.ModifierKeys
 import org.graphiks.kadre.core.NativeKeyCode
 import org.graphiks.kadre.core.PhysicalKey
 
 /**
  * Maps macOS virtual key codes (NSEvent.keyCode) to physical key codes.
- * Reference: QWERTY US keyboard layout key codes.
+ *
+ * The codes are **positional** (layout-independent); QWERTY US labels are used
+ * only as human-readable references for the physical positions.
  */
 internal object AppKitKeyMapper {
 
@@ -20,7 +36,7 @@ internal object AppKitKeyMapper {
         ?: PhysicalKey.Native(NativeKeyCode.AppKit(code.toLong()))
 
     fun keyCode(code: Short): KeyCode? = when (code.toInt()) {
-        // Letters (QWERTY US layout)
+        // Letters (physical positions, labelled with QWERTY US for reference)
         0  -> KeyCode.KeyA
         11 -> KeyCode.KeyB
         8  -> KeyCode.KeyC
@@ -101,4 +117,39 @@ internal object AppKitKeyMapper {
         if (flags and 0x100000L != 0L) mods += KeyboardModifiers.Meta
         return mods
     }
+
+    /**
+     * Maps the device-dependent bits of NSEventModifierFlags to a [ModifierKeys]
+     * with per-side Pressed/Released state.
+     *
+     * AppKit encodes left/right modifier sides in the low bits of
+     * `modifierFlags` (device-dependent flags):
+     * - Shift:   left 0x0002, right 0x0004
+     * - Control: left 0x0001, right 0x2000
+     * - Option:  left 0x0020, right 0x0040  (Alt)
+     * - Command: left 0x0008, right 0x0010  (Meta)
+     *
+     * A side that is not set is reported as [ModifierKeyState.Released] (rather
+     * than Unknown), since `modifierFlags` reflects the complete current state.
+     */
+    fun modifierKeys(flags: Long): ModifierKeys {
+        fun state(mask: Long): ModifierKeyState =
+            if (flags and mask != 0L) ModifierKeyState.Pressed else ModifierKeyState.Released
+        return ModifierKeys(
+            leftShift = state(NS_DEVICE_LSHIFT), rightShift = state(NS_DEVICE_RSHIFT),
+            leftCtrl = state(NS_DEVICE_LCTRL), rightCtrl = state(NS_DEVICE_RCTRL),
+            leftAlt = state(NS_DEVICE_LALT), rightAlt = state(NS_DEVICE_RALT),
+            leftMeta = state(NS_DEVICE_LCMD), rightMeta = state(NS_DEVICE_RCMD),
+        )
+    }
+
+    // Device-dependent modifier masks (low bits of NSEvent.modifierFlags).
+    private const val NS_DEVICE_LSHIFT = 0x0002L
+    private const val NS_DEVICE_RSHIFT = 0x0004L
+    private const val NS_DEVICE_LCTRL = 0x0001L
+    private const val NS_DEVICE_RCTRL = 0x2000L
+    private const val NS_DEVICE_LALT = 0x0020L
+    private const val NS_DEVICE_RALT = 0x0040L
+    private const val NS_DEVICE_LCMD = 0x0008L
+    private const val NS_DEVICE_RCMD = 0x0010L
 }
