@@ -63,14 +63,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * Includes: Expose, KeyPress, KeyRelease, ButtonPress, ButtonRelease,
  * PointerMotion, VisibilityNotify, FocusIn/FocusOut, StructureNotify.
  */
-private val xDeleteProperty: MethodHandle? by lazy {
-    try {
-        SymbolLookup.libraryLookup("libX11.so.6", Arena.global()).find("XDeleteProperty")
-            .map { Linker.nativeLinker().downcallHandle(it, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG)) }
-            .orElse(null)
-    } catch (_: Throwable) { null }
-}
-
 private val FULL_EVENT_MASK: Long =
     ExposureMask or
     KeyPressMask or
