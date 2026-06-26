@@ -188,6 +188,13 @@ object KadreWndProc {
     }
 
     /**
+     * Removes physical modifier state for the given window (called when the window is destroyed).
+     */
+    fun unregisterPhysicalModifiers(hwnd: Long) {
+        physicalModifierStates.remove(hwnd)
+    }
+
+    /**
      * Aligns [value] up to the nearest multiple of [increment].
      * Returns the original value when [increment] is null, zero, or negative.
      */
@@ -304,7 +311,7 @@ object KadreWndProc {
                 val extended = (lParam and KF_EXTENDED) != 0L
                 val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
-                    val newPhysical = updatePhysicalModifiers(resolvedKeyCode, KeyState.Pressed)
+                    val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Pressed)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
                 }
                 emit(hwnd, keyEvent(vkCode, KeyState.Pressed, mods, isRepeat, lParam))
@@ -319,7 +326,7 @@ object KadreWndProc {
                 val extended = (lParam and KF_EXTENDED) != 0L
                 val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
-                    val newPhysical = updatePhysicalModifiers(resolvedKeyCode, KeyState.Released)
+                    val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Released)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
                 }
                 emit(hwnd, keyEvent(vkCode, KeyState.Released, mods, isRepeat = false, lParam))
@@ -442,6 +449,7 @@ object KadreWndProc {
                 emit(hwnd, WindowEvent.Destroyed)
                 Win32FocusState.unregister(hwnd)
                 unregisterConstraints(hwnd)
+                unregisterPhysicalModifiers(hwnd)
                 // PostQuitMessage(0) — signal to end the Win32 message loop.
                 postQuitMessage(0)
                 0L
@@ -576,8 +584,8 @@ object KadreWndProc {
         return KeyboardModifiers(bits)
     }
 
-    /** Physical left/right modifier state tracked across key events. */
-    private var physicalModifierState: ModifierKeys = ModifierKeys()
+    /** Per-window physical left/right modifier state tracked across key events. */
+    private val physicalModifierStates = java.util.concurrent.ConcurrentHashMap<Long, ModifierKeys>()
 
     private fun isModifierKeyCode(keyCode: KeyCode): Boolean = keyCode in setOf(
         KeyCode.ShiftLeft, KeyCode.ShiftRight,
@@ -586,23 +594,24 @@ object KadreWndProc {
         KeyCode.MetaLeft, KeyCode.MetaRight,
     )
 
-    private fun updatePhysicalModifiers(keyCode: KeyCode, state: KeyState): ModifierKeys {
+    private fun updatePhysicalModifiers(hwnd: Long, keyCode: KeyCode, state: KeyState): ModifierKeys {
+        val current = physicalModifierStates.getOrDefault(hwnd, ModifierKeys())
         val modifierState = when (state) {
             KeyState.Pressed -> ModifierKeyState.Pressed
             KeyState.Released -> ModifierKeyState.Released
         }
         val newState = when (keyCode) {
-            KeyCode.ShiftLeft   -> physicalModifierState.copy(leftShift = modifierState)
-            KeyCode.ShiftRight  -> physicalModifierState.copy(rightShift = modifierState)
-            KeyCode.ControlLeft -> physicalModifierState.copy(leftCtrl = modifierState)
-            KeyCode.ControlRight -> physicalModifierState.copy(rightCtrl = modifierState)
-            KeyCode.AltLeft     -> physicalModifierState.copy(leftAlt = modifierState)
-            KeyCode.AltRight    -> physicalModifierState.copy(rightAlt = modifierState)
-            KeyCode.MetaLeft    -> physicalModifierState.copy(leftMeta = modifierState)
-            KeyCode.MetaRight   -> physicalModifierState.copy(rightMeta = modifierState)
-            else -> return physicalModifierState
+            KeyCode.ShiftLeft   -> current.copy(leftShift = modifierState)
+            KeyCode.ShiftRight  -> current.copy(rightShift = modifierState)
+            KeyCode.ControlLeft -> current.copy(leftCtrl = modifierState)
+            KeyCode.ControlRight -> current.copy(rightCtrl = modifierState)
+            KeyCode.AltLeft     -> current.copy(leftAlt = modifierState)
+            KeyCode.AltRight    -> current.copy(rightAlt = modifierState)
+            KeyCode.MetaLeft    -> current.copy(leftMeta = modifierState)
+            KeyCode.MetaRight   -> current.copy(rightMeta = modifierState)
+            else -> return current
         }
-        physicalModifierState = newState
+        physicalModifierStates[hwnd] = newState
         return newState
     }
 
