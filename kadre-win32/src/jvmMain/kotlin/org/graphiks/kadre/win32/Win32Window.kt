@@ -159,7 +159,7 @@ class Win32Window private constructor(
 
     // -- Cursor visibility counter for ShowCursor balance --
 
-    private val cursorVisibleCounter: AtomicInteger = AtomicInteger(0)
+    internal val cursorVisibleCounter: AtomicInteger = AtomicInteger(0)
 
     private val iconLock = Any()
     private var ownedWindowIconHandle: MemorySegment = MemorySegment.NULL
@@ -268,16 +268,17 @@ class Win32Window private constructor(
     }
 
     override fun close() {
-        // Reset cursor visibility counter to ensure balanced ShowCursor calls
-        val currentCount = cursorVisibleCounter.get()
+        // Reset cursor visibility counter to ensure balanced ShowCursor calls.
+        // We use getAndSet(0) to atomically read and reset the counter in one operation.
+        val currentCount = cursorVisibleCounter.getAndSet(0)
         if (currentCount > 0) {
             // Hide cursor to balance any remaining ShowCursor(1) calls
             repeat(currentCount) { ShowCursor(0) }
-            cursorVisibleCounter.set(0)
         } else if (currentCount < 0) {
             // Show cursor to balance any remaining ShowCursor(0) calls
+            // Note: Negative values should not occur in normal usage, but we handle them
+            // defensively to ensure the system ShowCursor counter remains balanced.
             repeat(-currentCount) { ShowCursor(1) }
-            cursorVisibleCounter.set(0)
         }
         setWindowIcon(null)
         KadreWndProc.unregisterConstraints(hwnd.address())
@@ -605,7 +606,9 @@ class Win32Window private constructor(
      * This implementation maintains an atomic counter to ensure proper balancing:
      * - Increment when showing (ShowCursor(1))
      * - Decrement when hiding (ShowCursor(0))
-     * - Reset to 0 when counter reaches 0 to avoid negative values
+     * - Reset to 0 when counter goes negative to prevent underflow
+     *   (defensive programming: ensures system counter stays balanced even with
+     *   unmatched hide/show calls)
      */
     override fun setCursorVisible(visible: Boolean) {
         try {

@@ -350,17 +350,25 @@ class Win32WindowTest {
         assertNotNull(window)
 
         // Initial state: cursor should be visible (counter = 0)
+        assertEquals(0, window.cursorVisibleCounter.get())
+
         // First call to setCursorVisible(true) should increment counter to 1
         window.setCursorVisible(true)
+        assertEquals(1, window.cursorVisibleCounter.get())
         
         // Call setCursorVisible(false) to decrement counter back to 0
         window.setCursorVisible(false)
+        assertEquals(0, window.cursorVisibleCounter.get())
         
         // Multiple show/hide cycles should maintain balance
         window.setCursorVisible(true)
+        assertEquals(1, window.cursorVisibleCounter.get())
         window.setCursorVisible(true)
+        assertEquals(2, window.cursorVisibleCounter.get())
         window.setCursorVisible(false)
+        assertEquals(1, window.cursorVisibleCounter.get())
         window.setCursorVisible(false)
+        assertEquals(0, window.cursorVisibleCounter.get())
         
         // Clean up
         window.close()
