@@ -99,7 +99,7 @@ and user-gesture dependent (see [DEFERRED.md](https://github.com/ygdrasil-io/poc
 | Gap | Details |
 |-----|---------|
 | `Fullscreen.Exclusive` | `ChangeDisplaySettingsExW` TODO |
-| `ShowCursor` not rebalanced | Counter mismatch (DEFERRED.md) |
+| `ShowCursor` balanced | Atomic counter in Win32Window |
 | `readWString` | Stops at space instead of `\0` (minor) |
 | `setBlur` | No-op runtime (DWM APIs deprecated) |
 

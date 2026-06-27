@@ -39,7 +39,7 @@ linked feature table changes status.
 - X11 dynamic scale-factor changes still need RandR notification handling.
 - X11 transparency still needs `_NET_WM_WINDOW_OPACITY` wiring.
 - Win32 exclusive fullscreen still needs `ChangeDisplaySettingsExW`.
-- Win32 cursor visibility still needs balanced `ShowCursor` counter handling.
+- Win32 cursor visibility: balanced `ShowCursor` counter implemented in Win32Window.kt.
 - Win32 wide-string reads still need strict null-terminator handling.
 - X11 custom cursors are currently a monochrome fallback; ARGB cursor support is
   deferred.
