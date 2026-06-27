@@ -326,7 +326,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | Feature | Spec Status | Implementation Status | Notes |
 |---------|-------------|---------------------|-------|
 | `Fullscreen.Exclusive` | ⚠️ | ⚠️ | `ChangeDisplaySettingsExW` TODO |
-| `ShowCursor` not rebalanced | ⚠️ | ⚠️ | Counter mismatch (DEFERRED.md) |
+| `ShowCursor` balanced | ⚠️ | ⚠️ | Atomic counter in Win32Window (PR #274) |
 | `readWString` | ⚠️ | ⚠️ | Stops at space instead of `\0` (minor) |
 | `setBlur` | ❌ | ❌ | No-op runtime (DWM APIs deprecated) |
 
@@ -444,7 +444,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | Backend | Estimated Coverage | Strengths | Weaknesses |
 |---------|:-----------------:|-----------|-----------|
 | **AppKit (macOS)** | ~95% | Most mature; custom cursors, gestures, IME, blur | outerPosition conversion, no per-window icon |
-| **Win32 (Windows)** | ~90% | Richest extension API (DWM, corners, borders) | Fullscreen.Exclusive TODO, ShowCursor counter |
+| **Win32 (Windows)** | ~90% | Richest extension API (DWM, corners, borders) | Fullscreen.Exclusive TODO |
 | **X11 (Linux)** | ~85% | Xdnd DnD, XIM IME; keyboard `text` wired | Static DPI, no systemTheme, no blur |
 | **Wayland (Linux)** | ~80% | Best protocol negotiation; keyboard `text` wired | Missing activation/blur protocols, synthetic monitors |
 | **UIKit (iOS)** | ~55% | Good for mobile; gesture opt-in, IME working | Many desktop features no-op |

@@ -39,7 +39,7 @@ Q1 2027 (Janvier - Mars)       → Phase 3: Excellence
 |----|-------|------------|--------------|-------------|--------|--------------|
 | **P0-001** | Implémenter `Window.ime_capabilities()` | Moyenne | 16 | Backend Team | ⏳ | Aucune |
 | **P0-002** | Implémenter `Fullscreen.Exclusive` sur Win32 | Élevée | 24 | Win32 Expert | ⏳ | `ChangeDisplaySettingsExW` |
-| **P0-003** | Corriger `ShowCursor` counter mismatch sur Win32 | Faible | 8 | Win32 Expert | ⏳ | DEFERRED.md |
+| **P0-003** | Corriger `ShowCursor` counter mismatch sur Win32 | Faible | 8 | Win32 Expert | ✅ | PR #274 |
 
 #### 🎯 Priorité P1 (Haute)
 
