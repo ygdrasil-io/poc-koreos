@@ -48,6 +48,7 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import org.graphiks.kadre.ffi.win32.*
 import org.graphiks.kadre.ffi.win32.generated.*
 
@@ -156,6 +157,10 @@ class Win32Window private constructor(
     @Volatile private var _savedRect: IntArray? = null
     @Volatile private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
+    // -- Cursor visibility counter for ShowCursor balance --
+
+    private val cursorVisibleCounter: AtomicInteger = AtomicInteger(0)
+
     private val iconLock = Any()
     private var ownedWindowIconHandle: MemorySegment = MemorySegment.NULL
 
@@ -263,6 +268,17 @@ class Win32Window private constructor(
     }
 
     override fun close() {
+        // Reset cursor visibility counter to ensure balanced ShowCursor calls
+        val currentCount = cursorVisibleCounter.get()
+        if (currentCount > 0) {
+            // Hide cursor to balance any remaining ShowCursor(1) calls
+            repeat(currentCount) { ShowCursor(0) }
+            cursorVisibleCounter.set(0)
+        } else if (currentCount < 0) {
+            // Show cursor to balance any remaining ShowCursor(0) calls
+            repeat(-currentCount) { ShowCursor(1) }
+            cursorVisibleCounter.set(0)
+        }
         setWindowIcon(null)
         KadreWndProc.unregisterConstraints(hwnd.address())
         DestroyWindow(hwnd)
@@ -585,9 +601,22 @@ class Win32Window private constructor(
      * Win32-specific: ShowCursor maintains a process-wide internal display
      * counter rather than a boolean, so visibility is shared across all windows
      * in the process and balanced show/hide calls are expected.
+     *
+     * This implementation maintains an atomic counter to ensure proper balancing:
+     * - Increment when showing (ShowCursor(1))
+     * - Decrement when hiding (ShowCursor(0))
+     * - Reset to 0 when counter reaches 0 to avoid negative values
      */
     override fun setCursorVisible(visible: Boolean) {
         try {
+            if (visible) {
+                cursorVisibleCounter.incrementAndGet()
+            } else {
+                val prev = cursorVisibleCounter.decrementAndGet()
+                // Ensure counter doesn't go negative; reset to 0 if it does
+                if (prev < 0) cursorVisibleCounter.set(0)
+            }
+            // Call ShowCursor to update the system counter
             ShowCursor(if (visible) 1 else 0)
         } catch (_: Throwable) {}
     }

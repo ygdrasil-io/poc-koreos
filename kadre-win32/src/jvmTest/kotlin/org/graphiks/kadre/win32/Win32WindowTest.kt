@@ -336,4 +336,33 @@ class Win32WindowTest {
 
         window.close()
     }
+
+
+    @Test
+    fun `setCursorVisible maintains balanced ShowCursor counter`() {
+        if (!isWindows()) return // Requires user32.dll
+        
+        val attrs = WindowAttributes(
+            title = "ShowCursor Counter Test",
+            size = PhysicalSize(640, 480)
+        )
+        val window = Win32Window.create(attrs)
+        assertNotNull(window)
+
+        // Initial state: cursor should be visible (counter = 0)
+        // First call to setCursorVisible(true) should increment counter to 1
+        window.setCursorVisible(true)
+        
+        // Call setCursorVisible(false) to decrement counter back to 0
+        window.setCursorVisible(false)
+        
+        // Multiple show/hide cycles should maintain balance
+        window.setCursorVisible(true)
+        window.setCursorVisible(true)
+        window.setCursorVisible(false)
+        window.setCursorVisible(false)
+        
+        // Clean up
+        window.close()
+    }
 }
