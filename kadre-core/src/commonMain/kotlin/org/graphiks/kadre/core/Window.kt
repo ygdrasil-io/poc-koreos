@@ -466,7 +466,6 @@ interface Window {
      * @param purpose Intended use of the text field.
      * @see ImePurpose
      */
-    
 
     /**
      * Returns the IME capabilities available on this platform.
