@@ -44,6 +44,7 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -1183,6 +1184,12 @@ class X11Window private constructor(
     override fun setImePurpose(purpose: ImePurpose) {
         // No-op on X11: XIM has no concept of IME purpose hints.
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     internal fun drainImeEvents(handler: ApplicationHandler, loop: ActiveEventLoop, windowId: WindowId) {
         while (true) {

@@ -42,6 +42,7 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -986,6 +987,12 @@ class WaylandWindow private constructor(
     override fun setImePurpose(purpose: ImePurpose) {
         waylandTextInputSetPurpose(purpose)
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     // ── Companion ─────────────────────────────────────────────────────────────
 

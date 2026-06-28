@@ -42,6 +42,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 
 /**
  * Maps a [CursorIcon] to the corresponding CSS cursor property value.
@@ -521,6 +522,12 @@ class WebWindow(
     override fun setImePurpose(purpose: org.graphiks.kadre.core.ImePurpose) {
         bridge.setImePurpose(purpose.name.lowercase())
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(org.graphiks.kadre.core.ImePurpose.Normal, org.graphiks.kadre.core.ImePurpose.Password, org.graphiks.kadre.core.ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     /**
      * Requests fullscreen via the browser Fullscreen API (delegate to bridge).

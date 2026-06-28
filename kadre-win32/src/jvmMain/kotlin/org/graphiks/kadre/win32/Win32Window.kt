@@ -37,6 +37,7 @@ import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -1077,6 +1078,12 @@ class Win32Window private constructor(
             try { relCtx.invokeExact(hwndSeg, himc) as Int } catch (_: Throwable) {}
         }
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     // -- Companion --
 

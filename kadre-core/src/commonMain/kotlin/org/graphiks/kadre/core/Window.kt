@@ -466,6 +466,23 @@ interface Window {
      * @param purpose Intended use of the text field.
      * @see ImePurpose
      */
+    
+
+    /**
+     * Returns the IME capabilities available on this platform.
+     *
+     * Allows applications to detect dynamically the IME capabilities
+     * available on the current platform. Returns default values on platforms
+     * without IME support.
+     *
+     * Default implementation returns [ImeCapabilities.NONE].
+     * Backends that support IME should override this method.
+     *
+     * @return The IME capabilities for this window.
+     * @see ImeCapabilities
+     */
+    fun ime_capabilities(): ImeCapabilities = ImeCapabilities.NONE
+
     fun setImePurpose(purpose: ImePurpose) { }
 
     // ── R5-CustomCursor ───────────────────────────────────────────────────────

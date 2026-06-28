@@ -28,6 +28,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 import kotlin.math.max
 
 /**
@@ -231,6 +232,12 @@ class AndroidWindow internal constructor(
             imm.restartInput(surfaceView)
         }
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     private fun applyImePurposeToEditorInfo(purpose: ImePurpose, editorInfo: EditorInfo) {
         when (purpose) {

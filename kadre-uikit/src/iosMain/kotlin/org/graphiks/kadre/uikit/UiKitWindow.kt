@@ -39,6 +39,7 @@ import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.location
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
+import org.graphiks.kadre.core.ImeCapabilities
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -1157,6 +1158,12 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         // To set them, ObjC runtime method implementations would need to be
         // added via class_addMethod / objc_msgSend.
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     // ── R4: keyboard ──────────────────────────────────────────────────────────
 

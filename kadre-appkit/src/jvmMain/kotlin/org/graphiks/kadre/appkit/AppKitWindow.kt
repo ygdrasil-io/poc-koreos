@@ -45,6 +45,7 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.core.ImeCapabilities
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -1228,6 +1229,12 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             // Best-effort — older macOS versions may not support these selectors
         }
     }
+
+    override fun ime_capabilities(): ImeCapabilities = ImeCapabilities(
+        enabled = true,
+        purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+        capabilities = 0,
+    )
 
     private fun setTextInputTrait(selector: String, enabled: Boolean) {
         ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel(selector), enabled)
