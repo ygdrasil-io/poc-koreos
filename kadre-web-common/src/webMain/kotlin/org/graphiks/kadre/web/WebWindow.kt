@@ -40,6 +40,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.ImeCapabilities
@@ -519,7 +520,7 @@ class WebWindow(
      * input element, letting the browser adapt its IME / virtual keyboard
      * behaviour (e.g. hide suggestions for a terminal, mask for a password).
      */
-    override fun setImePurpose(purpose: org.graphiks.kadre.core.ImePurpose) {
+    override fun setImePurpose(purpose: ImePurpose) {
         bridge.setImePurpose(purpose.name.lowercase())
     }
 

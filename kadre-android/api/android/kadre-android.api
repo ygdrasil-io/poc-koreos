@@ -34,6 +34,7 @@ public final class org/graphiks/kadre/android/AndroidWindow : org/graphiks/kadre
 	public fun getTheme ()Lorg/graphiks/kadre/core/Theme;
 	public fun getTitle ()Ljava/lang/String;
 	public fun inputCapabilities ()Lorg/graphiks/kadre/core/InputCapabilities;
+	public fun ime_capabilities ()Lorg/graphiks/kadre/core/ImeCapabilities;
 	public fun isDecorated ()Z
 	public fun isMaximized ()Z
 	public fun isMinimized ()Ljava/lang/Boolean;
