@@ -561,6 +561,14 @@ public final class org/graphiks/kadre/core/ImePurpose : java/lang/Enum {
 	public static fun values ()[Lorg/graphiks/kadre/core/ImePurpose;
 }
 
+public final class org/graphiks/kadre/core/ImeCapabilities {
+	public fun <init> (Z[Lorg/graphiks/kadre/core/ImePurpose;I)V
+	public final fun component1 ()Z
+	public final fun component2 ()[Lorg/graphiks/kadre/core/ImePurpose;
+	public final fun component3 ()I
+	public static final field NONE Lorg/graphiks/kadre/core/ImeCapabilities;
+}
+
 public final class org/graphiks/kadre/core/InputCapabilities {
 	public fun <init> ()V
 	public fun <init> (ZZZZZZZZZ)V
@@ -2422,6 +2430,7 @@ public abstract interface class org/graphiks/kadre/core/Window {
 	public abstract fun setFullscreen (Lorg/graphiks/kadre/core/Fullscreen;)V
 	public fun setImeAllowed (Z)V
 	public fun setImeCursorArea (Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/PhysicalSize;)V
+	public fun ime_capabilities ()Lorg/graphiks/kadre/core/ImeCapabilities;
 	public fun setImePurpose (Lorg/graphiks/kadre/core/ImePurpose;)V
 	public abstract fun setMaxSurfaceSize (Lorg/graphiks/kadre/core/PhysicalSize;)V
 	public abstract fun setMaximized (Z)V
@@ -2462,6 +2471,7 @@ public final class org/graphiks/kadre/core/Window$DefaultImpls {
 	public static fun setCustomCursor (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/CustomCursor;)V
 	public static fun setEnabledButtons (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/WindowButtons;)V
 	public static fun setImeAllowed (Lorg/graphiks/kadre/core/Window;Z)V
+	public static fun ime_capabilities (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/ImeCapabilities;
 	public static fun setImeCursorArea (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/PhysicalPosition;Lorg/graphiks/kadre/core/PhysicalSize;)V
 	public static fun setImePurpose (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/ImePurpose;)V
 	public static fun setSurfaceResizeIncrements (Lorg/graphiks/kadre/core/Window;Lorg/graphiks/kadre/core/PhysicalSize;)V
