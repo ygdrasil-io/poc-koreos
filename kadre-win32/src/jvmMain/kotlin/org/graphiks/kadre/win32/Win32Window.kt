@@ -96,6 +96,11 @@ private val dragAcceptFiles: MethodHandle? by lazy {
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
 }
 
+private val changeDisplaySettingsW: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "ChangeDisplaySettingsW",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+}
+
 internal val toUnicode: MethodHandle? by lazy {
     lookupDowncall("user32.dll", "ToUnicode",
         FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
@@ -136,6 +141,16 @@ private val immSetConversionStatus: MethodHandle? by lazy {
         FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
 }
 
+// DEVMODE byte offsets for writing (Win32Monitor.kt defines its own private copies for reading).
+private const val DEVMODE_MODE_SIZE: Long = 220L
+private const val DEVMODE_MODE_ALIGN: Long = 4L
+private const val DEVMODE_DM_SIZE_OFFSET: Long = 68L
+private const val DEVMODE_DM_FIELDS_OFFSET: Long = 72L
+private const val DEVMODE_PELS_WIDTH_OFFSET: Long = 196L
+private const val DEVMODE_PELS_HEIGHT_OFFSET: Long = 200L
+private const val DEVMODE_BITS_PER_PEL_OFFSET: Long = 192L
+private const val DEVMODE_DISPLAY_FREQUENCY_OFFSET: Long = 212L
+
 /**
  * Native Win32 window implementing [Window].
  *
@@ -157,6 +172,7 @@ class Win32Window private constructor(
     @Volatile private var _fullscreen: Fullscreen? = attrs.fullscreen
     @Volatile private var _savedStyle: Long? = null
     @Volatile private var _savedRect: IntArray? = null
+    @Volatile private var _savedDevMode: MemorySegment? = null
     @Volatile private var _enabledButtons: WindowButtons = attrs.enabledButtons
 
     // -- Cursor visibility counter for ShowCursor balance --
@@ -499,11 +515,101 @@ class Win32Window private constructor(
             when (fullscreen) {
                 null -> exitFullscreen()
                 is Fullscreen.Borderless -> enterBorderless(fullscreen.monitor)
-                is Fullscreen.Exclusive  -> {
-                    enterBorderless(fullscreen.monitor)
-                    _fullscreen = fullscreen
-                }
+                is Fullscreen.Exclusive  -> enterExclusive(fullscreen)
             }
+        } catch (_: Throwable) {}
+    }
+
+    private fun enterExclusive(exclusive: Fullscreen.Exclusive) {
+        val changeDisplay = changeDisplaySettingsW ?: run {
+            enterBorderless(exclusive.monitor)
+            return
+        }
+
+        // Save window state (same pattern as enterBorderless)
+        if (_savedStyle == null) {
+            _savedStyle = getWindowStyle()
+            _savedRect = try {
+                Arena.ofConfined().use { arena ->
+                    val rect = arena.allocate(16L, 4L)
+                    val ok = GetWindowRect(hwnd, rect)
+                    if (ok != 0) intArrayOf(
+                        rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_LEFT),
+                        rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_TOP),
+                        rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_RIGHT),
+                        rect.get(ValueLayout.JAVA_INT, RECT_OFFSET_BOTTOM),
+                    ) else null
+                }
+            } catch (_: Throwable) { null }
+        }
+
+        // Save original display mode before changing it
+        if (_savedDevMode == null) {
+            saveCurrentDisplayMode()
+        }
+
+        val mode = exclusive.videoMode
+        val modeBitDepth = mode.bitDepth
+        val modeRefresh = mode.refreshRateMilliHz
+
+        // Build DEVMODE from the requested VideoMode and attempt the mode change
+        val result = Arena.ofConfined().use { arena ->
+            val devMode = arena.allocate(DEVMODE_MODE_SIZE, DEVMODE_MODE_ALIGN)
+            devMode.set(ValueLayout.JAVA_SHORT, DEVMODE_DM_SIZE_OFFSET, DEVMODE_MODE_SIZE.toShort())
+
+            var fields = DM_PELSWIDTH or DM_PELSHEIGHT or DM_BITSPERPEL
+            if (modeRefresh != null) fields = fields or DM_DISPLAYFREQUENCY
+            devMode.set(ValueLayout.JAVA_INT, DEVMODE_DM_FIELDS_OFFSET, fields)
+
+            devMode.set(ValueLayout.JAVA_INT, DEVMODE_PELS_WIDTH_OFFSET, mode.size.width)
+            devMode.set(ValueLayout.JAVA_INT, DEVMODE_PELS_HEIGHT_OFFSET, mode.size.height)
+            // Reverse the bpp/3 division from Win32Monitor's readCurrentMode
+            devMode.set(ValueLayout.JAVA_INT, DEVMODE_BITS_PER_PEL_OFFSET,
+                if (modeBitDepth != null) modeBitDepth * 3 else 32)
+            if (modeRefresh != null) {
+                devMode.set(ValueLayout.JAVA_INT, DEVMODE_DISPLAY_FREQUENCY_OFFSET,
+                    modeRefresh / 1000)
+            }
+
+            // Test the mode first
+            val testResult = try {
+                changeDisplay.invokeExact(devMode, CDS_TEST) as Int
+            } catch (_: Throwable) { DISP_CHANGE_FAILED }
+            if (testResult != DISP_CHANGE_SUCCESSFUL) return@use testResult
+
+            // Apply the mode
+            try {
+                changeDisplay.invokeExact(devMode, CDS_FULLSCREEN) as Int
+            } catch (_: Throwable) { DISP_CHANGE_FAILED }
+        }
+
+        if (result == DISP_CHANGE_SUCCESSFUL) {
+            // Position window as borderless on the target monitor
+            val targetMonitor: Win32MonitorHandle? = if (exclusive.monitor is Win32MonitorHandle)
+                exclusive.monitor as Win32MonitorHandle else win32MonitorFromHwnd(hwnd)
+            val (mx, my) = if (targetMonitor != null) {
+                val pos = targetMonitor.position
+                pos.x to pos.y
+            } else {
+                0 to 0
+            }
+            setWindowStyle(0x80000000L or WS_VISIBLE.toLong())
+            SetWindowPos(hwnd, HWND_TOP, mx, my, mode.size.width, mode.size.height,
+                SWP_NOACTIVATE or SWP_FRAMECHANGED)
+            _fullscreen = exclusive
+        } else {
+            // Fall back to borderless on failure
+            enterBorderless(exclusive.monitor)
+        }
+    }
+
+    private fun saveCurrentDisplayMode() {
+        val enumHandle = enumDisplaySettingsW ?: return
+        try {
+            val devMode = Arena.global().allocate(DEVMODE_MODE_SIZE, DEVMODE_MODE_ALIGN)
+            devMode.set(ValueLayout.JAVA_SHORT, DEVMODE_DM_SIZE_OFFSET, DEVMODE_MODE_SIZE.toShort())
+            enumHandle.invokeExact(MemorySegment.NULL, ENUM_CURRENT_SETTINGS, devMode) as Int
+            _savedDevMode = devMode
         } catch (_: Throwable) {}
     }
 
@@ -538,7 +644,7 @@ class Win32Window private constructor(
             intArrayOf(0, 0, 1920, 1080)
         }
 
-        setWindowStyle(0x80000000L.toLong() or WS_VISIBLE.toLong())
+        setWindowStyle(0x80000000L or WS_VISIBLE.toLong())
         SetWindowPos(
             hwnd, HWND_TOP,
             mx, my, mw, mh,
@@ -551,6 +657,19 @@ class Win32Window private constructor(
     private fun exitFullscreen() {
         val savedStyle = _savedStyle
         val savedRect  = _savedRect
+        val savedDevMode = _savedDevMode
+
+        // Restore original display mode if we switched to exclusive mode
+        if (savedDevMode != null) {
+            val changeDisplay = changeDisplaySettingsW
+            if (changeDisplay != null) {
+                try {
+                    changeDisplay.invokeExact(savedDevMode, 0) as Int
+                } catch (_: Throwable) {}
+            }
+            _savedDevMode = null
+        }
+
         if (savedStyle != null) {
             setWindowStyle(savedStyle)
             if (savedRect != null) {
