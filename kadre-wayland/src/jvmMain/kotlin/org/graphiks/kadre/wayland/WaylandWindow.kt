@@ -920,21 +920,28 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Requests user attention; always returns a failure on Wayland.
+     * Requests user attention via the xdg_activation_v1 token flow.
      *
-     * Attention requests rely on xdg_activation_v1, whose token-based activation
-     * needs an asynchronous token-generation roundtrip not yet wired in Kadre.
-     * When the compositor exposes the protocol extension this returns
-     * [WindowRequestResult.Failure] with [RequestError.Ignored]; otherwise it
-     * returns [WindowRequestResult.Failure] with [RequestError.Unsupported],
-     * matching winit's behaviour.
+     * When the compositor exposes the protocol extension this generates an
+     * activation token, activates the surface, and returns
+     * [WindowRequestResult.Success]. When unavailable it returns
+     * [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
-    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
-        if (activationManager != null) {
-            WindowRequestResult.Failure(RequestError.Ignored("Wayland xdg_activation_v1 token flow not yet wired"))
+    override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult {
+        val act = activationManager ?: return WindowRequestResult.Failure(
+            RequestError.Unsupported("Wayland xdg_activation_v1 is unavailable"),
+        )
+        val seat = WaylandPointerState.current(surfacePtr)
+        val serial = seat?.serial ?: 0
+        val seatPtr = seat?.seatPtr ?: 0L
+        return if (act.requestAttention(surfacePtr, seatPtr, serial)) {
+            WindowRequestResult.Success
         } else {
-            WindowRequestResult.Failure(RequestError.Unsupported("Wayland xdg_activation_v1 is unavailable"))
+            WindowRequestResult.Failure(
+                RequestError.Ignored("Failed to get xdg_activation token"),
+            )
         }
+    }
 
     /**
      * No-op on Wayland, matching winit.
