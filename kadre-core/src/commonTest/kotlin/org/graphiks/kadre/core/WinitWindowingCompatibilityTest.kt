@@ -263,9 +263,9 @@ class WinitWindowingCompatibilityTest {
             ),
             WinitWindowingApi(
                 winitApi = "Window.ime_capabilities",
-                kadreApi = "missing rich IME capabilities API",
-                status = WinitWindowingStatus.Deferred,
-                note = "Kadre has inputCapabilities for device features, but not winit's IME capability reporting model.",
+                kadreApi = "imeCapabilities: ImeCapabilities",
+                status = WinitWindowingStatus.Implemented,
+                note = "Kadre exposes ImeCapabilities with enabled/purposes/capabilities fields, matching winit's ImeCapabilities model.",
             ),
             WinitWindowingApi(
                 winitApi = "ActiveEventLoop create/control/exit/proxy",

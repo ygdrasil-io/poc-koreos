@@ -19,6 +19,8 @@ import org.graphiks.kadre.core.CursorImage
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
@@ -177,6 +179,13 @@ class Win32Window private constructor(
 
     override fun inputCapabilities(): InputCapabilities =
         InputCapabilities(touch = true)
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = true,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition, ImeCapability.Password),
+        )
 
     @Volatile
     private var needsRedraw: Boolean = false

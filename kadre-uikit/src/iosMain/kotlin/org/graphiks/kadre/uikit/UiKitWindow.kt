@@ -1,6 +1,8 @@
 package org.graphiks.kadre.uikit
 
 import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
@@ -834,6 +836,13 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
             panGesture = true,
             rotationGesture = true,
             doubleTapGesture = true,
+        )
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = true,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition, ImeCapability.Learning, ImeCapability.Password),
         )
 
     override fun recognizePinchGesture(shouldRecognize: Boolean) {

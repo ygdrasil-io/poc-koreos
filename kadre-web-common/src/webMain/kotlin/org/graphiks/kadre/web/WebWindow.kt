@@ -34,6 +34,9 @@ import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
+import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.Theme
@@ -477,6 +480,13 @@ class WebWindow(
     override fun resetDeadKeys() {
         // no-op: browser IME state is not accessible from JavaScript
     }
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = true,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition),
+        )
 
     // ── R5-IME ──────────────────────────────────────────────────────────────────
 

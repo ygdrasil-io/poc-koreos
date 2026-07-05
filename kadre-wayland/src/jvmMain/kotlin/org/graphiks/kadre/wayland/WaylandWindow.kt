@@ -22,6 +22,8 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.MonitorHandle
 import org.graphiks.kadre.core.PhysicalPosition
@@ -145,6 +147,13 @@ class WaylandWindow private constructor(
 
     override fun inputCapabilities(): InputCapabilities =
         InputCapabilities()
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = WaylandTextInput.textInputPtr != 0L,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition),
+        )
 
     /**
      * Current inner size in physical pixels.
