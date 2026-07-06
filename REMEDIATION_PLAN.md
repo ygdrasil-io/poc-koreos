@@ -72,23 +72,23 @@ Q1 2027 (Janvier - Mars)       → Phase 3: Excellence
 
 | ID | Tâche | Complexité | Effort (j/h) | Responsable | Statut | Dépendances |
 |----|-------|------------|--------------|-------------|--------|--------------|
-| **P1-004** | Implémenter `textWithAllModifiers` proprement sur AppKit | Moyenne | 16 | AppKit Expert | ⏳ | NSTextInputClient |
-| **P1-005** | Implémenter `textWithAllModifiers` sur Win32 | Moyenne | 20 | Win32 Expert | ⏳ | WM_IME_* messages |
-| **P1-006** | Implémenter `keyWithoutModifiers` sur tous les backends | Moyenne | 24 | Keyboard Team | ⏳ | P1-004, P1-005 |
+| **P1-004** | Implémenter `textWithAllModifiers` proprement sur AppKit | Moyenne | 16 | AppKit Expert | ✅ | NSTextInputClient |
+| **P1-005** | Implémenter `textWithAllModifiers` sur Win32 | Moyenne | 20 | Win32 Expert | ✅ | ToUnicodeEx + HKL |
+| **P1-006** | Implémenter `keyWithoutModifiers` sur tous les backends | Moyenne | 24 | Keyboard Team | ✅ | P1-004, P1-005 |
 
 #### 🎯 Priorité P2 (Moyenne)
 
 | ID | Tâche | Complexité | Effort (j/h) | Responsable | Statut | Dépendances |
 |----|-------|------------|--------------|-------------|--------|--------------|
-| **P2-001** | Corriger le tracking left/right modifiers sur AppKit | Moyenne | 12 | AppKit Expert | ⏳ | Aucune |
-| **P2-002** | Corriger le tracking left/right modifiers sur Win32 | Moyenne | 16 | Win32 Expert | ⏳ | Aucune |
+| **P2-001** | Corriger le tracking left/right modifiers sur AppKit | Moyenne | 12 | AppKit Expert | ✅ | Aucune |
+| **P2-002** | Corriger le tracking left/right modifiers sur Win32 | Moyenne | 16 | Win32 Expert | ✅ | Aucune |
 | **P2-003** | Améliorer la détection des dead keys sur X11 | Faible | 8 | X11 Expert | ⏳ | XLookupString |
 | **P2-004** | Améliorer la détection des dead keys sur Wayland | Faible | 8 | Wayland Expert | ⏳ | xkb_state |
 
 #### 📊 Livrables Sprint 2
-- [ ] `textWithAllModifiers` implémenté sur AppKit et Win32
-- [ ] `keyWithoutModifiers` implémenté sur tous les backends
-- [ ] Tracking left/right modifiers corrigé sur AppKit et Win32
+- [x] `textWithAllModifiers` implémenté sur AppKit et Win32
+- [x] `keyWithoutModifiers` implémenté sur tous les backends (AppKit/Win32/UIKit natifs, autres fallback)
+- [x] Tracking left/right modifiers corrigé sur AppKit et Win32
 - [ ] Suite de tests étendue pour le clavier
 - [ ] Benchmarks de performance clavier
 

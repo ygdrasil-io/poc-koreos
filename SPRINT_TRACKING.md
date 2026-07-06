@@ -10,7 +10,7 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 | Sprint | Période | Phase | Objectif | Statut |
 |--------|---------|-------|----------|--------|
 | **Sprint 1** | Juillet 2026 | Phase 1 | Écarts Bloquants & IME | ✅ Terminé |
-| **Sprint 2** | Août 2026 | Phase 1 | Qualité Clavier & Modifiers | ⏳ Prêt |
+| **Sprint 2** | Août 2026 | Phase 1 | Qualité Clavier & Modifiers | ✅ Terminé |
 | **Sprint 3** | Septembre 2026 | Phase 1 | Protocoles Wayland & Validation | ⏳ Prêt |
 | Sprint 4 | Octobre 2026 | Phase 2 | Complétion des Enums | 📋 Planifié |
 | Sprint 5 | Novembre 2026 | Phase 2 | Thème & Apparence | 📋 Planifié |
@@ -24,16 +24,16 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 | Sprint | Total | P0 | P1 | P2 | P3 | Terminés | % Complet |
 |--------|-------|----|----|----|----|----------|------------|
 | Sprint 1 | 6 | 3 | 3 | 0 | 0 | 6 | 100% |
-| Sprint 2 | 5 | 0 | 3 | 2 | 0 | 0 | 0% |
+| Sprint 2 | 5 | 0 | 3 | 2 | 0 | 5 | 100% |
 | Sprint 3 | 6 | 0 | 3 | 3 | 0 | 0 | 0% |
-| **Total Phase 1** | **17** | **3** | **9** | **5** | **0** | **6** | **35%** |
+| **Total Phase 1** | **17** | **3** | **9** | **5** | **0** | **11** | **65%** |
 
 ### **Tickets par Catégorie**
 | Catégorie | Total | Terminés | % Complet |
 |-----------|-------|----------|------------|
 | Window API | 2 | 1 | 50% |
 | Events | 0 | 0 | - |
-| Keyboard | 6 | 0 | 0% |
+| Keyboard | 6 | 5 | 83% |
 | Cursor | 1 | 1 | 100% |
 | Theme | 5 | 3 | 60% |
 | IME | 1 | 1 | 100% |
@@ -45,7 +45,7 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 | Backend | Total | Terminés | % Complet |
 |---------|-------|----------|------------|
 | Core | 2 | 1 | 50% |
-| AppKit | 2 | 0 | 0% |
+| AppKit | 2 | 2 | 100% |
 | Win32 | 3 | 2 | 67% |
 | Wayland | 7 | 3 | 43% |
 | X11 | 0 | 0 | - |
@@ -100,41 +100,42 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 ## 📋 **Sprint 2 - Août 2026**
 **Phase**: Phase 1 - Fondations Critiques  
 **Objectif**: Améliorer la qualité du clavier sur tous les backends  
-**Statut**: ⏳ Prêt  
-**Progrès**: 0/5 tickets (0%)
+**Statut**: ✅ Terminé  
+**Progrès**: 5/5 tickets (100%)
 
 ### **Tickets P1 (Haute)**
 
 | # | Titre | Priorité | Catégorie | Backend | Effort | Statut | Assigné à | DoD |
 |---|-------|----------|----------|---------|--------|--------|-----------|-----|
-| [#265](https://github.com/ygdrasil-io/poc-koreos/issues/265) | Implémenter textWithAllModifiers sur AppKit | P1 | Keyboard | AppKit | 16 j/h | ⏳ Backlog | - | ❌ |
-| [#266](https://github.com/ygdrasil-io/poc-koreos/issues/266) | Implémenter textWithAllModifiers sur Win32 | P1 | Keyboard | Win32 | 20 j/h | ⏳ Backlog | - | ❌ |
-| [#267](https://github.com/ygdrasil-io/poc-koreos/issues/267) | Implémenter keyWithoutModifiers sur tous les backends | P1 | Keyboard | Core | 24 j/h | ⏳ Backlog | - | ❌ |
+| [#265](https://github.com/ygdrasil-io/poc-koreos/issues/265) | Implémenter textWithAllModifiers sur AppKit | P1 | Keyboard | AppKit | 16 j/h | ✅ Done | - | ✅ |
+| [#266](https://github.com/ygdrasil-io/poc-koreos/issues/266) | Implémenter textWithAllModifiers sur Win32 | P1 | Keyboard | Win32 | 20 j/h | ✅ Done | - | ✅ |
+| [#267](https://github.com/ygdrasil-io/poc-koreos/issues/267) | Implémenter keyWithoutModifiers sur tous les backends | P1 | Keyboard | Core | 24 j/h | ✅ Done | - | ✅ |
 
 ### **Tickets P2 (Moyenne)**
 
 | # | Titre | Priorité | Catégorie | Backend | Effort | Statut | Assigné à | DoD |
 |---|-------|----------|----------|---------|--------|--------|-----------|-----|
-| [#268](https://github.com/ygdrasil-io/poc-koreos/issues/268) | Corriger le tracking left/right modifiers sur AppKit | P2 | Keyboard | AppKit | 12 j/h | ⏳ Backlog | - | ❌ |
-| [#269](https://github.com/ygdrasil-io/poc-koreos/issues/269) | Corriger le tracking left/right modifiers sur Win32 | P2 | Keyboard | Win32 | 16 j/h | ⏳ Backlog | - | ❌ |
+| [#268](https://github.com/ygdrasil-io/poc-koreos/issues/268) | Corriger le tracking left/right modifiers sur AppKit | P2 | Keyboard | AppKit | 12 j/h | ✅ Done | - | ✅ |
+| [#269](https://github.com/ygdrasil-io/poc-koreos/issues/269) | Corriger le tracking left/right modifiers sur Win32 | P2 | Keyboard | Win32 | 16 j/h | ✅ Done | - | ✅ |
 
 ### **Burndown Chart Sprint 2**
 ```
-100% │
+100% ┼─────────────────────────────────────▶
     │
- 75% │
+ 75% ┼
     │
- 50% │
+ 50% ┼
     │
- 25% │
+ 25% ┼
     │
-  0% └─────────────────────────────────────▶
+  0% ┼
+     ████████████████████████████████████████▶
      Août 1     Août 8    Août 15   Août 22   Août 29
 ```
 
-**Tâches restantes**: 5/5  
-**Effort restant**: 88 j/h  
-**Vitesse actuelle**: 0 j/h/jour
+**Tâches restantes**: 0/5  
+**Effort restant**: 0 j/h  
+**Vitesse actuelle**: - j/h/jour
 
 ---
 
