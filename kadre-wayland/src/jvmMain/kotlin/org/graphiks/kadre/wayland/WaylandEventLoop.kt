@@ -451,6 +451,11 @@ private fun runAppInternal(handler: ApplicationHandler) {
         dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
         deviceFilter = eventLoop.deviceEventFilter,
         outputInfos = eventLoop.outputInfos,
+        onOutputChanged = { info ->
+            // WaylandOutputInfo objects are updated in-place. Applications can
+            // query currentMonitor/availableMonitors on any window to see changes.
+            // A future sprint could add a dedicated MonitorListChanged event.
+        },
     )
 
     // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──

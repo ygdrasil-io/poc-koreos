@@ -21,12 +21,19 @@ import org.graphiks.kadre.ffi.wayland.*
 import java.lang.foreign.MemorySegment
 
 /**
- * Identifies which KWin blur protocol variant is in use.
+ * Identifies which blur protocol variant the compositor exposes.
+ *
+ * - [ExtBackgroundEffect]: `ext_background_effect_v1` (wlroots, also used by KWin 6+).
+ * - [KwinBlurManager]: `org_kde_kwin_blur_manager` (originally KWin 5.x, some wlroots compositors
+ *   also implement this for compatibility).
+ * - [None]: no blur protocol available.
+ *
+ * The names reference the protocol interface, not a specific compositor.
  */
 internal enum class KwinBlurVariant {
-    /** ext_background_effect_v1 (KWin 6+, wlroots). */
+    /** ext_background_effect_v1 (wlroots, KWin 6+). */
     ExtBackgroundEffect,
-    /** org_kde_kwin_blur_manager (KWin 5.x). */
+    /** org_kde_kwin_blur_manager (originally KDE KWin, now broader). */
     KwinBlurManager,
     /** No blur protocol available. */
     None,
@@ -69,12 +76,14 @@ internal class WaylandBlur(
     val isSupported: Boolean get() = variant != KwinBlurVariant.None
 
     /**
-     * Returns true if KWin 6+ (ext_background_effect_v1) is in use.
+     * Returns true if the compositor exposes `ext_background_effect_v1`.
+     * This includes KWin 6+ and wlroots-based compositors.
      */
     val isKwin6: Boolean get() = variant == KwinBlurVariant.ExtBackgroundEffect
 
     /**
-     * Returns true if KWin 5.x (org_kde_kwin_blur_manager) is in use.
+     * Returns true if the compositor exposes `org_kde_kwin_blur_manager`.
+     * This includes KWin 5.x and some wlroots compositors for compatibility.
      */
     val isKwin5: Boolean get() = variant == KwinBlurVariant.KwinBlurManager
 

@@ -64,6 +64,9 @@ internal class WaylandOutputInfo(
     /** Flags bitmask from wl_output.mode (WL_OUTPUT_MODE_CURRENT = 0x1, WL_OUTPUT_MODE_PREFERRED = 0x2). */
     var modeFlags: Int = 0
 
+    /** All video modes advertised by the compositor via wl_output.mode events. */
+    internal val allModes = mutableListOf<VideoMode>()
+
     /**
      * Updates geometry from a wl_output.geometry event.
      */
@@ -85,10 +88,15 @@ internal class WaylandOutputInfo(
 
     /**
      * Updates current mode information from wl_output.mode.
+     * Stores every advertised mode in [allModes] for [VideoMode] enumeration.
      */
     fun updateMode(flags: Int, width: Int, height: Int, refresh: Int) {
         modeFlags = flags
-        if ((flags and 0x1) != 0) {
+        val mode = VideoMode(PhysicalSize(width, height), null, if (refresh > 0) refresh else null)
+        if (!allModes.any { it.size.width == width && it.size.height == height && it.refreshRateMilliHz == mode.refreshRateMilliHz }) {
+            allModes.add(mode)
+        }
+        if (WaylandOutputInfo.isCurrentMode(flags)) {
             modeWidth = width
             modeHeight = height
             modeRefresh = refresh
@@ -118,7 +126,7 @@ internal class WaylandOutputInfo(
             if (modeRefresh > 0) modeRefresh else null,
             null,
         )
-        override val videoModes: List<VideoMode> get() = listOf(currentVideoMode)
+        override val videoModes: List<VideoMode> get() = if (allModes.isNotEmpty()) allModes.toList() else listOf(currentVideoMode)
     }
 
     companion object {

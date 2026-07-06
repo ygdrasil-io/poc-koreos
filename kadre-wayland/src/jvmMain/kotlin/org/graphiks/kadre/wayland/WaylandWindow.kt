@@ -278,6 +278,10 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        // Destroy blur proxies first (child objects), then surface (parent).
+        // The blur proxy objects are independent Wayland protocol objects; destroying
+        // them before the surface is safe and follows the documented order in the
+        // ext_background_effect / org_kde_kwin_blur_manager protocol specs.
         blurManager?.destroy()
         destroyWaylandCursorTheme()
         destroyWlBuffer(currentCursorBuffer)
