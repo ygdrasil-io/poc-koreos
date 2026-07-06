@@ -33,6 +33,7 @@ public final class org/graphiks/kadre/android/AndroidWindow : org/graphiks/kadre
 	public fun getSurfaceSize ()Lorg/graphiks/kadre/core/PhysicalSize;
 	public fun getTheme ()Lorg/graphiks/kadre/core/Theme;
 	public fun getTitle ()Ljava/lang/String;
+	public fun imeCapabilities ()Lorg/graphiks/kadre/core/ImeCapabilities;
 	public fun inputCapabilities ()Lorg/graphiks/kadre/core/InputCapabilities;
 	public fun isDecorated ()Z
 	public fun isMaximized ()Z
