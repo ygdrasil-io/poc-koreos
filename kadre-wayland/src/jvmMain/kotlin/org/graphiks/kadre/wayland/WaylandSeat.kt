@@ -98,37 +98,56 @@ private const val WL_SEAT_CAPABILITY_TOUCH: Int = 4
 // ── wl_output listener (scale) ────────────────────────────────────────────────
 
 /**
- * wl_output listener that tracks the integer scale factor.
+ * wl_output listener that collects real geometry, mode, scale, and done events.
  *
- * The `wl_output_listener` struct has multiple callbacks in the Wayland protocol. We must
- * provide a stub for each one in order — the compositor indexes callbacks by position in
- * the vtable. The struct order (wl_output protocol, version 2+) is:
+ * The `wl_output_listener` struct has multiple callbacks in the Wayland protocol:
  *   0: geometry, 1: mode, 2: done, 3: scale.
  *
- * We only act on `scale`; the others are no-ops.
+ * ### Sprint 3 (#272)
+ * Prior to Sprint 3, only `scale` was tracked; geometry and mode were no-ops and
+ * monitor data was synthetic. This implementation now collects all events into
+ * [WaylandOutputInfo] objects and notifies consumers on `done`.
+ *
+ * @param outputPtr Address of the wl_output proxy.
+ * @param outputVersion Protocol version.
+ * @param name Output name (from wl_registry or wl_output.name in v4+).
+ * @param onOutputChanged Called on each `done` event with the updated [WaylandOutputInfo].
+ * @param onScaleChanged Called on each `scale` event with the new integer factor.
  */
 private class WlOutputListener(
-    private val onScaleChanged: (Int) -> Unit,
+    val info: WaylandOutputInfo,
+    private val onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
+    private val onScaleChanged: ((Int) -> Unit)?,
 ) {
     @Suppress("UNUSED_PARAMETER")
     fun onGeometry(
         data: MemorySegment, output: MemorySegment,
         x: Int, y: Int, physW: Int, physH: Int,
         subpixel: Int, make: MemorySegment, model: MemorySegment, transform: Int,
-    ) { /* no-op */ }
+    ) {
+        info.updateGeometry(
+            x, y, physW, physH, subpixel,
+            make.address(), model.address(), transform,
+        )
+    }
 
     @Suppress("UNUSED_PARAMETER")
     fun onMode(
         data: MemorySegment, output: MemorySegment,
         flags: Int, width: Int, height: Int, refresh: Int,
-    ) { /* no-op */ }
+    ) {
+        info.updateMode(flags, width, height, refresh)
+    }
 
     @Suppress("UNUSED_PARAMETER")
-    fun onDone(data: MemorySegment, output: MemorySegment) { /* no-op */ }
+    fun onDone(data: MemorySegment, output: MemorySegment) {
+        onOutputChanged?.invoke(info)
+    }
 
     @Suppress("UNUSED_PARAMETER")
     fun onScale(data: MemorySegment, output: MemorySegment, factor: Int) {
-        onScaleChanged(factor)
+        info.scale = factor
+        onScaleChanged?.invoke(factor)
     }
 }
 
@@ -554,6 +573,10 @@ internal fun installSeatListeners(
     onScaleChanged: (Int) -> Unit,
     dataDeviceManagerPtr: Long = 0L,
     deviceFilter: DeviceEvents = DeviceEvents.WhenFocused,
+    /** Callback invoked on each wl_output.done with the updated [WaylandOutputInfo]. */
+    onOutputChanged: ((WaylandOutputInfo) -> Unit)? = null,
+    /** Pre-allocated output info objects keyed by wl_output proxy address. */
+    outputInfos: MutableMap<Long, WaylandOutputInfo>? = null,
 ) {
     val addListener = wlProxyAddListener ?: return
     val arena = Arena.ofShared()
@@ -659,10 +682,21 @@ internal fun installSeatListeners(
             }
         }
 
-        // ── wl_output (scale) ────────────────────────────────────────────────
+        // ── wl_output (geometry, mode, scale) ─────────────────────────────────
         if (outputPtr != 0L && outputVersion >= 2) {
             val output = MemorySegment.ofAddress(outputPtr)
-            installOutputListener(output, addListener, lookup, arena, onScaleChanged)
+            val outputInfo = WaylandOutputInfo(
+                outputPtr = outputPtr,
+                name = null,
+                outputVersion = outputVersion,
+            )
+            outputInfos?.put(outputPtr, outputInfo)
+            installOutputListener(
+                output, addListener, lookup, arena,
+                outputInfo = outputInfo,
+                onOutputChanged = onOutputChanged,
+                onScaleChanged = onScaleChanged,
+            )
             anyListenerInstalled = true
         }
 
@@ -1002,9 +1036,11 @@ private fun installOutputListener(
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
-    onScaleChanged: (Int) -> Unit,
+    outputInfo: WaylandOutputInfo,
+    onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
+    onScaleChanged: ((Int) -> Unit)?,
 ) {
-    val listener = WlOutputListener(onScaleChanged)
+    val listener = WlOutputListener(outputInfo, onOutputChanged, onScaleChanged)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     // vtable: geometry, mode, done, scale — 4 entries (wl_output v2+).

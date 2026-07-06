@@ -88,6 +88,12 @@ class WaylandEventLoop internal constructor(
     /** Returns the set of protocol interface names announced by the compositor. */
     internal fun protocols(): Set<String> = _globals?.availableProtocols ?: emptySet()
 
+    /**
+     * Real monitor information collected from wl_output geometry/mode/scale events.
+     * Keyed by wl_output proxy address. Populated during [installSeatListeners].
+     */
+    internal val outputInfos = ConcurrentHashMap<Long, WaylandOutputInfo>()
+
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
 
@@ -202,18 +208,19 @@ class WaylandEventLoop internal constructor(
     // ── R2: monitor enumeration ───────────────────────────────────────────────
 
     /**
-     * Returns a synthetic monitor derived from the first window's size and scale factor.
+     * Returns the list of monitors detected via wl_output geometry/mode/scale events.
      *
-     * On Wayland, the compositor does not expose physical monitor geometry to clients
-     * via a simple public API in the core protocol (wl_output geometry is available
-     * but requires additional setup). We return a synthetic monitor based on the
-     * current window/screen state.
-     *
-     * A complete implementation would iterate the bound wl_output objects and read
-     * their `geometry` and `mode` events, which requires storing that data during
-     * the registry binding phase (TODO for a future ticket).
+     * ### Sprint 3 (#272)
+     * Prior to Sprint 3, this returned a synthetic monitor derived from the first
+     * window's size. Now it uses real [WaylandOutputInfo] data collected from the
+     * wl_output listener. If no output info is available yet (e.g. during early
+     * startup), falls back to a synthetic monitor.
      */
     override fun availableMonitors(): List<MonitorHandle> {
+        val realOutputs = outputInfos.values.map { it.toMonitorHandle() }
+        if (realOutputs.isNotEmpty()) return realOutputs
+
+        // Fallback: synthetic monitor from first window
         val win = windows.values.firstOrNull()
         val scale = win?._scaleFactor ?: 1.0
         val size = win?.innerSize ?: PhysicalSize(1920, 1080)
@@ -441,6 +448,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         },
         dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
         deviceFilter = eventLoop.deviceEventFilter,
+        outputInfos = eventLoop.outputInfos,
     )
 
     // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
