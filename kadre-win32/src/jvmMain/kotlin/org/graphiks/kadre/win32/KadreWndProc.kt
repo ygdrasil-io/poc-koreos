@@ -684,6 +684,7 @@ object KadreWndProc {
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
         val win32Text = if (!isRepeat) win32KeyText(vkCode, rawScanCode.toInt()) else null
+        val win32TextNoMods = if (!isRepeat) win32KeyTextWithoutModifiers(vkCode, rawScanCode.toInt()) else null
         return WindowEvent.KeyInput(
             event = KeyEvent(
                 physicalKey = Win32KeyMapper.physicalKey(vkCode, rawScanCode.toInt(), extended),
@@ -693,7 +694,7 @@ object KadreWndProc {
                 repeat = isRepeat,
                 text = win32Text ?: mappedCode?.defaultText(),
                 textWithAllModifiers = win32Text ?: mappedCode?.defaultText(),
-                keyWithoutModifiers = mappedCode?.defaultText(),
+                keyWithoutModifiers = win32TextNoMods ?: mappedCode?.defaultText(),
                 native = native,
             ),
             deviceId = null,
@@ -729,11 +730,9 @@ object KadreWndProc {
     private fun win32KeyText(vkCode: Int, scanCode: Int): String? {
         val handle = toUnicode ?: return null
         return try {
-            // Native (off-heap) buffers: heap MemorySegments cannot be passed to a downcall,
-            // which would throw and silently force text=null on every keystroke.
             java.lang.foreign.Arena.ofConfined().use { arena ->
-                val buf = arena.allocate(16L, 2L)        // 8 WCHARs
-                val keyState = arena.allocate(256L, 1L)  // BYTE[256]
+                val buf = arena.allocate(16L, 2L)
+                val keyState = arena.allocate(256L, 1L)
                 getKeyboardState?.invoke(keyState)
                 val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
                 if (result <= 0) return@use null
@@ -746,6 +745,44 @@ object KadreWndProc {
             }
         } catch (_: Throwable) { null }
     }
+
+    /**
+     * Returns the Unicode text produced by a key as if no modifiers were active,
+     * by calling ToUnicode with a keyboard state that has all modifier keys cleared.
+     *
+     * Used for [KeyEvent.keyWithoutModifiers].
+     */
+    private fun win32KeyTextWithoutModifiers(vkCode: Int, scanCode: Int): String? {
+        val handle = toUnicode ?: return null
+        return try {
+            java.lang.foreign.Arena.ofConfined().use { arena ->
+                val buf = arena.allocate(16L, 2L)
+                val keyState = arena.allocate(256L, 1L)
+                getKeyboardState?.invoke(keyState)
+                // Clear the high bit (key-down) for all modifier VK codes
+                for (vk in MODIFIER_VK_CODES) {
+                    val current = keyState.get(ValueLayout.JAVA_BYTE, vk.toLong()).toInt() and 0xFF
+                    keyState.set(ValueLayout.JAVA_BYTE, vk.toLong(), (current and 0x7F).toByte())
+                }
+                val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
+                if (result <= 0) return@use null
+                val sb = StringBuilder()
+                for (i in 0 until result) {
+                    val ch = buf.getAtIndex(ValueLayout.JAVA_CHAR, i.toLong())
+                    if (ch >= ' ') sb.append(ch)
+                }
+                if (sb.isEmpty()) null else sb.toString()
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    /** VK codes for modifier keys, used to clear their state for keyWithoutModifiers. */
+    private val MODIFIER_VK_CODES: IntArray = intArrayOf(
+        VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+        VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+        VK_MENU, VK_LMENU, VK_RMENU,
+        VK_LWIN, VK_RWIN,
+    )
 
     /**
      * Arms WM_MOUSELEAVE tracking for the window [hwnd] via TrackMouseEvent.

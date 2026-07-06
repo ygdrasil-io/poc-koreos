@@ -265,11 +265,37 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                         }
                     } catch (_: Throwable) { null }
                 } else null
+                // Extract charactersIgnoringModifiers for keyWithoutModifiers
+                val charsIgnoringMods: String? = if (isKeyDown) {
+                    try {
+                        val charsPtr = ObjCRuntime.msgSend(
+                            ValueLayout.ADDRESS,
+                            event,
+                            ObjCRuntime.sel("charactersIgnoringModifiers"),
+                        ) as MemorySegment
+                        if (charsPtr == MemorySegment.NULL) null
+                        else {
+                            val utf8Ptr = ObjCRuntime.msgSend(
+                                ValueLayout.ADDRESS,
+                                charsPtr,
+                                ObjCRuntime.sel("UTF8String"),
+                            ) as MemorySegment
+                            if (utf8Ptr == MemorySegment.NULL) null
+                            else {
+                                val s = utf8Ptr.reinterpret(256L).getString(0L, java.nio.charset.StandardCharsets.UTF_8)
+                                if (s.isNotEmpty() && s.all { it >= ' ' }) s else null
+                            }
+                        }
+                    } catch (_: Throwable) { null }
+                } else null
                 val native = NativeKeyInfo(
                     platform = KeyPlatform.AppKit,
                     scanCode = keyCode.toLong(),
                     nativeCode = NativeKeyCode.AppKit(keyCode.toLong()),
-                    nativeKey = NativeLogicalKey.AppKit(characters = text),
+                    nativeKey = NativeLogicalKey.AppKit(
+                        characters = text,
+                        charactersIgnoringModifiers = charsIgnoringMods,
+                    ),
                 )
                 val logicalKey = mappedCode?.defaultLogicalKey()
                     ?: LogicalKey.Unidentified(native)
@@ -295,7 +321,7 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                             synthetic = false,
                             text = text ?: mappedCode?.defaultText(),
                             textWithAllModifiers = text,
-                            keyWithoutModifiers = mappedCode?.defaultText(),
+                            keyWithoutModifiers = charsIgnoringMods ?: mappedCode?.defaultText(),
                             native = native,
                         ),
                         deviceId = DeviceId(0L),
