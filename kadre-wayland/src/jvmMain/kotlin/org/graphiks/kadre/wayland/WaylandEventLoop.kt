@@ -556,7 +556,7 @@ private fun pumpOnce(
     // ── Step 2: flush ─────────────────────────────────────────────────────────
     try { flush?.invokeExact(displaySeg) } catch (_: Throwable) {}
 
-    // ── Step 3: poll ──────────────────────────────────────────────────────────
+    // ── Step 3: poll + eventfd drain (single arena) ───────────────────────────
     val (displayReady, eventFdReady) = Arena.ofConfined().use { arena ->
         val fds = allocPollFd(arena)
         setPollFd(fds, 0, displayFd, POLLIN)
@@ -569,12 +569,19 @@ private fun pumpOnce(
         if (pollRc > 0) {
             val rev0 = getPollRevents(fds, 0)
             val rev1 = getPollRevents(fds, 1)
-            Pair(
-                (rev0.toInt() and POLLIN.toInt()) != 0,
-                (rev1.toInt() and POLLIN.toInt()) != 0,
-            )
+            val displayReady = (rev0.toInt() and POLLIN.toInt()) != 0
+            val eventFdReady = (rev1.toInt() and POLLIN.toInt()) != 0
+
+            // Step 4b: drain the eventfd within the same arena, avoiding a
+            // second allocation on the hot path (Sprint 3, #273).
+            if (eventFdReady) {
+                val buf = arena.allocate(8L, 8L)
+                try { nativeRead?.invokeExact(eventFd, buf, 8L) } catch (_: Throwable) {}
+            }
+
+            displayReady to eventFdReady
         } else {
-            Pair(false, false)
+            false to false
         }
     }
 
@@ -585,14 +592,6 @@ private fun pumpOnce(
     } else if (!displayReady && cancelRead != null && wlDisplayPrepareRead != null) {
         // Cancel the read announced in step 1 only if prepareRead is available
         try { cancelRead.invokeExact(displaySeg) } catch (_: Throwable) {}
-    }
-
-    // ── Step 4b: drain the eventfd if triggered ───────────────────────────────
-    if (eventFdReady) {
-        Arena.ofConfined().use { arena ->
-            val buf = arena.allocate(8L, 8L)
-            try { nativeRead?.invokeExact(eventFd, buf, 8L) } catch (_: Throwable) {}
-        }
     }
 
     // ── Determine the StartCause ──────────────────────────────────────────────
