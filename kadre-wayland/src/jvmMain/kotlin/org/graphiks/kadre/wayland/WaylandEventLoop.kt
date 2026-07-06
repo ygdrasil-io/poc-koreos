@@ -82,8 +82,8 @@ class WaylandEventLoop internal constructor(
 ) : ActiveEventLoop {
 
     /** The [WaylandGlobals] discovered during startup. Used by [protocols] and [hasProtocol]. */
+    @PublishedApi
     internal var _globals: WaylandGlobals? = null
-        private set
 
     /** Returns the set of protocol interface names announced by the compositor. */
     internal fun protocols(): Set<String> = _globals?.availableProtocols ?: emptySet()
@@ -160,6 +160,7 @@ class WaylandEventLoop internal constructor(
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
+        window.outputInfos = outputInfos
         windows[window.id.value] = window
         // Initial paint so the surface attaches a buffer and becomes visible. Subsequent repaints
         // are driven on demand (e.g. after a resize), not continuously — see the main loop.
@@ -189,6 +190,7 @@ class WaylandEventLoop internal constructor(
             kwinBlurManagerPtr = kwinBlurManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
+        window.outputInfos = outputInfos
         windows[window.id.value] = window
         // Apply platform extension settings
         attrs.preferCsd?.let { window.setPreferCsd(it) }

@@ -88,13 +88,18 @@ internal class WaylandBlur(
      */
     fun setBlur(blur: Boolean) {
         if (surfacePtr == 0L) return
-        if (extBackgroundEffectManagerPtr != 0L) {
+        val hadExt = extBackgroundEffectManagerPtr != 0L
+        val hadKwin = kwinBlurManagerPtr != 0L
+        if (hadExt) {
             setBlurExtBackgroundEffect(blur)
-        } else if (kwinBlurManagerPtr != 0L) {
+        } else if (hadKwin) {
             setBlurKwin(blur)
         }
         // KWin requires wl_surface.commit for the blur effect to take effect.
-        wlSurfaceCommit(surfacePtr)
+        // Only commit when a blur protocol is actually available.
+        if (hadExt || hadKwin) {
+            wlSurfaceCommit(surfacePtr)
+        }
     }
 
     /**

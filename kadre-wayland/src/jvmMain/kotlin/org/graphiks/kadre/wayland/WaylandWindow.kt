@@ -117,6 +117,12 @@ class WaylandWindow private constructor(
     @Volatile
     internal var onWindowEvent: ((WindowEvent) -> Unit)? = null
 
+    /**
+     * Reference to the event loop's output info map, set by [WaylandEventLoop.createWindow].
+     * Used by [currentMonitor] to return real monitor data instead of synthetic.
+     */
+    internal var outputInfos: MutableMap<Long, WaylandOutputInfo>? = null
+
     /** The xdg_shell decoration (real toplevel), or null if xdg_shell is unavailable. */
     private var xdg: XdgToplevel? = null
 
@@ -394,22 +400,36 @@ class WaylandWindow private constructor(
     // ── R2: monitor & fullscreen ──────────────────────────────────────────────
 
     /**
-     * Returns a synthetic monitor representing the Wayland compositor's output.
+     * Returns the [MonitorHandle] for this window's output, or a synthetic fallback.
      *
-     * Uses the current window size and scale factor as the monitor's video mode,
-     * since the Wayland protocol does not expose physical screen geometry directly.
+     * Uses real [WaylandOutputInfo] data from the event loop when available. Falls back
+     * to a synthetic monitor based on the window's current size and scale factor.
      */
-    override fun currentMonitor(): MonitorHandle? = object : MonitorHandle {
-        override val id: Long = displayPtr
-        override val name: String? = null
-        override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
-        override val scaleFactor: Double = _scaleFactor
-        override val currentVideoMode: VideoMode = VideoMode(_innerSize, null, null)
-        override val videoModes: List<VideoMode> = listOf(currentVideoMode)
+    override fun currentMonitor(): MonitorHandle? {
+        val infos = outputInfos
+        if (infos != null && infos.isNotEmpty()) {
+            // Return the first available output (best-effort — Wayland does not
+            // expose which output a surface is on without xdg-output protocol).
+            val info = infos.values.first()
+            return info.toMonitorHandle()
+        }
+        return object : MonitorHandle {
+            override val id: Long = displayPtr
+            override val name: String? = null
+            override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+            override val scaleFactor: Double = _scaleFactor
+            override val currentVideoMode: VideoMode = VideoMode(_innerSize, null, null)
+            override val videoModes: List<VideoMode> = listOf(currentVideoMode)
+        }
     }
 
-    override fun availableMonitors(): List<MonitorHandle> =
-        currentMonitor()?.let(::listOf) ?: emptyList()
+    override fun availableMonitors(): List<MonitorHandle> {
+        val infos = outputInfos
+        if (infos != null && infos.isNotEmpty()) {
+            return infos.values.map { it.toMonitorHandle() }
+        }
+        return currentMonitor()?.let(::listOf) ?: emptyList()
+    }
 
     override fun primaryMonitor(): MonitorHandle? =
         null

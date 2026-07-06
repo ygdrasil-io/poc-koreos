@@ -121,11 +121,8 @@ fun ActiveEventLoop.waylandProtocols(): Set<String> {
  *
  * @throws IllegalStateException if the event loop is not a Wayland event loop.
  */
-fun ActiveEventLoop.hasWaylandProtocol(interfaceName: String): Boolean {
-    val wayland = this as? WaylandEventLoop
-        ?: throw IllegalStateException("Event loop is not a Wayland event loop")
-    return wayland._globals?.hasProtocol(interfaceName) ?: false
-}
+fun ActiveEventLoop.hasWaylandProtocol(interfaceName: String): Boolean =
+    interfaceName in waylandProtocols()
 
 // ── Blur / KWin integration (Sprint 3, #270) ─────────────────────────────────
 
@@ -133,7 +130,7 @@ fun ActiveEventLoop.hasWaylandProtocol(interfaceName: String): Boolean {
  * Returns the [KwinBlurVariant] detected for this window, or [KwinBlurVariant.None]
  * if no blur protocol is available.
  */
-fun Window.kwinBlurVariant(): KwinBlurVariant {
+internal fun Window.kwinBlurVariant(): KwinBlurVariant {
     val wayland = this as? WaylandWindow ?: return KwinBlurVariant.None
     return wayland.blurManager?.variant ?: KwinBlurVariant.None
 }
@@ -142,7 +139,7 @@ fun Window.kwinBlurVariant(): KwinBlurVariant {
  * Returns true if this Wayland window can render background blur (i.e. the compositor
  * exposes either `ext_background_effect_v1` or `org_kde_kwin_blur_manager`).
  */
-fun Window.isKwinBlurSupported(): Boolean {
+internal fun Window.isKwinBlurSupported(): Boolean {
     val wayland = this as? WaylandWindow ?: return false
     return wayland.blurManager?.isSupported ?: false
 }
@@ -150,7 +147,7 @@ fun Window.isKwinBlurSupported(): Boolean {
 /**
  * Returns true if this Wayland window uses KWin 6+ blur (ext_background_effect_v1).
  */
-fun Window.isKwin6(): Boolean {
+internal fun Window.isKwin6(): Boolean {
     val wayland = this as? WaylandWindow ?: return false
     return wayland.blurManager?.isKwin6 ?: false
 }
@@ -158,7 +155,7 @@ fun Window.isKwin6(): Boolean {
 /**
  * Returns true if this Wayland window uses KWin 5.x blur (org_kde_kwin_blur_manager).
  */
-fun Window.isKwin5(): Boolean {
+internal fun Window.isKwin5(): Boolean {
     val wayland = this as? WaylandWindow ?: return false
     return wayland.blurManager?.isKwin5 ?: false
 }

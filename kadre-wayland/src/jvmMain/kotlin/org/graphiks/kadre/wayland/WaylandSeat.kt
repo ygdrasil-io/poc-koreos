@@ -149,6 +149,17 @@ private class WlOutputListener(
         info.scale = factor
         onScaleChanged?.invoke(factor)
     }
+
+    /** wl_output v4: name event — vtable index 4. */
+    @Suppress("UNUSED_PARAMETER")
+    fun onName(data: MemorySegment, output: MemorySegment, namePtr: MemorySegment) {
+        val nameStr = try { namePtr.reinterpret(128).getString(0) } catch (_: Throwable) { null }
+        if (nameStr != null) info.updateName(nameStr)
+    }
+
+    /** wl_output v4: description event — vtable index 5. */
+    @Suppress("UNUSED_PARAMETER")
+    fun onDescription(data: MemorySegment, output: MemorySegment, descPtr: MemorySegment) { /* no-op */ }
 }
 
 // ── wl_keyboard listener ──────────────────────────────────────────────────────
@@ -1043,7 +1054,7 @@ private fun installOutputListener(
     val listener = WlOutputListener(outputInfo, onOutputChanged, onScaleChanged)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
-    // vtable: geometry, mode, done, scale — 4 entries (wl_output v2+).
+    // vtable: geometry, mode, done, scale, name, description — 6 entries (wl_output v4).
     val geometryStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onGeometry",
             MethodType.methodType(Void.TYPE,
@@ -1086,10 +1097,28 @@ private fun installOutputListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
         arena,
     )
-    val vtable = arena.allocate(ptr * 4)
+    val nameStub = upcallStub(
+        lookup.findVirtual(WlOutputListener::class.java, "onName",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java, MemorySegment::class.java,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+        arena,
+    )
+    val descriptionStub = upcallStub(
+        lookup.findVirtual(WlOutputListener::class.java, "onDescription",
+            MethodType.methodType(Void.TYPE,
+                MemorySegment::class.java, MemorySegment::class.java, MemorySegment::class.java,
+            )).bindTo(listener),
+        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+        arena,
+    )
+    val vtable = arena.allocate(ptr * 6)
     vtable.set(ValueLayout.ADDRESS, 0L,       geometryStub)
     vtable.set(ValueLayout.ADDRESS, ptr,      modeStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 2,  doneStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  scaleStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 4,  nameStub)
+    vtable.set(ValueLayout.ADDRESS, ptr * 5,  descriptionStub)
     runCatching { addListener.invokeExact(output, vtable, MemorySegment.NULL) as Int }
 }
