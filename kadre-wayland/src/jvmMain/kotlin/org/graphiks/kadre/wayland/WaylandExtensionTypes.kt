@@ -90,3 +90,39 @@ fun ActiveEventLoop.setActivationToken(token: String?) {
         ?: throw IllegalStateException("Event loop is not a Wayland event loop")
     wayland._activationToken = token
 }
+
+// ── Dynamic protocol detection (Sprint 3, #271) ──────────────────────────────
+
+/**
+ * Returns the set of Wayland protocol interface names announced by the compositor
+ * during the initial wl_registry negotiation.
+ *
+ * Protocols detected at startup remain constant for the session lifetime
+ * (the compositor does not hotplug protocols). For hot-pluggable resources
+ * like wl_output, use [availableMonitors].
+ *
+ * ### Usage
+ * ```kotlin
+ * if (eventLoop.waylandProtocols().contains("ext_background_effect_v1")) {
+ *     // compositor supports ext_background_effect
+ * }
+ * ```
+ *
+ * @throws IllegalStateException if the event loop is not a Wayland event loop.
+ */
+fun ActiveEventLoop.waylandProtocols(): Set<String> {
+    val wayland = this as? WaylandEventLoop
+        ?: throw IllegalStateException("Event loop is not a Wayland event loop")
+    return wayland.protocols()
+}
+
+/**
+ * Returns true if the Wayland compositor supports the given protocol interface name.
+ *
+ * @throws IllegalStateException if the event loop is not a Wayland event loop.
+ */
+fun ActiveEventLoop.hasWaylandProtocol(interfaceName: String): Boolean {
+    val wayland = this as? WaylandEventLoop
+        ?: throw IllegalStateException("Event loop is not a Wayland event loop")
+    return wayland._globals?.hasProtocol(interfaceName) ?: false
+}

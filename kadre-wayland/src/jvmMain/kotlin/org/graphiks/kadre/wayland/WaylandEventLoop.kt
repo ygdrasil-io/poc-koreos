@@ -81,6 +81,13 @@ class WaylandEventLoop internal constructor(
     internal val kwinBlurManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
 
+    /** The [WaylandGlobals] discovered during startup. Used by [protocols] and [hasProtocol]. */
+    internal var _globals: WaylandGlobals? = null
+        private set
+
+    /** Returns the set of protocol interface names announced by the compositor. */
+    internal fun protocols(): Set<String> = _globals?.availableProtocols ?: emptySet()
+
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
 
@@ -405,7 +412,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
         globals.activationManagerPtr, globals.seatPtr,
         globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
-    )
+    ).also { it._globals = globals }
 
     // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
     // Route all input events into the eventQueue by their source wl_surface.
