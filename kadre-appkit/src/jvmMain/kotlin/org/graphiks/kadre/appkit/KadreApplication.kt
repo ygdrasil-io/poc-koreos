@@ -241,6 +241,9 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 val modifiers = AppKitKeyMapper.modifierFlags(modFlags)
                 val state = if (isKeyDown) KeyState.Pressed else KeyState.Released
                 // R4: extract text via [NSEvent characters] (nil-safe)
+                // NSEvent.characters includes all modifier effects EXCEPT Command
+                // (which macOS reserves for menu shortcut purposes), making it the
+                // correct value for both `text` and `textWithAllModifiers` on AppKit.
                 val text: String? = if (isKeyDown) {
                     try {
                         val charsPtr = ObjCRuntime.msgSend(
