@@ -684,6 +684,7 @@ object KadreWndProc {
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
         val win32Text = if (!isRepeat) win32KeyText(vkCode, rawScanCode.toInt()) else null
+        val win32TextWithMods = if (!isRepeat) win32KeyTextWithModifiers(vkCode, rawScanCode.toInt()) else null
         val win32TextNoMods = if (!isRepeat) win32KeyTextWithoutModifiers(vkCode, rawScanCode.toInt()) else null
         return WindowEvent.KeyInput(
             event = KeyEvent(
@@ -693,7 +694,7 @@ object KadreWndProc {
                 modifiers = modifiers,
                 repeat = isRepeat,
                 text = win32Text ?: mappedCode?.defaultText(),
-                textWithAllModifiers = win32Text ?: mappedCode?.defaultText(),
+                textWithAllModifiers = win32TextWithMods ?: win32Text ?: mappedCode?.defaultText(),
                 keyWithoutModifiers = win32TextNoMods ?: mappedCode?.defaultText(),
                 native = native,
             ),
@@ -765,6 +766,35 @@ object KadreWndProc {
                     keyState.set(ValueLayout.JAVA_BYTE, vk.toLong(), (current and 0x7F).toByte())
                 }
                 val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
+                if (result <= 0) return@use null
+                val sb = StringBuilder()
+                for (i in 0 until result) {
+                    val ch = buf.getAtIndex(ValueLayout.JAVA_CHAR, i.toLong())
+                    if (ch >= ' ') sb.append(ch)
+                }
+                if (sb.isEmpty()) null else sb.toString()
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    /**
+     * Returns the Unicode text produced by a key with all active modifiers applied,
+     * using ToUnicodeEx with the current thread's keyboard layout.
+     *
+     * Used for [KeyEvent.textWithAllModifiers].
+     * Unlike [win32KeyText], this variant uses ToUnicodeEx which explicitly takes
+     * the keyboard layout handle (HKL), providing better support for non-US layouts
+     * and avoiding dead-key state side effects.
+     */
+    private fun win32KeyTextWithModifiers(vkCode: Int, scanCode: Int): String? {
+        val handle = toUnicodeEx ?: return win32KeyText(vkCode, scanCode)
+        return try {
+            java.lang.foreign.Arena.ofConfined().use { arena ->
+                val buf = arena.allocate(16L, 2L)
+                val keyState = arena.allocate(256L, 1L)
+                getKeyboardState?.invoke(keyState)
+                val hkl = getKeyboardLayout?.invoke(0) as? MemorySegment ?: MemorySegment.NULL
+                val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0, hkl) as Int
                 if (result <= 0) return@use null
                 val sb = StringBuilder()
                 for (i in 0 until result) {

@@ -106,9 +106,19 @@ internal val toUnicode: MethodHandle? by lazy {
         FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT))
 }
 
+internal val toUnicodeEx: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "ToUnicodeEx",
+        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
 internal val getKeyboardState: MethodHandle? by lazy {
     lookupDowncall("user32.dll", "GetKeyboardState",
         FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+}
+
+internal val getKeyboardLayout: MethodHandle? by lazy {
+    lookupDowncall("user32.dll", "GetKeyboardLayout",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
 }
 
 private val immAssociateContextEx: MethodHandle? by lazy {
