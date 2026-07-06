@@ -196,8 +196,9 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
             // Get event type: [event type] → Long
             val eventType = ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("type")) as Long
 
-            val isKeyDown = eventType == 10L   // NSEventTypeKeyDown
-            val isKeyUp   = eventType == 11L   // NSEventTypeKeyUp
+            val isKeyDown       = eventType == 10L   // NSEventTypeKeyDown
+            val isKeyUp         = eventType == 11L   // NSEventTypeKeyUp
+            val isFlagsChanged  = eventType == 12L   // NSEventTypeFlagsChanged
 
             // ── Keyboard ──────────────────────────────────────────────────────────────
             if (isKeyDown || isKeyUp) {
@@ -320,6 +321,25 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                         ),
                     )
                 }
+                return
+            }
+
+            // ── Modifier-only change (NSEventTypeFlagsChanged) ──────────────────────────
+            if (isFlagsChanged) {
+                val eventWindow = ObjCRuntime.msgSend(ValueLayout.ADDRESS, event, ObjCRuntime.sel("window")) as MemorySegment
+                if (eventWindow == MemorySegment.NULL) return
+                val appKitWindow = loop.windows[eventWindow.address()] ?: return
+                val modFlags = ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("modifierFlags")) as Long
+                loop.handler.windowEvent(
+                    loop,
+                    appKitWindow.id,
+                    WindowEvent.ModifiersChanged(
+                        KeyboardModifierState(
+                            logical = AppKitKeyMapper.modifierFlags(modFlags),
+                            physical = AppKitKeyMapper.modifierKeys(modFlags),
+                        )
+                    ),
+                )
                 return
             }
 
