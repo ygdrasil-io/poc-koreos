@@ -31,9 +31,7 @@ linked feature table changes status.
 
 - Wayland monitor geometry and video modes are still synthetic until `wl_output`
   geometry/mode storage is wired.
-- Wayland optional protocols remain partial: `xdg_activation_v1` for user
-  attention, `xdg_toplevel_icon_manager_v1` for icons, compositor blur protocols,
-  portal-backed theme detection, and compositor-advertised pointer constraints
+- Wayland optional protocols remain partial: portal-backed theme detection and compositor-advertised pointer constraints
   for confined/locked cursor grabs.
 - X11 keyboard text fields still need `XLookupString` or equivalent integration.
 - X11 dynamic scale-factor changes still need RandR notification handling.
@@ -49,7 +47,7 @@ linked feature table changes status.
 
 ## Deferred Event and API Coverage
 
-- Rich IME capability reporting (`Window.ime_capabilities`) is not modeled.
+- Rich IME capability reporting (`Window.ime_capabilities`) is implemented on all backends.
 - `Window.request_ime_update` is not exposed; Kadre uses individual IME setters.
 - `ActiveEventLoop.ownedDisplayHandle()` may return `null`, unlike winit's
   non-null owned display handle.

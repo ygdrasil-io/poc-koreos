@@ -91,7 +91,7 @@
 | `Window::set_ime_allowed(bool)` | `setImeAllowed(Boolean)` | ✅ Implemented | |
 | `Window::set_ime_cursor_area(position, size)` | `setImeCursorArea(position, size)` | ✅ Implemented | |
 | `Window::set_ime_purpose(ImePurpose)` | `setImePurpose(ImePurpose)` | ✅ Implemented | |
-| `Window::ime_capabilities()` | absent | 🔶 Deferred | Kadre has `inputCapabilities()` for device features |
+| `Window::ime_capabilities()` | `imeCapabilities: ImeCapabilities` | ✅ Implemented | Implemented on all backends |
 
 ### Window Management Requests
 
