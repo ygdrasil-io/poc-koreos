@@ -9,7 +9,7 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 
 | Sprint | Période | Phase | Objectif | Statut |
 |--------|---------|-------|----------|--------|
-| **Sprint 1** | Juillet 2026 | Phase 1 | Écarts Bloquants & IME | ⏳ En cours |
+| **Sprint 1** | Juillet 2026 | Phase 1 | Écarts Bloquants & IME | ✅ Terminé |
 | **Sprint 2** | Août 2026 | Phase 1 | Qualité Clavier & Modifiers | ⏳ Prêt |
 | **Sprint 3** | Septembre 2026 | Phase 1 | Protocoles Wayland & Validation | ⏳ Prêt |
 | Sprint 4 | Octobre 2026 | Phase 2 | Complétion des Enums | 📋 Planifié |
@@ -23,20 +23,20 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 ### **Tickets par Sprint**
 | Sprint | Total | P0 | P1 | P2 | P3 | Terminés | % Complet |
 |--------|-------|----|----|----|----|----------|------------|
-| Sprint 1 | 6 | 3 | 3 | 0 | 0 | 0 | 0% |
+| Sprint 1 | 6 | 3 | 3 | 0 | 0 | 6 | 100% |
 | Sprint 2 | 5 | 0 | 3 | 2 | 0 | 0 | 0% |
 | Sprint 3 | 6 | 0 | 3 | 3 | 0 | 0 | 0% |
-| **Total Phase 1** | **17** | **3** | **9** | **5** | **0** | **0** | **0%** |
+| **Total Phase 1** | **17** | **3** | **9** | **5** | **0** | **6** | **35%** |
 
 ### **Tickets par Catégorie**
 | Catégorie | Total | Terminés | % Complet |
 |-----------|-------|----------|------------|
-| Window API | 2 | 0 | 0% |
+| Window API | 2 | 1 | 50% |
 | Events | 0 | 0 | - |
 | Keyboard | 6 | 0 | 0% |
-| Cursor | 1 | 0 | 0% |
-| Theme | 5 | 0 | 0% |
-| IME | 1 | 0 | 0% |
+| Cursor | 1 | 1 | 100% |
+| Theme | 5 | 3 | 60% |
+| IME | 1 | 1 | 100% |
 | Backend | 2 | 0 | 0% |
 | Tests | 1 | 0 | 0% |
 | Documentation | 0 | 0 | - |
@@ -44,10 +44,10 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 ### **Tickets par Backend**
 | Backend | Total | Terminés | % Complet |
 |---------|-------|----------|------------|
-| Core | 2 | 0 | 0% |
+| Core | 2 | 1 | 50% |
 | AppKit | 2 | 0 | 0% |
-| Win32 | 3 | 0 | 0% |
-| Wayland | 7 | 0 | 0% |
+| Win32 | 3 | 2 | 67% |
+| Wayland | 7 | 3 | 43% |
 | X11 | 0 | 0 | - |
 | Web | 0 | 0 | - |
 | Android | 0 | 0 | - |
@@ -58,24 +58,24 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 ## 📋 **Sprint 1 - Juillet 2026**
 **Phase**: Phase 1 - Fondations Critiques  
 **Objectif**: Résoudre les écarts bloquants et critiques  
-**Statut**: ⏳ En cours  
-**Progrès**: 0/6 tickets (0%)
+**Statut**: ✅ Terminé  
+**Progrès**: 6/6 tickets (100%)
 
 ### **Tickets P0 (Critique/Blocant)**
 
 | # | Titre | Priorité | Catégorie | Backend | Effort | Statut | Assigné à | DoD |
 |---|-------|----------|----------|---------|--------|--------|-----------|-----|
-| [#259](https://github.com/ygdrasil-io/poc-koreos/issues/259) | Implémenter Window.ime_capabilities() | P0 | IME | Core | 16 j/h | ⏳ Backlog | - | ❌ |
-| [#260](https://github.com/ygdrasil-io/poc-koreos/issues/260) | Implémenter Fullscreen.Exclusive sur Win32 | P0 | Window API | Win32 | 24 j/h | ⏳ Backlog | - | ❌ |
-| [#261](https://github.com/ygdrasil-io/poc-koreos/issues/261) | Corriger ShowCursor counter mismatch sur Win32 | P0 | Cursor | Win32 | 8 j/h | ⏳ Backlog | - | ❌ |
+| [#259](https://github.com/ygdrasil-io/poc-koreos/issues/259) | Implémenter Window.ime_capabilities() | P0 | IME | Core | 16 j/h | ✅ Done | - | ✅ |
+| [#260](https://github.com/ygdrasil-io/poc-koreos/issues/260) | Implémenter Fullscreen.Exclusive sur Win32 | P0 | Window API | Win32 | 24 j/h | ✅ Done | - | ✅ |
+| [#261](https://github.com/ygdrasil-io/poc-koreos/issues/261) | Corriger ShowCursor counter mismatch sur Win32 | P0 | Cursor | Win32 | 8 j/h | ✅ Done | - | ✅ |
 
 ### **Tickets P1 (Haute)**
 
 | # | Titre | Priorité | Catégorie | Backend | Effort | Statut | Assigné à | DoD |
 |---|-------|----------|----------|---------|--------|--------|-----------|-----|
-| [#262](https://github.com/ygdrasil-io/poc-koreos/issues/262) | Implémenter xdg_activation_v1 pour Wayland | P1 | Theme | Wayland | 32 j/h | ⏳ Backlog | - | ❌ |
-| [#263](https://github.com/ygdrasil-io/poc-koreos/issues/263) | Implémenter xdg_toplevel_icon_manager_v1 pour Wayland | P1 | Theme | Wayland | 24 j/h | ⏳ Backlog | - | ❌ |
-| [#264](https://github.com/ygdrasil-io/poc-koreos/issues/264) | Ajouter support ext_background_effect pour Wayland | P1 | Theme | Wayland | 40 j/h | ⏳ Backlog | - | ❌ |
+| [#262](https://github.com/ygdrasil-io/poc-koreos/issues/262) | Implémenter xdg_activation_v1 pour Wayland | P1 | Theme | Wayland | 32 j/h | ✅ Done | - | ✅ |
+| [#263](https://github.com/ygdrasil-io/poc-koreos/issues/263) | Implémenter xdg_toplevel_icon_manager_v1 pour Wayland | P1 | Theme | Wayland | 24 j/h | ✅ Done | - | ✅ |
+| [#264](https://github.com/ygdrasil-io/poc-koreos/issues/264) | Ajouter support ext_background_effect pour Wayland | P1 | Theme | Wayland | 40 j/h | ✅ Done | - | ✅ |
 
 ### **Burndown Chart Sprint 1**
 ```
@@ -91,8 +91,8 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
      Juillet 1   Juillet 8   Juillet 15  Juillet 22  Juillet 29
 ```
 
-**Tâches restantes**: 6/6  
-**Effort restant**: 140 j/h  
+**Tâches restantes**: 0/6  
+**Effort restant**: 0 j/h  
 **Vitesse actuelle**: 0 j/h/jour
 
 ---
@@ -185,21 +185,21 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 ### **P0 - Critique/Blocant (3 tickets)**
 | # | Titre | Sprint | Backend | Effort | Statut |
 |---|-------|--------|---------|--------|--------|
-| [#259](https://github.com/ygdrasil-io/poc-koreos/issues/259) | Implémenter Window.ime_capabilities() | 1 | Core | 16 j/h | ⏳ Backlog |
-| [#260](https://github.com/ygdrasil-io/poc-koreos/issues/260) | Implémenter Fullscreen.Exclusive sur Win32 | 1 | Win32 | 24 j/h | ⏳ Backlog |
-| [#261](https://github.com/ygdrasil-io/poc-koreos/issues/261) | Corriger ShowCursor counter mismatch sur Win32 | 1 | Win32 | 8 j/h | ⏳ Backlog |
+| [#259](https://github.com/ygdrasil-io/poc-koreos/issues/259) | Implémenter Window.ime_capabilities() | 1 | Core | 16 j/h | ✅ Done |
+| [#260](https://github.com/ygdrasil-io/poc-koreos/issues/260) | Implémenter Fullscreen.Exclusive sur Win32 | 1 | Win32 | 24 j/h | ✅ Done |
+| [#261](https://github.com/ygdrasil-io/poc-koreos/issues/261) | Corriger ShowCursor counter mismatch sur Win32 | 1 | Win32 | 8 j/h | ✅ Done |
 
-**Progrès P0**: 0/3 (0%)  
-**Effort restant P0**: 48 j/h
+**Progrès P0**: 3/3 (100%)  
+**Effort restant P0**: 0 j/h
 
 ---
 
 ### **P1 - Haute (9 tickets)**
 | # | Titre | Sprint | Backend | Effort | Statut |
 |---|-------|--------|---------|--------|--------|
-| [#262](https://github.com/ygdrasil-io/poc-koreos/issues/262) | Implémenter xdg_activation_v1 pour Wayland | 1 | Wayland | 32 j/h | ⏳ Backlog |
-| [#263](https://github.com/ygdrasil-io/poc-koreos/issues/263) | Implémenter xdg_toplevel_icon_manager_v1 pour Wayland | 1 | Wayland | 24 j/h | ⏳ Backlog |
-| [#264](https://github.com/ygdrasil-io/poc-koreos/issues/264) | Ajouter support ext_background_effect pour Wayland | 1 | Wayland | 40 j/h | ⏳ Backlog |
+| [#262](https://github.com/ygdrasil-io/poc-koreos/issues/262) | Implémenter xdg_activation_v1 pour Wayland | 1 | Wayland | 32 j/h | ✅ Done |
+| [#263](https://github.com/ygdrasil-io/poc-koreos/issues/263) | Implémenter xdg_toplevel_icon_manager_v1 pour Wayland | 1 | Wayland | 24 j/h | ✅ Done |
+| [#264](https://github.com/ygdrasil-io/poc-koreos/issues/264) | Ajouter support ext_background_effect pour Wayland | 1 | Wayland | 40 j/h | ✅ Done |
 | [#265](https://github.com/ygdrasil-io/poc-koreos/issues/265) | Implémenter textWithAllModifiers sur AppKit | 2 | AppKit | 16 j/h | ⏳ Backlog |
 | [#266](https://github.com/ygdrasil-io/poc-koreos/issues/266) | Implémenter textWithAllModifiers sur Win32 | 2 | Win32 | 20 j/h | ⏳ Backlog |
 | [#267](https://github.com/ygdrasil-io/poc-koreos/issues/267) | Implémenter keyWithoutModifiers sur tous les backends | 2 | Core | 24 j/h | ⏳ Backlog |
@@ -207,8 +207,8 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 | [#271](https://github.com/ygdrasil-io/poc-koreos/issues/271) | Implémenter la détection dynamique de protocoles Wayland | 3 | Wayland | 16 j/h | ⏳ Backlog |
 | [#272](https://github.com/ygdrasil-io/poc-koreos/issues/272) | Corriger la géométrie des moniteurs sur Wayland | 3 | Wayland | 20 j/h | ⏳ Backlog |
 
-**Progrès P1**: 0/9 (0%)  
-**Effort restant P1**: 224 j/h
+**Progrès P1**: 3/9 (33%)  
+**Effort restant P1**: 128 j/h
 
 ---
 
@@ -232,8 +232,8 @@ Atteindre **100% de parité avec winit v0.30.13** en suivant le [REMEDIATION_PLA
 - **Objectif**: Résoudre tous les écarts P0 et 95% des écarts P1
 - **Tickets**: 17 (3 P0 + 9 P1 + 5 P2)
 - **Effort total**: 444 j/h
-- **Progrès**: 0/17 (0%)
-- **Effort restant**: 444 j/h
+- **Progrès**: 6/17 (35%)
+- **Effort restant**: 300 j/h
 
 ### **Phase 2: Parité Complète (Sprints 4-6)**
 - **Objectif**: Atteindre 100% de parité avec winit

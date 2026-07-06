@@ -346,6 +346,32 @@ const val TRACKMOUSEEVENT_SIZE: Int = 24
 
 const val GESTUREINFO_SIZE: Int = 48
 
+// ── ChangeDisplaySettings flags ────────────────────────────────────────────────
+
+const val CDS_FULLSCREEN: Int = 4
+const val CDS_TEST: Int = 2
+const val CDS_SET_PRIMARY: Int = 0x10
+
+// ── ChangeDisplaySettings return values ────────────────────────────────────────
+
+const val DISP_CHANGE_SUCCESSFUL: Int = 0
+const val DISP_CHANGE_RESTART: Int = 1
+const val DISP_CHANGE_FAILED: Int = -1
+const val DISP_CHANGE_BADMODE: Int = -2
+const val DISP_CHANGE_BADPARAM: Int = -7
+
+// ── DEVMODE dmFields flags ─────────────────────────────────────────────────────
+
+const val DM_BITSPERPEL: Int = 0x00040000
+const val DM_PELSWIDTH: Int = 0x00080000
+const val DM_PELSHEIGHT: Int = 0x00100000
+const val DM_DISPLAYFREQUENCY: Int = 0x00400000
+
+// ── EnumDisplaySettings mode indices ───────────────────────────────────────────
+
+const val ENUM_CURRENT_SETTINGS: Int = -1
+const val ENUM_REGISTRY_SETTINGS: Int = -2
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Re-exported typealiases from the generated bindings
 // ═══════════════════════════════════════════════════════════════════════════════

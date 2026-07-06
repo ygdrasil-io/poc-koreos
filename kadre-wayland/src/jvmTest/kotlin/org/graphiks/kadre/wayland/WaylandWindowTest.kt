@@ -20,6 +20,7 @@ import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowRequestResult
@@ -695,6 +696,76 @@ class WaylandWindowTest {
     fun `setAppId does not crash with blank app ID`() {
         val window = WaylandWindow.createForTest()
         window.setAppId("")
+    }
+
+    // ── R5-requestUserAttention ──────────────────────────────────────────────
+
+    @Test
+    fun `WaylandActivationToken requestAttention returns false when activationManagerPtr is zero`() {
+        val act = WaylandActivationToken(activationManagerPtr = 0L)
+        assertEquals(false, act.requestAttention(surfacePtr = 100L, seatPtr = 200L, serial = 42))
+    }
+
+    @Test
+    fun `WaylandActivationToken requestAttention returns false with mock pointers`() {
+        if (libWaylandClient != null) return
+        val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 300L)
+        // FFI handles are null on non-Wayland → returns false without crashing
+        assertEquals(false, act.requestAttention(surfacePtr = 100L, seatPtr = 200L, serial = 42))
+    }
+
+    @Test
+    fun `WaylandActivationToken requestAttention returns false with zero surface`() {
+        val act = WaylandActivationToken(activationManagerPtr = 200L, seatPtr = 300L)
+        assertEquals(false, act.requestAttention(surfacePtr = 0L, seatPtr = 200L, serial = 42))
+    }
+
+    @Test
+    fun `WaylandWindow requestUserAttention with null requestType returns Success`() {
+        val window = WaylandWindow.createForTest()
+        val result = window.requestUserAttention(null)
+        assertIs<WindowRequestResult.Success>(result)
+    }
+
+    @Test
+    fun `WaylandWindow requestUserAttention returns Unsupported when activationManager is null`() {
+        val window = WaylandWindow.createForTest(activationManagerPtr = 0L)
+        val result = window.requestUserAttention(UserAttentionType.Informational)
+        assertIs<WindowRequestResult.Failure>(result)
+        assertIs<RequestError.Unsupported>(result.error)
+        assertEquals("Wayland xdg_activation_v1 is unavailable", result.error.message)
+    }
+
+    @Test
+    fun `WaylandWindow requestUserAttention returns Ignored when token flow fails`() {
+        if (libWaylandClient != null) return
+        val surface = 4_242L
+        val window = WaylandWindow.createForTest(
+            activationManagerPtr = 100L,
+            seatPtr = 200L,
+            surface = surface,
+        )
+        val result = window.requestUserAttention(UserAttentionType.Informational)
+        assertIs<WindowRequestResult.Failure>(result)
+        assertIs<RequestError.Ignored>(result.error)
+    }
+
+    @Test
+    fun `WaylandWindow requestUserAttention uses PointerState seat info`() {
+        if (libWaylandClient != null) return
+        val surface = 7_373L
+        WaylandPointerState.enterPointer(ptr = 3_333L, surfacePtr = surface, serial = 77)
+        WaylandPointerState.recordButton(serial = 88, button = 1, state = 1)
+        val window = WaylandWindow.createForTest(
+            activationManagerPtr = 100L,
+            seatPtr = 200L,
+            surface = surface,
+        )
+        val result = window.requestUserAttention(UserAttentionType.Informational)
+        // Should return Ignored (token flow fails with mock ptrs) not Unsupported
+        assertIs<WindowRequestResult.Failure>(result)
+        assertIs<RequestError.Ignored>(result.error)
+        WaylandPointerState.leaveSurface(surface)
     }
 
     // ── R5-IME: ──────────────────────────────────────────────────────────────

@@ -10,6 +10,8 @@ import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
 import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Icon
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.Insets
 import org.graphiks.kadre.core.InputCapabilities
@@ -132,6 +134,13 @@ class AndroidWindow internal constructor(
 
     override fun inputCapabilities(): InputCapabilities =
         InputCapabilities(deviceIds = true, touch = true, touchForce = true)
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = true,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition, ImeCapability.Learning, ImeCapability.Password),
+        )
 
     @Volatile
     internal var needsRedraw: Boolean = false

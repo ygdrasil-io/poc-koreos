@@ -211,7 +211,7 @@ class WinitWindowingCompatibilityTest {
                 winitApi = "Window appearance/state setters",
                 kadreApi = "setWindowLevel, requestUserAttention, setTheme, theme, setTransparent, setBlur, setWindowIcon, setContentProtected",
                 status = WinitWindowingStatus.Deferred,
-                note = "Kadre exposes these methods; requestUserAttention and setContentProtected now return typed WindowRequestResult failures on unsupported backends. setWindowIcon is implemented on Win32/X11 and intentionally no-op on AppKit like winit. Wayland still lacks winit's optional xdg_activation_v1 attention path, xdg_toplevel_icon_manager_v1 icon path, and ext_background_effect / KWin blur protocols. X11 setTheme writes _GTK_THEME_VARIANT like winit while theme remains null; other appearance setters still need the same fallible-result audit.",
+                note = "Kadre exposes these methods; requestUserAttention and setContentProtected now return typed WindowRequestResult failures on unsupported backends. setWindowIcon is implemented on Win32/X11 and intentionally no-op on AppKit like winit. Wayland now supports xdg_activation_v1 (requestUserAttention), xdg_toplevel_icon_manager_v1 (setWindowIcon), and ext_background_effect/KWin blur (setBlur). X11 setTheme writes _GTK_THEME_VARIANT like winit while theme remains null; other appearance setters still need the same fallible-result audit.",
             ),
             WinitWindowingApi(
                 winitApi = "Window reset_dead_keys",
@@ -263,9 +263,9 @@ class WinitWindowingCompatibilityTest {
             ),
             WinitWindowingApi(
                 winitApi = "Window.ime_capabilities",
-                kadreApi = "missing rich IME capabilities API",
-                status = WinitWindowingStatus.Deferred,
-                note = "Kadre has inputCapabilities for device features, but not winit's IME capability reporting model.",
+                kadreApi = "imeCapabilities: ImeCapabilities",
+                status = WinitWindowingStatus.Implemented,
+                note = "Kadre exposes ImeCapabilities with enabled/purposes/capabilities fields, matching winit's ImeCapabilities model.",
             ),
             WinitWindowingApi(
                 winitApi = "ActiveEventLoop create/control/exit/proxy",

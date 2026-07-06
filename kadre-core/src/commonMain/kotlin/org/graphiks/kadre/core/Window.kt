@@ -623,6 +623,20 @@ interface Window {
      */
     fun inputCapabilities(): InputCapabilities = InputCapabilities()
 
+    // ── R5-IME: IME capabilities ──────────────────────────────────────────────
+
+    /**
+     * Reports the IME capabilities of this window backend.
+     *
+     * Returns an [ImeCapabilities] instance describing whether IME is currently
+     * enabled, which [ImePurpose] values are supported, and which [ImeCapability]
+     * features are available. Backends without IME support can rely on the
+     * default implementation, which returns a fully-disabled capability set.
+     *
+     * @since R5-IME
+     */
+    fun imeCapabilities(): ImeCapabilities = ImeCapabilities()
+
     // ── R4: keyboard ──────────────────────────────────────────────────────────
 
     /**

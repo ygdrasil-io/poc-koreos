@@ -36,6 +36,8 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ImeCapabilities
+import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -118,6 +120,13 @@ class X11Window private constructor(
 
     override fun inputCapabilities(): InputCapabilities =
         InputCapabilities()
+
+    override fun imeCapabilities(): ImeCapabilities =
+        ImeCapabilities(
+            enabled = _imeAllowed && xic.address() != 0L,
+            purposes = listOf(ImePurpose.Normal, ImePurpose.Password, ImePurpose.Terminal),
+            capabilities = setOf(ImeCapability.Composition),
+        )
 
     /**
      * Current inner size in physical pixels.

@@ -73,7 +73,7 @@
 | `Window::set_ime_allowed(bool)` | `Window.setImeAllowed(Boolean)` | ✅ |
 | `Window::set_ime_cursor_area(position, size)` | `Window.setImeCursorArea(position, size)` | ✅ |
 | `Window::set_ime_purpose(ImePurpose)` | `Window.setImePurpose(ImePurpose)` | ✅ Normal/Password/Terminal |
-| `Window::ime_capabilities()` | absent | 🔶 Deferred |
+| `Window::ime_capabilities()` | `imeCapabilities: ImeCapabilities` | ✅ Implemented |
 
 ### IME Backend Implementation
 

@@ -118,9 +118,9 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | `Window.setTheme()` | ✅ | ✅ | Partial | ❌ X11, Wayland, Web, Android; ✅ AppKit, Win32, UIKit |
 | `Window.setWindowLevel()` | ✅ | ✅ | Partial | ❌ Wayland, Web, Android, UIKit; ✅ AppKit, Win32, X11 |
 | `Window.setTransparent()` | ✅ | ✅ | Partial | ❌ Web, Android, UIKit; ✅ AppKit, Win32, X11, Wayland |
-| `Window.setBlur()` | ✅ | ✅ | Partial | ❌ X11, Web, Android, UIKit; ✅ AppKit, Wayland (opt); ⚠️ Win32 (no-op) |
-| `Window.setWindowIcon()` | ✅ | ✅ | Partial | ❌ AppKit, Wayland, Web, Android, UIKit; ✅ Win32, X11 |
-| `Window.requestUserAttention()` | ✅ | ✅ | Partial | ❌ Wayland, Web, Android, UIKit; ✅ AppKit, Win32, X11 |
+| `Window.setBlur()` | ✅ | ✅ | ✅ | ❌ X11, Web, Android, UIKit; ✅ AppKit, Wayland; ⚠️ Win32 (no-op) |
+| `Window.setWindowIcon()` | ✅ | ✅ | ✅ | ❌ AppKit, Web, Android, UIKit; ✅ Win32, X11, Wayland |
+| `Window.requestUserAttention()` | ✅ | ✅ | ✅ | ❌ Web, Android, UIKit; ✅ AppKit, Win32, X11, Wayland |
 | `Window.setContentProtected()` | ✅ | ✅ | Partial | ❌ Wayland, Web, Android, UIKit; ✅ AppKit, Win32, X11 (no-op) |
 
 **Status**: ⚠️ **70% Complete** (Significant platform variations)
@@ -132,9 +132,9 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | `Window.setImeAllowed()` | ✅ | ✅ | All | Fully implemented |
 | `Window.setImeCursorArea()` | ✅ | ✅ | All | Fully implemented |
 | `Window.setImePurpose()` | ✅ | ✅ | All | Normal/Password/Terminal |
-| `Window.ime_capabilities()` | 🔶 | ❌ | None | **GAP: Not implemented** |
+| `Window.ime_capabilities()` | ✅ | ✅ | All | ✅ Implemented on all backends |
 
-**Status**: ⚠️ **90% Complete** (ime_capabilities deferred)
+**Status**: ✅ **100% Complete**
 
 ### 1.9 Window Management Requests
 
@@ -289,9 +289,9 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 | Feature | Spec Status | Implementation Status | Notes |
 |---------|-------------|---------------------|-------|
-| `requestUserAttention` | ❌ | ❌ | `xdg_activation_v1` protocol not wired |
-| `setWindowIcon` | ❌ | ❌ | `xdg_toplevel_icon_manager_v1` protocol not wired |
-| `setBlur` | ❌ | ❌ | `ext_background_effect` / KWin blur protocols not wired |
+| `requestUserAttention` | ✅ | ✅ | ✅ Implemented via xdg_activation_v1 |
+| `setWindowIcon` | ✅ | ✅ | ✅ Implemented via xdg_toplevel_icon_manager_v1 |
+| `setBlur` | ✅ | ✅ | ✅ Implemented via ext_background_effect / KWin blur |
 | `systemTheme()` portal | ✅ | ✅ | D-Bus integration works but detection incomplete |
 | Monitor geometry | ⚠️ | ⚠️ | `wl_output` geometry/mode not stored (synthetic only) |
 | `Fullscreen.Exclusive` | ❌ | ❌ | Not applicable on Wayland |
@@ -402,7 +402,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 | # | Feature | Category | Impact | Backends Affected | Resolution Status |
 |---|---------|----------|--------|-------------------|-------------------|
-| 1 | `ime_capabilities()` | IME | API missing | All | 🔶 Deferred |
+| 1 | `ime_capabilities()` | IME | API missing | All | ✅ Implemented |
 | 2 | `Fullscreen.Exclusive` | Fullscreen | Partial | Wayland, Web, Android, UIKit | ❌ UnsupportedPlatform |
 | 3 | `setCursorPosition()` | Cursor | Partial | Wayland, Web, Android, UIKit | ❌ Unsupported |
 | 4 | `setCursorGrab(Confined)` | Cursor | Partial | Wayland (needs protocol), Web | ❌ Unsupported |
@@ -411,8 +411,8 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 | # | Feature | Category | Impact | Backends Affected | Resolution Status |
 |---|---------|----------|--------|-------------------|-------------------|
-| 5 | `requestUserAttention` | Theme | Partial | Wayland, Web, Android, UIKit | ❌ Unsupported |
-| 6 | `setWindowIcon` | Theme | Partial | AppKit, Wayland, Web, Android, UIKit | ❌ Unsupported |
+| 5 | `requestUserAttention` | Theme | Partial | Web, Android, UIKit | ❌ Unsupported |
+| 6 | `setWindowIcon` | Theme | Partial | AppKit, Web, Android, UIKit | ❌ Unsupported |
 | 7 | `setBlur` | Theme | Partial | X11, Web, Android, UIKit, Win32 | ❌ Unsupported/No-op |
 | 8 | `setWindowLevel` | Theme | Partial | Wayland, Web, Android, UIKit | ❌ Unsupported |
 | 9 | `setTransparent` | Theme | Partial | Web, Android, UIKit | ❌ Unsupported |
@@ -457,12 +457,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 ### 8.1 Immediate Actions (High Priority)
 
-1. **Implement `ime_capabilities()`** - This is the only missing IME API
-2. **Complete Wayland protocol support** for:
-   - `xdg_activation_v1` (requestUserAttention)
-   - `xdg_toplevel_icon_manager_v1` (setWindowIcon)
-   - `ext_background_effect` (setBlur)
-3. **Fix Win32 `Fullscreen.Exclusive`** - Implement `ChangeDisplaySettingsExW`
+1. **Fix Win32 `Fullscreen.Exclusive`** - Implement `ChangeDisplaySettingsExW`
 
 ### 8.2 Medium Term (Next 3 Months)
 
@@ -491,7 +486,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 Kadre achieves **excellent feature parity** with winit (v0.30.13), with **~90-95% of APIs implemented** across all platforms. The remaining gaps are primarily:
 
 1. **Platform limitations** (Wayland compositors, browser security, mobile OS restrictions)
-2. **Intentionally deferred features** (ime_capabilities, some Wayland protocols)
+2. **Intentionally deferred features** (some platform-specific items)
 3. **Minor enum coverage gaps** (11 missing key values)
 4. **Backend quality variations** (keyboard text fields, modifier tracking)
 
