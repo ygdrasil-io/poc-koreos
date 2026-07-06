@@ -29,9 +29,7 @@ linked feature table changes status.
 
 ## Deferred Native Backend Work
 
-- Wayland monitor geometry and video modes are still synthetic until `wl_output`
-  geometry/mode storage is wired.
-- Wayland optional protocols remain partial: portal-backed theme detection and compositor-advertised pointer constraints
+- Wayland: platform extensions like portal-backed theme detection and compositor-advertised pointer constraints
   for confined/locked cursor grabs.
 - X11 keyboard text fields still need `XLookupString` or equivalent integration.
 - X11 dynamic scale-factor changes still need RandR notification handling.
