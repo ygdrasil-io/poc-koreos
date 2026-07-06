@@ -126,3 +126,39 @@ fun ActiveEventLoop.hasWaylandProtocol(interfaceName: String): Boolean {
         ?: throw IllegalStateException("Event loop is not a Wayland event loop")
     return wayland._globals?.hasProtocol(interfaceName) ?: false
 }
+
+// ── Blur / KWin integration (Sprint 3, #270) ─────────────────────────────────
+
+/**
+ * Returns the [KwinBlurVariant] detected for this window, or [KwinBlurVariant.None]
+ * if no blur protocol is available.
+ */
+fun Window.kwinBlurVariant(): KwinBlurVariant {
+    val wayland = this as? WaylandWindow ?: return KwinBlurVariant.None
+    return wayland.blurManager?.variant ?: KwinBlurVariant.None
+}
+
+/**
+ * Returns true if this Wayland window can render background blur (i.e. the compositor
+ * exposes either `ext_background_effect_v1` or `org_kde_kwin_blur_manager`).
+ */
+fun Window.isKwinBlurSupported(): Boolean {
+    val wayland = this as? WaylandWindow ?: return false
+    return wayland.blurManager?.isSupported ?: false
+}
+
+/**
+ * Returns true if this Wayland window uses KWin 6+ blur (ext_background_effect_v1).
+ */
+fun Window.isKwin6(): Boolean {
+    val wayland = this as? WaylandWindow ?: return false
+    return wayland.blurManager?.isKwin6 ?: false
+}
+
+/**
+ * Returns true if this Wayland window uses KWin 5.x blur (org_kde_kwin_blur_manager).
+ */
+fun Window.isKwin5(): Boolean {
+    val wayland = this as? WaylandWindow ?: return false
+    return wayland.blurManager?.isKwin5 ?: false
+}

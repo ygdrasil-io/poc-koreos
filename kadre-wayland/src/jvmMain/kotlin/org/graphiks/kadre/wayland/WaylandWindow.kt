@@ -272,6 +272,7 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        blurManager?.destroy()
         destroyWaylandCursorTheme()
         destroyWlBuffer(currentCursorBuffer)
         currentCursorBuffer = 0L
