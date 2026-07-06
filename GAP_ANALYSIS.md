@@ -272,14 +272,14 @@ This document provides a comprehensive **gap analysis** between the **specified 
 |-----------|-----|--------|-------|---------|-----|---------|-------|--------|
 | Physical key mapping | ✅ DOM `code` | ⚠️ QWERTY US | ✅ VK map | ✅ keycode map | ⚠️ hardcoded table | ✅ evdev table | ✅ HID usage | ⚠️ Partial |
 | `text` field | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Complete |
-| `textWithAllModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ⚠️ partial | ⚠️ Partial |
-| `keyWithoutModifiers` | ⚠️ fallback | ⚠️ partial | ⚠️ partial | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ⚠️ partial | ⚠️ Partial |
+| `textWithAllModifiers` | ⚠️ fallback | ✅ | ✅ | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ⚠️ partial | ⚠️ Partial |
+| `keyWithoutModifiers` | ⚠️ fallback | ✅ | ✅ | ⚠️ partial | ⚠️ fallback | ⚠️ fallback | ✅ | ⚠️ Partial |
 | `ModifiersChanged` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Complete |
-| `ModifierKeys` left/right | ❌ | ⚠️ limited | ⚠️ generic VK | ❌ | ✅ tracked | ✅ tracked | ❌ | ⚠️ Partial |
+| `ModifierKeys` left/right | ❌ | ✅ | ⚠️ improved | ❌ | ✅ tracked | ✅ tracked | ❌ | ⚠️ Partial |
 | Repeat detection | ✅ DOM | ✅ | ✅ lParam | ✅ | ✅ XKB | ✅ | ✅ | ✅ Complete |
 | Dead keys | ⚠️ browser | ✅ | ✅ | ❌ | ✅ compose | ✅ xkb | ❌ | ⚠️ Partial |
 
-**Status**: ⚠️ **80% Complete** (textWithAllModifiers and keyWithoutModifiers mostly fallback)
+**Status**: ⚠️ **90% Complete** (textWithAllModifiers and keyWithoutModifiers improved on AppKit/Win32/UIKit)
 
 ---
 

@@ -400,6 +400,8 @@ class KadreMetalView(
             // R4: UIKey.characters is the text produced by the key (may be nil/empty)
             val characters = uiKey.characters
             val text: String? = if (!characters.isNullOrEmpty() && characters[0] >= ' ') characters else null
+            val charsIgnoringMods = uiKey.charactersIgnoringModifiers
+            val keyWithoutMods: String? = if (!charsIgnoringMods.isNullOrEmpty() && charsIgnoringMods[0] >= ' ') charsIgnoringMods else null
             val native = NativeKeyInfo(
                 platform = KeyPlatform.UIKit,
                 scanCode = uiKey.keyCode,
@@ -425,7 +427,7 @@ class KadreMetalView(
                         repeat = false,
                         text = text ?: mappedCode.defaultText(),
                         textWithAllModifiers = text,
-                        keyWithoutModifiers = mappedCode.defaultText(),
+                        keyWithoutModifiers = keyWithoutMods ?: mappedCode.defaultText(),
                         native = native,
                     ),
                     deviceId = null,

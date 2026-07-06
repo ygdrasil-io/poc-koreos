@@ -196,8 +196,9 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
             // Get event type: [event type] → Long
             val eventType = ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("type")) as Long
 
-            val isKeyDown = eventType == 10L   // NSEventTypeKeyDown
-            val isKeyUp   = eventType == 11L   // NSEventTypeKeyUp
+            val isKeyDown       = eventType == 10L   // NSEventTypeKeyDown
+            val isKeyUp         = eventType == 11L   // NSEventTypeKeyUp
+            val isFlagsChanged  = eventType == 12L   // NSEventTypeFlagsChanged
 
             // ── Keyboard ──────────────────────────────────────────────────────────────
             if (isKeyDown || isKeyUp) {
@@ -240,35 +241,19 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 val modifiers = AppKitKeyMapper.modifierFlags(modFlags)
                 val state = if (isKeyDown) KeyState.Pressed else KeyState.Released
                 // R4: extract text via [NSEvent characters] (nil-safe)
-                val text: String? = if (isKeyDown) {
-                    try {
-                        val charsPtr = ObjCRuntime.msgSend(
-                            ValueLayout.ADDRESS,
-                            event,
-                            ObjCRuntime.sel("characters"),
-                        ) as MemorySegment
-                        if (charsPtr == MemorySegment.NULL) null
-                        else {
-                            // NSString → UTF-8 via UTF8String selector
-                            val utf8Ptr = ObjCRuntime.msgSend(
-                                ValueLayout.ADDRESS,
-                                charsPtr,
-                                ObjCRuntime.sel("UTF8String"),
-                            ) as MemorySegment
-                            if (utf8Ptr == MemorySegment.NULL) null
-                            else {
-                                val s = utf8Ptr.reinterpret(256L).getString(0L, java.nio.charset.StandardCharsets.UTF_8)
-                                // Only return text if it's printable (non-control)
-                                if (s.isNotEmpty() && s.all { it >= ' ' }) s else null
-                            }
-                        }
-                    } catch (_: Throwable) { null }
-                } else null
+                // NSEvent.characters includes all modifier effects EXCEPT Command
+                // (which macOS reserves for menu shortcut purposes), making it the
+                // correct value for both `text` and `textWithAllModifiers` on AppKit.
+                val text = nsStringFromEvent(event, "characters", isKeyDown)
+                val charsIgnoringMods = nsStringFromEvent(event, "charactersIgnoringModifiers", isKeyDown)
                 val native = NativeKeyInfo(
                     platform = KeyPlatform.AppKit,
                     scanCode = keyCode.toLong(),
                     nativeCode = NativeKeyCode.AppKit(keyCode.toLong()),
-                    nativeKey = NativeLogicalKey.AppKit(characters = text),
+                    nativeKey = NativeLogicalKey.AppKit(
+                        characters = text,
+                        charactersIgnoringModifiers = charsIgnoringMods,
+                    ),
                 )
                 val logicalKey = mappedCode?.defaultLogicalKey()
                     ?: LogicalKey.Unidentified(native)
@@ -294,7 +279,7 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                             synthetic = false,
                             text = text ?: mappedCode?.defaultText(),
                             textWithAllModifiers = text,
-                            keyWithoutModifiers = mappedCode?.defaultText(),
+                            keyWithoutModifiers = charsIgnoringMods ?: mappedCode?.defaultText(),
                             native = native,
                         ),
                         deviceId = DeviceId(0L),
@@ -320,6 +305,25 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                         ),
                     )
                 }
+                return
+            }
+
+            // ── Modifier-only change (NSEventTypeFlagsChanged) ──────────────────────────
+            if (isFlagsChanged) {
+                val eventWindow = ObjCRuntime.msgSend(ValueLayout.ADDRESS, event, ObjCRuntime.sel("window")) as MemorySegment
+                if (eventWindow == MemorySegment.NULL) return
+                val appKitWindow = loop.windows[eventWindow.address()] ?: return
+                val modFlags = ObjCRuntime.msgSend(ValueLayout.JAVA_LONG, event, ObjCRuntime.sel("modifierFlags")) as Long
+                loop.handler.windowEvent(
+                    loop,
+                    appKitWindow.id,
+                    WindowEvent.ModifiersChanged(
+                        KeyboardModifierState(
+                            logical = AppKitKeyMapper.modifierFlags(modFlags),
+                            physical = AppKitKeyMapper.modifierKeys(modFlags),
+                        )
+                    ),
+                )
                 return
             }
 
@@ -529,6 +533,37 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                     button = ButtonSource.Mouse(button),
                 ),
             )
+        }
+
+        /**
+         * Extracts an NSString property from [event] via ObjC runtime and returns
+         * its UTF-8 content, or null if the property is nil / non-printable.
+         *
+         * Used for both "characters" (textWithAllModifiers) and
+         * "charactersIgnoringModifiers" (keyWithoutModifiers) selectors.
+         */
+        private fun nsStringFromEvent(event: MemorySegment, selector: String, isKeyDown: Boolean): String? {
+            if (!isKeyDown) return null
+            return try {
+                val charsPtr = ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    event,
+                    ObjCRuntime.sel(selector),
+                ) as MemorySegment
+                if (charsPtr == MemorySegment.NULL) null
+                else {
+                    val utf8Ptr = ObjCRuntime.msgSend(
+                        ValueLayout.ADDRESS,
+                        charsPtr,
+                        ObjCRuntime.sel("UTF8String"),
+                    ) as MemorySegment
+                    if (utf8Ptr == MemorySegment.NULL) null
+                    else {
+                        val s = utf8Ptr.reinterpret(256L).getString(0L, java.nio.charset.StandardCharsets.UTF_8)
+                        if (s.isNotEmpty() && s.all { it >= ' ' }) s else null
+                    }
+                }
+            } catch (_: Throwable) { null }
         }
 
         private fun callSuperSendEvent(self: MemorySegment, sel: MemorySegment, event: MemorySegment) {

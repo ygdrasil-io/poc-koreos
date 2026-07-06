@@ -309,7 +309,13 @@ object KadreWndProc {
                 val mods     = currentModifiers()
                 val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
                 val extended = (lParam and KF_EXTENDED) != 0L
-                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                val currentPhysical = physicalModifierStates[hwnd] ?: ModifierKeys()
+                val resolvedKeyCode = if (isGenericModifierVk(vkCode) && rawScanCode == 0) {
+                    resolveGenericModifierVk(vkCode, rawScanCode, KeyState.Pressed, currentPhysical)
+                        ?: Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                } else {
+                    Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                }
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
                     val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Pressed)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
@@ -324,7 +330,13 @@ object KadreWndProc {
                 val mods     = currentModifiers()
                 val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
                 val extended = (lParam and KF_EXTENDED) != 0L
-                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                val currentPhysical = physicalModifierStates[hwnd] ?: ModifierKeys()
+                val resolvedKeyCode = if (isGenericModifierVk(vkCode) && rawScanCode == 0) {
+                    resolveGenericModifierVk(vkCode, rawScanCode, KeyState.Released, currentPhysical)
+                        ?: Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                } else {
+                    Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                }
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
                     val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Released)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
@@ -587,6 +599,48 @@ object KadreWndProc {
     /** Per-window physical left/right modifier state tracked across key events. */
     private val physicalModifierStates = java.util.concurrent.ConcurrentHashMap<Long, ModifierKeys>()
 
+    /**
+     * Generic VK codes that do not distinguish left/right in their VK value.
+     */
+    private val genericModifierVkCodes = setOf(VK_SHIFT, VK_CONTROL, VK_MENU)
+
+    private fun isGenericModifierVk(vkCode: Int): Boolean = vkCode in genericModifierVkCodes
+
+    /**
+     * Resolves a generic VK code (VK_SHIFT/VK_CONTROL/VK_MENU) to the correct
+     * left/right [KeyCode] when the scan code is 0 or ambiguous.
+     *
+     * For VK_SHIFT with scanCode==0: uses the current [ModifierKeys] state and
+     * the [KeyState] to infer which side changed:
+     * - **Pressed**: the side NOT currently pressed (toggle inference)
+     * - **Released**: the side currently pressed
+     *
+     * For VK_CONTROL/VK_MENU: the extended-key flag already distinguishes sides,
+     * so scanCode==0 is harmless — returns null to let the standard dispatch handle it.
+     */
+    private fun resolveGenericModifierVk(
+        vkCode: Int,
+        scanCode: Int,
+        state: KeyState,
+        current: ModifierKeys,
+    ): KeyCode? {
+        if (vkCode != VK_SHIFT || scanCode != 0) return null
+        return when (state) {
+            KeyState.Pressed -> when {
+                current.leftShift == ModifierKeyState.Pressed &&
+                    current.rightShift != ModifierKeyState.Pressed -> KeyCode.ShiftRight
+                current.rightShift == ModifierKeyState.Pressed &&
+                    current.leftShift != ModifierKeyState.Pressed -> KeyCode.ShiftLeft
+                else -> KeyCode.ShiftLeft
+            }
+            KeyState.Released -> when {
+                current.leftShift == ModifierKeyState.Pressed -> KeyCode.ShiftLeft
+                current.rightShift == ModifierKeyState.Pressed -> KeyCode.ShiftRight
+                else -> KeyCode.ShiftLeft
+            }
+        }
+    }
+
     private fun isModifierKeyCode(keyCode: KeyCode): Boolean = keyCode in setOf(
         KeyCode.ShiftLeft, KeyCode.ShiftRight,
         KeyCode.ControlLeft, KeyCode.ControlRight,
@@ -636,7 +690,24 @@ object KadreWndProc {
             nativeKey = NativeLogicalKey.Win32(vkCode.toLong()),
         )
         val logicalKey = mappedCode?.defaultLogicalKey() ?: LogicalKey.Unidentified(native)
-        val win32Text = if (!isRepeat) win32KeyText(vkCode, rawScanCode.toInt()) else null
+        // Share one keyboard-state capture (arena-managed) between text variants to
+        // minimise dead-key state corruption — ToUnicode mutates the internal keyboard
+        // layout buffer on each call, so two separate GetKeyboardState + ToUnicode
+        // sequences would double-consume dead keys on layouts like AZERTY.
+        val (win32Text, win32TextNoMods) = if (!isRepeat) {
+            val textHandle = toUnicodeEx ?: toUnicode
+            if (textHandle != null) {
+                try {
+                    java.lang.foreign.Arena.ofConfined().use { arena ->
+                        val keyState = arena.allocate(256L, 1L)
+                        getKeyboardState?.invoke(keyState)
+                        val withMods = toUnicodeText(textHandle, vkCode, rawScanCode.toInt(), keyState)
+                        val noMods = toUnicodeTextWithoutModifiers(textHandle, vkCode, rawScanCode.toInt(), keyState)
+                        withMods to noMods
+                    }
+                } catch (_: Throwable) { null to null }
+            } else null to null
+        } else null to null
         return WindowEvent.KeyInput(
             event = KeyEvent(
                 physicalKey = Win32KeyMapper.physicalKey(vkCode, rawScanCode.toInt(), extended),
@@ -646,7 +717,7 @@ object KadreWndProc {
                 repeat = isRepeat,
                 text = win32Text ?: mappedCode?.defaultText(),
                 textWithAllModifiers = win32Text ?: mappedCode?.defaultText(),
-                keyWithoutModifiers = mappedCode?.defaultText(),
+                keyWithoutModifiers = win32TextNoMods ?: mappedCode?.defaultText(),
                 native = native,
             ),
             deviceId = null,
@@ -664,41 +735,69 @@ object KadreWndProc {
     )
 
     /**
-     * Returns the Unicode text produced by a key via ToUnicode (FFM, lazy binding).
-     *
-     * Returns null if:
-     * - ToUnicode is not available (non-Windows platform)
-     * - The key does not produce printable text (control chars, function keys, etc.)
-     * - The call fails
-     *
-     * **FFM risk note (R4)**: `toUnicode` calls `ToUnicode` which has a side-effect:
-     * it may consume the dead-key state in the Win32 keyboard buffer. Call only when
-     * [isRepeat] is false to avoid clearing it for every repeated keystroke.
-     * A later follow-up may replace this with `ToUnicodeEx` + keyboard state snapshot.
-     *
-     * @param vkCode   Virtual key code (wParam).
-     * @param scanCode Scan code (bits 16-23 of lParam).
+     * Calls ToUnicode (or ToUnicodeEx) with the given [keyState] in the caller's
+     * arena, returning the printable text. Used for both [KeyEvent.text] and
+     * [KeyEvent.textWithAllModifiers] (same value on Win32).
      */
-    private fun win32KeyText(vkCode: Int, scanCode: Int): String? {
-        val handle = toUnicode ?: return null
+    private fun toUnicodeText(handle: java.lang.invoke.MethodHandle, vkCode: Int, scanCode: Int, keyState: MemorySegment): String? {
+        return callToUnicode(handle, vkCode, scanCode, keyState)
+    }
+
+    /**
+     * Calls ToUnicode(Ex) with modifier keys cleared, returning the base character
+     * without modifier influence. Used for [KeyEvent.keyWithoutModifiers].
+     * Operates on a copy of [keyState] so the caller's snapshot is not mutated.
+     */
+    private fun toUnicodeTextWithoutModifiers(handle: java.lang.invoke.MethodHandle, vkCode: Int, scanCode: Int, keyState: MemorySegment): String? {
+        clearModifiers(keyState)
+        return callToUnicode(handle, vkCode, scanCode, keyState)
+    }
+
+    private fun callToUnicode(handle: java.lang.invoke.MethodHandle, vkCode: Int, scanCode: Int, keyState: MemorySegment): String? {
         return try {
-            // Native (off-heap) buffers: heap MemorySegments cannot be passed to a downcall,
-            // which would throw and silently force text=null on every keystroke.
             java.lang.foreign.Arena.ofConfined().use { arena ->
-                val buf = arena.allocate(16L, 2L)        // 8 WCHARs
-                val keyState = arena.allocate(256L, 1L)  // BYTE[256]
-                getKeyboardState?.invoke(keyState)
-                val result = handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
-                if (result <= 0) return@use null
-                val sb = StringBuilder()
-                for (i in 0 until result) {
-                    val ch = buf.getAtIndex(ValueLayout.JAVA_CHAR, i.toLong())
-                    if (ch >= ' ') sb.append(ch)
+                val buf = arena.allocate(16L, 2L)
+                val result = if (handle === toUnicodeEx) {
+                    val hkl = getKeyboardLayout?.invoke(0) as? MemorySegment ?: MemorySegment.NULL
+                    handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0, hkl) as Int
+                } else {
+                    handle.invokeExact(vkCode, scanCode, keyState, buf, 8, 0) as Int
                 }
-                if (sb.isEmpty()) null else sb.toString()
+                extractChars(buf, result)
             }
         } catch (_: Throwable) { null }
     }
+
+    private fun extractChars(buf: MemorySegment, count: Int): String? {
+        if (count <= 0) return null
+        val sb = StringBuilder()
+        for (i in 0 until count) {
+            val ch = buf.getAtIndex(ValueLayout.JAVA_CHAR, i.toLong())
+            if (ch >= ' ') sb.append(ch)
+        }
+        return if (sb.isEmpty()) null else sb.toString()
+    }
+
+    /**
+     * Clears the high bit (key-down) in [keyState] for all modifier VK codes,
+     * so subsequent ToUnicode calls treat modifiers as not pressed.
+     * Operates in-place — the caller's snapshot is intentionally mutated because
+     * text extraction is ordered: textWithAllModifiers first, then keyWithoutModifiers.
+     */
+    private fun clearModifiers(keyState: MemorySegment) {
+        for (vk in MODIFIER_VK_CODES) {
+            val current = keyState.get(ValueLayout.JAVA_BYTE, vk.toLong()).toInt() and 0xFF
+            keyState.set(ValueLayout.JAVA_BYTE, vk.toLong(), (current and 0x7F).toByte())
+        }
+    }
+
+    /** VK codes for modifier keys, used to clear their state for keyWithoutModifiers. */
+    private val MODIFIER_VK_CODES: IntArray = intArrayOf(
+        VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+        VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+        VK_MENU, VK_LMENU, VK_RMENU,
+        VK_LWIN, VK_RWIN,
+    )
 
     /**
      * Arms WM_MOUSELEAVE tracking for the window [hwnd] via TrackMouseEvent.
