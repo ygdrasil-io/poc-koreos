@@ -309,7 +309,13 @@ object KadreWndProc {
                 val mods     = currentModifiers()
                 val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
                 val extended = (lParam and KF_EXTENDED) != 0L
-                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                val currentPhysical = physicalModifierStates[hwnd] ?: ModifierKeys()
+                val resolvedKeyCode = if (isGenericModifierVk(vkCode) && rawScanCode == 0) {
+                    resolveGenericModifierVk(vkCode, rawScanCode, KeyState.Pressed, currentPhysical)
+                        ?: Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                } else {
+                    Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                }
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
                     val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Pressed)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
@@ -324,7 +330,13 @@ object KadreWndProc {
                 val mods     = currentModifiers()
                 val rawScanCode = ((lParam ushr 16) and 0xFF).toInt()
                 val extended = (lParam and KF_EXTENDED) != 0L
-                val resolvedKeyCode = Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                val currentPhysical = physicalModifierStates[hwnd] ?: ModifierKeys()
+                val resolvedKeyCode = if (isGenericModifierVk(vkCode) && rawScanCode == 0) {
+                    resolveGenericModifierVk(vkCode, rawScanCode, KeyState.Released, currentPhysical)
+                        ?: Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                } else {
+                    Win32KeyMapper.keyCode(vkCode, rawScanCode, extended)
+                }
                 if (resolvedKeyCode != null && isModifierKeyCode(resolvedKeyCode)) {
                     val newPhysical = updatePhysicalModifiers(hwnd, resolvedKeyCode, KeyState.Released)
                     emit(hwnd, WindowEvent.ModifiersChanged(KeyboardModifierState(logical = mods, physical = newPhysical)))
@@ -586,6 +598,41 @@ object KadreWndProc {
 
     /** Per-window physical left/right modifier state tracked across key events. */
     private val physicalModifierStates = java.util.concurrent.ConcurrentHashMap<Long, ModifierKeys>()
+
+    /**
+     * Generic VK codes that do not distinguish left/right in their VK value.
+     */
+    private val genericModifierVkCodes = setOf(VK_SHIFT, VK_CONTROL, VK_MENU)
+
+    private fun isGenericModifierVk(vkCode: Int): Boolean = vkCode in genericModifierVkCodes
+
+    /**
+     * Resolves a generic VK code (VK_SHIFT/VK_CONTROL/VK_MENU) to the correct
+     * left/right [KeyCode] when the scan code is 0 or ambiguous.
+     *
+     * For VK_SHIFT with scanCode==0: uses the current [ModifierKeys] state to infer
+     * which side changed. If only one side is currently pressed, the incoming event
+     * is likely for the opposite side (toggle). Defaults to left when ambiguous.
+     *
+     * For VK_CONTROL/VK_MENU: the extended-key flag already distinguishes sides,
+     * so scanCode==0 is harmless — returns null to let the standard dispatch handle it.
+     */
+    private fun resolveGenericModifierVk(
+        vkCode: Int,
+        scanCode: Int,
+        state: KeyState,
+        current: ModifierKeys,
+    ): KeyCode? {
+        if (vkCode != VK_SHIFT || scanCode != 0) return null
+        val pressedSide = when {
+            current.leftShift == ModifierKeyState.Pressed &&
+                current.rightShift != ModifierKeyState.Pressed -> KeyCode.ShiftRight
+            current.rightShift == ModifierKeyState.Pressed &&
+                current.leftShift != ModifierKeyState.Pressed -> KeyCode.ShiftLeft
+            else -> KeyCode.ShiftLeft
+        }
+        return pressedSide
+    }
 
     private fun isModifierKeyCode(keyCode: KeyCode): Boolean = keyCode in setOf(
         KeyCode.ShiftLeft, KeyCode.ShiftRight,
