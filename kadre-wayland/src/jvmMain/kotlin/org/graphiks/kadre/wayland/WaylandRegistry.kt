@@ -48,11 +48,19 @@ internal data class WaylandGlobals(
     val extBackgroundEffectManagerPtr: Long = 0L,
     val kwinBlurManagerPtr: Long = 0L,
     val dataDeviceManagerPtr: Long = 0L,
-)
+) {
+    /** All protocol interface names announced by the compositor during wl_registry.global events. */
+    val availableProtocols: Set<String> get() = _availableProtocols
+    internal var _availableProtocols: Set<String> = emptySet()
+
+    /** Returns true if the compositor announced the given protocol interface name. */
+    fun hasProtocol(interfaceName: String): Boolean = interfaceName in _availableProtocols
+}
 
 /**
  * `wl_registry.global` event collector: retains the `name` and `version` of the globals
- * Kadre needs (`wl_compositor`, `xdg_wm_base`, `wl_seat`, `wl_output`) as they are announced.
+ * Kadre needs (`wl_compositor`, `xdg_wm_base`, `wl_seat`, `wl_output`) as they are announced,
+ * and records ALL announced protocol interface names for dynamic detection.
  */
 private class GlobalsCollector {
     var compositorName: Int = -1
@@ -82,6 +90,9 @@ private class GlobalsCollector {
     var dataDeviceManagerName: Int = -1
     var dataDeviceManagerVersion: Int = 0
 
+    /** All protocol interface names announced by the compositor, for dynamic detection. */
+    val allProtocolNames = mutableSetOf<String>()
+
     /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
     @Suppress("UNUSED_PARAMETER")
     fun onGlobal(data: MemorySegment, registry: MemorySegment, name: Int, iface: MemorySegment, version: Int) {
@@ -90,6 +101,9 @@ private class GlobalsCollector {
         } catch (_: Throwable) {
             return
         }
+        // Record EVERY announced protocol for dynamic detection (Sprint 3, #271).
+        allProtocolNames.add(ifaceName)
+
         when (ifaceName) {
             "wl_compositor" -> if (compositorName < 0) { compositorName = name; compositorVersion = version }
             "xdg_wm_base" -> if (xdgWmBaseName < 0) { xdgWmBaseName = name; xdgWmBaseVersion = version }
@@ -414,7 +428,7 @@ internal fun discoverGlobals(
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr      = kwinBlurManagerPtr,
             dataDeviceManagerPtr    = dataDeviceManagerPtr,
-        )
+        ).also { it._availableProtocols = collector.allProtocolNames.toSet() }
     } catch (_: Throwable) {
         WaylandGlobals(0L, 0L)
     }

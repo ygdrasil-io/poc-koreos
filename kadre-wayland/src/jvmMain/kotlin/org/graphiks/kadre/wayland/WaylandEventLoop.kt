@@ -81,6 +81,19 @@ class WaylandEventLoop internal constructor(
     internal val kwinBlurManagerPtr: Long = 0L,
 ) : ActiveEventLoop {
 
+    /** The [WaylandGlobals] discovered during startup. Used by [protocols] and [hasProtocol]. */
+    @PublishedApi
+    internal var _globals: WaylandGlobals? = null
+
+    /** Returns the set of protocol interface names announced by the compositor. */
+    internal fun protocols(): Set<String> = _globals?.availableProtocols ?: emptySet()
+
+    /**
+     * Real monitor information collected from wl_output geometry/mode/scale events.
+     * Keyed by wl_output proxy address. Populated during [installSeatListeners].
+     */
+    internal val outputInfos = ConcurrentHashMap<Long, WaylandOutputInfo>()
+
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
 
@@ -147,6 +160,7 @@ class WaylandEventLoop internal constructor(
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
+        window.outputInfos = outputInfos
         windows[window.id.value] = window
         // Initial paint so the surface attaches a buffer and becomes visible. Subsequent repaints
         // are driven on demand (e.g. after a resize), not continuously — see the main loop.
@@ -176,6 +190,7 @@ class WaylandEventLoop internal constructor(
             kwinBlurManagerPtr = kwinBlurManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
+        window.outputInfos = outputInfos
         windows[window.id.value] = window
         // Apply platform extension settings
         attrs.preferCsd?.let { window.setPreferCsd(it) }
@@ -195,18 +210,19 @@ class WaylandEventLoop internal constructor(
     // ── R2: monitor enumeration ───────────────────────────────────────────────
 
     /**
-     * Returns a synthetic monitor derived from the first window's size and scale factor.
+     * Returns the list of monitors detected via wl_output geometry/mode/scale events.
      *
-     * On Wayland, the compositor does not expose physical monitor geometry to clients
-     * via a simple public API in the core protocol (wl_output geometry is available
-     * but requires additional setup). We return a synthetic monitor based on the
-     * current window/screen state.
-     *
-     * A complete implementation would iterate the bound wl_output objects and read
-     * their `geometry` and `mode` events, which requires storing that data during
-     * the registry binding phase (TODO for a future ticket).
+     * ### Sprint 3 (#272)
+     * Prior to Sprint 3, this returned a synthetic monitor derived from the first
+     * window's size. Now it uses real [WaylandOutputInfo] data collected from the
+     * wl_output listener. If no output info is available yet (e.g. during early
+     * startup), falls back to a synthetic monitor.
      */
     override fun availableMonitors(): List<MonitorHandle> {
+        val realOutputs = outputInfos.values.map { it.toMonitorHandle() }
+        if (realOutputs.isNotEmpty()) return realOutputs
+
+        // Fallback: synthetic monitor from first window
         val win = windows.values.firstOrNull()
         val scale = win?._scaleFactor ?: 1.0
         val size = win?.innerSize ?: PhysicalSize(1920, 1080)
@@ -405,7 +421,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
         globals.activationManagerPtr, globals.seatPtr,
         globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
-    )
+    ).also { it._globals = globals }
 
     // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
     // Route all input events into the eventQueue by their source wl_surface.
@@ -434,6 +450,12 @@ private fun runAppInternal(handler: ApplicationHandler) {
         },
         dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
         deviceFilter = eventLoop.deviceEventFilter,
+        outputInfos = eventLoop.outputInfos,
+        onOutputChanged = { info ->
+            // WaylandOutputInfo objects are updated in-place. Applications can
+            // query currentMonitor/availableMonitors on any window to see changes.
+            // A future sprint could add a dedicated MonitorListChanged event.
+        },
     )
 
     // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
@@ -541,7 +563,7 @@ private fun pumpOnce(
     // ── Step 2: flush ─────────────────────────────────────────────────────────
     try { flush?.invokeExact(displaySeg) } catch (_: Throwable) {}
 
-    // ── Step 3: poll ──────────────────────────────────────────────────────────
+    // ── Step 3: poll + eventfd drain (single arena) ───────────────────────────
     val (displayReady, eventFdReady) = Arena.ofConfined().use { arena ->
         val fds = allocPollFd(arena)
         setPollFd(fds, 0, displayFd, POLLIN)
@@ -554,12 +576,19 @@ private fun pumpOnce(
         if (pollRc > 0) {
             val rev0 = getPollRevents(fds, 0)
             val rev1 = getPollRevents(fds, 1)
-            Pair(
-                (rev0.toInt() and POLLIN.toInt()) != 0,
-                (rev1.toInt() and POLLIN.toInt()) != 0,
-            )
+            val displayReady = (rev0.toInt() and POLLIN.toInt()) != 0
+            val eventFdReady = (rev1.toInt() and POLLIN.toInt()) != 0
+
+            // Step 4b: drain the eventfd within the same arena, avoiding a
+            // second allocation on the hot path (Sprint 3, #273).
+            if (eventFdReady) {
+                val buf = arena.allocate(8L, 8L)
+                try { nativeRead?.invokeExact(eventFd, buf, 8L) } catch (_: Throwable) {}
+            }
+
+            displayReady to eventFdReady
         } else {
-            Pair(false, false)
+            false to false
         }
     }
 
@@ -570,14 +599,6 @@ private fun pumpOnce(
     } else if (!displayReady && cancelRead != null && wlDisplayPrepareRead != null) {
         // Cancel the read announced in step 1 only if prepareRead is available
         try { cancelRead.invokeExact(displaySeg) } catch (_: Throwable) {}
-    }
-
-    // ── Step 4b: drain the eventfd if triggered ───────────────────────────────
-    if (eventFdReady) {
-        Arena.ofConfined().use { arena ->
-            val buf = arena.allocate(8L, 8L)
-            try { nativeRead?.invokeExact(eventFd, buf, 8L) } catch (_: Throwable) {}
-        }
     }
 
     // ── Determine the StartCause ──────────────────────────────────────────────

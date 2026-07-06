@@ -7,11 +7,37 @@
  *
  * Tries `ext_background_effect_v1` first (modern), falls back to
  * `org_kde_kwin_blur` if unavailable. Silent no-op if neither is available.
+ *
+ * ### KWin integration (#270)
+ * - KWin 5.x: uses `org_kde_kwin_blur_manager` — `set_region` with NULL = full-surface blur.
+ * - KWin 6.x: uses `ext_background_effect_v1` — `set_background_effects` with bitmask 0/1.
+ * - Both require a `wl_surface.commit` for the effect to take effect.
+ * - Error handling: protocol errors are caught silently; the compositor
+ *   may disconnect the client on invalid protocol usage.
  */
 package org.graphiks.kadre.wayland
 import org.graphiks.kadre.ffi.wayland.*
 
 import java.lang.foreign.MemorySegment
+
+/**
+ * Identifies which blur protocol variant the compositor exposes.
+ *
+ * - [ExtBackgroundEffect]: `ext_background_effect_v1` (wlroots, also used by KWin 6+).
+ * - [KwinBlurManager]: `org_kde_kwin_blur_manager` (originally KWin 5.x, some wlroots compositors
+ *   also implement this for compatibility).
+ * - [None]: no blur protocol available.
+ *
+ * The names reference the protocol interface, not a specific compositor.
+ */
+internal enum class KwinBlurVariant {
+    /** ext_background_effect_v1 (wlroots, KWin 6+). */
+    ExtBackgroundEffect,
+    /** org_kde_kwin_blur_manager (originally KDE KWin, now broader). */
+    KwinBlurManager,
+    /** No blur protocol available. */
+    None,
+}
 
 /**
  * Manages blur background effect for a single [WaylandWindow].
@@ -36,16 +62,66 @@ internal class WaylandBlur(
     private var kwinBlurPtr: Long = 0L
 
     /**
+     * The detected KWin blur variant.
+     */
+    val variant: KwinBlurVariant get() = when {
+        extBackgroundEffectManagerPtr != 0L -> KwinBlurVariant.ExtBackgroundEffect
+        kwinBlurManagerPtr != 0L -> KwinBlurVariant.KwinBlurManager
+        else -> KwinBlurVariant.None
+    }
+
+    /**
+     * Returns true if the compositor supports any blur protocol.
+     */
+    val isSupported: Boolean get() = variant != KwinBlurVariant.None
+
+    /**
+     * Returns true if the compositor exposes `ext_background_effect_v1`.
+     * This includes KWin 6+ and wlroots-based compositors.
+     */
+    val isKwin6: Boolean get() = variant == KwinBlurVariant.ExtBackgroundEffect
+
+    /**
+     * Returns true if the compositor exposes `org_kde_kwin_blur_manager`.
+     * This includes KWin 5.x and some wlroots compositors for compatibility.
+     */
+    val isKwin5: Boolean get() = variant == KwinBlurVariant.KwinBlurManager
+
+    /**
      * Enables or disables background blur on this surface.
+     *
+     * After setting the blur state, calls [wlSurfaceCommit] to make the
+     * effect take effect (required by both KWin 5.x and KWin 6+).
      *
      * @param blur `true` to enable blur, `false` to disable.
      */
     fun setBlur(blur: Boolean) {
         if (surfacePtr == 0L) return
-        if (extBackgroundEffectManagerPtr != 0L) {
+        val hadExt = extBackgroundEffectManagerPtr != 0L
+        val hadKwin = kwinBlurManagerPtr != 0L
+        if (hadExt) {
             setBlurExtBackgroundEffect(blur)
-        } else if (kwinBlurManagerPtr != 0L) {
+        } else if (hadKwin) {
             setBlurKwin(blur)
+        }
+        // KWin requires wl_surface.commit for the blur effect to take effect.
+        // Only commit when a blur protocol is actually available.
+        if (hadExt || hadKwin) {
+            wlSurfaceCommit(surfacePtr)
+        }
+    }
+
+    /**
+     * Destroys all blur proxy objects. Called on window shutdown.
+     */
+    fun destroy() {
+        if (effectSurfacePtr != 0L) {
+            destroyProxy(effectSurfacePtr)
+            effectSurfacePtr = 0L
+        }
+        if (kwinBlurPtr != 0L) {
+            destroyProxy(kwinBlurPtr)
+            kwinBlurPtr = 0L
         }
     }
 
@@ -83,17 +159,7 @@ internal class WaylandBlur(
         }
 
         if (!blur && effectSurfacePtr != 0L) {
-            val destroy = wlProxyMarshalFlagsVoid ?: return
-            try {
-                destroy.invokeExact(
-                    MemorySegment.ofAddress(effectSurfacePtr),
-                    0, // ext_background_effect_surface_v1.destroy opcode
-                    MemorySegment.NULL,
-                    1, // version
-                    0, // flags
-                )
-            } catch (_: Throwable) { }
-            effectSurfacePtr = 0L
+            effectSurfacePtr = destroyProxy(effectSurfacePtr)
         }
     }
 
@@ -121,17 +187,7 @@ internal class WaylandBlur(
         }
 
         if (!blur && kwinBlurPtr != 0L) {
-            val destroy = wlProxyMarshalFlagsVoid ?: return
-            try {
-                destroy.invokeExact(
-                    MemorySegment.ofAddress(kwinBlurPtr),
-                    0, // org_kde_kwin_blur.destroy opcode
-                    MemorySegment.NULL,
-                    1, // version
-                    0, // flags
-                )
-            } catch (_: Throwable) { }
-            kwinBlurPtr = 0L
+            kwinBlurPtr = destroyProxy(kwinBlurPtr)
         }
     }
 
@@ -147,5 +203,23 @@ internal class WaylandBlur(
                 MemorySegment.NULL, // NULL = full-surface blur effect
             )
         } catch (_: Throwable) { }
+    }
+
+    /**
+     * Destroys a Wayland proxy object via opcode 0 (destroy).
+     * Returns 0 to clear the reference in the caller.
+     */
+    private fun destroyProxy(proxyPtr: Long): Long {
+        val destroy = wlProxyMarshalFlagsVoid ?: return 0L
+        try {
+            destroy.invokeExact(
+                MemorySegment.ofAddress(proxyPtr),
+                0, // destroy opcode
+                MemorySegment.NULL,
+                1, // version
+                0, // flags
+            )
+        } catch (_: Throwable) { }
+        return 0L
     }
 }
