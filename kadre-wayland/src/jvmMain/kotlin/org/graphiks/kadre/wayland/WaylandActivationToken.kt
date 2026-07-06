@@ -141,14 +141,14 @@ internal class WaylandActivationToken(
 
     /**
      * Sets the serial on the activation token.
-     * xdg_activation_token_v1 opcode 1: set_serial (uint serial, object seat)
+     * xdg_activation_token_v1 opcode 0: set_serial (uint serial, object seat)
      */
     private fun setTokenSerial(tokenPtr: Long, serial: Int, seatPtr: Long) {
         val marshal = wlProxyMarshalFlagsUintObject ?: return
         try {
             marshal.invokeExact(
                 MemorySegment.ofAddress(tokenPtr),
-                1, // opcode: set_serial
+                0, // opcode: set_serial
                 MemorySegment.NULL,
                 1, // version
                 0, // flags
@@ -160,14 +160,14 @@ internal class WaylandActivationToken(
 
     /**
      * Sets the surface on the activation token.
-     * xdg_activation_token_v1 opcode 3: set_surface (object surface)
+     * xdg_activation_token_v1 opcode 2: set_surface (object surface)
      */
     private fun setTokenSurface(tokenPtr: Long, surfacePtr: Long) {
         val marshal = wlProxyMarshalFlagsObject ?: return
         try {
             marshal.invokeExact(
                 MemorySegment.ofAddress(tokenPtr),
-                3, // opcode: set_surface
+                2, // opcode: set_surface
                 MemorySegment.NULL,
                 1, // version
                 0, // flags
@@ -178,14 +178,14 @@ internal class WaylandActivationToken(
 
     /**
      * Commits the activation token.
-     * xdg_activation_token_v1 opcode 4: commit
+     * xdg_activation_token_v1 opcode 3: commit
      */
     private fun commitToken(tokenPtr: Long) {
         val marshal = wlProxyMarshalFlagsVoid ?: return
         try {
             marshal.invokeExact(
                 MemorySegment.ofAddress(tokenPtr),
-                4, // opcode: commit
+                3, // opcode: commit
                 MemorySegment.NULL,
                 1, // version
                 0, // flags
@@ -195,17 +195,17 @@ internal class WaylandActivationToken(
 
     /**
      * Destroys the activation token object.
-     * xdg_activation_token_v1 opcode 0: destroy
+     * xdg_activation_token_v1 opcode 4: destroy (destructor)
      */
     private fun destroyTokenObject(tokenPtr: Long) {
         val marshal = wlProxyMarshalFlagsVoid ?: return
         try {
             marshal.invokeExact(
                 MemorySegment.ofAddress(tokenPtr),
-                0, // opcode: destroy
+                4, // opcode: destroy
                 MemorySegment.NULL,
                 1, // version
-                0, // flags
+                WL_MARSHAL_FLAG_DESTROY, // flags
             )
         } catch (_: Throwable) {}
     }

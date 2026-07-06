@@ -928,6 +928,7 @@ class WaylandWindow private constructor(
      * [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult {
+        if (requestType == null) return WindowRequestResult.Success
         val act = activationManager ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("Wayland xdg_activation_v1 is unavailable"),
         )

@@ -536,11 +536,11 @@ fun buildWaylandInterface(
 }
 
 val xdgActivationV1Interface: MemorySegment by lazy {
-    buildWaylandInterface("xdg_activation_v1", methodCount = 4, eventCount = 1)
+    buildWaylandInterface("xdg_activation_v1", methodCount = 3, eventCount = 1)
 }
 
 val xdgActivationTokenV1Interface: MemorySegment by lazy {
-    buildWaylandInterface("xdg_activation_token_v1", methodCount = 4, eventCount = 1)
+    buildWaylandInterface("xdg_activation_token_v1", methodCount = 5, eventCount = 1)
 }
 
 val zwpTextInputManagerV3Interface: MemorySegment by lazy {

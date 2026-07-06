@@ -20,6 +20,7 @@ import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
+import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowRequestResult
@@ -720,9 +721,16 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `WaylandWindow requestUserAttention with null requestType returns Success`() {
+        val window = WaylandWindow.createForTest()
+        val result = window.requestUserAttention(null)
+        assertIs<WindowRequestResult.Success>(result)
+    }
+
+    @Test
     fun `WaylandWindow requestUserAttention returns Unsupported when activationManager is null`() {
         val window = WaylandWindow.createForTest(activationManagerPtr = 0L)
-        val result = window.requestUserAttention(null)
+        val result = window.requestUserAttention(UserAttentionType.Informational)
         assertIs<WindowRequestResult.Failure>(result)
         assertIs<RequestError.Unsupported>(result.error)
         assertEquals("Wayland xdg_activation_v1 is unavailable", result.error.message)
@@ -737,7 +745,7 @@ class WaylandWindowTest {
             seatPtr = 200L,
             surface = surface,
         )
-        val result = window.requestUserAttention(null)
+        val result = window.requestUserAttention(UserAttentionType.Informational)
         assertIs<WindowRequestResult.Failure>(result)
         assertIs<RequestError.Ignored>(result.error)
     }
@@ -753,7 +761,7 @@ class WaylandWindowTest {
             seatPtr = 200L,
             surface = surface,
         )
-        val result = window.requestUserAttention(null)
+        val result = window.requestUserAttention(UserAttentionType.Informational)
         // Should return Ignored (token flow fails with mock ptrs) not Unsupported
         assertIs<WindowRequestResult.Failure>(result)
         assertIs<RequestError.Ignored>(result.error)
