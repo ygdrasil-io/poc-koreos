@@ -291,9 +291,10 @@ This document provides a comprehensive **gap analysis** between the **specified 
 |---------|-------------|---------------------|-------|
 | `requestUserAttention` | ✅ | ✅ | ✅ Implemented via xdg_activation_v1 |
 | `setWindowIcon` | ✅ | ✅ | ✅ Implemented via xdg_toplevel_icon_manager_v1 |
-| `setBlur` | ✅ | ✅ | ✅ Implemented via ext_background_effect / KWin blur |
+| `setBlur` | ✅ | ✅ | ✅ Implemented via ext_background_effect / KWin blur; KWin 5.x/6.x detection (#270) |
 | `systemTheme()` portal | ✅ | ✅ | D-Bus integration works but detection incomplete |
-| Monitor geometry | ⚠️ | ⚠️ | `wl_output` geometry/mode not stored (synthetic only) |
+| Monitor geometry | ✅ | ✅ | Real `wl_output` geometry/mode/scale now tracked via WaylandOutputInfo (#272) |
+| Dynamic protocol detection | ✅ | ✅ | `ActiveEventLoop.waylandProtocols()` / `hasWaylandProtocol()` (#271) |
 | `Fullscreen.Exclusive` | ❌ | ❌ | Not applicable on Wayland |
 | Keyboard `text` | ✅ | ✅ | `xkb_state_key_get_utf8` wired |
 
