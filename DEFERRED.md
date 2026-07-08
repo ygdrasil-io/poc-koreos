@@ -31,10 +31,7 @@ linked feature table changes status.
 
 - Wayland: platform extensions like portal-backed theme detection and compositor-advertised pointer constraints
   for confined/locked cursor grabs.
-- X11 keyboard text fields still need `XLookupString` or equivalent integration.
 - X11 dynamic scale-factor changes still need RandR notification handling.
-- X11 transparency still needs `_NET_WM_WINDOW_OPACITY` wiring.
-- Win32 exclusive fullscreen still needs `ChangeDisplaySettingsExW`.
 - Win32 cursor visibility: balanced `ShowCursor` counter implemented in Win32Window.kt.
 - Win32 wide-string reads still need strict null-terminator handling.
 - X11 custom cursors are currently a monochrome fallback; ARGB cursor support is

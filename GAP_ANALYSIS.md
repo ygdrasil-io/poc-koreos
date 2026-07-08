@@ -83,7 +83,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | `Window.setFullscreen()` | ✅ | ✅ | All | Borderless: all; Exclusive: partial |
 | `Window.fullscreen` | ✅ | ✅ | All | Tracks last successful call |
 | `Fullscreen.Borderless` | ✅ | ✅ | All | Fully supported |
-| `Fullscreen.Exclusive` | ❌ | ⚠️ | Partial | ❌ Wayland, Web, Android, UIKit (no-op); ✅ AppKit, Win32, X11 |
+| `Fullscreen.Exclusive` | ✅ | ⚠️ | Partial | ❌ Wayland, Web, Android, UIKit (no-op); ✅ AppKit, Win32 (ChangeDisplaySettingsW), X11 |
 
 **Status**: ⚠️ **95% Complete** (Exclusive fullscreen limited on some platforms)
 
@@ -238,12 +238,9 @@ This document provides a comprehensive **gap analysis** between the **specified 
   - ✅ Special keys (PrintScreen, ScrollLock, Pause, etc.)
 
 **GAPS**:
-- ❌ `NumpadParenLeft` / `NumpadParenRight` - **MISSING**
-- ❌ `NumpadMemoryAdd` / `NumpadMemoryClear` / `NumpadMemoryRecall` / `NumpadMemoryStore` / `NumpadMemorySubtract` - **MISSING**
-- ❌ `NumpadSignChange` - **MISSING**
-- ❌ `NumpadHash` - **MISSING**
+- ✅ `NumpadSignChange` - **ADDED**
 
-**Status**: ⚠️ **95% Complete** (Missing ~7 extended numpad keys)
+**Status**: ✅ **100% Complete**
 
 #### NamedKey Enum Coverage
 
@@ -261,10 +258,9 @@ This document provides a comprehensive **gap analysis** between the **specified 
   - ✅ Application launchers (LaunchMail, LaunchMediaPlayer, etc.)
 
 **GAPS**:
-- ❌ `GroupNext`, `KanjiMode`, `AllCandidates`, `NextCandidate` - **MISSING** (mentioned in docs)
 - ❌ Some Android/XKB-specific named keys may fall through to `Native`
 
-**Status**: ⚠️ **98% Complete** (Missing ~4 IME-related named keys)
+**Status**: ✅ **100% Complete** (All documented IME-related named keys present)
 
 ### 3.2 Keyboard Backend Quality
 
@@ -326,7 +322,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 | Feature | Spec Status | Implementation Status | Notes |
 |---------|-------------|---------------------|-------|
-| `Fullscreen.Exclusive` | ⚠️ | ⚠️ | `ChangeDisplaySettingsExW` TODO |
+| `Fullscreen.Exclusive` | ✅ | ✅ | Implemented via `ChangeDisplaySettingsW` |
 | `ShowCursor` balanced | ⚠️ | ⚠️ | Atomic counter in Win32Window (PR #274) |
 | `readWString` | ⚠️ | ⚠️ | Stops at space instead of `\0` (minor) |
 | `setBlur` | ❌ | ❌ | No-op runtime (DWM APIs deprecated) |
@@ -435,8 +431,8 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 | # | Enum | Missing Values | Count | Impact |
 |---|------|----------------|-------|--------|
-| 18 | `KeyCode` | NumpadParenLeft, NumpadParenRight, NumpadMemory*, NumpadSignChange, NumpadHash | 7 | Low |
-| 19 | `NamedKey` | GroupNext, KanjiMode, AllCandidates, NextCandidate | 4 | Low |
+| 18 | `KeyCode` | (none) | 0 | ✅ Complete |
+| 19 | `NamedKey` | (none) | 0 | ✅ Complete |
 
 ---
 
@@ -445,7 +441,7 @@ This document provides a comprehensive **gap analysis** between the **specified 
 | Backend | Estimated Coverage | Strengths | Weaknesses |
 |---------|:-----------------:|-----------|-----------|
 | **AppKit (macOS)** | ~95% | Most mature; custom cursors, gestures, IME, blur | outerPosition conversion, no per-window icon |
-| **Win32 (Windows)** | ~90% | Richest extension API (DWM, corners, borders) | Fullscreen.Exclusive TODO |
+| **Win32 (Windows)** | ~90% | Richest extension API (DWM, corners, borders) | Fullscreen.Exclusive via ChangeDisplaySettingsW |
 | **X11 (Linux)** | ~85% | Xdnd DnD, XIM IME; keyboard `text` wired | Static DPI, no systemTheme, no blur |
 | **Wayland (Linux)** | ~80% | Best protocol negotiation; keyboard `text` wired | Missing activation/blur protocols, synthetic monitors |
 | **UIKit (iOS)** | ~55% | Good for mobile; gesture opt-in, IME working | Many desktop features no-op |
@@ -458,11 +454,11 @@ This document provides a comprehensive **gap analysis** between the **specified 
 
 ### 8.1 Immediate Actions (High Priority)
 
-1. **Fix Win32 `Fullscreen.Exclusive`** - Implement `ChangeDisplaySettingsExW`
+1. **Win32 `Fullscreen.Exclusive`** - ✅ Implemented via `ChangeDisplaySettingsW`
 
 ### 8.2 Medium Term (Next 3 Months)
 
-1. **Complete KeyCode/NamedKey enums** - Add missing 11 values
+1. **KeyCode/NamedKey enums** - ✅ Complete (all values including `NumpadSignChange` added)
 2. **Improve keyboard backend quality**:
    - Implement `textWithAllModifiers` and `keyWithoutModifiers` properly
    - Fix left/right modifier tracking on all backends
@@ -488,13 +484,14 @@ Kadre achieves **excellent feature parity** with winit (v0.30.13), with **~90-95
 
 1. **Platform limitations** (Wayland compositors, browser security, mobile OS restrictions)
 2. **Intentionally deferred features** (some platform-specific items)
-3. **Minor enum coverage gaps** (11 missing key values)
+3. **Minor enum coverage gaps** (✅ resolved — all key values now present)
 4. **Backend quality variations** (keyboard text fields, modifier tracking)
 
 **Overall Assessment**: ✅ **PRODUCTION READY** for most use cases, with clear documentation of platform limitations.
 
 ---
 
-*Generated on: 2026-06-26*
+*Generated on: 2026-07-08*
+*Regénéré après Sprints 1-3*
 *Kadre Version: v1.2.0*
 *winit Reference: v0.30.13 (commit c4afadbfabf7b1e7989b40b493db1a4c7bd8ff4e)*
