@@ -172,6 +172,7 @@ enum class KeyCode {
     NumpadMultiply,
     NumpadParenLeft,
     NumpadParenRight,
+    NumpadSignChange,
     NumpadStar,
     NumpadSubtract,
     Escape,
@@ -901,6 +902,7 @@ fun KeyCode.location(): KeyLocation = when (this) {
     KeyCode.NumpadMultiply,
     KeyCode.NumpadParenLeft,
     KeyCode.NumpadParenRight,
+    KeyCode.NumpadSignChange,
     KeyCode.NumpadStar,
     KeyCode.NumpadSubtract -> KeyLocation.Numpad
 

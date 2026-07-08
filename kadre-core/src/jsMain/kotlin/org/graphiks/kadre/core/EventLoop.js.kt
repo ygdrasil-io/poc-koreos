@@ -1,16 +1,21 @@
 /**
- * JS (stub) implementation of the kadre-core event loop.
+ * JS actual implementation of [EventLoop] (internal kadre-core stub).
  *
  * Ticket #28: adding the JS/wasmJs targets to kadre-core so the `kadre`
  * facade can expose EventLoop to browser targets.
- * The complete implementation will be done in ticket #24 (WebEventLoop).
+ *
+ * This is an internal `expect`/`actual` placeholder required by KMP for
+ * the `kadre-core` module. Do NOT use `kadre-core.EventLoop` directly.
+ * Use the `kadre` aggregator module which delegates to the concrete
+ * platform backends (kadre-uikit, kadre-android, kadre-web-common, …).
  */
 package org.graphiks.kadre.core
 
 /**
  * JS implementation of [EventLoop].
  *
- * Temporary stub — the real implementation will be provided in ticket #24.
+ * Internal placeholder — the real entry point is the `kadre` module
+ * which delegates to the web (kadre-web-common) backend at runtime.
  */
 actual class EventLoop actual constructor() {
 
@@ -18,11 +23,12 @@ actual class EventLoop actual constructor() {
      * Starts the event loop and delegates callbacks to the provided handler.
      *
      * @param handler Handler for the application lifecycle and events.
-     * @throws UnsupportedOperationException Always — complete implementation in #24.
+     * @throws UnsupportedOperationException Always — pending ticket #24.
      */
     actual fun runApp(handler: ApplicationHandler) {
         throw UnsupportedOperationException(
-            "EventLoop JS not implemented — pending ticket #24 (WebEventLoop)."
+            "kadre-core.EventLoop is an internal expect/actual placeholder. " +
+            "Use the `kadre` module which delegates to the JS (kadre-web-common) backend."
         )
     }
 }

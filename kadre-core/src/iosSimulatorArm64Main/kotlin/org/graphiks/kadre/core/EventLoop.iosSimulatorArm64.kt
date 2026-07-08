@@ -1,15 +1,18 @@
 /**
- * iOS Simulator arm64 (stub) implementation of the event loop.
+ * iOS Simulator arm64 actual implementation of [EventLoop] (internal kadre-core stub).
  *
- * This implementation is a temporary stub. The complete implementation
- * will be provided in a dedicated iOS ticket.
+ * This is an internal `expect`/`actual` placeholder required by KMP for
+ * the `kadre-core` module. Do NOT use `kadre-core.EventLoop` directly.
+ * Use the `kadre` aggregator module which delegates to the concrete
+ * platform backends (kadre-uikit, kadre-android, kadre-web-common, …).
  */
 package org.graphiks.kadre.core
 
 /**
  * iOS Simulator arm64 implementation of [EventLoop].
  *
- * Temporary stub — the real implementation will be provided in a dedicated ticket.
+ * Internal placeholder — the real entry point is the `kadre` module
+ * which delegates to the UIKit backend at runtime.
  */
 actual class EventLoop actual constructor() {
 
@@ -20,7 +23,8 @@ actual class EventLoop actual constructor() {
      */
     actual fun runApp(handler: ApplicationHandler) {
         throw UnsupportedOperationException(
-            "EventLoop iOS Simulator arm64 not implemented — pending a dedicated ticket."
+            "kadre-core.EventLoop is an internal expect/actual placeholder. " +
+            "Use the `kadre` module which delegates to the iOS Simulator arm64 (UIKit) backend."
         )
     }
 }

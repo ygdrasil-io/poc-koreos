@@ -99,6 +99,7 @@ class EventsTest {
             "NumpadMemorySubtract",
             "NumpadParenLeft",
             "NumpadParenRight",
+            "NumpadSignChange",
             "NumpadStar",
         )
 
@@ -266,6 +267,7 @@ class EventsTest {
             "NumpadMultiply",
             "NumpadParenLeft",
             "NumpadParenRight",
+            "NumpadSignChange",
             "NumpadStar",
             "NumpadSubtract",
             "Escape",
@@ -851,6 +853,7 @@ class EventsTest {
             KeyCode.NumpadMemorySubtract,
             KeyCode.NumpadParenLeft,
             KeyCode.NumpadParenRight,
+            KeyCode.NumpadSignChange,
             KeyCode.NumpadStar,
         )
 
