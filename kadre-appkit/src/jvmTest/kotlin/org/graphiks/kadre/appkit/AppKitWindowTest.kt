@@ -253,4 +253,16 @@ class AppKitWindowTest {
     fun `AppKit window icon is unsupported like winit`() {
         assertTrue(!appKitWindowIconIsSupported())
     }
+
+    @Test
+    fun `AppKitWindow overrides requestSurfaceSize (not the default no-op)`() {
+        // Regression: AppKitWindow previously inherited Window.requestSurfaceSize's
+        // default, which returns Failure(Unsupported) and never resized the NSWindow.
+        // The declaring class of the override must be AppKitWindow, not the Window interface.
+        val method = AppKitWindow::class.java.getMethod(
+            "requestSurfaceSize",
+            PhysicalSize::class.java,
+        )
+        assertEquals(AppKitWindow::class.java, method.declaringClass)
+    }
 }

@@ -31,6 +31,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
+import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
@@ -482,6 +483,42 @@ class Win32Window private constructor(
                 SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE,
             )
         } catch (_: Throwable) {}
+    }
+
+    /**
+     * Requests a new surface (client-area) size in physical pixels.
+     *
+     * Win32 [SetWindowPos] sizes the *outer* window, so the requested client
+     * size is expanded by the current non-client delta (outer − client) before
+     * the call. This resizes the window and fires `WM_SIZE`, which emits a
+     * [org.graphiks.kadre.core.WindowEvent.Resized] through [KadreWndProc].
+     * Returns [SurfaceSizeRequestResult.Applied] with the resulting client size.
+     */
+    override fun requestSurfaceSize(size: PhysicalSize<Int>): SurfaceSizeRequestResult {
+        return try {
+            val client = innerSize
+            val outer = outerSize
+            val borderW = outer.width - client.width
+            val borderH = outer.height - client.height
+            val targetW = size.width + borderW
+            val targetH = size.height + borderH
+            val ok = SetWindowPos(
+                hwnd, MemorySegment.NULL,
+                0, 0, targetW, targetH,
+                SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE,
+            )
+            if (ok == 0) {
+                SurfaceSizeRequestResult.Failure(
+                    RequestError.OsError("SetWindowPos failed for surface resize"),
+                )
+            } else {
+                SurfaceSizeRequestResult.Applied(innerSize)
+            }
+        } catch (t: Throwable) {
+            SurfaceSizeRequestResult.Failure(
+                RequestError.OsError(t.message ?: t::class.simpleName ?: "Win32 surface resize failed"),
+            )
+        }
     }
 
     override fun prePresentNotify() { /* no-op on Win32 */ }

@@ -51,6 +51,17 @@ class Win32WindowTest {
     }
 
     @Test
+    fun `Win32Window overrides requestSurfaceSize (not the default no-op)`() {
+        // Regression: Win32Window previously inherited Window.requestSurfaceSize's
+        // default, which returns Failure(Unsupported) and never resized the window.
+        val method = Win32Window::class.java.getMethod(
+            "requestSurfaceSize",
+            PhysicalSize::class.java,
+        )
+        assertEquals(Win32Window::class.java, method.declaringClass)
+    }
+
+    @Test
     fun `WndClassExW offsets correct for Win64 ABI`() {
         assertEquals(0,  WndClassExW.OFFSET_CB_SIZE)
         assertEquals(4,  WndClassExW.OFFSET_STYLE)

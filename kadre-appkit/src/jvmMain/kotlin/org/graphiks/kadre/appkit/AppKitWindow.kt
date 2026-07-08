@@ -38,6 +38,7 @@ import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
+import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
 import org.graphiks.kadre.core.Window
@@ -637,6 +638,36 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
                 nsWindow.setFrameOrigin(nsPoint)
             }
         } catch (_: Throwable) {}
+    }
+
+    /**
+     * Requests a new surface (content) size in physical pixels.
+     *
+     * Converts to logical points (dividing by backingScaleFactor) and calls
+     * `NSWindow.setContentSize:`, which resizes the content view and fires
+     * `windowDidResize:` — emitting a [org.graphiks.kadre.core.WindowEvent.Resized]
+     * through [KadreWindowDelegate]. Returns [SurfaceSizeRequestResult.Applied]
+     * with the resulting size read back from the content view.
+     */
+    override fun requestSurfaceSize(size: PhysicalSize<Int>): SurfaceSizeRequestResult {
+        return try {
+            val nsWindow = NSWindow(nsWindowPtr)
+            val scale = nsWindow.backingScaleFactor()
+            if (scale <= 0.0) {
+                return SurfaceSizeRequestResult.Failure(
+                    RequestError.OsError("Invalid backing scale factor: $scale"),
+                )
+            }
+            Arena.ofConfined().use { arena ->
+                val nsSize = allocNSSize(arena, size.width / scale, size.height / scale)
+                nsWindow.setContentSize(nsSize)
+            }
+            SurfaceSizeRequestResult.Applied(innerSize)
+        } catch (t: Throwable) {
+            SurfaceSizeRequestResult.Failure(
+                RequestError.OsError(t.message ?: t::class.simpleName ?: "AppKit surface resize failed"),
+            )
+        }
     }
 
     /**
