@@ -822,7 +822,7 @@ typealias ResType = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Char Boolean;}
  */
-typealias Boolean = Byte
+typealias Boolean_ = Byte
 
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UnicodeScalarValue;}
@@ -888,6 +888,11 @@ typealias TimeScale = Int
  * {@snippet lang=c : typedef LongLong TimeValue64;}
  */
 typealias TimeValue64 = Long
+
+/**
+ * {@snippet lang=c : typedef UNSIGNED = Char Byte;}
+ */
+typealias Byte_ = Byte
 
 /**
  * {@snippet lang=c : typedef SIGNED = Char SignedByte;}
@@ -7880,7 +7885,7 @@ typealias IOReturn = Int
 /**
  * {@snippet lang=c : typedef UNSIGNED = Int UInt;}
  */
-typealias UInt = Int
+typealias UInt_ = Int
 
 /**
  * {@snippet lang=c : typedef Int SInt;}

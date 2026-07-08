@@ -608,13 +608,7 @@ fun CFMakeCollectable(arg0: MemorySegment): MemorySegment {
 /**
  * {@snippet lang=c : kCFTypeArrayCallBacks typedef const CFArrayCallBacks = Declared(CFArrayCallBacks)
  */
-private val kCFTypeArrayCallBacks_LAYOUT: MemoryLayout by lazy { CFArrayCallBacks.layout }
-private val kCFTypeArrayCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFTypeArrayCallBacks").orElseThrow() }
-private val kCFTypeArrayCallBacks_VH: VarHandle by lazy { kCFTypeArrayCallBacks_LAYOUT.varHandle() }
-
-var kCFTypeArrayCallBacks: MemorySegment
-    get() = kCFTypeArrayCallBacks_VH.get(kCFTypeArrayCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFTypeArrayCallBacks_VH.set(kCFTypeArrayCallBacks_SEGMENT, value)
+val kCFTypeArrayCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFTypeArrayCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : CFArrayGetTypeID typedef CFTypeID = UNSIGNED = Long()
@@ -1056,24 +1050,12 @@ fun CFArrayAppendArray(arg0: MemorySegment, arg1: MemorySegment, arg2: MemorySeg
 /**
  * {@snippet lang=c : kCFTypeBagCallBacks typedef const CFBagCallBacks = Declared(CFBagCallBacks)
  */
-private val kCFTypeBagCallBacks_LAYOUT: MemoryLayout by lazy { CFBagCallBacks.layout }
-private val kCFTypeBagCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFTypeBagCallBacks").orElseThrow() }
-private val kCFTypeBagCallBacks_VH: VarHandle by lazy { kCFTypeBagCallBacks_LAYOUT.varHandle() }
-
-var kCFTypeBagCallBacks: MemorySegment
-    get() = kCFTypeBagCallBacks_VH.get(kCFTypeBagCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFTypeBagCallBacks_VH.set(kCFTypeBagCallBacks_SEGMENT, value)
+val kCFTypeBagCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFTypeBagCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : kCFCopyStringBagCallBacks typedef const CFBagCallBacks = Declared(CFBagCallBacks)
  */
-private val kCFCopyStringBagCallBacks_LAYOUT: MemoryLayout by lazy { CFBagCallBacks.layout }
-private val kCFCopyStringBagCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFCopyStringBagCallBacks").orElseThrow() }
-private val kCFCopyStringBagCallBacks_VH: VarHandle by lazy { kCFCopyStringBagCallBacks_LAYOUT.varHandle() }
-
-var kCFCopyStringBagCallBacks: MemorySegment
-    get() = kCFCopyStringBagCallBacks_VH.get(kCFCopyStringBagCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFCopyStringBagCallBacks_VH.set(kCFCopyStringBagCallBacks_SEGMENT, value)
+val kCFCopyStringBagCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFCopyStringBagCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : CFBagGetTypeID typedef CFTypeID = UNSIGNED = Long()
@@ -1401,13 +1383,7 @@ fun CFBagRemoveAllValues(arg0: MemorySegment): Unit {
 /**
  * {@snippet lang=c : kCFStringBinaryHeapCallBacks typedef const CFBinaryHeapCallBacks = Declared(CFBinaryHeapCallBacks)
  */
-private val kCFStringBinaryHeapCallBacks_LAYOUT: MemoryLayout by lazy { CFBinaryHeapCallBacks.layout }
-private val kCFStringBinaryHeapCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFStringBinaryHeapCallBacks").orElseThrow() }
-private val kCFStringBinaryHeapCallBacks_VH: VarHandle by lazy { kCFStringBinaryHeapCallBacks_LAYOUT.varHandle() }
-
-var kCFStringBinaryHeapCallBacks: MemorySegment
-    get() = kCFStringBinaryHeapCallBacks_VH.get(kCFStringBinaryHeapCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFStringBinaryHeapCallBacks_VH.set(kCFStringBinaryHeapCallBacks_SEGMENT, value)
+val kCFStringBinaryHeapCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFStringBinaryHeapCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : CFBinaryHeapGetTypeID typedef CFTypeID = UNSIGNED = Long()
@@ -2001,35 +1977,17 @@ fun CFBitVectorSetAllBits(arg0: MemorySegment, arg1: Int): Unit {
 /**
  * {@snippet lang=c : kCFTypeDictionaryKeyCallBacks typedef const CFDictionaryKeyCallBacks = Declared(CFDictionaryKeyCallBacks)
  */
-private val kCFTypeDictionaryKeyCallBacks_LAYOUT: MemoryLayout by lazy { CFDictionaryKeyCallBacks.layout }
-private val kCFTypeDictionaryKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFTypeDictionaryKeyCallBacks").orElseThrow() }
-private val kCFTypeDictionaryKeyCallBacks_VH: VarHandle by lazy { kCFTypeDictionaryKeyCallBacks_LAYOUT.varHandle() }
-
-var kCFTypeDictionaryKeyCallBacks: MemorySegment
-    get() = kCFTypeDictionaryKeyCallBacks_VH.get(kCFTypeDictionaryKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFTypeDictionaryKeyCallBacks_VH.set(kCFTypeDictionaryKeyCallBacks_SEGMENT, value)
+val kCFTypeDictionaryKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFTypeDictionaryKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : kCFCopyStringDictionaryKeyCallBacks typedef const CFDictionaryKeyCallBacks = Declared(CFDictionaryKeyCallBacks)
  */
-private val kCFCopyStringDictionaryKeyCallBacks_LAYOUT: MemoryLayout by lazy { CFDictionaryKeyCallBacks.layout }
-private val kCFCopyStringDictionaryKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFCopyStringDictionaryKeyCallBacks").orElseThrow() }
-private val kCFCopyStringDictionaryKeyCallBacks_VH: VarHandle by lazy { kCFCopyStringDictionaryKeyCallBacks_LAYOUT.varHandle() }
-
-var kCFCopyStringDictionaryKeyCallBacks: MemorySegment
-    get() = kCFCopyStringDictionaryKeyCallBacks_VH.get(kCFCopyStringDictionaryKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFCopyStringDictionaryKeyCallBacks_VH.set(kCFCopyStringDictionaryKeyCallBacks_SEGMENT, value)
+val kCFCopyStringDictionaryKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFCopyStringDictionaryKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : kCFTypeDictionaryValueCallBacks typedef const CFDictionaryValueCallBacks = Declared(CFDictionaryValueCallBacks)
  */
-private val kCFTypeDictionaryValueCallBacks_LAYOUT: MemoryLayout by lazy { CFDictionaryValueCallBacks.layout }
-private val kCFTypeDictionaryValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFTypeDictionaryValueCallBacks").orElseThrow() }
-private val kCFTypeDictionaryValueCallBacks_VH: VarHandle by lazy { kCFTypeDictionaryValueCallBacks_LAYOUT.varHandle() }
-
-var kCFTypeDictionaryValueCallBacks: MemorySegment
-    get() = kCFTypeDictionaryValueCallBacks_VH.get(kCFTypeDictionaryValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFTypeDictionaryValueCallBacks_VH.set(kCFTypeDictionaryValueCallBacks_SEGMENT, value)
+val kCFTypeDictionaryValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFTypeDictionaryValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : CFDictionaryGetTypeID typedef CFTypeID = UNSIGNED = Long()

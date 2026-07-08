@@ -3786,24 +3786,12 @@ fun CFPropertyListCreateWithStream(arg0: MemorySegment, arg1: MemorySegment, arg
 /**
  * {@snippet lang=c : kCFTypeSetCallBacks typedef const CFSetCallBacks = Declared(CFSetCallBacks)
  */
-private val kCFTypeSetCallBacks_LAYOUT: MemoryLayout by lazy { CFSetCallBacks.layout }
-private val kCFTypeSetCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFTypeSetCallBacks").orElseThrow() }
-private val kCFTypeSetCallBacks_VH: VarHandle by lazy { kCFTypeSetCallBacks_LAYOUT.varHandle() }
-
-var kCFTypeSetCallBacks: MemorySegment
-    get() = kCFTypeSetCallBacks_VH.get(kCFTypeSetCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFTypeSetCallBacks_VH.set(kCFTypeSetCallBacks_SEGMENT, value)
+val kCFTypeSetCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFTypeSetCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : kCFCopyStringSetCallBacks typedef const CFSetCallBacks = Declared(CFSetCallBacks)
  */
-private val kCFCopyStringSetCallBacks_LAYOUT: MemoryLayout by lazy { CFSetCallBacks.layout }
-private val kCFCopyStringSetCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("kCFCopyStringSetCallBacks").orElseThrow() }
-private val kCFCopyStringSetCallBacks_VH: VarHandle by lazy { kCFCopyStringSetCallBacks_LAYOUT.varHandle() }
-
-var kCFCopyStringSetCallBacks: MemorySegment
-    get() = kCFCopyStringSetCallBacks_VH.get(kCFCopyStringSetCallBacks_SEGMENT) as MemorySegment
-    set(value) = kCFCopyStringSetCallBacks_VH.set(kCFCopyStringSetCallBacks_SEGMENT, value)
+val kCFCopyStringSetCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("kCFCopyStringSetCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : CFSetGetTypeID typedef CFTypeID = UNSIGNED = Long()

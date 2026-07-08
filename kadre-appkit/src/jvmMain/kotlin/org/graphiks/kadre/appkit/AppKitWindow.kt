@@ -192,7 +192,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
             ObjCRuntime.sel("new"),
         ) as MemorySegment
         contentView.setLayer(metalLayerPtr) // ← setLayer BEFORE setWantsLayer
-        contentView.setWantsLayer(1.toByte())     // ← setWantsLayer LAST
+        contentView.setWantsLayer(true)     // ← setWantsLayer LAST
 
         // 6. contentsScale = backingScaleFactor for HiDPI / Retina support
         val scale = NSWindow(nsWindowPtr).backingScaleFactor()
