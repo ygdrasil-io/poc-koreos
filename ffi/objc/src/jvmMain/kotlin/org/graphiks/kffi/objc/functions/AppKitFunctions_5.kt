@@ -1122,90 +1122,42 @@ fun NSCreateHashTable(arg0: MemorySegment, arg1: Long): MemorySegment {
 /**
  * {@snippet lang=c : NSIntegerHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSIntegerHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSIntegerHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntegerHashCallBacks").orElseThrow() }
-private val NSIntegerHashCallBacks_VH: VarHandle by lazy { NSIntegerHashCallBacks_LAYOUT.varHandle() }
-
-var NSIntegerHashCallBacks: MemorySegment
-    get() = NSIntegerHashCallBacks_VH.get(NSIntegerHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntegerHashCallBacks_VH.set(NSIntegerHashCallBacks_SEGMENT, value)
+val NSIntegerHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntegerHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonOwnedPointerHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSNonOwnedPointerHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSNonOwnedPointerHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonOwnedPointerHashCallBacks").orElseThrow() }
-private val NSNonOwnedPointerHashCallBacks_VH: VarHandle by lazy { NSNonOwnedPointerHashCallBacks_LAYOUT.varHandle() }
-
-var NSNonOwnedPointerHashCallBacks: MemorySegment
-    get() = NSNonOwnedPointerHashCallBacks_VH.get(NSNonOwnedPointerHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonOwnedPointerHashCallBacks_VH.set(NSNonOwnedPointerHashCallBacks_SEGMENT, value)
+val NSNonOwnedPointerHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonOwnedPointerHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonRetainedObjectHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSNonRetainedObjectHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSNonRetainedObjectHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonRetainedObjectHashCallBacks").orElseThrow() }
-private val NSNonRetainedObjectHashCallBacks_VH: VarHandle by lazy { NSNonRetainedObjectHashCallBacks_LAYOUT.varHandle() }
-
-var NSNonRetainedObjectHashCallBacks: MemorySegment
-    get() = NSNonRetainedObjectHashCallBacks_VH.get(NSNonRetainedObjectHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonRetainedObjectHashCallBacks_VH.set(NSNonRetainedObjectHashCallBacks_SEGMENT, value)
+val NSNonRetainedObjectHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonRetainedObjectHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSObjectHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSObjectHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSObjectHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSObjectHashCallBacks").orElseThrow() }
-private val NSObjectHashCallBacks_VH: VarHandle by lazy { NSObjectHashCallBacks_LAYOUT.varHandle() }
-
-var NSObjectHashCallBacks: MemorySegment
-    get() = NSObjectHashCallBacks_VH.get(NSObjectHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSObjectHashCallBacks_VH.set(NSObjectHashCallBacks_SEGMENT, value)
+val NSObjectHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSObjectHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSOwnedObjectIdentityHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSOwnedObjectIdentityHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSOwnedObjectIdentityHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSOwnedObjectIdentityHashCallBacks").orElseThrow() }
-private val NSOwnedObjectIdentityHashCallBacks_VH: VarHandle by lazy { NSOwnedObjectIdentityHashCallBacks_LAYOUT.varHandle() }
-
-var NSOwnedObjectIdentityHashCallBacks: MemorySegment
-    get() = NSOwnedObjectIdentityHashCallBacks_VH.get(NSOwnedObjectIdentityHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSOwnedObjectIdentityHashCallBacks_VH.set(NSOwnedObjectIdentityHashCallBacks_SEGMENT, value)
+val NSOwnedObjectIdentityHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSOwnedObjectIdentityHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSOwnedPointerHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSOwnedPointerHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSOwnedPointerHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSOwnedPointerHashCallBacks").orElseThrow() }
-private val NSOwnedPointerHashCallBacks_VH: VarHandle by lazy { NSOwnedPointerHashCallBacks_LAYOUT.varHandle() }
-
-var NSOwnedPointerHashCallBacks: MemorySegment
-    get() = NSOwnedPointerHashCallBacks_VH.get(NSOwnedPointerHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSOwnedPointerHashCallBacks_VH.set(NSOwnedPointerHashCallBacks_SEGMENT, value)
+val NSOwnedPointerHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSOwnedPointerHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSPointerToStructHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSPointerToStructHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSPointerToStructHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSPointerToStructHashCallBacks").orElseThrow() }
-private val NSPointerToStructHashCallBacks_VH: VarHandle by lazy { NSPointerToStructHashCallBacks_LAYOUT.varHandle() }
-
-var NSPointerToStructHashCallBacks: MemorySegment
-    get() = NSPointerToStructHashCallBacks_VH.get(NSPointerToStructHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSPointerToStructHashCallBacks_VH.set(NSPointerToStructHashCallBacks_SEGMENT, value)
+val NSPointerToStructHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSPointerToStructHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSIntHashCallBacks typedef const NSHashTableCallBacks = Declared(NSHashTableCallBacks)
  */
-private val NSIntHashCallBacks_LAYOUT: MemoryLayout by lazy { NSHashTableCallBacks.layout }
-private val NSIntHashCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntHashCallBacks").orElseThrow() }
-private val NSIntHashCallBacks_VH: VarHandle by lazy { NSIntHashCallBacks_LAYOUT.varHandle() }
-
-var NSIntHashCallBacks: MemorySegment
-    get() = NSIntHashCallBacks_VH.get(NSIntHashCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntHashCallBacks_VH.set(NSIntHashCallBacks_SEGMENT, value)
+val NSIntHashCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntHashCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSHTTPCookieName typedef const NSHTTPCookiePropertyKey = (Void)*
@@ -1606,57 +1558,27 @@ var NSKeyValueChangeNotificationIsPriorKey: MemorySegment
 /**
  * {@snippet lang=c : CGPointZero typedef const CGPoint = Declared(CGPoint)
  */
-private val CGPointZero_LAYOUT: MemoryLayout by lazy { CGPoint.layout }
-private val CGPointZero_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CGPointZero").orElseThrow() }
-private val CGPointZero_VH: VarHandle by lazy { CGPointZero_LAYOUT.varHandle() }
-
-var CGPointZero: MemorySegment
-    get() = CGPointZero_VH.get(CGPointZero_SEGMENT) as MemorySegment
-    set(value) = CGPointZero_VH.set(CGPointZero_SEGMENT, value)
+val CGPointZero: MemorySegment = SymbolLookup.loaderLookup().find("CGPointZero").orElseThrow()
 
 /**
  * {@snippet lang=c : CGSizeZero typedef const CGSize = Declared(CGSize)
  */
-private val CGSizeZero_LAYOUT: MemoryLayout by lazy { CGSize.layout }
-private val CGSizeZero_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CGSizeZero").orElseThrow() }
-private val CGSizeZero_VH: VarHandle by lazy { CGSizeZero_LAYOUT.varHandle() }
-
-var CGSizeZero: MemorySegment
-    get() = CGSizeZero_VH.get(CGSizeZero_SEGMENT) as MemorySegment
-    set(value) = CGSizeZero_VH.set(CGSizeZero_SEGMENT, value)
+val CGSizeZero: MemorySegment = SymbolLookup.loaderLookup().find("CGSizeZero").orElseThrow()
 
 /**
  * {@snippet lang=c : CGRectZero typedef const CGRect = Declared(CGRect)
  */
-private val CGRectZero_LAYOUT: MemoryLayout by lazy { CGRect.layout }
-private val CGRectZero_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CGRectZero").orElseThrow() }
-private val CGRectZero_VH: VarHandle by lazy { CGRectZero_LAYOUT.varHandle() }
-
-var CGRectZero: MemorySegment
-    get() = CGRectZero_VH.get(CGRectZero_SEGMENT) as MemorySegment
-    set(value) = CGRectZero_VH.set(CGRectZero_SEGMENT, value)
+val CGRectZero: MemorySegment = SymbolLookup.loaderLookup().find("CGRectZero").orElseThrow()
 
 /**
  * {@snippet lang=c : CGRectNull typedef const CGRect = Declared(CGRect)
  */
-private val CGRectNull_LAYOUT: MemoryLayout by lazy { CGRect.layout }
-private val CGRectNull_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CGRectNull").orElseThrow() }
-private val CGRectNull_VH: VarHandle by lazy { CGRectNull_LAYOUT.varHandle() }
-
-var CGRectNull: MemorySegment
-    get() = CGRectNull_VH.get(CGRectNull_SEGMENT) as MemorySegment
-    set(value) = CGRectNull_VH.set(CGRectNull_SEGMENT, value)
+val CGRectNull: MemorySegment = SymbolLookup.loaderLookup().find("CGRectNull").orElseThrow()
 
 /**
  * {@snippet lang=c : CGRectInfinite typedef const CGRect = Declared(CGRect)
  */
-private val CGRectInfinite_LAYOUT: MemoryLayout by lazy { CGRect.layout }
-private val CGRectInfinite_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CGRectInfinite").orElseThrow() }
-private val CGRectInfinite_VH: VarHandle by lazy { CGRectInfinite_LAYOUT.varHandle() }
-
-var CGRectInfinite: MemorySegment
-    get() = CGRectInfinite_VH.get(CGRectInfinite_SEGMENT) as MemorySegment
-    set(value) = CGRectInfinite_VH.set(CGRectInfinite_SEGMENT, value)
+val CGRectInfinite: MemorySegment = SymbolLookup.loaderLookup().find("CGRectInfinite").orElseThrow()
 
 /**
  * {@snippet lang=c : CGRectGetMinX typedef CGFloat = Double(typedef CGRect = Declared(CGRect))
@@ -2212,46 +2134,22 @@ fun CGRectMakeWithDictionaryRepresentation(arg0: MemorySegment, arg1: MemorySegm
 /**
  * {@snippet lang=c : NSZeroPoint typedef const NSPoint = Declared(CGPoint)
  */
-private val NSZeroPoint_LAYOUT: MemoryLayout by lazy { CGPoint.layout }
-private val NSZeroPoint_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSZeroPoint").orElseThrow() }
-private val NSZeroPoint_VH: VarHandle by lazy { NSZeroPoint_LAYOUT.varHandle() }
-
-var NSZeroPoint: MemorySegment
-    get() = NSZeroPoint_VH.get(NSZeroPoint_SEGMENT) as MemorySegment
-    set(value) = NSZeroPoint_VH.set(NSZeroPoint_SEGMENT, value)
+val NSZeroPoint: MemorySegment = SymbolLookup.loaderLookup().find("NSZeroPoint").orElseThrow()
 
 /**
  * {@snippet lang=c : NSZeroSize typedef const NSSize = Declared(CGSize)
  */
-private val NSZeroSize_LAYOUT: MemoryLayout by lazy { CGSize.layout }
-private val NSZeroSize_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSZeroSize").orElseThrow() }
-private val NSZeroSize_VH: VarHandle by lazy { NSZeroSize_LAYOUT.varHandle() }
-
-var NSZeroSize: MemorySegment
-    get() = NSZeroSize_VH.get(NSZeroSize_SEGMENT) as MemorySegment
-    set(value) = NSZeroSize_VH.set(NSZeroSize_SEGMENT, value)
+val NSZeroSize: MemorySegment = SymbolLookup.loaderLookup().find("NSZeroSize").orElseThrow()
 
 /**
  * {@snippet lang=c : NSZeroRect typedef const NSRect = Declared(CGRect)
  */
-private val NSZeroRect_LAYOUT: MemoryLayout by lazy { CGRect.layout }
-private val NSZeroRect_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSZeroRect").orElseThrow() }
-private val NSZeroRect_VH: VarHandle by lazy { NSZeroRect_LAYOUT.varHandle() }
-
-var NSZeroRect: MemorySegment
-    get() = NSZeroRect_VH.get(NSZeroRect_SEGMENT) as MemorySegment
-    set(value) = NSZeroRect_VH.set(NSZeroRect_SEGMENT, value)
+val NSZeroRect: MemorySegment = SymbolLookup.loaderLookup().find("NSZeroRect").orElseThrow()
 
 /**
  * {@snippet lang=c : NSEdgeInsetsZero typedef const NSEdgeInsets = Declared(NSEdgeInsets)
  */
-private val NSEdgeInsetsZero_LAYOUT: MemoryLayout by lazy { NSEdgeInsets.layout }
-private val NSEdgeInsetsZero_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSEdgeInsetsZero").orElseThrow() }
-private val NSEdgeInsetsZero_VH: VarHandle by lazy { NSEdgeInsetsZero_LAYOUT.varHandle() }
-
-var NSEdgeInsetsZero: MemorySegment
-    get() = NSEdgeInsetsZero_VH.get(NSEdgeInsetsZero_SEGMENT) as MemorySegment
-    set(value) = NSEdgeInsetsZero_VH.set(NSEdgeInsetsZero_SEGMENT, value)
+val NSEdgeInsetsZero: MemorySegment = SymbolLookup.loaderLookup().find("NSEdgeInsetsZero").orElseThrow()
 
 /**
  * {@snippet lang=c : NSEqualPoints typedef BOOL = Bool(typedef NSPoint = Declared(CGPoint),typedef NSPoint = Declared(CGPoint))
@@ -3030,145 +2928,67 @@ fun NSCreateMapTable(arg0: MemorySegment, arg1: MemorySegment, arg2: Long): Memo
 /**
  * {@snippet lang=c : NSIntegerMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSIntegerMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSIntegerMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntegerMapKeyCallBacks").orElseThrow() }
-private val NSIntegerMapKeyCallBacks_VH: VarHandle by lazy { NSIntegerMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSIntegerMapKeyCallBacks: MemorySegment
-    get() = NSIntegerMapKeyCallBacks_VH.get(NSIntegerMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntegerMapKeyCallBacks_VH.set(NSIntegerMapKeyCallBacks_SEGMENT, value)
+val NSIntegerMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntegerMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonOwnedPointerMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSNonOwnedPointerMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSNonOwnedPointerMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonOwnedPointerMapKeyCallBacks").orElseThrow() }
-private val NSNonOwnedPointerMapKeyCallBacks_VH: VarHandle by lazy { NSNonOwnedPointerMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSNonOwnedPointerMapKeyCallBacks: MemorySegment
-    get() = NSNonOwnedPointerMapKeyCallBacks_VH.get(NSNonOwnedPointerMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonOwnedPointerMapKeyCallBacks_VH.set(NSNonOwnedPointerMapKeyCallBacks_SEGMENT, value)
+val NSNonOwnedPointerMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonOwnedPointerMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonOwnedPointerOrNullMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSNonOwnedPointerOrNullMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSNonOwnedPointerOrNullMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonOwnedPointerOrNullMapKeyCallBacks").orElseThrow() }
-private val NSNonOwnedPointerOrNullMapKeyCallBacks_VH: VarHandle by lazy { NSNonOwnedPointerOrNullMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSNonOwnedPointerOrNullMapKeyCallBacks: MemorySegment
-    get() = NSNonOwnedPointerOrNullMapKeyCallBacks_VH.get(NSNonOwnedPointerOrNullMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonOwnedPointerOrNullMapKeyCallBacks_VH.set(NSNonOwnedPointerOrNullMapKeyCallBacks_SEGMENT, value)
+val NSNonOwnedPointerOrNullMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonOwnedPointerOrNullMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonRetainedObjectMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSNonRetainedObjectMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSNonRetainedObjectMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonRetainedObjectMapKeyCallBacks").orElseThrow() }
-private val NSNonRetainedObjectMapKeyCallBacks_VH: VarHandle by lazy { NSNonRetainedObjectMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSNonRetainedObjectMapKeyCallBacks: MemorySegment
-    get() = NSNonRetainedObjectMapKeyCallBacks_VH.get(NSNonRetainedObjectMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonRetainedObjectMapKeyCallBacks_VH.set(NSNonRetainedObjectMapKeyCallBacks_SEGMENT, value)
+val NSNonRetainedObjectMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonRetainedObjectMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSObjectMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSObjectMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSObjectMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSObjectMapKeyCallBacks").orElseThrow() }
-private val NSObjectMapKeyCallBacks_VH: VarHandle by lazy { NSObjectMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSObjectMapKeyCallBacks: MemorySegment
-    get() = NSObjectMapKeyCallBacks_VH.get(NSObjectMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSObjectMapKeyCallBacks_VH.set(NSObjectMapKeyCallBacks_SEGMENT, value)
+val NSObjectMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSObjectMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSOwnedPointerMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSOwnedPointerMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSOwnedPointerMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSOwnedPointerMapKeyCallBacks").orElseThrow() }
-private val NSOwnedPointerMapKeyCallBacks_VH: VarHandle by lazy { NSOwnedPointerMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSOwnedPointerMapKeyCallBacks: MemorySegment
-    get() = NSOwnedPointerMapKeyCallBacks_VH.get(NSOwnedPointerMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSOwnedPointerMapKeyCallBacks_VH.set(NSOwnedPointerMapKeyCallBacks_SEGMENT, value)
+val NSOwnedPointerMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSOwnedPointerMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSIntMapKeyCallBacks typedef const NSMapTableKeyCallBacks = Declared(NSMapTableKeyCallBacks)
  */
-private val NSIntMapKeyCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableKeyCallBacks.layout }
-private val NSIntMapKeyCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntMapKeyCallBacks").orElseThrow() }
-private val NSIntMapKeyCallBacks_VH: VarHandle by lazy { NSIntMapKeyCallBacks_LAYOUT.varHandle() }
-
-var NSIntMapKeyCallBacks: MemorySegment
-    get() = NSIntMapKeyCallBacks_VH.get(NSIntMapKeyCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntMapKeyCallBacks_VH.set(NSIntMapKeyCallBacks_SEGMENT, value)
+val NSIntMapKeyCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntMapKeyCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSIntegerMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSIntegerMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSIntegerMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntegerMapValueCallBacks").orElseThrow() }
-private val NSIntegerMapValueCallBacks_VH: VarHandle by lazy { NSIntegerMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSIntegerMapValueCallBacks: MemorySegment
-    get() = NSIntegerMapValueCallBacks_VH.get(NSIntegerMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntegerMapValueCallBacks_VH.set(NSIntegerMapValueCallBacks_SEGMENT, value)
+val NSIntegerMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntegerMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonOwnedPointerMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSNonOwnedPointerMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSNonOwnedPointerMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonOwnedPointerMapValueCallBacks").orElseThrow() }
-private val NSNonOwnedPointerMapValueCallBacks_VH: VarHandle by lazy { NSNonOwnedPointerMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSNonOwnedPointerMapValueCallBacks: MemorySegment
-    get() = NSNonOwnedPointerMapValueCallBacks_VH.get(NSNonOwnedPointerMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonOwnedPointerMapValueCallBacks_VH.set(NSNonOwnedPointerMapValueCallBacks_SEGMENT, value)
+val NSNonOwnedPointerMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonOwnedPointerMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSObjectMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSObjectMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSObjectMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSObjectMapValueCallBacks").orElseThrow() }
-private val NSObjectMapValueCallBacks_VH: VarHandle by lazy { NSObjectMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSObjectMapValueCallBacks: MemorySegment
-    get() = NSObjectMapValueCallBacks_VH.get(NSObjectMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSObjectMapValueCallBacks_VH.set(NSObjectMapValueCallBacks_SEGMENT, value)
+val NSObjectMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSObjectMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSNonRetainedObjectMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSNonRetainedObjectMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSNonRetainedObjectMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSNonRetainedObjectMapValueCallBacks").orElseThrow() }
-private val NSNonRetainedObjectMapValueCallBacks_VH: VarHandle by lazy { NSNonRetainedObjectMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSNonRetainedObjectMapValueCallBacks: MemorySegment
-    get() = NSNonRetainedObjectMapValueCallBacks_VH.get(NSNonRetainedObjectMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSNonRetainedObjectMapValueCallBacks_VH.set(NSNonRetainedObjectMapValueCallBacks_SEGMENT, value)
+val NSNonRetainedObjectMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSNonRetainedObjectMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSOwnedPointerMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSOwnedPointerMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSOwnedPointerMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSOwnedPointerMapValueCallBacks").orElseThrow() }
-private val NSOwnedPointerMapValueCallBacks_VH: VarHandle by lazy { NSOwnedPointerMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSOwnedPointerMapValueCallBacks: MemorySegment
-    get() = NSOwnedPointerMapValueCallBacks_VH.get(NSOwnedPointerMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSOwnedPointerMapValueCallBacks_VH.set(NSOwnedPointerMapValueCallBacks_SEGMENT, value)
+val NSOwnedPointerMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSOwnedPointerMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSIntMapValueCallBacks typedef const NSMapTableValueCallBacks = Declared(NSMapTableValueCallBacks)
  */
-private val NSIntMapValueCallBacks_LAYOUT: MemoryLayout by lazy { NSMapTableValueCallBacks.layout }
-private val NSIntMapValueCallBacks_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSIntMapValueCallBacks").orElseThrow() }
-private val NSIntMapValueCallBacks_VH: VarHandle by lazy { NSIntMapValueCallBacks_LAYOUT.varHandle() }
-
-var NSIntMapValueCallBacks: MemorySegment
-    get() = NSIntMapValueCallBacks_VH.get(NSIntMapValueCallBacks_SEGMENT) as MemorySegment
-    set(value) = NSIntMapValueCallBacks_VH.set(NSIntMapValueCallBacks_SEGMENT, value)
+val NSIntMapValueCallBacks: MemorySegment = SymbolLookup.loaderLookup().find("NSIntMapValueCallBacks").orElseThrow()
 
 /**
  * {@snippet lang=c : NSInvocationOperationVoidResultException typedef const NSExceptionName = (Void)*

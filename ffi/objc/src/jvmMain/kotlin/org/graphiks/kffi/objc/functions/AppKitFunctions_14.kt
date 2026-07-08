@@ -1813,13 +1813,7 @@ var kCAFillModeRemoved: MemorySegment
 /**
  * {@snippet lang=c : CATransform3DIdentity typedef const CATransform3D = Declared(CATransform3D)
  */
-private val CATransform3DIdentity_LAYOUT: MemoryLayout by lazy { CATransform3D.layout }
-private val CATransform3DIdentity_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("CATransform3DIdentity").orElseThrow() }
-private val CATransform3DIdentity_VH: VarHandle by lazy { CATransform3DIdentity_LAYOUT.varHandle() }
-
-var CATransform3DIdentity: MemorySegment
-    get() = CATransform3DIdentity_VH.get(CATransform3DIdentity_SEGMENT) as MemorySegment
-    set(value) = CATransform3DIdentity_VH.set(CATransform3DIdentity_SEGMENT, value)
+val CATransform3DIdentity: MemorySegment = SymbolLookup.loaderLookup().find("CATransform3DIdentity").orElseThrow()
 
 /**
  * {@snippet lang=c : CATransform3DIsIdentity Bool(typedef CATransform3D = Declared(CATransform3D))

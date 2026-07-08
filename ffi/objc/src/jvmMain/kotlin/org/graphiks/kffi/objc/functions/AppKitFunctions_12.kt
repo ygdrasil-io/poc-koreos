@@ -984,13 +984,7 @@ var NSCollectionElementKindSectionFooter: MemorySegment
 /**
  * {@snippet lang=c : NSDirectionalEdgeInsetsZero typedef const NSDirectionalEdgeInsets = Declared(NSDirectionalEdgeInsets)
  */
-private val NSDirectionalEdgeInsetsZero_LAYOUT: MemoryLayout by lazy { NSDirectionalEdgeInsets.layout }
-private val NSDirectionalEdgeInsetsZero_SEGMENT: MemorySegment by lazy { SymbolLookup.loaderLookup().find("NSDirectionalEdgeInsetsZero").orElseThrow() }
-private val NSDirectionalEdgeInsetsZero_VH: VarHandle by lazy { NSDirectionalEdgeInsetsZero_LAYOUT.varHandle() }
-
-var NSDirectionalEdgeInsetsZero: MemorySegment
-    get() = NSDirectionalEdgeInsetsZero_VH.get(NSDirectionalEdgeInsetsZero_SEGMENT) as MemorySegment
-    set(value) = NSDirectionalEdgeInsetsZero_VH.set(NSDirectionalEdgeInsetsZero_SEGMENT, value)
+val NSDirectionalEdgeInsetsZero: MemorySegment = SymbolLookup.loaderLookup().find("NSDirectionalEdgeInsetsZero").orElseThrow()
 
 /**
  * {@snippet lang=c : NSFontFamilyAttribute typedef NSFontDescriptorAttributeName = typedef NSString = (Void)*
