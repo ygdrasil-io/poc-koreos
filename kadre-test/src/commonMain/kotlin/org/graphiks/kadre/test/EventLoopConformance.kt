@@ -79,3 +79,64 @@ fun assertNoCallbacksAfter(trace: List<ObservedCallback>, marker: ObservedCallba
         throw AssertionError("Expected $marker to be the final callback, got $trace")
     }
 }
+
+interface EventLoopConformanceDriver {
+    val trace: MutableList<ObservedCallback>
+    fun start()
+    fun wakeUp()
+    fun requestRedraw()
+    fun waitForIdle()
+    fun closeWindow()
+    fun shutdown()
+}
+
+fun assertWakeUpRearms(factory: () -> EventLoopConformanceDriver) {
+    val driver = factory()
+    try {
+        driver.start()
+        repeat(3) { cycle ->
+            val before = driver.trace.count { it == ObservedCallback.NewEvents }
+            driver.wakeUp()
+            driver.waitForIdle()
+            val after = driver.trace.count { it == ObservedCallback.NewEvents }
+            if (after != before + 1) throw AssertionError("Wake cycle $cycle was not dispatched: ${driver.trace}")
+            val iterationStart = driver.trace.indexOfLast { it == ObservedCallback.NewEvents }
+            val iteration = driver.trace.drop(iterationStart)
+            assertIterationOrder(iteration)
+        }
+    } finally {
+        driver.shutdown()
+    }
+}
+
+fun assertRedrawAfterIdle(factory: () -> EventLoopConformanceDriver) {
+    val driver = factory()
+    try {
+        driver.start()
+        driver.waitForIdle()
+        val before = driver.trace.size
+        repeat(10) { driver.requestRedraw() }
+        driver.waitForIdle()
+        val iteration = driver.trace.drop(before)
+        if (iteration.count { it == ObservedCallback.RedrawRequested } != 1) {
+            throw AssertionError("Expected one coalesced redraw, got $iteration")
+        }
+        assertIterationOrder(iteration)
+    } finally {
+        driver.shutdown()
+    }
+}
+
+fun assertCloseIsTerminal(factory: () -> EventLoopConformanceDriver) {
+    val driver = factory()
+    try {
+        driver.start()
+        driver.closeWindow()
+        driver.requestRedraw()
+        driver.wakeUp()
+        driver.waitForIdle()
+        assertNoCallbacksAfter(driver.trace, ObservedCallback.Closed)
+    } finally {
+        driver.shutdown()
+    }
+}
