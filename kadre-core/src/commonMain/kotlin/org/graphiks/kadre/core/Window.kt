@@ -95,8 +95,8 @@ interface Window {
     /**
      * Closes the window.
      *
-     * Once closed, the window no longer emits events and its identifier
-     * becomes invalid.
+     * After this call returns, [id], [rawWindowHandle], and [rawDisplayHandle] are invalid,
+     * and the event loop must not emit any later events for this window.
      */
     fun close()
 
@@ -183,7 +183,7 @@ interface Window {
     fun setMaxSurfaceSize(size: PhysicalSize<Int>?)
 
     /**
-     * Insets of the unobstructed area inside [surfaceSize].
+     * Insets of the unobstructed renderable area, in physical pixels inside [surfaceSize].
      */
     val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
