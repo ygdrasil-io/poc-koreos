@@ -53,6 +53,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-appkit"))
+                runtimeOnly(project(":kadre-win32"))
             }
         }
 
