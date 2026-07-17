@@ -22,7 +22,7 @@ private const val ERROR_PROC_NOT_FOUND: Int = 127
 private val advapi32: SymbolLookup? by lazy {
     try {
         SymbolLookup.libraryLookup("advapi32.dll", Arena.global())
-    } catch (_: Throwable) {
+    } catch (_: IllegalArgumentException) {
         null
     }
 }
@@ -44,6 +44,9 @@ private val regGetValueWHandle: MethodHandle? by lazy {
         ?.orElse(null)
 }
 
+internal fun invokeRegistryCall(invocation: (() -> Int)?): Int =
+    invocation?.invoke() ?: ERROR_PROC_NOT_FOUND
+
 /** Read-only wrapper for Advapi32!RegGetValueW. */
 fun regGetValueW(
     hKey: MemorySegment,
@@ -54,10 +57,8 @@ fun regGetValueW(
     data: MemorySegment,
     dataSize: MemorySegment,
 ): Int {
-    val handle = regGetValueWHandle ?: return ERROR_PROC_NOT_FOUND
-    return try {
+    val handle = regGetValueWHandle ?: return invokeRegistryCall(null)
+    return invokeRegistryCall {
         handle.invokeExact(hKey, subKey, value, flags, type, data, dataSize) as Int
-    } catch (_: Throwable) {
-        ERROR_PROC_NOT_FOUND
     }
 }

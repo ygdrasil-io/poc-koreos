@@ -3,8 +3,10 @@ package org.graphiks.kadre.ffi.win32
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.WrongMethodTypeException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class Win32RegistryBindingsTest {
 
@@ -46,5 +48,17 @@ class Win32RegistryBindingsTest {
 
         assertEquals("regGetValueW", ::regGetValueW.name)
         assertEquals(wrapper, ::regGetValueW)
+    }
+
+    @Test
+    fun `registry invocation only maps an absent handle and propagates failures`() {
+        assertEquals(127, invokeRegistryCall(null))
+
+        assertFailsWith<WrongMethodTypeException> {
+            invokeRegistryCall { throw WrongMethodTypeException("bad FFM signature") }
+        }
+        assertFailsWith<AssertionError> {
+            invokeRegistryCall { throw AssertionError("fatal error") }
+        }
     }
 }
