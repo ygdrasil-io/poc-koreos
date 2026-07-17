@@ -86,7 +86,7 @@ abstract class KadreActivity : ComponentActivity() {
      * Delegates surface management to [AndroidEventLoop].
      */
     val kadreWindow: AndroidWindow?
-        get() = eventLoop.pendingWindow
+        get() = eventLoop.currentOpenWindow()
 
     /** Android event loop. */
     internal lateinit var eventLoop: AndroidEventLoop
@@ -155,7 +155,7 @@ abstract class KadreActivity : ComponentActivity() {
 
         // ── Drag & Drop (R5-DnD) ─────────────────────────────────────────────
         surfaceView.setOnDragListener { _, dragEvent ->
-            val window = eventLoop.pendingWindow
+            val window = eventLoop.currentOpenWindow()
             if (destroyed || window == null) return@setOnDragListener false
             when (dragEvent.action) {
                 DragEvent.ACTION_DRAG_STARTED -> {
@@ -215,7 +215,7 @@ abstract class KadreActivity : ComponentActivity() {
         // ── Scale gesture detector (pinch-zoom) ─────────────────────────────────
         scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                eventLoop.pendingWindow?.let { window ->
+                eventLoop.currentOpenWindow()?.let { window ->
                     eventLoop.queueWindowEvent(window.id,
                         WindowEvent.PinchGesture(
                             deviceId = DeviceId(0),
@@ -227,7 +227,7 @@ abstract class KadreActivity : ComponentActivity() {
             }
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                eventLoop.pendingWindow?.let { window ->
+                eventLoop.currentOpenWindow()?.let { window ->
                     eventLoop.queueWindowEvent(window.id,
                         WindowEvent.PinchGesture(
                             deviceId = DeviceId(0),
@@ -239,7 +239,7 @@ abstract class KadreActivity : ComponentActivity() {
             }
 
             override fun onScaleEnd(detector: ScaleGestureDetector) {
-                eventLoop.pendingWindow?.let { window ->
+                eventLoop.currentOpenWindow()?.let { window ->
                     eventLoop.queueWindowEvent(window.id,
                         WindowEvent.PinchGesture(
                             deviceId = DeviceId(0),
@@ -260,13 +260,13 @@ abstract class KadreActivity : ComponentActivity() {
                 // canCreateSurfaces triggers createWindow in the handler,
                 // which creates the AndroidWindow and attaches the current surface.
                 handler.canCreateSurfaces(eventLoop)
-                eventLoop.pendingWindow?.let { eventLoop.scheduleFrameIfNeeded(it) }
+                eventLoop.currentOpenWindow()?.let { eventLoop.scheduleFrameIfNeeded(it) }
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                 if (destroyed) return
                 println("[KadreActivity] surfaceChanged ${width}×${height}")
-                eventLoop.pendingWindow?.let { window ->
+                eventLoop.currentOpenWindow()?.let { window ->
                     eventLoop.queueWindowEvent(
                         window.id,
                         WindowEvent.Resized(PhysicalSize(width, height)),
@@ -284,8 +284,14 @@ abstract class KadreActivity : ComponentActivity() {
 
     private fun releaseSurfaceIfNeeded() {
         if (!surfaceLifecycleActive) return
-        handler.destroySurfaces(eventLoop)
+        destroySurfacesIfNeeded()
         eventLoop.onSurfaceDestroyed()
+    }
+
+    /** Preserves the renderer callback before the window invalidates its surface handle. */
+    internal fun destroySurfacesIfNeeded() {
+        if (!surfaceLifecycleActive) return
+        handler.destroySurfaces(eventLoop)
         surfaceLifecycleActive = false
     }
 
@@ -293,7 +299,7 @@ abstract class KadreActivity : ComponentActivity() {
         super.onResume()
         if (destroyed) return
         handler.resumed(eventLoop)
-        eventLoop.pendingWindow?.let { window ->
+        eventLoop.currentOpenWindow()?.let { window ->
             eventLoop.queueWindowEvent(window.id, WindowEvent.Occluded(false))
             dispatchThemeChangedIfNeeded(window)
             eventLoop.scheduleFrameIfNeeded(window)
@@ -304,13 +310,13 @@ abstract class KadreActivity : ComponentActivity() {
         super.onPause()
         if (destroyed) return
         handler.suspended(eventLoop)
-        eventLoop.pendingWindow?.let { window ->
+        eventLoop.currentOpenWindow()?.let { window ->
             eventLoop.queueWindowEvent(window.id, WindowEvent.Occluded(true))
         }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val window = eventLoop.pendingWindow
+        val window = eventLoop.currentOpenWindow()
         if (destroyed || window == null) return super.onTouchEvent(event)
         val handled = scaleGestureDetector?.onTouchEvent(event) ?: false
         if (scaleGestureDetector?.isInProgress == true) {
@@ -412,7 +418,7 @@ abstract class KadreActivity : ComponentActivity() {
      *   keys (volume, back, media…) so the system keeps its default behavior.
      */
     private fun dispatchKey(keyCode: Int, event: KeyEvent, state: KeyState, isRepeat: Boolean): Boolean {
-        val window = eventLoop.pendingWindow
+        val window = eventLoop.currentOpenWindow()
         if (destroyed || window == null) return false
         val mappedCode = AndroidKeyMapper.keyCode(keyCode) ?: return false
         val deviceId = DeviceId(event.deviceId.toLong())
@@ -486,7 +492,7 @@ abstract class KadreActivity : ComponentActivity() {
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val window = eventLoop.pendingWindow
+        val window = eventLoop.currentOpenWindow()
         if (destroyed || window == null) return
         val density = resources.displayMetrics.density.toDouble()
         if (density != lastScaleFactor) {
@@ -509,7 +515,7 @@ abstract class KadreActivity : ComponentActivity() {
      */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        val window = eventLoop.pendingWindow
+        val window = eventLoop.currentOpenWindow()
         if (destroyed || window == null) return
         if (!hasFocus) resetKeyboardModifiersIfNeeded(window)
         eventLoop.queueWindowEvent(window.id, WindowEvent.Focused(hasFocus))
@@ -537,14 +543,7 @@ abstract class KadreActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Per-window terminal event, emitted before the guard/cleanup while the
-        // window is still resolvable (counterpart of the surface-destroyed
-        // app-level destroySurfaces callback). This remains synchronous until
-        // Task 5 makes close terminal: queuing it after Activity destruction would
-        // leave no scheduler frame capable of delivering the terminal event.
-        eventLoop.pendingWindow?.let { window ->
-            handler.windowEvent(eventLoop, window.id, WindowEvent.Destroyed)
-        }
+        eventLoop.currentOpenWindow()?.let(eventLoop::closeWindowFromActivityDestroy)
         releaseSurfaceIfNeeded()
         destroyed = true
         super.onDestroy()

@@ -30,6 +30,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 /**
@@ -64,6 +65,8 @@ class AndroidWindow internal constructor(
 
     @Volatile
     private var _surface: android.view.Surface? = null
+
+    private val closeDelegated = AtomicBoolean(false)
 
     /**
      * Makes the surface available for rendering.
@@ -189,7 +192,9 @@ class AndroidWindow internal constructor(
     }
 
     override fun close() {
-        // No-op at the library level; closing is up to the app
+        if (closeDelegated.compareAndSet(false, true)) {
+            eventLoop.closeWindow(this)
+        }
     }
 
     // ── R5-IME: Input Method Editor ────────────────────────────────────────────
@@ -363,7 +368,12 @@ class AndroidWindow internal constructor(
                 override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
                 override val scaleFactor: Double = dm.density.toDouble()
                 override val currentVideoMode: VideoMode = VideoMode(
-                    PhysicalSize(dm.widthPixels, dm.heightPixels), null, null)
+                    size = PhysicalSize(dm.widthPixels, dm.heightPixels),
+                    bitDepth = null,
+                    refreshRateMilliHz = refreshRateMillihertz(
+                        surfaceView.display?.refreshRate ?: 0f,
+                    ),
+                )
                 override val videoModes: List<VideoMode> = listOf(currentVideoMode)
             }
         } catch (_: Throwable) { null }

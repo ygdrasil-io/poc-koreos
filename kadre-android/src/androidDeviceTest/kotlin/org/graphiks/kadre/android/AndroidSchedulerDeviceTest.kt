@@ -632,6 +632,87 @@ class AndroidSchedulerDeviceTest {
         }
     }
 
+    @Test
+    fun closeIsTerminalIdempotentAndPurgesQueuedWindowWork() {
+        val closeSnapshot = CompletableFuture<Pair<Boolean, Int>>()
+        val postCloseEvents = CopyOnWriteArrayList<WindowEvent>()
+        val nonTerminalEvent = CountDownLatch(1)
+        lateinit var closedWindow: Window
+        lateinit var androidEventLoop: AndroidEventLoop
+        val handler = object : GuardedHandler() {
+            private var closeStarted = false
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                androidEventLoop = eventLoop as AndroidEventLoop
+                closedWindow = eventLoop.createWindow(WindowAttributes())
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (!closeStarted || windowId != closedWindow.id) return
+                postCloseEvents += event
+                if (
+                    event is WindowEvent.RedrawRequested ||
+                    event is WindowEvent.Focused ||
+                    event is WindowEvent.Occluded
+                ) {
+                    nonTerminalEvent.countDown()
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (closeStarted) return
+                closeStarted = true
+
+                androidEventLoop.queueWindowEvent(closedWindow.id, WindowEvent.Focused(false))
+                androidEventLoop.queueWindowEvent(closedWindow.id, WindowEvent.Occluded(true))
+                closedWindow.requestRedraw()
+                closedWindow.close()
+                closedWindow.close()
+                closedWindow.requestRedraw()
+
+                val rawHandleInvalid = runCatching { closedWindow.rawWindowHandle }.isFailure
+                closeSnapshot.complete(rawHandleInvalid to registeredWindowCount(androidEventLoop))
+            }
+        }
+
+        SurfaceLifecycleTestActivity.handlerFactory = { handler }
+        val scenario = ActivityScenario.launch(SurfaceLifecycleTestActivity::class.java)
+        try {
+            val (rawHandleInvalid, registeredWindowCount) = await(closeSnapshot, handler)
+            assertTrue(rawHandleInvalid, "close must immediately invalidate the raw window handle")
+            assertEquals(0, registeredWindowCount, "close must remove the window from the registry")
+            assertFalse(
+                nonTerminalEvent.await(750L, TimeUnit.MILLISECONDS),
+                "redraw, focus, or occlusion was delivered after close",
+            )
+
+            scenario.close()
+            handler.rethrowFailure()
+            assertEquals(
+                1,
+                postCloseEvents.count { it is WindowEvent.Destroyed },
+                "close and Activity destruction must emit exactly one Destroyed",
+            )
+            assertTrue(
+                postCloseEvents.all { it is WindowEvent.Destroyed },
+                "only Destroyed may be delivered after close: $postCloseEvents",
+            )
+        } finally {
+            scenario.close()
+            SurfaceLifecycleTestActivity.handlerFactory = null
+        }
+    }
+
+    private fun registeredWindowCount(eventLoop: AndroidEventLoop): Int {
+        val field = AndroidEventLoop::class.java.getDeclaredField("windows")
+        field.isAccessible = true
+        return (field.get(eventLoop) as Map<*, *>).size
+    }
+
     private fun withActivity(handler: GuardedHandler, assertions: () -> Unit) {
         withActivityScenario(handler) {
             assertions()

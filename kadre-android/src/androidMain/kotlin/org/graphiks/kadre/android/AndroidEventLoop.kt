@@ -24,6 +24,15 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
+
+/** Converts a positive finite display refresh rate from hertz to millihertz. */
+internal fun refreshRateMillihertz(refreshRateHz: Float): Int? {
+    if (!refreshRateHz.isFinite() || refreshRateHz <= 0f) return null
+    val millihertz = refreshRateHz.toDouble() * 1_000.0
+    if (millihertz > Int.MAX_VALUE.toDouble()) return null
+    return millihertz.roundToInt()
+}
 
 /**
  * Android implementation of [ActiveEventLoop].
@@ -80,6 +89,7 @@ internal class AndroidEventLoop(
 
     private var frameCallbackScheduled = false
     private var scheduledStartCause: StartCause? = null
+    private val frameCallback = Choreographer.FrameCallback { onFrame() }
 
     private var waitGeneration = 0L
     private var armedWaitToken: Any? = null
@@ -173,8 +183,9 @@ internal class AndroidEventLoop(
     }
 
     private fun onSurfaceCreatedOnMain(surface: Surface) {
+        if (!isActivityActive()) return
         currentSurface = surface
-        pendingWindow?.onSurfaceAvailable(surface)
+        currentOpenWindowOnMain()?.onSurfaceAvailable(surface)
     }
 
     /**
@@ -193,7 +204,7 @@ internal class AndroidEventLoop(
     }
 
     private fun onSurfaceDestroyedOnMain() {
-        pendingWindow?.onSurfaceReleased()
+        currentOpenWindowOnMain()?.onSurfaceReleased()
         currentSurface = null
     }
 
@@ -252,8 +263,9 @@ internal class AndroidEventLoop(
                 override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
                 override val scaleFactor: Double = dm.density.toDouble()
                 override val currentVideoMode: VideoMode = VideoMode(
-                    PhysicalSize(dm.widthPixels, dm.heightPixels), null,
-                    dm.xdpi.toInt().let { if (it > 0) it else null }
+                    size = PhysicalSize(dm.widthPixels, dm.heightPixels),
+                    bitDepth = null,
+                    refreshRateMilliHz = refreshRateMillihertz(activity.display?.refreshRate ?: 0f),
                 )
                 override val videoModes: List<VideoMode> = listOf(currentVideoMode)
             })
@@ -314,6 +326,62 @@ internal class AndroidEventLoop(
         }
     }
 
+    /** Terminates [window] exactly once on the main Looper. */
+    internal fun closeWindow(window: AndroidWindow) {
+        callOnMain {
+            closeWindowOnMain(window, finishActivity = true)
+        }
+    }
+
+    /** Closes an Activity-owned window without finishing an Activity already being destroyed. */
+    internal fun closeWindowFromActivityDestroy(window: AndroidWindow) {
+        closeWindowOnMain(window, finishActivity = false)
+    }
+
+    private fun closeWindowOnMain(window: AndroidWindow, finishActivity: Boolean) {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        val windowId = window.id
+        if (!state.close(windowId)) return
+
+        windows.remove(windowId)
+        pendingWindowEvents.removeAll { it.windowId == windowId }
+        if (pendingWindow === window) {
+            pendingWindow = null
+        }
+
+        if (windows.isEmpty()) {
+            proxyWakeQueued.set(false)
+            invalidateArmedWait()
+            if (frameCallbackScheduled) {
+                choreographer.removeFrameCallback(frameCallback)
+                frameCallbackScheduled = false
+                scheduledStartCause = null
+            }
+        }
+
+        // Renderers must release their resources before the native surface handle
+        // becomes invalid, even when close() precedes Android's surface callback.
+        val kadreActivity = activity as KadreActivity
+        kadreActivity.destroySurfacesIfNeeded()
+        window.onSurfaceReleased()
+        currentSurface = null
+
+        kadreActivity.handler.windowEvent(this, windowId, WindowEvent.Destroyed)
+        if (finishActivity && windows.isEmpty()) {
+            activity.finish()
+        }
+    }
+
+    /** Returns only the current window that is still registered as open. */
+    internal fun currentOpenWindow(): AndroidWindow? = callOnMain {
+        currentOpenWindowOnMain()
+    }
+
+    private fun currentOpenWindowOnMain(): AndroidWindow? {
+        val window = pendingWindow ?: return null
+        return openWindow(window.id)
+    }
+
     /** Queues a platform window event for the next ordered loop iteration. */
     internal fun queueWindowEvent(windowId: WindowId, event: WindowEvent) {
         runOnMain {
@@ -357,9 +425,7 @@ internal class AndroidEventLoop(
 
         scheduledStartCause = cause
         frameCallbackScheduled = true
-        choreographer.postFrameCallback {
-            onFrame()
-        }
+        choreographer.postFrameCallback(frameCallback)
         return true
     }
 
@@ -418,7 +484,7 @@ internal class AndroidEventLoop(
     private fun armNextWait() {
         check(Looper.myLooper() == Looper.getMainLooper())
         invalidateArmedWait()
-        if (!isActivityActive() || scheduleStateIteration()) return
+        if (windows.isEmpty() || !isActivityActive() || scheduleStateIteration()) return
 
         val waitUntil = controlFlow as? ControlFlow.WaitUntil ?: return
         val token = Any()
@@ -455,7 +521,7 @@ internal class AndroidEventLoop(
     }
 
     private fun isActivityActive(): Boolean {
-        return !activity.isDestroyed && !(activity as KadreActivity).destroyed
+        return !activity.isFinishing && !activity.isDestroyed && !(activity as KadreActivity).destroyed
     }
 
     private fun runOnMain(action: () -> Unit) {
