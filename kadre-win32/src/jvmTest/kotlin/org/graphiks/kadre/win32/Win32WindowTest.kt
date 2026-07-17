@@ -13,6 +13,7 @@
 package org.graphiks.kadre.win32
 
 import org.graphiks.kadre.ffi.win32.*
+import org.graphiks.kadre.ffi.win32.generated.GetDpiForWindow
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowLevel
@@ -21,9 +22,11 @@ import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.RawDisplayHandle
 import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.Insets
+import java.lang.foreign.MemorySegment
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -271,25 +274,27 @@ class Win32WindowTest {
         )
         val window = Win32Window.create(attrs)
         assertNotNull(window, "create() must succeed on Windows")
+        try {
+            // Check the handles
+            val rawHandle = assertIs<RawWindowHandle.Win32>(window.rawWindowHandle)
+            assertTrue(rawHandle.hwnd != 0L, "HWND must not be null")
+            assertTrue(rawHandle.hinstance != 0L, "HINSTANCE must not be null")
 
-        // Check the handles
-        val rawHandle = window.rawWindowHandle
-        assertTrue(rawHandle is RawWindowHandle.Win32, "rawWindowHandle must be Win32")
-        assertTrue(rawHandle.hwnd != 0L, "HWND must not be null")
-        assertTrue(rawHandle.hinstance != 0L, "HINSTANCE must not be null")
+            val displayHandle = window.rawDisplayHandle
+            assertTrue(displayHandle is RawDisplayHandle.Win32, "rawDisplayHandle must be Win32")
+            assertTrue(displayHandle.hinstance != 0L)
 
-        val displayHandle = window.rawDisplayHandle
-        assertTrue(displayHandle is RawDisplayHandle.Win32, "rawDisplayHandle must be Win32")
-        assertTrue((displayHandle).hinstance != 0L)
-
-        // Check the basic properties
-        assertEquals(rawHandle.hwnd, window.id.value)
-        assertEquals(1.0, window.scaleFactor)
-        assertNotNull(window.innerSize)
-        assertNotNull(window.outerSize)
-
-        // Cleanup
-        window.close()
+            // Check the basic properties
+            assertEquals(rawHandle.hwnd, window.id.value)
+            val dpi = GetDpiForWindow(MemorySegment.ofAddress(rawHandle.hwnd))
+            val expectedScaleFactor = if (dpi > 0) dpi / 96.0 else 1.0
+            assertTrue(window.scaleFactor > 0.0, "scaleFactor must be positive")
+            assertEquals(expectedScaleFactor, window.scaleFactor)
+            assertNotNull(window.innerSize)
+            assertNotNull(window.outerSize)
+        } finally {
+            window.close()
+        }
     }
 
     @Test

@@ -12,6 +12,16 @@ import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
+internal typealias RegGetValueCall = (
+    MemorySegment,
+    MemorySegment,
+    MemorySegment,
+    Int,
+    MemorySegment,
+    MemorySegment,
+    MemorySegment,
+) -> Int
+
 /**
  * Win32 theme utilities.
  */
@@ -26,21 +36,47 @@ internal object Win32ThemeHelper {
      * Returns [Theme.Light] when the DWORD value is non-zero (light),
      * [Theme.Dark] when zero (dark), null on failure.
      *
-     * Note: uses the Java `Registry` class via `Preferences` API (no FFM needed).
+     * Uses the read-only Win32 `RegGetValueW` API.
      */
-    fun systemThemeFromRegistry(): Theme? = try {
-        val prefs = java.util.prefs.Preferences.userRoot()
-        // Java Preferences maps HKCU on Windows
-        val node = prefs.node(
-            "Software/Microsoft/Windows/CurrentVersion/Themes/Personalize"
-        )
-        val value = node.getInt("AppsUseLightTheme", -1)
-        when (value) {
-            -1   -> null             // key absent — unknown
-            0    -> Theme.Dark
-            else -> Theme.Light
+    fun systemThemeFromRegistry(
+        getValue: RegGetValueCall = ::regGetValueW,
+    ): Theme? = try {
+        Arena.ofConfined().use { arena ->
+            val subKey = arena.allocateWString(
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            )
+            val valueName = arena.allocateWString("AppsUseLightTheme")
+            val value = arena.allocate(ValueLayout.JAVA_INT)
+            val valueSize = arena.allocate(ValueLayout.JAVA_INT)
+            val dwordSize = ValueLayout.JAVA_INT.byteSize().toInt()
+            valueSize.set(ValueLayout.JAVA_INT, 0L, dwordSize)
+
+            val status = getValue(
+                HKEY_CURRENT_USER,
+                subKey,
+                valueName,
+                RRF_RT_REG_DWORD,
+                MemorySegment.NULL,
+                value,
+                valueSize,
+            )
+            if (
+                status != ERROR_SUCCESS ||
+                valueSize.get(ValueLayout.JAVA_INT, 0L) != dwordSize
+            ) {
+                return@use null
+            }
+            themeFromAppsUseLightTheme(value.get(ValueLayout.JAVA_INT, 0L))
         }
-    } catch (_: Throwable) { null }
+    } catch (_: Exception) {
+        null
+    }
+
+    internal fun themeFromAppsUseLightTheme(value: Int?): Theme? = when (value) {
+        null -> null
+        0 -> Theme.Dark
+        else -> Theme.Light
+    }
 
     /**
      * Applies or removes the DWMWA_USE_IMMERSIVE_DARK_MODE attribute on [hwnd].

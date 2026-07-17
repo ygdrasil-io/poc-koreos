@@ -230,7 +230,7 @@ internal class Win32EventLoop(
     /**
      * Returns the current system theme by reading the registry.
      *
-     * Reads HKCU\...\Personalize\AppsUseLightTheme via Java Preferences.
+     * Reads HKCU\...\Personalize\AppsUseLightTheme via Win32 RegGetValueW.
      * Returns null if the key is absent or the call fails.
      */
     override fun systemTheme(): Theme? = Win32ThemeHelper.systemThemeFromRegistry()
