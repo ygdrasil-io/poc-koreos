@@ -56,12 +56,11 @@ import kotlin.math.max
  * and must release the handle before [org.graphiks.kadre.core.ApplicationHandler.destroySurfaces].
  */
 class AndroidWindow internal constructor(
+    override val id: WindowId,
     internal val surfaceView: KadreImeSurfaceView,
     private val eventLoop: AndroidEventLoop,
     private val activity: KadreActivity,
 ) : Window {
-
-    override val id: WindowId = WindowId(surfaceView.hashCode().toLong())
 
     @Volatile
     private var _surface: android.view.Surface? = null
@@ -144,13 +143,10 @@ class AndroidWindow internal constructor(
         )
 
     @Volatile
-    internal var needsRedraw: Boolean = false
-
-    @Volatile
     internal var handleVolumeKeys: Boolean = false
 
     override fun requestRedraw() {
-        needsRedraw = true
+        eventLoop.requestRedraw(id)
     }
 
     override val innerSize: PhysicalSize<Int>

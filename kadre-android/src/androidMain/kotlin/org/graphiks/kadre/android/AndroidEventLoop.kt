@@ -1,5 +1,8 @@
 package org.graphiks.kadre.android
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.Choreographer
 import android.view.Surface
 import androidx.activity.ComponentActivity
@@ -12,11 +15,14 @@ import org.graphiks.kadre.core.OwnedDisplayHandle
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RawDisplayHandle
+import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.VideoMode
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
+import java.util.concurrent.FutureTask
 
 /**
  * Android implementation of [ActiveEventLoop].
@@ -47,10 +53,9 @@ import org.graphiks.kadre.core.WindowEvent
  *
  * ## Frame scheduling
  *
- * Frame timing is handled by [Choreographer]: [scheduleFrameIfNeeded]
- * schedules a vsync callback that dispatches [WindowEvent.RedrawRequested]
- * if [AndroidWindow.needsRedraw] is set, then [org.graphiks.kadre.core.ApplicationHandler.aboutToWait].
- * In [ControlFlow.Poll] mode, the callback reschedules itself automatically.
+ * Frame timing is handled by one main-thread [Handler] and [Choreographer].
+ * [AndroidLoopState] owns wake and redraw coalescing; the Android adapter only
+ * turns the next state-machine cause into one ordered application iteration.
  *
  * [exit] terminates the parent Activity via [ComponentActivity.finish].
  */
@@ -62,10 +67,25 @@ internal class AndroidEventLoop(
     override var controlFlow: ControlFlow = ControlFlow.Wait
         private set
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val choreographer = Choreographer.getInstance()
+    private val state = AndroidLoopState(nowMillis = System::currentTimeMillis)
+    private val windows = mutableMapOf<WindowId, AndroidWindow>()
 
-    @Volatile
+    private var nextWindowId = 1L
+    private var initialIterationPending = true
+    private var inIteration = false
+
     private var frameCallbackScheduled = false
+    private var scheduledStartCause: StartCause? = null
+
+    private var waitGeneration = 0L
+    private var armedWaitToken: Any? = null
+    private val surfaceDestroyedCallback = object : Runnable {
+        override fun run() {
+            onSurfaceDestroyedOnMain()
+        }
+    }
 
     /**
      * Current window created via [createWindow].
@@ -94,10 +114,25 @@ internal class AndroidEventLoop(
      *                   On Android, title and resizing are ignored.
      * @return An [AndroidWindow] whose surface matches the current Android lifecycle state.
      */
-    override fun createWindow(attributes: WindowAttributes): Window {
+    override fun createWindow(attributes: WindowAttributes): Window = callOnMain {
+        createWindowOnMain(attributes)
+    }
+
+    private fun createWindowOnMain(attributes: WindowAttributes): AndroidWindow {
         val kadreActivity = activity as KadreActivity
-        return AndroidWindow(kadreActivity.surfaceView, this, kadreActivity).also { window ->
-            pendingWindow?.onSurfaceReleased()
+        check(nextWindowId < Long.MAX_VALUE) { "Android WindowId space exhausted" }
+        val windowId = WindowId(nextWindowId++)
+        val window = AndroidWindow(windowId, kadreActivity.surfaceView, this, kadreActivity)
+
+        pendingWindow?.let { previousWindow ->
+            state.close(previousWindow.id)
+            windows.remove(previousWindow.id)
+            previousWindow.onSurfaceReleased()
+        }
+
+        state.register(windowId)
+        windows[windowId] = window
+        return window.also {
             currentSurface?.let(window::onSurfaceAvailable)
             pendingWindow = window
         }
@@ -109,10 +144,10 @@ internal class AndroidEventLoop(
      * Merges [AndroidWindowAttributes] fields into the core [WindowAttributes]
      * and applies platform-specific settings at creation time.
      */
-    internal fun createWindow(attrs: AndroidWindowAttributes): Window {
-        val window = createWindow(attrs.core) as AndroidWindow
+    internal fun createWindow(attrs: AndroidWindowAttributes): Window = callOnMain {
+        val window = createWindowOnMain(attrs.core)
         window.handleVolumeKeys = attrs.handleVolumeKeys
-        return window
+        window
     }
 
     /**
@@ -127,6 +162,14 @@ internal class AndroidEventLoop(
      * @param surface The Android surface freshly created by the SurfaceHolder.
      */
     internal fun onSurfaceCreated(surface: Surface) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onSurfaceCreatedOnMain(surface)
+        } else {
+            mainHandler.post(SurfaceCreatedCallback(this, surface))
+        }
+    }
+
+    private fun onSurfaceCreatedOnMain(surface: Surface) {
         currentSurface = surface
         pendingWindow?.onSurfaceAvailable(surface)
     }
@@ -139,24 +182,37 @@ internal class AndroidEventLoop(
      * next invocation of [onSurfaceCreated].
      */
     internal fun onSurfaceDestroyed() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onSurfaceDestroyedOnMain()
+        } else {
+            mainHandler.post(surfaceDestroyedCallback)
+        }
+    }
+
+    private fun onSurfaceDestroyedOnMain() {
         pendingWindow?.onSurfaceReleased()
         currentSurface = null
     }
 
     override fun setControlFlow(controlFlow: ControlFlow) {
-        this.controlFlow = controlFlow
+        runOnMain {
+            this.controlFlow = controlFlow
+            if (!inIteration) {
+                armNextWait()
+            }
+        }
     }
 
     override fun exit() {
-        activity.finish()
+        runOnMain(activity::finish)
     }
 
     override val isExiting: Boolean
-        get() = activity.isFinishing
+        get() = callOnMain { activity.isFinishing }
 
     override fun createProxy(): EventLoopProxy = object : EventLoopProxy {
         override fun wakeUp() {
-            // No-op: Android manages its own scheduling via the Looper/Handler
+            mainHandler.post { signalWake() }
         }
     }
 
@@ -230,37 +286,146 @@ internal class AndroidEventLoop(
         // no-op on Android
     }
 
-    /**
-     * Schedules the next vsync callback if not already scheduled.
-     * Must be called from the main thread.
-     */
+    /** Starts the initial iteration, or preserves an already pending state iteration. */
     internal fun scheduleFrameIfNeeded(window: AndroidWindow) {
-        if (!frameCallbackScheduled) {
-            frameCallbackScheduled = true
-            choreographer.postFrameCallback { frameTimeNanos ->
-                frameCallbackScheduled = false
-                onFrame(frameTimeNanos, window)
+        runOnMain {
+            if (state.isOpen(window.id)) {
+                scheduleStateIteration()
             }
         }
     }
 
-    private fun onFrame(frameTimeNanos: Long, window: AndroidWindow) {
-        if (activity.isDestroyed) return
-        val kadreActivity = activity as KadreActivity
-        if (kadreActivity.destroyed) return
+    /** Queues a redraw and explicitly wakes any idle wait on the main Looper. */
+    internal fun requestRedraw(windowId: WindowId) {
+        runOnMain {
+            if (state.requestRedraw(windowId)) {
+                state.wakeUp()
+                invalidateArmedWait()
+                scheduleStateIteration()
+            }
+        }
+    }
 
-        // Dispatch RedrawRequested if needsRedraw is set
-        if (window.needsRedraw) {
-            window.needsRedraw = false
-            kadreActivity.handler.windowEvent(this, window.id, WindowEvent.RedrawRequested)
+    private fun signalWake() {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (state.wakeUp()) {
+            invalidateArmedWait()
+            scheduleStateIteration()
+        }
+    }
+
+    private fun scheduleStateIteration(): Boolean {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (frameCallbackScheduled || !isActivityActive()) return false
+
+        val cause = if (initialIterationPending) {
+            initialIterationPending = false
+            // Init already processes all pending work, so absorb a wake queued before
+            // the first frame rather than emitting a redundant second iteration.
+            state.takeStartCause(controlFlow)
+            StartCause.Init
+        } else {
+            state.takeStartCause(controlFlow) ?: return false
         }
 
-        // Dispatch aboutToWait
-        kadreActivity.handler.aboutToWait(this)
+        scheduledStartCause = cause
+        frameCallbackScheduled = true
+        choreographer.postFrameCallback {
+            onFrame()
+        }
+        return true
+    }
 
-        // Reschedule if in Poll mode or if needsRedraw was set again
-        if (controlFlow == ControlFlow.Poll || window.needsRedraw) {
-            scheduleFrameIfNeeded(window)
+    private fun onFrame() {
+        frameCallbackScheduled = false
+        val cause = scheduledStartCause ?: return
+        scheduledStartCause = null
+        if (!isActivityActive()) return
+
+        val kadreActivity = activity as KadreActivity
+        inIteration = true
+        try {
+            kadreActivity.handler.newEvents(this, cause)
+            state.takeRedraws().forEach { windowId ->
+                openWindow(windowId)?.let {
+                    kadreActivity.handler.windowEvent(
+                        this,
+                        windowId,
+                        WindowEvent.RedrawRequested,
+                    )
+                }
+            }
+            kadreActivity.handler.aboutToWait(this)
+        } finally {
+            inIteration = false
+        }
+        armNextWait()
+    }
+
+    private fun armNextWait() {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        invalidateArmedWait()
+        if (!isActivityActive() || scheduleStateIteration()) return
+
+        val waitUntil = controlFlow as? ControlFlow.WaitUntil ?: return
+        val token = Any()
+        val generation = waitGeneration
+        armedWaitToken = token
+        val delayMillis = (waitUntil.instant - System.currentTimeMillis()).coerceAtLeast(0L)
+        val uptimeMillis = SystemClock.uptimeMillis() + delayMillis
+        mainHandler.postAtTime(
+            {
+                if (generation != waitGeneration || armedWaitToken !== token) {
+                    return@postAtTime
+                }
+                armedWaitToken = null
+                if (!scheduleStateIteration()) {
+                    armNextWait()
+                }
+            },
+            token,
+            uptimeMillis,
+        )
+    }
+
+    private fun invalidateArmedWait() {
+        waitGeneration += 1L
+        armedWaitToken?.let { token ->
+            mainHandler.removeCallbacksAndMessages(token)
+        }
+        armedWaitToken = null
+    }
+
+    private fun openWindow(windowId: WindowId): AndroidWindow? {
+        if (!state.isOpen(windowId)) return null
+        return windows[windowId]
+    }
+
+    private fun isActivityActive(): Boolean {
+        return !activity.isDestroyed && !(activity as KadreActivity).destroyed
+    }
+
+    private fun runOnMain(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+        } else {
+            mainHandler.post(action)
+        }
+    }
+
+    private fun <T> callOnMain(action: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) return action()
+        val task = FutureTask(action)
+        mainHandler.post(task)
+        return task.get()
+    }
+
+    private class SurfaceCreatedCallback(
+        private val eventLoop: AndroidEventLoop,
+        private val surface: Surface,
+    ) : Runnable {
+        override fun run() {
+            eventLoop.onSurfaceCreatedOnMain(surface)
         }
     }
 }
