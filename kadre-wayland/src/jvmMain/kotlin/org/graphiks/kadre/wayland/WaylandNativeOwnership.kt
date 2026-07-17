@@ -6,11 +6,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Keeps native listener storage alive until its proxy is known to be destroyed.
  * Any still-live leases are released only after wl_display_disconnect.
  */
-internal class WaylandNativeListenerLifetime {
+internal open class WaylandNativeListenerLifetime {
     private val closed = AtomicBoolean(false)
     private val bindings = linkedSetOf<AutoCloseable>()
 
-    internal fun register(binding: AutoCloseable): WaylandNativeListenerLease {
+    internal open fun register(binding: AutoCloseable): WaylandNativeListenerLease {
         synchronized(bindings) {
             check(!closed.get()) { "Wayland display listener lifetime is already closed" }
             bindings += binding
@@ -21,6 +21,16 @@ internal class WaylandNativeListenerLifetime {
     internal fun releaseAfterProxyDestroyed(binding: AutoCloseable) {
         val removed = synchronized(bindings) { bindings.remove(binding) }
         if (removed) binding.close()
+    }
+
+    internal fun deferUntilDisplayDisconnect(binding: AutoCloseable) {
+        val closeNow = synchronized(bindings) {
+            if (closed.get()) true else {
+                bindings += binding
+                false
+            }
+        }
+        if (closeNow) binding.close()
     }
 
     internal fun closeAfterDisplayDisconnect() {
@@ -55,6 +65,35 @@ internal fun WaylandNativeListenerLifetime.registerOrClose(
 } catch (failure: Throwable) {
     runWaylandCleanup(failure, listOf(binding::close))
     throw failure
+}
+
+internal fun WaylandNativeListenerLifetime.registerForProxyOrRollback(
+    binding: AutoCloseable,
+    proxy: Long,
+    destroyProxy: (Long) -> Unit,
+): WaylandNativeListenerLease = try {
+    register(binding)
+} catch (registrationFailure: Throwable) {
+    var proxyDestroyed = proxy == 0L
+    if (!proxyDestroyed) {
+        try {
+            destroyProxy(proxy)
+            proxyDestroyed = true
+        } catch (destroyFailure: Throwable) {
+            if (destroyFailure !== registrationFailure) {
+                registrationFailure.addSuppressed(destroyFailure)
+            }
+        }
+    }
+    try {
+        if (proxyDestroyed) binding.close()
+        else deferUntilDisplayDisconnect(binding)
+    } catch (cleanupFailure: Throwable) {
+        if (cleanupFailure !== registrationFailure) {
+            registrationFailure.addSuppressed(cleanupFailure)
+        }
+    }
+    throw registrationFailure
 }
 
 /** Transactional owner used while native discovery has not reached a durable owner. */

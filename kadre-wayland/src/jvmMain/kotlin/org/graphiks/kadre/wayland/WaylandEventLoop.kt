@@ -155,6 +155,7 @@ class WaylandEventLoop internal constructor(
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
             nativeListenerLifetime = nativeListenerLifetime,
+            ownsNativeListenerLifetime = false,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
@@ -187,6 +188,7 @@ class WaylandEventLoop internal constructor(
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
             nativeListenerLifetime = nativeListenerLifetime,
+            ownsNativeListenerLifetime = false,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
         window.registryOwner = _globals?.registryOwner

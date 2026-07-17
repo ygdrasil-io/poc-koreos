@@ -32,6 +32,7 @@ import java.lang.foreign.MemorySegment
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -40,6 +41,183 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandWindowTest {
+
+    @Test
+    fun `surface listener registration failure destroys proxy before closing binding`() {
+        val trace = mutableListOf<String>()
+        val lifetime = object : WaylandNativeListenerLifetime() {
+            override fun register(binding: AutoCloseable): WaylandNativeListenerLease =
+                error("registration failed")
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            WaylandWindow.createForTest(
+                surface = 42L,
+                surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                    AutoCloseable { trace += "close-listener" }
+                },
+                surfaceProxyDestroyer = { trace += "destroy-$it" },
+                nativeListenerLifetime = lifetime,
+            )
+        }
+
+        assertEquals("registration failed", failure.message)
+        assertEquals(listOf("destroy-42", "close-listener"), trace)
+    }
+
+    @Test
+    fun `factory rollback never destroys surface twice after registration rollback`() {
+        var destroyCalls = 0
+        var bindingCloseCalls = 0
+        val lifetime = object : WaylandNativeListenerLifetime() {
+            override fun register(binding: AutoCloseable): WaylandNativeListenerLease =
+                error("registration failed")
+        }
+
+        assertFailsWith<IllegalStateException> {
+            withWaylandAcquiredSurfaceOwner(
+                surfacePtr = 42L,
+                destroySurface = { destroyCalls += 1 },
+            ) { destroyOnce ->
+                WaylandWindow.createForTest(
+                    surface = 42L,
+                    surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                        AutoCloseable { bindingCloseCalls += 1 }
+                    },
+                    surfaceProxyDestroyer = destroyOnce,
+                    nativeListenerLifetime = lifetime,
+                )
+            }
+        }
+
+        assertEquals(1, destroyCalls)
+        assertEquals(1, bindingCloseCalls)
+    }
+
+    @Test
+    fun `surface listener registration defers binding when proxy destroy fails`() {
+        val destroyFailure = IllegalArgumentException("destroy surface")
+        var destroyCalls = 0
+        var listenerClosed = false
+        val lifetime = object : WaylandNativeListenerLifetime() {
+            override fun register(binding: AutoCloseable): WaylandNativeListenerLease =
+                error("registration failed")
+        }
+
+        val registration = assertFailsWith<IllegalStateException> {
+            withWaylandAcquiredSurfaceOwner(
+                surfacePtr = 42L,
+                destroySurface = {
+                    destroyCalls += 1
+                    throw destroyFailure
+                },
+            ) { destroyOnce ->
+                WaylandWindow.createForTest(
+                    surface = 42L,
+                    surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                        AutoCloseable { listenerClosed = true }
+                    },
+                    surfaceProxyDestroyer = destroyOnce,
+                    nativeListenerLifetime = lifetime,
+                )
+            }
+        }
+
+        assertEquals(listOf(destroyFailure), registration.suppressed.toList())
+        assertEquals(1, destroyCalls)
+        assertFalse(listenerClosed)
+        lifetime.closeAfterDisplayDisconnect()
+        assertTrue(listenerClosed)
+    }
+
+    @Test
+    fun `close destroys surface and listener exactly once`() {
+        var destroyCalls = 0
+        var listenerCloseCalls = 0
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            val window = WaylandWindow.createForTest(
+                surface = 42L,
+                surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                    AutoCloseable { listenerCloseCalls += 1 }
+                },
+                surfaceProxyDestroyer = { destroyCalls += 1 },
+                surfaceFlusher = { 0 },
+            ).also { it.registryOwner = registry }
+            assertEquals(1, registry.outputRemovalListenerCount)
+            assertEquals(1, registry.outputScaleListenerCount)
+
+            window.close()
+            window.close()
+
+            assertEquals(1, destroyCalls)
+            assertEquals(1, listenerCloseCalls)
+            assertEquals(0, registry.outputRemovalListenerCount)
+            assertEquals(0, registry.outputScaleListenerCount)
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `flush failure after destroy is terminal and retry never destroys twice`() {
+        var destroyCalls = 0
+        var listenerCloseCalls = 0
+        val window = WaylandWindow.createForTest(
+            surface = 42L,
+            surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                AutoCloseable { listenerCloseCalls += 1 }
+            },
+            surfaceProxyDestroyer = { destroyCalls += 1 },
+            surfaceFlusher = { -1 },
+        )
+
+        assertFailsWith<IllegalStateException> { window.close() }
+        window.close()
+
+        assertEquals(1, destroyCalls)
+        assertEquals(1, listenerCloseCalls)
+    }
+
+    @Test
+    fun `standalone factory exposes safe listener release after display disconnect`() {
+        var listenerClosed = false
+        val window = WaylandWindow.createForTest(
+            surface = 42L,
+            surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                AutoCloseable { listenerClosed = true }
+            },
+            surfaceProxyDestroyer = { error("destroy failed") },
+        )
+
+        assertFailsWith<IllegalStateException> { window.close() }
+        assertFalse(listenerClosed)
+
+        window.releaseNativeListenersAfterDisplayDisconnect()
+        assertTrue(listenerClosed)
+    }
+
+    @Test
+    fun `event loop window cannot release the shared connection listener lifetime`() {
+        var connectionListenerClosed = false
+        val sharedLifetime = WaylandNativeListenerLifetime()
+        sharedLifetime.register(AutoCloseable { connectionListenerClosed = true })
+        val window = WaylandWindow.createForTest(
+            nativeListenerLifetime = sharedLifetime,
+            ownsNativeListenerLifetime = false,
+        )
+
+        val failure = assertFailsWith<IllegalStateException> {
+            window.releaseNativeListenersAfterDisplayDisconnect()
+        }
+
+        assertEquals(
+            "Only a standalone WaylandWindow may release its native listener lifetime",
+            failure.message,
+        )
+        assertFalse(connectionListenerClosed)
+        sharedLifetime.closeAfterDisplayDisconnect()
+        assertTrue(connectionListenerClosed)
+    }
 
     @Test
     fun `entered output selection follows last enter then falls back on leave`() {

@@ -13,6 +13,80 @@ import kotlin.test.assertTrue
 class WaylandOutputRegistryTest {
 
     @Test
+    fun `output listener registration failure destroys proxy before closing binding`() {
+        val trace = mutableListOf<String>()
+        val lifetime = FailOnRegistrationLifetime(failOnCall = 2)
+        Arena.ofShared().use { arena ->
+            val owner = WaylandRegistryOwner(
+                registryPtr = 9_000L,
+                listenerArena = arena,
+                collector = GlobalsCollector(),
+                bindOutput = { _, version -> 700L to version },
+                installOutputListener = { AutoCloseable { trace += "close-listener" } },
+                destroyProxy = { trace += "destroy-$it" },
+                closeListenerArena = {},
+                nativeListenerLifetime = lifetime,
+            )
+
+            owner.onGlobal(7, "wl_output", 4)
+
+            assertEquals(listOf("destroy-700", "close-listener"), trace)
+            assertFailsWith<IllegalStateException> { owner.throwPendingNativeFailure() }
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `output listener registration defers binding when proxy destroy fails`() {
+        val expectedDestroy = IllegalArgumentException("destroy output")
+        var listenerClosed = false
+        val lifetime = FailOnRegistrationLifetime(failOnCall = 2)
+        Arena.ofShared().use { arena ->
+            val owner = WaylandRegistryOwner(
+                registryPtr = 9_000L,
+                listenerArena = arena,
+                collector = GlobalsCollector(),
+                bindOutput = { _, version -> 700L to version },
+                installOutputListener = { AutoCloseable { listenerClosed = true } },
+                destroyProxy = { proxy -> if (proxy == 700L) throw expectedDestroy },
+                closeListenerArena = {},
+                nativeListenerLifetime = lifetime,
+            )
+
+            owner.onGlobal(7, "wl_output", 4)
+
+            assertFalse(listenerClosed)
+            val registration = assertFailsWith<IllegalStateException> {
+                owner.throwPendingNativeFailure()
+            }
+            assertEquals(listOf(expectedDestroy), registration.suppressed.toList())
+
+            lifetime.closeAfterDisplayDisconnect()
+            assertTrue(listenerClosed)
+        }
+    }
+
+    @Test
+    fun `registry bootstrap closes arena for every stage failure before owner transfer`() {
+        WaylandRegistryBootstrapStage.entries.forEach { failedStage ->
+            var arena: Arena? = null
+            val expected = IllegalStateException("fail $failedStage")
+            val thrown = assertFailsWith<IllegalStateException> {
+                bootstrapWaylandRegistryOwner(
+                    failAt = { stage -> if (stage == failedStage) throw expected },
+                    arenaFactory = { Arena.ofShared().also { arena = it } },
+                    ownerFactory = { _, _, _, _ -> Any() },
+                )
+            }
+
+            assertSame(expected, thrown)
+            if (failedStage != WaylandRegistryBootstrapStage.OpenArena) {
+                assertFalse(checkNotNull(arena).scope().isAlive)
+            }
+        }
+    }
+
+    @Test
     fun `geometry callback routes its exact failure to the native sink`() {
         assertOutputCallbackFailureIsRouted(
             customize = { expected ->
@@ -398,6 +472,21 @@ class WaylandOutputRegistryTest {
     }
 
     @Test
+    fun `failed child adoption closes XDG binding and suppresses cleanup failure`() {
+        val cleanupFailure = IllegalArgumentException("close XDG")
+        Arena.ofShared().use { arena ->
+            val owner = registryOwner(arena)
+            owner.close()
+
+            val adoptionFailure = assertFailsWith<IllegalStateException> {
+                owner.ownChildOrClose(AutoCloseable { throw cleanupFailure })
+            }
+
+            assertEquals(listOf(cleanupFailure), adoptionFailure.suppressed.toList())
+        }
+    }
+
+    @Test
     fun `registry listener arena stays alive after registry destroy failure until disconnect`() {
         val expected = IllegalStateException("destroy registry")
         var listenerClosed = false
@@ -552,5 +641,17 @@ class WaylandOutputRegistryTest {
         invoke(listener)
 
         assertSame(expected, failures.single())
+    }
+
+    private class FailOnRegistrationLifetime(
+        private val failOnCall: Int,
+    ) : WaylandNativeListenerLifetime() {
+        private var calls = 0
+
+        override fun register(binding: AutoCloseable): WaylandNativeListenerLease {
+            calls += 1
+            if (calls == failOnCall) error("registration failed")
+            return super.register(binding)
+        }
     }
 }

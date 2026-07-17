@@ -203,6 +203,9 @@ internal class WaylandRegistryOwner internal constructor(
     val outputs: List<BoundOutput>
         get() = synchronized(outputsByRegistryName) { outputsByRegistryName.values.toList() }
 
+    internal val outputRemovalListenerCount: Int get() = removalListeners.size
+    internal val outputScaleListenerCount: Int get() = scaleListeners.size
+
     fun outputForProxy(proxy: Long): BoundOutput? =
         synchronized(outputsByRegistryName) { outputsByRegistryName.values.firstOrNull { it.proxy == proxy } }
 
@@ -217,8 +220,19 @@ internal class WaylandRegistryOwner internal constructor(
     }
 
     fun ownChild(child: AutoCloseable) {
-        check(!closed.get()) { "Wayland registry owner is already closed" }
-        synchronized(ownedChildren) { ownedChildren += child }
+        synchronized(ownedChildren) {
+            check(!closed.get()) { "Wayland registry owner is already closed" }
+            ownedChildren += child
+        }
+    }
+
+    fun ownChildOrClose(child: AutoCloseable) {
+        try {
+            ownChild(child)
+        } catch (adoptionFailure: Throwable) {
+            runWaylandCleanup(adoptionFailure, listOf(child::close))
+            throw adoptionFailure
+        }
     }
 
     fun ownGlobalProxy(proxy: Long) {
@@ -351,7 +365,16 @@ internal class WaylandRegistryOwner internal constructor(
             reportNativeFailure(installationFailure)
             return
         }
-        output.listenerLease = nativeListenerLifetime.register(checkNotNull(listenerBinding))
+        output.listenerLease = try {
+            nativeListenerLifetime.registerForProxyOrRollback(
+                binding = checkNotNull(listenerBinding),
+                proxy = output.proxy,
+                destroyProxy = destroyProxy,
+            )
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+            return
+        }
         val inserted = synchronized(outputsByRegistryName) {
             if (name in outputsByRegistryName) false
             else true.also { outputsByRegistryName[name] = output }
@@ -477,6 +500,46 @@ internal class XdgWmBaseBinding(
     }
 }
 
+internal enum class WaylandRegistryBootstrapStage {
+    OpenArena,
+    CreateCollector,
+    CreateLookup,
+    LoadOutputInterface,
+    CreateOwner,
+}
+
+internal data class WaylandRegistryBootstrap<T>(
+    val arena: Arena,
+    val collector: GlobalsCollector,
+    val lookup: MethodHandles.Lookup,
+    val outputInterface: MemorySegment?,
+    val owner: T,
+)
+
+/** Actual discovery bootstrap seam: the arena is transactional until owner transfer. */
+internal fun <T> bootstrapWaylandRegistryOwner(
+    failAt: (WaylandRegistryBootstrapStage) -> Unit = {},
+    arenaFactory: () -> Arena = Arena::ofShared,
+    ownerFactory: (Arena, GlobalsCollector, MethodHandles.Lookup, MemorySegment?) -> T,
+): WaylandRegistryBootstrap<T> {
+    failAt(WaylandRegistryBootstrapStage.OpenArena)
+    val arena = arenaFactory()
+    try {
+        failAt(WaylandRegistryBootstrapStage.CreateCollector)
+        val collector = GlobalsCollector()
+        failAt(WaylandRegistryBootstrapStage.CreateLookup)
+        val lookup = MethodHandles.lookup()
+        failAt(WaylandRegistryBootstrapStage.LoadOutputInterface)
+        val outputInterface = wlOutputInterface
+        failAt(WaylandRegistryBootstrapStage.CreateOwner)
+        val owner = ownerFactory(arena, collector, lookup, outputInterface)
+        return WaylandRegistryBootstrap(arena, collector, lookup, outputInterface, owner)
+    } catch (failure: Throwable) {
+        if (arena.scope().isAlive) runWaylandCleanup(failure, listOf(arena::close))
+        throw failure
+    }
+}
+
 /**
  * Discovers and binds the `wl_compositor` and `xdg_wm_base` globals, and installs the
  * xdg_wm_base ping→pong listener.
@@ -520,41 +583,43 @@ internal fun discoverGlobals(
         provisional.adopt(registry.address())
 
         // 2. Registry listener (global/global_remove upcall) in a durable arena.
-        val arena = Arena.ofShared()
-        val collector = GlobalsCollector()
-        val lookup = MethodHandles.lookup()
-        val outputIface = wlOutputInterface
         lateinit var registryOwner: WaylandRegistryOwner
-        registryOwner = WaylandRegistryOwner(
-            registryPtr = registry.address(),
-            listenerArena = arena,
-            collector = collector,
-            bindOutput = bindOutput@{ name, advertisedVersion ->
-                val iface = outputIface ?: return@bindOutput null
-                val boundVersion = advertisedVersion.coerceAtMost(4)
-                val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
-                val proxy = (bind.invokeExact(
-                    registry, WL_REGISTRY_BIND, iface, boundVersion, 0,
-                    name, namePtr, boundVersion, MemorySegment.NULL,
-                ) as MemorySegment).address()
-                proxy to boundVersion
-            },
-            installOutputListener = { output ->
-                installWaylandOutputListener(
-                    output = MemorySegment.ofAddress(output.proxy),
-                    addListener = addListener,
-                    lookup = lookup,
-                    outputInfo = output.info,
-                    onOutputChanged = registryOwner::notifyOutputChanged,
-                    onScaleChanged = registryOwner::notifyOutputScaleChanged,
-                    onFailure = registryOwner::reportNativeFailure,
-                )
-            },
-            destroyProxy = { proxy ->
-                destroy.invokeExact(MemorySegment.ofAddress(proxy))
-            },
-            nativeListenerLifetime = nativeListenerLifetime,
-        )
+        val bootstrap = bootstrapWaylandRegistryOwner { arena, collector, lookup, outputIface ->
+            WaylandRegistryOwner(
+                registryPtr = registry.address(),
+                listenerArena = arena,
+                collector = collector,
+                bindOutput = bindOutput@{ name, advertisedVersion ->
+                    val iface = outputIface ?: return@bindOutput null
+                    val boundVersion = advertisedVersion.coerceAtMost(4)
+                    val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+                    val proxy = (bind.invokeExact(
+                        registry, WL_REGISTRY_BIND, iface, boundVersion, 0,
+                        name, namePtr, boundVersion, MemorySegment.NULL,
+                    ) as MemorySegment).address()
+                    proxy to boundVersion
+                },
+                installOutputListener = { output ->
+                    installWaylandOutputListener(
+                        output = MemorySegment.ofAddress(output.proxy),
+                        addListener = addListener,
+                        lookup = lookup,
+                        outputInfo = output.info,
+                        onOutputChanged = registryOwner::notifyOutputChanged,
+                        onScaleChanged = registryOwner::notifyOutputScaleChanged,
+                        onFailure = registryOwner::reportNativeFailure,
+                    )
+                },
+                destroyProxy = { proxy ->
+                    destroy.invokeExact(MemorySegment.ofAddress(proxy))
+                },
+                nativeListenerLifetime = nativeListenerLifetime,
+            )
+        }
+        val arena = bootstrap.arena
+        val collector = bootstrap.collector
+        val lookup = bootstrap.lookup
+        registryOwner = bootstrap.owner
         registryOwnerForCleanup = registryOwner
         provisional.release(registry.address())
 
@@ -636,7 +701,7 @@ internal fun discoverGlobals(
                 destroyProxy = { proxy -> destroy.invokeExact(MemorySegment.ofAddress(proxy)) },
             )
             xdgWmBasePtr = binding.proxy
-            registryOwner.ownChild(binding)
+            registryOwner.ownChildOrClose(binding)
         }
 
         // 6. wl_registry.bind(zxdg_decoration_manager_v1) for server-side window decorations.

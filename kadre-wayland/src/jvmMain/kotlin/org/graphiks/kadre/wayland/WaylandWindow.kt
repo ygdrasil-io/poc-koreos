@@ -196,6 +196,25 @@ internal fun <T> withWaylandSurfaceRollback(
     throw failure
 }
 
+internal fun <T> withWaylandAcquiredSurfaceOwner(
+    surfacePtr: Long,
+    destroySurface: (Long) -> Unit,
+    createOwner: (destroyOnce: (Long) -> Unit) -> T,
+): T {
+    val destroyStarted = AtomicBoolean(false)
+    val destroyOnce: (Long) -> Unit = { proxy ->
+        if (destroyStarted.compareAndSet(false, true)) {
+            destroySurface(proxy)
+        }
+    }
+    return withWaylandSurfaceRollback(
+        surfacePtr = surfacePtr,
+        destroySurface = destroyOnce,
+    ) {
+        createOwner(destroyOnce)
+    }
+}
+
 
 /**
  * Native Wayland window implementing [Window].
@@ -227,8 +246,14 @@ class WaylandWindow private constructor(
         val destroy = checkNotNull(wlProxyDestroy) { "wl_proxy_destroy unavailable" }
         destroy.invokeExact(MemorySegment.ofAddress(proxy))
     },
-    private val nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
+    private val surfaceFlusher: (() -> Int)? = wlDisplayFlush?.let { flush ->
+        { flush.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int }
+    },
+    private val nativeListenerLifetime: WaylandNativeListenerLifetime,
+    private val ownsNativeListenerLifetime: Boolean,
 ) : Window {
+    private val closeStarted = AtomicBoolean(false)
+    @Volatile private var surfaceDestroyed: Boolean = surfacePtr == 0L
     @JvmField
     internal val pointerConstraints: WaylandPointerConstraints? =
         if (pointerConstraintsPtr != 0L) WaylandPointerConstraints(pointerConstraintsPtr) else null
@@ -300,7 +325,14 @@ class WaylandWindow private constructor(
                     checkNotNull(binding) { "failed to install wl_surface enter leave listener" }
                 }
             }
-            ?.let(nativeListenerLifetime::register)
+            ?.let { binding ->
+                nativeListenerLifetime.registerForProxyOrRollback(
+                    binding = binding,
+                    proxy = surfacePtr,
+                    destroyProxy = surfaceProxyDestroyer
+                        ?: { error("wl_proxy_destroy unavailable while adopting wl_surface listener") },
+                )
+            }
 
     private fun reportSurfaceCallbackFailure(failure: Throwable) {
         val owner = registryOwner
@@ -468,6 +500,7 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        if (!closeStarted.compareAndSet(false, true)) return
         var primary: Throwable? = null
         try {
             // Destroy blur proxies first (child objects), then surface (parent).
@@ -484,7 +517,7 @@ class WaylandWindow private constructor(
             }
             xdg?.destroy()
             xdg = null
-            if (surfacePtr == 0L) {
+            if (surfaceDestroyed) {
                 surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
                 surfaceOutputListenerLease = null
             } else {
@@ -492,11 +525,11 @@ class WaylandWindow private constructor(
                     ?: error("wl_proxy_destroy unavailable while closing wl_surface")
                 // If this throws, retain the upcall arena until display disconnect.
                 destroySurface(surfacePtr)
+                surfaceDestroyed = true
                 surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
                 surfaceOutputListenerLease = null
-                wlDisplayFlush?.let { flush ->
-                    val displaySeg = MemorySegment.ofAddress(displayPtr)
-                    val result = flush.invokeExact(displaySeg) as Int
+                surfaceFlusher?.let { flush ->
+                    val result = flush()
                     check(result >= 0) { "wl_display_flush failed while closing wl_surface: $result" }
                 }
             }
@@ -518,6 +551,18 @@ class WaylandWindow private constructor(
                 ),
             )
         }
+    }
+
+    /**
+     * Releases listener upcall storage after the caller has disconnected this window's
+     * wl_display. This is the safe terminal path for standalone [create] users when a
+     * proxy destruction failed and the listener therefore had to remain alive.
+     */
+    fun releaseNativeListenersAfterDisplayDisconnect() {
+        check(ownsNativeListenerLifetime) {
+            "Only a standalone WaylandWindow may release its native listener lifetime"
+        }
+        nativeListenerLifetime.closeAfterDisplayDisconnect()
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -1307,6 +1352,7 @@ class WaylandWindow private constructor(
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
             nativeListenerLifetime = WaylandNativeListenerLifetime(),
+            ownsNativeListenerLifetime = true,
         )
 
         internal fun createOwned(
@@ -1322,7 +1368,8 @@ class WaylandWindow private constructor(
             seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
-            nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
+            nativeListenerLifetime: WaylandNativeListenerLifetime,
+            ownsNativeListenerLifetime: Boolean,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -1352,13 +1399,14 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = withWaylandSurfaceRollback(
+            val nativeSurfaceDestroyer: (Long) -> Unit = { proxy ->
+                val destroy = checkNotNull(wlProxyDestroy) { "wl_proxy_destroy unavailable" }
+                destroy.invokeExact(MemorySegment.ofAddress(proxy))
+            }
+            val window = withWaylandAcquiredSurfaceOwner(
                 surfacePtr = surface,
-                destroySurface = { proxy ->
-                    val destroy = checkNotNull(wlProxyDestroy) { "wl_proxy_destroy unavailable" }
-                    destroy.invokeExact(MemorySegment.ofAddress(proxy))
-                },
-            ) {
+                destroySurface = nativeSurfaceDestroyer,
+            ) { destroyOnce ->
                 WaylandWindow(
                     display,
                     compositor,
@@ -1372,7 +1420,9 @@ class WaylandWindow private constructor(
                     seatPtr,
                     extBackgroundEffectManagerPtr,
                     kwinBlurManagerPtr,
+                    surfaceProxyDestroyer = destroyOnce,
                     nativeListenerLifetime = nativeListenerLifetime,
+                    ownsNativeListenerLifetime = ownsNativeListenerLifetime,
                 )
             }
             window.setTransparent(attrs.transparent)
@@ -1437,7 +1487,9 @@ class WaylandWindow private constructor(
             kwinBlurManagerPtr: Long = 0L,
             surfaceOutputListenerInstaller: WaylandSurfaceOutputListenerInstaller? = null,
             surfaceProxyDestroyer: ((Long) -> Unit)? = null,
+            surfaceFlusher: (() -> Int)? = null,
             nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
+            ownsNativeListenerLifetime: Boolean = true,
         ): WaylandWindow =
             WaylandWindow(
                 display,
@@ -1454,7 +1506,9 @@ class WaylandWindow private constructor(
                 kwinBlurManagerPtr,
                 surfaceOutputListenerInstaller,
                 surfaceProxyDestroyer,
+                surfaceFlusher,
                 nativeListenerLifetime,
+                ownsNativeListenerLifetime,
             ).also {
                 it.setTransparent(attrs.transparent)
             }
