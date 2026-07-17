@@ -22,7 +22,9 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import java.util.ArrayDeque
 import java.util.concurrent.FutureTask
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Android implementation of [ActiveEventLoop].
@@ -71,6 +73,7 @@ internal class AndroidEventLoop(
     private val choreographer = Choreographer.getInstance()
     private val state = AndroidLoopState(nowMillis = System::currentTimeMillis)
     private val windows = mutableMapOf<WindowId, AndroidWindow>()
+    private val pendingWindowEvents = ArrayDeque<QueuedWindowEvent>()
 
     private var nextWindowId = 1L
     private var initialIterationPending = true
@@ -81,6 +84,7 @@ internal class AndroidEventLoop(
 
     private var waitGeneration = 0L
     private var armedWaitToken: Any? = null
+    private val proxyWakeQueued = AtomicBoolean(false)
     private val surfaceDestroyedCallback = object : Runnable {
         override fun run() {
             onSurfaceDestroyedOnMain()
@@ -212,7 +216,12 @@ internal class AndroidEventLoop(
 
     override fun createProxy(): EventLoopProxy = object : EventLoopProxy {
         override fun wakeUp() {
-            mainHandler.post { signalWake() }
+            if (proxyWakeQueued.compareAndSet(false, true)) {
+                val posted = mainHandler.post { signalProxyWake() }
+                if (!posted) {
+                    proxyWakeQueued.compareAndSet(true, false)
+                }
+            }
         }
     }
 
@@ -306,11 +315,33 @@ internal class AndroidEventLoop(
         }
     }
 
+    /** Queues a platform window event for the next ordered loop iteration. */
+    internal fun queueWindowEvent(windowId: WindowId, event: WindowEvent) {
+        runOnMain {
+            if (!state.isOpen(windowId)) return@runOnMain
+
+            val firstPendingEvent = pendingWindowEvents.isEmpty()
+            pendingWindowEvents.addLast(QueuedWindowEvent(windowId, event))
+            if (firstPendingEvent) {
+                state.wakeUp()
+                invalidateArmedWait()
+                scheduleStateIteration()
+            }
+        }
+    }
+
     private fun signalWake() {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (state.wakeUp()) {
             invalidateArmedWait()
             scheduleStateIteration()
+        }
+    }
+
+    private fun signalProxyWake() {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (proxyWakeQueued.compareAndSet(true, false)) {
+            signalWake()
         }
     }
 
@@ -320,9 +351,6 @@ internal class AndroidEventLoop(
 
         val cause = if (initialIterationPending) {
             initialIterationPending = false
-            // Init already processes all pending work, so absorb a wake queued before
-            // the first frame rather than emitting a redundant second iteration.
-            state.takeStartCause(controlFlow)
             StartCause.Init
         } else {
             state.takeStartCause(controlFlow) ?: return false
@@ -343,9 +371,26 @@ internal class AndroidEventLoop(
         if (!isActivityActive()) return
 
         val kadreActivity = activity as KadreActivity
+        if (cause == StartCause.Init) {
+            // Init processes all work queued before the first frame. Consume the
+            // coalesced wake at frame entry so proxy calls made before Init cannot
+            // leak into a later empty WaitCancelled iteration even when their main
+            // Handler callback is delayed behind Choreographer's sync barrier.
+            proxyWakeQueued.set(false)
+            state.takeStartCause(controlFlow)
+        }
         inIteration = true
         try {
             kadreActivity.handler.newEvents(this, cause)
+            takeWindowEvents().forEach { queuedEvent ->
+                openWindow(queuedEvent.windowId)?.let {
+                    kadreActivity.handler.windowEvent(
+                        this,
+                        queuedEvent.windowId,
+                        queuedEvent.event,
+                    )
+                }
+            }
             state.takeRedraws().forEach { windowId ->
                 openWindow(windowId)?.let {
                     kadreActivity.handler.windowEvent(
@@ -360,6 +405,13 @@ internal class AndroidEventLoop(
             inIteration = false
         }
         armNextWait()
+    }
+
+    private fun takeWindowEvents(): List<QueuedWindowEvent> {
+        if (pendingWindowEvents.isEmpty()) return emptyList()
+        return pendingWindowEvents.toList().also {
+            pendingWindowEvents.clear()
+        }
     }
 
     private fun armNextWait() {
@@ -428,4 +480,9 @@ internal class AndroidEventLoop(
             eventLoop.onSurfaceCreatedOnMain(surface)
         }
     }
+
+    private data class QueuedWindowEvent(
+        val windowId: WindowId,
+        val event: WindowEvent,
+    )
 }

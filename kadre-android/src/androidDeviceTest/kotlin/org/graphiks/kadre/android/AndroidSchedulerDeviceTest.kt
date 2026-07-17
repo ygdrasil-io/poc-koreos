@@ -2,6 +2,7 @@ package org.graphiks.kadre.android
 
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.util.concurrent.CompletableFuture
@@ -10,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
@@ -226,6 +228,8 @@ class AndroidSchedulerDeviceTest {
     @Test
     fun redrawBeforeOneSecondDeadlineCancelsWaitAndInvalidatesDeadlineTimer() {
         val requestedResume = AtomicLong(0L)
+        val armingRequested = AtomicBoolean(false)
+        val schedulerReady = CompletableFuture<EventLoopProxy>()
         val armedWaitWindow = CompletableFuture<Window>()
         val waitCancelled = CompletableFuture<StartCause.WaitCancelled>()
         val orderedTrace = CompletableFuture<List<String>>()
@@ -233,12 +237,21 @@ class AndroidSchedulerDeviceTest {
         val trace = CopyOnWriteArrayList<String>()
         val handler = object : GuardedHandler() {
             private lateinit var window: Window
+            private var armAfterIteration = false
 
             override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
                 window = eventLoop.createWindow(WindowAttributes())
             }
 
             override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (
+                    requestedResume.get() == 0L &&
+                    armingRequested.get() &&
+                    startCause is StartCause.WaitCancelled
+                ) {
+                    armAfterIteration = true
+                    return
+                }
                 when (startCause) {
                     is StartCause.WaitCancelled -> {
                         if (startCause.requestedResume == requestedResume.get()) {
@@ -270,11 +283,15 @@ class AndroidSchedulerDeviceTest {
 
             override fun onAboutToWait(eventLoop: ActiveEventLoop) {
                 if (requestedResume.get() == 0L) {
-                    val deadline = System.currentTimeMillis() + 1_000L
-                    requestedResume.set(deadline)
-                    eventLoop.setControlFlow(ControlFlow.WaitUntil(deadline))
-                    Handler(Looper.getMainLooper()).post {
-                        armedWaitWindow.complete(window)
+                    if (armAfterIteration) {
+                        val deadline = System.currentTimeMillis() + 1_000L
+                        requestedResume.set(deadline)
+                        eventLoop.setControlFlow(ControlFlow.WaitUntil(deadline))
+                        Handler(Looper.getMainLooper()).post {
+                            armedWaitWindow.complete(window)
+                        }
+                    } else if (!schedulerReady.isDone) {
+                        schedulerReady.complete(eventLoop.createProxy())
                     }
                 } else if (waitCancelled.isDone && !orderedTrace.isDone) {
                     trace += "aboutToWait"
@@ -284,6 +301,9 @@ class AndroidSchedulerDeviceTest {
         }
 
         withActivity(handler) {
+            val proxy = await(schedulerReady, handler)
+            armingRequested.set(true)
+            proxy.wakeUp()
             val window = await(armedWaitWindow, handler)
             check(Looper.myLooper() != Looper.getMainLooper())
             window.requestRedraw()
@@ -306,11 +326,195 @@ class AndroidSchedulerDeviceTest {
         }
     }
 
+    @Test
+    fun keyEventAfterArmedDeadlineCancelsWaitBeforeOrderedDelivery() {
+        val requestedResume = AtomicLong(0L)
+        val armingRequested = AtomicBoolean(false)
+        val schedulerReady = CompletableFuture<EventLoopProxy>()
+        val waitArmed = CompletableFuture<Unit>()
+        val waitCancelled = CompletableFuture<StartCause.WaitCancelled>()
+        val orderedTrace = CompletableFuture<List<String>>()
+        val staleDeadline = CountDownLatch(1)
+        val trace = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            private var armAfterIteration = false
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes())
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (
+                    requestedResume.get() == 0L &&
+                    armingRequested.get() &&
+                    startCause is StartCause.WaitCancelled
+                ) {
+                    armAfterIteration = true
+                    return
+                }
+                when (startCause) {
+                    is StartCause.WaitCancelled -> {
+                        if (startCause.requestedResume == requestedResume.get()) {
+                            trace += "newEvents:$startCause"
+                            eventLoop.setControlFlow(ControlFlow.Wait)
+                            waitCancelled.complete(startCause)
+                        }
+                    }
+
+                    is StartCause.ResumeTimeReached -> {
+                        if (startCause.requestedResume == requestedResume.get()) {
+                            staleDeadline.countDown()
+                        }
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.KeyInput) {
+                    trace += "KeyInput"
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (requestedResume.get() == 0L) {
+                    if (armAfterIteration) {
+                        val deadline = System.currentTimeMillis() + 1_000L
+                        requestedResume.set(deadline)
+                        eventLoop.setControlFlow(ControlFlow.WaitUntil(deadline))
+                        Handler(Looper.getMainLooper()).post {
+                            waitArmed.complete(Unit)
+                        }
+                    } else if (!schedulerReady.isDone) {
+                        schedulerReady.complete(eventLoop.createProxy())
+                    }
+                } else if (waitCancelled.isDone && !orderedTrace.isDone) {
+                    trace += "aboutToWait"
+                    orderedTrace.complete(trace.toList())
+                }
+            }
+        }
+
+        withActivityScenario(handler) { scenario ->
+            val proxy = await(schedulerReady, handler)
+            armingRequested.set(true)
+            proxy.wakeUp()
+            await(waitArmed, handler)
+            scenario.onActivity { activity ->
+                val event = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A)
+                assertTrue(activity.onKeyDown(KeyEvent.KEYCODE_A, event))
+            }
+
+            val cause = await(waitCancelled, handler)
+            assertEquals(requestedResume.get(), cause.requestedResume)
+            assertEquals(
+                listOf(
+                    "newEvents:$cause",
+                    "KeyInput",
+                    "aboutToWait",
+                ),
+                await(orderedTrace, handler),
+            )
+            assertFalse(
+                staleDeadline.await(1_200L, TimeUnit.MILLISECONDS),
+                "key-cancelled WaitUntil timer fired after its generation was invalidated",
+            )
+            handler.rethrowFailure()
+        }
+    }
+
+    @Test
+    fun twoWakesQueuedBeforeInitDoNotCreateAnEmptyIterationAfterInit() {
+        val initComplete = CompletableFuture<Unit>()
+        val unexpectedEmptyIteration = CountDownLatch(1)
+        val trace = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            private var currentCause: StartCause? = null
+            private var currentWindowEventCount = 0
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes())
+                val proxy = eventLoop.createProxy()
+                val wakesPosted = CountDownLatch(1)
+                val background = Executors.newSingleThreadExecutor()
+                try {
+                    background.execute {
+                        check(Looper.myLooper() != Looper.getMainLooper())
+                        proxy.wakeUp()
+                        proxy.wakeUp()
+                        wakesPosted.countDown()
+                    }
+                    check(wakesPosted.await(5, TimeUnit.SECONDS))
+                } finally {
+                    background.shutdownNow()
+                }
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                currentCause = startCause
+                currentWindowEventCount = 0
+                if (startCause == StartCause.Init) {
+                    trace += "newEvents:Init"
+                }
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                currentWindowEventCount += 1
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                when (currentCause) {
+                    StartCause.Init -> {
+                        trace += "aboutToWait:Init"
+                        initComplete.complete(Unit)
+                    }
+
+                    is StartCause.WaitCancelled -> {
+                        if (currentWindowEventCount == 0) {
+                            unexpectedEmptyIteration.countDown()
+                        }
+                    }
+
+                    else -> Unit
+                }
+                currentCause = null
+            }
+        }
+
+        withActivity(handler) {
+            await(initComplete, handler)
+            assertFalse(
+                unexpectedEmptyIteration.await(750L, TimeUnit.MILLISECONDS),
+                "two wakes queued before Init produced a later empty WaitCancelled iteration",
+            )
+            assertEquals(listOf("newEvents:Init", "aboutToWait:Init"), trace)
+            handler.rethrowFailure()
+        }
+    }
+
     private fun withActivity(handler: GuardedHandler, assertions: () -> Unit) {
+        withActivityScenario(handler) {
+            assertions()
+        }
+    }
+
+    private fun withActivityScenario(
+        handler: GuardedHandler,
+        assertions: (ActivityScenario<SurfaceLifecycleTestActivity>) -> Unit,
+    ) {
         SurfaceLifecycleTestActivity.handlerFactory = { handler }
         val scenario = ActivityScenario.launch(SurfaceLifecycleTestActivity::class.java)
         try {
-            assertions()
+            assertions(scenario)
             handler.rethrowFailure()
         } finally {
             scenario.close()

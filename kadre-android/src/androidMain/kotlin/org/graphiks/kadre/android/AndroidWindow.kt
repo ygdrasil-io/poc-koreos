@@ -210,7 +210,7 @@ class AndroidWindow internal constructor(
                 applyImePurposeToEditorInfo(currentImePurpose, editorInfo)
                 KadreInputConnection(
                     dispatchEvent = { event ->
-                        activity.handler.windowEvent(eventLoop, id, event)
+                        eventLoop.queueWindowEvent(id, event)
                     },
                     targetView = surfaceView,
                     editorInfo = editorInfo,
