@@ -221,8 +221,6 @@ class HelloTriangleApp : ApplicationHandler {
         val interactiveSurface = createInteractiveSurface(win.rawWindowHandle) ?: return
         val wgpuInstance = interactiveSurface.instance
         val surf = interactiveSurface.surface
-        wgpu = wgpuInstance
-        surface = surf
 
         // 3. Adapter
         val adapter = wgpuInstance.requestAdapter(surf)
@@ -247,7 +245,6 @@ class HelloTriangleApp : ApplicationHandler {
                 wgpuInstance.close()
                 return
             }
-        gpuDevice = device
         println("[hello-triangle] Device created")
 
         // 5a. Surface configuration
@@ -290,12 +287,17 @@ class HelloTriangleApp : ApplicationHandler {
                 ),
             )
         )
-        pipeline = renderPipeline
         println("[hello-triangle] Render pipeline created — ready to draw (GRA-138)")
 
         // Release the shader module (no longer needed after pipeline creation)
         shaderModule.close()
         adapter.close()
+
+        // Publish long-lived resources only once initialization is complete.
+        wgpu = wgpuInstance
+        surface = surf
+        gpuDevice = device
+        pipeline = renderPipeline
 
         fpsWindowStart = System.currentTimeMillis()
     }
@@ -534,8 +536,9 @@ class HelloTriangleApp : ApplicationHandler {
 /**
  * Entry point of the hello-triangle sample.
  *
- * Must be run from the main macOS thread (guaranteed by Gradle via
- * `-XstartOnFirstThread` in [build.gradle.kts]).
+ * On macOS, this must run on the main thread (guaranteed by Gradle via
+ * `-XstartOnFirstThread` in [build.gradle.kts]). Win32 runs on its normal
+ * event-loop thread with the Primary backend.
  */
 fun main(args: Array<String>) {
     // Native screen capture: `--native-capture <path>` captures the screen via
