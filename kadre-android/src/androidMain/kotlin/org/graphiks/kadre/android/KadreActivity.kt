@@ -52,7 +52,7 @@ import org.graphiks.kadre.core.KeyEvent as KadreKeyEvent
  * - Surface created   → [ApplicationHandler.canCreateSurfaces]
  * - Surface changed → [ApplicationHandler.windowEvent] ([WindowEvent.Resized])
  * - Surface destroyed → [ApplicationHandler.destroySurfaces]
- * - [onDestroy] → [WindowEvent.Destroyed], then `destroyed` guard set + cleanup
+ * - [onDestroy] → [WindowEvent.Destroyed], missing surface-destroy fallback, then cleanup
  *
  * ## Lifecycle vs WindowEvent (two parallel channels)
  * [onResume] / [onPause] / surface-destroyed drive the **app-level**
@@ -106,6 +106,8 @@ abstract class KadreActivity : ComponentActivity() {
      */
     @Volatile
     internal var destroyed = false
+
+    private var surfaceLifecycleActive = false
 
     /**
      * Last dispatched scale factor (display density), to emit
@@ -253,11 +255,11 @@ abstract class KadreActivity : ComponentActivity() {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 if (destroyed) return
                 println("[KadreActivity] surfaceCreated → surface available")
-                // canCreateSurfaces triggers createWindow in the handler,
-                // which creates the AndroidWindow via AndroidEventLoop.createWindow.
-                // Then we transfer the surface to the created window.
-                handler.canCreateSurfaces(eventLoop)
                 eventLoop.onSurfaceCreated(holder.surface)
+                surfaceLifecycleActive = true
+                // canCreateSurfaces triggers createWindow in the handler,
+                // which creates the AndroidWindow and attaches the current surface.
+                handler.canCreateSurfaces(eventLoop)
                 eventLoop.pendingWindow?.let { eventLoop.scheduleFrameIfNeeded(it) }
             }
 
@@ -276,10 +278,16 @@ abstract class KadreActivity : ComponentActivity() {
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 if (destroyed) return
                 println("[KadreActivity] surfaceDestroyed → surface released")
-                handler.destroySurfaces(eventLoop)
-                eventLoop.onSurfaceDestroyed()
+                releaseSurfaceIfNeeded()
             }
         })
+    }
+
+    private fun releaseSurfaceIfNeeded() {
+        if (!surfaceLifecycleActive) return
+        handler.destroySurfaces(eventLoop)
+        eventLoop.onSurfaceDestroyed()
+        surfaceLifecycleActive = false
     }
 
     override fun onResume() {
@@ -545,8 +553,8 @@ abstract class KadreActivity : ComponentActivity() {
         eventLoop.pendingWindow?.let { window ->
             handler.windowEvent(eventLoop, window.id, WindowEvent.Destroyed)
         }
+        releaseSurfaceIfNeeded()
         destroyed = true
-        eventLoop.onSurfaceDestroyed()
         super.onDestroy()
     }
 }

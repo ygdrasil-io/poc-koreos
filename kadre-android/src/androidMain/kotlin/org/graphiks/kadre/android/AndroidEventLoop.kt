@@ -1,6 +1,7 @@
 package org.graphiks.kadre.android
 
 import android.view.Choreographer
+import android.view.Surface
 import androidx.activity.ComponentActivity
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ControlFlow
@@ -27,22 +28,22 @@ import org.graphiks.kadre.core.WindowEvent
  * and recreated (e.g. rotation, onPause/onResume). The "pending window" pattern
  * decouples the creation of the [AndroidWindow] object from the surface availability:
  *
- * 1. **[createWindow]** — called from [org.graphiks.kadre.core.ApplicationHandler.canCreateSurfaces]:
- *    immediately creates an [AndroidWindow] bound to the Activity's [SurfaceView] **before**
- *    the surface is available. The window is stored in [pendingWindow].
+ * 1. **[onSurfaceCreated]** — called by [KadreActivity] before
+ *    [org.graphiks.kadre.core.ApplicationHandler.canCreateSurfaces]: remembers the current surface
+ *    independently of whether a window exists yet.
  *
- * 2. **[onSurfaceCreated]** — called by [KadreActivity] on `surfaceCreated`:
- *    transfers the surface to the [AndroidWindow] via [AndroidWindow.onSurfaceAvailable].
- *    From that point on, [AndroidWindow.rawWindowHandle] is valid.
+ * 2. **[createWindow]** — called from
+ *    [org.graphiks.kadre.core.ApplicationHandler.canCreateSurfaces]: immediately creates an
+ *    [AndroidWindow], attaches the remembered surface, and stores it in [pendingWindow].
  *
  * 3. **[onSurfaceDestroyed]** — called by [KadreActivity] on `surfaceDestroyed`:
  *    invalidates the surface via [AndroidWindow.onSurfaceReleased].
  *
  * ## Timing contract for [AndroidWindow.rawWindowHandle]
  *
- * [AndroidWindow.rawWindowHandle] throws [IllegalStateException] if the surface is not
- * yet available (between [createWindow] and [onSurfaceCreated]). Renderers must
- * only access the handle within or after [ApplicationHandler.canCreateSurfaces].
+ * [AndroidWindow.rawWindowHandle] throws [IllegalStateException] if no surface is active.
+ * A window created from [ApplicationHandler.canCreateSurfaces] receives the current surface
+ * before [createWindow] returns, so renderers can read the handle inside that callback.
  *
  * ## Frame scheduling
  *
@@ -67,7 +68,7 @@ internal class AndroidEventLoop(
     private var frameCallbackScheduled = false
 
     /**
-     * Window created via [createWindow] and awaiting a surface.
+     * Current window created via [createWindow].
      *
      * Null before the first call to [createWindow], non-null afterwards.
      * The surface itself is only available after [onSurfaceCreated].
@@ -76,25 +77,28 @@ internal class AndroidEventLoop(
     internal var pendingWindow: AndroidWindow? = null
         private set
 
+    private var currentSurface: Surface? = null
+
     /**
      * Creates an [AndroidWindow] bound to the Activity's [SurfaceView].
      *
-     * Immediately returns a valid [AndroidWindow] **before** the
-     * [android.view.Surface] is available ("pending window" pattern).
-     * [AndroidWindow.rawWindowHandle] is only accessible after [onSurfaceCreated].
+     * Immediately returns an [AndroidWindow] with the current surface attached when one is
+     * active ("pending window" pattern). [AndroidWindow.rawWindowHandle] is inaccessible only
+     * when Android has not published a surface yet or has already destroyed it.
      *
      * May be called multiple times: each call replaces the [pendingWindow]
      * reference (rare case — a single window per Activity is the norm).
      *
      * @param attributes Window attributes (title, size, etc.).
      *                   On Android, title and resizing are ignored.
-     * @return An [AndroidWindow] whose surface will be available after [onSurfaceCreated].
+     * @return An [AndroidWindow] whose surface matches the current Android lifecycle state.
      */
     override fun createWindow(attributes: WindowAttributes): Window {
         val kadreActivity = activity as KadreActivity
-        val window = AndroidWindow(kadreActivity.surfaceView, this, kadreActivity)
-        pendingWindow = window
-        return window
+        return AndroidWindow(kadreActivity.surfaceView, this, kadreActivity).also { window ->
+            currentSurface?.let(window::onSurfaceAvailable)
+            pendingWindow = window
+        }
     }
 
     /**
@@ -115,12 +119,13 @@ internal class AndroidEventLoop(
      * Called by [KadreActivity] on `surfaceCreated`. After this call,
      * [AndroidWindow.rawWindowHandle] returns a valid
      * [org.graphiks.kadre.core.RawWindowHandle.Android]. If no window has yet been
-     * created via [createWindow], the [holder] is ignored (the surface will be
-     * provided on the next [createWindow]).
+     * created via [createWindow], the surface is retained and attached by the next
+     * [createWindow] call.
      *
      * @param surface The Android surface freshly created by the SurfaceHolder.
      */
-    internal fun onSurfaceCreated(surface: android.view.Surface) {
+    internal fun onSurfaceCreated(surface: Surface) {
+        currentSurface = surface
         pendingWindow?.onSurfaceAvailable(surface)
     }
 
@@ -133,6 +138,7 @@ internal class AndroidEventLoop(
      */
     internal fun onSurfaceDestroyed() {
         pendingWindow?.onSurfaceReleased()
+        currentSurface = null
     }
 
     override fun setControlFlow(controlFlow: ControlFlow) {

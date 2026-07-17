@@ -7,10 +7,13 @@ class SurfaceLifecycleTestActivity : KadreActivity() {
         checkNotNull(handlerFactory) { "Surface lifecycle test handler factory is not configured" }.invoke()
 
     override fun onDestroy() {
+        val changingConfigurations = isChangingConfigurations
         try {
             super.onDestroy()
         } finally {
-            handlerFactory = null
+            if (!changingConfigurations) {
+                handlerFactory = null
+            }
         }
     }
 

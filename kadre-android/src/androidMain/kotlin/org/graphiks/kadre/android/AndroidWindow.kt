@@ -46,7 +46,8 @@ import kotlin.math.max
  *
  * | Event | Surface state | [rawWindowHandle] |
  * |-----------|--------------|-------------------|
- * | After [AndroidEventLoop.createWindow] | Unavailable | Throws [IllegalStateException] |
+ * | After [AndroidEventLoop.createWindow] before `surfaceCreated` | Unavailable | Throws [IllegalStateException] |
+ * | After [AndroidEventLoop.createWindow] during `canCreateSurfaces` | Available | Returns valid [RawWindowHandle.Android] |
  * | After [onSurfaceAvailable] | Available | Returns valid [RawWindowHandle.Android] |
  * | After [onSurfaceReleased] | Unavailable | Throws [IllegalStateException] |
  *
