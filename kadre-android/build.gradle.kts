@@ -34,11 +34,14 @@ afterEvaluate {
     }
 }
 
-android {
-    namespace = "org.graphiks.kadre.android"
-}
-
 kotlin {
+    android {
+        namespace = "org.graphiks.kadre.android"
+        withHostTest {
+            isIncludeAndroidResources = true
+        }
+    }
+
     // ABI compatibility validation — integrated into the Kotlin plugin.
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation()
@@ -54,7 +57,7 @@ kotlin {
                 implementation("androidx.activity:activity:1.10.1")
             }
         }
-        val androidUnitTest by getting {
+        val androidHostTest by getting {
             dependencies {
                 implementation(kotlin("test"))
             }
