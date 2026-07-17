@@ -425,7 +425,15 @@ private fun runAppInternal(handler: ApplicationHandler) {
     }
 
     var seatBinding: WaylandSeatBinding? = null
-    try {
+    preservingWaylandCleanup(
+        cleanupActions = listOf(
+            { closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) } },
+            {
+                val binding = seatBinding
+                if (binding != null) binding.close()
+            },
+        ),
+    ) {
         // ── 4. Discover Wayland globals (compositor, seat, output) ───────────
         // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
         val globals = discoverGlobals(displayPtr)
@@ -532,23 +540,48 @@ private fun runAppInternal(handler: ApplicationHandler) {
         // ── 9. Shutdown ───────────────────────────────────────────────────────
         handler.destroySurfaces(eventLoop)
         handler.suspended(eventLoop)
-    } finally {
-        var cleanupFailure: Throwable? = null
+    }
+}
+
+/**
+ * Runs cleanup actions in order without losing the failure that left the loop body.
+ * If [primary] is null, the first cleanup failure becomes primary and later failures
+ * are suppressed on it. Otherwise every cleanup failure is suppressed directly on
+ * [primary], which is already propagating from the body.
+ */
+internal fun runWaylandCleanup(
+    primary: Throwable?,
+    cleanupActions: List<() -> Unit>,
+) {
+    var cleanupPrimary: Throwable? = null
+    for (cleanup in cleanupActions) {
         try {
-            closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) }
+            cleanup()
         } catch (failure: Throwable) {
-            cleanupFailure = failure
-        }
-        try {
-            seatBinding?.close()
-        } catch (failure: Throwable) {
-            cleanupFailure = if (cleanupFailure == null) {
-                failure
-            } else {
-                cleanupFailure.also { it.addSuppressed(failure) }
+            if (primary != null) {
+                if (failure !== primary) primary.addSuppressed(failure)
+            } else if (cleanupPrimary == null) {
+                cleanupPrimary = failure
+            } else if (failure !== cleanupPrimary) {
+                cleanupPrimary.addSuppressed(failure)
             }
         }
-        cleanupFailure?.let { throw it }
+    }
+    if (primary == null) cleanupPrimary?.let { throw it }
+}
+
+internal fun <T> preservingWaylandCleanup(
+    cleanupActions: List<() -> Unit>,
+    body: () -> T,
+): T {
+    var bodyFailure: Throwable? = null
+    try {
+        return body()
+    } catch (failure: Throwable) {
+        bodyFailure = failure
+        throw failure
+    } finally {
+        runWaylandCleanup(bodyFailure, cleanupActions)
     }
 }
 
@@ -557,11 +590,10 @@ internal fun closeWaylandResources(
     disconnectDisplay: () -> Unit,
 ) {
     // Stop every proxy before invalidating the display they wake.
-    try {
-        wakeup.close()
-    } finally {
-        disconnectDisplay()
-    }
+    runWaylandCleanup(
+        primary = null,
+        cleanupActions = listOf(wakeup::close, disconnectDisplay),
+    )
 }
 
 internal interface WaylandPumpOperations {

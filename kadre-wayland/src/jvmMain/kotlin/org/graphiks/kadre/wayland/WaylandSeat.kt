@@ -27,9 +27,10 @@
  * `ScaleFactorChanged`.
  *
  * ### Arena lifetime
- * All upcall stubs live in a single [Arena.ofShared] created in [WaylandSeatBinding.install].
- * It is never closed (the seat lasts for the entire Wayland session), so the stubs remain
- * valid for the process lifetime. This matches the pattern used by [XdgToplevel].
+ * All upcall stubs live in a single [Arena.ofShared] created by [installSeatListeners].
+ * The returned [WaylandSeatBinding] keeps the arena and listener owners alive for the
+ * Wayland session. [WaylandSeatBinding.close] releases them only after the display has
+ * disconnected, so no compositor can call a freed stub.
  */
 package org.graphiks.kadre.wayland
 import org.graphiks.kadre.ffi.wayland.*
@@ -72,8 +73,8 @@ internal const val WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1: Int = 1
 /** Native operations injected into [WaylandKeymapLoader] for deterministic ownership tests. */
 internal interface WaylandKeymapOperations {
     fun mmap(fd: Int, size: Int): MemorySegment?
-    fun munmap(mapping: MemorySegment, size: Int)
-    fun close(fd: Int)
+    fun munmap(mapping: MemorySegment, size: Int): Int
+    fun close(fd: Int): Int
     fun contextNew(): MemorySegment?
     fun keymapNewFromString(context: MemorySegment, mapping: MemorySegment): MemorySegment?
     fun stateNew(keymap: MemorySegment): MemorySegment?
@@ -97,14 +98,14 @@ private object NativeWaylandKeymapOperations : WaylandKeymapOperations {
             0L,
         ) as? MemorySegment
 
-    override fun munmap(mapping: MemorySegment, size: Int) {
+    override fun munmap(mapping: MemorySegment, size: Int): Int {
         val munmap = checkNotNull(nativeMunmap) { "munmap is unavailable" }
-        munmap.invokeExact(mapping, size.toLong()) as Int
+        return munmap.invokeExact(mapping, size.toLong()) as Int
     }
 
-    override fun close(fd: Int) {
+    override fun close(fd: Int): Int {
         val close = checkNotNull(nativeClose) { "close is unavailable" }
-        close.invokeExact(fd) as Int
+        return close.invokeExact(fd) as Int
     }
 
     override fun contextNew(): MemorySegment? =
@@ -181,7 +182,7 @@ internal class WaylandKeymapLoader(
             failure = caught
         } finally {
             try {
-                operations.close(fd)
+                requireNativeSuccess("close", operations.close(fd))
             } catch (closeFailure: Throwable) {
                 failure = combineFailures(failure, closeFailure)
             }
@@ -225,7 +226,7 @@ internal class WaylandKeymapLoader(
             throw caught
         } finally {
             try {
-                operations.munmap(mapping, size)
+                requireNativeSuccess("munmap", operations.munmap(mapping, size))
             } catch (unmapFailure: Throwable) {
                 val primary = combineFailures(failure, unmapFailure)
                 if (failure == null) throw checkNotNull(primary)
@@ -236,6 +237,10 @@ internal class WaylandKeymapLoader(
     private fun requireResource(operation: String, resource: MemorySegment?): MemorySegment =
         resource?.takeUnless { it.address() == 0L }
             ?: error("$operation failed")
+
+    private fun requireNativeSuccess(operation: String, returnCode: Int) {
+        check(returnCode == 0) { "$operation failed with return code $returnCode" }
+    }
 
     private fun releaseCurrent() {
         val owned = current
@@ -705,7 +710,8 @@ internal fun seatHasCapability(caps: Int, capBit: Int): Boolean = (caps and capB
  * A strong reference prevents the arena (and the upcall stubs) from being GC'd.
  */
 internal class WaylandSeatBinding internal constructor(
-    private val arena: Arena,
+    arena: Arena,
+    private val closeArena: () -> Unit = arena::close,
 ) : AutoCloseable {
     private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -719,13 +725,16 @@ internal class WaylandSeatBinding internal constructor(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         seatBindings.remove(this)
-        try {
-            keyboardOwner?.close()
-        } finally {
-            keyboardOwner = null
-            dnd = null
-            arena.close()
-        }
+        val ownedKeyboard = keyboardOwner
+        keyboardOwner = null
+        dnd = null
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = listOf(
+                { ownedKeyboard?.close(); Unit },
+                closeArena,
+            ),
+        )
     }
 }
 

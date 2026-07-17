@@ -29,6 +29,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandEventLoopSmokeTest {
@@ -361,6 +362,63 @@ class WaylandEventLoopSmokeTest {
 
         assertEquals("injected close failure", failure.message)
         assertEquals(listOf("close", "disconnect"), trace)
+    }
+
+    @Test
+    fun `cleanup keeps wakeup failure primary and suppresses disconnect failure`() {
+        val trace = mutableListOf<String>()
+        val wakeupFailure = IllegalStateException("wakeup-close")
+        val disconnectFailure = IllegalArgumentException("display-disconnect")
+        val wakeup = object : PosixWakeup {
+            override val readFd: Int = 73
+            override fun signal(): Boolean = true
+            override fun drain(): Boolean = true
+            override fun close() {
+                trace += "close"
+                throw wakeupFailure
+            }
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            closeWaylandResources(wakeup) {
+                trace += "disconnect"
+                throw disconnectFailure
+            }
+        }
+
+        assertSame(wakeupFailure, failure)
+        assertEquals(listOf("close", "disconnect"), trace)
+        assertEquals(listOf(disconnectFailure), failure.suppressed.toList())
+    }
+
+    @Test
+    fun `run cleanup keeps body failure primary and suppresses every cleanup failure in order`() {
+        val trace = mutableListOf<String>()
+        val bodyFailure = IllegalStateException("handler")
+        val wakeupFailure = IllegalArgumentException("wakeup")
+        val bindingFailure = UnsupportedOperationException("binding")
+
+        val failure = assertFailsWith<IllegalStateException> {
+            preservingWaylandCleanup(
+                cleanupActions = listOf(
+                    {
+                        trace += "wakeup"
+                        throw wakeupFailure
+                    },
+                    {
+                        trace += "binding"
+                        throw bindingFailure
+                    },
+                ),
+            ) {
+                trace += "body"
+                throw bodyFailure
+            }
+        }
+
+        assertSame(bodyFailure, failure)
+        assertEquals(listOf("body", "wakeup", "binding"), trace)
+        assertEquals(listOf(wakeupFailure, bindingFailure), failure.suppressed.toList())
     }
 
     /**
