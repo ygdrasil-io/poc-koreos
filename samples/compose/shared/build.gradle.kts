@@ -2,23 +2,18 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     kotlin("multiplatform")
-    id("com.android.library")
+    id("com.android.kotlin.multiplatform.library")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
 }
 
-android {
-    namespace = "org.graphiks.kadre.samples.compose.shared"
-    compileSdk = 35
-    defaultConfig { minSdk = 24 }
-}
-
 kotlin {
     jvm()
-    androidTarget {
-        publishLibraryVariants("release")
+    android {
+        namespace = "org.graphiks.kadre.samples.compose.shared"
+        compileSdk = 35
+        minSdk = 24
     }
-    iosX64()
     iosArm64()
     iosSimulatorArm64()
     js(IR) { browser() }
