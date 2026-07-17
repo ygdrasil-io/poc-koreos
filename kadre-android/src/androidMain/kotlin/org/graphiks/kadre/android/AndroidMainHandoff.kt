@@ -4,6 +4,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
 
 internal const val MAIN_HANDOFF_TIMEOUT_MILLIS = 5_000L
 
@@ -12,7 +13,7 @@ internal fun <T> boundedMainHandoff(
     post: (Runnable) -> Boolean,
     action: () -> T,
 ): T {
-    val task = FutureTask<T> { action() }
+    val task = StartAwareFutureTask(action)
     if (!post(task)) {
         task.cancel(false)
         throw IllegalStateException("Main-thread handoff was rejected by Handler")
@@ -21,20 +22,76 @@ internal fun <T> boundedMainHandoff(
     return try {
         task.get(timeoutMillis, TimeUnit.MILLISECONDS)
     } catch (failure: TimeoutException) {
-        task.cancel(false)
-        throw IllegalStateException(
-            "Main-thread handoff timed out after $timeoutMillis ms",
-            failure,
-        )
-    } catch (failure: InterruptedException) {
-        task.cancel(false)
-        Thread.currentThread().interrupt()
-        throw IllegalStateException("Main-thread handoff was interrupted", failure)
-    } catch (failure: ExecutionException) {
-        when (val cause = failure.cause ?: failure) {
-            is RuntimeException -> throw cause
-            is Error -> throw cause
-            else -> throw IllegalStateException("Main-thread handoff action failed", cause)
+        if (task.cancel(false)) {
+            throw IllegalStateException(
+                "Main-thread handoff timed out after $timeoutMillis ms",
+                failure,
+            )
         }
+        awaitTerminalOutcome(task)
+    } catch (failure: InterruptedException) {
+        if (task.cancel(false)) {
+            Thread.currentThread().interrupt()
+            throw IllegalStateException("Main-thread handoff was interrupted", failure)
+        }
+        awaitTerminalOutcome(task, restoreInterrupt = true)
+    } catch (failure: ExecutionException) {
+        rethrowExecutionFailure(failure)
+    }
+}
+
+private fun <T> awaitTerminalOutcome(
+    task: FutureTask<T>,
+    restoreInterrupt: Boolean = false,
+): T {
+    var interrupted = restoreInterrupt
+    try {
+        while (true) {
+            try {
+                return task.get()
+            } catch (_: InterruptedException) {
+                interrupted = true
+            } catch (failure: ExecutionException) {
+                rethrowExecutionFailure(failure)
+            }
+        }
+    } finally {
+        if (interrupted) Thread.currentThread().interrupt()
+    }
+}
+
+private fun rethrowExecutionFailure(failure: ExecutionException): Nothing {
+    when (val cause = failure.cause ?: failure) {
+        is RuntimeException -> throw cause
+        is Error -> throw cause
+        else -> throw IllegalStateException("Main-thread handoff action failed", cause)
+    }
+}
+
+private class StartAwareFutureTask<T>(action: () -> T) : FutureTask<T>({ action() }) {
+    private val state = MainHandoffTaskState()
+
+    override fun run() {
+        if (!state.tryStart()) return
+        super.run()
+    }
+
+    override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
+        if (!state.tryCancelBeforeStart()) return false
+        return super.cancel(mayInterruptIfRunning)
+    }
+}
+
+internal class MainHandoffTaskState {
+    private val phase = AtomicReference(Phase.Pending)
+
+    fun tryStart(): Boolean = phase.compareAndSet(Phase.Pending, Phase.Running)
+
+    fun tryCancelBeforeStart(): Boolean = phase.compareAndSet(Phase.Pending, Phase.Cancelled)
+
+    private enum class Phase {
+        Pending,
+        Running,
+        Cancelled,
     }
 }

@@ -378,10 +378,12 @@ internal class AndroidEventLoop(
             proxyWakeQueued.set(false)
             state.takeStartCause(controlFlow)
         }
+        val windowEvents = takeWindowEvents()
+        val redraws = state.takeRedraws()
         inIteration = true
         try {
             kadreActivity.handler.newEvents(this, cause)
-            takeWindowEvents().forEach { queuedEvent ->
+            windowEvents.forEach { queuedEvent ->
                 openWindow(queuedEvent.windowId)?.let {
                     kadreActivity.handler.windowEvent(
                         this,
@@ -390,7 +392,7 @@ internal class AndroidEventLoop(
                     )
                 }
             }
-            state.takeRedraws().forEach { windowId ->
+            redraws.forEach { windowId ->
                 openWindow(windowId)?.let {
                     kadreActivity.handler.windowEvent(
                         this,

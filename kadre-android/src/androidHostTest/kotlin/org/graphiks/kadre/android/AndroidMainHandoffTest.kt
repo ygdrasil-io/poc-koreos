@@ -1,8 +1,14 @@
 package org.graphiks.kadre.android
 
 import java.io.IOException
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -12,6 +18,151 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AndroidMainHandoffTest {
+    @Test
+    fun handoffStartAndCancellationTransitionsAreMutuallyExclusive() {
+        val startFirst = MainHandoffTaskState()
+        assertTrue(startFirst.tryStart())
+        assertFalse(startFirst.tryCancelBeforeStart())
+
+        val cancelFirst = MainHandoffTaskState()
+        assertTrue(cancelFirst.tryCancelBeforeStart())
+        assertFalse(cancelFirst.tryStart())
+
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            repeat(100) {
+                val state = MainHandoffTaskState()
+                val ready = CountDownLatch(2)
+                val start = CountDownLatch(1)
+                val startWon = AtomicBoolean(false)
+                val cancelWon = AtomicBoolean(false)
+                val startFuture = executor.submit {
+                    ready.countDown()
+                    start.await()
+                    startWon.set(state.tryStart())
+                }
+                val cancelFuture = executor.submit {
+                    ready.countDown()
+                    start.await()
+                    cancelWon.set(state.tryCancelBeforeStart())
+                }
+
+                assertTrue(ready.await(5L, TimeUnit.SECONDS))
+                start.countDown()
+                startFuture.get(5L, TimeUnit.SECONDS)
+                cancelFuture.get(5L, TimeUnit.SECONDS)
+                assertTrue(startWon.get() != cancelWon.get())
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun timedOutRunningHandoffWaitsForFinalResult() {
+        val actionStarted = CountDownLatch(1)
+        val releaseAction = CountDownLatch(1)
+        val allowPostReturn = Semaphore(0)
+        val callerReturned = CountDownLatch(1)
+        val outcome = CompletableFuture<Int>()
+        val caller = Thread {
+            try {
+                outcome.complete(
+                    boundedMainHandoff(
+                        timeoutMillis = 0L,
+                        post = { task ->
+                            Thread(task, "running-timeout-action").start()
+                            check(actionStarted.await(5L, TimeUnit.SECONDS))
+                            allowPostReturn.acquireUninterruptibly()
+                            true
+                        },
+                    ) {
+                        actionStarted.countDown()
+                        check(releaseAction.await(5L, TimeUnit.SECONDS))
+                        42
+                    },
+                )
+            } catch (failure: Throwable) {
+                outcome.completeExceptionally(failure)
+            } finally {
+                callerReturned.countDown()
+            }
+        }
+
+        caller.start()
+        try {
+            assertTrue(actionStarted.await(5L, TimeUnit.SECONDS))
+            allowPostReturn.release()
+            assertFalse(
+                callerReturned.await(250L, TimeUnit.MILLISECONDS),
+                "running action was reported as timed out before its terminal result",
+            )
+
+            releaseAction.countDown()
+            assertEquals(42, outcome.get(5L, TimeUnit.SECONDS))
+            assertTrue(callerReturned.await(5L, TimeUnit.SECONDS))
+        } finally {
+            allowPostReturn.release()
+            releaseAction.countDown()
+            caller.join(5_000L)
+        }
+    }
+
+    @Test
+    fun interruptedRunningHandoffWaitsForFinalResultAndRestoresInterrupt() {
+        val actionStarted = CountDownLatch(1)
+        val callerReadyForInterrupt = CountDownLatch(1)
+        val releaseAction = CountDownLatch(1)
+        val allowPostReturn = Semaphore(0)
+        val callerReturned = CountDownLatch(1)
+        val interruptRestored = AtomicBoolean(false)
+        val outcome = CompletableFuture<Int>()
+        val caller = Thread {
+            try {
+                val result = boundedMainHandoff(
+                    timeoutMillis = 5_000L,
+                    post = { task ->
+                        Thread(task, "running-interrupted-action").start()
+                        check(actionStarted.await(5L, TimeUnit.SECONDS))
+                        callerReadyForInterrupt.countDown()
+                        allowPostReturn.acquireUninterruptibly()
+                        true
+                    },
+                ) {
+                    actionStarted.countDown()
+                    check(releaseAction.await(5L, TimeUnit.SECONDS))
+                    42
+                }
+                interruptRestored.set(Thread.currentThread().isInterrupted)
+                outcome.complete(result)
+            } catch (failure: Throwable) {
+                outcome.completeExceptionally(failure)
+            } finally {
+                callerReturned.countDown()
+            }
+        }
+
+        caller.start()
+        try {
+            assertTrue(callerReadyForInterrupt.await(5L, TimeUnit.SECONDS))
+            caller.interrupt()
+            allowPostReturn.release()
+            assertFalse(
+                callerReturned.await(250L, TimeUnit.MILLISECONDS),
+                "running action was reported as interrupted before its terminal result",
+            )
+
+            releaseAction.countDown()
+            assertEquals(42, outcome.get(5L, TimeUnit.SECONDS))
+            assertTrue(interruptRestored.get())
+            assertTrue(callerReturned.await(5L, TimeUnit.SECONDS))
+        } finally {
+            allowPostReturn.release()
+            releaseAction.countDown()
+            caller.join(5_000L)
+        }
+    }
+
     @Test
     fun acceptedHandoffReturnsActionResult() {
         val result = boundedMainHandoff(

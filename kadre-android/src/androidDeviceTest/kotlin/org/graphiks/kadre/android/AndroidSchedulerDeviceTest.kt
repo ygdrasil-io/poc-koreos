@@ -35,6 +35,105 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 class AndroidSchedulerDeviceTest {
     @Test
+    fun eventQueuedFromNewEventsIsDeliveredOnlyInNextIterationWithoutEmptyWake() {
+        val ready = CompletableFuture<EventLoopProxy>()
+        val stabilizationComplete = CompletableFuture<Unit>()
+        val completedTrace = CompletableFuture<List<String>>()
+        val unexpectedIteration = CountDownLatch(1)
+        val trace = CopyOnWriteArrayList<String>()
+        val queuedEvent = WindowEvent.Focused(true)
+        val exerciseRequested = AtomicBoolean(false)
+        val handler = object : GuardedHandler() {
+            private var windowId: WindowId? = null
+            private var waitCancelledIteration = 0
+            private var stabilizationIteration = false
+            private var currentWindowEventCount = 0
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                windowId = eventLoop.createWindow(WindowAttributes()).id
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (startCause !is StartCause.WaitCancelled) return
+                if (!exerciseRequested.get()) {
+                    stabilizationIteration = true
+                    return
+                }
+
+                waitCancelledIteration += 1
+                currentWindowEventCount = 0
+                trace += "newEvents#$waitCancelledIteration"
+                when (waitCancelledIteration) {
+                    1 -> (eventLoop as AndroidEventLoop).queueWindowEvent(
+                        checkNotNull(windowId),
+                        queuedEvent,
+                    )
+                    2 -> Unit
+                    else -> Unit
+                }
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (waitCancelledIteration > 0) {
+                    currentWindowEventCount += 1
+                }
+                if (event === queuedEvent) {
+                    trace += "Focused#$waitCancelledIteration"
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (stabilizationIteration && !exerciseRequested.get()) {
+                    stabilizationIteration = false
+                    stabilizationComplete.complete(Unit)
+                    return
+                }
+                when (waitCancelledIteration) {
+                    0 -> ready.complete(eventLoop.createProxy())
+                    1 -> trace += "aboutToWait#1"
+                    2 -> {
+                        trace += "aboutToWait#2"
+                        completedTrace.complete(trace.toList())
+                    }
+
+                    else -> {
+                        if (currentWindowEventCount == 0) {
+                            unexpectedIteration.countDown()
+                        }
+                    }
+                }
+            }
+        }
+
+        withActivity(handler) {
+            val proxy = await(ready, handler)
+            proxy.wakeUp()
+            await(stabilizationComplete, handler)
+            exerciseRequested.set(true)
+            proxy.wakeUp()
+            assertEquals(
+                listOf(
+                    "newEvents#1",
+                    "aboutToWait#1",
+                    "newEvents#2",
+                    "Focused#2",
+                    "aboutToWait#2",
+                ),
+                await(completedTrace, handler),
+            )
+            assertFalse(
+                unexpectedIteration.await(750L, TimeUnit.MILLISECONDS),
+                "queued event produced an additional empty WaitCancelled iteration",
+            )
+            handler.rethrowFailure()
+        }
+    }
+
+    @Test
     fun backgroundCreateWindowCompletesAndReplacesWindowWithDistinctId() {
         val ready = CompletableFuture<Pair<ActiveEventLoop, Window>>()
         val handler = object : GuardedHandler() {
