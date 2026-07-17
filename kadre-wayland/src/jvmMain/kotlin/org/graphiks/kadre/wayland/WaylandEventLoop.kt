@@ -90,12 +90,6 @@ class WaylandEventLoop internal constructor(
     /** Returns the set of protocol interface names announced by the compositor. */
     internal fun protocols(): Set<String> = _globals?.availableProtocols ?: emptySet()
 
-    /**
-     * Real monitor information collected from wl_output geometry/mode/scale events.
-     * Keyed by wl_output proxy address. Populated during [installSeatListeners].
-     */
-    internal val outputInfos = ConcurrentHashMap<Long, WaylandOutputInfo>()
-
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
 
@@ -162,7 +156,7 @@ class WaylandEventLoop internal constructor(
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
-        window.outputInfos = outputInfos
+        window.registryOwner = _globals?.registryOwner
         windows[window.id.value] = window
         // Initial paint so the surface attaches a buffer and becomes visible. Subsequent repaints
         // are driven on demand (e.g. after a resize), not continuously — see the main loop.
@@ -192,7 +186,7 @@ class WaylandEventLoop internal constructor(
             kwinBlurManagerPtr = kwinBlurManagerPtr,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
-        window.outputInfos = outputInfos
+        window.registryOwner = _globals?.registryOwner
         windows[window.id.value] = window
         // Apply platform extension settings
         attrs.preferCsd?.let { window.setPreferCsd(it) }
@@ -221,7 +215,7 @@ class WaylandEventLoop internal constructor(
      * startup), falls back to a synthetic monitor.
      */
     override fun availableMonitors(): List<MonitorHandle> {
-        val realOutputs = outputInfos.values.map { it.toMonitorHandle() }
+        val realOutputs = _globals?.registryOwner?.outputs?.map { it.info.toMonitorHandle() }.orEmpty()
         if (realOutputs.isNotEmpty()) return realOutputs
 
         // Fallback: synthetic monitor from first window
@@ -354,7 +348,11 @@ private fun syntheticWaylandMonitor(
     override val name: String? = null
     override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
     override val scaleFactor: Double = scale
-    override val currentVideoMode: VideoMode = VideoMode(size, null, null)
+    override val currentVideoMode: VideoMode = VideoMode(
+        size = size,
+        bitDepth = null,
+        refreshRateMilliHz = null,
+    )
     override val videoModes: List<VideoMode> = listOf(currentVideoMode)
 }
 
@@ -425,8 +423,10 @@ private fun runAppInternal(handler: ApplicationHandler) {
     }
 
     var seatBinding: WaylandSeatBinding? = null
+    var registryOwner: WaylandRegistryOwner? = null
     preservingWaylandCleanup(
         cleanupActions = listOf(
+            { registryOwner?.close() },
             { closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) } },
             {
                 val binding = seatBinding
@@ -437,6 +437,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         // ── 4. Discover Wayland globals (compositor, seat, output) ───────────
         // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
         val globals = discoverGlobals(displayPtr)
+        registryOwner = globals.registryOwner
 
         val eventLoop = WaylandEventLoop(
             displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, wakeup,
@@ -444,6 +445,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
             globals.activationManagerPtr, globals.seatPtr,
             globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
         ).also { it._globals = globals }
+        globals.registryOwner?.routeNativeFailuresTo(eventLoop::queueNativeFailure)
 
         // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
         // Route all input events into the eventQueue by their source wl_surface.
@@ -452,33 +454,16 @@ private fun runAppInternal(handler: ApplicationHandler) {
         seatBinding = installSeatListeners(
             displayPtr    = displayPtr,
             seatPtr       = globals.seatPtr,
-            outputPtr     = globals.outputPtr,
             seatVersion   = globals.seatVersion,
-            outputVersion = globals.outputVersion,
             onEvent = { surfacePtr, event ->
                 routeWaylandInputEvent(surfacePtr, event, eventLoop.windows, eventLoop.eventQueue)
             },
             onDeviceEvent = { event ->
                 handler.deviceEvent(eventLoop, DeviceId(0L), event)
             },
-            onScaleChanged = { scale ->
-                val factor = scale.toDouble()
-                for (win in eventLoop.windows.values) {
-                    if (win._scaleFactor != factor) {
-                        win._scaleFactor = factor
-                        eventLoop.eventQueue.add(win.id to org.graphiks.kadre.core.WindowEvent.ScaleFactorChanged(factor))
-                    }
-                }
-            },
             dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
             deviceFilter = eventLoop.liveDeviceFilter,
             onNativeFailure = eventLoop::queueNativeFailure,
-            outputInfos = eventLoop.outputInfos,
-            onOutputChanged = { info ->
-                // WaylandOutputInfo objects are updated in-place. Applications can
-                // query currentMonitor/availableMonitors on any window to see changes.
-                // A future sprint could add a dedicated MonitorListChanged event.
-            },
         )
         eventLoop.throwPendingNativeFailure()
 

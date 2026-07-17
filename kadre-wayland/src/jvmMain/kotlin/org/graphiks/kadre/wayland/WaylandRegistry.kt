@@ -24,6 +24,8 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Opcode wl_display.get_registry. */
 private const val WL_DISPLAY_GET_REGISTRY: Int = 1
@@ -37,8 +39,7 @@ internal data class WaylandGlobals(
     val decorationManagerPtr: Long = 0L,
     val seatPtr: Long = 0L,
     val seatVersion: Int = 0,
-    val outputPtr: Long = 0L,
-    val outputVersion: Int = 0,
+    val registryOwner: WaylandRegistryOwner? = null,
     val textInputManagerPtr: Long = 0L,
     val shmPtr: Long = 0L,
     val shmVersion: Int = 0,
@@ -50,11 +51,12 @@ internal data class WaylandGlobals(
     val dataDeviceManagerPtr: Long = 0L,
 ) {
     /** All protocol interface names announced by the compositor during wl_registry.global events. */
-    val availableProtocols: Set<String> get() = _availableProtocols
+    val availableProtocols: Set<String>
+        get() = registryOwner?.collector?.allProtocolNames?.toSet() ?: _availableProtocols
     internal var _availableProtocols: Set<String> = emptySet()
 
     /** Returns true if the compositor announced the given protocol interface name. */
-    fun hasProtocol(interfaceName: String): Boolean = interfaceName in _availableProtocols
+    fun hasProtocol(interfaceName: String): Boolean = interfaceName in availableProtocols
 }
 
 /**
@@ -62,7 +64,7 @@ internal data class WaylandGlobals(
  * Kadre needs (`wl_compositor`, `xdg_wm_base`, `wl_seat`, `wl_output`) as they are announced,
  * and records ALL announced protocol interface names for dynamic detection.
  */
-private class GlobalsCollector {
+internal class GlobalsCollector {
     var compositorName: Int = -1
     var compositorVersion: Int = 0
     var xdgWmBaseName: Int = -1
@@ -71,8 +73,6 @@ private class GlobalsCollector {
     var decorationManagerVersion: Int = 0
     var seatName: Int = -1
     var seatVersion: Int = 0
-    var outputName: Int = -1
-    var outputVersion: Int = 0
     var textInputManagerName: Int = -1
     var textInputManagerVersion: Int = 0
     var shmName: Int = -1
@@ -90,18 +90,14 @@ private class GlobalsCollector {
     var dataDeviceManagerName: Int = -1
     var dataDeviceManagerVersion: Int = 0
 
-    /** All protocol interface names announced by the compositor, for dynamic detection. */
+    /** All live protocol interface names announced by the compositor. */
     val allProtocolNames = mutableSetOf<String>()
+    private val protocolByRegistryName = mutableMapOf<Int, String>()
 
-    /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
-    @Suppress("UNUSED_PARAMETER")
-    fun onGlobal(data: MemorySegment, registry: MemorySegment, name: Int, iface: MemorySegment, version: Int) {
-        val ifaceName = try {
-            iface.reinterpret(128).getString(0)
-        } catch (_: Throwable) {
-            return
-        }
-        // Record EVERY announced protocol for dynamic detection (Sprint 3, #271).
+    fun hasProtocol(interfaceName: String): Boolean = interfaceName in allProtocolNames
+
+    fun recordGlobal(name: Int, ifaceName: String, version: Int) {
+        protocolByRegistryName[name] = ifaceName
         allProtocolNames.add(ifaceName)
 
         when (ifaceName) {
@@ -110,7 +106,6 @@ private class GlobalsCollector {
             "zxdg_decoration_manager_v1" ->
                 if (decorationManagerName < 0) { decorationManagerName = name; decorationManagerVersion = version }
             "wl_seat" -> if (seatName < 0) { seatName = name; seatVersion = version }
-            "wl_output" -> if (outputName < 0) { outputName = name; outputVersion = version }
             "zwp_text_input_manager_v3" ->
                 if (textInputManagerName < 0) { textInputManagerName = name; textInputManagerVersion = version }
             "wl_shm" -> if (shmName < 0) { shmName = name; shmVersion = version }
@@ -129,9 +124,276 @@ private class GlobalsCollector {
         }
     }
 
+    fun recordGlobalRemove(name: Int) {
+        val removedProtocol = protocolByRegistryName.remove(name) ?: return
+        if (removedProtocol !in protocolByRegistryName.values) {
+            allProtocolNames.remove(removedProtocol)
+        }
+    }
+
+    /** C callback: void global(data, wl_registry*, uint32 name, const char* interface, uint32 version). */
+    @Suppress("UNUSED_PARAMETER")
+    fun onGlobal(data: MemorySegment, registry: MemorySegment, name: Int, iface: MemorySegment, version: Int) {
+        val ifaceName = try {
+            iface.reinterpret(128).getString(0)
+        } catch (_: Throwable) {
+            return
+        }
+        recordGlobal(name, ifaceName, version)
+    }
+
     /** C callback: void global_remove(data, wl_registry*, uint32 name). */
     @Suppress("UNUSED_PARAMETER")
-    fun onGlobalRemove(data: MemorySegment, registry: MemorySegment, name: Int) { /* no-op */ }
+    fun onGlobalRemove(data: MemorySegment, registry: MemorySegment, name: Int) {
+        recordGlobalRemove(name)
+    }
+}
+
+internal data class BoundOutput(
+    val registryName: Int,
+    val proxy: Long,
+    val version: Int,
+    val info: WaylandOutputInfo,
+)
+
+/**
+ * Owns the live wl_registry listener and every wl_output bound through it.
+ * Output globals remain dynamic for the whole display connection lifetime.
+ */
+internal class WaylandRegistryOwner internal constructor(
+    private val registryPtr: Long,
+    @Suppress("unused") private val listenerArena: Arena,
+    internal val collector: GlobalsCollector,
+    private val bindOutput: (registryName: Int, advertisedVersion: Int) -> Pair<Long, Int>?,
+    private val installOutputListener: (BoundOutput) -> Boolean,
+    private val destroyProxy: (Long) -> Unit,
+    private val closeListenerArena: () -> Unit = listenerArena::close,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+    private val outputsByRegistryName = linkedMapOf<Int, BoundOutput>()
+    private val removalListeners = CopyOnWriteArrayList<(Long) -> Unit>()
+    private val scaleListeners = CopyOnWriteArrayList<(WaylandOutputInfo, Int) -> Unit>()
+    private val ownedChildren = mutableListOf<AutoCloseable>()
+    private val nativeFailureLock = Any()
+    private val pendingNativeFailures = ArrayDeque<Throwable>()
+    @Volatile private var nativeFailureSink: ((Throwable) -> Unit)? = null
+
+    @Volatile
+    var onOutputChanged: ((WaylandOutputInfo) -> Unit)? = null
+
+    @Volatile
+    var onOutputScaleChanged: ((WaylandOutputInfo, Int) -> Unit)? = null
+
+    val outputs: List<BoundOutput>
+        get() = synchronized(outputsByRegistryName) { outputsByRegistryName.values.toList() }
+
+    fun outputForProxy(proxy: Long): BoundOutput? =
+        synchronized(outputsByRegistryName) { outputsByRegistryName.values.firstOrNull { it.proxy == proxy } }
+
+    fun addOutputRemovalListener(listener: (Long) -> Unit): AutoCloseable {
+        removalListeners += listener
+        return AutoCloseable { removalListeners -= listener }
+    }
+
+    fun addOutputScaleListener(listener: (WaylandOutputInfo, Int) -> Unit): AutoCloseable {
+        scaleListeners += listener
+        return AutoCloseable { scaleListeners -= listener }
+    }
+
+    fun ownChild(child: AutoCloseable) {
+        check(!closed.get()) { "Wayland registry owner is already closed" }
+        synchronized(ownedChildren) { ownedChildren += child }
+    }
+
+    fun routeNativeFailuresTo(sink: (Throwable) -> Unit) {
+        val pending = synchronized(nativeFailureLock) {
+            nativeFailureSink = sink
+            buildList {
+                while (pendingNativeFailures.isNotEmpty()) add(pendingNativeFailures.removeFirst())
+            }
+        }
+        pending.forEach(sink)
+    }
+
+    fun throwPendingNativeFailure() {
+        val pending = synchronized(nativeFailureLock) {
+            buildList {
+                while (pendingNativeFailures.isNotEmpty()) add(pendingNativeFailures.removeFirst())
+            }
+        }
+        val primary = pending.firstOrNull() ?: return
+        pending.drop(1).forEach(primary::addSuppressed)
+        throw primary
+    }
+
+    internal fun reportNativeFailure(failure: Throwable) {
+        val sink = synchronized(nativeFailureLock) {
+            nativeFailureSink ?: run {
+                pendingNativeFailures.addLast(failure)
+                null
+            }
+        }
+        if (sink != null) {
+            try {
+                sink(failure)
+            } catch (sinkFailure: Throwable) {
+                synchronized(nativeFailureLock) {
+                    pendingNativeFailures.addLast(failure)
+                    if (sinkFailure !== failure) pendingNativeFailures.addLast(sinkFailure)
+                }
+            }
+        }
+    }
+
+    fun notifyOutputChanged(info: WaylandOutputInfo) {
+        try {
+            onOutputChanged?.invoke(info)
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+        }
+    }
+
+    fun notifyOutputScaleChanged(info: WaylandOutputInfo, scale: Int) {
+        try {
+            onOutputScaleChanged?.invoke(info, scale)
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+        }
+        scaleListeners.forEach { listener ->
+            try {
+                listener(info, scale)
+            } catch (failure: Throwable) {
+                reportNativeFailure(failure)
+            }
+        }
+    }
+
+    fun onGlobal(name: Int, interfaceName: String, version: Int) {
+        if (closed.get()) return
+        collector.recordGlobal(name, interfaceName, version)
+        if (interfaceName != "wl_output") return
+        if (synchronized(outputsByRegistryName) { name in outputsByRegistryName }) return
+
+        val binding = try {
+            bindOutput(name, version)
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+            return
+        }
+        if (binding == null || binding.first == 0L) {
+            reportNativeFailure(
+                IllegalStateException(
+                    "failed to bind wl_output registry global $name at advertised version $version",
+                ),
+            )
+            return
+        }
+        val (proxy, boundVersion) = binding
+        val output = BoundOutput(
+            registryName = name,
+            proxy = proxy,
+            version = boundVersion,
+            info = WaylandOutputInfo(
+                outputPtr = proxy,
+                name = null,
+                outputVersion = boundVersion,
+            ),
+        )
+        val inserted = synchronized(outputsByRegistryName) {
+            if (name in outputsByRegistryName) false
+            else true.also { outputsByRegistryName[name] = output }
+        }
+        if (!inserted) {
+            try {
+                destroyProxy(proxy)
+            } catch (failure: Throwable) {
+                reportNativeFailure(failure)
+            }
+            return
+        }
+        val installationFailure = try {
+            if (installOutputListener(output)) null else IllegalStateException(
+                "failed to install wl_output listener for registry global ${output.registryName}",
+            )
+        } catch (failure: Throwable) {
+            failure
+        }
+        if (installationFailure != null) {
+            synchronized(outputsByRegistryName) {
+                if (outputsByRegistryName[name] === output) outputsByRegistryName.remove(name)
+            }
+            try {
+                destroyProxy(output.proxy)
+            } catch (destroyFailure: Throwable) {
+                if (destroyFailure !== installationFailure) installationFailure.addSuppressed(destroyFailure)
+            }
+            reportNativeFailure(installationFailure)
+        }
+    }
+
+    fun onGlobalRemove(name: Int) {
+        if (closed.get()) return
+        collector.recordGlobalRemove(name)
+        val removed = synchronized(outputsByRegistryName) { outputsByRegistryName.remove(name) } ?: return
+        removalListeners.forEach { listener ->
+            try {
+                listener(removed.proxy)
+            } catch (failure: Throwable) {
+                reportNativeFailure(failure)
+            }
+        }
+        try {
+            destroyProxy(removed.proxy)
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+        }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onNativeGlobal(
+        data: MemorySegment,
+        registry: MemorySegment,
+        name: Int,
+        iface: MemorySegment,
+        version: Int,
+    ) {
+        try {
+            val interfaceName = iface.reinterpret(128).getString(0)
+            onGlobal(name, interfaceName, version)
+        } catch (failure: Throwable) {
+            reportNativeFailure(IllegalStateException("wl_registry.global callback failed", failure))
+        }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun onNativeGlobalRemove(data: MemorySegment, registry: MemorySegment, name: Int) {
+        try {
+            onGlobalRemove(name)
+        } catch (failure: Throwable) {
+            reportNativeFailure(failure)
+        }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        val children = synchronized(outputsByRegistryName) {
+            outputsByRegistryName.values.map(BoundOutput::proxy).also { outputsByRegistryName.clear() }
+        }
+        val otherChildren = synchronized(ownedChildren) {
+            ownedChildren.toList().also { ownedChildren.clear() }
+        }
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = buildList {
+                children.forEach { proxy -> add { destroyProxy(proxy) } }
+                otherChildren.forEach { child -> add(child::close) }
+                add { if (registryPtr != 0L) destroyProxy(registryPtr) }
+                add(closeListenerArena)
+            },
+        )
+        removalListeners.clear()
+        scaleListeners.clear()
+    }
 }
 
 /**
@@ -153,8 +415,28 @@ private class XdgWmBasePinger(private val wmBasePtr: Long, private val displayPt
     }
 }
 
-/** Keeps pinger instances (and their upcall arenas) alive for the process lifetime. */
-private val pingers = mutableListOf<XdgWmBasePinger>()
+private class XdgWmBaseBinding(
+    val proxy: Long,
+    @Suppress("unused") private val pinger: XdgWmBasePinger,
+    private val listenerArena: Arena,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = listOf(
+                {
+                    if (proxy != 0L) {
+                        wlProxyDestroy?.invokeExact(MemorySegment.ofAddress(proxy))
+                    }
+                },
+                listenerArena::close,
+            ),
+        )
+    }
+}
 
 /**
  * Discovers and binds the `wl_compositor` and `xdg_wm_base` globals, and installs the
@@ -182,6 +464,7 @@ internal fun discoverGlobals(
     val getVersion = wlProxyGetVersion ?: return WaylandGlobals(0L, 0L)
 
     val display = MemorySegment.ofAddress(displayPtr)
+    var registryOwnerForCleanup: WaylandRegistryOwner? = null
 
     return try {
         // 1. wl_display.get_registry → wl_registry*
@@ -195,22 +478,54 @@ internal fun discoverGlobals(
         val arena = Arena.ofShared()
         val collector = GlobalsCollector()
         val lookup = MethodHandles.lookup()
+        val outputIface = wlOutputInterface
+        lateinit var registryOwner: WaylandRegistryOwner
+        registryOwner = WaylandRegistryOwner(
+            registryPtr = registry.address(),
+            listenerArena = arena,
+            collector = collector,
+            bindOutput = bindOutput@{ name, advertisedVersion ->
+                val iface = outputIface ?: return@bindOutput null
+                val boundVersion = advertisedVersion.coerceAtMost(4)
+                val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+                val proxy = (bind.invokeExact(
+                    registry, WL_REGISTRY_BIND, iface, boundVersion, 0,
+                    name, namePtr, boundVersion, MemorySegment.NULL,
+                ) as MemorySegment).address()
+                proxy to boundVersion
+            },
+            installOutputListener = { output ->
+                installWaylandOutputListener(
+                    output = MemorySegment.ofAddress(output.proxy),
+                    addListener = addListener,
+                    lookup = lookup,
+                    arena = arena,
+                    outputInfo = output.info,
+                    onOutputChanged = registryOwner::notifyOutputChanged,
+                    onScaleChanged = registryOwner::notifyOutputScaleChanged,
+                )
+            },
+            destroyProxy = { proxy ->
+                wlProxyDestroy?.invokeExact(MemorySegment.ofAddress(proxy))
+            },
+        )
+        registryOwnerForCleanup = registryOwner
 
         val onGlobalHandle = lookup.findVirtual(
-            GlobalsCollector::class.java, "onGlobal",
+            WaylandRegistryOwner::class.java, "onNativeGlobal",
             MethodType.methodType(
                 Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java,
                 Int::class.javaPrimitiveType, MemorySegment::class.java, Int::class.javaPrimitiveType,
             ),
-        ).bindTo(collector)
+        ).bindTo(registryOwner)
         val onGlobalRemoveHandle = lookup.findVirtual(
-            GlobalsCollector::class.java, "onGlobalRemove",
+            WaylandRegistryOwner::class.java, "onNativeGlobalRemove",
             MethodType.methodType(
                 Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java, Int::class.javaPrimitiveType,
             ),
-        ).bindTo(collector)
+        ).bindTo(registryOwner)
 
         val globalStub = upcallStub(
             onGlobalHandle,
@@ -232,11 +547,17 @@ internal fun discoverGlobals(
         listener.set(ValueLayout.ADDRESS, ValueLayout.ADDRESS.byteSize(), globalRemoveStub)
 
         val rc = addListener.invokeExact(registry, listener, MemorySegment.NULL) as Int
-        if (rc != 0) return WaylandGlobals(0L, 0L)
+        if (rc != 0) {
+            registryOwner.close()
+            return WaylandGlobals(0L, 0L)
+        }
 
         // 3. roundtrip → triggers the global events (fills the collector).
         roundtrip.invokeExact(display) as Int
-        if (collector.compositorName < 0) return WaylandGlobals(0L, 0L)
+        if (collector.compositorName < 0) {
+            registryOwner.close()
+            return WaylandGlobals(0L, 0L)
+        }
 
         // 4. wl_registry.bind(wl_compositor). interface->name = 1st field (const char*).
         val compositorNamePtr = compositorIface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
@@ -248,7 +569,10 @@ internal fun discoverGlobals(
         // 5. wl_registry.bind(xdg_wm_base) if present, then install the ping→pong listener.
         var xdgWmBasePtr = 0L
         if (collector.xdgWmBaseName >= 0) {
-            xdgWmBasePtr = bindXdgWmBase(registry, bind, collector, addListener, lookup, arena, displayPtr)
+            bindXdgWmBase(registry, bind, collector, addListener, lookup, displayPtr)?.let { binding ->
+                xdgWmBasePtr = binding.proxy
+                registryOwner.ownChild(binding)
+            }
         }
 
         // 6. wl_registry.bind(zxdg_decoration_manager_v1) for server-side window decorations.
@@ -279,24 +603,6 @@ internal fun discoverGlobals(
                     ) as MemorySegment).address()
                 }.getOrDefault(0L)
                 seatVersion = boundVersion
-            }
-        }
-
-        // 8. wl_registry.bind(wl_output) for scale factor.
-        var outputPtr = 0L
-        var outputVersion = 0
-        if (collector.outputName >= 0) {
-            val iface = wlOutputInterface
-            if (iface != null) {
-                val namePtr = iface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
-                val boundVersion = collector.outputVersion.coerceAtMost(4) // cap at v4 (scale is v2)
-                outputPtr = runCatching {
-                    (bind.invokeExact(
-                        registry, WL_REGISTRY_BIND, iface, boundVersion, 0,
-                        collector.outputName, namePtr, boundVersion, MemorySegment.NULL,
-                    ) as MemorySegment).address()
-                }.getOrDefault(0L)
-                outputVersion = boundVersion
             }
         }
 
@@ -417,8 +723,7 @@ internal fun discoverGlobals(
             decorationManagerPtr    = decorationManagerPtr,
             seatPtr                 = seatPtr,
             seatVersion             = seatVersion,
-            outputPtr               = outputPtr,
-            outputVersion           = outputVersion,
+            registryOwner           = registryOwner,
             textInputManagerPtr     = textInputManagerPtr,
             shmPtr                  = shmPtr,
             shmVersion              = shmVersion,
@@ -429,7 +734,12 @@ internal fun discoverGlobals(
             kwinBlurManagerPtr      = kwinBlurManagerPtr,
             dataDeviceManagerPtr    = dataDeviceManagerPtr,
         ).also { it._availableProtocols = collector.allProtocolNames.toSet() }
-    } catch (_: Throwable) {
+    } catch (failure: Throwable) {
+        try {
+            registryOwnerForCleanup?.close()
+        } catch (cleanupFailure: Throwable) {
+            if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+        }
         WaylandGlobals(0L, 0L)
     }
 }
@@ -441,34 +751,51 @@ private fun bindXdgWmBase(
     collector: GlobalsCollector,
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
-    arena: Arena,
     displayPtr: Long,
-): Long = try {
-    val wmBaseIface = xdg_wm_base_interface
-    val wmBaseNamePtr = wmBaseIface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
-    val wmBase = bind.invokeExact(
-        registry, WL_REGISTRY_BIND, wmBaseIface, collector.xdgWmBaseVersion, 0,
-        collector.xdgWmBaseName, wmBaseNamePtr, collector.xdgWmBaseVersion, MemorySegment.NULL,
-    ) as MemorySegment
-    if (wmBase.address() == 0L) return 0L
+): XdgWmBaseBinding? {
+    var wmBase = MemorySegment.NULL
+    var listenerArena: Arena? = null
+    return try {
+        val wmBaseIface = xdg_wm_base_interface
+        val wmBaseNamePtr = wmBaseIface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
+        wmBase = bind.invokeExact(
+            registry, WL_REGISTRY_BIND, wmBaseIface, collector.xdgWmBaseVersion, 0,
+            collector.xdgWmBaseName, wmBaseNamePtr, collector.xdgWmBaseVersion, MemorySegment.NULL,
+        ) as MemorySegment
+        check(wmBase.address() != 0L) { "xdg_wm_base bind returned NULL" }
 
-    val pinger = XdgWmBasePinger(wmBase.address(), displayPtr, collector.xdgWmBaseVersion)
-    pingers.add(pinger)
-    val pingStub = upcallStub(
-        lookup.findVirtual(
-            XdgWmBasePinger::class.java, "onPing",
-            MethodType.methodType(Void.TYPE, MemorySegment::class.java, MemorySegment::class.java, Int::class.javaPrimitiveType),
-        ).bindTo(pinger),
-        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
-        arena,
-    )
-    // struct xdg_wm_base_listener { ping } — 1 pointer.
-    val pingListener = arena.allocate(ValueLayout.ADDRESS.byteSize())
-    pingListener.set(ValueLayout.ADDRESS, 0L, pingStub)
-    (wlProxyAddListener ?: return 0L).invokeExact(wmBase, pingListener, MemorySegment.NULL) as Int
+        val arena = Arena.ofShared().also { listenerArena = it }
+        val pinger = XdgWmBasePinger(wmBase.address(), displayPtr, collector.xdgWmBaseVersion)
+        val pingStub = upcallStub(
+            lookup.findVirtual(
+                XdgWmBasePinger::class.java, "onPing",
+                MethodType.methodType(Void.TYPE, MemorySegment::class.java, MemorySegment::class.java, Int::class.javaPrimitiveType),
+            ).bindTo(pinger),
+            FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+            arena,
+        )
+        // struct xdg_wm_base_listener { ping } — 1 pointer.
+        val pingListener = arena.allocate(ValueLayout.ADDRESS.byteSize())
+        pingListener.set(ValueLayout.ADDRESS, 0L, pingStub)
+        val listener = checkNotNull(wlProxyAddListener) { "wl_proxy_add_listener unavailable" }
+        val listenerResult = listener.invokeExact(wmBase, pingListener, MemorySegment.NULL) as Int
+        check(listenerResult == 0) { "xdg_wm_base listener installation failed: $listenerResult" }
 
-    wmBase.address()
-} catch (t: Throwable) {
-    System.err.println("[kadre-wayland] bindXdgWmBase failed: $t")
-    0L
+        XdgWmBaseBinding(wmBase.address(), pinger, arena).also { listenerArena = null }
+    } catch (failure: Throwable) {
+        if (wmBase.address() != 0L) {
+            try {
+                wlProxyDestroy?.invokeExact(wmBase)
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+            }
+        }
+        try {
+            listenerArena?.close()
+        } catch (cleanupFailure: Throwable) {
+            if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+        }
+        System.err.println("[kadre-wayland] bindXdgWmBase failed: $failure")
+        null
+    }
 }

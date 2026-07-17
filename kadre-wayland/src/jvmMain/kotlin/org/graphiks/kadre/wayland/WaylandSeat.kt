@@ -22,9 +22,8 @@
  * | wl_touch    | cancel        | PointerButton(Touch) + PointerLeft           |
  *
  * ### wl_output (scale)
- * Binds `wl_output` and installs a `wl_output_listener` to receive the `scale` integer event.
- * On each scale change, updates [WaylandSeatBinding.onScaleChanged] and emits
- * `ScaleFactorChanged`.
+ * Defines the per-output listener installer used by [WaylandRegistryOwner]. Each live
+ * output owns one listener for geometry, modes, scale, name, and description events.
  *
  * ### Arena lifetime
  * All upcall stubs live in a single [Arena.ofShared] created by [installSeatListeners].
@@ -336,16 +335,14 @@ private const val WL_SEAT_CAPABILITY_TOUCH: Int = 4
  * monitor data was synthetic. This implementation now collects all events into
  * [WaylandOutputInfo] objects and notifies consumers on `done`.
  *
- * @param outputPtr Address of the wl_output proxy.
- * @param outputVersion Protocol version.
- * @param name Output name (from wl_registry or wl_output.name in v4+).
+ * @param info Mutable state for this wl_output proxy.
  * @param onOutputChanged Called on each `done` event with the updated [WaylandOutputInfo].
  * @param onScaleChanged Called on each `scale` event with the new integer factor.
  */
 private class WlOutputListener(
     val info: WaylandOutputInfo,
     private val onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
-    private val onScaleChanged: ((Int) -> Unit)?,
+    private val onScaleChanged: ((WaylandOutputInfo, Int) -> Unit)?,
 ) {
     @Suppress("UNUSED_PARAMETER")
     fun onGeometry(
@@ -375,7 +372,7 @@ private class WlOutputListener(
     @Suppress("UNUSED_PARAMETER")
     fun onScale(data: MemorySegment, output: MemorySegment, factor: Int) {
         info.scale = factor
-        onScaleChanged?.invoke(factor)
+        onScaleChanged?.invoke(info, factor)
     }
 
     /** wl_output v4: name event — vtable index 4. */
@@ -711,7 +708,7 @@ internal fun seatHasCapability(caps: Int, capBit: Int): Boolean = (caps and capB
 // ── WaylandSeatBinding ────────────────────────────────────────────────────────
 
 /**
- * Holds all listeners installed for the seat / output.
+ * Holds all listeners installed for the seat and its input devices.
  * A strong reference prevents the arena (and the upcall stubs) from being GC'd.
  */
 internal class WaylandSeatBinding internal constructor(
@@ -747,7 +744,7 @@ internal class WaylandSeatBinding internal constructor(
 private val seatBindings = mutableListOf<WaylandSeatBinding>()
 
 /**
- * Binds `wl_seat` and `wl_output` globals and installs all input listeners.
+ * Installs listeners for the already-bound `wl_seat` and its input devices.
  *
  * Called from the event-loop init sequence after globals have been discovered.
  * Emits all input events via [onEvent]. Scale changes update [onScaleChanged].
@@ -760,33 +757,22 @@ private val seatBindings = mutableListOf<WaylandSeatBinding>()
  * Calling e.g. `wl_seat_get_touch` on a seat without touch capability is undefined
  * behaviour and can cause a SIGSEGV.
  *
- * Both `seatPtr` and `outputPtr` may be 0 if the respective global was absent;
- * this function is tolerant of 0-pointers.
+ * `seatPtr` may be 0 if the global was absent; this function is tolerant of it.
  *
  * @param displayPtr  Address of the connected wl_display* (needed for the roundtrip).
  * @param seatPtr     Address of the already-bound wl_seat* (or 0).
- * @param outputPtr   Address of the already-bound wl_output* (or 0).
  * @param seatVersion Version of the bound wl_seat.
- * @param outputVersion Version of the bound wl_output.
  * @param onEvent     Sink for all emitted [WindowEvent]s (routed to the event queue).
- * @param onScaleChanged Callback invoked with the new integer scale factor.
  */
 internal fun installSeatListeners(
     displayPtr: Long,
     seatPtr: Long,
-    outputPtr: Long,
     seatVersion: Int,
-    outputVersion: Int,
     onEvent: RoutedWindowEventSink,
     onDeviceEvent: RoutedDeviceEventSink = {},
-    onScaleChanged: (Int) -> Unit,
     dataDeviceManagerPtr: Long = 0L,
     deviceFilter: WaylandDeviceFilter = WaylandDeviceFilter(),
     onNativeFailure: (Throwable) -> Unit = {},
-    /** Callback invoked on each wl_output.done with the updated [WaylandOutputInfo]. */
-    onOutputChanged: ((WaylandOutputInfo) -> Unit)? = null,
-    /** Pre-allocated output info objects keyed by wl_output proxy address. */
-    outputInfos: MutableMap<Long, WaylandOutputInfo>? = null,
 ): WaylandSeatBinding? {
     val addListener = wlProxyAddListener ?: return null
     val arena = Arena.ofShared()
@@ -893,24 +879,6 @@ internal fun installSeatListeners(
                     }
                 }
             }
-        }
-
-        // ── wl_output (geometry, mode, scale) ─────────────────────────────────
-        if (outputPtr != 0L && outputVersion >= 2) {
-            val output = MemorySegment.ofAddress(outputPtr)
-            val outputInfo = WaylandOutputInfo(
-                outputPtr = outputPtr,
-                name = null,
-                outputVersion = outputVersion,
-            )
-            outputInfos?.put(outputPtr, outputInfo)
-            installOutputListener(
-                output, addListener, lookup, arena,
-                outputInfo = outputInfo,
-                onOutputChanged = onOutputChanged,
-                onScaleChanged = onScaleChanged,
-            )
-            anyListenerInstalled = true
         }
 
         // ── wl_data_device (DnD) ─────────────────────────────────────────────
@@ -1250,15 +1218,15 @@ private fun installTouchListener(
     runCatching { addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int }
 }
 
-private fun installOutputListener(
+internal fun installWaylandOutputListener(
     output: MemorySegment,
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
     arena: Arena,
     outputInfo: WaylandOutputInfo,
     onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
-    onScaleChanged: ((Int) -> Unit)?,
-) {
+    onScaleChanged: ((WaylandOutputInfo, Int) -> Unit)?,
+): Boolean {
     val listener = WlOutputListener(outputInfo, onOutputChanged, onScaleChanged)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -1328,5 +1296,7 @@ private fun installOutputListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  scaleStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  nameStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  descriptionStub)
-    runCatching { addListener.invokeExact(output, vtable, MemorySegment.NULL) as Int }
+    return runCatching {
+        addListener.invokeExact(output, vtable, MemorySegment.NULL) as Int
+    }.getOrDefault(-1) == 0
 }

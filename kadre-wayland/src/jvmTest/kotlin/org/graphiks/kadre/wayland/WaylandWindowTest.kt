@@ -27,9 +27,12 @@ import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
+import java.lang.foreign.Arena
+import java.lang.foreign.MemorySegment
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -37,6 +40,208 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandWindowTest {
+
+    @Test
+    fun `entered output selection follows last enter then falls back on leave`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            val outputA = registry.addTestOutput(name = 7, proxy = 700L, scale = 1)
+            val outputB = registry.addTestOutput(name = 11, proxy = 1_100L, scale = 2)
+            val window = WaylandWindow.createForTest().also { it.registryOwner = registry }
+
+            window.onOutputEntered(outputA.proxy)
+            window.onOutputEntered(outputB.proxy)
+            assertEquals(outputB.proxy, window.currentMonitor()?.id)
+            assertEquals(2.0, window.scaleFactor)
+
+            window.onOutputLeft(outputB.proxy)
+            assertEquals(outputA.proxy, window.currentMonitor()?.id)
+            assertEquals(1.0, window.scaleFactor)
+
+            window.onOutputLeft(outputA.proxy)
+            assertNull(window.currentMonitor())
+            assertEquals(1.0, window.scaleFactor)
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `hot unplug removes only that entered output and uses remaining output scale`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            registry.addTestOutput(name = 7, proxy = 700L, scale = 1)
+            registry.addTestOutput(name = 11, proxy = 1_100L, scale = 3)
+            val window = WaylandWindow.createForTest().also { it.registryOwner = registry }
+            window.onOutputEntered(700L)
+            window.onOutputEntered(1_100L)
+
+            registry.onGlobalRemove(11)
+
+            assertEquals(700L, window.currentMonitor()?.id)
+            assertEquals(1.0, window.scaleFactor)
+            assertEquals(listOf(700L), window.enteredOutputProxies.toList())
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `surface listener installation routes enter and leave to window state`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            registry.addTestOutput(name = 7, proxy = 700L, scale = 1)
+            registry.addTestOutput(name = 11, proxy = 1_100L, scale = 2)
+            var installedSurface = 0L
+            lateinit var enter: (Long) -> Unit
+            lateinit var leave: (Long) -> Unit
+            val window = WaylandWindow.createForTest(
+                surface = 42L,
+                surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { surface, onEnter, onLeave, _ ->
+                    installedSurface = surface
+                    enter = onEnter
+                    leave = onLeave
+                    AutoCloseable {}
+                },
+            ).also { it.registryOwner = registry }
+
+            assertEquals(42L, installedSurface)
+            enter(700L)
+            enter(1_100L)
+            assertEquals(1_100L, window.currentMonitor()?.id)
+
+            leave(1_100L)
+            assertEquals(700L, window.currentMonitor()?.id)
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `surface listener owner closes when zero-pointer test window closes`() {
+        var listenerClosed = false
+        val window = WaylandWindow.createForTest(
+            surface = 0L,
+            surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                AutoCloseable { listenerClosed = true }
+            },
+        )
+
+        window.close()
+
+        assertTrue(listenerClosed)
+    }
+
+    @Test
+    fun `real surface creation seam fails when surface output listener is not installed`() {
+        val failure = assertFailsWith<IllegalStateException> {
+            WaylandWindow.createForTest(
+                surface = 42L,
+                surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ -> null },
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("wl_surface enter leave listener"))
+    }
+
+    @Test
+    fun `surface construction failure destroys acquired proxy and preserves cause`() {
+        val destroyed = mutableListOf<Long>()
+        val failure = assertFailsWith<IllegalStateException> {
+            withWaylandSurfaceRollback(
+                surfacePtr = 42L,
+                destroySurface = destroyed::add,
+            ) {
+                error("listener installation failed")
+            }
+        }
+
+        assertEquals("listener installation failed", failure.message)
+        assertEquals(listOf(42L), destroyed)
+    }
+
+    @Test
+    fun `surface native listener routes enter callback failure without crossing upcall`() {
+        val failures = mutableListOf<Throwable>()
+        val listener = WlSurfaceOutputListener(
+            onEnter = { error("surface enter boom") },
+            onLeave = {},
+            onFailure = failures::add,
+        )
+
+        listener.enter(
+            data = MemorySegment.NULL,
+            surface = MemorySegment.NULL,
+            output = MemorySegment.ofAddress(700L),
+        )
+
+        assertEquals("surface enter boom", failures.single().message)
+    }
+
+    @Test
+    fun `window enumerates every live registry output independently of entered set`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            registry.addTestOutput(name = 7, proxy = 700L, scale = 1)
+            registry.addTestOutput(name = 11, proxy = 1_100L, scale = 2)
+            val window = WaylandWindow.createForTest().also { it.registryOwner = registry }
+            window.onOutputEntered(1_100L)
+
+            assertEquals(listOf(700L, 1_100L), window.availableMonitors().map { it.id })
+            assertEquals(1_100L, window.currentMonitor()?.id)
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `selected window scale follows later scale events from that output`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            val output = registry.addTestOutput(name = 11, proxy = 1_100L, scale = 2)
+            val window = WaylandWindow.createForTest().also { it.registryOwner = registry }
+            window.onOutputEntered(output.proxy)
+            val events = mutableListOf<WindowEvent>()
+            window.onWindowEvent = events::add
+
+            output.info.scale = 3
+            registry.notifyOutputScaleChanged(output.info, 3)
+
+            assertEquals(3.0, window.scaleFactor)
+            assertEquals(listOf<WindowEvent>(WindowEvent.ScaleFactorChanged(3.0)), events)
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `fullscreen output resolves explicit live monitor then current entered output`() {
+        Arena.ofShared().use { arena ->
+            val registry = outputRegistry(arena)
+            val outputA = registry.addTestOutput(name = 7, proxy = 700L, scale = 1)
+            val outputB = registry.addTestOutput(name = 11, proxy = 1_100L, scale = 2)
+            val window = WaylandWindow.createForTest().also { it.registryOwner = registry }
+            window.onOutputEntered(outputA.proxy)
+
+            assertEquals(
+                outputB.proxy,
+                window.resolveFullscreenOutputProxy(Fullscreen.Borderless(outputB.info.toMonitorHandle())),
+            )
+            assertEquals(
+                outputA.proxy,
+                window.resolveFullscreenOutputProxy(Fullscreen.Borderless()),
+            )
+            registry.close()
+        }
+    }
+
+    @Test
+    fun `output video mode keeps refresh rate out of bit depth`() {
+        val info = WaylandOutputInfo(outputPtr = 700L, name = "A", outputVersion = 4)
+
+        info.updateMode(flags = 0x1, width = 1920, height = 1080, refresh = 60_000)
+
+        val mode = info.toMonitorHandle().currentVideoMode
+        assertNotNull(mode)
+        assertEquals(PhysicalSize(1920, 1080), mode.size)
+        assertNull(mode.bitDepth)
+        assertEquals(60_000, mode.refreshRateMilliHz)
+    }
 
     @Test
     fun `WaylandWindow can be constructed with mock pointers without crashing`() {
@@ -858,5 +1063,24 @@ class WaylandWindowTest {
             assertEquals(event, queued)
         }
         assertNull(queue.poll())
+    }
+
+    private fun outputRegistry(arena: Arena): WaylandRegistryOwner = WaylandRegistryOwner(
+        registryPtr = 9_000L,
+        listenerArena = arena,
+        collector = GlobalsCollector(),
+        bindOutput = { name, version -> (name * 100L) to version.coerceAtMost(4) },
+        installOutputListener = { true },
+        destroyProxy = {},
+        closeListenerArena = {},
+    )
+
+    private fun WaylandRegistryOwner.addTestOutput(
+        name: Int,
+        proxy: Long,
+        scale: Int,
+    ): BoundOutput {
+        onGlobal(name = name, interfaceName = "wl_output", version = 4)
+        return checkNotNull(outputForProxy(proxy)).also { it.info.scale = scale }
     }
 }

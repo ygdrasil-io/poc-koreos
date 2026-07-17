@@ -182,16 +182,28 @@ internal class XdgToplevel private constructor(
      * Requests fullscreen / unfullscreen via xdg_toplevel.set_fullscreen / unset_fullscreen.
      *
      * @param fullscreen true = enter fullscreen (borderless), false = exit fullscreen.
+     * @param outputPtr target wl_output proxy, or 0 to let the compositor choose.
      */
-    fun setFullscreen(fullscreen: Boolean) {
-        val opcode = if (fullscreen) XDG_TOPLEVEL_SET_FULLSCREEN else XDG_TOPLEVEL_UNSET_FULLSCREEN
-        val handle = wlProxyMarshalFlagsVoid ?: return
-        runCatching {
-            handle.invokeExact(
-                MemorySegment.ofAddress(xdgToplevelPtr), opcode,
-                MemorySegment.NULL, version, 0,
-            )
-            Unit
+    fun setFullscreen(fullscreen: Boolean, outputPtr: Long = 0L) {
+        if (fullscreen) {
+            val handle = wlProxyMarshalFlagsObject ?: return
+            runCatching {
+                handle.invokeExact(
+                    MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_SET_FULLSCREEN,
+                    MemorySegment.NULL, version, 0,
+                    outputPtr.takeIf { it != 0L }?.let(MemorySegment::ofAddress) ?: MemorySegment.NULL,
+                )
+                Unit
+            }
+        } else {
+            val handle = wlProxyMarshalFlagsVoid ?: return
+            runCatching {
+                handle.invokeExact(
+                    MemorySegment.ofAddress(xdgToplevelPtr), XDG_TOPLEVEL_UNSET_FULLSCREEN,
+                    MemorySegment.NULL, version, 0,
+                )
+                Unit
+            }
         }
     }
 
