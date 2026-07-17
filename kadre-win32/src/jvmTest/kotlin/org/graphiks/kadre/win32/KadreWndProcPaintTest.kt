@@ -69,6 +69,63 @@ class KadreWndProcPaintTest {
         assertSame(deliveryFailure, thrown)
         assertEquals(listOf("begin", "emit", "end"), calls)
     }
+
+    @Test
+    fun `redraw delivery stays primary when endPaint also throws`() {
+        val calls = mutableListOf<String>()
+        val deliveryFailure = IllegalStateException("redraw delivery failed")
+        val endFailure = IllegalStateException("endPaint failed")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            KadreWndProc.dispatchPaint(
+                hwnd = TEST_PAINT_HWND,
+                beginPaint = { _, _ ->
+                    calls += "begin"
+                    MemorySegment.NULL
+                },
+                emitEvent = { _, _ ->
+                    calls += "emit"
+                    throw deliveryFailure
+                },
+                endPaint = { _, _ ->
+                    calls += "end"
+                    throw endFailure
+                },
+            )
+        }
+
+        assertSame(deliveryFailure, thrown)
+        assertEquals(listOf(endFailure), thrown.suppressed.toList())
+        assertEquals(listOf("begin", "emit", "end"), calls)
+    }
+
+    @Test
+    fun `redraw delivery and endPaint tolerate the same Throwable instance`() {
+        val calls = mutableListOf<String>()
+        val shared = IllegalStateException("shared")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            KadreWndProc.dispatchPaint(
+                hwnd = TEST_PAINT_HWND,
+                beginPaint = { _, _ ->
+                    calls += "begin"
+                    MemorySegment.NULL
+                },
+                emitEvent = { _, _ ->
+                    calls += "emit"
+                    throw shared
+                },
+                endPaint = { _, _ ->
+                    calls += "end"
+                    throw shared
+                },
+            )
+        }
+
+        assertSame(shared, thrown)
+        assertEquals(emptyList(), thrown.suppressed.toList())
+        assertEquals(listOf("begin", "emit", "end"), calls)
+    }
 }
 
 private const val TEST_PAINT_HWND: Long = 0x1234_5678L

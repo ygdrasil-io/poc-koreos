@@ -221,11 +221,12 @@ class Win32LastWindowPolicyTest {
                 unregisterFocus = { calls += "focus" },
                 unregisterConstraints = { calls += "constraints" },
                 unregisterModifiers = { calls += "modifiers" },
+                unregisterInside = { calls += "inside" },
             )
         }
 
         assertSame(deliveryFailure, thrown)
-        assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
+        assertEquals(listOf("emit", "focus", "constraints", "modifiers", "inside"), calls)
     }
 
     @Test
@@ -234,6 +235,7 @@ class Win32LastWindowPolicyTest {
         val focusFailure = IllegalStateException("focus")
         val constraintsFailure = IllegalStateException("constraints")
         val modifiersFailure = IllegalStateException("modifiers")
+        val insideFailure = IllegalStateException("inside")
         val calls = mutableListOf<String>()
 
         val thrown = assertFailsWith<IllegalStateException> {
@@ -255,15 +257,19 @@ class Win32LastWindowPolicyTest {
                     calls += "modifiers"
                     throw modifiersFailure
                 },
+                unregisterInside = {
+                    calls += "inside"
+                    throw insideFailure
+                },
             )
         }
 
         assertSame(deliveryFailure, thrown)
         assertEquals(
-            listOf(focusFailure, constraintsFailure, modifiersFailure),
+            listOf(focusFailure, constraintsFailure, modifiersFailure, insideFailure),
             thrown.suppressed.toList(),
         )
-        assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
+        assertEquals(listOf("emit", "focus", "constraints", "modifiers", "inside"), calls)
     }
 
     @Test
@@ -290,12 +296,39 @@ class Win32LastWindowPolicyTest {
                     calls += "modifiers"
                     throw shared
                 },
+                unregisterInside = {
+                    calls += "inside"
+                    throw shared
+                },
             )
         }
 
         assertSame(shared, thrown)
         assertEquals(emptyList(), thrown.suppressed.toList())
-        assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
+        assertEquals(listOf("emit", "focus", "constraints", "modifiers", "inside"), calls)
+    }
+
+    @Test
+    fun `destroyed HWND reused by Windows emits PointerEntered again`() {
+        val hwnd = 0x7654_3210L
+        val events = mutableListOf<WindowEvent>()
+        KadreWndProc.install { _, event -> events += event }
+
+        try {
+            KadreWndProc.dispatch(hwnd, WM_MOUSEMOVE, 0L, 0L)
+            assertTrue(events.first() is WindowEvent.PointerEntered)
+
+            KadreWndProc.dispatch(hwnd, WM_DESTROY, 0L, 0L)
+            events.clear()
+
+            KadreWndProc.dispatch(hwnd, WM_MOUSEMOVE, 0L, 0L)
+            assertTrue(
+                events.first() is WindowEvent.PointerEntered,
+                "a recycled HWND must not inherit the destroyed window's inside state",
+            )
+        } finally {
+            KadreWndProc.dispatch(hwnd, WM_MOUSELEAVE, 0L, 0L)
+        }
     }
 
     @Test

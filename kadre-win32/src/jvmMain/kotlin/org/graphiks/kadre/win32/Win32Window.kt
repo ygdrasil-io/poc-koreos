@@ -1299,11 +1299,28 @@ class Win32Window private constructor(
         }
 
         @JvmStatic
-        fun wndProc(hwnd: MemorySegment, msg: Int, wParam: Long, lParam: Long): Long {
+        fun wndProc(hwnd: MemorySegment, msg: Int, wParam: Long, lParam: Long): Long = try {
+            wndProc(hwnd, msg, wParam, lParam, Win32WndProcFailures::record)
+        } catch (_: Throwable) {
+            // The public FFM upcall target is the final no-throw boundary.
+            0L
+        }
+
+        internal fun wndProc(
+            hwnd: MemorySegment,
+            msg: Int,
+            wParam: Long,
+            lParam: Long,
+            recordFailure: (Throwable) -> Unit,
+        ): Long {
             return try {
                 KadreWndProc.dispatch(hwnd.address(), msg, wParam, lParam)
             } catch (failure: Throwable) {
-                Win32WndProcFailures.record(failure)
+                try {
+                    recordFailure(failure)
+                } catch (_: Throwable) {
+                    // Nothing may cross the FFM upcall boundary, including recorder failures.
+                }
                 0L
             }
         }

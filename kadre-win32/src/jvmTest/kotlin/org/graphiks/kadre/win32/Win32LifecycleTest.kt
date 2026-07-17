@@ -217,6 +217,28 @@ class Win32LifecycleTest {
     }
 
     @Test
+    fun `WndProc catch path returns zero when deferred failure recorder throws`() {
+        val deliveryFailure = LifecycleFailure("window event")
+        val recorderFailure = LifecycleFailure("recorder")
+        var recorded: Throwable? = null
+        KadreWndProc.install { _, _ -> throw deliveryFailure }
+
+        val result = Win32Window.wndProc(
+            hwnd = MemorySegment.ofAddress(0x1234L),
+            msg = WM_SIZE,
+            wParam = 0L,
+            lParam = 0L,
+            recordFailure = { failure ->
+                recorded = failure
+                throw recorderFailure
+            },
+        )
+
+        assertEquals(0L, result, "the FFM upcall target must remain no-throw")
+        assertSame(deliveryFailure, recorded)
+    }
+
+    @Test
     fun `Java message loop rethrows a failure pending before its body`() {
         val primary = LifecycleFailure("pending before message loop")
         var newEventsCalls = 0

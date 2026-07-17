@@ -547,6 +547,7 @@ object KadreWndProc {
         unregisterFocus: (Long) -> Unit = Win32FocusState::unregister,
         unregisterConstraints: (Long) -> Unit = ::unregisterConstraints,
         unregisterModifiers: (Long) -> Unit = ::unregisterPhysicalModifiers,
+        unregisterInside: (Long) -> Unit = { insideWindows.remove(it) },
     ): Long {
         var failure: Throwable? = null
 
@@ -554,6 +555,7 @@ object KadreWndProc {
         failure = captureWin32Failure(failure) { unregisterFocus(hwnd) }
         failure = captureWin32Failure(failure) { unregisterConstraints(hwnd) }
         failure = captureWin32Failure(failure) { unregisterModifiers(hwnd) }
+        failure = captureWin32Failure(failure) { unregisterInside(hwnd) }
 
         failure?.let { throw it }
         return 0L
@@ -569,11 +571,14 @@ object KadreWndProc {
             val hwndSegment = MemorySegment.ofAddress(hwnd)
             val paintStruct = arena.allocatePaintStruct()
             beginPaint(hwndSegment, paintStruct)
-            try {
+            var failure: Throwable? = null
+            failure = captureWin32Failure(failure) {
                 emitEvent(hwnd, WindowEvent.RedrawRequested)
-            } finally {
+            }
+            failure = captureWin32Failure(failure) {
                 endPaint(hwndSegment, paintStruct)
             }
+            failure?.let { throw it }
         }
         return 0L
     }
