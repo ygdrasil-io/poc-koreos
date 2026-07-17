@@ -339,21 +339,60 @@ private const val WL_SEAT_CAPABILITY_TOUCH: Int = 4
  * @param onOutputChanged Called on each `done` event with the updated [WaylandOutputInfo].
  * @param onScaleChanged Called on each `scale` event with the new integer factor.
  */
-private class WlOutputListener(
+internal data class WaylandOutputCallbackActions(
+    val geometry: (WaylandOutputInfo, Int, Int, Int, Int, Int, Long, Long, Int) -> Unit,
+    val mode: (WaylandOutputInfo, Int, Int, Int, Int) -> Unit,
+    val done: (WaylandOutputInfo) -> Unit,
+    val scale: (WaylandOutputInfo, Int) -> Unit,
+    val name: (WaylandOutputInfo, Long) -> Unit,
+) {
+    companion object {
+        fun default(): WaylandOutputCallbackActions = WaylandOutputCallbackActions(
+            geometry = { info, x, y, physW, physH, subpixel, make, model, transform ->
+                info.updateGeometry(x, y, physW, physH, subpixel, make, model, transform)
+            },
+            mode = WaylandOutputInfo::updateMode,
+            done = {},
+            scale = { info, factor -> info.scale = factor },
+            name = { info, namePtr ->
+                val outputName = MemorySegment.ofAddress(namePtr).reinterpret(128).getString(0)
+                info.updateName(outputName)
+            },
+        )
+    }
+}
+
+internal class WlOutputListener(
     val info: WaylandOutputInfo,
     private val onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
     private val onScaleChanged: ((WaylandOutputInfo, Int) -> Unit)?,
+    private val onFailure: (Throwable) -> Unit,
+    private val actions: WaylandOutputCallbackActions = WaylandOutputCallbackActions.default(),
 ) {
+    private inline fun guarded(action: () -> Unit) {
+        try {
+            action()
+        } catch (failure: Throwable) {
+            try {
+                onFailure(failure)
+            } catch (_: Throwable) {
+                // Never let a Kotlin exception cross the native upcall boundary.
+            }
+        }
+    }
+
     @Suppress("UNUSED_PARAMETER")
     fun onGeometry(
         data: MemorySegment, output: MemorySegment,
         x: Int, y: Int, physW: Int, physH: Int,
         subpixel: Int, make: MemorySegment, model: MemorySegment, transform: Int,
     ) {
-        info.updateGeometry(
-            x, y, physW, physH, subpixel,
-            make.address(), model.address(), transform,
-        )
+        guarded {
+            actions.geometry(
+                info, x, y, physW, physH, subpixel,
+                make.address(), model.address(), transform,
+            )
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -361,25 +400,29 @@ private class WlOutputListener(
         data: MemorySegment, output: MemorySegment,
         flags: Int, width: Int, height: Int, refresh: Int,
     ) {
-        info.updateMode(flags, width, height, refresh)
+        guarded { actions.mode(info, flags, width, height, refresh) }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onDone(data: MemorySegment, output: MemorySegment) {
-        onOutputChanged?.invoke(info)
+        guarded {
+            actions.done(info)
+            onOutputChanged?.invoke(info)
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onScale(data: MemorySegment, output: MemorySegment, factor: Int) {
-        info.scale = factor
-        onScaleChanged?.invoke(info, factor)
+        guarded {
+            actions.scale(info, factor)
+            onScaleChanged?.invoke(info, factor)
+        }
     }
 
     /** wl_output v4: name event — vtable index 4. */
     @Suppress("UNUSED_PARAMETER")
     fun onName(data: MemorySegment, output: MemorySegment, namePtr: MemorySegment) {
-        val nameStr = try { namePtr.reinterpret(128).getString(0) } catch (_: Throwable) { null }
-        if (nameStr != null) info.updateName(nameStr)
+        guarded { actions.name(info, namePtr.address()) }
     }
 
     /** wl_output v4: description event — vtable index 5. */
@@ -1222,16 +1265,19 @@ internal fun installWaylandOutputListener(
     output: MemorySegment,
     addListener: java.lang.invoke.MethodHandle,
     lookup: MethodHandles.Lookup,
-    arena: Arena,
     outputInfo: WaylandOutputInfo,
     onOutputChanged: ((WaylandOutputInfo) -> Unit)?,
     onScaleChanged: ((WaylandOutputInfo, Int) -> Unit)?,
-): Boolean {
-    val listener = WlOutputListener(outputInfo, onOutputChanged, onScaleChanged)
+    onFailure: (Throwable) -> Unit,
+): AutoCloseable {
+    val arena = Arena.ofShared()
+    val listener = WlOutputListener(outputInfo, onOutputChanged, onScaleChanged, onFailure)
+    val binding = WaylandOutputListenerBinding(listener, arena)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
-    // vtable: geometry, mode, done, scale, name, description — 6 entries (wl_output v4).
-    val geometryStub = upcallStub(
+    return finalizeWaylandListenerInstallation(binding) {
+      // vtable: geometry, mode, done, scale, name, description — 6 entries (wl_output v4).
+      val geometryStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onGeometry",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java,
@@ -1246,7 +1292,7 @@ internal fun installWaylandOutputListener(
             ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
         arena,
     )
-    val modeStub = upcallStub(
+      val modeStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onMode",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java,
@@ -1257,7 +1303,7 @@ internal fun installWaylandOutputListener(
             ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
         arena,
     )
-    val doneStub = upcallStub(
+      val doneStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onDone",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java,
@@ -1265,7 +1311,7 @@ internal fun installWaylandOutputListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS),
         arena,
     )
-    val scaleStub = upcallStub(
+      val scaleStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onScale",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java, Int::class.javaPrimitiveType,
@@ -1273,7 +1319,7 @@ internal fun installWaylandOutputListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
         arena,
     )
-    val nameStub = upcallStub(
+      val nameStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onName",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java, MemorySegment::class.java,
@@ -1281,7 +1327,7 @@ internal fun installWaylandOutputListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
         arena,
     )
-    val descriptionStub = upcallStub(
+      val descriptionStub = upcallStub(
         lookup.findVirtual(WlOutputListener::class.java, "onDescription",
             MethodType.methodType(Void.TYPE,
                 MemorySegment::class.java, MemorySegment::class.java, MemorySegment::class.java,
@@ -1289,14 +1335,25 @@ internal fun installWaylandOutputListener(
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
         arena,
     )
-    val vtable = arena.allocate(ptr * 6)
-    vtable.set(ValueLayout.ADDRESS, 0L,       geometryStub)
-    vtable.set(ValueLayout.ADDRESS, ptr,      modeStub)
-    vtable.set(ValueLayout.ADDRESS, ptr * 2,  doneStub)
-    vtable.set(ValueLayout.ADDRESS, ptr * 3,  scaleStub)
-    vtable.set(ValueLayout.ADDRESS, ptr * 4,  nameStub)
-    vtable.set(ValueLayout.ADDRESS, ptr * 5,  descriptionStub)
-    return runCatching {
-        addListener.invokeExact(output, vtable, MemorySegment.NULL) as Int
-    }.getOrDefault(-1) == 0
+      val vtable = arena.allocate(ptr * 6)
+      vtable.set(ValueLayout.ADDRESS, 0L,       geometryStub)
+      vtable.set(ValueLayout.ADDRESS, ptr,      modeStub)
+      vtable.set(ValueLayout.ADDRESS, ptr * 2,  doneStub)
+      vtable.set(ValueLayout.ADDRESS, ptr * 3,  scaleStub)
+      vtable.set(ValueLayout.ADDRESS, ptr * 4,  nameStub)
+      vtable.set(ValueLayout.ADDRESS, ptr * 5,  descriptionStub)
+      val result = addListener.invokeExact(output, vtable, MemorySegment.NULL) as Int
+      check(result == 0) { "wl_output listener installation failed: $result" }
+    }
+}
+
+private class WaylandOutputListenerBinding(
+    @Suppress("unused") private val listener: WlOutputListener,
+    private val arena: Arena,
+) : AutoCloseable {
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) arena.close()
+    }
 }

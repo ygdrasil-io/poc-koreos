@@ -130,6 +130,49 @@ class WaylandWindowTest {
     }
 
     @Test
+    fun `surface listener stays alive when proxy destroy is unavailable until display disconnect`() {
+        var listenerClosed = false
+        val lifetime = WaylandNativeListenerLifetime()
+        val window = WaylandWindow.createForTest(
+            surface = 42L,
+            surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                AutoCloseable { listenerClosed = true }
+            },
+            surfaceProxyDestroyer = null,
+            nativeListenerLifetime = lifetime,
+        )
+
+        val failure = assertFailsWith<IllegalStateException> { window.close() }
+        assertTrue(failure.message.orEmpty().contains("wl_proxy_destroy"))
+        assertTrue(!listenerClosed)
+
+        lifetime.closeAfterDisplayDisconnect()
+        assertTrue(listenerClosed)
+    }
+
+    @Test
+    fun `surface listener stays alive when proxy destroy throws until display disconnect`() {
+        val expected = IllegalStateException("destroy surface")
+        var listenerClosed = false
+        val lifetime = WaylandNativeListenerLifetime()
+        val window = WaylandWindow.createForTest(
+            surface = 42L,
+            surfaceOutputListenerInstaller = WaylandSurfaceOutputListenerInstaller { _, _, _, _ ->
+                AutoCloseable { listenerClosed = true }
+            },
+            surfaceProxyDestroyer = { throw expected },
+            nativeListenerLifetime = lifetime,
+        )
+
+        val thrown = assertFailsWith<IllegalStateException> { window.close() }
+        assertSame(expected, thrown)
+        assertTrue(!listenerClosed)
+
+        lifetime.closeAfterDisplayDisconnect()
+        assertTrue(listenerClosed)
+    }
+
+    @Test
     fun `real surface creation seam fails when surface output listener is not installed`() {
         val failure = assertFailsWith<IllegalStateException> {
             WaylandWindow.createForTest(
@@ -1070,7 +1113,7 @@ class WaylandWindowTest {
         listenerArena = arena,
         collector = GlobalsCollector(),
         bindOutput = { name, version -> (name * 100L) to version.coerceAtMost(4) },
-        installOutputListener = { true },
+        installOutputListener = { AutoCloseable {} },
         destroyProxy = {},
         closeListenerArena = {},
     )

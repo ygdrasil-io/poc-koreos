@@ -118,7 +118,7 @@ private class WaylandSurfaceOutputListenerBinding(
     }
 }
 
-private object NativeWaylandSurfaceOutputListenerInstaller : WaylandSurfaceOutputListenerInstaller {
+internal object NativeWaylandSurfaceOutputListenerInstaller : WaylandSurfaceOutputListenerInstaller {
     override fun install(
         surfacePtr: Long,
         onEnter: (Long) -> Unit,
@@ -128,8 +128,9 @@ private object NativeWaylandSurfaceOutputListenerInstaller : WaylandSurfaceOutpu
         if (surfacePtr == 0L) return null
         val addListener = wlProxyAddListener ?: return null
         val arena = Arena.ofShared()
-        return try {
-            val listener = WlSurfaceOutputListener(onEnter, onLeave, onFailure)
+        val listener = WlSurfaceOutputListener(onEnter, onLeave, onFailure)
+        val binding = WaylandSurfaceOutputListenerBinding(listener, arena)
+        return finalizeWaylandListenerInstallation(binding) {
             val lookup = MethodHandles.lookup()
             val callbackDescriptor = FunctionDescriptor.ofVoid(
                 ValueLayout.ADDRESS,
@@ -173,15 +174,7 @@ private object NativeWaylandSurfaceOutputListenerInstaller : WaylandSurfaceOutpu
                 vtable,
                 MemorySegment.NULL,
             ) as Int
-            if (result != 0) {
-                arena.close()
-                null
-            } else {
-                WaylandSurfaceOutputListenerBinding(listener, arena)
-            }
-        } catch (_: Throwable) {
-            arena.close()
-            null
+            check(result == 0) { "wl_surface listener installation failed: $result" }
         }
     }
 }
@@ -230,6 +223,11 @@ class WaylandWindow private constructor(
     extBackgroundEffectManagerPtr: Long = 0L,
     kwinBlurManagerPtr: Long = 0L,
     surfaceOutputListenerInstaller: WaylandSurfaceOutputListenerInstaller? = NativeWaylandSurfaceOutputListenerInstaller,
+    private val surfaceProxyDestroyer: ((Long) -> Unit)? = { proxy ->
+        val destroy = checkNotNull(wlProxyDestroy) { "wl_proxy_destroy unavailable" }
+        destroy.invokeExact(MemorySegment.ofAddress(proxy))
+    },
+    private val nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
 ) : Window {
     @JvmField
     internal val pointerConstraints: WaylandPointerConstraints? =
@@ -289,7 +287,7 @@ class WaylandWindow private constructor(
 
     internal val enteredOutputProxies = linkedSetOf<Long>()
 
-    private var surfaceOutputListenerBinding: AutoCloseable? =
+    private var surfaceOutputListenerLease: WaylandNativeListenerLease? =
         surfaceOutputListenerInstaller
             ?.install(
                 surfacePtr,
@@ -302,6 +300,7 @@ class WaylandWindow private constructor(
                     checkNotNull(binding) { "failed to install wl_surface enter leave listener" }
                 }
             }
+            ?.let(nativeListenerLifetime::register)
 
     private fun reportSurfaceCallbackFailure(failure: Throwable) {
         val owner = registryOwner
@@ -469,6 +468,7 @@ class WaylandWindow private constructor(
      * calls wl_proxy_destroy directly on the surface.
      */
     override fun close() {
+        var primary: Throwable? = null
         try {
             // Destroy blur proxies first (child objects), then surface (parent).
             // The blur proxy objects are independent Wayland protocol objects; destroying
@@ -479,34 +479,44 @@ class WaylandWindow private constructor(
             destroyWlBuffer(currentCursorBuffer)
             currentCursorBuffer = 0L
             if (cursorSurfacePtr != 0L) {
-                val handle = wlProxyDestroy ?: return
-                try {
-                    handle.invokeExact(MemorySegment.ofAddress(cursorSurfacePtr))
-                } catch (_: Throwable) {}
+                wlProxyDestroy?.invokeExact(MemorySegment.ofAddress(cursorSurfacePtr))
                 cursorSurfacePtr = 0L
             }
             xdg?.destroy()
             xdg = null
-            if (surfacePtr == 0L) return
-            val handle = wlProxyDestroy ?: return
-            try {
-                val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
-                handle.invokeExact(surfaceSeg)
+            if (surfacePtr == 0L) {
+                surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
+                surfaceOutputListenerLease = null
+            } else {
+                val destroySurface = surfaceProxyDestroyer
+                    ?: error("wl_proxy_destroy unavailable while closing wl_surface")
+                // If this throws, retain the upcall arena until display disconnect.
+                destroySurface(surfacePtr)
+                surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
+                surfaceOutputListenerLease = null
                 wlDisplayFlush?.let { flush ->
                     val displaySeg = MemorySegment.ofAddress(displayPtr)
-                    flush.invokeExact(displaySeg) as Int
+                    val result = flush.invokeExact(displaySeg) as Int
+                    check(result >= 0) { "wl_display_flush failed while closing wl_surface: $result" }
                 }
-            } catch (_: Throwable) {
-                // Ignore — proxy already destroyed or library absent
             }
+        } catch (failure: Throwable) {
+            primary = failure
+            throw failure
         } finally {
-            // wl_surface listeners cannot be released until the surface proxy is gone.
-            surfaceOutputListenerBinding?.close()
-            surfaceOutputListenerBinding = null
-            outputRemovalSubscription?.close()
-            outputRemovalSubscription = null
-            outputScaleSubscription?.close()
-            outputScaleSubscription = null
+            runWaylandCleanup(
+                primary,
+                listOf(
+                    {
+                        outputRemovalSubscription?.close()
+                        outputRemovalSubscription = null
+                    },
+                    {
+                        outputScaleSubscription?.close()
+                        outputScaleSubscription = null
+                    },
+                ),
+            )
         }
     }
 
@@ -1283,6 +1293,36 @@ class WaylandWindow private constructor(
             seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
+        ): WaylandWindow? = createOwned(
+            display = display,
+            compositor = compositor,
+            xdgWmBase = xdgWmBase,
+            shmPtr = shmPtr,
+            attrs = attrs,
+            decorationManager = decorationManager,
+            pointerConstraintsPtr = pointerConstraintsPtr,
+            iconManagerPtr = iconManagerPtr,
+            activationManagerPtr = activationManagerPtr,
+            seatPtr = seatPtr,
+            extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
+            kwinBlurManagerPtr = kwinBlurManagerPtr,
+            nativeListenerLifetime = WaylandNativeListenerLifetime(),
+        )
+
+        internal fun createOwned(
+            display: Long,
+            compositor: Long,
+            xdgWmBase: Long,
+            shmPtr: Long,
+            attrs: WindowAttributes,
+            decorationManager: Long = 0L,
+            pointerConstraintsPtr: Long = 0L,
+            iconManagerPtr: Long = 0L,
+            activationManagerPtr: Long = 0L,
+            seatPtr: Long = 0L,
+            extBackgroundEffectManagerPtr: Long = 0L,
+            kwinBlurManagerPtr: Long = 0L,
+            nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -1332,6 +1372,7 @@ class WaylandWindow private constructor(
                     seatPtr,
                     extBackgroundEffectManagerPtr,
                     kwinBlurManagerPtr,
+                    nativeListenerLifetime = nativeListenerLifetime,
                 )
             }
             window.setTransparent(attrs.transparent)
@@ -1395,6 +1436,8 @@ class WaylandWindow private constructor(
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
             surfaceOutputListenerInstaller: WaylandSurfaceOutputListenerInstaller? = null,
+            surfaceProxyDestroyer: ((Long) -> Unit)? = null,
+            nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
         ): WaylandWindow =
             WaylandWindow(
                 display,
@@ -1410,6 +1453,8 @@ class WaylandWindow private constructor(
                 extBackgroundEffectManagerPtr,
                 kwinBlurManagerPtr,
                 surfaceOutputListenerInstaller,
+                surfaceProxyDestroyer,
+                nativeListenerLifetime,
             ).also {
                 it.setTransparent(attrs.transparent)
             }

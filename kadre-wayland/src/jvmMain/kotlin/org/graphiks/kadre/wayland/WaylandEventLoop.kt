@@ -81,6 +81,7 @@ class WaylandEventLoop internal constructor(
     internal val seatPtr: Long = 0L,
     internal val extBackgroundEffectManagerPtr: Long = 0L,
     internal val kwinBlurManagerPtr: Long = 0L,
+    private val nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
 ) : ActiveEventLoop {
 
     /** The [WaylandGlobals] discovered during startup. Used by [protocols] and [hasProtocol]. */
@@ -140,7 +141,7 @@ class WaylandEventLoop internal constructor(
      * @return The created window, or throws IllegalStateException if libwayland is absent.
      */
     override fun createWindow(attributes: WindowAttributes): Window {
-        val window = WaylandWindow.create(
+        val window = WaylandWindow.createOwned(
             display = displayPtr,
             compositor = compositorPtr,
             xdgWmBase = xdgWmBasePtr,
@@ -153,6 +154,7 @@ class WaylandEventLoop internal constructor(
             seatPtr = seatPtr,
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
+            nativeListenerLifetime = nativeListenerLifetime,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
         // Route this window's compositor-driven events into the loop's queue for dispatch.
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
@@ -171,7 +173,7 @@ class WaylandEventLoop internal constructor(
      * and applies platform-specific settings at creation time.
      */
     fun createWindow(attrs: WaylandWindowAttributes): Window {
-        val window = WaylandWindow.create(
+        val window = WaylandWindow.createOwned(
             display = displayPtr,
             compositor = compositorPtr,
             xdgWmBase = xdgWmBasePtr,
@@ -184,6 +186,7 @@ class WaylandEventLoop internal constructor(
             seatPtr = seatPtr,
             extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
             kwinBlurManagerPtr = kwinBlurManagerPtr,
+            nativeListenerLifetime = nativeListenerLifetime,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
         window.onWindowEvent = { event -> eventQueue.add(window.id to event) }
         window.registryOwner = _globals?.registryOwner
@@ -288,7 +291,7 @@ class WaylandEventLoop internal constructor(
         val primary = nativeFailureQueue.poll() ?: return
         while (true) {
             val additional = nativeFailureQueue.poll() ?: break
-            primary.addSuppressed(additional)
+            if (additional !== primary) primary.addSuppressed(additional)
         }
         throw primary
     }
@@ -424,10 +427,12 @@ private fun runAppInternal(handler: ApplicationHandler) {
 
     var seatBinding: WaylandSeatBinding? = null
     var registryOwner: WaylandRegistryOwner? = null
+    val nativeListenerLifetime = WaylandNativeListenerLifetime()
     preservingWaylandCleanup(
         cleanupActions = listOf(
-            { registryOwner?.close() },
+            { registryOwner?.close(); Unit },
             { closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) } },
+            nativeListenerLifetime::closeAfterDisplayDisconnect,
             {
                 val binding = seatBinding
                 if (binding != null) binding.close()
@@ -436,7 +441,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
     ) {
         // ── 4. Discover Wayland globals (compositor, seat, output) ───────────
         // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
-        val globals = discoverGlobals(displayPtr)
+        val globals = discoverGlobals(displayPtr, nativeListenerLifetime = nativeListenerLifetime)
         registryOwner = globals.registryOwner
 
         val eventLoop = WaylandEventLoop(
@@ -444,6 +449,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
             globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
             globals.activationManagerPtr, globals.seatPtr,
             globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
+            nativeListenerLifetime,
         ).also { it._globals = globals }
         globals.registryOwner?.routeNativeFailuresTo(eventLoop::queueNativeFailure)
 
