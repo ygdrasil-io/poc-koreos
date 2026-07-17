@@ -181,10 +181,12 @@ internal class WaylandKeymapLoader(
         } catch (caught: Throwable) {
             failure = caught
         } finally {
-            try {
-                requireNativeSuccess("close", operations.close(fd))
-            } catch (closeFailure: Throwable) {
-                failure = combineFailures(failure, closeFailure)
+            if (fd >= 0) {
+                try {
+                    requireNativeSuccess("close", operations.close(fd))
+                } catch (closeFailure: Throwable) {
+                    failure = combineFailures(failure, closeFailure)
+                }
             }
         }
 
@@ -278,8 +280,11 @@ internal class WaylandKeymapLoader(
     }
 }
 
-private fun combineFailures(primary: Throwable?, cleanup: Throwable): Throwable =
-    if (primary == null) cleanup else primary.also { it.addSuppressed(cleanup) }
+private fun combineFailures(primary: Throwable?, cleanup: Throwable): Throwable = when {
+    primary == null -> cleanup
+    primary === cleanup -> primary
+    else -> primary.also { it.addSuppressed(cleanup) }
+}
 
 /** Converts a throwing loader call into a queued loop failure at the native boundary. */
 internal class WaylandKeymapCallback(

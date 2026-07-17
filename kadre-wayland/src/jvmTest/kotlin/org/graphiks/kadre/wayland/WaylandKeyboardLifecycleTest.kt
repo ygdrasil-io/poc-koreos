@@ -47,6 +47,19 @@ class WaylandKeyboardLifecycleTest {
     }
 
     @Test
+    fun `negative fd is rejected without attempting native close`() {
+        val operations = FakeWaylandKeymapOperations()
+        val loader = WaylandKeymapLoader(operations)
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            loader.load(format = WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, fd = -1, size = 64)
+        }
+
+        assertEquals("invalid Wayland keymap fd: -1", failure.message)
+        assertEquals(emptyList(), operations.trace)
+    }
+
+    @Test
     fun `all construction exception paths close fd and only successful mappings are unmapped`() {
         val failurePoints = listOf("mmap", "context", "keymap", "state", "compose", "composeState")
 
@@ -148,6 +161,39 @@ class WaylandKeyboardLifecycleTest {
             listOf(
                 "mmap", "context", "keymap while mapping open", "state",
                 "munmap", "close(27)", "unref-keymap(102)", "unref-context(101)",
+            ),
+            operations.trace,
+        )
+    }
+
+    @Test
+    fun `same throwable reemitted by every cleanup remains the unsuppressed primary`() {
+        val sharedFailure = InjectedKeymapFailure("shared")
+        val operations = FakeWaylandKeymapOperations(
+            sharedFailure = sharedFailure,
+            sharedFailurePoints = setOf(
+                "state",
+                "munmap",
+                "close",
+                "unref-keymap",
+                "unref-context",
+            ),
+        )
+
+        val failure = assertFailsWith<InjectedKeymapFailure> {
+            WaylandKeymapLoader(operations).load(
+                format = WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
+                fd = 28,
+                size = 64,
+            )
+        }
+
+        assertSame(sharedFailure, failure)
+        assertEquals(emptyList(), failure.suppressed.toList())
+        assertEquals(
+            listOf(
+                "mmap", "context", "keymap while mapping open", "state",
+                "munmap", "close(28)", "unref-keymap(102)", "unref-context(101)",
             ),
             operations.trace,
         )
@@ -309,12 +355,15 @@ private class FakeWaylandKeymapOperations(
     var munmapResult: Int = 0,
     var closeResult: Int = 0,
     private val throwUnrefs: Set<String> = emptySet(),
+    private val sharedFailure: InjectedKeymapFailure? = null,
+    private val sharedFailurePoints: Set<String> = emptySet(),
 ) : WaylandKeymapOperations {
     val trace = mutableListOf<String>()
     private var mappingOpen = false
     private var contextCalls = 0
 
     private fun fail(point: String) {
+        if (point in sharedFailurePoints) throw checkNotNull(sharedFailure)
         if (throwAt == point) throw InjectedKeymapFailure(point)
     }
 
@@ -331,11 +380,13 @@ private class FakeWaylandKeymapOperations(
         assertTrue(mappingOpen, "mapping must still be open when munmap is called")
         mappingOpen = false
         trace += "munmap"
+        fail("munmap")
         return munmapResult
     }
 
     override fun close(fd: Int): Int {
         trace += "close($fd)"
+        fail("close")
         return closeResult
     }
 
@@ -398,6 +449,7 @@ private class FakeWaylandKeymapOperations(
     }
 
     private fun failUnref(operation: String) {
+        fail(operation)
         if (operation in throwUnrefs) throw InjectedKeymapFailure(operation)
     }
 }
