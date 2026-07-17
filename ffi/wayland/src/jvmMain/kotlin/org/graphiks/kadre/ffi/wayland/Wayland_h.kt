@@ -549,7 +549,7 @@ val zwpTextInputManagerV3Interface: MemorySegment by lazy {
 }
 
 val zwpTextInputV3Interface: MemorySegment by lazy {
-    buildWaylandInterface("zwp_text_input_v3", methodCount = 6, eventCount = 6)
+    buildWaylandInterface("zwp_text_input_v3", methodCount = 8, eventCount = 6)
 }
 
 val zwpPointerConstraintsV1Interface: MemorySegment by lazy {
@@ -615,6 +615,7 @@ val zwpInputManagerV3CreateTextInput: MethodHandle? by lazy {
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_INT,
             ValueLayout.JAVA_INT,
+            ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,
         ))
 }

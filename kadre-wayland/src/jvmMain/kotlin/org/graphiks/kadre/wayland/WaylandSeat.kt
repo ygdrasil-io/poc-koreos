@@ -316,6 +316,37 @@ internal const val WL_SEAT_GET_KEYBOARD: Int = 1
 /** wl_seat.get_touch opcode. */
 internal const val WL_SEAT_GET_TOUCH: Int = 2
 
+internal fun destroyOwnedWaylandProxy(proxyPtr: Long) {
+    checkNotNull(wlProxyDestroy) { "wl_proxy_destroy unavailable during listener rollback" }
+        .invokeExact(MemorySegment.ofAddress(proxyPtr))
+}
+
+internal fun installOwnedWaylandListener(
+    kind: String,
+    proxyPtr: Long,
+    failOnNativeError: Boolean,
+    destroyProxy: (Long) -> Unit = ::destroyOwnedWaylandProxy,
+    install: () -> Int,
+): Boolean {
+    val listenerResult = try {
+        install()
+    } catch (failure: Throwable) {
+        if (proxyPtr != 0L) {
+            runWaylandCleanup(failure, listOf({ destroyProxy(proxyPtr) }))
+        }
+        if (failOnNativeError) throw failure
+        return false
+    }
+    if (listenerResult == 0) return true
+
+    val failure = IllegalStateException("$kind listener installation failed: $listenerResult")
+    if (proxyPtr != 0L) {
+        runWaylandCleanup(failure, listOf({ destroyProxy(proxyPtr) }))
+    }
+    if (failOnNativeError) throw failure
+    return false
+}
+
 // ── wl_seat capability bits ───────────────────────────────────────────────────
 
 private const val WL_SEAT_CAPABILITY_POINTER: Int = 1
@@ -905,9 +936,9 @@ internal fun installSeatListeners(
                     if (kbSeg != null && kbSeg.address() != 0L) {
                         binding.keyboardOwner = installKeyboardListener(
                             kbSeg, addListener, lookup, arena, seatPtr, onEvent,
-                            onDeviceEvent, deviceFilter, onNativeFailure,
+                            onDeviceEvent, deviceFilter, onNativeFailure, failOnNativeError,
                         )
-                        anyListenerInstalled = true
+                        if (binding.keyboardOwner != null) anyListenerInstalled = true
                     }
                 }
             }
@@ -926,8 +957,13 @@ internal fun installSeatListeners(
                         null
                     }
                     if (ptrSeg != null && ptrSeg.address() != 0L) {
-                        installPointerListener(ptrSeg, addListener, lookup, arena, seatPtr, onEvent)
-                        anyListenerInstalled = true
+                        if (installPointerListener(
+                                ptrSeg, addListener, lookup, arena, seatPtr, onEvent,
+                                failOnNativeError,
+                            )
+                        ) {
+                            anyListenerInstalled = true
+                        }
                     }
                 }
             }
@@ -946,8 +982,12 @@ internal fun installSeatListeners(
                         null
                     }
                     if (touchSeg != null && touchSeg.address() != 0L) {
-                        installTouchListener(touchSeg, addListener, lookup, arena, onEvent)
-                        anyListenerInstalled = true
+                        if (installTouchListener(
+                                touchSeg, addListener, lookup, arena, onEvent, failOnNativeError,
+                            )
+                        ) {
+                            anyListenerInstalled = true
+                        }
                     }
                 }
             }
@@ -974,9 +1014,10 @@ internal fun installSeatListeners(
                 }
                 if (dataDevice != null && dataDevice.address() != 0L) {
                     val dnd = WaylandDragAndDrop(dataDevice.address(), displayPtr, onEvent)
-                    dnd.installListener(arena, addListener)
-                    binding.dnd = dnd
-                    anyListenerInstalled = true
+                    if (dnd.installListener(arena, addListener, failOnNativeError)) {
+                        binding.dnd = dnd
+                        anyListenerInstalled = true
+                    }
                 }
             }
         }
@@ -1016,7 +1057,8 @@ private fun installKeyboardListener(
     onDeviceEvent: RoutedDeviceEventSink,
     deviceFilter: WaylandDeviceFilter,
     onNativeFailure: (Throwable) -> Unit,
-): AutoCloseable {
+    failOnNativeError: Boolean,
+): AutoCloseable? {
     val listener = WlKeyboardListener(onEvent, onDeviceEvent, seatPtr, deviceFilter, onNativeFailure)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -1092,8 +1134,22 @@ private fun installKeyboardListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  keyStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  modsStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  repeatInfoStub)
-    runCatching { addListener.invokeExact(keyboard, vtable, MemorySegment.NULL) as Int }
-    return listener
+    return try {
+        if (installOwnedWaylandListener(
+                kind = "wl_keyboard",
+                proxyPtr = keyboard.address(),
+                failOnNativeError = failOnNativeError,
+            ) { addListener.invokeExact(keyboard, vtable, MemorySegment.NULL) as Int }
+        ) {
+            listener
+        } else {
+            listener.close()
+            null
+        }
+    } catch (failure: Throwable) {
+        runWaylandCleanup(failure, listOf(listener::close))
+        throw failure
+    }
 }
 
 private fun installPointerListener(
@@ -1103,7 +1159,8 @@ private fun installPointerListener(
     arena: Arena,
     seatPtr: Long,
     onEvent: RoutedWindowEventSink,
-) {
+    failOnNativeError: Boolean,
+): Boolean {
     val listener = WlPointerListener(onEvent, seatPtr)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -1206,7 +1263,11 @@ private fun installPointerListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 6,  axisSourceStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 7,  axisStopStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 8,  axisDiscreteStub)
-    runCatching { addListener.invokeExact(pointer, vtable, MemorySegment.NULL) as Int }
+    return installOwnedWaylandListener(
+        kind = "wl_pointer",
+        proxyPtr = pointer.address(),
+        failOnNativeError = failOnNativeError,
+    ) { addListener.invokeExact(pointer, vtable, MemorySegment.NULL) as Int }
 }
 
 private fun installTouchListener(
@@ -1215,7 +1276,8 @@ private fun installTouchListener(
     lookup: MethodHandles.Lookup,
     arena: Arena,
     onEvent: RoutedWindowEventSink,
-) {
+    failOnNativeError: Boolean,
+): Boolean {
     val listener = WlTouchListener(onEvent)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -1297,7 +1359,11 @@ private fun installTouchListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  cancelStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  shapeStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 6,  orientationStub)
-    runCatching { addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int }
+    return installOwnedWaylandListener(
+        kind = "wl_touch",
+        proxyPtr = touch.address(),
+        failOnNativeError = failOnNativeError,
+    ) { addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int }
 }
 
 internal fun installWaylandOutputListener(

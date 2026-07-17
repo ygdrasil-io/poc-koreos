@@ -84,7 +84,11 @@ internal class WaylandDragAndDrop(
     /**
      * Installs the wl_data_device listener. Called once after construction.
      */
-    fun installListener(arena: Arena, addListener: java.lang.invoke.MethodHandle) {
+    fun installListener(
+        arena: Arena,
+        addListener: java.lang.invoke.MethodHandle,
+        failOnNativeError: Boolean,
+    ): Boolean {
         val listener = WlDataDeviceListener(this)
         val lookup = MethodHandles.lookup()
         val ptr = ValueLayout.ADDRESS.byteSize()
@@ -151,7 +155,17 @@ internal class WaylandDragAndDrop(
         vtable.set(ValueLayout.ADDRESS, ptr * 3, motionStub)
         vtable.set(ValueLayout.ADDRESS, ptr * 4, dropStub)
         vtable.set(ValueLayout.ADDRESS, ptr * 5, selectionStub)
-        runCatching { addListener.invokeExact(MemorySegment.ofAddress(dataDevicePtr), vtable, MemorySegment.NULL) as Int }
+        return installOwnedWaylandListener(
+            kind = "wl_data_device",
+            proxyPtr = dataDevicePtr,
+            failOnNativeError = failOnNativeError,
+        ) {
+            addListener.invokeExact(
+                MemorySegment.ofAddress(dataDevicePtr),
+                vtable,
+                MemorySegment.NULL,
+            ) as Int
+        }
     }
 
     // ── wl_data_device event handlers ─────────────────────────────────────────

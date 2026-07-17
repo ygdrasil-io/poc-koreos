@@ -343,9 +343,73 @@ class WaylandKeyboardLifecycleTest {
             arena.close()
         }
     }
+
+    @Test
+    fun `strict seat child listener invoke failures propagate and roll back every proxy`() {
+        val kinds = listOf("wl_keyboard", "wl_pointer", "wl_touch", "wl_data_device")
+
+        for ((index, kind) in kinds.withIndex()) {
+            val proxy = 100L + index
+            val expected = InjectedListenerFailure("$kind invoke")
+            val destroyed = mutableListOf<Long>()
+
+            val actual = assertFailsWith<InjectedListenerFailure>(kind) {
+                installOwnedWaylandListener(
+                    kind = kind,
+                    proxyPtr = proxy,
+                    failOnNativeError = true,
+                    destroyProxy = { destroyed += it },
+                ) { throw expected }
+            }
+
+            assertSame(expected, actual, kind)
+            assertEquals(listOf(proxy), destroyed, kind)
+        }
+    }
+
+    @Test
+    fun `strict seat child listener nonzero results fail and roll back every proxy`() {
+        val kinds = listOf("wl_keyboard", "wl_pointer", "wl_touch", "wl_data_device")
+
+        for ((index, kind) in kinds.withIndex()) {
+            val proxy = 200L + index
+            val destroyed = mutableListOf<Long>()
+
+            val failure = assertFailsWith<IllegalStateException>(kind) {
+                installOwnedWaylandListener(
+                    kind = kind,
+                    proxyPtr = proxy,
+                    failOnNativeError = true,
+                    destroyProxy = { destroyed += it },
+                ) { -7 }
+            }
+
+            assertEquals("$kind listener installation failed: -7", failure.message, kind)
+            assertEquals(listOf(proxy), destroyed, kind)
+        }
+    }
+
+    @Test
+    fun `listener failure remains primary when proxy rollback also fails`() {
+        val expected = InjectedListenerFailure("listener")
+        val rollback = IllegalStateException("rollback")
+
+        val actual = assertFailsWith<InjectedListenerFailure> {
+            installOwnedWaylandListener(
+                kind = "wl_pointer",
+                proxyPtr = 301L,
+                failOnNativeError = true,
+                destroyProxy = { throw rollback },
+            ) { throw expected }
+        }
+
+        assertSame(expected, actual)
+        assertEquals(listOf(rollback), actual.suppressed.toList())
+    }
 }
 
 private class InjectedKeymapFailure(point: String) : RuntimeException(point)
+private class InjectedListenerFailure(point: String) : RuntimeException(point)
 
 private class FakeWaylandKeymapOperations(
     private val throwAt: String? = null,

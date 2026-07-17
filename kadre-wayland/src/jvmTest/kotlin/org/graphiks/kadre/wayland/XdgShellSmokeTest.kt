@@ -221,6 +221,15 @@ class XdgShellSmokeTest {
     }
 
     @Test
+    fun `initial xdg commit uses actual wl_surface proxy version`() {
+        val operations = RecordingXdgCreateOperations()
+
+        assertNotNull(createXdgForTest(operations))
+
+        assertEquals(3, operations.commitVersion)
+    }
+
+    @Test
     fun `real xdg factory rolls back every proxy when listener lifetime rejects registration`() {
         val operations = RecordingXdgCreateOperations()
         val registrationFailure = IllegalStateException("listener lifetime closed")
@@ -308,6 +317,7 @@ class XdgShellSmokeTest {
     ) : XdgCreateOperations {
         val trace = mutableListOf<String>()
         var ackCalls = 0
+        var commitVersion: Int? = null
 
         override val available: Boolean = true
 
@@ -321,7 +331,7 @@ class XdgShellSmokeTest {
             return if (failingStage == name) -7 else 0
         }
 
-        override fun getVersion(proxyPtr: Long): Int = 5
+        override fun getVersion(proxyPtr: Long): Int = if (proxyPtr == 30L) 3 else 5
 
         override fun getXdgSurface(wmBasePtr: Long, surfacePtr: Long, version: Int): Long {
             stage("get xdg_surface")
@@ -369,6 +379,7 @@ class XdgShellSmokeTest {
         ) = Unit
 
         override fun commit(surfacePtr: Long, version: Int) {
+            commitVersion = version
             stage("initial xdg commit")
         }
 

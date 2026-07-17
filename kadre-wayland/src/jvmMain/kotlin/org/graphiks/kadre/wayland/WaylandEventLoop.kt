@@ -758,6 +758,16 @@ internal inline fun <T> runWaylandStartupOperation(
     throw waylandStartupFailure(operation, display, failure)
 }
 
+internal inline fun <T> installWaylandSeatForStartup(
+    display: String?,
+    install: () -> T,
+    throwPendingNativeFailure: () -> Unit,
+): T = runWaylandStartupOperation("install seat listeners", display) {
+    val binding = install()
+    throwPendingNativeFailure()
+    binding
+}
+
 internal fun requireWaylandGlobals(globals: WaylandGlobals) {
     check(globals.compositorPtr != 0L) {
         "required Wayland global wl_compositor was not announced"
@@ -822,12 +832,14 @@ private fun runAppInternal(handler: ApplicationHandler) {
     }
 
     var seatBinding: WaylandSeatBinding? = null
+    var textInputBinding: WaylandTextInputBinding? = null
     var registryOwner: WaylandRegistryOwner? = null
     var eventLoopForCleanup: WaylandEventLoop? = null
     val nativeListenerLifetime = WaylandNativeListenerLifetime()
     preservingWaylandCleanup(
         cleanupActions = listOf(
             { eventLoopForCleanup?.closeAllWindowsDirect(); Unit },
+            { textInputBinding?.close(); Unit },
             { registryOwner?.close(); Unit },
             { closeWaylandResources(wakeup) { disconnectWaylandDisplay(displaySeg) } },
             nativeListenerLifetime::closeAfterDisplayDisconnect,
@@ -861,12 +873,10 @@ private fun runAppInternal(handler: ApplicationHandler) {
         // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
         // Route all input events into the eventQueue by their source wl_surface.
         // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
-        // DeviceEvent.Key is dispatched directly to the handler for raw key events.
-        seatBinding = runWaylandStartupOperation(
-            operation = "install seat listeners",
+        seatBinding = installWaylandSeatForStartup(
             display = waylandDisplay,
-        ) {
-            installSeatListeners(
+            install = {
+                installSeatListeners(
                 displayPtr    = displayPtr,
                 seatPtr       = globals.seatPtr,
                 seatVersion   = globals.seatVersion,
@@ -884,9 +894,10 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 onNativeFailure = eventLoop::queueNativeFailure,
                 failOnNativeError = true,
                 onBindingCreated = { seatBinding = it },
-            )
-        }
-        eventLoop.throwPendingNativeFailure()
+                )
+            },
+            throwPendingNativeFailure = eventLoop::throwPendingNativeFailure,
+        )
 
         // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
         if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
@@ -894,8 +905,9 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 operation = "create text input",
                 display = waylandDisplay,
             ) {
-                createTextInput(
+                textInputBinding = createTextInput(
                     managerPtr = globals.textInputManagerPtr,
+                    seatPtr = globals.seatPtr,
                     display = displayPtr,
                     onEvent = { surfacePtr, event ->
                         routeWaylandInputEvent(
@@ -905,6 +917,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
                             eventLoop::enqueueWindowEvent,
                         )
                     },
+                    nativeListenerLifetime = nativeListenerLifetime,
                     failOnNativeError = true,
                 )
             }

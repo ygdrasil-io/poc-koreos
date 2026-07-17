@@ -883,8 +883,10 @@ internal class XdgToplevel private constructor(
 
                 // Initial commit (no buffer yet) + roundtrip → triggers the first configure, which
                 // the surface listener acks. Only then is it legal to attach a buffer.
+                operation = "get wl_surface version"
+                val surfaceVersion = operations.getVersion(surfacePtr).coerceAtLeast(1)
                 operation = "initial xdg commit"
-                operations.commit(surfacePtr, version)
+                operations.commit(surfacePtr, surfaceVersion)
                 operation = "initial xdg roundtrip"
                 val roundtripResult = operations.roundtrip(displayPtr, bridge)
                 check(roundtripResult >= 0) { "wl_display_roundtrip failed: $roundtripResult" }

@@ -665,6 +665,24 @@ class WaylandLoopContractTest {
     }
 
     @Test
+    fun `pending native failure raised by seat roundtrip keeps startup context`() {
+        val pendingFailure = IllegalArgumentException("keymap callback failed")
+
+        val wrapped = assertFailsWith<IllegalStateException> {
+            installWaylandSeatForStartup(
+                display = "wayland-test-11",
+                install = { 42 },
+                throwPendingNativeFailure = { throw pendingFailure },
+            )
+        }
+
+        assertTrue(wrapped.message.orEmpty().contains("backend=Wayland"))
+        assertTrue(wrapped.message.orEmpty().contains("WAYLAND_DISPLAY=wayland-test-11"))
+        assertTrue(wrapped.message.orEmpty().contains("operation=install seat listeners"))
+        assertSame(pendingFailure, wrapped.cause)
+    }
+
+    @Test
     fun `strict display disconnect and wake cleanup preserve every failure`() {
         val disconnectFailure = IllegalArgumentException("disconnect")
         assertSame(
