@@ -4,6 +4,7 @@ import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import java.lang.foreign.MemorySegment
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -136,6 +137,119 @@ class Win32LifecycleTest {
             handler.calls,
         )
         assertCleanAndReusable(handler)
+    }
+
+    @Test
+    fun `WndProc upcall defers failures and runApp preserves cleanup order`() {
+        val primary = LifecycleFailure("first window event")
+        val second = LifecycleFailure("second window event")
+        val cleanup = LifecycleFailure("destroySurfaces")
+        val calls = mutableListOf<String>()
+        var windowEventCalls = 0
+        val handler = object : ApplicationHandler {
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                calls += "resumed"
+            }
+
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                calls += "canCreateSurfaces"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                calls += "windowEvent"
+                windowEventCalls++
+                throw if (windowEventCalls == 1) primary else second
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                calls += "suspended"
+                throw primary
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                calls += "destroySurfaces"
+                throw cleanup
+            }
+        }
+
+        val thrown = assertFailsWith<LifecycleFailure> {
+            runApp(handler, messageLoop = { _, _ ->
+                calls += "messageLoop"
+                assertEquals(
+                    0L,
+                    Win32Window.wndProc(MemorySegment.ofAddress(0x1234L), WM_SIZE, 0L, 0L),
+                    "the FFM upcall target must never throw",
+                )
+                assertEquals(
+                    0L,
+                    Win32Window.wndProc(MemorySegment.ofAddress(0x1234L), WM_SIZE, 0L, 0L),
+                    "later upcall failures must also be deferred",
+                )
+            })
+        }
+
+        assertSame(primary, thrown)
+        assertEquals(listOf(second, cleanup), thrown.suppressed.toList())
+        assertEquals(
+            listOf(
+                "resumed",
+                "canCreateSurfaces",
+                "messageLoop",
+                "windowEvent",
+                "windowEvent",
+                "suspended",
+                "destroySurfaces",
+            ),
+            calls,
+        )
+        assertFalse(win32Running.get())
+
+        val probe = LifecycleRecordingHandler()
+        runApp(probe, messageLoop = { _, _ -> probe.calls += "messageLoop" })
+        assertEquals(
+            listOf("resumed", "canCreateSurfaces", "messageLoop", "suspended", "destroySurfaces"),
+            probe.calls,
+        )
+    }
+
+    @Test
+    fun `Java message loop rethrows a failure pending before its body`() {
+        val primary = LifecycleFailure("pending before message loop")
+        var newEventsCalls = 0
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+
+            override fun newEvents(
+                eventLoop: ActiveEventLoop,
+                startCause: org.graphiks.kadre.core.StartCause,
+            ) {
+                newEventsCalls++
+            }
+        }
+        KadreWndProc.install { _, _ -> throw primary }
+
+        assertEquals(
+            0L,
+            Win32Window.wndProc(MemorySegment.ofAddress(0x1234L), WM_SIZE, 0L, 0L),
+            "the upcall must return before Java code rethrows the pending failure",
+        )
+
+        val thrown = assertFailsWith<LifecycleFailure> {
+            Win32EventLoop(postQuitMessage = {}).runMessageLoop(handler)
+        }
+
+        assertSame(primary, thrown)
+        assertEquals(0, newEventsCalls, "a pending failure must be checked before the loop body")
     }
 
     private fun assertCleanAndReusable(handler: LifecycleRecordingHandler) {

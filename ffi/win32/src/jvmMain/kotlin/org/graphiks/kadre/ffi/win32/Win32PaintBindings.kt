@@ -45,38 +45,35 @@ private fun paintDowncall(name: String, descriptor: FunctionDescriptor): MethodH
         ?.map { Linker.nativeLinker().downcallHandle(it, descriptor) }
         ?.orElse(null)
 
+internal val invalidateRectDescriptor: FunctionDescriptor = FunctionDescriptor.of(
+    ValueLayout.JAVA_INT,
+    ValueLayout.ADDRESS,
+    ValueLayout.ADDRESS,
+    ValueLayout.JAVA_INT,
+)
+
+internal val beginPaintDescriptor: FunctionDescriptor = FunctionDescriptor.of(
+    ValueLayout.ADDRESS,
+    ValueLayout.ADDRESS,
+    ValueLayout.ADDRESS,
+)
+
+internal val endPaintDescriptor: FunctionDescriptor = FunctionDescriptor.of(
+    ValueLayout.JAVA_INT,
+    ValueLayout.ADDRESS,
+    ValueLayout.ADDRESS,
+)
+
 private val invalidateRectHandle: MethodHandle? by lazy {
-    paintDowncall(
-        "InvalidateRect",
-        FunctionDescriptor.of(
-            ValueLayout.JAVA_INT,
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-            ValueLayout.JAVA_INT,
-        ),
-    )
+    paintDowncall("InvalidateRect", invalidateRectDescriptor)
 }
 
 private val beginPaintHandle: MethodHandle? by lazy {
-    paintDowncall(
-        "BeginPaint",
-        FunctionDescriptor.of(
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-        ),
-    )
+    paintDowncall("BeginPaint", beginPaintDescriptor)
 }
 
 private val endPaintHandle: MethodHandle? by lazy {
-    paintDowncall(
-        "EndPaint",
-        FunctionDescriptor.of(
-            ValueLayout.JAVA_INT,
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-        ),
-    )
+    paintDowncall("EndPaint", endPaintDescriptor)
 }
 
 /** Invalidates a window rectangle through user32!InvalidateRect. */

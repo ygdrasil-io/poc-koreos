@@ -179,14 +179,19 @@ internal class Win32EventLoop(
             return
         }
 
-        try {
+        var failure: Throwable? = null
+        failure = captureWin32Failure(failure) {
             handler.windowEvent(this, WindowId(hwnd), event)
-        } finally {
-            removeWindow(hwnd)
-            if (windowsEmpty() && !isExiting) {
-                exit()
-            }
         }
+        failure = captureWin32Failure(failure) { removeWindow(hwnd) }
+
+        var empty = false
+        failure = captureWin32Failure(failure) { empty = windowsEmpty() }
+        if (empty && !isExiting) {
+            failure = captureWin32Failure(failure) { exit() }
+        }
+
+        failure?.let { throw it }
     }
 
     /**
@@ -265,7 +270,7 @@ internal class Win32EventLoop(
      *
      * @param handler Lifecycle and event handler.
      */
-    internal fun runMessageLoop(handler: ApplicationHandler) {
+    internal fun runMessageLoop(handler: ApplicationHandler) = withWndProcFailureCheck {
         // Confined arena for the MSG segment — freed when the loop exits
         Arena.ofConfined().use { arena ->
             val msg = arena.allocateMsg()
@@ -318,6 +323,7 @@ internal class Win32EventLoop(
             if (hasMsg == 0) break  // queue empty, exit the pump
             TranslateMessage(msg)
             DispatchMessageW(msg)
+            Win32WndProcFailures.throwPending()
         }
         return StartCause.Poll
     }
@@ -341,6 +347,7 @@ internal class Win32EventLoop(
                 // Normal message → translate + dispatch
                 TranslateMessage(msg)
                 DispatchMessageW(msg)
+                Win32WndProcFailures.throwPending()
             }
             result == 0 -> {
                 // WM_QUIT → clean exit
@@ -388,6 +395,7 @@ internal class Win32EventLoop(
                     if (hasMsg == 0) break
                     TranslateMessage(msg)
                     DispatchMessageW(msg)
+                    Win32WndProcFailures.throwPending()
                 }
                 return StartCause.WaitCancelled(targetInstant)
             }
@@ -448,23 +456,24 @@ internal fun runApp(
 
         var failure: Throwable? = null
         try {
-            handler.resumed(eventLoop)
-            handler.canCreateSurfaces(eventLoop)
-            messageLoop(eventLoop, handler)
+            withWndProcFailureCheck { handler.resumed(eventLoop) }
+            withWndProcFailureCheck { handler.canCreateSurfaces(eventLoop) }
+            withWndProcFailureCheck { messageLoop(eventLoop, handler) }
         } catch (throwable: Throwable) {
             failure = throwable
         }
 
         failure = captureLifecycleFailure(failure) {
-            handler.suspended(eventLoop)
+            withWndProcFailureCheck { handler.suspended(eventLoop) }
         }
         failure = captureLifecycleFailure(failure) {
-            handler.destroySurfaces(eventLoop)
+            withWndProcFailureCheck { handler.destroySurfaces(eventLoop) }
         }
 
         failure?.let { throw it }
     } finally {
         KadreWndProc.uninstall()
+        Win32WndProcFailures.clear()
         win32Running.set(false)
     }
 }
@@ -476,10 +485,5 @@ private inline fun captureLifecycleFailure(
     callback()
     primary
 } catch (later: Throwable) {
-    if (primary == null) {
-        later
-    } else {
-        if (primary !== later) primary.addSuppressed(later)
-        primary
-    }
+    appendWin32Failure(primary, later)
 }

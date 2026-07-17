@@ -119,6 +119,93 @@ class Win32LastWindowPolicyTest {
     }
 
     @Test
+    fun `destroyed stages preserve first failure and suppress later distinct failures`() {
+        val deliveryFailure = IllegalStateException("delivery")
+        val removalFailure = IllegalStateException("removal")
+        val exitFailure = IllegalStateException("exit")
+        val calls = mutableListOf<String>()
+        val eventLoop = Win32EventLoop(postQuitMessage = {
+            calls += "exit"
+            throw exitFailure
+        })
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                calls += "delivery"
+                throw deliveryFailure
+            }
+        }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            eventLoop.deliverWindowEvent(
+                handler = handler,
+                hwnd = 1L,
+                event = WindowEvent.Destroyed,
+                removeWindow = {
+                    calls += "removal"
+                    throw removalFailure
+                },
+                windowsEmpty = {
+                    calls += "empty"
+                    true
+                },
+            )
+        }
+
+        assertSame(deliveryFailure, thrown)
+        assertEquals(listOf(removalFailure, exitFailure), thrown.suppressed.toList())
+        assertEquals(listOf("delivery", "removal", "empty", "exit"), calls)
+        assertTrue(eventLoop.isExiting)
+    }
+
+    @Test
+    fun `destroyed stages tolerate the same Throwable instance`() {
+        val shared = IllegalStateException("shared")
+        val calls = mutableListOf<String>()
+        val eventLoop = Win32EventLoop(postQuitMessage = {
+            calls += "exit"
+            throw shared
+        })
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                calls += "delivery"
+                throw shared
+            }
+        }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            eventLoop.deliverWindowEvent(
+                handler = handler,
+                hwnd = 1L,
+                event = WindowEvent.Destroyed,
+                removeWindow = {
+                    calls += "removal"
+                    throw shared
+                },
+                windowsEmpty = {
+                    calls += "empty"
+                    true
+                },
+            )
+        }
+
+        assertSame(shared, thrown)
+        assertEquals(emptyList(), thrown.suppressed.toList())
+        assertEquals(listOf("delivery", "removal", "empty", "exit"), calls)
+    }
+
+    @Test
     fun `WndProc destroy failure still clears every per-window registry`() {
         val deliveryFailure = IllegalStateException("destroyed delivery failed")
         val calls = mutableListOf<String>()
@@ -138,6 +225,76 @@ class Win32LastWindowPolicyTest {
         }
 
         assertSame(deliveryFailure, thrown)
+        assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
+    }
+
+    @Test
+    fun `WndProc registries preserve distinct failures in cleanup order`() {
+        val deliveryFailure = IllegalStateException("delivery")
+        val focusFailure = IllegalStateException("focus")
+        val constraintsFailure = IllegalStateException("constraints")
+        val modifiersFailure = IllegalStateException("modifiers")
+        val calls = mutableListOf<String>()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            KadreWndProc.dispatchDestroy(
+                hwnd = 1L,
+                emitEvent = { _, _ ->
+                    calls += "emit"
+                    throw deliveryFailure
+                },
+                unregisterFocus = {
+                    calls += "focus"
+                    throw focusFailure
+                },
+                unregisterConstraints = {
+                    calls += "constraints"
+                    throw constraintsFailure
+                },
+                unregisterModifiers = {
+                    calls += "modifiers"
+                    throw modifiersFailure
+                },
+            )
+        }
+
+        assertSame(deliveryFailure, thrown)
+        assertEquals(
+            listOf(focusFailure, constraintsFailure, modifiersFailure),
+            thrown.suppressed.toList(),
+        )
+        assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
+    }
+
+    @Test
+    fun `WndProc registries tolerate the same Throwable instance`() {
+        val shared = IllegalStateException("shared")
+        val calls = mutableListOf<String>()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            KadreWndProc.dispatchDestroy(
+                hwnd = 1L,
+                emitEvent = { _, _ ->
+                    calls += "emit"
+                    throw shared
+                },
+                unregisterFocus = {
+                    calls += "focus"
+                    throw shared
+                },
+                unregisterConstraints = {
+                    calls += "constraints"
+                    throw shared
+                },
+                unregisterModifiers = {
+                    calls += "modifiers"
+                    throw shared
+                },
+            )
+        }
+
+        assertSame(shared, thrown)
+        assertEquals(emptyList(), thrown.suppressed.toList())
         assertEquals(listOf("emit", "focus", "constraints", "modifiers"), calls)
     }
 

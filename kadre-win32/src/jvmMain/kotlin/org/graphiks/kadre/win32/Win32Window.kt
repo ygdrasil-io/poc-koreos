@@ -1300,7 +1300,12 @@ class Win32Window private constructor(
 
         @JvmStatic
         fun wndProc(hwnd: MemorySegment, msg: Int, wParam: Long, lParam: Long): Long {
-            return KadreWndProc.dispatch(hwnd.address(), msg, wParam, lParam)
+            return try {
+                KadreWndProc.dispatch(hwnd.address(), msg, wParam, lParam)
+            } catch (failure: Throwable) {
+                Win32WndProcFailures.record(failure)
+                0L
+            }
         }
 
         fun create(attrs: WindowAttributes): Win32Window? {

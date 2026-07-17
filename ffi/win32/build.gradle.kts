@@ -13,5 +13,6 @@ kotlin {
 
     sourceSets {
         jvmMain { dependencies { } }
+        jvmTest { dependencies { implementation(kotlin("test")) } }
     }
 }

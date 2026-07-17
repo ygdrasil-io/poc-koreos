@@ -550,23 +550,10 @@ object KadreWndProc {
     ): Long {
         var failure: Throwable? = null
 
-        fun capture(action: () -> Unit) {
-            try {
-                action()
-            } catch (caught: Throwable) {
-                val primary = failure
-                if (primary == null) {
-                    failure = caught
-                } else {
-                    primary.addSuppressed(caught)
-                }
-            }
-        }
-
-        capture { emitEvent(hwnd, WindowEvent.Destroyed) }
-        capture { unregisterFocus(hwnd) }
-        capture { unregisterConstraints(hwnd) }
-        capture { unregisterModifiers(hwnd) }
+        failure = captureWin32Failure(failure) { emitEvent(hwnd, WindowEvent.Destroyed) }
+        failure = captureWin32Failure(failure) { unregisterFocus(hwnd) }
+        failure = captureWin32Failure(failure) { unregisterConstraints(hwnd) }
+        failure = captureWin32Failure(failure) { unregisterModifiers(hwnd) }
 
         failure?.let { throw it }
         return 0L
