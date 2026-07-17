@@ -32,11 +32,15 @@ object PaintStructLayout {
 fun Arena.allocatePaintStruct(): MemorySegment =
     allocate(PaintStructLayout.SIZEOF.toLong(), PaintStructLayout.ALIGN.toLong())
 
+internal fun lookupPaintUser32(openLibrary: () -> SymbolLookup): SymbolLookup? = try {
+    openLibrary()
+} catch (_: IllegalArgumentException) {
+    null
+}
+
 private val paintUser32: SymbolLookup? by lazy {
-    try {
+    lookupPaintUser32 {
         SymbolLookup.libraryLookup("user32.dll", Arena.global())
-    } catch (_: Throwable) {
-        null
     }
 }
 
