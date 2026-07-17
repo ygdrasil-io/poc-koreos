@@ -1039,6 +1039,9 @@ val wlSeatGetTouch: MethodHandle? by lazy {
 }
 
 const val POLLIN: Short = 1
+const val POLLERR: Short = 0x08
+const val POLLHUP: Short = 0x10
+const val POLLNVAL: Short = 0x20
 
 fun allocPollFd(arena: java.lang.foreign.Arena): java.lang.foreign.MemorySegment =
     arena.allocate(8L * 2, 4L)

@@ -550,9 +550,23 @@ internal sealed interface WaylandPollResult {
     ) : WaylandPollResult
 
     data class Failure(val errno: Int) : WaylandPollResult
+
+    data class DescriptorFailure(
+        val displayRevents: Short,
+        val wakeRevents: Short,
+    ) : WaylandPollResult
+}
+
+internal fun interface WaylandMonotonicClock {
+    fun nowNanos(): Long
 }
 
 private const val POSIX_EINTR = 4
+private const val NANOS_PER_MILLISECOND = 1_000_000L
+private const val POLL_ERROR_MASK =
+    POLLERR.toInt() or POLLHUP.toInt() or POLLNVAL.toInt()
+
+private val systemWaylandMonotonicClock = WaylandMonotonicClock(System::nanoTime)
 
 private class NativeWaylandPumpOperations(
     private val display: MemorySegment,
@@ -600,11 +614,35 @@ private object NativeWaylandPoller : WaylandPoller {
         } else if (result.value == 0) {
             WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
         } else {
-            WaylandPollResult.Ready(
-                displayReadable = (getPollRevents(fds, 0).toInt() and POLLIN.toInt()) != 0,
-                wakeReadable = (getPollRevents(fds, 1).toInt() and POLLIN.toInt()) != 0,
+            decodeWaylandPollResult(
+                pollCount = result.value,
+                displayRevents = getPollRevents(fds, 0),
+                wakeRevents = getPollRevents(fds, 1),
             )
         }
+    }
+}
+
+internal fun decodeWaylandPollResult(
+    pollCount: Int,
+    displayRevents: Short,
+    wakeRevents: Short,
+): WaylandPollResult {
+    if (pollCount == 0) {
+        return WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
+    }
+
+    val displayFlags = displayRevents.toInt() and 0xffff
+    val wakeFlags = wakeRevents.toInt() and 0xffff
+    val hasDescriptorError =
+        (displayFlags and POLL_ERROR_MASK) != 0 || (wakeFlags and POLL_ERROR_MASK) != 0
+    val displayReadable = (displayFlags and POLLIN.toInt()) != 0
+    val wakeReadable = (wakeFlags and POLLIN.toInt()) != 0
+
+    return if (hasDescriptorError || (!displayReadable && !wakeReadable)) {
+        WaylandPollResult.DescriptorFailure(displayRevents, wakeRevents)
+    } else {
+        WaylandPollResult.Ready(displayReadable, wakeReadable)
     }
 }
 
@@ -614,8 +652,37 @@ internal fun pumpWaylandOnce(
     wakeup: PosixWakeup,
     displayFd: Int,
     timeoutMs: Int,
+    clock: WaylandMonotonicClock = systemWaylandMonotonicClock,
 ): WaylandPollResult.Ready {
+    val deadlineNanos = if (timeoutMs > 0) {
+        val startedAt = clock.nowNanos()
+        val durationNanos = timeoutMs.toLong() * NANOS_PER_MILLISECOND
+        try {
+            Math.addExact(startedAt, durationNanos)
+        } catch (_: ArithmeticException) {
+            Long.MAX_VALUE
+        }
+    } else {
+        null
+    }
+    var retryingAfterInterrupt = false
+
     while (true) {
+        val currentTimeoutMs = if (deadlineNanos != null && retryingAfterInterrupt) {
+            val remainingNanos = deadlineNanos - clock.nowNanos()
+            if (remainingNanos <= 0L) {
+                return WaylandPollResult.Ready(
+                    displayReadable = false,
+                    wakeReadable = false,
+                )
+            }
+            (remainingNanos / NANOS_PER_MILLISECOND)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+        } else {
+            timeoutMs
+        }
+
         while (operations.prepareRead() != 0) {
             operations.dispatchPending()
         }
@@ -628,7 +695,7 @@ internal fun pumpWaylandOnce(
         }
 
         val pollResult = try {
-            poller.poll(displayFd, wakeup.readFd, timeoutMs)
+            poller.poll(displayFd, wakeup.readFd, currentTimeoutMs)
         } catch (failure: Throwable) {
             cancelPreparedRead(operations, failure)
             throw failure
@@ -636,9 +703,23 @@ internal fun pumpWaylandOnce(
 
         when (pollResult) {
             is WaylandPollResult.Failure -> {
-                cancelPreparedRead(operations)
-                if (pollResult.errno == POSIX_EINTR) continue
-                throw PosixException("poll", pollResult.errno)
+                if (pollResult.errno == POSIX_EINTR) {
+                    cancelPreparedRead(operations)
+                    retryingAfterInterrupt = true
+                    continue
+                }
+                val failure = PosixException("poll", pollResult.errno)
+                cancelPreparedRead(operations, failure)
+                throw failure
+            }
+            is WaylandPollResult.DescriptorFailure -> {
+                val failure = IllegalStateException(
+                    "Wayland poll descriptor failure: " +
+                        "display=${formatPollRevents(pollResult.displayRevents)}, " +
+                        "wake=${formatPollRevents(pollResult.wakeRevents)}",
+                )
+                cancelPreparedRead(operations, failure)
+                throw failure
             }
             is WaylandPollResult.Ready -> {
                 if (pollResult.displayReadable) {
@@ -655,6 +736,22 @@ internal fun pumpWaylandOnce(
             }
         }
     }
+}
+
+private fun formatPollRevents(revents: Short): String {
+    val flags = revents.toInt() and 0xffff
+    if (flags == 0) return "none"
+
+    val names = buildList {
+        if ((flags and POLLIN.toInt()) != 0) add("POLLIN")
+        if ((flags and POLLERR.toInt()) != 0) add("POLLERR")
+        if ((flags and POLLHUP.toInt()) != 0) add("POLLHUP")
+        if ((flags and POLLNVAL.toInt()) != 0) add("POLLNVAL")
+        val known = POLLIN.toInt() or POLL_ERROR_MASK
+        val unknown = flags and known.inv()
+        if (unknown != 0) add("0x${unknown.toString(16)}")
+    }
+    return names.joinToString("|")
 }
 
 private fun cancelPreparedRead(

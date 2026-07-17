@@ -28,6 +28,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class WaylandEventLoopSmokeTest {
@@ -52,7 +53,7 @@ class WaylandEventLoopSmokeTest {
     }
 
     @Test
-    fun `poll EINTR cancels prepared read then prepares again before retry`() {
+    fun `infinite poll EINTR cancels prepared read then retries infinitely`() {
         val trace = mutableListOf<String>()
         val operations = FakeWaylandPumpOperations(trace)
         val wakeup = FakePosixWakeup(externalTrace = trace)
@@ -67,17 +68,126 @@ class WaylandEventLoopSmokeTest {
             poller = poller,
             wakeup = wakeup,
             displayFd = 41,
-            timeoutMs = 250,
+            timeoutMs = -1,
         )
 
         assertEquals(WaylandPollResult.Ready(displayReadable = true, wakeReadable = true), readiness)
         assertEquals(
             listOf(
-                "prepare", "flush", "poll(41,73,250)", "cancel",
-                "prepare", "flush", "poll(41,73,250)", "read", "dispatch", "drain",
+                "prepare", "flush", "poll(41,73,-1)", "cancel",
+                "prepare", "flush", "poll(41,73,-1)", "read", "dispatch", "drain",
             ),
             trace,
         )
+    }
+
+    @Test
+    fun `positive timeout budget decreases after EINTR and expires without rearming`() {
+        val trace = mutableListOf<String>()
+        val clock = FakeWaylandMonotonicClock(
+            0L,
+            40_000_000L,
+            100_000_000L,
+        )
+
+        val readiness = pumpWaylandOnce(
+            operations = FakeWaylandPumpOperations(trace),
+            poller = FakeWaylandPoller(
+                trace,
+                WaylandPollResult.Failure(errno = 4),
+                WaylandPollResult.Failure(errno = 4),
+            ),
+            wakeup = FakePosixWakeup(externalTrace = trace),
+            displayFd = 45,
+            timeoutMs = 100,
+            clock = clock,
+        )
+
+        assertEquals(WaylandPollResult.Ready(displayReadable = false, wakeReadable = false), readiness)
+        assertEquals(
+            listOf(
+                "prepare", "flush", "poll(45,73,100)", "cancel",
+                "prepare", "flush", "poll(45,73,60)", "cancel",
+            ),
+            trace,
+        )
+        assertEquals(3, clock.calls)
+    }
+
+    @Test
+    fun `zero timeout stays nonblocking across EINTR`() {
+        val trace = mutableListOf<String>()
+
+        pumpWaylandOnce(
+            operations = FakeWaylandPumpOperations(trace),
+            poller = FakeWaylandPoller(
+                trace,
+                WaylandPollResult.Failure(errno = 4),
+                WaylandPollResult.Ready(displayReadable = false, wakeReadable = false),
+            ),
+            wakeup = FakePosixWakeup(externalTrace = trace),
+            displayFd = 46,
+            timeoutMs = 0,
+            clock = WaylandMonotonicClock { error("zero timeout must not consult the clock") },
+        )
+
+        assertEquals(
+            listOf(
+                "prepare", "flush", "poll(46,73,0)", "cancel",
+                "prepare", "flush", "poll(46,73,0)", "cancel",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `native poll decoder reports every descriptor error flag for display and wake`() {
+        val cases = listOf(
+            Triple(POLLERR, 0.toShort(), "display POLLERR"),
+            Triple(POLLHUP, 0.toShort(), "display POLLHUP"),
+            Triple(POLLNVAL, 0.toShort(), "display POLLNVAL"),
+            Triple(0.toShort(), POLLERR, "wake POLLERR"),
+            Triple(0.toShort(), POLLHUP, "wake POLLHUP"),
+            Triple(0.toShort(), POLLNVAL, "wake POLLNVAL"),
+        )
+
+        for ((displayRevents, wakeRevents, label) in cases) {
+            val result = assertIs<WaylandPollResult.DescriptorFailure>(
+                decodeWaylandPollResult(
+                    pollCount = 1,
+                    displayRevents = displayRevents,
+                    wakeRevents = wakeRevents,
+                ),
+                label,
+            )
+            assertEquals(displayRevents, result.displayRevents, label)
+            assertEquals(wakeRevents, result.wakeRevents, label)
+        }
+    }
+
+    @Test
+    fun `descriptor poll error cancels prepared read and reports both descriptors`() {
+        val trace = mutableListOf<String>()
+
+        val failure = assertFailsWith<IllegalStateException> {
+            pumpWaylandOnce(
+                operations = FakeWaylandPumpOperations(trace),
+                poller = FakeWaylandPoller(
+                    trace,
+                    WaylandPollResult.DescriptorFailure(
+                        displayRevents = POLLERR,
+                        wakeRevents = POLLHUP,
+                    ),
+                ),
+                wakeup = FakePosixWakeup(externalTrace = trace),
+                displayFd = 47,
+                timeoutMs = -1,
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("display=POLLERR"))
+        assertTrue(failure.message.orEmpty().contains("wake=POLLHUP"))
+        assertEquals(listOf("prepare", "flush", "poll(47,73,-1)", "cancel"), trace)
     }
 
     @Test
@@ -99,6 +209,25 @@ class WaylandEventLoopSmokeTest {
         assertEquals("poll", failure.operation)
         assertEquals(5, failure.errno)
         assertEquals(listOf("prepare", "flush", "poll(42,73,-1)", "cancel"), trace)
+    }
+
+    @Test
+    fun `poll errno stays primary when cancel read also fails`() {
+        val trace = mutableListOf<String>()
+
+        val failure = assertFailsWith<PosixException> {
+            pumpWaylandOnce(
+                operations = FakeWaylandPumpOperations(trace, failCancel = true),
+                poller = FakeWaylandPoller(trace, WaylandPollResult.Failure(errno = 5)),
+                wakeup = FakePosixWakeup(externalTrace = trace),
+                displayFd = 48,
+                timeoutMs = -1,
+            )
+        }
+
+        assertEquals(5, failure.errno)
+        assertEquals("injected cancel failure", failure.suppressed.single().message)
+        assertEquals(listOf("prepare", "flush", "poll(48,73,-1)", "cancel"), trace)
     }
 
     @Test
@@ -475,6 +604,7 @@ private class FakePosixWakeup(
 private class FakeWaylandPumpOperations(
     private val trace: MutableList<String>,
     private val failFlush: Boolean = false,
+    private val failCancel: Boolean = false,
 ) : WaylandPumpOperations {
     override fun prepareRead(): Int {
         trace += "prepare"
@@ -496,6 +626,20 @@ private class FakeWaylandPumpOperations(
 
     override fun cancelRead() {
         trace += "cancel"
+        if (failCancel) throw IllegalStateException("injected cancel failure")
+    }
+}
+
+private class FakeWaylandMonotonicClock(
+    vararg readings: Long,
+) : WaylandMonotonicClock {
+    private val readings = ArrayDeque(readings.toList())
+    var calls: Int = 0
+        private set
+
+    override fun nowNanos(): Long {
+        calls += 1
+        return readings.removeFirst()
     }
 }
 
