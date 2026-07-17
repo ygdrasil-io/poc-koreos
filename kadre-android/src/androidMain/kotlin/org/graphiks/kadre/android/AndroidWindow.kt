@@ -30,7 +30,6 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 /**
@@ -66,7 +65,7 @@ class AndroidWindow internal constructor(
     @Volatile
     private var _surface: android.view.Surface? = null
 
-    private val closeDelegated = AtomicBoolean(false)
+    private val closeOperation = LinearizedCloseOperation()
 
     /**
      * Makes the surface available for rendering.
@@ -192,7 +191,7 @@ class AndroidWindow internal constructor(
     }
 
     override fun close() {
-        if (closeDelegated.compareAndSet(false, true)) {
+        closeOperation.run {
             eventLoop.closeWindow(this)
         }
     }

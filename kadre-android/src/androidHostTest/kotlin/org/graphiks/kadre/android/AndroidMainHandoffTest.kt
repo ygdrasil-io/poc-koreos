@@ -9,6 +9,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,6 +19,95 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AndroidMainHandoffTest {
+    @Test
+    fun concurrentCloseCallersWaitForOneSharedCompletion() {
+        val operation = LinearizedCloseOperation()
+        val actionStarted = CountDownLatch(1)
+        val releaseAction = CountDownLatch(1)
+        val secondReturned = CountDownLatch(1)
+        val actionCalls = AtomicInteger(0)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val first = executor.submit {
+                operation.run {
+                    actionCalls.incrementAndGet()
+                    actionStarted.countDown()
+                    check(releaseAction.await(5L, TimeUnit.SECONDS))
+                }
+            }
+            assertTrue(actionStarted.await(5L, TimeUnit.SECONDS))
+            val second = executor.submit {
+                operation.run {
+                    actionCalls.incrementAndGet()
+                }
+                secondReturned.countDown()
+            }
+
+            assertFalse(
+                secondReturned.await(250L, TimeUnit.MILLISECONDS),
+                "a concurrent close returned before the shared operation completed",
+            )
+            releaseAction.countDown()
+            first.get(5L, TimeUnit.SECONDS)
+            second.get(5L, TimeUnit.SECONDS)
+            assertEquals(1, actionCalls.get())
+        } finally {
+            releaseAction.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun rejectedCloseHandoffCanBeRetried() {
+        val operation = LinearizedCloseOperation()
+        val attempts = AtomicInteger(0)
+
+        assertFailsWith<IllegalStateException> {
+            operation.run {
+                attempts.incrementAndGet()
+                boundedMainHandoff(
+                    timeoutMillis = 50L,
+                    post = { false },
+                ) {
+                    error("rejected handoff must not run")
+                }
+            }
+        }
+        operation.run {
+            attempts.incrementAndGet()
+        }
+
+        assertEquals(2, attempts.get())
+    }
+
+    @Test
+    fun cancelledBeforeStartCloseHandoffCanBeRetried() {
+        val operation = LinearizedCloseOperation()
+        val attempts = AtomicInteger(0)
+        var postedTask: Runnable? = null
+
+        assertFailsWith<IllegalStateException> {
+            operation.run {
+                attempts.incrementAndGet()
+                boundedMainHandoff(
+                    timeoutMillis = 10L,
+                    post = { task ->
+                        postedTask = task
+                        true
+                    },
+                ) {
+                    error("cancelled handoff must not run")
+                }
+            }
+        }
+        assertTrue(assertIs<Future<*>>(postedTask).isCancelled)
+        operation.run {
+            attempts.incrementAndGet()
+        }
+
+        assertEquals(2, attempts.get())
+    }
+
     @Test
     fun handoffStartAndCancellationTransitionsAreMutuallyExclusive() {
         val startFirst = MainHandoffTaskState()

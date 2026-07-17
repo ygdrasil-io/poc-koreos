@@ -5,8 +5,55 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 internal const val MAIN_HANDOFF_TIMEOUT_MILLIS = 5_000L
+
+/**
+ * Linearizes one retryable close operation across all callers.
+ *
+ * Concurrent callers wait for the owner to complete. A failure resets the operation so a
+ * handoff rejected or cancelled before start can be retried. Reentrant calls from the owner
+ * join the in-flight operation without waiting on themselves.
+ */
+internal class LinearizedCloseOperation {
+    private val lock = ReentrantLock()
+    private val completion = lock.newCondition()
+    private var phase = Phase.Idle
+    private var owner: Thread? = null
+
+    fun run(action: () -> Unit) {
+        val caller = Thread.currentThread()
+        lock.withLock {
+            while (phase == Phase.Running) {
+                if (owner === caller) return
+                completion.awaitUninterruptibly()
+            }
+            if (phase == Phase.Completed) return
+            phase = Phase.Running
+            owner = caller
+        }
+
+        var completed = false
+        try {
+            action()
+            completed = true
+        } finally {
+            lock.withLock {
+                phase = if (completed) Phase.Completed else Phase.Idle
+                owner = null
+                completion.signalAll()
+            }
+        }
+    }
+
+    private enum class Phase {
+        Idle,
+        Running,
+        Completed,
+    }
+}
 
 internal fun <T> boundedMainHandoff(
     timeoutMillis: Long,

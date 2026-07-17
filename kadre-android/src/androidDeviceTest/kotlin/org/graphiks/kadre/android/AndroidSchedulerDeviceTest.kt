@@ -1,8 +1,10 @@
 package org.graphiks.kadre.android
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.util.concurrent.CompletableFuture
@@ -12,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
@@ -30,10 +33,37 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class AndroidSchedulerDeviceTest {
+    @Test
+    fun availableMonitorReportsDefaultDisplayRefreshRate() {
+        val ready = CompletableFuture<ActiveEventLoop>()
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes())
+                ready.complete(eventLoop)
+            }
+        }
+
+        withActivityScenario(handler) { scenario ->
+            val eventLoop = await(ready, handler)
+            scenario.onActivity { activity ->
+                @Suppress("DEPRECATION")
+                val display = (activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+                    .defaultDisplay
+                val monitor = eventLoop.availableMonitors().single()
+                assertEquals(
+                    refreshRateMillihertz(display.refreshRate),
+                    checkNotNull(monitor.currentVideoMode).refreshRateMilliHz,
+                )
+            }
+        }
+    }
+
     @Test
     fun eventQueuedFromNewEventsIsDeliveredOnlyInNextIterationWithoutEmptyWake() {
         val ready = CompletableFuture<EventLoopProxy>()
@@ -707,10 +737,341 @@ class AndroidSchedulerDeviceTest {
         }
     }
 
+    @Test
+    fun concurrentBackgroundCloseCallersWaitForTerminalCompletion() {
+        val ready = CompletableFuture<Window>()
+        val closeEntered = CountDownLatch(1)
+        val releaseClose = CountDownLatch(1)
+        val secondReturned = CountDownLatch(1)
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                ready.complete(eventLoop.createWindow(WindowAttributes()))
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                closeEntered.countDown()
+                check(releaseClose.await(5L, TimeUnit.SECONDS))
+            }
+        }
+
+        withActivity(handler) {
+            val window = await(ready, handler)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val first = executor.submit { window.close() }
+                assertTrue(closeEntered.await(5L, TimeUnit.SECONDS))
+                val second = executor.submit {
+                    window.close()
+                    secondReturned.countDown()
+                }
+
+                assertFalse(
+                    secondReturned.await(750L, TimeUnit.MILLISECONDS),
+                    "the second close returned while the first close was still in destroySurfaces",
+                )
+                releaseClose.countDown()
+                first.get(5L, TimeUnit.SECONDS)
+                second.get(5L, TimeUnit.SECONDS)
+                assertFailsWith<IllegalStateException> { window.rawWindowHandle }
+                handler.rethrowFailure()
+            } finally {
+                releaseClose.countDown()
+                executor.shutdownNow()
+            }
+        }
+    }
+
+    @Test
+    fun createWindowIsRejectedDuringAndAfterTerminalClose() {
+        val ready = CompletableFuture<Pair<ActiveEventLoop, Window>>()
+        val rejectedAt = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                ready.complete(eventLoop to eventLoop.createWindow(WindowAttributes()))
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                val failure = runCatching { eventLoop.createWindow(WindowAttributes()) }.exceptionOrNull()
+                if (failure is IllegalStateException) rejectedAt += "destroySurfaces"
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Destroyed) {
+                    val failure = runCatching {
+                        eventLoop.createWindow(WindowAttributes())
+                    }.exceptionOrNull()
+                    if (failure is IllegalStateException) rejectedAt += "Destroyed"
+                }
+            }
+        }
+
+        withActivity(handler) {
+            val (eventLoop, window) = await(ready, handler)
+            window.close()
+            val afterCloseFailure = runCatching {
+                eventLoop.createWindow(WindowAttributes())
+            }.exceptionOrNull()
+            if (afterCloseFailure is IllegalStateException) rejectedAt += "afterClose"
+
+            assertEquals(
+                setOf("destroySurfaces", "Destroyed", "afterClose"),
+                rejectedAt.toSet(),
+            )
+            assertEquals(3, rejectedAt.size)
+            handler.rethrowFailure()
+        }
+    }
+
+    @Test
+    fun destroySurfacesFailureStillInvalidatesDispatchesDestroyedAndFinishes() {
+        val ready = CompletableFuture<Pair<AndroidEventLoop, Window>>()
+        val expected = IllegalStateException("destroySurfaces failed")
+        val throwOnce = AtomicBoolean(true)
+        val destroyedCount = AtomicInteger(0)
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                ready.complete(eventLoop as AndroidEventLoop to eventLoop.createWindow(WindowAttributes()))
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                if (throwOnce.compareAndSet(true, false)) throw expected
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Destroyed) destroyedCount.incrementAndGet()
+            }
+        }
+
+        withActivity(handler) {
+            val (eventLoop, window) = await(ready, handler)
+            val actual = assertFailsWith<IllegalStateException> { window.close() }
+            assertSame(expected, actual)
+            assertFailsWith<IllegalStateException> { window.rawWindowHandle }
+            assertEquals(0, registeredWindowCount(eventLoop))
+            assertEquals(1, destroyedCount.get())
+            assertTrue(eventLoop.isExiting)
+        }
+    }
+
+    @Test
+    fun closeFromNewEventsStopsIterationAtDestroyed() {
+        val ready = CompletableFuture<EventLoopProxy>()
+        val destroyed = CompletableFuture<Unit>()
+        val unexpectedCallback = CountDownLatch(1)
+        val exercise = AtomicBoolean(false)
+        val trace = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            private lateinit var window: Window
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                window = eventLoop.createWindow(WindowAttributes())
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (!exercise.get()) return
+                if (destroyed.isDone) {
+                    unexpectedCallback.countDown()
+                    return
+                }
+                trace += "newEvents"
+                window.close()
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Destroyed) {
+                    trace += "Destroyed"
+                    destroyed.complete(Unit)
+                } else if (destroyed.isDone) {
+                    unexpectedCallback.countDown()
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (!exercise.get()) {
+                    ready.complete(eventLoop.createProxy())
+                } else if (destroyed.isDone) {
+                    trace += "aboutToWait"
+                    unexpectedCallback.countDown()
+                }
+            }
+        }
+
+        withActivity(handler) {
+            val proxy = await(ready, handler)
+            exercise.set(true)
+            proxy.wakeUp()
+            await(destroyed, handler)
+            assertFalse(
+                unexpectedCallback.await(750L, TimeUnit.MILLISECONDS),
+                "an event-loop callback followed Destroyed after close from newEvents",
+            )
+            assertEquals(listOf("newEvents", "Destroyed"), trace)
+            handler.rethrowFailure()
+        }
+    }
+
+    @Test
+    fun closeFromWindowEventStopsIterationAtDestroyed() {
+        val ready = CompletableFuture<Pair<AndroidEventLoop, Window>>()
+        val destroyed = CompletableFuture<Unit>()
+        val unexpectedCallback = CountDownLatch(1)
+        val trace = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            private lateinit var window: Window
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                window = eventLoop.createWindow(WindowAttributes())
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (destroyed.isDone) unexpectedCallback.countDown()
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                when {
+                    event is WindowEvent.Focused -> {
+                        trace += "Focused"
+                        window.close()
+                    }
+                    event is WindowEvent.Destroyed -> {
+                        trace += "Destroyed"
+                        destroyed.complete(Unit)
+                    }
+                    destroyed.isDone -> unexpectedCallback.countDown()
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (!ready.isDone) {
+                    ready.complete(eventLoop as AndroidEventLoop to window)
+                } else if (destroyed.isDone) {
+                    trace += "aboutToWait"
+                    unexpectedCallback.countDown()
+                }
+            }
+        }
+
+        withActivity(handler) {
+            val (eventLoop, window) = await(ready, handler)
+            eventLoop.queueWindowEvent(window.id, WindowEvent.Focused(false))
+            await(destroyed, handler)
+            assertFalse(
+                unexpectedCallback.await(750L, TimeUnit.MILLISECONDS),
+                "an event-loop callback followed Destroyed after close from windowEvent",
+            )
+            assertEquals(listOf("Focused", "Destroyed"), trace)
+            handler.rethrowFailure()
+        }
+    }
+
+    @Test
+    fun closePurgesArmedTimerPendingProxyWakeAndAllSchedulerCallbacks() {
+        val waitArmed = CompletableFuture<Triple<AndroidEventLoop, Window, EventLoopProxy>>()
+        val destroyed = CompletableFuture<Unit>()
+        val unexpectedCallback = CountDownLatch(1)
+        val trace = CopyOnWriteArrayList<String>()
+        val handler = object : GuardedHandler() {
+            private lateinit var eventLoop: AndroidEventLoop
+            private lateinit var window: Window
+            private var waitRequested = false
+
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                this.eventLoop = eventLoop as AndroidEventLoop
+                window = eventLoop.createWindow(WindowAttributes())
+            }
+
+            override fun onNewEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (destroyed.isDone) {
+                    trace += "newEvents:$startCause"
+                    unexpectedCallback.countDown()
+                }
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Destroyed) {
+                    trace += "Destroyed"
+                    destroyed.complete(Unit)
+                } else if (destroyed.isDone) {
+                    trace += event::class.java.simpleName
+                    unexpectedCallback.countDown()
+                }
+            }
+
+            override fun onAboutToWait(eventLoop: ActiveEventLoop) {
+                if (!waitRequested) {
+                    waitRequested = true
+                    eventLoop.setControlFlow(
+                        ControlFlow.WaitUntil(System.currentTimeMillis() + 400L),
+                    )
+                    Handler(Looper.getMainLooper()).post {
+                        waitArmed.complete(
+                            Triple(this.eventLoop, window, eventLoop.createProxy()),
+                        )
+                    }
+                } else if (destroyed.isDone) {
+                    trace += "aboutToWait"
+                    unexpectedCallback.countDown()
+                }
+            }
+        }
+
+        withActivityScenario(handler) { scenario ->
+            val (eventLoop, window, proxy) = await(waitArmed, handler)
+            scenario.onActivity {
+                assertTrue(
+                    eventLoop.schedulerDiagnostics().hasArmedWait,
+                    "WaitUntil timer was not armed",
+                )
+                val background = Executors.newSingleThreadExecutor()
+                try {
+                    background.submit { proxy.wakeUp() }.get(5L, TimeUnit.SECONDS)
+                    assertTrue(
+                        eventLoop.schedulerDiagnostics().hasPendingProxyWake,
+                        "proxy wake was not pending",
+                    )
+                    window.close()
+                } finally {
+                    background.shutdownNow()
+                }
+
+                assertNull(eventLoop.pendingWindow)
+                assertEquals(0, registeredWindowCount(eventLoop))
+                assertFalse(eventLoop.schedulerDiagnostics().hasArmedWait)
+                assertFalse(eventLoop.schedulerDiagnostics().hasPendingProxyWake)
+            }
+
+            await(destroyed, handler)
+            assertFalse(
+                unexpectedCallback.await(750L, TimeUnit.MILLISECONDS),
+                "a timer, proxy wake, or scheduler callback survived terminal close: $trace",
+            )
+            assertEquals(listOf("Destroyed"), trace)
+            handler.rethrowFailure()
+        }
+    }
+
     private fun registeredWindowCount(eventLoop: AndroidEventLoop): Int {
-        val field = AndroidEventLoop::class.java.getDeclaredField("windows")
-        field.isAccessible = true
-        return (field.get(eventLoop) as Map<*, *>).size
+        return eventLoop.schedulerDiagnostics().registeredWindowCount
     }
 
     private fun withActivity(handler: GuardedHandler, assertions: () -> Unit) {

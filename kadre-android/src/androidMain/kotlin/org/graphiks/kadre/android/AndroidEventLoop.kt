@@ -34,6 +34,12 @@ internal fun refreshRateMillihertz(refreshRateHz: Float): Int? {
     return millihertz.roundToInt()
 }
 
+internal data class AndroidSchedulerDiagnostics(
+    val registeredWindowCount: Int,
+    val hasArmedWait: Boolean,
+    val hasPendingProxyWake: Boolean,
+)
+
 /**
  * Android implementation of [ActiveEventLoop].
  *
@@ -84,6 +90,8 @@ internal class AndroidEventLoop(
     private val pendingWindowEvents = ArrayDeque<QueuedWindowEvent>()
 
     private var nextWindowId = 1L
+    @Volatile
+    private var terminal = false
     private var initialIterationPending = true
     private var inIteration = false
 
@@ -133,6 +141,9 @@ internal class AndroidEventLoop(
 
     private fun createWindowOnMain(attributes: WindowAttributes): AndroidWindow {
         val kadreActivity = activity as KadreActivity
+        check(!terminal && !activity.isFinishing && !activity.isDestroyed && !kadreActivity.destroyed) {
+            "Android event loop is terminal; no window can be created after close"
+        }
         check(nextWindowId < Long.MAX_VALUE) { "Android WindowId space exhausted" }
         val windowId = WindowId(nextWindowId++)
         val window = AndroidWindow(windowId, kadreActivity.surfaceView, this, kadreActivity)
@@ -255,8 +266,12 @@ internal class AndroidEventLoop(
     override fun availableMonitors(): List<MonitorHandle> {
         return try {
             val dm = android.util.DisplayMetrics()
-            (activity.getSystemService(android.content.Context.WINDOW_SERVICE)
-                as android.view.WindowManager).defaultDisplay.getRealMetrics(dm)
+            @Suppress("DEPRECATION")
+            val display = (activity.getSystemService(android.content.Context.WINDOW_SERVICE)
+                as android.view.WindowManager).defaultDisplay
+            @Suppress("DEPRECATION")
+            display.getRealMetrics(dm)
+            val refreshRateMilliHz = refreshRateMillihertz(display.refreshRate)
             listOf(object : MonitorHandle {
                 override val id: Long = 0L
                 override val name: String? = null
@@ -265,7 +280,7 @@ internal class AndroidEventLoop(
                 override val currentVideoMode: VideoMode = VideoMode(
                     size = PhysicalSize(dm.widthPixels, dm.heightPixels),
                     bitDepth = null,
-                    refreshRateMilliHz = refreshRateMillihertz(activity.display?.refreshRate ?: 0f),
+                    refreshRateMilliHz = refreshRateMilliHz,
                 )
                 override val videoModes: List<VideoMode> = listOf(currentVideoMode)
             })
@@ -350,6 +365,7 @@ internal class AndroidEventLoop(
         }
 
         if (windows.isEmpty()) {
+            terminal = true
             proxyWakeQueued.set(false)
             invalidateArmedWait()
             if (frameCallbackScheduled) {
@@ -362,14 +378,30 @@ internal class AndroidEventLoop(
         // Renderers must release their resources before the native surface handle
         // becomes invalid, even when close() precedes Android's surface callback.
         val kadreActivity = activity as KadreActivity
-        kadreActivity.destroySurfacesIfNeeded()
-        window.onSurfaceReleased()
-        currentSurface = null
-
-        kadreActivity.handler.windowEvent(this, windowId, WindowEvent.Destroyed)
-        if (finishActivity && windows.isEmpty()) {
-            activity.finish()
+        var callbackFailure: Throwable? = null
+        try {
+            kadreActivity.destroySurfacesIfNeeded()
+        } catch (failure: Throwable) {
+            callbackFailure = failure
+        } finally {
+            window.onSurfaceReleased()
+            currentSurface = null
         }
+
+        try {
+            kadreActivity.handler.windowEvent(this, windowId, WindowEvent.Destroyed)
+        } catch (failure: Throwable) {
+            callbackFailure?.addSuppressed(failure) ?: run { callbackFailure = failure }
+        } finally {
+            if (finishActivity && windows.isEmpty()) {
+                try {
+                    activity.finish()
+                } catch (failure: Throwable) {
+                    callbackFailure?.addSuppressed(failure) ?: run { callbackFailure = failure }
+                }
+            }
+        }
+        callbackFailure?.let { throw it }
     }
 
     /** Returns only the current window that is still registered as open. */
@@ -380,6 +412,14 @@ internal class AndroidEventLoop(
     private fun currentOpenWindowOnMain(): AndroidWindow? {
         val window = pendingWindow ?: return null
         return openWindow(window.id)
+    }
+
+    internal fun schedulerDiagnostics(): AndroidSchedulerDiagnostics = callOnMain {
+        AndroidSchedulerDiagnostics(
+            registeredWindowCount = windows.size,
+            hasArmedWait = armedWaitToken != null,
+            hasPendingProxyWake = proxyWakeQueued.get(),
+        )
     }
 
     /** Queues a platform window event for the next ordered loop iteration. */
@@ -449,7 +489,8 @@ internal class AndroidEventLoop(
         inIteration = true
         try {
             kadreActivity.handler.newEvents(this, cause)
-            windowEvents.forEach { queuedEvent ->
+            if (!canContinueIteration()) return
+            for (queuedEvent in windowEvents) {
                 openWindow(queuedEvent.windowId)?.let {
                     kadreActivity.handler.windowEvent(
                         this,
@@ -457,8 +498,9 @@ internal class AndroidEventLoop(
                         queuedEvent.event,
                     )
                 }
+                if (!canContinueIteration()) return
             }
-            redraws.forEach { windowId ->
+            for (windowId in redraws) {
                 openWindow(windowId)?.let {
                     kadreActivity.handler.windowEvent(
                         this,
@@ -466,8 +508,10 @@ internal class AndroidEventLoop(
                         WindowEvent.RedrawRequested,
                     )
                 }
+                if (!canContinueIteration()) return
             }
             kadreActivity.handler.aboutToWait(this)
+            if (!canContinueIteration()) return
         } finally {
             inIteration = false
         }
@@ -518,6 +562,10 @@ internal class AndroidEventLoop(
     private fun openWindow(windowId: WindowId): AndroidWindow? {
         if (!state.isOpen(windowId)) return null
         return windows[windowId]
+    }
+
+    private fun canContinueIteration(): Boolean {
+        return !terminal && windows.isNotEmpty() && isActivityActive()
     }
 
     private fun isActivityActive(): Boolean {

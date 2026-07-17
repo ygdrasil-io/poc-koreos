@@ -284,15 +284,18 @@ abstract class KadreActivity : ComponentActivity() {
 
     private fun releaseSurfaceIfNeeded() {
         if (!surfaceLifecycleActive) return
-        destroySurfacesIfNeeded()
-        eventLoop.onSurfaceDestroyed()
+        try {
+            destroySurfacesIfNeeded()
+        } finally {
+            eventLoop.onSurfaceDestroyed()
+        }
     }
 
     /** Preserves the renderer callback before the window invalidates its surface handle. */
     internal fun destroySurfacesIfNeeded() {
         if (!surfaceLifecycleActive) return
-        handler.destroySurfaces(eventLoop)
         surfaceLifecycleActive = false
+        handler.destroySurfaces(eventLoop)
     }
 
     override fun onResume() {
