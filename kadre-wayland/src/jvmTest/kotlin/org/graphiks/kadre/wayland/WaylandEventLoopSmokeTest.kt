@@ -115,6 +115,63 @@ class WaylandEventLoopSmokeTest {
     }
 
     @Test
+    fun `timeout budget survives nanoTime wraparound`() {
+        val trace = mutableListOf<String>()
+        val clock = FakeWaylandMonotonicClock(
+            Long.MAX_VALUE - 4L,
+            Long.MIN_VALUE + 1_000_005L,
+        )
+
+        pumpWaylandOnce(
+            operations = FakeWaylandPumpOperations(trace),
+            poller = FakeWaylandPoller(
+                trace,
+                WaylandPollResult.Failure(errno = 4),
+                WaylandPollResult.Ready(displayReadable = false, wakeReadable = false),
+            ),
+            wakeup = FakePosixWakeup(externalTrace = trace),
+            displayFd = 49,
+            timeoutMs = 2,
+            clock = clock,
+        )
+
+        assertEquals(
+            listOf(
+                "prepare", "flush", "poll(49,73,2)", "cancel",
+                "prepare", "flush", "poll(49,73,1)", "cancel",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `sub millisecond remaining budget rounds up to one millisecond`() {
+        val trace = mutableListOf<String>()
+        val clock = FakeWaylandMonotonicClock(0L, 1_999_999L)
+
+        pumpWaylandOnce(
+            operations = FakeWaylandPumpOperations(trace),
+            poller = FakeWaylandPoller(
+                trace,
+                WaylandPollResult.Failure(errno = 4),
+                WaylandPollResult.Ready(displayReadable = false, wakeReadable = false),
+            ),
+            wakeup = FakePosixWakeup(externalTrace = trace),
+            displayFd = 50,
+            timeoutMs = 2,
+            clock = clock,
+        )
+
+        assertEquals(
+            listOf(
+                "prepare", "flush", "poll(50,73,2)", "cancel",
+                "prepare", "flush", "poll(50,73,1)", "cancel",
+            ),
+            trace,
+        )
+    }
+
+    @Test
     fun `zero timeout stays nonblocking across EINTR`() {
         val trace = mutableListOf<String>()
 
@@ -163,6 +220,20 @@ class WaylandEventLoopSmokeTest {
             assertEquals(displayRevents, result.displayRevents, label)
             assertEquals(wakeRevents, result.wakeRevents, label)
         }
+    }
+
+    @Test
+    fun `positive poll count without revents is a descriptor failure`() {
+        val result = decodeWaylandPollResult(
+            pollCount = 1,
+            displayRevents = 0,
+            wakeRevents = 0,
+        )
+
+        assertEquals(
+            WaylandPollResult.DescriptorFailure(displayRevents = 0, wakeRevents = 0),
+            result,
+        )
     }
 
     @Test

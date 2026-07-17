@@ -654,29 +654,29 @@ internal fun pumpWaylandOnce(
     timeoutMs: Int,
     clock: WaylandMonotonicClock = systemWaylandMonotonicClock,
 ): WaylandPollResult.Ready {
-    val deadlineNanos = if (timeoutMs > 0) {
-        val startedAt = clock.nowNanos()
-        val durationNanos = timeoutMs.toLong() * NANOS_PER_MILLISECOND
-        try {
-            Math.addExact(startedAt, durationNanos)
-        } catch (_: ArithmeticException) {
-            Long.MAX_VALUE
-        }
-    } else {
-        null
-    }
+    val durationNanos = timeoutMs
+        .takeIf { it > 0 }
+        ?.toLong()
+        ?.times(NANOS_PER_MILLISECOND)
+    val startedAtNanos = durationNanos?.let { clock.nowNanos() }
     var retryingAfterInterrupt = false
 
     while (true) {
-        val currentTimeoutMs = if (deadlineNanos != null && retryingAfterInterrupt) {
-            val remainingNanos = deadlineNanos - clock.nowNanos()
+        val currentTimeoutMs = if (
+            durationNanos != null && startedAtNanos != null && retryingAfterInterrupt
+        ) {
+            // System.nanoTime values are only meaningful through subtraction. Long
+            // overflow here intentionally implements the documented wraparound arithmetic.
+            val elapsedNanos = clock.nowNanos() - startedAtNanos
+            val remainingNanos = durationNanos - elapsedNanos
             if (remainingNanos <= 0L) {
                 return WaylandPollResult.Ready(
                     displayReadable = false,
                     wakeReadable = false,
                 )
             }
-            (remainingNanos / NANOS_PER_MILLISECOND)
+            // Ceiling division without `remaining + unit - 1`, which could overflow.
+            (((remainingNanos - 1L) / NANOS_PER_MILLISECOND) + 1L)
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
         } else {
