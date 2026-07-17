@@ -42,6 +42,35 @@ scan_gradle_files() {
         return 0
       }
 
+      function source_line_for_position(position, line_) {
+        for (line_ = line_count; line_ >= 1; line_--) {
+          if (line_start[line_] <= position) {
+            return line_
+          }
+        }
+
+        return 1
+      }
+
+      function collect_android_library_matches(text, mask, pattern, remaining, offset, position, length_, line_) {
+        remaining = text
+        offset = 1
+
+        while (match(remaining, pattern)) {
+          position = offset + RSTART - 1
+          if (substr(mask, position, 1) != "1") {
+            line_ = source_line_for_position(position)
+            android_library_plugin_count++
+            android_library_plugin_line[android_library_plugin_count] = line_
+            android_library_plugin_source[android_library_plugin_count] = line_source[line_]
+          }
+
+          length_ = RLENGTH
+          offset = position + length_
+          remaining = substr(text, offset)
+        }
+      }
+
       function is_identifier_start(character) {
         return character ~ /[[:alpha:]_]/
       }
@@ -50,18 +79,10 @@ scan_gradle_files() {
         return character ~ /[[:alnum:]_]/
       }
 
-      function is_inside_kmp_android_scope(level, found_android) {
-        found_android = 0
-
-        for (level = scope_depth; level >= 1; level--) {
-          if (!found_android && scope[level] == "android") {
-            found_android = 1
-          } else if (found_android && scope[level] == "kotlin") {
-            return 1
-          }
-        }
-
-        return 0
+      function is_direct_kmp_android_scope() {
+        return scope_depth >= 2 &&
+          scope[scope_depth] == "android" &&
+          scope[scope_depth - 1] == "kotlin"
       }
 
       function inspect_scopes(text, original, character, cursor, end_, word) {
@@ -91,7 +112,7 @@ scan_gradle_files() {
           } else if (character == "=") {
             if (pending_identifier == "namespace") {
               found_namespace = 1
-              if (is_inside_kmp_android_scope()) {
+              if (is_direct_kmp_android_scope()) {
                 found_nested_namespace = 1
               } else if (enforce_kmp_namespace) {
                 invalid_namespace = 1
@@ -113,7 +134,7 @@ scan_gradle_files() {
         android_target = "androidTarget[[:space:]]*\\("
         kotlin_android_plugin = "id\\(\"org\\.jetbrains\\.kotlin\\.android\"\\)|kotlin\\(\"android\"\\)"
         android_library_plugin = "id[[:space:]]*\\([[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)"
-        kotlin_multiplatform_plugin = "id[[:space:]]*\\([[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|kotlin[[:space:]]*\\([[:space:]]*\"multiplatform\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)"
+        kotlin_multiplatform_plugin = "id[[:space:]]*\\([[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|kotlin[[:space:]]*\\([[:space:]]*\"multiplatform\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|id[[:space:]]*\\([[:space:]]*\"ygdrasil\\.conventions\\.kmp-library\"[[:space:]]*\\)"
       }
 
       {
@@ -212,15 +233,6 @@ scan_gradle_files() {
           print FILENAME ":" FNR ":" original
         }
 
-        if (has_unmasked_match(code, string_mask, android_library_plugin)) {
-          android_library_plugin_count++
-          android_library_plugin_line[android_library_plugin_count] = FNR
-          android_library_plugin_source[android_library_plugin_count] = original
-        }
-        if (has_unmasked_match(code, string_mask, kotlin_multiplatform_plugin)) {
-          found_kotlin_multiplatform_plugin = 1
-        }
-
         structure = ""
         for (column = 1; column <= length(code); column++) {
           if (substr(string_mask, column, 1) == "1") {
@@ -230,9 +242,18 @@ scan_gradle_files() {
           }
         }
         inspect_scopes(structure, original)
+
+        line_count = FNR
+        line_start[FNR] = length(file_code) + 1
+        line_source[FNR] = original
+        file_code = file_code code "\n"
+        file_mask = file_mask string_mask "0"
       }
 
       END {
+        collect_android_library_matches(file_code, file_mask, android_library_plugin)
+        found_kotlin_multiplatform_plugin = has_unmasked_match(file_code, file_mask, kotlin_multiplatform_plugin)
+
         if (found_kotlin_multiplatform_plugin && android_library_plugin_count > 0) {
           for (plugin_index = 1; plugin_index <= android_library_plugin_count; plugin_index++) {
             print FILENAME ":" android_library_plugin_line[plugin_index] ":" android_library_plugin_source[plugin_index]
@@ -248,7 +269,7 @@ scan_gradle_files() {
 }
 
 legacy="$({
-  scan_gradle_files
+  scan_gradle_files || exit 1
   rg -n '^android\.(builtInKotlin|newDsl)=false|^systemProp\..*android\.(builtInKotlin|newDsl)=false' "$root/gradle.properties" || true
 })"
 
