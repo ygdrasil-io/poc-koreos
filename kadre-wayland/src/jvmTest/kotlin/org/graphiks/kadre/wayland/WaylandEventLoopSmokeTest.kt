@@ -15,12 +15,17 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kadre.test.EventLoopConformanceDriver
+import org.graphiks.kadre.test.ObservedCallback
+import org.graphiks.kadre.test.assertWakeUpRearms
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class WaylandEventLoopSmokeTest {
@@ -36,60 +41,49 @@ class WaylandEventLoopSmokeTest {
         assertFalse(waylandRunning.get(), "waylandRunning must be false at startup")
     }
 
-    /**
-     * Verifies that WaylandEventLoopProxy.wakeUp() does not crash when libC is absent.
-     *
-     * On macOS/Windows, nativeWrite is null — wakeUp() must simply return
-     * without throwing an exception.
-     */
     @Test
-    fun `wakeUp proxy no-crash when libC absent`() {
-        // We pass fd=-1 to simulate the absence of eventfd (immediate return in wakeUp)
-        val proxy = WaylandEventLoopProxy(eventFd = -1)
-        proxy.wakeUp()  // must not throw an exception
-        proxy.wakeUp()  // second call — idempotent
+    fun `wakeUp proxy rearms for every conformance cycle`() {
+        val wakeup = FakePosixWakeup()
+
+        assertWakeUpRearms { WaylandProxyConformanceDriver(wakeup) }
+
+        assertEquals(3, wakeup.successfulSignals)
+        assertEquals(3, wakeup.successfulDrains)
+        assertEquals(
+            listOf("signal", "drain", "signal", "drain", "signal", "drain", "close"),
+            wakeup.trace,
+        )
     }
 
-    /**
-     * Verifies that WaylandEventLoopProxy.wakeUp() has no effect if nativeWrite is null
-     * and the eventFd is valid (simulation).
-     *
-     * On platforms without libc.so.6, nativeWrite is null and wakeUp() must return
-     * cleanly, even with an fd > 0.
-     */
     @Test
-    fun `wakeUp proxy handles missing nativeWrite gracefully`() {
-        // fd=42 — fictitious, never opened
-        val proxy = WaylandEventLoopProxy(eventFd = 42)
-        // On macOS/Windows, nativeWrite is null → wakeUp returns cleanly
-        // On Linux with libc, a write on fd=42 (invalid) will return -1 or EBADF
-        // but must not throw an exception (try/catch in wakeUp)
-        try {
-            proxy.wakeUp()
-        } catch (e: Throwable) {
-            // Tolerated only if the exception is unexpected — log for diagnosis
-            throw AssertionError("wakeUp() must never propagate an exception: $e", e)
-        }
+    fun `drain failure preserves wake retryability`() {
+        val wakeup = FakePosixWakeup(failNextDrain = true)
+        val proxy = WaylandEventLoopProxy(wakeup)
+
+        proxy.wakeUp()
+        assertFailsWith<IllegalStateException> { wakeup.drain() }
+        proxy.wakeUp()
+        assertTrue(wakeup.drain())
+        proxy.wakeUp()
+        assertTrue(wakeup.drain())
+
+        assertEquals(3, wakeup.signalAttempts)
+        assertEquals(2, wakeup.successfulSignals)
+        assertEquals(2, wakeup.successfulDrains)
     }
 
-    /**
-     * Verifies that libC loads without exception (or is null cleanly).
-     *
-     * On Linux: libC is non-null.
-     * On macOS/Windows: libC is null (libc.so.6 absent).
-     */
     @Test
-    fun `libC loads safely on any platform`() {
-        // No assertion on the value — we just verify that the access does not crash
-        val lib = libC  // may be null
-        // On Linux, we can verify the derived handles
-        if (lib != null) {
-            assertNotNull(nativePoll, "nativePoll must be non-null if libC is available")
-            assertNotNull(nativeEventfd, "nativeEventfd must be non-null if libC is available")
-            assertNotNull(nativeRead, "nativeRead must be non-null if libC is available")
-            assertNotNull(nativeWrite, "nativeWrite must be non-null if libC is available")
-            assertNotNull(nativeClose, "nativeClose must be non-null if libC is available")
-        }
+    fun `close prevents later wake signals`() {
+        val wakeup = FakePosixWakeup()
+        val proxy = WaylandEventLoopProxy(wakeup)
+
+        proxy.wakeUp()
+        wakeup.close()
+        proxy.wakeUp()
+
+        assertEquals(2, wakeup.signalAttempts)
+        assertEquals(1, wakeup.successfulSignals)
+        assertEquals(listOf("signal", "close", "signal-closed"), wakeup.trace)
     }
 
     @Test
@@ -99,7 +93,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         val window = WaylandWindow.createForTest(
             display = 77L,
@@ -155,7 +149,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         WaylandThemePortal.resetCache()
         assertNull(loop.systemTheme())
@@ -168,7 +162,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         WaylandThemePortal.resetCache()
         val first = loop.systemTheme()
@@ -183,7 +177,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         WaylandThemePortal.resetCache()
         loop.refreshTheme()
@@ -196,7 +190,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         WaylandThemePortal.resetCache()
         // Force cache to a known state by calling systemTheme first
@@ -214,7 +208,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         assertEquals(DeviceEvents.WhenFocused, loop.deviceEventFilter)
     }
@@ -226,7 +220,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         loop.listenDeviceEvents(DeviceEvents.Never)
         assertEquals(DeviceEvents.Never, loop.deviceEventFilter)
@@ -239,7 +233,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         loop.listenDeviceEvents(DeviceEvents.Always)
         assertEquals(DeviceEvents.Always, loop.deviceEventFilter)
@@ -252,7 +246,7 @@ class WaylandEventLoopSmokeTest {
             compositorPtr = 0L,
             xdgWmBasePtr = 0L,
             shmPtr = 0L,
-            eventFd = -1,
+            wakeup = FakePosixWakeup(),
         )
         loop.listenDeviceEvents(DeviceEvents.Never)
         assertEquals(DeviceEvents.Never, loop.deviceEventFilter)
@@ -260,5 +254,82 @@ class WaylandEventLoopSmokeTest {
         assertEquals(DeviceEvents.WhenFocused, loop.deviceEventFilter)
         loop.listenDeviceEvents(DeviceEvents.Always)
         assertEquals(DeviceEvents.Always, loop.deviceEventFilter)
+    }
+}
+
+private class WaylandProxyConformanceDriver(
+    private val wakeup: FakePosixWakeup,
+) : EventLoopConformanceDriver {
+    override val trace = mutableListOf<ObservedCallback>()
+    private val proxy = WaylandEventLoopProxy(wakeup)
+
+    override fun start() = Unit
+
+    override fun wakeUp() {
+        proxy.wakeUp()
+    }
+
+    override fun requestRedraw() = Unit
+
+    override fun waitForIdle() {
+        check(wakeup.drain())
+        trace += ObservedCallback.NewEvents
+        trace += ObservedCallback.AboutToWait
+    }
+
+    override fun closeWindow() = Unit
+
+    override fun shutdown() {
+        wakeup.close()
+    }
+}
+
+private class FakePosixWakeup(
+    private var failNextDrain: Boolean = false,
+) : PosixWakeup {
+    override val readFd: Int = 73
+    val trace = mutableListOf<String>()
+    var signalAttempts = 0
+        private set
+    var successfulSignals = 0
+        private set
+    var successfulDrains = 0
+        private set
+    private var pending = false
+    private var closed = false
+
+    override fun signal(): Boolean {
+        signalAttempts += 1
+        if (closed) {
+            trace += "signal-closed"
+            return false
+        }
+        trace += "signal"
+        if (!pending) {
+            pending = true
+            successfulSignals += 1
+        }
+        return true
+    }
+
+    override fun drain(): Boolean {
+        if (closed) return false
+        trace += "drain"
+        if (failNextDrain) {
+            failNextDrain = false
+            throw IllegalStateException("injected drain failure")
+        }
+        if (pending) {
+            pending = false
+            successfulDrains += 1
+        }
+        return true
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        pending = false
+        trace += "close"
     }
 }

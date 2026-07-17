@@ -1,5 +1,6 @@
 package org.graphiks.kadre.ffi.wayland
 
+import org.graphiks.kadre.ffi.posix.PosixSymbols
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -21,10 +22,6 @@ val libWaylandClient: SymbolLookup? by lazy {
     }
 }
 
-val libC: SymbolLookup? by lazy {
-    try { SymbolLookup.libraryLookup("libc.so.6", Arena.global()) } catch (_: Throwable) { null }
-}
-
 val libXkbCommon: SymbolLookup? by lazy {
     if (waylandNativeDisabled()) return@lazy null
     try {
@@ -43,6 +40,9 @@ private fun SymbolLookup?.downcall(name: String, desc: FunctionDescriptor): Meth
 
 private fun SymbolLookup?.symbol(name: String): MemorySegment? =
     this?.find(name)?.orElse(null)
+
+fun posixDowncall(name: String, desc: FunctionDescriptor): MethodHandle? =
+    PosixSymbols.find(name)?.let { linker.downcallHandle(it, desc) }
 
 fun upcallStub(
     handle: MethodHandle,
@@ -705,7 +705,7 @@ fun wlSurfaceDamage(
 }
 
 val nativePoll: MethodHandle? by lazy {
-    libC.downcall("poll", FunctionDescriptor.of(
+    posixDowncall("poll", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_INT,
@@ -714,7 +714,7 @@ val nativePoll: MethodHandle? by lazy {
 }
 
 val nativeEventfd: MethodHandle? by lazy {
-    libC.downcall("eventfd", FunctionDescriptor.of(
+    posixDowncall("eventfd", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.JAVA_INT,
         ValueLayout.JAVA_INT,
@@ -722,7 +722,7 @@ val nativeEventfd: MethodHandle? by lazy {
 }
 
 val nativeRead: MethodHandle? by lazy {
-    libC.downcall("read", FunctionDescriptor.of(
+    posixDowncall("read", FunctionDescriptor.of(
         ValueLayout.JAVA_LONG,
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
@@ -731,7 +731,7 @@ val nativeRead: MethodHandle? by lazy {
 }
 
 val nativeWrite: MethodHandle? by lazy {
-    libC.downcall("write", FunctionDescriptor.of(
+    posixDowncall("write", FunctionDescriptor.of(
         ValueLayout.JAVA_LONG,
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
@@ -740,14 +740,14 @@ val nativeWrite: MethodHandle? by lazy {
 }
 
 val nativeClose: MethodHandle? by lazy {
-    libC.downcall("close", FunctionDescriptor.of(
+    posixDowncall("close", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.JAVA_INT,
     ))
 }
 
 val nativeMemfdCreate: MethodHandle? by lazy {
-    libC.downcall("memfd_create", FunctionDescriptor.of(
+    posixDowncall("memfd_create", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_INT,
@@ -755,7 +755,7 @@ val nativeMemfdCreate: MethodHandle? by lazy {
 }
 
 val nativeFtruncate: MethodHandle? by lazy {
-    libC.downcall("ftruncate", FunctionDescriptor.of(
+    posixDowncall("ftruncate", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.JAVA_INT,
         ValueLayout.JAVA_LONG,
@@ -763,7 +763,7 @@ val nativeFtruncate: MethodHandle? by lazy {
 }
 
 val nativeMmap: MethodHandle? by lazy {
-    libC.downcall("mmap", FunctionDescriptor.of(
+    posixDowncall("mmap", FunctionDescriptor.of(
         ValueLayout.ADDRESS,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_LONG,
@@ -775,7 +775,7 @@ val nativeMmap: MethodHandle? by lazy {
 }
 
 val nativeMunmap: MethodHandle? by lazy {
-    libC.downcall("munmap", FunctionDescriptor.of(
+    posixDowncall("munmap", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_LONG,
@@ -900,7 +900,7 @@ val wlDataOfferFinish: MethodHandle? by lazy {
 }
 
 val nativePipe2: MethodHandle? by lazy {
-    libC.downcall("pipe2", FunctionDescriptor.of(
+    posixDowncall("pipe2", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_INT,
@@ -910,7 +910,7 @@ val nativePipe2: MethodHandle? by lazy {
 const val O_CLOEXEC: Int = 0x80000
 
 val nativeShmOpen: MethodHandle? by lazy {
-    libC.downcall("shm_open", FunctionDescriptor.of(
+    posixDowncall("shm_open", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
         ValueLayout.JAVA_INT,
@@ -919,7 +919,7 @@ val nativeShmOpen: MethodHandle? by lazy {
 }
 
 val nativeShmUnlink: MethodHandle? by lazy {
-    libC.downcall("shm_unlink", FunctionDescriptor.of(
+    posixDowncall("shm_unlink", FunctionDescriptor.of(
         ValueLayout.JAVA_INT,
         ValueLayout.ADDRESS,
     ))
@@ -1014,5 +1014,4 @@ fun setPollFd(seg: java.lang.foreign.MemorySegment, idx: Int, fd: Int, events: S
 
 fun getPollRevents(seg: java.lang.foreign.MemorySegment, idx: Int): Short =
     seg.get(ValueLayout.JAVA_SHORT, idx * 8L + 6)
-
 

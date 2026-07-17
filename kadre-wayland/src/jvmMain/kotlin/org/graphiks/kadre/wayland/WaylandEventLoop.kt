@@ -38,6 +38,7 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.ffi.posix.PosixWakeup
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -64,14 +65,14 @@ internal val waylandRunning = AtomicBoolean(false)
  * @param displayPtr  Address of the wl_display* (Long, never 0).
  * @param compositorPtr Address of the wl_compositor* (Long, 0 if unavailable).
  * @param xdgWmBasePtr  Address of the xdg_wm_base* (Long, 0 if unavailable).
- * @param eventFd     eventfd descriptor for inter-thread wakeup.
+ * @param wakeup      owned POSIX descriptor used for inter-thread wakeup.
  */
 class WaylandEventLoop internal constructor(
     internal val displayPtr: Long,
     internal val compositorPtr: Long,
     internal val xdgWmBasePtr: Long,
     internal val shmPtr: Long,
-    internal val eventFd: Int,
+    internal val wakeup: PosixWakeup,
     internal val decorationManagerPtr: Long = 0L,
     internal val pointerConstraintsPtr: Long = 0L,
     internal val iconManagerPtr: Long = 0L,
@@ -205,7 +206,7 @@ class WaylandEventLoop internal constructor(
      *
      * The proxy uses the eventfd to wake up the loop from any thread.
      */
-    override fun createProxy(): EventLoopProxy = WaylandEventLoopProxy(eventFd)
+    override fun createProxy(): EventLoopProxy = WaylandEventLoopProxy(wakeup)
 
     // ── R2: monitor enumeration ───────────────────────────────────────────────
 
@@ -400,76 +401,72 @@ private fun runAppInternal(handler: ApplicationHandler) {
         throw t
     }
 
-    // ── 3. Create the eventfd for wakeUp ──────────────────────────────────────
-    val eventFd: Int = try {
-        val efdHandle = nativeEventfd
-            ?: error("eventfd not available — libc.so.6 missing")
-        val fd = efdHandle.invokeExact(0, 0) as Int
-        if (fd < 0) error("eventfd() returned $fd")
-        fd
+    // ── 3. Create the portable POSIX wake owner ───────────────────────────────
+    val wakeup = try {
+        PosixWakeup.open()
     } catch (t: Throwable) {
         disconnectDisplay(displaySeg)
         throw t
     }
 
-    // ── 4. Discover Wayland globals (compositor, seat, output) ───────────────
-    // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
-    val globals = discoverGlobals(displayPtr)
+    try {
+        // ── 4. Discover Wayland globals (compositor, seat, output) ───────────
+        // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
+        val globals = discoverGlobals(displayPtr)
 
-    val eventLoop = WaylandEventLoop(
-        displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, eventFd,
-        globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
-        globals.activationManagerPtr, globals.seatPtr,
-        globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
-    ).also { it._globals = globals }
+        val eventLoop = WaylandEventLoop(
+            displayPtr, globals.compositorPtr, globals.xdgWmBasePtr, globals.shmPtr, wakeup,
+            globals.decorationManagerPtr, globals.pointerConstraintsPtr, globals.iconManagerPtr,
+            globals.activationManagerPtr, globals.seatPtr,
+            globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
+        ).also { it._globals = globals }
 
-    // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
-    // Route all input events into the eventQueue by their source wl_surface.
-    // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
-    // DeviceEvent.Key is dispatched directly to the handler for raw key events.
-    installSeatListeners(
-        displayPtr    = displayPtr,
-        seatPtr       = globals.seatPtr,
-        outputPtr     = globals.outputPtr,
-        seatVersion   = globals.seatVersion,
-        outputVersion = globals.outputVersion,
-        onEvent = { surfacePtr, event ->
-            routeWaylandInputEvent(surfacePtr, event, eventLoop.windows, eventLoop.eventQueue)
-        },
-        onDeviceEvent = { event ->
-            handler.deviceEvent(eventLoop, DeviceId(0L), event)
-        },
-        onScaleChanged = { scale ->
-            val factor = scale.toDouble()
-            for (win in eventLoop.windows.values) {
-                if (win._scaleFactor != factor) {
-                    win._scaleFactor = factor
-                    eventLoop.eventQueue.add(win.id to org.graphiks.kadre.core.WindowEvent.ScaleFactorChanged(factor))
-                }
-            }
-        },
-        dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
-        deviceFilter = eventLoop.deviceEventFilter,
-        outputInfos = eventLoop.outputInfos,
-        onOutputChanged = { info ->
-            // WaylandOutputInfo objects are updated in-place. Applications can
-            // query currentMonitor/availableMonitors on any window to see changes.
-            // A future sprint could add a dedicated MonitorListChanged event.
-        },
-    )
-
-    // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
-    if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
-        createTextInput(
-            managerPtr = globals.textInputManagerPtr,
-            display = displayPtr,
+        // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
+        // Route all input events into the eventQueue by their source wl_surface.
+        // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
+        // DeviceEvent.Key is dispatched directly to the handler for raw key events.
+        installSeatListeners(
+            displayPtr    = displayPtr,
+            seatPtr       = globals.seatPtr,
+            outputPtr     = globals.outputPtr,
+            seatVersion   = globals.seatVersion,
+            outputVersion = globals.outputVersion,
             onEvent = { surfacePtr, event ->
                 routeWaylandInputEvent(surfacePtr, event, eventLoop.windows, eventLoop.eventQueue)
             },
+            onDeviceEvent = { event ->
+                handler.deviceEvent(eventLoop, DeviceId(0L), event)
+            },
+            onScaleChanged = { scale ->
+                val factor = scale.toDouble()
+                for (win in eventLoop.windows.values) {
+                    if (win._scaleFactor != factor) {
+                        win._scaleFactor = factor
+                        eventLoop.eventQueue.add(win.id to org.graphiks.kadre.core.WindowEvent.ScaleFactorChanged(factor))
+                    }
+                }
+            },
+            dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
+            deviceFilter = eventLoop.deviceEventFilter,
+            outputInfos = eventLoop.outputInfos,
+            onOutputChanged = { info ->
+                // WaylandOutputInfo objects are updated in-place. Applications can
+                // query currentMonitor/availableMonitors on any window to see changes.
+                // A future sprint could add a dedicated MonitorListChanged event.
+            },
         )
-    }
 
-    try {
+        // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
+        if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
+            createTextInput(
+                managerPtr = globals.textInputManagerPtr,
+                display = displayPtr,
+                onEvent = { surfacePtr, event ->
+                    routeWaylandInputEvent(surfacePtr, event, eventLoop.windows, eventLoop.eventQueue)
+                },
+            )
+        }
+
         // ── 5. Lifecycle: resumed ─────────────────────────────────────────────
         handler.resumed(eventLoop)
 
@@ -499,7 +496,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
 
             // Canonical Wayland prepare_read / poll / read_events sequence. This dispatches the
             // pending Wayland protocol events, whose native upcalls enqueue WindowEvents.
-            val startCause = pumpOnce(displaySeg, displayFd, eventFd, timeoutMs, eventLoop)
+            val startCause = pumpOnce(displaySeg, displayFd, wakeup, timeoutMs, eventLoop)
 
             // Drain queued window events (initial/resize RedrawRequested, xdg configure/close)
             // into the handler. Rendering happens here, on demand — NOT on a continuous pump:
@@ -517,10 +514,12 @@ private fun runAppInternal(handler: ApplicationHandler) {
         handler.destroySurfaces(eventLoop)
         handler.suspended(eventLoop)
     } finally {
-        // Close the eventfd
-        try { nativeClose?.invokeExact(eventFd) } catch (_: Throwable) {}
-        // Disconnect from the Wayland server
-        disconnectDisplay(displaySeg)
+        // The wake owner must stop every proxy before the display is disconnected.
+        try {
+            wakeup.close()
+        } finally {
+            disconnectDisplay(displaySeg)
+        }
     }
 }
 
@@ -530,7 +529,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
  * Sequence:
  *  1. Drain the queue (prepare_read retry)
  *  2. Flush
- *  3. poll([displayFd, eventFd], timeoutMs)
+ *  3. poll([displayFd, wakeup.readFd], timeoutMs)
  *  4. Conditional processing of the results
  *
  * @return [StartCause] describing the cause of the wakeup.
@@ -538,7 +537,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
 private fun pumpOnce(
     displaySeg: MemorySegment,
     displayFd: Int,
-    eventFd: Int,
+    wakeup: PosixWakeup,
     timeoutMs: Int,
     eventLoop: WaylandEventLoop,
 ): StartCause {
@@ -564,29 +563,27 @@ private fun pumpOnce(
     try { flush?.invokeExact(displaySeg) } catch (_: Throwable) {}
 
     // ── Step 3: poll + eventfd drain (single arena) ───────────────────────────
-    val (displayReady, eventFdReady) = Arena.ofConfined().use { arena ->
+    val (displayReady, wakeReady) = Arena.ofConfined().use { arena ->
         val fds = allocPollFd(arena)
         setPollFd(fds, 0, displayFd, POLLIN)
-        setPollFd(fds, 1, eventFd, POLLIN)
+        setPollFd(fds, 1, wakeup.readFd, POLLIN)
 
+        val poll = nativePoll
+            ?: error("required POSIX symbol 'poll' is unavailable")
         val pollRc = try {
-            nativePoll?.invokeExact(fds, 2, timeoutMs) as? Int ?: 0
-        } catch (_: Throwable) { 0 }
+            poll.invokeExact(fds, 2, timeoutMs) as Int
+        } catch (failure: Throwable) {
+            throw IllegalStateException("Wayland poll failed", failure)
+        }
+        check(pollRc >= 0) { "Wayland poll returned $pollRc" }
 
         if (pollRc > 0) {
             val rev0 = getPollRevents(fds, 0)
             val rev1 = getPollRevents(fds, 1)
             val displayReady = (rev0.toInt() and POLLIN.toInt()) != 0
-            val eventFdReady = (rev1.toInt() and POLLIN.toInt()) != 0
+            val wakeReady = (rev1.toInt() and POLLIN.toInt()) != 0
 
-            // Step 4b: drain the eventfd within the same arena, avoiding a
-            // second allocation on the hot path (Sprint 3, #273).
-            if (eventFdReady) {
-                val buf = arena.allocate(8L, 8L)
-                try { nativeRead?.invokeExact(eventFd, buf, 8L) } catch (_: Throwable) {}
-            }
-
-            displayReady to eventFdReady
+            displayReady to wakeReady
         } else {
             false to false
         }
@@ -601,9 +598,13 @@ private fun pumpOnce(
         try { cancelRead.invokeExact(displaySeg) } catch (_: Throwable) {}
     }
 
+    if (wakeReady && !wakeup.drain()) {
+        error("Wayland wake descriptor closed while the event loop is running")
+    }
+
     // ── Determine the StartCause ──────────────────────────────────────────────
     return when {
-        eventFdReady -> StartCause.WaitCancelled()
+        wakeReady -> StartCause.WaitCancelled()
         displayReady -> StartCause.Poll
         else -> when (val cf = eventLoop.controlFlow) {
             is ControlFlow.WaitUntil -> {
