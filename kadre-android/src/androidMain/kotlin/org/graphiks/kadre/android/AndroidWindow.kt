@@ -65,8 +65,6 @@ class AndroidWindow internal constructor(
     @Volatile
     private var _surface: android.view.Surface? = null
 
-    private val closeOperation = LinearizedCloseOperation()
-
     /**
      * Makes the surface available for rendering.
      *
@@ -191,9 +189,7 @@ class AndroidWindow internal constructor(
     }
 
     override fun close() {
-        closeOperation.run {
-            eventLoop.closeWindow(this)
-        }
+        eventLoop.closeWindow(this)
     }
 
     // ── R5-IME: Input Method Editor ────────────────────────────────────────────

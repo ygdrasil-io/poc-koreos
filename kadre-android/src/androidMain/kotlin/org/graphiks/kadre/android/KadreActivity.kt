@@ -32,6 +32,23 @@ import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
 import org.graphiks.kadre.core.KeyEvent as KadreKeyEvent
 
+internal fun runAllCleanupStages(vararg stages: () -> Unit) {
+    var firstFailure: Throwable? = null
+    stages.forEach { stage ->
+        try {
+            stage()
+        } catch (failure: Throwable) {
+            val primary = firstFailure
+            if (primary == null) {
+                firstFailure = failure
+            } else if (primary !== failure) {
+                primary.addSuppressed(failure)
+            }
+        }
+    }
+    firstFailure?.let { throw it }
+}
+
 /**
  * Root Kadre Activity for Android.
  *
@@ -101,7 +118,7 @@ abstract class KadreActivity : ComponentActivity() {
 
     /**
      * Guard against any callback dispatch after [onDestroy].
-     * Set to `true` at the start of [onDestroy], before any cleanup.
+     * Set to `true` during [onDestroy], even when an earlier cleanup stage fails.
      * Exposed as `internal` so that [AndroidEventLoop.onFrame] can read it.
      */
     @Volatile
@@ -546,9 +563,11 @@ abstract class KadreActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        eventLoop.currentOpenWindow()?.let(eventLoop::closeWindowFromActivityDestroy)
-        releaseSurfaceIfNeeded()
-        destroyed = true
-        super.onDestroy()
+        runAllCleanupStages(
+            { eventLoop.currentOpenWindow()?.let(eventLoop::closeWindowFromActivityDestroy) },
+            ::releaseSurfaceIfNeeded,
+            { destroyed = true },
+            { super.onDestroy() },
+        )
     }
 }

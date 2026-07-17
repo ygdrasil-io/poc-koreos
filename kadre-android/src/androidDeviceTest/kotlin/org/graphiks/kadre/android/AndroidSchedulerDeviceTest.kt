@@ -782,6 +782,61 @@ class AndroidSchedulerDeviceTest {
     }
 
     @Test
+    fun backgroundCloseAllowsReentrantCloseFromTerminalCallbacks() {
+        val ready = CompletableFuture<Window>()
+        val callbackTrace = CopyOnWriteArrayList<String>()
+        val destroyedCount = AtomicInteger(0)
+        lateinit var window: Window
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                window = eventLoop.createWindow(WindowAttributes())
+                ready.complete(window)
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                callbackTrace += "destroySurfaces"
+                window.close()
+                callbackTrace += "destroySurfaces:return"
+            }
+
+            override fun onWindowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Destroyed) {
+                    destroyedCount.incrementAndGet()
+                    callbackTrace += "Destroyed"
+                    window.close()
+                    callbackTrace += "Destroyed:return"
+                }
+            }
+        }
+
+        withActivity(handler) {
+            val closeTarget = await(ready, handler)
+            val background = Executors.newSingleThreadExecutor()
+            try {
+                background.submit { closeTarget.close() }.get(5L, TimeUnit.SECONDS)
+                assertEquals(
+                    listOf(
+                        "destroySurfaces",
+                        "destroySurfaces:return",
+                        "Destroyed",
+                        "Destroyed:return",
+                    ),
+                    callbackTrace,
+                )
+                assertEquals(1, destroyedCount.get())
+                assertFailsWith<IllegalStateException> { closeTarget.rawWindowHandle }
+                handler.rethrowFailure()
+            } finally {
+                background.shutdownNow()
+            }
+        }
+    }
+
+    @Test
     fun createWindowIsRejectedDuringAndAfterTerminalClose() {
         val ready = CompletableFuture<Pair<ActiveEventLoop, Window>>()
         val rejectedAt = CopyOnWriteArrayList<String>()

@@ -8,6 +8,7 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -39,6 +40,22 @@ class AndroidWindowContractTest {
         assertTrue(
             Window::class.java.isAssignableFrom(AndroidWindow::class.java),
             "AndroidWindow must implement Window",
+        )
+    }
+
+    @Test
+    fun `AndroidWindow close always delegates without a permanent coordinator latch`() {
+        val classLoader = checkNotNull(AndroidWindow::class.java.classLoader)
+        val classBytes = checkNotNull(
+            classLoader.getResourceAsStream(
+                "org/graphiks/kadre/android/AndroidWindow.class",
+            ),
+        ).use { it.readBytes().toString(Charsets.ISO_8859_1) }
+
+        assertTrue(classBytes.contains("closeWindow"))
+        assertFalse(
+            classBytes.contains("LinearizedCloseOperation"),
+            "close must delegate every call so a cancelled handoff remains retryable",
         )
     }
 
