@@ -33,6 +33,7 @@ application {
 }
 
 dependencies {
+    testImplementation(kotlin("test"))
     implementation(project(":kadre"))
     implementation(libs.wgpu4k)
     // wgpu4k descriptor data classes (VertexState, FragmentState, RenderPipelineDescriptor, etc.)
