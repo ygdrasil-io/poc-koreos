@@ -23,7 +23,6 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import java.util.ArrayDeque
-import java.util.concurrent.FutureTask
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -467,9 +466,11 @@ internal class AndroidEventLoop(
 
     private fun <T> callOnMain(action: () -> T): T {
         if (Looper.myLooper() == Looper.getMainLooper()) return action()
-        val task = FutureTask(action)
-        mainHandler.post(task)
-        return task.get()
+        return boundedMainHandoff(
+            timeoutMillis = MAIN_HANDOFF_TIMEOUT_MILLIS,
+            post = { task -> mainHandler.post(task) },
+            action = action,
+        )
     }
 
     private class SurfaceCreatedCallback(

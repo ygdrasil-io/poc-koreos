@@ -17,6 +17,7 @@ import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -25,6 +26,7 @@ import org.graphiks.kadre.core.WindowId
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
@@ -32,6 +34,36 @@ import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class AndroidSchedulerDeviceTest {
+    @Test
+    fun backgroundCreateWindowCompletesAndReplacesWindowWithDistinctId() {
+        val ready = CompletableFuture<Pair<ActiveEventLoop, Window>>()
+        val handler = object : GuardedHandler() {
+            override fun onCanCreateSurfaces(eventLoop: ActiveEventLoop) {
+                ready.complete(eventLoop to eventLoop.createWindow(WindowAttributes()))
+            }
+        }
+
+        withActivity(handler) {
+            val (eventLoop, initialWindow) = await(ready, handler)
+            val background = Executors.newSingleThreadExecutor()
+            val replacementWindow = try {
+                background.submit<Window> {
+                    check(Looper.myLooper() != Looper.getMainLooper())
+                    eventLoop.createWindow(WindowAttributes())
+                }.get(10L, TimeUnit.SECONDS)
+            } finally {
+                background.shutdownNow()
+            }
+
+            assertNotEquals(initialWindow.id, replacementWindow.id)
+            assertFailsWith<IllegalStateException> {
+                initialWindow.rawWindowHandle
+            }
+            assertIs<RawWindowHandle.Android>(replacementWindow.rawWindowHandle)
+            handler.rethrowFailure()
+        }
+    }
+
     @Test
     fun redrawRequestedFromAboutToWaitStartsOneOrderedIteration() {
         val trace = CopyOnWriteArrayList<String>()
