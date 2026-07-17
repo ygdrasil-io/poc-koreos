@@ -816,10 +816,17 @@ internal fun installSeatListeners(
     dataDeviceManagerPtr: Long = 0L,
     deviceFilter: WaylandDeviceFilter = WaylandDeviceFilter(),
     onNativeFailure: (Throwable) -> Unit = {},
+    failOnNativeError: Boolean = false,
+    onBindingCreated: (WaylandSeatBinding) -> Unit = {},
 ): WaylandSeatBinding? {
-    val addListener = wlProxyAddListener ?: return null
+    val addListener = wlProxyAddListener ?: if (failOnNativeError) {
+        error("wl_proxy_add_listener not available")
+    } else {
+        return null
+    }
     val arena = Arena.ofShared()
     val binding = WaylandSeatBinding(arena)
+    onBindingCreated(binding)
     val lookup = MethodHandles.lookup()
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -854,15 +861,28 @@ internal fun installSeatListeners(
             val seatVtable = arena.allocate(ptr * 2)
             seatVtable.set(ValueLayout.ADDRESS, 0L,  capsStub)
             seatVtable.set(ValueLayout.ADDRESS, ptr, nameStub)
-            val seatListenerRc = runCatching {
+            val seatListenerRc = try {
                 addListener.invokeExact(seat, seatVtable, MemorySegment.NULL) as Int
-            }.getOrDefault(-1)
+            } catch (failure: Throwable) {
+                if (failOnNativeError) throw failure
+                -1
+            }
             if (seatListenerRc == 0) {
                 anyListenerInstalled = true
                 // Roundtrip so the compositor delivers the capabilities event.
-                runCatching {
+                val roundtripResult = try {
                     wlDisplayRoundtrip?.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int
+                } catch (failure: Throwable) {
+                    if (failOnNativeError) throw failure
+                    -1
                 }
+                if (failOnNativeError) {
+                    check(roundtripResult >= 0) {
+                        "wl_display_roundtrip failed while installing seat listeners: $roundtripResult"
+                    }
+                }
+            } else if (failOnNativeError) {
+                error("wl_seat listener installation failed: $seatListenerRc")
             }
 
             val caps = capsListener.capabilities
@@ -874,11 +894,14 @@ internal fun installSeatListeners(
                 val keyboardIface = wlKeyboardInterface
                 val getKeyboard = wlSeatGetKeyboard
                 if (keyboardIface != null && getKeyboard != null) {
-                    val kbSeg = runCatching {
+                    val kbSeg = try {
                         getKeyboard.invokeExact(
                             seat, WL_SEAT_GET_KEYBOARD, keyboardIface, seatVersion, 0, MemorySegment.NULL,
                         ) as MemorySegment
-                    }.getOrNull()
+                    } catch (failure: Throwable) {
+                        if (failOnNativeError) throw failure
+                        null
+                    }
                     if (kbSeg != null && kbSeg.address() != 0L) {
                         binding.keyboardOwner = installKeyboardListener(
                             kbSeg, addListener, lookup, arena, seatPtr, onEvent,
@@ -894,11 +917,14 @@ internal fun installSeatListeners(
                 val pointerIface = wlPointerInterface
                 val getPointer = wlSeatGetPointer
                 if (pointerIface != null && getPointer != null) {
-                    val ptrSeg = runCatching {
+                    val ptrSeg = try {
                         getPointer.invokeExact(
                             seat, WL_SEAT_GET_POINTER, pointerIface, seatVersion, 0, MemorySegment.NULL,
                         ) as MemorySegment
-                    }.getOrNull()
+                    } catch (failure: Throwable) {
+                        if (failOnNativeError) throw failure
+                        null
+                    }
                     if (ptrSeg != null && ptrSeg.address() != 0L) {
                         installPointerListener(ptrSeg, addListener, lookup, arena, seatPtr, onEvent)
                         anyListenerInstalled = true
@@ -911,11 +937,14 @@ internal fun installSeatListeners(
                 val touchIface = wlTouchInterface
                 val getTouch = wlSeatGetTouch
                 if (touchIface != null && getTouch != null) {
-                    val touchSeg = runCatching {
+                    val touchSeg = try {
                         getTouch.invokeExact(
                             seat, WL_SEAT_GET_TOUCH, touchIface, seatVersion, 0, MemorySegment.NULL,
                         ) as MemorySegment
-                    }.getOrNull()
+                    } catch (failure: Throwable) {
+                        if (failOnNativeError) throw failure
+                        null
+                    }
                     if (touchSeg != null && touchSeg.address() != 0L) {
                         installTouchListener(touchSeg, addListener, lookup, arena, onEvent)
                         anyListenerInstalled = true
@@ -929,7 +958,7 @@ internal fun installSeatListeners(
             val getDataDevice = wlDataDeviceManagerGetDataDevice
             val dataDeviceIface = wlDataDeviceInterface
             if (getDataDevice != null && dataDeviceIface != null) {
-                val dataDevice = runCatching {
+                val dataDevice = try {
                     getDataDevice.invokeExact(
                         MemorySegment.ofAddress(dataDeviceManagerPtr),
                         1,                            // opcode: get_data_device
@@ -939,7 +968,10 @@ internal fun installSeatListeners(
                         MemorySegment.ofAddress(seatPtr),
                         MemorySegment.NULL,            // new_id = NULL
                     ) as MemorySegment
-                }.getOrNull()
+                } catch (failure: Throwable) {
+                    if (failOnNativeError) throw failure
+                    null
+                }
                 if (dataDevice != null && dataDevice.address() != 0L) {
                     val dnd = WaylandDragAndDrop(dataDevice.address(), displayPtr, onEvent)
                     dnd.installListener(arena, addListener)
@@ -952,15 +984,22 @@ internal fun installSeatListeners(
         seatBindings.add(binding)
         return binding
     } catch (t: Throwable) {
-        System.err.println("[kadre-wayland] installSeatListeners failed: $t")
         // BLOQUANT 3: do NOT close the arena if any listener has already been registered
         // with the compositor — its stubs are already referenced by the compositor side and
         // closing the arena would free them, causing a SIGSEGV on the next event dispatch.
         if (anyListenerInstalled) {
             seatBindings.add(binding)
+            if (failOnNativeError) throw t
+            System.err.println("[kadre-wayland] installSeatListeners failed: $t")
             return binding
         }
-        runCatching { binding.close() }
+        try {
+            binding.close()
+        } catch (cleanupFailure: Throwable) {
+            if (cleanupFailure !== t) t.addSuppressed(cleanupFailure)
+        }
+        if (failOnNativeError) throw t
+        System.err.println("[kadre-wayland] installSeatListeners failed: $t")
         return null
     }
 }

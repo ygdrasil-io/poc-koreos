@@ -89,11 +89,24 @@ internal fun createTextInput(
     managerPtr: Long,
     display: Long,
     onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+    failOnNativeError: Boolean = false,
 ) {
-    val createHandle = zwpInputManagerV3CreateTextInput ?: return
+    val createHandle = zwpInputManagerV3CreateTextInput ?: if (failOnNativeError) {
+        error("zwp_text_input_manager_v3.create_text_input not available")
+    } else {
+        return
+    }
     val iface = zwpTextInputV3Interface
-    val addListener = wlProxyAddListener ?: return
-    val getVersion = wlProxyGetVersion ?: return
+    val addListener = wlProxyAddListener ?: if (failOnNativeError) {
+        error("wl_proxy_add_listener not available for text input")
+    } else {
+        return
+    }
+    val getVersion = wlProxyGetVersion ?: if (failOnNativeError) {
+        error("wl_proxy_get_version not available for text input")
+    } else {
+        return
+    }
 
     val textInput: MemorySegment
     val tiVersion: Int
@@ -107,20 +120,29 @@ internal fun createTextInput(
             0, // flags
             MemorySegment.NULL,
         ) as MemorySegment
-        if (textInput.address() == 0L) return
+        if (textInput.address() == 0L) {
+            if (failOnNativeError) error("create_text_input returned NULL")
+            return
+        }
 
-        tiVersion = runCatching {
+        tiVersion = if (failOnNativeError) {
             getVersion.invokeExact(textInput) as Int
-        }.getOrDefault(1)
+        } else {
+            runCatching { getVersion.invokeExact(textInput) as Int }.getOrDefault(1)
+        }
 
-        installTextInputListener(textInput, addListener, tiVersion, onEvent)
+        installTextInputListener(textInput, addListener, tiVersion, onEvent, failOnNativeError)
 
         WaylandTextInput.textInputPtr = textInput.address()
         WaylandTextInput.displayPtr = display
         WaylandTextInput.version = tiVersion
         WaylandTextInput.onImeEvent = onEvent
-    } catch (_: Throwable) {
+    } catch (failure: Throwable) {
         // Protocol extension unavailable — leave textInputPtr = 0
+        WaylandTextInput.textInputPtr = 0L
+        WaylandTextInput.displayPtr = 0L
+        WaylandTextInput.onImeEvent = null
+        if (failOnNativeError) throw failure
     }
 }
 
@@ -136,6 +158,7 @@ private fun installTextInputListener(
     addListener: java.lang.invoke.MethodHandle,
     version: Int,
     onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+    failOnNativeError: Boolean,
 ) {
     val listener = TextInputListener(onEvent)
     val arena = Arena.ofShared()
@@ -208,8 +231,14 @@ private fun installTextInputListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 4, deleteStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5, doneStub)
 
-    runCatching {
+    val listenerResult = try {
         addListener.invokeExact(textInput, vtable, MemorySegment.NULL) as Int
+    } catch (failure: Throwable) {
+        if (failOnNativeError) throw failure
+        -1
+    }
+    if (failOnNativeError) check(listenerResult == 0) {
+        "text input listener installation failed: $listenerResult"
     }
 }
 

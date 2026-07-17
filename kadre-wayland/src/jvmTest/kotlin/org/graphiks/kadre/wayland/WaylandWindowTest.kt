@@ -47,12 +47,14 @@ class WaylandWindowTest {
         val trace = mutableListOf<String>()
         val primary = IllegalStateException("frame")
         val cursorFailure = IllegalArgumentException("cursor")
+        val pointerFailure = IllegalStateException("pointer constraint")
         val surfaceFailure = UnsupportedOperationException("surface")
 
         val thrown = assertFailsWith<IllegalStateException> {
             closeWaylandWindowResources(
                 destroyFrameCallback = { trace += "frame"; throw primary },
                 destroyCursor = { trace += "cursor"; throw cursorFailure },
+                destroyPointerConstraints = { trace += "pointer"; throw pointerFailure },
                 destroyBlur = { trace += "blur" },
                 destroyXdgToplevel = { trace += "xdg-toplevel" },
                 destroyXdgSurface = { trace += "xdg-surface" },
@@ -62,10 +64,10 @@ class WaylandWindowTest {
 
         assertSame(primary, thrown)
         assertEquals(
-            listOf("frame", "cursor", "blur", "xdg-toplevel", "xdg-surface", "wl-surface"),
+            listOf("frame", "cursor", "pointer", "blur", "xdg-toplevel", "xdg-surface", "wl-surface"),
             trace,
         )
-        assertEquals(listOf(cursorFailure, surfaceFailure), thrown.suppressed.toList())
+        assertEquals(listOf(cursorFailure, pointerFailure, surfaceFailure), thrown.suppressed.toList())
     }
 
     @Test

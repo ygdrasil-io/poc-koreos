@@ -2,15 +2,15 @@
  * WaylandEventLoop — Wayland event loop for kadre.
  *
  * Implements the canonical Wayland prepare_read / poll / read_events sequence
- * with an eventfd for inter-thread wakeup (wakeUp).
+ * with a portable POSIX wake descriptor for inter-thread wakeup (`pipe2` or `eventfd`).
  *
  * Pump sequence:
  *  1. while (wl_display_prepare_read != 0) → wl_display_dispatch_pending
  *  2. wl_display_flush
- *  3. poll([displayFd, eventfdFd], timeout)
+ *  3. poll([displayFd, wakeFd], timeout)
  *  4. If displayFd ready → wl_display_read_events + dispatch_pending
  *     Otherwise          → wl_display_cancel_read
- *  5. If eventfdFd ready → read(eventfd) to drain the counter
+ *  5. If wakeFd ready → drain the portable wake descriptor
  *
  * WaylandEventLoop.
  */
@@ -57,16 +57,39 @@ internal val waylandRunning = AtomicBoolean(false)
 
 internal sealed interface WaylandQueueItem
 
+internal class WaylandWindowOwner(
+    val window: WaylandWindow,
+) {
+    val redrawTransactionLock = Any()
+    val closeStarted = AtomicBoolean(false)
+    val destroyedDelivered = AtomicBoolean(false)
+}
+
 internal data class WaylandQueuedWindowEvent(
-    val windowId: WindowId,
+    val owner: WaylandWindowOwner,
     val event: WindowEvent,
     val redrawToken: Any? = null,
+) : WaylandQueueItem {
+    val windowId: WindowId get() = owner.window.id
+}
+
+internal data class WaylandQueuedDeviceEvent(
+    val event: DeviceEvent,
 ) : WaylandQueueItem
 
-private data class WaylandQueuedCloseCommand(
-    val windowId: WindowId,
+internal data class WaylandQueuedCloseCommand(
+    val owner: WaylandWindowOwner,
     val token: Any,
-) : WaylandQueueItem
+) : WaylandQueueItem {
+    val wakeFailures = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+    val windowId: WindowId get() = owner.window.id
+}
+
+internal data class WaylandCloseResult(
+    val owner: WaylandWindowOwner,
+    val closed: Boolean,
+    val failure: Throwable?,
+)
 
 private class WaylandDispatchBoundary : WaylandQueueItem
 
@@ -108,6 +131,7 @@ class WaylandEventLoop internal constructor(
 
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
+    private val windowOwners = ConcurrentHashMap<Long, WaylandWindowOwner>()
 
     /**
      * Window events produced by native upcalls (xdg configure/close), queued here and drained
@@ -116,18 +140,57 @@ class WaylandEventLoop internal constructor(
     internal val eventQueue = java.util.concurrent.ConcurrentLinkedQueue<WaylandQueueItem>()
 
     /** Window IDs with one redraw already queued for the next Kotlin dispatch. */
-    private val pendingRedraws = ConcurrentHashMap<WindowId, Any>()
-    private val pendingDestroyedEvents = ConcurrentHashMap.newKeySet<WindowId>()
-    private val pendingCloseCommands = ConcurrentHashMap<WindowId, Any>()
+    private val pendingRedraws = ConcurrentHashMap<WaylandWindowOwner, Any>()
+    private val pendingCloseCommands = ConcurrentHashMap<WaylandWindowOwner, WaylandQueuedCloseCommand>()
 
-    internal fun registerWindow(window: WaylandWindow) {
-        window.onWindowEvent = { event -> enqueueWindowEvent(window.id, event) }
-        window.onRedrawRequested = { requestRedraw(window.id) }
-        window.onCloseRequested = { enqueueCloseWindow(window.id) }
-        window.onCompositorCloseRequested = { enqueueCloseWindow(window.id) }
-        window.registryOwner = _globals?.registryOwner
+    internal fun registerWindow(window: WaylandWindow): WaylandWindowOwner {
+        val owner = WaylandWindowOwner(window)
+        windowOwners[window.id.value] = owner
         windows[window.id.value] = window
-        if (window.takePendingCompositorClose()) enqueueCloseWindow(window.id)
+        window.attachWindowEventSink { event -> enqueueWindowEvent(owner, event) }
+        window.onRedrawRequested = { requestRedraw(owner) }
+        window.onCloseRequested = { enqueueCloseWindow(owner, associateWakeFailure = false) }
+        window.onCompositorCloseRequested = {
+            enqueueCloseWindow(owner, associateWakeFailure = true)
+        }
+        window.registryOwner = _globals?.registryOwner
+        if (window.takePendingCompositorClose()) {
+            enqueueCloseWindow(owner, associateWakeFailure = true)
+        }
+        return owner
+    }
+
+    internal fun adoptCreatedWindow(
+        window: WaylandWindow,
+        configure: (WaylandWindow) -> Unit = {},
+    ): WaylandWindow {
+        var owner: WaylandWindowOwner? = null
+        try {
+            owner = registerWindow(window)
+            configure(window)
+            requestRedraw(owner)
+            return window
+        } catch (failure: Throwable) {
+            val registeredOwner = owner ?: windowOwners[window.id.value]?.takeIf { it.window === window }
+            if (registeredOwner != null) {
+                val closeResult = closeWindow(registeredOwner)
+                closeResult.failure?.let {
+                    if (it !== failure) failure.addSuppressed(it)
+                }
+                eventQueue.removeIf { item ->
+                    (item is WaylandQueuedWindowEvent && item.owner === registeredOwner) ||
+                        (item is WaylandQueuedCloseCommand && item.owner === registeredOwner)
+                }
+            } else {
+                window.detachFromEventLoop()
+                try {
+                    window.closeNativeResources()
+                } catch (closeFailure: Throwable) {
+                    if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                }
+            }
+            throw failure
+        }
     }
 
     /**
@@ -135,46 +198,69 @@ class WaylandEventLoop internal constructor(
      * insertion always signals the portable POSIX wake owner so an idle poll returns.
      */
     internal fun requestRedraw(windowId: WindowId): Boolean {
-        if (!windows.containsKey(windowId.value)) return false
-        val token = Any()
-        if (pendingRedraws.putIfAbsent(windowId, token) != null) return true
-        val queued = WaylandQueuedWindowEvent(windowId, WindowEvent.RedrawRequested, token)
-        eventQueue.add(queued)
-        val wakeFailure = try {
-            if (wakeup.signal()) return true
-            IllegalStateException("portable POSIX wake owner is closed")
-        } catch (failure: Throwable) {
-            failure
-        }
-        rollbackRedraw(windowId, token, queued)
-        throw IllegalStateException("Wayland redraw wake failed", wakeFailure)
+        val owner = windowOwners[windowId.value] ?: return false
+        return requestRedraw(owner)
     }
 
-    private fun rollbackRedraw(windowId: WindowId, token: Any, queued: WaylandQueuedWindowEvent) {
-        if (pendingRedraws.remove(windowId, token)) {
+    private fun requestRedraw(owner: WaylandWindowOwner): Boolean {
+        synchronized(owner.redrawTransactionLock) {
+            if (!isCurrentOwner(owner)) return false
+            val token = Any()
+            if (pendingRedraws.putIfAbsent(owner, token) != null) return true
+            val queued = WaylandQueuedWindowEvent(owner, WindowEvent.RedrawRequested, token)
+            eventQueue.add(queued)
+            val wakeFailure = try {
+                if (wakeup.signal()) return true
+                IllegalStateException("portable POSIX wake owner is closed")
+            } catch (failure: Throwable) {
+                failure
+            }
+            rollbackRedraw(owner, token, queued)
+            throw IllegalStateException("Wayland redraw wake failed", wakeFailure)
+        }
+    }
+
+    private fun rollbackRedraw(owner: WaylandWindowOwner, token: Any, queued: WaylandQueuedWindowEvent) {
+        if (pendingRedraws.remove(owner, token)) {
             eventQueue.remove(queued)
         }
     }
 
-    internal fun consumeRedraw(windowId: WindowId, token: Any?): Boolean {
+    internal fun consumeRedraw(owner: WaylandWindowOwner, token: Any?): Boolean {
         if (token == null) return false
-        return pendingRedraws.remove(windowId, token)
+        return pendingRedraws.remove(owner, token)
     }
 
     internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent) {
-        eventQueue.add(WaylandQueuedWindowEvent(windowId, event))
+        val owner = windowOwners[windowId.value] ?: return
+        enqueueWindowEvent(owner, event)
     }
 
-    private fun enqueueCloseWindow(windowId: WindowId) {
-        if (!windows.containsKey(windowId.value)) return
-        val token = Any()
-        if (pendingCloseCommands.putIfAbsent(windowId, token) != null) {
-            signalCloseWake()
-            return
+    private fun enqueueWindowEvent(owner: WaylandWindowOwner, event: WindowEvent) {
+        eventQueue.add(WaylandQueuedWindowEvent(owner, event))
+    }
+
+    internal fun enqueueDeviceEvent(event: DeviceEvent) {
+        eventQueue.add(WaylandQueuedDeviceEvent(event))
+    }
+
+    private fun enqueueCloseWindow(
+        owner: WaylandWindowOwner,
+        associateWakeFailure: Boolean,
+    ) {
+        if (!isCurrentOwner(owner)) return
+        var command = pendingCloseCommands[owner]
+        if (command == null) {
+            val candidate = WaylandQueuedCloseCommand(owner, Any())
+            val raced = pendingCloseCommands.putIfAbsent(owner, candidate)
+            command = raced ?: candidate.also(eventQueue::add)
         }
-        val command = WaylandQueuedCloseCommand(windowId, token)
-        eventQueue.add(command)
-        signalCloseWake()
+        try {
+            signalCloseWake()
+        } catch (failure: Throwable) {
+            if (!associateWakeFailure) throw failure
+            command.wakeFailures.add(failure)
+        }
     }
 
     private fun signalCloseWake() {
@@ -190,30 +276,73 @@ class WaylandEventLoop internal constructor(
         throw IllegalStateException("Wayland close wake failed", wakeFailure)
     }
 
-    internal fun consumeCloseCommand(windowId: WindowId, token: Any): Boolean =
-        pendingCloseCommands.remove(windowId, token)
+    internal fun consumeCloseCommand(command: WaylandQueuedCloseCommand): Boolean =
+        pendingCloseCommands.remove(command.owner, command)
 
-    /** Removes loop ownership before releasing any child or surface proxy. */
+    /** Test seam that closes the current owner and queues its terminal notification. */
     internal fun closeWindow(windowId: WindowId): Boolean {
-        val window = windows.remove(windowId.value) ?: return false
-        pendingRedraws.remove(windowId)
-        pendingCloseCommands.remove(windowId)
-        window.detachFromEventLoop()
-        var failure: Throwable? = null
-        try {
-            window.closeNativeResources()
-        } catch (thrown: Throwable) {
-            failure = thrown
-        } finally {
-            pendingDestroyedEvents.add(windowId)
-            eventQueue.add(WaylandQueuedWindowEvent(windowId, WindowEvent.Destroyed))
-        }
-        failure?.let { throw it }
-        return true
+        val owner = windowOwners[windowId.value] ?: return false
+        val result = closeWindow(owner)
+        if (result.closed) eventQueue.add(WaylandQueuedWindowEvent(owner, WindowEvent.Destroyed))
+        result.failure?.let { throw it }
+        return result.closed
     }
 
-    internal fun consumeDestroyedEvent(windowId: WindowId): Boolean =
-        pendingDestroyedEvents.remove(windowId)
+    /** Removes loop ownership before releasing any child or surface proxy. */
+    internal fun closeWindow(owner: WaylandWindowOwner): WaylandCloseResult {
+        if (!owner.closeStarted.compareAndSet(false, true)) {
+            return WaylandCloseResult(owner, closed = false, failure = null)
+        }
+        windowOwners.remove(owner.window.id.value, owner)
+        windows.remove(owner.window.id.value, owner.window)
+        pendingRedraws.remove(owner)
+        pendingCloseCommands.remove(owner)
+        owner.window.detachFromEventLoop()
+        var failure: Throwable? = null
+        try {
+            owner.window.closeNativeResources()
+        } catch (thrown: Throwable) {
+            failure = thrown
+        }
+        return WaylandCloseResult(owner, closed = true, failure = failure)
+    }
+
+    internal fun deliverDestroyed(
+        owner: WaylandWindowOwner,
+        handler: ApplicationHandler,
+    ) {
+        if (!owner.destroyedDelivered.compareAndSet(false, true)) return
+        val current = windowOwners[owner.window.id.value]
+        if (current != null && current !== owner) return
+        handler.windowEvent(this, owner.window.id, WindowEvent.Destroyed)
+    }
+
+    internal fun isCurrentOwner(owner: WaylandWindowOwner): Boolean =
+        windowOwners[owner.window.id.value] === owner && windows[owner.window.id.value] === owner.window
+
+    /** Closes every remaining native window synchronously while the display is still valid. */
+    internal fun closeAllWindowsDirect() {
+        val commandsByOwner = pendingCloseCommands.values.associateBy { it.owner }
+        val owners = (windowOwners.values + commandsByOwner.keys)
+            .distinct()
+            .sortedBy { it.window.id.value }
+        var failure: Throwable? = null
+        for (owner in owners) {
+            val result = closeWindow(owner)
+            result.failure?.let { failure = appendWaylandFailure(failure, it) }
+            val command = commandsByOwner[owner]
+            if (command != null) {
+                while (true) {
+                    val wakeFailure = command.wakeFailures.poll() ?: break
+                    failure = appendWaylandFailure(failure, wakeFailure)
+                }
+            }
+        }
+        eventQueue.removeIf {
+            it is WaylandQueuedWindowEvent || it is WaylandQueuedCloseCommand
+        }
+        failure?.let { throw it }
+    }
 
     /**
      * Default CSD preference for newly created windows.
@@ -272,12 +401,7 @@ class WaylandEventLoop internal constructor(
             nativeListenerLifetime = nativeListenerLifetime,
             ownsNativeListenerLifetime = false,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent or display invalid")
-        // Route this window's compositor-driven events into the loop's queue for dispatch.
-        registerWindow(window)
-        // Initial paint so the surface attaches a buffer and becomes visible. Subsequent repaints
-        // are driven on demand (e.g. after a resize), not continuously — see the main loop.
-        requestRedraw(window.id)
-        return window
+        return adoptCreatedWindow(window)
     }
 
     /**
@@ -303,19 +427,17 @@ class WaylandEventLoop internal constructor(
             nativeListenerLifetime = nativeListenerLifetime,
             ownsNativeListenerLifetime = false,
         ) ?: error("WaylandWindow.create failed — libwayland-client.so.0 absent")
-        registerWindow(window)
-        // Apply platform extension settings
-        attrs.preferCsd?.let { window.setPreferCsd(it) }
-        attrs.activationToken?.let { window.setActivationToken(it) }
-        attrs.name?.let { name -> window.setAppId(name) }
-        requestRedraw(window.id)
-        return window
+        return adoptCreatedWindow(window) { ownedWindow ->
+            attrs.preferCsd?.let { ownedWindow.setPreferCsd(it) }
+            attrs.activationToken?.let { ownedWindow.setActivationToken(it) }
+            attrs.name?.let { name -> ownedWindow.setAppId(name) }
+        }
     }
 
     /**
      * Creates a thread-safe proxy to this event loop.
      *
-     * The proxy uses the eventfd to wake up the loop from any thread.
+     * The proxy uses the portable POSIX wake descriptor to wake the loop from any thread.
      */
     override fun createProxy(): EventLoopProxy = WaylandEventLoopProxy(wakeup)
 
@@ -483,32 +605,89 @@ internal fun dispatchWaylandIteration(
         }
         // Terminal commands own the batch: closing first clears pending redraw tokens and makes
         // every ordinary event already queued for that window invalid before callbacks run.
+        var terminalFailure: Throwable? = null
         batch.filterIsInstance<WaylandQueuedCloseCommand>().forEach { command ->
-            if (eventLoop.consumeCloseCommand(command.windowId, command.token)) {
-                eventLoop.closeWindow(command.windowId)
+            if (eventLoop.consumeCloseCommand(command)) {
+                val result = eventLoop.closeWindow(command.owner)
+                result.failure?.let { failure ->
+                    terminalFailure = appendWaylandFailure(terminalFailure, failure)
+                }
+                if (result.closed) {
+                    try {
+                        eventLoop.deliverDestroyed(command.owner, handler)
+                    } catch (failure: Throwable) {
+                        terminalFailure = appendWaylandFailure(terminalFailure, failure)
+                    }
+                }
+                while (true) {
+                    val wakeFailure = command.wakeFailures.poll() ?: break
+                    terminalFailure = appendWaylandFailure(terminalFailure, wakeFailure)
+                }
             }
         }
+        terminalFailure?.let { throw it }
         for (item in batch) {
             if (item is WaylandQueuedCloseCommand) continue
+            if (item is WaylandQueuedDeviceEvent) {
+                handler.deviceEvent(eventLoop, DeviceId(0L), item.event)
+                continue
+            }
             val queued = item as WaylandQueuedWindowEvent
             val windowId = queued.windowId
             val event = queued.event
             if (event == WindowEvent.Destroyed) {
-                if (eventLoop.consumeDestroyedEvent(windowId)) {
-                    handler.windowEvent(eventLoop, windowId, event)
-                }
+                eventLoop.deliverDestroyed(queued.owner, handler)
                 continue
             }
-            if (eventLoop.windows[windowId.value] == null) continue
             if (event == WindowEvent.RedrawRequested) {
-                if (!eventLoop.consumeRedraw(windowId, queued.redrawToken)) continue
+                if (!eventLoop.consumeRedraw(queued.owner, queued.redrawToken)) continue
             }
+            if (!eventLoop.isCurrentOwner(queued.owner)) continue
             handler.windowEvent(eventLoop, windowId, event)
         }
         handler.aboutToWait(eventLoop)
     } finally {
         eventLoop.eventQueue.remove(boundary)
     }
+}
+
+private fun appendWaylandFailure(primary: Throwable?, additional: Throwable): Throwable {
+    if (primary == null) return additional
+    if (additional !== primary) primary.addSuppressed(additional)
+    return primary
+}
+
+internal fun startWaylandLifecycle(
+    eventLoop: WaylandEventLoop,
+    handler: ApplicationHandler,
+) {
+    handler.resumed(eventLoop)
+    handler.newEvents(eventLoop, StartCause.Init)
+    handler.canCreateSurfaces(eventLoop)
+    handler.aboutToWait(eventLoop)
+}
+
+internal fun shutdownWaylandLifecycle(
+    eventLoop: WaylandEventLoop,
+    handler: ApplicationHandler,
+) {
+    var failure: Throwable? = null
+    try {
+        handler.destroySurfaces(eventLoop)
+    } catch (thrown: Throwable) {
+        failure = appendWaylandFailure(failure, thrown)
+    }
+    try {
+        eventLoop.closeAllWindowsDirect()
+    } catch (thrown: Throwable) {
+        failure = appendWaylandFailure(failure, thrown)
+    }
+    try {
+        handler.suspended(eventLoop)
+    } catch (thrown: Throwable) {
+        failure = appendWaylandFailure(failure, thrown)
+    }
+    failure?.let { throw it }
 }
 
 /** Creates a synthetic [MonitorHandle] for a Wayland output. */
@@ -534,8 +713,7 @@ private fun syntheticWaylandMonitor(
 /**
  * Starts the Wayland event loop and delegates the lifecycle to [handler].
  *
- * Blocking: only returns when the loop ends (via [ActiveEventLoop.exit]
- * or when all windows are closed).
+ * Blocking: only returns when the loop ends via [ActiveEventLoop.exit] or an exception.
  *
  * @throws IllegalStateException if a Wayland loop is already running.
  * @throws IllegalStateException if wl_display_connect fails.
@@ -568,6 +746,16 @@ internal fun waylandStartupFailure(
         "backend=Wayland WAYLAND_DISPLAY=$displayContext operation=$operation cause=$nativeCause",
         cause,
     )
+}
+
+internal inline fun <T> runWaylandStartupOperation(
+    operation: String,
+    display: String?,
+    action: () -> T,
+): T = try {
+    action()
+} catch (failure: Throwable) {
+    throw waylandStartupFailure(operation, display, failure)
 }
 
 internal fun requireWaylandGlobals(globals: WaylandGlobals) {
@@ -621,7 +809,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         fdHandle.invokeExact(displaySeg) as Int
     } catch (t: Throwable) {
         // Clean disconnect before propagating
-        runWaylandCleanup(t, listOf({ disconnectDisplay(displaySeg) }))
+        runWaylandCleanup(t, listOf({ disconnectWaylandDisplay(displaySeg) }))
         throw waylandStartupFailure("wl_display_get_fd", waylandDisplay, t)
     }
 
@@ -629,17 +817,19 @@ private fun runAppInternal(handler: ApplicationHandler) {
     val wakeup = try {
         PosixWakeup.open()
     } catch (t: Throwable) {
-        runWaylandCleanup(t, listOf({ disconnectDisplay(displaySeg) }))
+        runWaylandCleanup(t, listOf({ disconnectWaylandDisplay(displaySeg) }))
         throw waylandStartupFailure("create POSIX wake", waylandDisplay, t)
     }
 
     var seatBinding: WaylandSeatBinding? = null
     var registryOwner: WaylandRegistryOwner? = null
+    var eventLoopForCleanup: WaylandEventLoop? = null
     val nativeListenerLifetime = WaylandNativeListenerLifetime()
     preservingWaylandCleanup(
         cleanupActions = listOf(
+            { eventLoopForCleanup?.closeAllWindowsDirect(); Unit },
             { registryOwner?.close(); Unit },
-            { closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) } },
+            { closeWaylandResources(wakeup) { disconnectWaylandDisplay(displaySeg) } },
             nativeListenerLifetime::closeAfterDisplayDisconnect,
             {
                 val binding = seatBinding
@@ -665,38 +855,21 @@ private fun runAppInternal(handler: ApplicationHandler) {
             globals.extBackgroundEffectManagerPtr, globals.kwinBlurManagerPtr,
             nativeListenerLifetime,
         ).also { it._globals = globals }
+        eventLoopForCleanup = eventLoop
         globals.registryOwner?.routeNativeFailuresTo(eventLoop::queueNativeFailure)
 
         // ── 4b. Install seat / output listeners (keyboard, pointer, touch, scale) ─
         // Route all input events into the eventQueue by their source wl_surface.
         // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
         // DeviceEvent.Key is dispatched directly to the handler for raw key events.
-        seatBinding = installSeatListeners(
-            displayPtr    = displayPtr,
-            seatPtr       = globals.seatPtr,
-            seatVersion   = globals.seatVersion,
-            onEvent = { surfacePtr, event ->
-                routeWaylandInputEvent(
-                    surfacePtr,
-                    event,
-                    eventLoop.windows,
-                    eventLoop::enqueueWindowEvent,
-                )
-            },
-            onDeviceEvent = { event ->
-                handler.deviceEvent(eventLoop, DeviceId(0L), event)
-            },
-            dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
-            deviceFilter = eventLoop.liveDeviceFilter,
-            onNativeFailure = eventLoop::queueNativeFailure,
-        )
-        eventLoop.throwPendingNativeFailure()
-
-        // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
-        if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
-            createTextInput(
-                managerPtr = globals.textInputManagerPtr,
-                display = displayPtr,
+        seatBinding = runWaylandStartupOperation(
+            operation = "install seat listeners",
+            display = waylandDisplay,
+        ) {
+            installSeatListeners(
+                displayPtr    = displayPtr,
+                seatPtr       = globals.seatPtr,
+                seatVersion   = globals.seatVersion,
                 onEvent = { surfacePtr, event ->
                     routeWaylandInputEvent(
                         surfacePtr,
@@ -705,17 +878,40 @@ private fun runAppInternal(handler: ApplicationHandler) {
                         eventLoop::enqueueWindowEvent,
                     )
                 },
+                onDeviceEvent = eventLoop::enqueueDeviceEvent,
+                dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
+                deviceFilter = eventLoop.liveDeviceFilter,
+                onNativeFailure = eventLoop::queueNativeFailure,
+                failOnNativeError = true,
+                onBindingCreated = { seatBinding = it },
             )
         }
+        eventLoop.throwPendingNativeFailure()
 
-        // ── 5. Lifecycle: resumed ─────────────────────────────────────────────
-        handler.resumed(eventLoop)
+        // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
+        if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
+            runWaylandStartupOperation(
+                operation = "create text input",
+                display = waylandDisplay,
+            ) {
+                createTextInput(
+                    managerPtr = globals.textInputManagerPtr,
+                    display = displayPtr,
+                    onEvent = { surfacePtr, event ->
+                        routeWaylandInputEvent(
+                            surfacePtr,
+                            event,
+                            eventLoop.windows,
+                            eventLoop::enqueueWindowEvent,
+                        )
+                    },
+                    failOnNativeError = true,
+                )
+            }
+        }
 
-        // ── 6. First newEvents (Init) ─────────────────────────────────────────
-        handler.newEvents(eventLoop, StartCause.Init)
-
-        // ── 7. canCreateSurfaces ──────────────────────────────────────────────
-        handler.canCreateSurfaces(eventLoop)
+        // ── 5-7. Initial lifecycle and pre-pump wait boundary ─────────────────
+        startWaylandLifecycle(eventLoop, handler)
 
         // ── 8. Main loop ──────────────────────────────────────────────────────
         while (!eventLoop.isExiting) {
@@ -740,8 +936,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         }
 
         // ── 9. Shutdown ───────────────────────────────────────────────────────
-        handler.destroySurfaces(eventLoop)
-        handler.suspended(eventLoop)
+        shutdownWaylandLifecycle(eventLoop, handler)
     }
 }
 
@@ -790,11 +985,16 @@ internal fun <T> preservingWaylandCleanup(
 internal fun closeWaylandResources(
     wakeup: PosixWakeup,
     disconnectDisplay: () -> Unit,
+) = closeWaylandResources(wakeup::close, disconnectDisplay)
+
+internal fun closeWaylandResources(
+    closeWakeup: () -> Unit,
+    disconnectDisplay: () -> Unit,
 ) {
     // Stop every proxy before invalidating the display they wake.
     runWaylandCleanup(
         primary = null,
-        cleanupActions = listOf(wakeup::close, disconnectDisplay),
+        cleanupActions = listOf(closeWakeup, disconnectDisplay),
     )
 }
 
@@ -1076,9 +1276,11 @@ private fun pumpOnce(
     }
 }
 
-/** Closes the connection to the Wayland server cleanly. */
-private fun disconnectDisplay(displaySeg: MemorySegment) {
-    try {
-        wlDisplayDisconnect?.invokeExact(displaySeg)
-    } catch (_: Throwable) {}
-}
+/** Closes the connection and propagates native cleanup failures to the cleanup aggregator. */
+internal fun disconnectWaylandDisplay(
+    displaySeg: MemorySegment,
+    disconnect: (MemorySegment) -> Unit = { display ->
+        checkNotNull(wlDisplayDisconnect) { "wl_display_disconnect not available" }
+            .invokeExact(display)
+    },
+) = disconnect(displaySeg)

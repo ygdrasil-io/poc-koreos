@@ -242,6 +242,7 @@ internal fun <T> withWaylandAcquiredSurfaceOwner(
 internal fun closeWaylandWindowResources(
     destroyFrameCallback: () -> Unit,
     destroyCursor: () -> Unit,
+    destroyPointerConstraints: () -> Unit,
     destroyBlur: () -> Unit,
     destroyXdgToplevel: () -> Unit,
     destroyXdgSurface: () -> Unit,
@@ -252,6 +253,7 @@ internal fun closeWaylandWindowResources(
         cleanupActions = listOf(
             destroyFrameCallback,
             destroyCursor,
+            destroyPointerConstraints,
             destroyBlur,
             destroyXdgToplevel,
             destroyXdgSurface,
@@ -323,6 +325,8 @@ class WaylandWindow private constructor(
      */
     @Volatile
     internal var onWindowEvent: ((WindowEvent) -> Unit)? = null
+    private val pendingWindowEventLock = Any()
+    private val pendingWindowEvents = ArrayDeque<WindowEvent>()
 
     /** Installed by the owning event loop; queues/coalesces redraw and wakes its POSIX poll. */
     @Volatile
@@ -582,10 +586,32 @@ class WaylandWindow private constructor(
         pendingCompositorClose.compareAndSet(true, false)
 
     internal fun detachFromEventLoop() {
-        onWindowEvent = null
+        synchronized(pendingWindowEventLock) {
+            onWindowEvent = null
+            pendingWindowEvents.clear()
+        }
         onRedrawRequested = null
         onCloseRequested = null
         onCompositorCloseRequested = null
+    }
+
+    internal fun attachWindowEventSink(sink: (WindowEvent) -> Unit) {
+        synchronized(pendingWindowEventLock) {
+            onWindowEvent = sink
+            while (pendingWindowEvents.isNotEmpty()) {
+                sink(pendingWindowEvents.removeFirst())
+            }
+        }
+    }
+
+    private fun emitWindowEvent(event: WindowEvent) {
+        val sink = synchronized(pendingWindowEventLock) {
+            onWindowEvent ?: run {
+                pendingWindowEvents.addLast(event)
+                null
+            }
+        }
+        sink?.invoke(event)
     }
 
     internal fun closeNativeResources() {
@@ -596,6 +622,7 @@ class WaylandWindow private constructor(
             closeWaylandWindowResources(
                 destroyFrameCallback = ::destroyFrameCallback,
                 destroyCursor = ::destroyCursorResourcesForClose,
+                destroyPointerConstraints = { pointerConstraints?.releaseStrict() },
                 destroyBlur = { blurManager?.destroyStrict() },
                 destroyXdgToplevel = { closingXdg?.destroyToplevel() },
                 destroyXdgSurface = {
@@ -841,7 +868,7 @@ class WaylandWindow private constructor(
         val newScale = selectedOutput()?.info?.scale?.coerceAtLeast(1)?.toDouble() ?: 1.0
         if (_scaleFactor == newScale) return
         _scaleFactor = newScale
-        onWindowEvent?.invoke(WindowEvent.ScaleFactorChanged(newScale))
+        emitWindowEvent(WindowEvent.ScaleFactorChanged(newScale))
     }
 
     /**
@@ -975,6 +1002,12 @@ class WaylandWindow private constructor(
                 size
             }
         }
+    }
+
+    internal fun handleXdgResize(width: Int, height: Int, applyResizeIncrements: Boolean) {
+        onConfigure(width, height, applyResizeIncrements)
+        emitWindowEvent(WindowEvent.Resized(innerSize))
+        requestRedraw()
     }
 
     internal fun onToplevelStateConfigured(states: WaylandToplevelConfigureStates) {
@@ -1585,10 +1618,7 @@ class WaylandWindow private constructor(
                             decorationManagerPtr = decorationManager,
                             decorated = attrs.decorations,
                             onResized = { w, h, applyResizeIncrements ->
-                                window.onConfigure(w, h, applyResizeIncrements)
-                                val size = window.innerSize
-                                window.onWindowEvent?.invoke(WindowEvent.Resized(size))
-                                window.requestRedraw()
+                                window.handleXdgResize(w, h, applyResizeIncrements)
                             },
                             onStateConfigured = { states -> window.onToplevelStateConfigured(states) },
                             onClose = window::handleXdgToplevelClose,

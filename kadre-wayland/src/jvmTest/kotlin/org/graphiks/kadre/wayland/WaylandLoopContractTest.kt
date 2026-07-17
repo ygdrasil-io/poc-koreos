@@ -2,10 +2,15 @@ package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.DeviceEvent
+import org.graphiks.kadre.core.DeviceId
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import java.lang.foreign.MemorySegment
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -14,6 +19,42 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandLoopContractTest {
+    @Test
+    fun `device event is queued until after new events and handler failure stays on Kotlin loop`() {
+        val loop = testLoop(RecordingWakeup())
+        val trace = mutableListOf<String>()
+        val handlerFailure = IllegalStateException("device handler")
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                trace += "newEvents"
+            }
+            override fun deviceEvent(
+                eventLoop: ActiveEventLoop,
+                deviceId: DeviceId,
+                event: DeviceEvent,
+            ) {
+                trace += "device"
+                throw handlerFailure
+            }
+        }
+
+        loop.enqueueDeviceEvent(DeviceEvent.PointerMotion(1.0, 2.0))
+        assertTrue(trace.isEmpty())
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchWaylandIteration(loop, handler, StartCause.Poll)
+        }
+
+        assertSame(handlerFailure, thrown)
+        assertEquals(listOf("newEvents", "device"), trace)
+    }
+
     @Test
     fun `redraw is published before wake can release the polling thread`() {
         lateinit var loop: WaylandEventLoop
@@ -56,6 +97,44 @@ class WaylandLoopContractTest {
             listOf<WindowEvent>(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested),
             events,
         )
+    }
+
+    @Test
+    fun `concurrent redraw survives first publisher wake rollback`() {
+        val wakeup = BlockingFirstWakeup()
+        val loop = testLoop(wakeup)
+        val window = WaylandWindow.createForTest(surface = 56L)
+        loop.registerWindow(window)
+        var firstFailure: Throwable? = null
+        var secondResult = false
+        val secondStarted = CountDownLatch(1)
+
+        val first = Thread({
+            try {
+                loop.requestRedraw(window.id)
+            } catch (failure: Throwable) {
+                firstFailure = failure
+            }
+        }, "redraw-first")
+        first.start()
+        wakeup.firstSignalEntered.await()
+
+        val second = Thread({
+            secondStarted.countDown()
+            secondResult = loop.requestRedraw(window.id)
+        }, "redraw-second")
+        second.start()
+        secondStarted.await()
+        wakeup.releaseFirstSignal.countDown()
+        first.join()
+        second.join()
+
+        assertTrue(firstFailure?.message.orEmpty().contains("redraw wake failed"))
+        assertTrue(secondResult)
+        assertEquals(2, wakeup.signalCalls.get())
+        val events = mutableListOf<WindowEvent>()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
     }
 
     @Test
@@ -117,6 +196,56 @@ class WaylandLoopContractTest {
     }
 
     @Test
+    fun `surface id reuse in new events rejects stale events and destroyed from old owner`() {
+        val loop = testLoop(RecordingWakeup())
+        val oldWindow = WaylandWindow.createForTest(
+            surface = 57L,
+            surfaceProxyDestroyer = {},
+            surfaceFlusher = { 0 },
+        )
+        loop.registerWindow(oldWindow)
+        loop.enqueueWindowEvent(oldWindow.id, WindowEvent.Focused(true))
+        assertTrue(loop.closeWindow(oldWindow.id))
+        val newWindow = WaylandWindow.createForTest(surface = 57L)
+        val events = mutableListOf<WindowEvent>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                loop.registerWindow(newWindow)
+            }
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                events += event
+            }
+        }
+
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+
+        assertTrue(events.isEmpty())
+        assertSame(newWindow, loop.windows[57L])
+    }
+
+    @Test
+    fun `initial xdg resize buffered before registration publishes under the new owner`() {
+        val loop = testLoop(RecordingWakeup())
+        val window = WaylandWindow.createForTest(xdgWmBase = 1L, surface = 59L)
+
+        window.handleXdgResize(width = 640, height = 480, applyResizeIncrements = true)
+        loop.registerWindow(window)
+        val events = mutableListOf<WindowEvent>()
+
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+
+        assertEquals(
+            listOf<WindowEvent>(WindowEvent.Resized(org.graphiks.kadre.core.PhysicalSize(640, 480))),
+            events,
+        )
+    }
+
+    @Test
     fun `failed redraw wake rolls back atomically and allows retry`() {
         val wakeup = RecordingWakeup(signalResult = false)
         val loop = testLoop(wakeup)
@@ -133,6 +262,32 @@ class WaylandLoopContractTest {
 
         assertTrue(failure.message.orEmpty().contains("redraw"))
         assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
+    fun `unreturned window rolls back registration and native resources when initial redraw fails`() {
+        val loop = testLoop(RecordingWakeup(signalResult = false))
+        val nativeFailure = IllegalArgumentException("rollback surface")
+        var destroyCalls = 0
+        val window = WaylandWindow.createForTest(
+            surface = 58L,
+            surfaceProxyDestroyer = {
+                destroyCalls += 1
+                throw nativeFailure
+            },
+        )
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            loop.adoptCreatedWindow(window)
+        }
+
+        assertEquals("Wayland redraw wake failed", thrown.message)
+        assertEquals(listOf(nativeFailure), thrown.suppressed.toList())
+        assertEquals(1, destroyCalls)
+        assertFalse(loop.windows.containsKey(window.id.value))
+        val events = mutableListOf<WindowEvent>()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -174,18 +329,20 @@ class WaylandLoopContractTest {
 
         wakeup.signalResult = true
         window.close()
-        dispatchWaylandIteration(loop, recordingHandler(), StartCause.Poll)
+        val events = mutableListOf<WindowEvent>()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
 
         assertEquals(2, wakeup.signalCalls)
         assertEquals(1, nativeDestroyCalls)
         assertFalse(loop.windows.containsKey(window.id.value))
-        val events = mutableListOf<WindowEvent>()
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+        events.clear()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
     }
 
     @Test
-    fun `xdg close keeps its command when wake fails and reports the failure`() {
+    fun `xdg close wake failure propagates only after close and destroyed`() {
         val wakeup = RecordingWakeup(signalResult = false)
         val loop = testLoop(wakeup)
         var nativeDestroyCalls = 0
@@ -205,17 +362,22 @@ class WaylandLoopContractTest {
 
         callbacks.close()
 
-        assertEquals("Wayland close wake failed", failures.single().message)
+        assertTrue(failures.isEmpty())
         assertTrue(loop.windows.containsKey(window.id.value))
         assertEquals(0, nativeDestroyCalls)
 
-        dispatchWaylandIteration(loop, recordingHandler(), StartCause.Poll)
+        val events = mutableListOf<WindowEvent>()
+        val failure = assertFailsWith<IllegalStateException> {
+            dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        }
 
+        assertEquals("Wayland close wake failed", failure.message)
         assertEquals(1, nativeDestroyCalls)
         assertFalse(loop.windows.containsKey(window.id.value))
-        val events = mutableListOf<WindowEvent>()
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+        events.clear()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -264,9 +426,10 @@ class WaylandLoopContractTest {
         dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
 
         assertEquals(1, nativeDestroyCalls)
-        assertTrue(events.isEmpty())
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+        events.clear()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
         assertFalse(loop.requestRedraw(window.id))
     }
 
@@ -316,9 +479,10 @@ class WaylandLoopContractTest {
         dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
 
         assertEquals(1, nativeDestroyCalls)
-        assertTrue(events.isEmpty())
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+        events.clear()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -340,13 +504,100 @@ class WaylandLoopContractTest {
         callbacks.close()
         assertTrue(loop.windows.containsKey(window.id.value))
 
+        val events = mutableListOf<WindowEvent>()
         val thrown = assertFailsWith<IllegalStateException> {
-            dispatchWaylandIteration(loop, recordingHandler(), StartCause.Poll)
+            dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         }
         assertSame(nativeFailure, thrown)
-        val events = mutableListOf<WindowEvent>()
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+        events.clear()
+        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `close batch destroys every window delivers destroyed then throws aggregated cleanup`() {
+        val loop = testLoop(RecordingWakeup())
+        val firstFailure = IllegalStateException("first cleanup")
+        val secondFailure = IllegalArgumentException("second cleanup")
+        val first = WaylandWindow.createForTest(
+            surface = 60L,
+            surfaceProxyDestroyer = { throw firstFailure },
+        )
+        val second = WaylandWindow.createForTest(
+            surface = 61L,
+            surfaceProxyDestroyer = { throw secondFailure },
+        )
+        loop.registerWindow(first)
+        loop.registerWindow(second)
+        val terminal = mutableListOf<Pair<WindowId, WindowEvent>>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                terminal += windowId to event
+            }
+        }
+
+        first.close()
+        second.close()
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchWaylandIteration(loop, handler, StartCause.Poll)
+        }
+
+        assertSame(firstFailure, thrown)
+        assertEquals(listOf(secondFailure), thrown.suppressed.toList())
+        assertEquals(
+            listOf<Pair<WindowId, WindowEvent>>(
+                first.id to WindowEvent.Destroyed,
+                second.id to WindowEvent.Destroyed,
+            ),
+            terminal,
+        )
+        assertTrue(loop.windows.isEmpty())
+
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+        assertEquals(2, terminal.size)
+    }
+
+    @Test
+    fun `shutdown closes queued and live windows directly before connection cleanup`() {
+        val loop = testLoop(RecordingWakeup())
+        val firstFailure = IllegalStateException("shutdown first")
+        val secondFailure = IllegalArgumentException("shutdown second")
+        var firstDestroyCalls = 0
+        var secondDestroyCalls = 0
+        val first = WaylandWindow.createForTest(
+            surface = 62L,
+            surfaceProxyDestroyer = {
+                firstDestroyCalls += 1
+                throw firstFailure
+            },
+        )
+        val second = WaylandWindow.createForTest(
+            surface = 63L,
+            surfaceProxyDestroyer = {
+                secondDestroyCalls += 1
+                throw secondFailure
+            },
+        )
+        loop.registerWindow(first)
+        loop.registerWindow(second)
+        first.close()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            loop.closeAllWindowsDirect()
+        }
+
+        assertSame(firstFailure, thrown)
+        assertEquals(listOf(secondFailure), thrown.suppressed.toList())
+        assertEquals(1, firstDestroyCalls)
+        assertEquals(1, secondDestroyCalls)
+        assertTrue(loop.windows.isEmpty())
+        assertFalse(loop.eventQueue.any { it is WaylandQueuedCloseCommand })
     }
 
     @Test
@@ -395,6 +646,46 @@ class WaylandLoopContractTest {
     }
 
     @Test
+    fun `startup native steps are contextualized while application callbacks stay outside wrapper`() {
+        val nativeFailure = IllegalArgumentException("seat listener rc=-1")
+        val wrapped = assertFailsWith<IllegalStateException> {
+            runWaylandStartupOperation("install seat listeners", "wayland-test-10") {
+                throw nativeFailure
+            }
+        }
+
+        assertTrue(wrapped.message.orEmpty().contains("operation=install seat listeners"))
+        assertSame(nativeFailure, wrapped.cause)
+
+        val callbackFailure = UnsupportedOperationException("application callback")
+        val callback = runWaylandStartupOperation("create text input", "wayland-test-10") {
+            { throw callbackFailure }
+        }
+        assertSame(callbackFailure, assertFailsWith { callback() })
+    }
+
+    @Test
+    fun `strict display disconnect and wake cleanup preserve every failure`() {
+        val disconnectFailure = IllegalArgumentException("disconnect")
+        assertSame(
+            disconnectFailure,
+            assertFailsWith {
+                disconnectWaylandDisplay(MemorySegment.NULL) { throw disconnectFailure }
+            },
+        )
+
+        val wakeFailure = IllegalStateException("wake close")
+        val cleanupFailure = assertFailsWith<IllegalStateException> {
+            closeWaylandResources(
+                closeWakeup = { throw wakeFailure },
+                disconnectDisplay = { throw disconnectFailure },
+            )
+        }
+        assertSame(wakeFailure, cleanupFailure)
+        assertEquals(listOf(disconnectFailure), cleanupFailure.suppressed.toList())
+    }
+
+    @Test
     fun `required compositor and xdg wm base are validated before lifecycle`() {
         val compositor = assertFailsWith<IllegalStateException> {
             requireWaylandGlobals(WaylandGlobals(compositorPtr = 0L, xdgWmBasePtr = 2L))
@@ -405,6 +696,87 @@ class WaylandLoopContractTest {
 
         assertTrue(compositor.message.orEmpty().contains("wl_compositor"))
         assertTrue(shell.message.orEmpty().contains("xdg_wm_base"))
+    }
+
+    @Test
+    fun `startup lifecycle reaches about to wait before the first native pump`() {
+        val loop = testLoop(RecordingWakeup())
+        val trace = mutableListOf<String>()
+        val handler = object : ApplicationHandler {
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                trace += "resumed"
+            }
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                trace += "newEvents-$startCause"
+            }
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreateSurfaces"
+            }
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+        }
+
+        startWaylandLifecycle(loop, handler)
+        trace += "pump"
+
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents-${StartCause.Init}",
+                "canCreateSurfaces",
+                "aboutToWait",
+                "pump",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `shutdown closes windows after destroy surfaces failure before suspended`() {
+        val loop = testLoop(RecordingWakeup())
+        val trace = mutableListOf<String>()
+        val destroySurfacesFailure = IllegalStateException("destroy surfaces")
+        val nativeFailure = IllegalArgumentException("native close")
+        val window = WaylandWindow.createForTest(
+            surface = 64L,
+            surfaceProxyDestroyer = {
+                trace += "native-close"
+                throw nativeFailure
+            },
+        )
+        loop.registerWindow(window)
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+                window.close()
+                throw destroySurfacesFailure
+            }
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                assertTrue(loop.windows.isEmpty())
+                trace += "suspended"
+            }
+        }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            shutdownWaylandLifecycle(loop, handler)
+        }
+
+        assertSame(destroySurfacesFailure, thrown)
+        assertEquals(listOf(nativeFailure), thrown.suppressed.toList())
+        assertEquals(listOf("destroySurfaces", "native-close", "suspended"), trace)
+        assertTrue(loop.windows.isEmpty())
     }
 
     private fun recordingHandler(
@@ -458,5 +830,25 @@ private class RecordingWakeup(
 
     override fun drain(): Boolean = true
 
+    override fun close() = Unit
+}
+
+private class BlockingFirstWakeup : PosixWakeup {
+    override val readFd: Int = 8
+    val firstSignalEntered = CountDownLatch(1)
+    val releaseFirstSignal = CountDownLatch(1)
+    val signalCalls = AtomicInteger()
+
+    override fun signal(): Boolean {
+        val call = signalCalls.incrementAndGet()
+        if (call == 1) {
+            firstSignalEntered.countDown()
+            releaseFirstSignal.await()
+            return false
+        }
+        return true
+    }
+
+    override fun drain(): Boolean = true
     override fun close() = Unit
 }
