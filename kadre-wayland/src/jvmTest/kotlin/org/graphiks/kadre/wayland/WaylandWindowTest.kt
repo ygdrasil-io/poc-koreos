@@ -43,6 +43,32 @@ import kotlin.test.assertTrue
 class WaylandWindowTest {
 
     @Test
+    fun `native close runs every child to parent cleanup and preserves failures`() {
+        val trace = mutableListOf<String>()
+        val primary = IllegalStateException("frame")
+        val cursorFailure = IllegalArgumentException("cursor")
+        val surfaceFailure = UnsupportedOperationException("surface")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            closeWaylandWindowResources(
+                destroyFrameCallback = { trace += "frame"; throw primary },
+                destroyCursor = { trace += "cursor"; throw cursorFailure },
+                destroyBlur = { trace += "blur" },
+                destroyXdgToplevel = { trace += "xdg-toplevel" },
+                destroyXdgSurface = { trace += "xdg-surface" },
+                destroyWlSurface = { trace += "wl-surface"; throw surfaceFailure },
+            )
+        }
+
+        assertSame(primary, thrown)
+        assertEquals(
+            listOf("frame", "cursor", "blur", "xdg-toplevel", "xdg-surface", "wl-surface"),
+            trace,
+        )
+        assertEquals(listOf(cursorFailure, surfaceFailure), thrown.suppressed.toList())
+    }
+
+    @Test
     fun `surface listener registration failure destroys proxy before closing binding`() {
         val trace = mutableListOf<String>()
         val lifetime = object : WaylandNativeListenerLifetime() {
@@ -924,6 +950,13 @@ class WaylandWindowTest {
     fun `requestRedraw does not crash with null surface`() {
         val window = WaylandWindow.createForTest(surface = 0L)
         window.requestRedraw() // Must not throw an exception
+    }
+
+    @Test
+    fun `bare redraw commit is forbidden while xdg shell acquisition is in progress`() {
+        assertTrue(shouldCommitBareWaylandSurface(surfacePtr = 42L, xdgWmBasePtr = 0L))
+        assertFalse(shouldCommitBareWaylandSurface(surfacePtr = 0L, xdgWmBasePtr = 0L))
+        assertFalse(shouldCommitBareWaylandSurface(surfacePtr = 42L, xdgWmBasePtr = 99L))
     }
 
     @Test
