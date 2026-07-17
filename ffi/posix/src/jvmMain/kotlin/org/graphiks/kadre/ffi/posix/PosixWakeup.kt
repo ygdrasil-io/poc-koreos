@@ -44,13 +44,20 @@ interface PosixWakeup : AutoCloseable {
             symbols: PosixSymbolLookup,
             syscalls: PosixSyscalls,
         ): PosixWakeup {
+            // Resolve every symbol needed by an opened owner before a syscall can
+            // allocate a descriptor. The owner retains these exact addresses.
+            val wakeSymbols = WakeSymbols(
+                read = symbols.require("read"),
+                write = symbols.require("write"),
+                close = symbols.require("close"),
+            )
+
             symbols.find("eventfd")?.let { eventFd ->
                 when (val fd = retryEintr("eventfd") { syscalls.eventFd(eventFd, 0, EFD_FLAGS) }) {
-                    is CompletedCall.Success -> return OwnedPosixWakeup(
-                        readFd = fd.value,
-                        writeFd = fd.value,
+                    is CompletedCall.Success -> return ownOpenedDescriptors(
+                        pair = FdPair(fd.value, fd.value),
                         eventFd = true,
-                        symbols = symbols,
+                        symbols = wakeSymbols,
                         syscalls = syscalls,
                     )
                     is CompletedCall.Failure -> if (fd.errno != ENOSYS) {
@@ -61,11 +68,10 @@ interface PosixWakeup : AutoCloseable {
 
             symbols.find("pipe2")?.let { pipe2 ->
                 when (val pair = retryEintr("pipe2") { syscalls.pipe2(pipe2, PIPE_FLAGS) }) {
-                    is CompletedCall.Success -> return OwnedPosixWakeup(
-                        readFd = pair.value.readFd,
-                        writeFd = pair.value.writeFd,
+                    is CompletedCall.Success -> return ownOpenedDescriptors(
+                        pair = pair.value,
                         eventFd = false,
-                        symbols = symbols,
+                        symbols = wakeSymbols,
                         syscalls = syscalls,
                     )
                     is CompletedCall.Failure -> if (pair.errno != ENOSYS) {
@@ -75,22 +81,27 @@ interface PosixWakeup : AutoCloseable {
             }
 
             val pipe = symbols.require("pipe")
+            val fcntl = symbols.require("fcntl")
             val pair = retryEintrOrThrow("pipe") { syscalls.pipe(pipe) }
             try {
-                val fcntl = symbols.require("fcntl")
                 configureDescriptor(pair.readFd, fcntl, syscalls)
                 configureDescriptor(pair.writeFd, fcntl, syscalls)
+                return OwnedPosixWakeup(
+                    readFd = pair.readFd,
+                    writeFd = pair.writeFd,
+                    eventFd = false,
+                    symbols = wakeSymbols,
+                    syscalls = syscalls,
+                )
             } catch (failure: Throwable) {
-                closePairAfterOpenFailure(pair, symbols, syscalls, failure)
+                closeDescriptors(
+                    fds = pair.asDistinctList(),
+                    close = wakeSymbols.close,
+                    syscalls = syscalls,
+                    primaryFailure = failure,
+                )
                 throw failure
             }
-            return OwnedPosixWakeup(
-                readFd = pair.readFd,
-                writeFd = pair.writeFd,
-                eventFd = false,
-                symbols = symbols,
-                syscalls = syscalls,
-            )
         }
     }
 }
@@ -104,7 +115,7 @@ private class OwnedPosixWakeup(
     override val readFd: Int,
     private val writeFd: Int,
     private val eventFd: Boolean,
-    private val symbols: PosixSymbolLookup,
+    private val symbols: WakeSymbols,
     private val syscalls: PosixSyscalls,
 ) : PosixWakeup {
     private val closed = AtomicBoolean(false)
@@ -121,23 +132,22 @@ private class OwnedPosixWakeup(
 
     override fun signal(): Boolean = synchronized(lock) {
         if (closed.get()) return false
-        if (!pending.compareAndSet(false, true)) return true
+        if (pending.get()) return true
 
-        val write = symbols.require("write")
         while (true) {
-            val result = syscalls.write(write, writeFd, writeBytes)
+            val result = syscalls.write(symbols.write, writeFd, writeBytes)
             when {
-                result.succeeded && result.value == writeBytes.size.toLong() -> return true
-                result.succeeded -> {
-                    pending.set(false)
-                    throw PosixException("write", 0)
+                result.succeeded && result.value == writeBytes.size.toLong() -> {
+                    pending.set(true)
+                    return true
                 }
+                result.succeeded -> throw PosixException("write", 0)
                 result.errno == EINTR -> continue
-                result.errno == EAGAIN -> return true
-                else -> {
-                    pending.set(false)
-                    throw PosixException("write", result.requireErrno())
+                result.errno == EAGAIN -> {
+                    pending.set(true)
+                    return true
                 }
+                else -> throw PosixException("write", result.requireErrno())
             }
         }
         @Suppress("UNREACHABLE_CODE")
@@ -147,10 +157,9 @@ private class OwnedPosixWakeup(
     override fun drain(): Boolean = synchronized(lock) {
         if (closed.get()) return false
 
-        val read = symbols.require("read")
         val byteCount = if (eventFd) Long.SIZE_BYTES else 1
         while (true) {
-            val result = syscalls.read(read, readFd, byteCount)
+            val result = syscalls.read(symbols.read, readFd, byteCount)
             when {
                 result.succeeded && (result.value ?: 0L) > 0L -> {
                     pending.set(false)
@@ -174,19 +183,42 @@ private class OwnedPosixWakeup(
             if (!closed.compareAndSet(false, true)) return
             pending.set(false)
 
-            val close = symbols.find("close")
-                ?: throw IllegalStateException("required POSIX symbol 'close' is unavailable")
-            var failure: Throwable? = null
-            for (fd in listOf(readFd, writeFd).distinct()) {
-                val result = syscalls.close(close, fd)
-                if (!result.succeeded) {
-                    val next = PosixException("close", result.requireErrno())
-                    if (failure == null) failure = next else failure.addSuppressed(next)
-                }
-            }
-            failure?.let { throw it }
+            closeDescriptors(
+                fds = FdPair(readFd, writeFd).asDistinctList(),
+                close = symbols.close,
+                syscalls = syscalls,
+            )?.let { throw it }
         }
     }
+}
+
+private data class WakeSymbols(
+    val read: MemorySegment,
+    val write: MemorySegment,
+    val close: MemorySegment,
+)
+
+private fun ownOpenedDescriptors(
+    pair: FdPair,
+    eventFd: Boolean,
+    symbols: WakeSymbols,
+    syscalls: PosixSyscalls,
+): PosixWakeup = try {
+    OwnedPosixWakeup(
+        readFd = pair.readFd,
+        writeFd = pair.writeFd,
+        eventFd = eventFd,
+        symbols = symbols,
+        syscalls = syscalls,
+    )
+} catch (failure: Throwable) {
+    closeDescriptors(
+        fds = pair.asDistinctList(),
+        close = symbols.close,
+        syscalls = syscalls,
+        primaryFailure = failure,
+    )
+    throw failure
 }
 
 private fun configureDescriptor(
@@ -208,18 +240,32 @@ private fun configureDescriptor(
     }
 }
 
-private fun closePairAfterOpenFailure(
-    pair: FdPair,
-    symbols: PosixSymbolLookup,
+private fun closeDescriptors(
+    fds: List<Int>,
+    close: MemorySegment,
     syscalls: PosixSyscalls,
-    failure: Throwable,
-) {
-    val close = symbols.find("close") ?: return
-    for (fd in listOf(pair.readFd, pair.writeFd).distinct()) {
-        val result = syscalls.close(close, fd)
-        if (!result.succeeded) failure.addSuppressed(PosixException("close", result.requireErrno()))
+    primaryFailure: Throwable? = null,
+): Throwable? {
+    var failure = primaryFailure
+    for (fd in fds) {
+        val closeFailure = try {
+            val result = syscalls.close(close, fd)
+            if (result.succeeded) null else PosixException("close", result.requireErrno())
+        } catch (thrown: Throwable) {
+            thrown
+        }
+        if (closeFailure != null) {
+            if (failure == null) {
+                failure = closeFailure
+            } else if (failure !== closeFailure) {
+                failure.addSuppressed(closeFailure)
+            }
+        }
     }
+    return failure
 }
+
+private fun FdPair.asDistinctList(): List<Int> = listOf(readFd, writeFd).distinct()
 
 private sealed interface CompletedCall<out T> {
     data class Success<T>(val value: T) : CompletedCall<T>

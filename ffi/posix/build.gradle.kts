@@ -12,3 +12,7 @@ kotlin {
         }
     }
 }
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
