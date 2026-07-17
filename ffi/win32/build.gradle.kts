@@ -7,6 +7,10 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
 }
 
+tasks.withType<Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
 kotlin {
     jvmToolchain(25)
     jvm()

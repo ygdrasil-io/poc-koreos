@@ -12,12 +12,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+internal fun win32CapturePeriodMillis(frameRate: Int): Long {
+    require(frameRate in 1..1000) {
+        "Windows capture frameRate must be in 1..1000, got $frameRate"
+    }
+    return 1000L / frameRate
+}
+
 class Win32CaptureSession(
     source: CaptureSource,
     config: CaptureConfig,
     private val hwnd: Long?,
     rect: Win32MonitorRect?,
 ) : CaptureSession(source, config) {
+
+    private val capturePeriodMillis = win32CapturePeriodMillis(config.frameRate)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -37,7 +46,7 @@ class Win32CaptureSession(
                 if (frame != null) {
                     _frames.tryEmit(frame)
                 }
-                delay(1000L / config.frameRate)
+                delay(capturePeriodMillis)
             }
         }
     }
