@@ -213,11 +213,8 @@ class Win32Window private constructor(
             capabilities = setOf(ImeCapability.Composition, ImeCapability.Password),
         )
 
-    @Volatile
-    private var needsRedraw: Boolean = false
-
     override fun requestRedraw() {
-        needsRedraw = true
+        invalidateRect(hwnd, MemorySegment.NULL, 0)
     }
 
     override fun setTitle(title: String) {

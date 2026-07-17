@@ -63,11 +63,13 @@ internal val win32Running = AtomicBoolean(false)
  * ```
  * runApp(handler)
  *   └─ handler.resumed(this)
+ *   └─ handler.canCreateSurfaces(this)
  *   └─ message loop
  *        ├─ handler.newEvents(this, cause)
  *        ├─ pump messages according to ControlFlow
  *        └─ handler.aboutToWait(this)
  *   └─ handler.suspended(this)
+ *   └─ handler.destroySurfaces(this)
  * ```
  *
  * ### Thread-safety
@@ -76,7 +78,9 @@ internal val win32Running = AtomicBoolean(false)
  * - [windows] is a ConcurrentHashMap.
  * - The message loop itself runs on the calling thread.
  */
-internal class Win32EventLoop : ActiveEventLoop {
+internal class Win32EventLoop(
+    private val postQuitMessage: (Int) -> Unit = { exitCode -> PostQuitMessage(exitCode) },
+) : ActiveEventLoop {
 
     /** Live windows: windowId (HWND address) → Win32Window. */
     internal val windows = ConcurrentHashMap<Long, Win32Window>()
@@ -160,7 +164,29 @@ internal class Win32EventLoop : ActiveEventLoop {
      */
     override fun exit() {
         _isExiting = true
-        PostQuitMessage(0)
+        postQuitMessage(0)
+    }
+
+    internal fun deliverWindowEvent(
+        handler: ApplicationHandler,
+        hwnd: Long,
+        event: WindowEvent,
+        removeWindow: (Long) -> Unit = { windows.remove(it) },
+        windowsEmpty: () -> Boolean = windows::isEmpty,
+    ) {
+        if (event !is WindowEvent.Destroyed) {
+            handler.windowEvent(this, WindowId(hwnd), event)
+            return
+        }
+
+        try {
+            handler.windowEvent(this, WindowId(hwnd), event)
+        } finally {
+            removeWindow(hwnd)
+            if (windowsEmpty() && !isExiting) {
+                exit()
+            }
+        }
     }
 
     /**
@@ -395,40 +421,65 @@ internal class Win32EventLoop : ActiveEventLoop {
  * @throws IllegalStateException if a Win32 loop is already active in this process.
  */
 fun runApp(handler: ApplicationHandler) {
+    runApp(handler) { eventLoop, loopHandler ->
+        eventLoop.runMessageLoop(loopHandler)
+    }
+}
+
+internal fun runApp(
+    handler: ApplicationHandler,
+    messageLoop: (Win32EventLoop, ApplicationHandler) -> Unit,
+) {
     check(win32Running.compareAndSet(false, true)) {
         "Win32EventLoop.runApp() can only be called once per process. A Win32 event loop is already active."
     }
 
-    // Enable Per-Monitor-V2 before any window creation, otherwise Windows
-    // virtualizes the DPI and makes content blurry on high-density displays.
-    enablePerMonitorV2DpiAwareness()
-
-    val eventLoop = Win32EventLoop()
-
-    // Install the KadreWndProc handler to route messages to the windows
-    KadreWndProc.install { hwnd, event ->
-        val windowId = WindowId(hwnd)
-        handler.windowEvent(eventLoop, windowId, event)
-
-        // Handle window destruction: remove from the table + possibly quit
-        if (event is WindowEvent.Destroyed) {
-            eventLoop.windows.remove(hwnd)
-        }
-    }
-
     try {
-        // Notify the handler that the application is resuming
-        handler.resumed(eventLoop)
+        // Enable Per-Monitor-V2 before any window creation, otherwise Windows
+        // virtualizes the DPI and makes content blurry on high-density displays.
+        enablePerMonitorV2DpiAwareness()
 
-        // Notify that surfaces can be created
-        handler.canCreateSurfaces(eventLoop)
+        val eventLoop = Win32EventLoop()
 
-        // Start the blocking message loop
-        eventLoop.runMessageLoop(handler)
+        // Install the KadreWndProc handler to route messages to the windows.
+        KadreWndProc.install { hwnd, event ->
+            eventLoop.deliverWindowEvent(handler, hwnd, event)
+        }
+
+        var failure: Throwable? = null
+        try {
+            handler.resumed(eventLoop)
+            handler.canCreateSurfaces(eventLoop)
+            messageLoop(eventLoop, handler)
+        } catch (throwable: Throwable) {
+            failure = throwable
+        }
+
+        failure = captureLifecycleFailure(failure) {
+            handler.suspended(eventLoop)
+        }
+        failure = captureLifecycleFailure(failure) {
+            handler.destroySurfaces(eventLoop)
+        }
+
+        failure?.let { throw it }
     } finally {
-        // Final cleanup
-        handler.suspended(eventLoop)
         KadreWndProc.uninstall()
         win32Running.set(false)
+    }
+}
+
+private inline fun captureLifecycleFailure(
+    primary: Throwable?,
+    callback: () -> Unit,
+): Throwable? = try {
+    callback()
+    primary
+} catch (later: Throwable) {
+    if (primary == null) {
+        later
+    } else {
+        if (primary !== later) primary.addSuppressed(later)
+        primary
     }
 }

@@ -251,10 +251,7 @@ object KadreWndProc {
 
             // ── Redraw ────────────────────────────────────────────────────────
             WM_PAINT.toUInt() -> {
-                emit(hwnd, WindowEvent.RedrawRequested)
-                // Return 0 without calling BeginPaint/EndPaint — the window will be
-                // redrawn by the render engine (wgpu4k) on the next frame.
-                0L
+                dispatchPaint(hwnd)
             }
 
             // ── Kadre private native actions ─────────────────────────────────
@@ -457,15 +454,7 @@ object KadreWndProc {
             }
 
             // ── Destroy ───────────────────────────────────────────────────────
-            WM_DESTROY.toUInt() -> {
-                emit(hwnd, WindowEvent.Destroyed)
-                Win32FocusState.unregister(hwnd)
-                unregisterConstraints(hwnd)
-                unregisterPhysicalModifiers(hwnd)
-                // PostQuitMessage(0) — signal to end the Win32 message loop.
-                postQuitMessage(0)
-                0L
-            }
+            WM_DESTROY.toUInt() -> dispatchDestroy(hwnd)
 
             // ── Min/max size & resize increments ──────────────────────────────
             WM_GETMINMAXINFO.toUInt() -> {
@@ -552,6 +541,56 @@ object KadreWndProc {
         handler?.onEvent(hwnd, event)
     }
 
+    internal fun dispatchDestroy(
+        hwnd: Long,
+        emitEvent: (Long, WindowEvent) -> Unit = ::emit,
+        unregisterFocus: (Long) -> Unit = Win32FocusState::unregister,
+        unregisterConstraints: (Long) -> Unit = ::unregisterConstraints,
+        unregisterModifiers: (Long) -> Unit = ::unregisterPhysicalModifiers,
+    ): Long {
+        var failure: Throwable? = null
+
+        fun capture(action: () -> Unit) {
+            try {
+                action()
+            } catch (caught: Throwable) {
+                val primary = failure
+                if (primary == null) {
+                    failure = caught
+                } else {
+                    primary.addSuppressed(caught)
+                }
+            }
+        }
+
+        capture { emitEvent(hwnd, WindowEvent.Destroyed) }
+        capture { unregisterFocus(hwnd) }
+        capture { unregisterConstraints(hwnd) }
+        capture { unregisterModifiers(hwnd) }
+
+        failure?.let { throw it }
+        return 0L
+    }
+
+    internal fun dispatchPaint(
+        hwnd: Long,
+        beginPaint: (MemorySegment, MemorySegment) -> MemorySegment = ::beginPaint,
+        emitEvent: (Long, WindowEvent) -> Unit = ::emit,
+        endPaint: (MemorySegment, MemorySegment) -> Int = ::endPaint,
+    ): Long {
+        Arena.ofConfined().use { arena ->
+            val hwndSegment = MemorySegment.ofAddress(hwnd)
+            val paintStruct = arena.allocatePaintStruct()
+            beginPaint(hwndSegment, paintStruct)
+            try {
+                emitEvent(hwnd, WindowEvent.RedrawRequested)
+            } finally {
+                endPaint(hwndSegment, paintStruct)
+            }
+        }
+        return 0L
+    }
+
     /**
      * Calls DefWindowProcW via the FFM binding (lazy, null on macOS/Linux).
      *
@@ -564,17 +603,6 @@ object KadreWndProc {
     private fun defWindowProcW(hwnd: Long, msg: Int, wParam: Long, lParam: Long): Long {
         val hwndSeg = MemorySegment.ofAddress(hwnd)
         return DefWindowProcW(hwndSeg, msg, wParam, lParam)
-    }
-
-    /**
-     * Calls PostQuitMessage(nExitCode) via the FFM binding (lazy, null on macOS/Linux).
-     *
-     * Triggers the exit of the GetMessage message loop when WM_DESTROY is received.
-     *
-     * @param nExitCode Exit code (0 = normal success).
-     */
-    private fun postQuitMessage(nExitCode: Int) {
-        PostQuitMessage(nExitCode)
     }
 
     /**
