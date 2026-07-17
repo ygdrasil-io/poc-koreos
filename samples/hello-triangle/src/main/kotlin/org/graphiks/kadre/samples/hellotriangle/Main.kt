@@ -44,7 +44,6 @@ import io.ygdrasil.webgpu.SurfaceConfiguration
 import io.ygdrasil.webgpu.SurfaceTextureStatus
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
-import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.WGPULowLevelApi
 import org.graphiks.kffi.objc.ObjCRuntime
 import java.lang.foreign.Arena
@@ -97,7 +96,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
  * Handler for the hello-triangle sample (GRA-138 + GRA-139).
  *
  * Maintains the wgpu4k resources across frames:
- * - [surface]: render surface bound to the CAMetalLayer
+ * - [surface]: render surface bound to the AppKit CAMetalLayer or Win32 window
  * - [gpuDevice]: GPU device
  * - [pipeline]: render pipeline (vertex + fragment shaders)
  * - [window]: Kadre window for `requestRedraw()`
@@ -110,6 +109,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
  */
 @OptIn(WGPULowLevelApi::class)
 class HelloTriangleApp : ApplicationHandler {
+
+    private data class InteractiveGpuSurface(
+        val instance: WGPU,
+        val surface: NativeSurface,
+    )
 
     // wgpu4k resources (initialized in canCreateSurfaces)
     private var wgpu: WGPU? = null
@@ -128,17 +132,76 @@ class HelloTriangleApp : ApplicationHandler {
     // Initialization
     // ---------------------------------------------------------------------------
 
+    private fun createInteractiveSurface(handle: RawWindowHandle): InteractiveGpuSurface? {
+        val target = interactiveSurfaceTarget(handle)
+        if (target is InteractiveSurfaceTarget.Unsupported) {
+            println("[hello-triangle] Unsupported platform: $handle")
+            return null
+        }
+
+        ffi.LibraryLoader.load()
+
+        val backend = when (target) {
+            is InteractiveSurfaceTarget.AppKit -> target.backend
+            is InteractiveSurfaceTarget.Win32 -> target.backend
+            InteractiveSurfaceTarget.Unsupported -> error("unsupported target already handled")
+        }
+        val instance = WGPU.createInstance(backend)
+            ?: run {
+                println("[hello-triangle] Failed to create WGPU Instance — backend=$backend")
+                return null
+            }
+
+        val nativeSurface = when (target) {
+            is InteractiveSurfaceTarget.AppKit -> {
+                val layerAddress = if (target.nsLayer != 0L) {
+                    target.nsLayer
+                } else {
+                    getMetalLayerFromNsView(target.nsView)
+                }
+                if (layerAddress == 0L) {
+                    println("[hello-triangle] Unable to obtain CAMetalLayer from NSView")
+                    null
+                } else {
+                    println("[hello-triangle] Interactive target — AppKit/Metal")
+                    instance.getSurfaceFromMetalLayer(
+                        JvmNativeAddress(MemorySegment.ofAddress(layerAddress)),
+                    )
+                }
+            }
+            is InteractiveSurfaceTarget.Win32 -> {
+                println(
+                    "[hello-triangle] Interactive target — Win32 " +
+                        "hinstance=0x%x hwnd=0x%x".format(target.hinstance, target.hwnd),
+                )
+                instance.getSurfaceFromWindows(
+                    JvmNativeAddress(MemorySegment.ofAddress(target.hinstance)),
+                    JvmNativeAddress(MemorySegment.ofAddress(target.hwnd)),
+                )
+            }
+            InteractiveSurfaceTarget.Unsupported -> error("unsupported target already handled")
+        }
+
+        if (nativeSurface == null) {
+            println("[hello-triangle] Failed to create interactive Surface")
+            instance.close()
+            return null
+        }
+
+        println("[hello-triangle] WGPU Instance created — backend=$backend")
+        println("[hello-triangle] Surface created")
+        return InteractiveGpuSurface(instance, nativeSurface)
+    }
+
     /**
-     * Called as soon as AppKit allows render surface creation.
+     * Called as soon as the platform allows render surface creation.
      *
      * Sequence:
      * 1. Window creation
-     * 2. Retrieval of the CAMetalLayer from the NSView
-     * 3. WGPU Instance (Metal backend)
-     * 4. Surface from the CAMetalLayer
-     * 5. Adapter + Device
-     * 6. Surface configuration
-     * 7. Shader module + render pipeline
+     * 2. Native surface creation (AppKit/Metal or Win32/Primary)
+     * 3. Adapter + Device
+     * 4. Surface configuration
+     * 5. Shader module + render pipeline
      */
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         println("[hello-triangle] canCreateSurfaces — initializing wgpu4k + pipeline")
@@ -155,54 +218,13 @@ class HelloTriangleApp : ApplicationHandler {
         window = win
         println("[hello-triangle] Window created — windowId=${win.id.value}")
 
-        // 2. CAMetalLayer from the NSView
-        val handle = win.rawWindowHandle
-        if (handle !is RawWindowHandle.AppKit) {
-            println("[hello-triangle] Unsupported platform: $handle")
-            return
-        }
-        println("[hello-triangle] RawWindowHandle.AppKit — nsView=0x%x  nsWindow=0x%x"
-            .format(handle.nsView, handle.nsWindow))
-
-        // Use nsLayer directly (exposed by AppKitWindow) rather than [nsView layer],
-        // which may return AppKit's generic CALayer if the setLayer/setWantsLayer order
-        // was incorrect. nsLayer = metalLayerPtr.address() from AppKitWindow.
-        val metalLayerAddr = if (handle.nsLayer != 0L) {
-            handle.nsLayer
-        } else {
-            // Fallback: obtain via [nsView layer] (legacy path)
-            getMetalLayerFromNsView(handle.nsView)
-        }
-        if (metalLayerAddr == 0L) {
-            println("[hello-triangle] Unable to obtain CAMetalLayer from NSView")
-            return
-        }
-        println("[hello-triangle] CAMetalLayer = 0x%x".format(metalLayerAddr))
-
-        // 3. WGPU Instance (Metal backend)
-        // libWGPU.dylib is bundled inside the wgpu4k-native JAR and must be explicitly
-        // extracted + loaded before calling any wgpu function.
-        ffi.LibraryLoader.load()
-        val wgpuInstance = WGPU.createInstance(WGPUInstanceBackend.Metal)
-            ?: run {
-                println("[hello-triangle] Failed to create WGPU Instance")
-                return
-            }
+        val interactiveSurface = createInteractiveSurface(win.rawWindowHandle) ?: return
+        val wgpuInstance = interactiveSurface.instance
+        val surf = interactiveSurface.surface
         wgpu = wgpuInstance
-        println("[hello-triangle] WGPU Instance created")
-
-        // 4. Surface from the CAMetalLayer
-        val metalLayerNativeAddr = JvmNativeAddress(MemorySegment.ofAddress(metalLayerAddr))
-        val surf: NativeSurface = wgpuInstance.getSurfaceFromMetalLayer(metalLayerNativeAddr)
-            ?: run {
-                println("[hello-triangle] Failed to create Surface from CAMetalLayer")
-                wgpuInstance.close()
-                return
-            }
         surface = surf
-        println("[hello-triangle] Surface created")
 
-        // 5. Adapter
+        // 3. Adapter
         val adapter = wgpuInstance.requestAdapter(surf)
             ?: run {
                 println("[hello-triangle] Failed to acquire Adapter")
@@ -216,7 +238,7 @@ class HelloTriangleApp : ApplicationHandler {
         println("[hello-triangle] Supported formats   : ${surf.supportedFormats}")
         println("[hello-triangle] Supported alpha modes: ${surf.supportedAlphaMode}")
 
-        // 6. Device
+        // 4. Device
         val device = runBlocking { adapter.requestDevice() }
             .getOrElse { err ->
                 println("[hello-triangle] Failed to acquire Device: $err")
@@ -228,7 +250,7 @@ class HelloTriangleApp : ApplicationHandler {
         gpuDevice = device
         println("[hello-triangle] Device created")
 
-        // 7a. Surface configuration
+        // 5a. Surface configuration
         val format = surf.supportedFormats
             .firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
             ?: surf.supportedFormats.firstOrNull()
@@ -252,11 +274,11 @@ class HelloTriangleApp : ApplicationHandler {
         )
         println("[hello-triangle] Surface configured — format=$format  size=${innerSize.width}×${innerSize.height}  alpha=$alphaMode")
 
-        // 7b. Shader module
+        // 5b. Shader module
         val shaderModule = device.createShaderModule(ShaderModuleDescriptor(code = TRIANGLE_WGSL))
         println("[hello-triangle] Shader module created")
 
-        // 7c. Render pipeline
+        // 5c. Render pipeline
         val renderPipeline = device.createRenderPipeline(
             RenderPipelineDescriptor(
                 vertex = VertexState(module = shaderModule, entryPoint = "vs_main"),
