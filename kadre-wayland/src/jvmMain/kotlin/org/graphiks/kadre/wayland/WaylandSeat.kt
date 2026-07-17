@@ -35,7 +35,6 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kadre.ffi.wayland.*
 
 import org.graphiks.kadre.core.DeviceEvent
-import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.WindowEvent
@@ -60,16 +59,6 @@ private val xkbStateUpdateMask: MethodHandle? by lazy {
 private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
 private typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
 
-/** No-op device event sink used when [DeviceEvents.Never] is active. */
-private val noOpDeviceEventSink: RoutedDeviceEventSink = { }
-
-/**
- * Shared device event filter checked dynamically by [WlKeyboardListener].
- * Updated by [WaylandEventLoop.listenDeviceEvents] whenever the filter changes.
- */
-@Volatile
-internal var deviceEventFilterOverride: DeviceEvents = DeviceEvents.WhenFocused
-
 /**
  * Global XKB compose state for dead-key reset, lazily initialized from
  * [WlKeyboardListener.onKeymap]. Written on the loop thread; read from
@@ -77,6 +66,235 @@ internal var deviceEventFilterOverride: DeviceEvents = DeviceEvents.WhenFocused
  */
 @Volatile
 internal var waylandComposeState: Long = 0L
+
+internal const val WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1: Int = 1
+
+/** Native operations injected into [WaylandKeymapLoader] for deterministic ownership tests. */
+internal interface WaylandKeymapOperations {
+    fun mmap(fd: Int, size: Int): MemorySegment?
+    fun munmap(mapping: MemorySegment, size: Int)
+    fun close(fd: Int)
+    fun contextNew(): MemorySegment?
+    fun keymapNewFromString(context: MemorySegment, mapping: MemorySegment): MemorySegment?
+    fun stateNew(keymap: MemorySegment): MemorySegment?
+    fun composeTableNewFromLocale(context: MemorySegment, locale: MemorySegment): MemorySegment?
+    fun composeStateNew(table: MemorySegment): MemorySegment?
+    fun composeStateUnref(state: MemorySegment)
+    fun composeTableUnref(table: MemorySegment)
+    fun stateUnref(state: MemorySegment)
+    fun keymapUnref(keymap: MemorySegment)
+    fun contextUnref(context: MemorySegment)
+}
+
+private object NativeWaylandKeymapOperations : WaylandKeymapOperations {
+    override fun mmap(fd: Int, size: Int): MemorySegment? =
+        nativeMmap?.invokeExact(
+            MemorySegment.NULL,
+            size.toLong(),
+            PROT_READ,
+            MAP_SHARED,
+            fd,
+            0L,
+        ) as? MemorySegment
+
+    override fun munmap(mapping: MemorySegment, size: Int) {
+        val munmap = checkNotNull(nativeMunmap) { "munmap is unavailable" }
+        munmap.invokeExact(mapping, size.toLong()) as Int
+    }
+
+    override fun close(fd: Int) {
+        val close = checkNotNull(nativeClose) { "close is unavailable" }
+        close.invokeExact(fd) as Int
+    }
+
+    override fun contextNew(): MemorySegment? =
+        xkbContextNew?.invokeExact(0) as? MemorySegment
+
+    override fun keymapNewFromString(context: MemorySegment, mapping: MemorySegment): MemorySegment? =
+        xkbKeymapNewFromString?.invokeExact(context, mapping, 0, 0) as? MemorySegment
+
+    override fun stateNew(keymap: MemorySegment): MemorySegment? =
+        xkbStateNew?.invokeExact(keymap) as? MemorySegment
+
+    override fun composeTableNewFromLocale(context: MemorySegment, locale: MemorySegment): MemorySegment? =
+        xkbComposeTableNewFromLocale?.invokeExact(context, locale, 0) as? MemorySegment
+
+    override fun composeStateNew(table: MemorySegment): MemorySegment? =
+        xkbComposeStateNew?.invokeExact(table, 0) as? MemorySegment
+
+    override fun composeStateUnref(state: MemorySegment) {
+        checkNotNull(xkbComposeStateUnref) { "xkb_compose_state_unref is unavailable" }
+            .invokeExact(state)
+    }
+
+    override fun composeTableUnref(table: MemorySegment) {
+        checkNotNull(xkbComposeTableUnref) { "xkb_compose_table_unref is unavailable" }
+            .invokeExact(table)
+    }
+
+    override fun stateUnref(state: MemorySegment) {
+        checkNotNull(xkbStateUnref) { "xkb_state_unref is unavailable" }
+            .invokeExact(state)
+    }
+
+    override fun keymapUnref(keymap: MemorySegment) {
+        checkNotNull(xkbKeymapUnref) { "xkb_keymap_unref is unavailable" }
+            .invokeExact(keymap)
+    }
+
+    override fun contextUnref(context: MemorySegment) {
+        checkNotNull(xkbContextUnref) { "xkb_context_unref is unavailable" }
+            .invokeExact(context)
+    }
+}
+
+private class WaylandXkbResources {
+    var context: MemorySegment? = null
+    var keymap: MemorySegment? = null
+    var state: MemorySegment? = null
+    var composeTable: MemorySegment? = null
+    var composeState: MemorySegment? = null
+}
+
+/** Owns one installed XKB keymap and all native resources derived from it. */
+internal class WaylandKeymapLoader(
+    private val operations: WaylandKeymapOperations = NativeWaylandKeymapOperations,
+    private val localeProvider: () -> String = { System.getenv("LANG") ?: "en_US.UTF-8" },
+) : AutoCloseable {
+    private var current = WaylandXkbResources()
+
+    val stateAddress: Long get() = current.state?.address() ?: 0L
+    val composeStateAddress: Long get() = current.composeState?.address() ?: 0L
+
+    fun load(format: Int, fd: Int, size: Int) {
+        val pending = WaylandXkbResources()
+        var failure: Throwable? = null
+
+        try {
+            require(format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+                "unsupported Wayland keymap format: $format"
+            }
+            require(fd >= 0) { "invalid Wayland keymap fd: $fd" }
+            require(size > 0) { "invalid Wayland keymap size: $size" }
+            loadMappedKeymap(fd, size, pending)
+        } catch (caught: Throwable) {
+            failure = caught
+        } finally {
+            try {
+                operations.close(fd)
+            } catch (closeFailure: Throwable) {
+                failure = combineFailures(failure, closeFailure)
+            }
+        }
+
+        if (failure != null) {
+            val primary = releaseResources(pending, failure)
+            throw checkNotNull(primary)
+        }
+        val previous = current
+        current = pending
+        releaseResources(previous)?.let { throw it }
+    }
+
+    private fun loadMappedKeymap(fd: Int, size: Int, target: WaylandXkbResources) {
+        val mapping = operations.mmap(fd, size)
+            ?.takeUnless { it.address() == 0L || it.address() == MAP_FAILED_PTR }
+            ?: error("mmap failed for Wayland keymap")
+        var failure: Throwable? = null
+
+        try {
+            target.context = requireResource("xkb_context_new", operations.contextNew())
+            target.keymap = requireResource(
+                "xkb_keymap_new_from_string",
+                operations.keymapNewFromString(checkNotNull(target.context), mapping.reinterpret(size.toLong())),
+            )
+            target.state = requireResource("xkb_state_new", operations.stateNew(checkNotNull(target.keymap)))
+            Arena.ofConfined().use { localeArena ->
+                val locale = localeArena.allocateFrom(localeProvider())
+                target.composeTable = requireResource(
+                    "xkb_compose_table_new_from_locale",
+                    operations.composeTableNewFromLocale(checkNotNull(target.context), locale),
+                )
+            }
+            target.composeState = requireResource(
+                "xkb_compose_state_new",
+                operations.composeStateNew(checkNotNull(target.composeTable)),
+            )
+        } catch (caught: Throwable) {
+            failure = caught
+            throw caught
+        } finally {
+            try {
+                operations.munmap(mapping, size)
+            } catch (unmapFailure: Throwable) {
+                val primary = combineFailures(failure, unmapFailure)
+                if (failure == null) throw checkNotNull(primary)
+            }
+        }
+    }
+
+    private fun requireResource(operation: String, resource: MemorySegment?): MemorySegment =
+        resource?.takeUnless { it.address() == 0L }
+            ?: error("$operation failed")
+
+    private fun releaseCurrent() {
+        val owned = current
+        current = WaylandXkbResources()
+        releaseResources(owned)?.let { throw it }
+    }
+
+    private fun releaseResources(resources: WaylandXkbResources, cause: Throwable? = null): Throwable? {
+        var failure = cause
+
+        fun release(resource: MemorySegment?, operation: (MemorySegment) -> Unit) {
+            if (resource == null) return
+            try {
+                operation(resource)
+            } catch (cleanupFailure: Throwable) {
+                failure = combineFailures(failure, cleanupFailure)
+            }
+        }
+
+        val composeState = resources.composeState.also { resources.composeState = null }
+        val composeTable = resources.composeTable.also { resources.composeTable = null }
+        val state = resources.state.also { resources.state = null }
+        val keymap = resources.keymap.also { resources.keymap = null }
+        val context = resources.context.also { resources.context = null }
+        release(composeState, operations::composeStateUnref)
+        release(composeTable, operations::composeTableUnref)
+        release(state, operations::stateUnref)
+        release(keymap, operations::keymapUnref)
+        release(context, operations::contextUnref)
+        return failure
+    }
+
+    override fun close() {
+        releaseCurrent()
+    }
+}
+
+private fun combineFailures(primary: Throwable?, cleanup: Throwable): Throwable =
+    if (primary == null) cleanup else primary.also { it.addSuppressed(cleanup) }
+
+/** Converts a throwing loader call into a queued loop failure at the native boundary. */
+internal class WaylandKeymapCallback(
+    private val loader: WaylandKeymapLoader,
+    private val onLoaded: () -> Unit,
+    private val onFailure: (Throwable) -> Unit,
+) {
+    fun onKeymap(format: Int, fd: Int, size: Int) {
+        try {
+            loader.load(format, fd, size)
+            onLoaded()
+        } catch (failure: Throwable) {
+            try {
+                onFailure(failure)
+            } catch (_: Throwable) {
+                // Never let a Kotlin exception cross the native upcall boundary.
+            }
+        }
+    }
+}
 
 // ── wl_seat opcodes ───────────────────────────────────────────────────────────
 
@@ -173,89 +391,33 @@ private class WlOutputListener(
  */
 private class WlKeyboardListener(
     private val onEvent: RoutedWindowEventSink,
-    private val onDeviceEvent: RoutedDeviceEventSink,
+    onDeviceEvent: RoutedDeviceEventSink,
     private val seatPtr: Long,
-) {
+    deviceFilter: WaylandDeviceFilter,
+    onNativeFailure: (Throwable) -> Unit,
+) : AutoCloseable {
     private var focusedSurfacePtr: Long = 0L
     private val modifiers = WaylandKeyboardModifierTracker()
     private var repeatRate: Int = 0
     private var repeatDelay: Int = 0
 
-    private var xkbContext: Long = 0L
-    private var xkbKeymap: Long = 0L
-    private var xkbState: Long = 0L
-    private var xkbComposeTable: Long = 0L
-    private var xkbComposeState: Long = 0L
-
-    private fun cleanupXkbResources() {
-        if (xkbComposeState != 0L) {
-            try { xkbComposeStateUnref?.invokeExact(MemorySegment.ofAddress(xkbComposeState)) } catch (_: Throwable) {}
-            xkbComposeState = 0L
-        }
-        if (xkbComposeTable != 0L) {
-            try { xkbComposeTableUnref?.invokeExact(MemorySegment.ofAddress(xkbComposeTable)) } catch (_: Throwable) {}
-            xkbComposeTable = 0L
-        }
-        if (xkbState != 0L) {
-            try { xkbStateUnref?.invokeExact(MemorySegment.ofAddress(xkbState)) } catch (_: Throwable) {}
-            xkbState = 0L
-        }
-        if (xkbKeymap != 0L) {
-            try { xkbKeymapUnref?.invokeExact(MemorySegment.ofAddress(xkbKeymap)) } catch (_: Throwable) {}
-            xkbKeymap = 0L
-        }
-        if (xkbContext != 0L) {
-            try { xkbContextUnref?.invokeExact(MemorySegment.ofAddress(xkbContext)) } catch (_: Throwable) {}
-            xkbContext = 0L
-        }
-        waylandComposeState = 0L
-    }
+    private val keymapLoader = WaylandKeymapLoader()
+    private val filteredDeviceEvent = deviceFilter.listener(onDeviceEvent)
+    private val keymapCallback = WaylandKeymapCallback(
+        loader = keymapLoader,
+        onLoaded = { waylandComposeState = keymapLoader.composeStateAddress },
+        onFailure = { failure ->
+            waylandComposeState = keymapLoader.composeStateAddress
+            onNativeFailure(failure)
+        },
+    )
 
     @Suppress("UNUSED_PARAMETER")
     fun onKeymap(
         data: MemorySegment, keyboard: MemorySegment,
         format: Int, fd: Int, size: Int,
     ) {
-        cleanupXkbResources()
-        if (format != 0 || fd < 0 || size <= 0) return
-        val mmapSeg = try {
-            nativeMmap?.invokeExact(MemorySegment.NULL, size.toLong(), PROT_READ, MAP_SHARED, fd, 0L) as MemorySegment
-        } catch (_: Throwable) { MemorySegment.NULL }
-        try { nativeClose?.invokeExact(fd) } catch (_: Throwable) {}
-        if (mmapSeg.address() == MAP_FAILED_PTR || mmapSeg.address() == 0L) return
-
-        val ctx = try {
-            xkbContextNew?.invokeExact(0) as? MemorySegment
-        } catch (_: Throwable) { null } ?: run { try { nativeMunmap?.invokeExact(mmapSeg, size.toLong()) } catch (_: Throwable) {}; return }
-
-        val keymapStr = mmapSeg.reinterpret(size.toLong())
-        val km = try {
-            xkbKeymapNewFromString?.invokeExact(ctx, keymapStr, 0, 0) as? MemorySegment
-        } catch (_: Throwable) { null }
-        val st = try {
-            if (km != null && km.address() != 0L) xkbStateNew?.invokeExact(km) as? MemorySegment else null
-        } catch (_: Throwable) { null }
-
-        val locale = System.getenv("LANG") ?: "en_US.UTF-8"
-        val localeSeg = Arena.ofConfined().use { it.allocateFrom(locale) }
-        val ct = try {
-            if (xkbComposeTableNewFromLocale != null) xkbComposeTableNewFromLocale?.invokeExact(ctx, localeSeg, 0) as? MemorySegment else null
-        } catch (_: Throwable) { null }
-
-        val cs = try {
-            if (ct != null && ct.address() != 0L) xkbComposeStateNew?.invokeExact(ct, 0) as? MemorySegment else null
-        } catch (_: Throwable) { null }
-
-        xkbContext = ctx.address()
-        xkbKeymap = km?.address() ?: 0L
-        xkbState = st?.address() ?: 0L
-        xkbComposeTable = ct?.address() ?: 0L
-        xkbComposeState = cs?.address() ?: 0L
-        waylandComposeState = cs?.address() ?: 0L
-
-        try { nativeMunmap?.invokeExact(mmapSeg, size.toLong()) } catch (_: Throwable) {}
-
-        if (km == null || km.address() == 0L) cleanupXkbResources()
+        keymapCallback.onKeymap(format, fd, size)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -292,12 +454,10 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, time: Int, key: Int, state: Int,
     ) {
-        modifiers.mapKey(keycode = key, state = state, xkbStatePtr = xkbState).forEach { event ->
+        modifiers.mapKey(keycode = key, state = state, xkbStatePtr = keymapLoader.stateAddress).forEach { event ->
             onEvent(focusedSurfacePtr, event)
         }
-        if (deviceEventFilterOverride != DeviceEvents.Never) {
-            onDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
-        }
+        filteredDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -307,10 +467,10 @@ private class WlKeyboardListener(
     ) {
         // Keep the xkb state in sync so xkb_state_key_get_utf8 yields shifted /
         // dead-key characters for subsequent key events.
-        if (xkbState != 0L) {
+        if (keymapLoader.stateAddress != 0L) {
             try {
                 xkbStateUpdateMask?.invokeExact(
-                    MemorySegment.ofAddress(xkbState),
+                    MemorySegment.ofAddress(keymapLoader.stateAddress),
                     modsDepressed, modsLatched, modsLocked,
                     0, 0, group,
                 ) as Int
@@ -326,6 +486,13 @@ private class WlKeyboardListener(
     fun onRepeatInfo(data: MemorySegment, keyboard: MemorySegment, rate: Int, delay: Int) {
         repeatRate = rate
         repeatDelay = delay
+    }
+
+    override fun close() {
+        if (waylandComposeState == keymapLoader.composeStateAddress) {
+            waylandComposeState = 0L
+        }
+        keymapLoader.close()
     }
 }
 
@@ -538,14 +705,31 @@ internal fun seatHasCapability(caps: Int, capBit: Int): Boolean = (caps and capB
  * A strong reference prevents the arena (and the upcall stubs) from being GC'd.
  */
 internal class WaylandSeatBinding internal constructor(
-    @Suppress("unused") private val arena: Arena,
-) {
+    private val arena: Arena,
+) : AutoCloseable {
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Keyboard/XKB owner, released after the display has disconnected. */
+    internal var keyboardOwner: AutoCloseable? = null
+
     /** DnD handler, kept alive by the binding. */
     @JvmField
     internal var dnd: WaylandDragAndDrop? = null
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        seatBindings.remove(this)
+        try {
+            keyboardOwner?.close()
+        } finally {
+            keyboardOwner = null
+            dnd = null
+            arena.close()
+        }
+    }
 }
 
-/** Keeps seat bindings alive for the process lifetime. */
+/** Keeps seat bindings alive until their owning event loop disconnects. */
 private val seatBindings = mutableListOf<WaylandSeatBinding>()
 
 /**
@@ -583,14 +767,16 @@ internal fun installSeatListeners(
     onDeviceEvent: RoutedDeviceEventSink = {},
     onScaleChanged: (Int) -> Unit,
     dataDeviceManagerPtr: Long = 0L,
-    deviceFilter: DeviceEvents = DeviceEvents.WhenFocused,
+    deviceFilter: WaylandDeviceFilter = WaylandDeviceFilter(),
+    onNativeFailure: (Throwable) -> Unit = {},
     /** Callback invoked on each wl_output.done with the updated [WaylandOutputInfo]. */
     onOutputChanged: ((WaylandOutputInfo) -> Unit)? = null,
     /** Pre-allocated output info objects keyed by wl_output proxy address. */
     outputInfos: MutableMap<Long, WaylandOutputInfo>? = null,
-) {
-    val addListener = wlProxyAddListener ?: return
+): WaylandSeatBinding? {
+    val addListener = wlProxyAddListener ?: return null
     val arena = Arena.ofShared()
+    val binding = WaylandSeatBinding(arena)
     val lookup = MethodHandles.lookup()
     val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -651,8 +837,10 @@ internal fun installSeatListeners(
                         ) as MemorySegment
                     }.getOrNull()
                     if (kbSeg != null && kbSeg.address() != 0L) {
-                        val sink = if (deviceFilter == DeviceEvents.Never) noOpDeviceEventSink else onDeviceEvent
-                        installKeyboardListener(kbSeg, addListener, lookup, arena, seatPtr, onEvent, sink)
+                        binding.keyboardOwner = installKeyboardListener(
+                            kbSeg, addListener, lookup, arena, seatPtr, onEvent,
+                            onDeviceEvent, deviceFilter, onNativeFailure,
+                        )
                         anyListenerInstalled = true
                     }
                 }
@@ -712,7 +900,6 @@ internal fun installSeatListeners(
         }
 
         // ── wl_data_device (DnD) ─────────────────────────────────────────────
-        val binding = WaylandSeatBinding(arena)
         if (dataDeviceManagerPtr != 0L && seatPtr != 0L) {
             val getDataDevice = wlDataDeviceManagerGetDataDevice
             val dataDeviceIface = wlDataDeviceInterface
@@ -738,14 +925,18 @@ internal fun installSeatListeners(
         }
 
         seatBindings.add(binding)
+        return binding
     } catch (t: Throwable) {
         System.err.println("[kadre-wayland] installSeatListeners failed: $t")
         // BLOQUANT 3: do NOT close the arena if any listener has already been registered
         // with the compositor — its stubs are already referenced by the compositor side and
         // closing the arena would free them, causing a SIGSEGV on the next event dispatch.
-        if (!anyListenerInstalled) {
-            runCatching { arena.close() }
+        if (anyListenerInstalled) {
+            seatBindings.add(binding)
+            return binding
         }
+        runCatching { binding.close() }
+        return null
     }
 }
 
@@ -759,8 +950,10 @@ private fun installKeyboardListener(
     seatPtr: Long,
     onEvent: RoutedWindowEventSink,
     onDeviceEvent: RoutedDeviceEventSink,
-) {
-    val listener = WlKeyboardListener(onEvent, onDeviceEvent, seatPtr)
+    deviceFilter: WaylandDeviceFilter,
+    onNativeFailure: (Throwable) -> Unit,
+): AutoCloseable {
+    val listener = WlKeyboardListener(onEvent, onDeviceEvent, seatPtr, deviceFilter, onNativeFailure)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     // vtable: keymap, enter, leave, key, modifiers, repeat_info — 6 entries.
@@ -836,6 +1029,7 @@ private fun installKeyboardListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  modsStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  repeatInfoStub)
     runCatching { addListener.invokeExact(keyboard, vtable, MemorySegment.NULL) as Int }
+    return listener
 }
 
 private fun installPointerListener(

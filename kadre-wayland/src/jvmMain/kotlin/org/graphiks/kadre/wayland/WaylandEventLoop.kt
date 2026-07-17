@@ -281,12 +281,26 @@ class WaylandEventLoop internal constructor(
      * Wayland since keyboard/pointer events are already delivered per-surface.
      * [DeviceEvents.Never] suppresses raw `DeviceEvent.Key` dispatch.
      */
-    @Volatile
-    internal var deviceEventFilter: DeviceEvents = DeviceEvents.WhenFocused
+    internal val liveDeviceFilter = WaylandDeviceFilter()
+    internal val deviceEventFilter: DeviceEvents get() = liveDeviceFilter.current
+
+    private val nativeFailureQueue = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+
+    internal fun queueNativeFailure(failure: Throwable) {
+        nativeFailureQueue.add(failure)
+    }
+
+    internal fun throwPendingNativeFailure() {
+        val primary = nativeFailureQueue.poll() ?: return
+        while (true) {
+            val additional = nativeFailureQueue.poll() ?: break
+            primary.addSuppressed(additional)
+        }
+        throw primary
+    }
 
     override fun listenDeviceEvents(mode: DeviceEvents) {
-        deviceEventFilter = mode
-
+        liveDeviceFilter.update(mode)
     }
 
     // ── R6: gestures ──────────────────────────────────────────────────────────
@@ -410,6 +424,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         throw t
     }
 
+    var seatBinding: WaylandSeatBinding? = null
     try {
         // ── 4. Discover Wayland globals (compositor, seat, output) ───────────
         // get_registry + listener(global) + roundtrip + bind(wl_compositor, wl_seat, wl_output, …).
@@ -426,7 +441,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
         // Route all input events into the eventQueue by their source wl_surface.
         // The seat and output globals may be absent (0) — installSeatListeners tolerates that.
         // DeviceEvent.Key is dispatched directly to the handler for raw key events.
-        installSeatListeners(
+        seatBinding = installSeatListeners(
             displayPtr    = displayPtr,
             seatPtr       = globals.seatPtr,
             outputPtr     = globals.outputPtr,
@@ -448,7 +463,8 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 }
             },
             dataDeviceManagerPtr = globals.dataDeviceManagerPtr,
-            deviceFilter = eventLoop.deviceEventFilter,
+            deviceFilter = eventLoop.liveDeviceFilter,
+            onNativeFailure = eventLoop::queueNativeFailure,
             outputInfos = eventLoop.outputInfos,
             onOutputChanged = { info ->
                 // WaylandOutputInfo objects are updated in-place. Applications can
@@ -456,6 +472,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
                 // A future sprint could add a dedicated MonitorListChanged event.
             },
         )
+        eventLoop.throwPendingNativeFailure()
 
         // ── 4c. Create zwp_text_input_v3 for IME (if compositor exposes the protocol) ──
         if (globals.textInputManagerPtr != 0L && globals.seatPtr != 0L) {
@@ -498,6 +515,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
             // Canonical Wayland prepare_read / poll / read_events sequence. This dispatches the
             // pending Wayland protocol events, whose native upcalls enqueue WindowEvents.
             val startCause = pumpOnce(displaySeg, displayFd, wakeup, timeoutMs, eventLoop)
+            eventLoop.throwPendingNativeFailure()
 
             // Drain queued window events (initial/resize RedrawRequested, xdg configure/close)
             // into the handler. Rendering happens here, on demand — NOT on a continuous pump:
@@ -515,7 +533,22 @@ private fun runAppInternal(handler: ApplicationHandler) {
         handler.destroySurfaces(eventLoop)
         handler.suspended(eventLoop)
     } finally {
-        closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) }
+        var cleanupFailure: Throwable? = null
+        try {
+            closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) }
+        } catch (failure: Throwable) {
+            cleanupFailure = failure
+        }
+        try {
+            seatBinding?.close()
+        } catch (failure: Throwable) {
+            cleanupFailure = if (cleanupFailure == null) {
+                failure
+            } else {
+                cleanupFailure.also { it.addSuppressed(failure) }
+            }
+        }
+        cleanupFailure?.let { throw it }
     }
 }
 
