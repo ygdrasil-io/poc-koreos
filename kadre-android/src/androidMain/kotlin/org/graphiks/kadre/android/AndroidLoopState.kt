@@ -8,12 +8,22 @@ import org.graphiks.kadre.core.WindowId
 internal class AndroidLoopState(
     private val nowMillis: () -> Long,
 ) {
+    private val claimedWindowIds = mutableSetOf<WindowId>()
     private val openWindows = mutableSetOf<WindowId>()
     private val pendingRedraws = linkedSetOf<WindowId>()
     private var pendingWake = false
 
+    /**
+     * Claims [windowId] for this state's lifetime and opens it exactly once.
+     *
+     * Task 4 must provide a distinct ID for each Android window before calling this method;
+     * IDs derived from the shared SurfaceView collide across multiple window creations.
+     */
     fun register(windowId: WindowId) {
-        openWindows += windowId
+        check(claimedWindowIds.add(windowId)) {
+            "WindowId ${windowId.value} has already been registered"
+        }
+        openWindows.add(windowId)
     }
 
     fun requestRedraw(windowId: WindowId): Boolean {

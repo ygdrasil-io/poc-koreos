@@ -6,11 +6,39 @@ import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AndroidLoopStateTest {
     private val windowId = WindowId(1L)
+
+    @Test
+    fun `register rejects an already open window id`() {
+        val state = AndroidLoopState(nowMillis = { 0L })
+        state.register(windowId)
+
+        assertFailsWith<IllegalStateException> {
+            state.register(windowId)
+        }
+        assertTrue(state.isOpen(windowId))
+    }
+
+    @Test
+    fun `register after close is rejected and close remains terminal`() {
+        val state = AndroidLoopState(nowMillis = { 0L })
+        state.register(windowId)
+        assertTrue(state.requestRedraw(windowId))
+        assertTrue(state.wakeUp())
+        assertTrue(state.close(windowId))
+
+        assertFailsWith<IllegalStateException> {
+            state.register(windowId)
+        }
+        assertFalse(state.isOpen(windowId))
+        assertFalse(state.requestRedraw(windowId))
+        assertFalse(state.wakeUp())
+    }
 
     @Test
     fun `wake can be consumed and rearmed for three wait cycles`() {
