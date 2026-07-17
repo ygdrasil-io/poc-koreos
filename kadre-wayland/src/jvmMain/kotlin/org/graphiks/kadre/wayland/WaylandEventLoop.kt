@@ -39,6 +39,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kadre.ffi.posix.PosixException
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -514,12 +515,157 @@ private fun runAppInternal(handler: ApplicationHandler) {
         handler.destroySurfaces(eventLoop)
         handler.suspended(eventLoop)
     } finally {
-        // The wake owner must stop every proxy before the display is disconnected.
-        try {
-            wakeup.close()
-        } finally {
-            disconnectDisplay(displaySeg)
+        closeWaylandResources(wakeup) { disconnectDisplay(displaySeg) }
+    }
+}
+
+internal fun closeWaylandResources(
+    wakeup: PosixWakeup,
+    disconnectDisplay: () -> Unit,
+) {
+    // Stop every proxy before invalidating the display they wake.
+    try {
+        wakeup.close()
+    } finally {
+        disconnectDisplay()
+    }
+}
+
+internal interface WaylandPumpOperations {
+    fun prepareRead(): Int
+    fun dispatchPending()
+    fun flush()
+    fun readEvents()
+    fun cancelRead()
+}
+
+internal fun interface WaylandPoller {
+    fun poll(displayFd: Int, wakeFd: Int, timeoutMs: Int): WaylandPollResult
+}
+
+internal sealed interface WaylandPollResult {
+    data class Ready(
+        val displayReadable: Boolean,
+        val wakeReadable: Boolean,
+    ) : WaylandPollResult
+
+    data class Failure(val errno: Int) : WaylandPollResult
+}
+
+private const val POSIX_EINTR = 4
+
+private class NativeWaylandPumpOperations(
+    private val display: MemorySegment,
+) : WaylandPumpOperations {
+    override fun prepareRead(): Int =
+        (wlDisplayPrepareRead ?: error("wl_display_prepare_read not available"))
+            .invokeExact(display) as Int
+
+    override fun dispatchPending() {
+        (wlDisplayDispatchPending ?: error("wl_display_dispatch_pending not available"))
+            .invokeExact(display) as Int
+    }
+
+    override fun flush() {
+        (wlDisplayFlush ?: error("wl_display_flush not available"))
+            .invokeExact(display) as Int
+    }
+
+    override fun readEvents() {
+        (wlDisplayReadEvents ?: error("wl_display_read_events not available"))
+            .invokeExact(display) as Int
+    }
+
+    override fun cancelRead() {
+        (wlDisplayCancelRead ?: error("wl_display_cancel_read not available"))
+            .invokeExact(display)
+    }
+}
+
+private object NativeWaylandPoller : WaylandPoller {
+    override fun poll(
+        displayFd: Int,
+        wakeFd: Int,
+        timeoutMs: Int,
+    ): WaylandPollResult = Arena.ofConfined().use { arena ->
+        val fds = allocPollFd(arena)
+        setPollFd(fds, 0, displayFd, POLLIN)
+        setPollFd(fds, 1, wakeFd, POLLIN)
+
+        val result = invokeNativePoll(fds, 2L, timeoutMs)
+        if (result.value < 0) {
+            WaylandPollResult.Failure(
+                result.errno ?: error("poll failed without a captured errno"),
+            )
+        } else if (result.value == 0) {
+            WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
+        } else {
+            WaylandPollResult.Ready(
+                displayReadable = (getPollRevents(fds, 0).toInt() and POLLIN.toInt()) != 0,
+                wakeReadable = (getPollRevents(fds, 1).toInt() and POLLIN.toInt()) != 0,
+            )
         }
+    }
+}
+
+internal fun pumpWaylandOnce(
+    operations: WaylandPumpOperations,
+    poller: WaylandPoller,
+    wakeup: PosixWakeup,
+    displayFd: Int,
+    timeoutMs: Int,
+): WaylandPollResult.Ready {
+    while (true) {
+        while (operations.prepareRead() != 0) {
+            operations.dispatchPending()
+        }
+
+        try {
+            operations.flush()
+        } catch (failure: Throwable) {
+            cancelPreparedRead(operations, failure)
+            throw failure
+        }
+
+        val pollResult = try {
+            poller.poll(displayFd, wakeup.readFd, timeoutMs)
+        } catch (failure: Throwable) {
+            cancelPreparedRead(operations, failure)
+            throw failure
+        }
+
+        when (pollResult) {
+            is WaylandPollResult.Failure -> {
+                cancelPreparedRead(operations)
+                if (pollResult.errno == POSIX_EINTR) continue
+                throw PosixException("poll", pollResult.errno)
+            }
+            is WaylandPollResult.Ready -> {
+                if (pollResult.displayReadable) {
+                    operations.readEvents()
+                    operations.dispatchPending()
+                } else {
+                    cancelPreparedRead(operations)
+                }
+
+                if (pollResult.wakeReadable && !wakeup.drain()) {
+                    error("Wayland wake descriptor closed while the event loop is running")
+                }
+                return pollResult
+            }
+        }
+    }
+}
+
+private fun cancelPreparedRead(
+    operations: WaylandPumpOperations,
+    primaryFailure: Throwable? = null,
+) {
+    try {
+        operations.cancelRead()
+    } catch (cancelFailure: Throwable) {
+        if (primaryFailure == null) throw cancelFailure
+        if (primaryFailure !== cancelFailure) primaryFailure.addSuppressed(cancelFailure)
     }
 }
 
@@ -541,66 +687,15 @@ private fun pumpOnce(
     timeoutMs: Int,
     eventLoop: WaylandEventLoop,
 ): StartCause {
-    val prepareRead = wlDisplayPrepareRead
-    val dispatchPending = wlDisplayDispatchPending
-    val flush = wlDisplayFlush
-    val readEvents = wlDisplayReadEvents
-    val cancelRead = wlDisplayCancelRead
-
-    // ── Step 1: prepare the read (drain the queue first if needed) ────────────
-    if (prepareRead != null && dispatchPending != null) {
-        while (true) {
-            val rc = try {
-                prepareRead.invokeExact(displaySeg) as Int
-            } catch (_: Throwable) { 0 }
-            if (rc == 0) break
-            // Events are queued — process them before retrying
-            try { dispatchPending.invokeExact(displaySeg) } catch (_: Throwable) {}
-        }
-    }
-
-    // ── Step 2: flush ─────────────────────────────────────────────────────────
-    try { flush?.invokeExact(displaySeg) } catch (_: Throwable) {}
-
-    // ── Step 3: poll + eventfd drain (single arena) ───────────────────────────
-    val (displayReady, wakeReady) = Arena.ofConfined().use { arena ->
-        val fds = allocPollFd(arena)
-        setPollFd(fds, 0, displayFd, POLLIN)
-        setPollFd(fds, 1, wakeup.readFd, POLLIN)
-
-        val poll = nativePoll
-            ?: error("required POSIX symbol 'poll' is unavailable")
-        val pollRc = try {
-            poll.invokeExact(fds, 2, timeoutMs) as Int
-        } catch (failure: Throwable) {
-            throw IllegalStateException("Wayland poll failed", failure)
-        }
-        check(pollRc >= 0) { "Wayland poll returned $pollRc" }
-
-        if (pollRc > 0) {
-            val rev0 = getPollRevents(fds, 0)
-            val rev1 = getPollRevents(fds, 1)
-            val displayReady = (rev0.toInt() and POLLIN.toInt()) != 0
-            val wakeReady = (rev1.toInt() and POLLIN.toInt()) != 0
-
-            displayReady to wakeReady
-        } else {
-            false to false
-        }
-    }
-
-    // ── Step 4a: read Wayland events if available ─────────────────────────────
-    if (displayReady && readEvents != null && dispatchPending != null) {
-        try { readEvents.invokeExact(displaySeg) } catch (_: Throwable) {}
-        try { dispatchPending.invokeExact(displaySeg) } catch (_: Throwable) {}
-    } else if (!displayReady && cancelRead != null && wlDisplayPrepareRead != null) {
-        // Cancel the read announced in step 1 only if prepareRead is available
-        try { cancelRead.invokeExact(displaySeg) } catch (_: Throwable) {}
-    }
-
-    if (wakeReady && !wakeup.drain()) {
-        error("Wayland wake descriptor closed while the event loop is running")
-    }
+    val readiness = pumpWaylandOnce(
+        operations = NativeWaylandPumpOperations(displaySeg),
+        poller = NativeWaylandPoller,
+        wakeup = wakeup,
+        displayFd = displayFd,
+        timeoutMs = timeoutMs,
+    )
+    val displayReady = readiness.displayReadable
+    val wakeReady = readiness.wakeReadable
 
     // ── Determine the StartCause ──────────────────────────────────────────────
     return when {

@@ -16,9 +16,11 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kadre.ffi.posix.PosixException
 import org.graphiks.kadre.test.EventLoopConformanceDriver
 import org.graphiks.kadre.test.ObservedCallback
 import org.graphiks.kadre.test.assertWakeUpRearms
+import java.lang.foreign.Arena
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,6 +31,137 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class WaylandEventLoopSmokeTest {
+
+    @Test
+    fun `native poll uses Linux nfds ABI and captures errno`() {
+        if (System.getProperty("os.name") != "Linux") return
+
+        Arena.ofConfined().use { arena ->
+            val pollFds = allocPollFd(arena)
+            setPollFd(pollFds, 0, -1, POLLIN)
+            setPollFd(pollFds, 1, -1, POLLIN)
+
+            val success = invokeNativePoll(pollFds, 2L, 0)
+            assertEquals(0, success.value)
+            assertNull(success.errno)
+
+            val failure = invokeNativePoll(pollFds, Long.MAX_VALUE, 0)
+            assertTrue(failure.value < 0)
+            assertTrue((failure.errno ?: 0) > 0)
+        }
+    }
+
+    @Test
+    fun `poll EINTR cancels prepared read then prepares again before retry`() {
+        val trace = mutableListOf<String>()
+        val operations = FakeWaylandPumpOperations(trace)
+        val wakeup = FakePosixWakeup(externalTrace = trace)
+        val poller = FakeWaylandPoller(
+            trace,
+            WaylandPollResult.Failure(errno = 4),
+            WaylandPollResult.Ready(displayReadable = true, wakeReadable = true),
+        )
+
+        val readiness = pumpWaylandOnce(
+            operations = operations,
+            poller = poller,
+            wakeup = wakeup,
+            displayFd = 41,
+            timeoutMs = 250,
+        )
+
+        assertEquals(WaylandPollResult.Ready(displayReadable = true, wakeReadable = true), readiness)
+        assertEquals(
+            listOf(
+                "prepare", "flush", "poll(41,73,250)", "cancel",
+                "prepare", "flush", "poll(41,73,250)", "read", "dispatch", "drain",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `poll error cancels prepared read before propagating errno`() {
+        val trace = mutableListOf<String>()
+        val operations = FakeWaylandPumpOperations(trace)
+        val poller = FakeWaylandPoller(trace, WaylandPollResult.Failure(errno = 5))
+
+        val failure = assertFailsWith<PosixException> {
+            pumpWaylandOnce(
+                operations = operations,
+                poller = poller,
+                wakeup = FakePosixWakeup(externalTrace = trace),
+                displayFd = 42,
+                timeoutMs = -1,
+            )
+        }
+
+        assertEquals("poll", failure.operation)
+        assertEquals(5, failure.errno)
+        assertEquals(listOf("prepare", "flush", "poll(42,73,-1)", "cancel"), trace)
+    }
+
+    @Test
+    fun `flush error cancels the prepared read before propagating`() {
+        val trace = mutableListOf<String>()
+        val failure = assertFailsWith<IllegalStateException> {
+            pumpWaylandOnce(
+                operations = FakeWaylandPumpOperations(trace, failFlush = true),
+                poller = FakeWaylandPoller(
+                    trace,
+                    WaylandPollResult.Ready(displayReadable = false, wakeReadable = false),
+                ),
+                wakeup = FakePosixWakeup(externalTrace = trace),
+                displayFd = 44,
+                timeoutMs = 10,
+            )
+        }
+
+        assertEquals("injected flush failure", failure.message)
+        assertEquals(listOf("prepare", "flush", "cancel"), trace)
+    }
+
+    @Test
+    fun `timeout cancels prepared read without reading or draining`() {
+        val trace = mutableListOf<String>()
+
+        val readiness = pumpWaylandOnce(
+            operations = FakeWaylandPumpOperations(trace),
+            poller = FakeWaylandPoller(
+                trace,
+                WaylandPollResult.Ready(displayReadable = false, wakeReadable = false),
+            ),
+            wakeup = FakePosixWakeup(externalTrace = trace),
+            displayFd = 43,
+            timeoutMs = 0,
+        )
+
+        assertEquals(WaylandPollResult.Ready(displayReadable = false, wakeReadable = false), readiness)
+        assertEquals(listOf("prepare", "flush", "poll(43,73,0)", "cancel"), trace)
+    }
+
+    @Test
+    fun `cleanup closes wakeup before disconnecting display`() {
+        val trace = mutableListOf<String>()
+        val wakeup = FakePosixWakeup(externalTrace = trace)
+
+        closeWaylandResources(wakeup) { trace += "disconnect" }
+
+        assertEquals(listOf("close", "disconnect"), trace)
+    }
+
+    @Test
+    fun `cleanup disconnects display even when wakeup close fails`() {
+        val trace = mutableListOf<String>()
+        val wakeup = FakePosixWakeup(externalTrace = trace, failClose = true)
+
+        val failure = assertFailsWith<IllegalStateException> {
+            closeWaylandResources(wakeup) { trace += "disconnect" }
+        }
+
+        assertEquals("injected close failure", failure.message)
+        assertEquals(listOf("close", "disconnect"), trace)
+    }
 
     /**
      * Verifies that waylandRunning is false at JVM startup.
@@ -286,6 +419,8 @@ private class WaylandProxyConformanceDriver(
 
 private class FakePosixWakeup(
     private var failNextDrain: Boolean = false,
+    private val externalTrace: MutableList<String>? = null,
+    private val failClose: Boolean = false,
 ) : PosixWakeup {
     override val readFd: Int = 73
     val trace = mutableListOf<String>()
@@ -315,6 +450,7 @@ private class FakePosixWakeup(
     override fun drain(): Boolean {
         if (closed) return false
         trace += "drain"
+        externalTrace?.add("drain")
         if (failNextDrain) {
             failNextDrain = false
             throw IllegalStateException("injected drain failure")
@@ -331,5 +467,50 @@ private class FakePosixWakeup(
         closed = true
         pending = false
         trace += "close"
+        externalTrace?.add("close")
+        if (failClose) throw IllegalStateException("injected close failure")
+    }
+}
+
+private class FakeWaylandPumpOperations(
+    private val trace: MutableList<String>,
+    private val failFlush: Boolean = false,
+) : WaylandPumpOperations {
+    override fun prepareRead(): Int {
+        trace += "prepare"
+        return 0
+    }
+
+    override fun dispatchPending() {
+        trace += "dispatch"
+    }
+
+    override fun flush() {
+        trace += "flush"
+        if (failFlush) throw IllegalStateException("injected flush failure")
+    }
+
+    override fun readEvents() {
+        trace += "read"
+    }
+
+    override fun cancelRead() {
+        trace += "cancel"
+    }
+}
+
+private class FakeWaylandPoller(
+    private val trace: MutableList<String>,
+    vararg results: WaylandPollResult,
+) : WaylandPoller {
+    private val results = ArrayDeque(results.toList())
+
+    override fun poll(
+        displayFd: Int,
+        wakeFd: Int,
+        timeoutMs: Int,
+    ): WaylandPollResult {
+        trace += "poll($displayFd,$wakeFd,$timeoutMs)"
+        return results.removeFirst()
     }
 }

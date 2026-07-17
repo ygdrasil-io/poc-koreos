@@ -374,13 +374,15 @@ internal object XdpPipeWire {
         try {
             val munmap = posixDowncall(
                 "munmap",
-                java.lang.foreign.FunctionDescriptor.ofVoid(
+                java.lang.foreign.FunctionDescriptor.of(
+                    java.lang.foreign.ValueLayout.JAVA_INT,
                     java.lang.foreign.ValueLayout.ADDRESS,
                     java.lang.foreign.ValueLayout.JAVA_LONG,
                 )
             ) ?: error("required POSIX symbol 'munmap' is unavailable")
-            
-            munmap.invokeExact(addr, size.toLong())
+
+            val result = munmap.invokeExact(addr, size.toLong()) as Int
+            check(result == 0) { "munmap returned $result" }
         } catch (e: Exception) {
             System.err.println("[XdpPipeWire] munmap failed: ${e.message}")
         }

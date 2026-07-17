@@ -4,6 +4,7 @@ import org.graphiks.kadre.ffi.posix.PosixSymbols
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
+import java.lang.foreign.MemoryLayout.PathElement.groupElement
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
@@ -704,13 +705,48 @@ fun wlSurfaceDamage(
     } catch (_: Throwable) { }
 }
 
-val nativePoll: MethodHandle? by lazy {
-    posixDowncall("poll", FunctionDescriptor.of(
-        ValueLayout.JAVA_INT,
-        ValueLayout.ADDRESS,
-        ValueLayout.JAVA_INT,
-        ValueLayout.JAVA_INT,
-    ))
+private val pollCaptureErrno = Linker.Option.captureCallState("errno")
+private val pollCaptureLayout = Linker.Option.captureStateLayout()
+private val pollErrnoOffset = pollCaptureLayout.byteOffset(groupElement("errno"))
+
+private val nativePoll: MethodHandle? by lazy {
+    PosixSymbols.find("poll")?.let { symbol ->
+        linker.downcallHandle(
+            symbol,
+            FunctionDescriptor.of(
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.JAVA_INT,
+            ),
+            pollCaptureErrno,
+        )
+    }
+}
+
+data class WaylandNativePollResult(
+    val value: Int,
+    val errno: Int?,
+)
+
+/** Invokes POSIX poll(2) with the platform-sized nfds_t and captures errno atomically. */
+fun invokeNativePoll(
+    pollFds: MemorySegment,
+    count: Long,
+    timeoutMs: Int,
+): WaylandNativePollResult = Arena.ofConfined().use { arena ->
+    val poll = nativePoll
+        ?: error("required POSIX symbol 'poll' is unavailable")
+    val callState = arena.allocate(pollCaptureLayout)
+    val result = poll.invokeExact(callState, pollFds, count, timeoutMs) as Int
+    WaylandNativePollResult(
+        value = result,
+        errno = if (result < 0) {
+            callState.get(ValueLayout.JAVA_INT, pollErrnoOffset)
+        } else {
+            null
+        },
+    )
 }
 
 val nativeEventfd: MethodHandle? by lazy {
@@ -1014,4 +1050,3 @@ fun setPollFd(seg: java.lang.foreign.MemorySegment, idx: Int, fd: Int, events: S
 
 fun getPollRevents(seg: java.lang.foreign.MemorySegment, idx: Int): Short =
     seg.get(ValueLayout.JAVA_SHORT, idx * 8L + 6)
-
