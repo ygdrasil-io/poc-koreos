@@ -86,8 +86,9 @@ internal class AndroidEventLoop(
      * active ("pending window" pattern). [AndroidWindow.rawWindowHandle] is inaccessible only
      * when Android has not published a surface yet or has already destroyed it.
      *
-     * May be called multiple times: each call replaces the [pendingWindow]
-     * reference (rare case — a single window per Activity is the norm).
+     * May be called multiple times: each call releases the previous window's surface before
+     * replacing the [pendingWindow] reference (rare case — a single window per Activity is
+     * the norm).
      *
      * @param attributes Window attributes (title, size, etc.).
      *                   On Android, title and resizing are ignored.
@@ -96,6 +97,7 @@ internal class AndroidEventLoop(
     override fun createWindow(attributes: WindowAttributes): Window {
         val kadreActivity = activity as KadreActivity
         return AndroidWindow(kadreActivity.surfaceView, this, kadreActivity).also { window ->
+            pendingWindow?.onSurfaceReleased()
             currentSurface?.let(window::onSurfaceAvailable)
             pendingWindow = window
         }
