@@ -111,7 +111,6 @@ scan_gradle_files() {
             cursor++
           } else if (character == "=") {
             if (pending_identifier == "namespace") {
-              found_namespace = 1
               if (is_direct_kmp_android_scope()) {
                 found_nested_namespace = 1
               } else if (enforce_kmp_namespace) {
@@ -133,8 +132,8 @@ scan_gradle_files() {
       BEGIN {
         android_target = "androidTarget[[:space:]]*\\("
         kotlin_android_plugin = "id\\(\"org\\.jetbrains\\.kotlin\\.android\"\\)|kotlin\\(\"android\"\\)"
-        android_library_plugin = "id[[:space:]]*\\([[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)"
-        kotlin_multiplatform_plugin = "id[[:space:]]*\\([[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|kotlin[[:space:]]*\\([[:space:]]*\"multiplatform\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|id[[:space:]]*\\([[:space:]]*\"ygdrasil\\.conventions\\.kmp-library\"[[:space:]]*\\)"
+        android_library_plugin = "id[[:space:]]*\\([[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"com\\.android\\.library\"[[:space:]]*\\)|alias[[:space:]]*\\([[:space:]]*libs\\.plugins\\.android\\.library[[:space:]]*\\)"
+        kotlin_multiplatform_plugin = "id[[:space:]]*\\([[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|kotlin[[:space:]]*\\([[:space:]]*\"multiplatform\"[[:space:]]*\\)|apply[[:space:]]*\\([[:space:]]*plugin[[:space:]]*=[[:space:]]*\"org\\.jetbrains\\.kotlin\\.multiplatform\"[[:space:]]*\\)|id[[:space:]]*\\([[:space:]]*\"ygdrasil\\.conventions\\.kmp-library\"[[:space:]]*\\)|alias[[:space:]]*\\([[:space:]]*libs\\.plugins\\.kotlin\\.multiplatform[[:space:]]*\\)"
       }
 
       {
