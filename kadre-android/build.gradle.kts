@@ -40,6 +40,10 @@ kotlin {
         withHostTest {
             isIncludeAndroidResources = true
         }
+        withDeviceTest {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            execution = "HOST"
+        }
     }
 
     // ABI compatibility validation — integrated into the Kotlin plugin.
@@ -60,6 +64,14 @@ kotlin {
         val androidHostTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+            }
+        }
+        val androidDeviceTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation("androidx.test.ext:junit:1.2.1")
+                implementation("androidx.test:runner:1.6.2")
+                implementation("androidx.test:core:1.6.1")
             }
         }
     }
