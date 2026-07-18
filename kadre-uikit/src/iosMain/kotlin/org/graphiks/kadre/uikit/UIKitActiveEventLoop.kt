@@ -24,6 +24,9 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Next live window to return while surfaces are being recreated. */
     private var recreationCursor: Int? = null
 
+    /** Distinguishes an exhausted outer session from no recreation session. */
+    private var recreationInProgress = false
+
     /** Whether the current surface generation still needs destruction. */
     private var surfacesActive = false
 
@@ -48,13 +51,15 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * Calls beyond the number of existing windows create and register new ones.
      */
     internal fun recreateSurfaces(block: UIKitActiveEventLoop.() -> Unit) {
-        val previousCursor = recreationCursor
+        check(!recreationInProgress) { "Surface recreation cannot be nested" }
+        recreationInProgress = true
         recreationCursor = 0
         try {
             block()
             surfacesActive = true
         } finally {
-            recreationCursor = previousCursor
+            recreationCursor = null
+            recreationInProgress = false
         }
     }
 

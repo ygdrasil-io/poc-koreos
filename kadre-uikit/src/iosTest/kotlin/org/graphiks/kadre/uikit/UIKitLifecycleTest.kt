@@ -2,6 +2,7 @@ package org.graphiks.kadre.uikit
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
@@ -297,6 +298,46 @@ class UIKitLifecycleTest {
         } finally {
             original.close()
             createdOutsideSession?.close()
+        }
+    }
+
+    @Test
+    fun nestedRecreationIsRejectedWithoutChangingTheOuterCursor() {
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val first = loop.createWindow(WindowAttributes(visible = false))
+        val second = loop.createWindow(WindowAttributes(visible = false))
+        var nestedBlockRan = false
+        var firstReuse: Window? = null
+        var secondReuse: Window? = null
+
+        try {
+            loop.recreateSurfaces {
+                firstReuse = createWindow(WindowAttributes(visible = false))
+                assertFailsWith<IllegalStateException> {
+                    recreateSurfaces {
+                        nestedBlockRan = true
+                    }
+                }
+                secondReuse = createWindow(WindowAttributes(visible = false))
+            }
+
+            assertFalse(nestedBlockRan)
+            assertSame(first, firstReuse)
+            assertSame(second, secondReuse)
+        } finally {
+            first.close()
+            second.close()
+            firstReuse?.close()
+            secondReuse?.close()
         }
     }
 }
