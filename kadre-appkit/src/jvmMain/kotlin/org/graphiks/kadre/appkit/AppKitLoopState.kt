@@ -81,6 +81,21 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
         pendingCause = deadlineCause(armed.deadline, observedAt)
     }
 
+    /** Classifies the Core Foundation wake before its iteration is consumed. */
+    fun classifyWake(timerGeneration: Long?) {
+        if (exited || firstIteration || pendingCause != null) return
+
+        val armed = timerGeneration?.let { generation ->
+            armedDeadline?.takeIf { it.generation == generation }
+        }
+        if (armed == null) {
+            signalExternalEvent()
+        } else {
+            armedDeadline = null
+            pendingCause = deadlineCause(armed.deadline, nowMillis())
+        }
+    }
+
     fun beginIteration(): StartCause {
         if (firstIteration) {
             firstIteration = false

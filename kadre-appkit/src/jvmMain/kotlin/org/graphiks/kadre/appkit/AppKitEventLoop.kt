@@ -284,6 +284,7 @@ fun runApp(handler: ApplicationHandler) {
         runLoopOwner.throwPendingCallbackFailure()
     } catch (failure: Throwable) {
         runFailure = failure
+        runLoopOwner?.suppressPendingCallbackFailureOnto(failure)
         throw failure
     } finally {
         val closeFailure = runCatching {

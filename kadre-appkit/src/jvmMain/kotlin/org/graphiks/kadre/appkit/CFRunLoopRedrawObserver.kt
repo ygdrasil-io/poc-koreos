@@ -75,12 +75,23 @@ internal class CFRunLoopOwner private constructor(
 
     /** Kotlin-safe boundary for failures captured by native callbacks. */
     fun throwPendingCallbackFailure() {
-        val primary = callbackFailures.poll() ?: return
+        val primary = drainPendingCallbackFailure() ?: return
+        throw primary
+    }
+
+    /** Preserves a native-loop failure while retaining queued callback context. */
+    fun suppressPendingCallbackFailureOnto(primary: Throwable) {
+        val callbackFailure = drainPendingCallbackFailure() ?: return
+        if (callbackFailure !== primary) primary.addSuppressed(callbackFailure)
+    }
+
+    private fun drainPendingCallbackFailure(): Throwable? {
+        val primary = callbackFailures.poll() ?: return null
         while (true) {
             val additional = callbackFailures.poll() ?: break
             if (additional !== primary) primary.addSuppressed(additional)
         }
-        throw primary
+        return primary
     }
 
     override fun close() {
@@ -100,7 +111,11 @@ internal class CFRunLoopOwner private constructor(
             failure = cleanupStep(failure) { api.removeTimer(timer.ref) }
             failure = cleanupStep(failure) { api.release(timer.ref) }
         }
-        failure = cleanupStep(failure) { api.removeObserver(observer) }
+        val removeObserverFailure = runCatching { api.removeObserver(observer) }.exceptionOrNull()
+        if (removeObserverFailure != null) {
+            failure = cleanupStep(failure) { throw removeObserverFailure }
+            failure = cleanupStep(failure) { api.invalidateObserver(observer) }
+        }
         failure = cleanupStep(failure) { api.release(observer) }
         failure = cleanupStep(failure) { api.close() }
         failure?.let { throw it }
@@ -110,6 +125,7 @@ internal class CFRunLoopOwner private constructor(
         if (activity and AFTER_WAITING != 0L) {
             val cause = synchronized(lock) {
                 if (closed) return
+                state.classifyWake(currentTimer?.generation)
                 state.beginIteration()
             }
             onAfterWaiting(cause)
@@ -135,7 +151,6 @@ internal class CFRunLoopOwner private constructor(
             } ?: return
             currentTimer = null
             timerRoutes.remove(ref, TimerRoute(this, generation))
-            state.signalDeadline(generation)
             releaseTimer(timer)?.let { throw it }
         }
     }
@@ -147,6 +162,7 @@ internal class CFRunLoopOwner private constructor(
             TimerDecision.FireNow -> api.wakeUp()
             is TimerDecision.Arm -> {
                 val timerRef = api.createTimer(decision.deadline)
+                check(timerRef != 0L) { "CFRunLoopTimerCreate returned NULL" }
                 val timer = ArmedTimer(timerRef, decision.generation)
                 timerRoutes[timerRef] = TimerRoute(this, decision.generation)
                 try {
@@ -154,8 +170,11 @@ internal class CFRunLoopOwner private constructor(
                     currentTimer = timer
                 } catch (failure: Throwable) {
                     timerRoutes.remove(timerRef, TimerRoute(this, decision.generation))
-                    api.release(timerRef)
-                    throw failure
+                    var primary = failure
+                    primary = cleanupStep(primary) { api.invalidateTimer(timerRef) }!!
+                    primary = cleanupStep(primary) { api.removeTimer(timerRef) }!!
+                    primary = cleanupStep(primary) { api.release(timerRef) }!!
+                    throw primary
                 }
             }
         }
@@ -178,6 +197,11 @@ internal class CFRunLoopOwner private constructor(
 
     private fun recordCallbackFailure(failure: Throwable) {
         callbackFailures.add(failure)
+        try {
+            api.wakeUp()
+        } catch (wakeFailure: Throwable) {
+            if (wakeFailure !== failure) failure.addSuppressed(wakeFailure)
+        }
     }
 
     private data class TimerRoute(
@@ -203,6 +227,7 @@ internal class CFRunLoopOwner private constructor(
             var owner: CFRunLoopOwner? = null
             try {
                 val createdObserver = api.createObserver(OBSERVED_ACTIVITIES)
+                check(createdObserver != 0L) { "CFRunLoopObserverCreate returned NULL" }
                 observer = createdObserver
                 val installedOwner = CFRunLoopOwner(
                     api,
@@ -216,14 +241,17 @@ internal class CFRunLoopOwner private constructor(
                 api.addObserver(createdObserver)
                 return installedOwner
             } catch (failure: Throwable) {
+                var primary = failure
                 observer?.let { createdObserver ->
                     owner?.let { observerRoutes.remove(createdObserver, it) }
-                    runCatching { api.release(createdObserver) }
-                        .exceptionOrNull()
-                        ?.let(failure::addSuppressed)
+                    primary = cleanupStep(primary) {
+                        api.invalidateObserver(createdObserver)
+                    }!!
+                    primary = cleanupStep(primary) { api.removeObserver(createdObserver) }!!
+                    primary = cleanupStep(primary) { api.release(createdObserver) }!!
                 }
-                runCatching { api.close() }.exceptionOrNull()?.let(failure::addSuppressed)
-                throw failure
+                primary = cleanupStep(primary) { api.close() }!!
+                throw primary
             }
         }
 
