@@ -700,7 +700,7 @@ private class UiKitRootViewController(
  * [CADisplayLink] paces [WindowEvent.RedrawRequested] on every screen refresh.
  */
 @OptIn(ExperimentalForeignApi::class)
-internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKitActiveEventLoop) : Window {
+internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window {
 
     private val uiWindow: UIWindow
     private val viewController: UIViewController
@@ -747,14 +747,8 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
             vc.setView(metalView)
         }
 
-        // 5. Wire root VC and apply the supported initial attributes once.
+        // 5. Wire root VC. Initial attributes are applied after registry admission.
         uiWindow.rootViewController = viewController
-        applyMutableAttributes(attrs)
-        if (attrs.visible) {
-            // Become first responder so hardware-keyboard / controller key
-            // presses reach pressesBegan/Ended.
-            metalView.becomeFirstResponder()
-        }
 
         // 6. Enable drag-and-drop via UIDropInteraction (iOS 11+).
         setupDropInteraction(windowId)
@@ -821,6 +815,16 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         if (attrs.active) focusWindow()
     }
 
+    /** Applies initial attributes once, after this window is admitted to the live registry. */
+    internal fun applyInitialAttributes(attrs: WindowAttributes) {
+        applyMutableAttributes(attrs)
+        if (attrs.visible && !closed) {
+            // Become first responder so hardware-keyboard / controller key
+            // presses reach pressesBegan/Ended.
+            metalView.becomeFirstResponder()
+        }
+    }
+
     /**
      * Creates and schedules the [CADisplayLink] on the main run loop so
      * [emitRedraw] fires once per screen refresh.
@@ -842,7 +846,6 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * further frame is emitted after shutdown.
      */
     private fun emitRedraw() {
-        if (closed) return
         if (eventLoop.isExiting) {
             displayLink?.invalidate()
             displayLink = null

@@ -505,4 +505,67 @@ class UIKitLifecycleTest {
         assertSame(replacement, selected)
         assertFalse(original in liveRegistry)
     }
+
+    @Test
+    fun initialWindowClosedDuringAttributeApplicationThrowsWithoutRetry() {
+        val candidate = Any()
+        val liveRegistry = mutableSetOf<Any>()
+        var structureCount = 0
+        var applyCount = 0
+        var cleanupCount = 0
+        var rollbackCount = 0
+
+        assertFailsWith<IllegalStateException> {
+            createRegisteredUIKitWindow(
+                createStructure = {
+                    structureCount += 1
+                    candidate
+                },
+                register = liveRegistry::add,
+                applyInitialAttributes = {
+                    applyCount += 1
+                    if (liveRegistry.remove(it)) cleanupCount += 1
+                },
+                isLive = liveRegistry::contains,
+                rollback = {
+                    rollbackCount += 1
+                    liveRegistry.remove(it)
+                },
+            )
+        }
+
+        assertEquals(1, structureCount)
+        assertEquals(1, applyCount)
+        assertEquals(1, cleanupCount)
+        assertEquals(0, rollbackCount)
+        assertFalse(candidate in liveRegistry)
+    }
+
+    @Test
+    fun initialAttributeFailureRollsBackAndPreservesTheOriginalCause() {
+        val candidate = Any()
+        val liveRegistry = mutableSetOf<Any>()
+        val applyFailure = IllegalStateException("initial attributes")
+        val rollbackFailure = IllegalArgumentException("rollback")
+        var rollbackCount = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            createRegisteredUIKitWindow(
+                createStructure = { candidate },
+                register = liveRegistry::add,
+                applyInitialAttributes = { throw applyFailure },
+                isLive = liveRegistry::contains,
+                rollback = {
+                    rollbackCount += 1
+                    liveRegistry.remove(it)
+                    throw rollbackFailure
+                },
+            )
+        }
+
+        assertSame(applyFailure, thrown)
+        assertEquals(listOf(rollbackFailure), thrown.suppressedExceptions)
+        assertEquals(1, rollbackCount)
+        assertFalse(candidate in liveRegistry)
+    }
 }

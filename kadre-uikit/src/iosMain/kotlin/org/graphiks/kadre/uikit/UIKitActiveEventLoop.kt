@@ -55,7 +55,13 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
             isLive = windows::contains,
             applyAttributes = { it.applyMutableAttributes(attributes) },
             create = {
-                UiKitWindow(attributes, this).also { windows.add(it) }
+                createRegisteredUIKitWindow(
+                    createStructure = { UiKitWindow(this) },
+                    register = { windows.add(it) },
+                    applyInitialAttributes = { it.applyInitialAttributes(attributes) },
+                    isLive = windows::contains,
+                    rollback = UiKitWindow::close,
+                )
             },
         )
     }
@@ -256,6 +262,34 @@ internal fun runAllUIKitCleanupStages(vararg stages: () -> Unit) {
         }
     }
     firstFailure?.let { throw it }
+}
+
+/** Creates native structure, admits it, applies initial attributes, and revalidates it. */
+internal inline fun <T : Any> createRegisteredUIKitWindow(
+    createStructure: () -> T,
+    register: (T) -> Unit,
+    applyInitialAttributes: (T) -> Unit,
+    isLive: (T) -> Boolean,
+    rollback: (T) -> Unit,
+): T {
+    val created = createStructure()
+    register(created)
+    try {
+        applyInitialAttributes(created)
+    } catch (failure: Throwable) {
+        if (isLive(created)) {
+            try {
+                rollback(created)
+            } catch (rollbackFailure: Throwable) {
+                if (rollbackFailure !== failure) failure.addSuppressed(rollbackFailure)
+            }
+        }
+        throw failure
+    }
+    check(isLive(created)) {
+        "A UIKit window closed during initial attribute application"
+    }
+    return created
 }
 
 /** Selects a live reusable window, applies attributes, or creates a new one. */
