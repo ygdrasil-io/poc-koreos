@@ -4,6 +4,8 @@ import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.ffi.wayland.zwpTextInputV3Interface
+import org.graphiks.kadre.ffi.wayland.zwpTextInputManagerV3Interface
+import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -12,6 +14,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class WaylandTextInputTest {
     @AfterTest
@@ -31,6 +34,125 @@ class WaylandTextInputTest {
         assertEquals(7, ZWP_TEXT_INPUT_V3_COMMIT)
         assertEquals(8, zwpTextInputV3Interface.get(ValueLayout.JAVA_INT, pointerSize + 4L))
     }
+
+    @Test
+    fun `text input v3 interfaces expose complete process lifetime message tables`() {
+        assertWaylandInterface(
+            interfaceSegment = zwpTextInputManagerV3Interface,
+            name = "zwp_text_input_manager_v3",
+            version = 1,
+            methods = listOf(
+                ProtocolMessage("destroy", "", null),
+                ProtocolMessage(
+                    "get_text_input",
+                    "no",
+                    listOf("zwp_text_input_v3", "wl_seat"),
+                ),
+            ),
+            events = emptyList(),
+        )
+        assertWaylandInterface(
+            interfaceSegment = zwpTextInputV3Interface,
+            name = "zwp_text_input_v3",
+            version = 1,
+            methods = listOf(
+                ProtocolMessage("destroy", "", null),
+                ProtocolMessage("enable", "", null),
+                ProtocolMessage("disable", "", null),
+                ProtocolMessage("set_surrounding_text", "sii", listOf(null, null, null)),
+                ProtocolMessage("set_text_change_cause", "u", listOf(null)),
+                ProtocolMessage("set_content_type", "uu", listOf(null, null)),
+                ProtocolMessage("set_cursor_rectangle", "iiii", listOf(null, null, null, null)),
+                ProtocolMessage("commit", "", null),
+            ),
+            events = listOf(
+                ProtocolMessage("enter", "o", listOf("wl_surface")),
+                ProtocolMessage("leave", "o", listOf("wl_surface")),
+                ProtocolMessage("preedit_string", "?sii", listOf(null, null, null)),
+                ProtocolMessage("commit_string", "?s", listOf(null)),
+                ProtocolMessage("delete_surrounding_text", "uu", listOf(null, null)),
+                ProtocolMessage("done", "u", listOf(null)),
+            ),
+        )
+    }
+
+    private fun assertWaylandInterface(
+        interfaceSegment: MemorySegment,
+        name: String,
+        version: Int,
+        methods: List<ProtocolMessage>,
+        events: List<ProtocolMessage>,
+    ) {
+        val pointerSize = ValueLayout.ADDRESS.byteSize()
+        assertEquals(name, readCString(interfaceSegment.get(ValueLayout.ADDRESS, 0L)))
+        assertEquals(version, interfaceSegment.get(ValueLayout.JAVA_INT, pointerSize))
+        assertEquals(methods.size, interfaceSegment.get(ValueLayout.JAVA_INT, pointerSize + 4L))
+        assertProtocolMessages(
+            interfaceSegment.get(ValueLayout.ADDRESS, pointerSize + 8L),
+            methods,
+        )
+        assertEquals(
+            events.size,
+            interfaceSegment.get(ValueLayout.JAVA_INT, pointerSize + 8L + pointerSize),
+        )
+        assertProtocolMessages(
+            interfaceSegment.get(ValueLayout.ADDRESS, pointerSize + 16L + pointerSize),
+            events,
+        )
+    }
+
+    private fun assertProtocolMessages(
+        table: MemorySegment,
+        expected: List<ProtocolMessage>,
+    ) {
+        if (expected.isEmpty()) {
+            assertEquals(0L, table.address())
+            return
+        }
+        assertTrue(table.address() != 0L)
+        val rows = table.reinterpret(expected.size * 24L)
+        for ((index, message) in expected.withIndex()) {
+            val row = rows.asSlice(index * 24L, 24L)
+            assertEquals(message.name, readCString(row.get(ValueLayout.ADDRESS, 0L)))
+            assertEquals(message.signature, readCString(row.get(ValueLayout.ADDRESS, 8L)))
+            val types = row.get(ValueLayout.ADDRESS, 16L)
+            if (message.types == null) {
+                assertEquals(0L, types.address(), message.name)
+            } else {
+                assertTrue(types.address() != 0L, message.name)
+                val typeArray = types.reinterpret((message.types.size + 1L) * ValueLayout.ADDRESS.byteSize())
+                for ((typeIndex, expectedType) in message.types.withIndex()) {
+                    val type = typeArray.get(
+                        ValueLayout.ADDRESS,
+                        typeIndex * ValueLayout.ADDRESS.byteSize(),
+                    )
+                    assertEquals(
+                        expectedType,
+                        type.takeIf { it.address() != 0L }?.let {
+                            readCString(it.reinterpret(40L).get(ValueLayout.ADDRESS, 0L))
+                        },
+                        "${message.name} type $typeIndex",
+                    )
+                }
+                assertEquals(
+                    0L,
+                    typeArray.get(
+                        ValueLayout.ADDRESS,
+                        message.types.size * ValueLayout.ADDRESS.byteSize(),
+                    ).address(),
+                    "${message.name} type terminator",
+                )
+            }
+        }
+    }
+
+    private fun readCString(pointer: MemorySegment): String = pointer.reinterpret(128L).getString(0L)
+
+    private data class ProtocolMessage(
+        val name: String,
+        val signature: String,
+        val types: List<String?>?,
+    )
 
     @Test
     fun `every text input mutation commits then flushes with exact arguments`() {
@@ -386,6 +508,7 @@ class WaylandTextInputTest {
 
         override fun createListenerRegistration(
             onEvent: (Long, org.graphiks.kadre.core.WindowEvent) -> Unit,
+            onNativeFailure: (Throwable) -> Unit,
         ): WaylandTextInputListenerRegistration {
             trace += "listener:create"
             if (failureAt == "listener") throw IllegalStateException("listener failed")

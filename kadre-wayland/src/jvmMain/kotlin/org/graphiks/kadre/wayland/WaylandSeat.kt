@@ -56,8 +56,8 @@ private val xkbStateUpdateMask: MethodHandle? by lazy {
     } catch (_: Throwable) { null }
 }
 
-private typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
-private typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
+internal typealias RoutedWindowEventSink = (surfacePtr: Long, event: WindowEvent) -> Unit
+internal typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
 
 /**
  * Global XKB compose state for dead-key reset, lazily initialized from
@@ -327,24 +327,38 @@ internal fun installOwnedWaylandListener(
     failOnNativeError: Boolean,
     destroyProxy: (Long) -> Unit = ::destroyOwnedWaylandProxy,
     install: () -> Int,
-): Boolean {
-    val listenerResult = try {
-        install()
+): Boolean = constructOwnedWaylandChildListener(
+    kind = kind,
+    proxyPtr = proxyPtr,
+    failOnNativeError = failOnNativeError,
+    destroyProxy = destroyProxy,
+) {
+    val listenerResult = install()
+    check(listenerResult == 0) { "$kind listener installation failed: $listenerResult" }
+    true
+} == true
+
+/**
+ * Owns a child proxy from acquisition through listener construction and native
+ * installation. Any failure in that whole interval destroys the proxy once.
+ */
+internal fun <T> constructOwnedWaylandChildListener(
+    @Suppress("UNUSED_PARAMETER")
+    kind: String,
+    proxyPtr: Long,
+    failOnNativeError: Boolean,
+    destroyProxy: (Long) -> Unit = ::destroyOwnedWaylandProxy,
+    constructAndInstall: () -> T,
+): T? {
+    try {
+        return constructAndInstall()
     } catch (failure: Throwable) {
         if (proxyPtr != 0L) {
             runWaylandCleanup(failure, listOf({ destroyProxy(proxyPtr) }))
         }
         if (failOnNativeError) throw failure
-        return false
+        return null
     }
-    if (listenerResult == 0) return true
-
-    val failure = IllegalStateException("$kind listener installation failed: $listenerResult")
-    if (proxyPtr != 0L) {
-        runWaylandCleanup(failure, listOf({ destroyProxy(proxyPtr) }))
-    }
-    if (failOnNativeError) throw failure
-    return false
 }
 
 // ── wl_seat capability bits ───────────────────────────────────────────────────
@@ -470,12 +484,12 @@ internal class WlOutputListener(
  * wl_keyboard_listener vtable order:
  *   0: keymap, 1: enter, 2: leave, 3: key, 4: modifiers, 5: repeat_info.
  */
-private class WlKeyboardListener(
+internal class WlKeyboardListener(
     private val onEvent: RoutedWindowEventSink,
     onDeviceEvent: RoutedDeviceEventSink,
     private val seatPtr: Long,
     deviceFilter: WaylandDeviceFilter,
-    onNativeFailure: (Throwable) -> Unit,
+    private val onNativeFailure: (Throwable) -> Unit,
 ) : AutoCloseable {
     private var focusedSurfacePtr: Long = 0L
     private val modifiers = WaylandKeyboardModifierTracker()
@@ -498,7 +512,9 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         format: Int, fd: Int, size: Int,
     ) {
-        keymapCallback.onKeymap(format, fd, size)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            keymapCallback.onKeymap(format, fd, size)
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -506,11 +522,13 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, surface: MemorySegment, keys: MemorySegment,
     ) {
-        focusedSurfacePtr = surface.address()
-        val focusChanged = WaylandFocusState.addSeatFocus(focusedSurfacePtr, seatPtr)
-        modifiers.mapFocusGained(waylandPressedKeysFromArray(keys)).forEach { event ->
-            if (event !is WindowEvent.Focused || focusChanged) {
-                onEvent(focusedSurfacePtr, event)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            focusedSurfacePtr = surface.address()
+            val focusChanged = WaylandFocusState.addSeatFocus(focusedSurfacePtr, seatPtr)
+            modifiers.mapFocusGained(waylandPressedKeysFromArray(keys)).forEach { event ->
+                if (event !is WindowEvent.Focused || focusChanged) {
+                    onEvent(focusedSurfacePtr, event)
+                }
             }
         }
     }
@@ -520,14 +538,16 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, surface: MemorySegment,
     ) {
-        val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
-        val focusChanged = WaylandFocusState.removeSeatFocus(surfacePtr, seatPtr)
-        modifiers.mapFocusLost().forEach { event ->
-            if (event !is WindowEvent.Focused || focusChanged) {
-                onEvent(surfacePtr, event)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
+            val focusChanged = WaylandFocusState.removeSeatFocus(surfacePtr, seatPtr)
+            modifiers.mapFocusLost().forEach { event ->
+                if (event !is WindowEvent.Focused || focusChanged) {
+                    onEvent(surfacePtr, event)
+                }
             }
+            if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
         }
-        if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -535,10 +555,12 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, time: Int, key: Int, state: Int,
     ) {
-        modifiers.mapKey(keycode = key, state = state, xkbStatePtr = keymapLoader.stateAddress).forEach { event ->
-            onEvent(focusedSurfacePtr, event)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            modifiers.mapKey(keycode = key, state = state, xkbStatePtr = keymapLoader.stateAddress).forEach { event ->
+                onEvent(focusedSurfacePtr, event)
+            }
+            filteredDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
         }
-        filteredDeviceEvent(DeviceEvent.Key(linuxKeycodeToPhysicalKey(key), waylandKeyStateToKeyState(state)))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -546,27 +568,31 @@ private class WlKeyboardListener(
         data: MemorySegment, keyboard: MemorySegment,
         serial: Int, modsDepressed: Int, modsLatched: Int, modsLocked: Int, group: Int,
     ) {
-        // Keep the xkb state in sync so xkb_state_key_get_utf8 yields shifted /
-        // dead-key characters for subsequent key events.
-        if (keymapLoader.stateAddress != 0L) {
-            try {
-                xkbStateUpdateMask?.invokeExact(
-                    MemorySegment.ofAddress(keymapLoader.stateAddress),
-                    modsDepressed, modsLatched, modsLocked,
-                    0, 0, group,
-                ) as Int
-            } catch (_: Throwable) {
+        guardWaylandNativeUpcall(onNativeFailure) {
+            // Keep the xkb state in sync so xkb_state_key_get_utf8 yields shifted /
+            // dead-key characters for subsequent key events.
+            if (keymapLoader.stateAddress != 0L) {
+                try {
+                    xkbStateUpdateMask?.invokeExact(
+                        MemorySegment.ofAddress(keymapLoader.stateAddress),
+                        modsDepressed, modsLatched, modsLocked,
+                        0, 0, group,
+                    ) as Int
+                } catch (_: Throwable) {
+                }
             }
-        }
-        modifiers.mapModifiers(modsDepressed = modsDepressed).forEach { event ->
-            onEvent(focusedSurfacePtr, event)
+            modifiers.mapModifiers(modsDepressed = modsDepressed).forEach { event ->
+                onEvent(focusedSurfacePtr, event)
+            }
         }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onRepeatInfo(data: MemorySegment, keyboard: MemorySegment, rate: Int, delay: Int) {
-        repeatRate = rate
-        repeatDelay = delay
+        guardWaylandNativeUpcall(onNativeFailure) {
+            repeatRate = rate
+            repeatDelay = delay
+        }
     }
 
     override fun close() {
@@ -589,9 +615,10 @@ private class WlKeyboardListener(
  * We install 9 entries (enter→axis_discrete) so wl_pointer remains safe when
  * the seat is bound at a modern protocol version.
  */
-private class WlPointerListener(
+internal class WlPointerListener(
     private val onEvent: RoutedWindowEventSink,
     private val seatPtr: Long,
+    private val onNativeFailure: (Throwable) -> Unit,
 ) {
     private var lastPosition: PhysicalPosition<Double> = PhysicalPosition(0.0, 0.0)
     private var focusedSurfacePtr: Long = 0L
@@ -601,14 +628,16 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, surface: MemorySegment, xFixed: Int, yFixed: Int,
     ) {
-        WaylandPointerState.updateSeat(seatPtr)
-        focusedSurfacePtr = surface.address()
-        WaylandPointerState.enterPointer(pointer.address(), focusedSurfacePtr, serial)
-        if (!WaylandPointerState.isCursorVisible(focusedSurfacePtr)) {
-            WaylandPointerState.hideCursorForSurface(focusedSurfacePtr)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            WaylandPointerState.updateSeat(seatPtr)
+            focusedSurfacePtr = surface.address()
+            WaylandPointerState.enterPointer(pointer.address(), focusedSurfacePtr, serial)
+            if (!WaylandPointerState.isCursorVisible(focusedSurfacePtr)) {
+                WaylandPointerState.hideCursorForSurface(focusedSurfacePtr)
+            }
+            lastPosition = PhysicalPosition(wlFixedToDouble(xFixed), wlFixedToDouble(yFixed))
+            onEvent(focusedSurfacePtr, WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
         }
-        lastPosition = PhysicalPosition(wlFixedToDouble(xFixed), wlFixedToDouble(yFixed))
-        onEvent(focusedSurfacePtr, WindowEvent.PointerEntered(null, lastPosition, primary = true, kind = PointerKind.Mouse))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -616,10 +645,12 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, surface: MemorySegment,
     ) {
-        val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
-        WaylandPointerState.leaveSurface(surfacePtr)
-        onEvent(surfacePtr, WindowEvent.PointerLeft(null, lastPosition, primary = true, kind = PointerKind.Mouse))
-        if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val surfacePtr = surface.address().takeIf { it != 0L } ?: focusedSurfacePtr
+            WaylandPointerState.leaveSurface(surfacePtr)
+            onEvent(surfacePtr, WindowEvent.PointerLeft(null, lastPosition, primary = true, kind = PointerKind.Mouse))
+            if (focusedSurfacePtr == surfacePtr) focusedSurfacePtr = 0L
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -627,9 +658,11 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         time: Int, xFixed: Int, yFixed: Int,
     ) {
-        val event = mapWaylandPointerMotion(xFixed, yFixed)
-        lastPosition = event.position
-        onEvent(focusedSurfacePtr, event)
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val event = mapWaylandPointerMotion(xFixed, yFixed)
+            lastPosition = event.position
+            onEvent(focusedSurfacePtr, event)
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -637,9 +670,11 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         serial: Int, time: Int, button: Int, state: Int,
     ) {
-        WaylandPointerState.updateSeat(seatPtr)
-        WaylandPointerState.recordButton(serial, button, state)
-        onEvent(focusedSurfacePtr, mapWaylandPointerButton(button, state, lastPosition))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            WaylandPointerState.updateSeat(seatPtr)
+            WaylandPointerState.recordButton(serial, button, state)
+            onEvent(focusedSurfacePtr, mapWaylandPointerButton(button, state, lastPosition))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -647,20 +682,26 @@ private class WlPointerListener(
         data: MemorySegment, pointer: MemorySegment,
         time: Int, axis: Int, valueFixed: Int,
     ) {
-        onEvent(focusedSurfacePtr, mapWaylandPointerAxis(axis, valueFixed))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            onEvent(focusedSurfacePtr, mapWaylandPointerAxis(axis, valueFixed))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
-    fun onFrame(data: MemorySegment, pointer: MemorySegment) { /* no-op */ }
+    fun onFrame(data: MemorySegment, pointer: MemorySegment) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 
     @Suppress("UNUSED_PARAMETER")
-    fun onAxisSource(data: MemorySegment, pointer: MemorySegment, axisSource: Int) { /* no-op */ }
+    fun onAxisSource(data: MemorySegment, pointer: MemorySegment, axisSource: Int) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 
     @Suppress("UNUSED_PARAMETER")
-    fun onAxisStop(data: MemorySegment, pointer: MemorySegment, time: Int, axis: Int) { /* no-op */ }
+    fun onAxisStop(data: MemorySegment, pointer: MemorySegment, time: Int, axis: Int) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 
     @Suppress("UNUSED_PARAMETER")
-    fun onAxisDiscrete(data: MemorySegment, pointer: MemorySegment, axis: Int, discrete: Int) { /* no-op */ }
+    fun onAxisDiscrete(data: MemorySegment, pointer: MemorySegment, axis: Int, discrete: Int) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 }
 
 // ── wl_touch listener ─────────────────────────────────────────────────────────
@@ -674,8 +715,9 @@ private class WlPointerListener(
  * Active contact positions are tracked in [lastPositions] so that [TouchPhase.Ended]
  * events can carry the last known location (wl_touch.up does not include coordinates).
  */
-private class WlTouchListener(
+internal class WlTouchListener(
     private val onEvent: RoutedWindowEventSink,
+    private val onNativeFailure: (Throwable) -> Unit,
 ) {
     private data class TouchContact(
         val surfacePtr: Long,
@@ -691,13 +733,15 @@ private class WlTouchListener(
         data: MemorySegment, touch: MemorySegment,
         serial: Int, time: Int, surface: MemorySegment, id: Int, xFixed: Int, yFixed: Int,
     ) {
-        val x = wlFixedToDouble(xFixed)
-        val y = wlFixedToDouble(yFixed)
-        val surfacePtr = surface.address()
-        contacts[id] = TouchContact(surfacePtr, x to y)
-        if (primaryTouchId == null) primaryTouchId = id
-        val primary = primaryTouchId == id
-        mapWaylandTouchDown(id, xFixed, yFixed, primary).forEach { event -> onEvent(surfacePtr, event) }
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val x = wlFixedToDouble(xFixed)
+            val y = wlFixedToDouble(yFixed)
+            val surfacePtr = surface.address()
+            contacts[id] = TouchContact(surfacePtr, x to y)
+            if (primaryTouchId == null) primaryTouchId = id
+            val primary = primaryTouchId == id
+            mapWaylandTouchDown(id, xFixed, yFixed, primary).forEach { event -> onEvent(surfacePtr, event) }
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -705,12 +749,14 @@ private class WlTouchListener(
         data: MemorySegment, touch: MemorySegment,
         serial: Int, time: Int, id: Int,
     ) {
-        val contact = contacts.remove(id) ?: return
-        val (lx, ly) = contact.position
-        val primary = primaryTouchId == id
-        if (contacts.isEmpty()) primaryTouchId = null
-        // Build terminal events with the last known location (wl_touch.up has no coords).
-        mapWaylandTouchUp(id, PhysicalPosition(lx, ly), primary).forEach { event -> onEvent(contact.surfacePtr, event) }
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val contact = contacts.remove(id) ?: return@guardWaylandNativeUpcall
+            val (lx, ly) = contact.position
+            val primary = primaryTouchId == id
+            if (contacts.isEmpty()) primaryTouchId = null
+            // Build terminal events with the last known location (wl_touch.up has no coords).
+            mapWaylandTouchUp(id, PhysicalPosition(lx, ly), primary).forEach { event -> onEvent(contact.surfacePtr, event) }
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -718,33 +764,40 @@ private class WlTouchListener(
         data: MemorySegment, touch: MemorySegment,
         time: Int, id: Int, xFixed: Int, yFixed: Int,
     ) {
-        val x = wlFixedToDouble(xFixed)
-        val y = wlFixedToDouble(yFixed)
-        val surfacePtr = contacts[id]?.surfacePtr ?: return
-        contacts[id] = TouchContact(surfacePtr, x to y)
-        onEvent(surfacePtr, mapWaylandTouchMotion(id, xFixed, yFixed, primaryTouchId == id))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val x = wlFixedToDouble(xFixed)
+            val y = wlFixedToDouble(yFixed)
+            val surfacePtr = contacts[id]?.surfacePtr ?: return@guardWaylandNativeUpcall
+            contacts[id] = TouchContact(surfacePtr, x to y)
+            onEvent(surfacePtr, mapWaylandTouchMotion(id, xFixed, yFixed, primaryTouchId == id))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
-    fun onFrame(data: MemorySegment, touch: MemorySegment) { /* no-op — we dispatch eagerly */ }
+    fun onFrame(data: MemorySegment, touch: MemorySegment) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 
     @Suppress("UNUSED_PARAMETER")
     fun onCancel(data: MemorySegment, touch: MemorySegment) {
-        // Cancel ALL active contacts.
-        for ((id, contact) in contacts.toMap()) {
-            val (lx, ly) = contact.position
-            mapWaylandTouchCancel(id, PhysicalPosition(lx, ly), primaryTouchId == id)
-                .forEach { event -> onEvent(contact.surfacePtr, event) }
+        guardWaylandNativeUpcall(onNativeFailure) {
+            // Cancel ALL active contacts.
+            for ((id, contact) in contacts.toMap()) {
+                val (lx, ly) = contact.position
+                mapWaylandTouchCancel(id, PhysicalPosition(lx, ly), primaryTouchId == id)
+                    .forEach { event -> onEvent(contact.surfacePtr, event) }
+            }
+            contacts.clear()
+            primaryTouchId = null
         }
-        contacts.clear()
-        primaryTouchId = null
     }
 
     @Suppress("UNUSED_PARAMETER")
-    fun onShape(data: MemorySegment, touch: MemorySegment, id: Int, major: Int, minor: Int) { /* no-op */ }
+    fun onShape(data: MemorySegment, touch: MemorySegment, id: Int, major: Int, minor: Int) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 
     @Suppress("UNUSED_PARAMETER")
-    fun onOrientation(data: MemorySegment, touch: MemorySegment, id: Int, orientation: Int) { /* no-op */ }
+    fun onOrientation(data: MemorySegment, touch: MemorySegment, id: Int, orientation: Int) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 }
 
 // ── WaylandSeatBinding ────────────────────────────────────────────────────────
@@ -959,6 +1012,7 @@ internal fun installSeatListeners(
                     if (ptrSeg != null && ptrSeg.address() != 0L) {
                         if (installPointerListener(
                                 ptrSeg, addListener, lookup, arena, seatPtr, onEvent,
+                                onNativeFailure,
                                 failOnNativeError,
                             )
                         ) {
@@ -983,7 +1037,8 @@ internal fun installSeatListeners(
                     }
                     if (touchSeg != null && touchSeg.address() != 0L) {
                         if (installTouchListener(
-                                touchSeg, addListener, lookup, arena, onEvent, failOnNativeError,
+                                touchSeg, addListener, lookup, arena, onEvent,
+                                onNativeFailure, failOnNativeError,
                             )
                         ) {
                             anyListenerInstalled = true
@@ -1013,8 +1068,19 @@ internal fun installSeatListeners(
                     null
                 }
                 if (dataDevice != null && dataDevice.address() != 0L) {
-                    val dnd = WaylandDragAndDrop(dataDevice.address(), displayPtr, onEvent)
-                    if (dnd.installListener(arena, addListener, failOnNativeError)) {
+                    val dnd = constructOwnedWaylandChildListener(
+                        kind = "wl_data_device",
+                        proxyPtr = dataDevice.address(),
+                        failOnNativeError = failOnNativeError,
+                    ) {
+                        WaylandDragAndDrop(
+                            dataDevice.address(),
+                            displayPtr,
+                            onEvent,
+                            onNativeFailure,
+                        ).also { it.installListener(arena, addListener) }
+                    }
+                    if (dnd != null) {
                         binding.dnd = dnd
                         anyListenerInstalled = true
                     }
@@ -1058,9 +1124,14 @@ private fun installKeyboardListener(
     deviceFilter: WaylandDeviceFilter,
     onNativeFailure: (Throwable) -> Unit,
     failOnNativeError: Boolean,
-): AutoCloseable? {
+): AutoCloseable? = constructOwnedWaylandChildListener(
+    kind = "wl_keyboard",
+    proxyPtr = keyboard.address(),
+    failOnNativeError = failOnNativeError,
+) {
     val listener = WlKeyboardListener(onEvent, onDeviceEvent, seatPtr, deviceFilter, onNativeFailure)
-    val ptr = ValueLayout.ADDRESS.byteSize()
+    try {
+        val ptr = ValueLayout.ADDRESS.byteSize()
 
     // vtable: keymap, enter, leave, key, modifiers, repeat_info — 6 entries.
     val keymapStub = upcallStub(
@@ -1134,18 +1205,9 @@ private fun installKeyboardListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 3,  keyStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  modsStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  repeatInfoStub)
-    return try {
-        if (installOwnedWaylandListener(
-                kind = "wl_keyboard",
-                proxyPtr = keyboard.address(),
-                failOnNativeError = failOnNativeError,
-            ) { addListener.invokeExact(keyboard, vtable, MemorySegment.NULL) as Int }
-        ) {
-            listener
-        } else {
-            listener.close()
-            null
-        }
+        val result = addListener.invokeExact(keyboard, vtable, MemorySegment.NULL) as Int
+        check(result == 0) { "wl_keyboard listener installation failed: $result" }
+        listener
     } catch (failure: Throwable) {
         runWaylandCleanup(failure, listOf(listener::close))
         throw failure
@@ -1159,9 +1221,14 @@ private fun installPointerListener(
     arena: Arena,
     seatPtr: Long,
     onEvent: RoutedWindowEventSink,
+    onNativeFailure: (Throwable) -> Unit,
     failOnNativeError: Boolean,
-): Boolean {
-    val listener = WlPointerListener(onEvent, seatPtr)
+): Boolean = constructOwnedWaylandChildListener(
+    kind = "wl_pointer",
+    proxyPtr = pointer.address(),
+    failOnNativeError = failOnNativeError,
+) {
+    val listener = WlPointerListener(onEvent, seatPtr, onNativeFailure)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     val enterStub = upcallStub(
@@ -1263,12 +1330,10 @@ private fun installPointerListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 6,  axisSourceStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 7,  axisStopStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 8,  axisDiscreteStub)
-    return installOwnedWaylandListener(
-        kind = "wl_pointer",
-        proxyPtr = pointer.address(),
-        failOnNativeError = failOnNativeError,
-    ) { addListener.invokeExact(pointer, vtable, MemorySegment.NULL) as Int }
-}
+    val result = addListener.invokeExact(pointer, vtable, MemorySegment.NULL) as Int
+    check(result == 0) { "wl_pointer listener installation failed: $result" }
+    true
+} == true
 
 private fun installTouchListener(
     touch: MemorySegment,
@@ -1276,9 +1341,14 @@ private fun installTouchListener(
     lookup: MethodHandles.Lookup,
     arena: Arena,
     onEvent: RoutedWindowEventSink,
+    onNativeFailure: (Throwable) -> Unit,
     failOnNativeError: Boolean,
-): Boolean {
-    val listener = WlTouchListener(onEvent)
+): Boolean = constructOwnedWaylandChildListener(
+    kind = "wl_touch",
+    proxyPtr = touch.address(),
+    failOnNativeError = failOnNativeError,
+) {
+    val listener = WlTouchListener(onEvent, onNativeFailure)
     val ptr = ValueLayout.ADDRESS.byteSize()
 
     // vtable: down, up, motion, frame, cancel, shape, orientation — 7 entries for wl_touch v6+.
@@ -1359,12 +1429,10 @@ private fun installTouchListener(
     vtable.set(ValueLayout.ADDRESS, ptr * 4,  cancelStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 5,  shapeStub)
     vtable.set(ValueLayout.ADDRESS, ptr * 6,  orientationStub)
-    return installOwnedWaylandListener(
-        kind = "wl_touch",
-        proxyPtr = touch.address(),
-        failOnNativeError = failOnNativeError,
-    ) { addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int }
-}
+    val result = addListener.invokeExact(touch, vtable, MemorySegment.NULL) as Int
+    check(result == 0) { "wl_touch listener installation failed: $result" }
+    true
+} == true
 
 internal fun installWaylandOutputListener(
     output: MemorySegment,

@@ -918,6 +918,7 @@ private fun runAppInternal(handler: ApplicationHandler) {
                         )
                     },
                     nativeListenerLifetime = nativeListenerLifetime,
+                    onNativeFailure = eventLoop::queueNativeFailure,
                     failOnNativeError = true,
                 )
             }

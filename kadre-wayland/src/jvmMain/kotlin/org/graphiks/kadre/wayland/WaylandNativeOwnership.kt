@@ -2,6 +2,22 @@ package org.graphiks.kadre.wayland
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Prevents any Kotlin throwable from crossing an FFM upcall boundary. */
+internal inline fun guardWaylandNativeUpcall(
+    onNativeFailure: (Throwable) -> Unit,
+    action: () -> Unit,
+) {
+    try {
+        action()
+    } catch (failure: Throwable) {
+        try {
+            onNativeFailure(failure)
+        } catch (_: Throwable) {
+            // The native caller must always regain control, even if routing fails.
+        }
+    }
+}
+
 /**
  * Keeps native listener storage alive until its proxy is known to be destroyed.
  * Any still-live leases are released only after wl_display_disconnect.

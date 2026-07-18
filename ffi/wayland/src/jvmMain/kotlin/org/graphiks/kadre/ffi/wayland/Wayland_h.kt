@@ -1,6 +1,8 @@
 package org.graphiks.kadre.ffi.wayland
 
 import org.graphiks.kadre.ffi.posix.PosixSymbols
+import org.graphiks.kadre.ffi.wayland.generated.zwp_text_input_manager_v3_interface
+import org.graphiks.kadre.ffi.wayland.generated.zwp_text_input_v3_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -545,11 +547,11 @@ val xdgActivationTokenV1Interface: MemorySegment by lazy {
 }
 
 val zwpTextInputManagerV3Interface: MemorySegment by lazy {
-    buildWaylandInterface("zwp_text_input_manager_v3", methodCount = 2, eventCount = 0)
+    zwp_text_input_manager_v3_interface
 }
 
 val zwpTextInputV3Interface: MemorySegment by lazy {
-    buildWaylandInterface("zwp_text_input_v3", methodCount = 8, eventCount = 6)
+    zwp_text_input_v3_interface
 }
 
 val zwpPointerConstraintsV1Interface: MemorySegment by lazy {

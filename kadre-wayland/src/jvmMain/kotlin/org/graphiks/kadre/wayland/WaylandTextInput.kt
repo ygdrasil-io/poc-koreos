@@ -78,6 +78,7 @@ internal interface WaylandTextInputCreationOperations : WaylandTextInputRequestO
     fun getVersion(proxyPtr: Long): Int
     fun createListenerRegistration(
         onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+        onNativeFailure: (Throwable) -> Unit,
     ): WaylandTextInputListenerRegistration
 }
 
@@ -166,7 +167,9 @@ private object NativeWaylandTextInputCreationOperations : WaylandTextInputCreati
 
     override fun createListenerRegistration(
         onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
-    ): WaylandTextInputListenerRegistration = createNativeTextInputListenerRegistration(onEvent)
+        onNativeFailure: (Throwable) -> Unit,
+    ): WaylandTextInputListenerRegistration =
+        createNativeTextInputListenerRegistration(onEvent, onNativeFailure)
 }
 
 // ── State tracking ───────────────────────────────────────────────────────────
@@ -285,6 +288,7 @@ internal fun createTextInput(
     display: Long,
     onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
     nativeListenerLifetime: WaylandNativeListenerLifetime,
+    onNativeFailure: (Throwable) -> Unit = {},
     failOnNativeError: Boolean = false,
     operations: WaylandTextInputCreationOperations = NativeWaylandTextInputCreationOperations,
 ): WaylandTextInputBinding? {
@@ -303,7 +307,7 @@ internal fun createTextInput(
         proxyPtr = operations.createTextInput(managerPtr, seatPtr)
         check(proxyPtr != 0L) { "create_text_input returned NULL" }
         proxyVersion = operations.getVersion(proxyPtr)
-        listener = operations.createListenerRegistration(onEvent)
+        listener = operations.createListenerRegistration(onEvent, onNativeFailure)
         listenerLease = nativeListenerLifetime.register(listener)
         val listenerResult = listener.install(proxyPtr)
         check(listenerResult == 0) { "text input listener installation failed: $listenerResult" }
@@ -362,11 +366,12 @@ internal fun createTextInput(
  */
 private fun createNativeTextInputListenerRegistration(
     onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+    onNativeFailure: (Throwable) -> Unit,
 ): WaylandTextInputListenerRegistration {
     val addListener = checkNotNull(wlProxyAddListener) {
         "wl_proxy_add_listener not available for text input"
     }
-    val listener = TextInputListener(onEvent)
+    val listener = TextInputListener(onEvent, onNativeFailure)
     val arena = Arena.ofShared()
     try {
         val lookup = MethodHandles.lookup()
@@ -461,8 +466,9 @@ private fun createNativeTextInputListenerRegistration(
  * wl_text_input_v3 listener that accumulates IME events in the batch
  * and dispatches them on `done(serial)`.
  */
-private class TextInputListener(
+internal class TextInputListener(
     private val onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+    private val onNativeFailure: (Throwable) -> Unit,
 ) {
     // Pending events accumulated between preedit_string/commit_string/delete_surrounding
     // and the next done event.
@@ -470,20 +476,24 @@ private class TextInputListener(
 
     @Suppress("UNUSED_PARAMETER")
     fun onEnter(data: MemorySegment, textInput: MemorySegment, surface: MemorySegment) {
-        val surfacePtr = surface.address()
-        WaylandTextInput.focusedSurfacePtr = surfacePtr
-        if (!WaylandTextInput.imeEnabled) {
-            // The compositor entered our surface — emit Enabled if not already
-            onEvent(surfacePtr, WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Enabled))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val surfacePtr = surface.address()
+            WaylandTextInput.focusedSurfacePtr = surfacePtr
+            if (!WaylandTextInput.imeEnabled) {
+                // The compositor entered our surface — emit Enabled if not already
+                onEvent(surfacePtr, WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Enabled))
+            }
         }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onLeave(data: MemorySegment, textInput: MemorySegment, surface: MemorySegment) {
-        val surfacePtr = surface.address().takeIf { it != 0L } ?: WaylandTextInput.focusedSurfacePtr
-        WaylandTextInput.focusedSurfacePtr = 0L
-        WaylandTextInput.imeEnabled = false
-        onEvent(surfacePtr, WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val surfacePtr = surface.address().takeIf { it != 0L } ?: WaylandTextInput.focusedSurfacePtr
+            WaylandTextInput.focusedSurfacePtr = 0L
+            WaylandTextInput.imeEnabled = false
+            onEvent(surfacePtr, WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -491,17 +501,19 @@ private class TextInputListener(
         data: MemorySegment, textInput: MemorySegment,
         text: MemorySegment, cursorBegin: Int, cursorEnd: Int,
     ) {
-        val str = try {
-            text.getString(0)
-        } catch (_: Throwable) {
-            ""
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val str = try {
+                text.getString(0)
+            } catch (_: Throwable) {
+                ""
+            }
+            val cursorRange = if (cursorBegin >= 0 && cursorEnd >= 0) {
+                Pair(cursorBegin, cursorEnd)
+            } else {
+                null
+            }
+            pending.add(WindowEvent.Ime.ImeEvent.Preedit(str, cursorRange))
         }
-        val cursorRange = if (cursorBegin >= 0 && cursorEnd >= 0) {
-            Pair(cursorBegin, cursorEnd)
-        } else {
-            null
-        }
-        pending.add(WindowEvent.Ime.ImeEvent.Preedit(str, cursorRange))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -509,12 +521,14 @@ private class TextInputListener(
         data: MemorySegment, textInput: MemorySegment,
         text: MemorySegment,
     ) {
-        val str = try {
-            text.getString(0)
-        } catch (_: Throwable) {
-            ""
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val str = try {
+                text.getString(0)
+            } catch (_: Throwable) {
+                ""
+            }
+            pending.add(WindowEvent.Ime.ImeEvent.Commit(str))
         }
-        pending.add(WindowEvent.Ime.ImeEvent.Commit(str))
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -522,21 +536,25 @@ private class TextInputListener(
         data: MemorySegment, textInput: MemorySegment,
         beforeLength: Int, afterLength: Int,
     ) {
-        pending.add(WindowEvent.Ime.ImeEvent.DeleteSurrounding(beforeLength, afterLength))
+        guardWaylandNativeUpcall(onNativeFailure) {
+            pending.add(WindowEvent.Ime.ImeEvent.DeleteSurrounding(beforeLength, afterLength))
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onDone(data: MemorySegment, textInput: MemorySegment, serial: Int) {
-        val surfacePtr = WaylandTextInput.focusedSurfacePtr
-        if (surfacePtr == 0L) {
+        guardWaylandNativeUpcall(onNativeFailure) {
+            val surfacePtr = WaylandTextInput.focusedSurfacePtr
+            if (surfacePtr == 0L) {
+                pending.clear()
+                return@guardWaylandNativeUpcall
+            }
+            // Dispatch all events accumulated since the last done.
+            for (event in pending) {
+                onEvent(surfacePtr, WindowEvent.Ime(event))
+            }
             pending.clear()
-            return
         }
-        // Dispatch all events accumulated since the last done.
-        for (event in pending) {
-            onEvent(surfacePtr, WindowEvent.Ime(event))
-        }
-        pending.clear()
     }
 }
 
