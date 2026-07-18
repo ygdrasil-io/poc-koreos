@@ -5,6 +5,7 @@ import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -77,7 +78,7 @@ class AppKitLoopStateTest {
     }
 
     @Test
-    fun `event cancels armed deadline and preserves requested resume`() {
+    fun `external event before deadline cancels wait and preserves requested resume`() {
         val deadline = 2_000L
         val state = initializedState(nowMillis = { 1_000L })
         val decision = assertIs<TimerDecision.Arm>(state.arm(ControlFlow.WaitUntil(deadline)))
@@ -87,6 +88,38 @@ class AppKitLoopStateTest {
 
         assertEquals(
             StartCause.WaitCancelled(requestedResume = deadline),
+            state.beginIteration(),
+        )
+    }
+
+    @Test
+    fun `external event at deadline reports resume time reached`() {
+        var now = 1_000L
+        val deadline = 2_000L
+        val state = initializedState(nowMillis = { now })
+        state.arm(ControlFlow.WaitUntil(deadline))
+
+        now = deadline
+        state.signalExternalEvent()
+
+        assertEquals(
+            StartCause.ResumeTimeReached(requestedResume = deadline, start = now),
+            state.beginIteration(),
+        )
+    }
+
+    @Test
+    fun `external event after deadline reports resume time reached`() {
+        var now = 1_000L
+        val deadline = 2_000L
+        val state = initializedState(nowMillis = { now })
+        state.arm(ControlFlow.WaitUntil(deadline))
+
+        now = 2_007L
+        state.signalExternalEvent()
+
+        assertEquals(
+            StartCause.ResumeTimeReached(requestedResume = deadline, start = now),
             state.beginIteration(),
         )
     }
@@ -123,6 +156,45 @@ class AppKitLoopStateTest {
             state.beginIteration(),
         )
         assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.WaitUntil(deadline)))
+    }
+
+    @Test
+    fun `delivered deadline callback marks deadline handled`() {
+        var now = 1_000L
+        val deadline = 2_000L
+        val state = initializedState(nowMillis = { now })
+        val timer = assertIs<TimerDecision.Arm>(state.arm(ControlFlow.WaitUntil(deadline)))
+
+        now = deadline
+        state.signalDeadline(timer.generation)
+        assertEquals(
+            StartCause.ResumeTimeReached(requestedResume = deadline, start = now),
+            state.beginIteration(),
+        )
+
+        assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.WaitUntil(deadline)))
+        assertFailsWith<IllegalStateException> {
+            state.beginIteration()
+        }
+    }
+
+    @Test
+    fun `poll remains sole cause after stale deadline callback and external event`() {
+        var now = 1_000L
+        val state = initializedState(nowMillis = { now })
+        val staleTimer = assertIs<TimerDecision.Arm>(
+            state.arm(ControlFlow.WaitUntil(2_000L)),
+        )
+        assertEquals(TimerDecision.FireNow, state.arm(ControlFlow.Poll))
+
+        now = 2_007L
+        state.signalDeadline(staleTimer.generation)
+        state.signalExternalEvent()
+
+        assertEquals(StartCause.Poll, state.beginIteration())
+        assertFailsWith<IllegalStateException> {
+            state.beginIteration()
+        }
     }
 
     @Test

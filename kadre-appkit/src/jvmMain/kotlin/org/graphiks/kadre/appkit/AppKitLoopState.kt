@@ -63,7 +63,12 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
     fun signalExternalEvent() {
         if (exited || pendingCause != null) return
 
-        pendingCause = StartCause.WaitCancelled(requestedResume)
+        val deadline = requestedResume
+        pendingCause = if (deadline == null) {
+            StartCause.WaitCancelled()
+        } else {
+            deadlineCause(deadline, nowMillis())
+        }
         armedDeadline = null
     }
 
@@ -73,14 +78,7 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
         armedDeadline = null
 
         val observedAt = nowMillis()
-        pendingCause = if (observedAt >= armed.deadline) {
-            StartCause.ResumeTimeReached(
-                requestedResume = armed.deadline,
-                start = observedAt,
-            )
-        } else {
-            StartCause.WaitCancelled(requestedResume = armed.deadline)
-        }
+        pendingCause = deadlineCause(armed.deadline, observedAt)
     }
 
     fun beginIteration(): StartCause {
@@ -135,4 +133,15 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
         armedDeadline = ArmedDeadline(deadline, generation)
         return TimerDecision.Arm(deadline, generation)
     }
+
+    private fun deadlineCause(deadline: Long, observedAt: Long): StartCause =
+        if (observedAt >= deadline) {
+            handledExpiredDeadline = deadline
+            StartCause.ResumeTimeReached(
+                requestedResume = deadline,
+                start = observedAt,
+            )
+        } else {
+            StartCause.WaitCancelled(requestedResume = deadline)
+        }
 }
