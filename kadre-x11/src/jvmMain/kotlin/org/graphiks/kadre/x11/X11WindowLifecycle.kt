@@ -33,8 +33,8 @@ internal class X11WindowLifecycle(
     }
 
     /** Publishes one owner-scoped redraw and wakes only a newly queued synthetic request. */
-    fun requestRedraw(windowId: WindowId): Boolean = synchronized(stateLock) {
-        val owner = currentOwnerLocked(windowId) ?: return false
+    fun requestRedraw(window: X11Window): Boolean = synchronized(stateLock) {
+        val owner = currentOwnerLocked(window) ?: return false
         if (pendingRedrawItems.containsKey(owner)) return true
 
         val queued = X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested, isRedraw = true)
@@ -70,8 +70,8 @@ internal class X11WindowLifecycle(
     }
 
     /** Publishes close plus wake as one transaction, rolling both records back on wake failure. */
-    fun closeWindow(windowId: WindowId): Boolean = synchronized(stateLock) {
-        val owner = currentOwnerLocked(windowId) ?: return false
+    fun closeWindow(window: X11Window): Boolean = synchronized(stateLock) {
+        val owner = currentOwnerLocked(window) ?: return false
         if (pendingCloseCommands.containsKey(owner)) return true
 
         val command = X11QueuedCloseCommand(owner)
@@ -246,6 +246,11 @@ internal class X11WindowLifecycle(
 
     private fun currentOwnerLocked(windowId: WindowId): X11WindowOwner? =
         owners[windowId.value]?.takeIf { windows[windowId.value] === it.window }
+
+    private fun currentOwnerLocked(window: X11Window): X11WindowOwner? =
+        owners[window.id.value]?.takeIf { owner ->
+            owner.window === window && windows[window.id.value] === window
+        }
 
     private fun isCurrentOwnerLocked(owner: X11WindowOwner): Boolean =
         owners[owner.window.id.value] === owner && windows[owner.window.id.value] === owner.window

@@ -11,6 +11,7 @@ import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -305,6 +306,43 @@ class X11LoopContractTest {
     }
 
     @Test
+    fun `old window handle cannot publish to replacement that reuses its XID`() {
+        lateinit var loop: X11EventLoop
+        var replacement: org.graphiks.kadre.core.Window? = null
+        val wakeup = RecordingX11Wakeup()
+        val native = FakeX11NativeAdapter(
+            windowIds = ArrayDeque(listOf(41L, 41L)),
+            onDestroy = {
+                if (replacement == null) {
+                    replacement = loop.createWindow(WindowAttributes(title = "replacement"))
+                }
+            },
+        )
+        loop = testLoop(wakeup, native)
+        val old = loop.createWindow(WindowAttributes(title = "old"))
+        val initialEvents = mutableListOf<WindowEvent>()
+        old.close()
+        dispatchX11Iteration(loop, recordingHandler(events = initialEvents), StartCause.WaitCancelled())
+        val replacementWindow = requireNotNull(replacement)
+        val baselineSignals = wakeup.signalCalls
+        val baselineTrace = native.trace.toList()
+        val staleEvents = mutableListOf<WindowEvent>()
+
+        old.close()
+        old.requestRedraw()
+        dispatchX11Iteration(loop, recordingHandler(events = staleEvents), StartCause.Poll)
+
+        assertEquals(
+            Triple(baselineSignals, baselineTrace, true) to emptyList<WindowEvent>(),
+            Triple(
+                wakeup.signalCalls,
+                native.trace.toList(),
+                loop.windows[old.id.value] === replacementWindow,
+            ) to staleEvents,
+        )
+    }
+
+    @Test
     fun `close batch delivers every tombstone and aggregates native failures`() {
         val primary = IllegalStateException("destroy first")
         val secondary = IllegalArgumentException("flush second")
@@ -396,13 +434,16 @@ class X11LoopContractTest {
                 val native = FakeX11NativeAdapter(
                     onDestroy = {
                         destroyEntered.countDown()
-                        allowDestroy.await()
+                        assertTrue(
+                            allowDestroy.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS),
+                            "timed out waiting to release native destroy",
+                        )
                     },
                 )
                 val loop = testLoop(wakeup, native)
                 val window = loop.createWindow(WindowAttributes(title = "race"))
                 Triple(loop, window, wakeup)
-            }).get()
+            }).get(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS)
             val (loop, window, wakeup) = context
             window.close()
             val destroy = loopExecutor.submit(java.util.concurrent.Callable {
@@ -410,13 +451,19 @@ class X11LoopContractTest {
                 dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
                 events
             })
-            destroyEntered.await()
+            assertTrue(
+                destroyEntered.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS),
+                "timed out waiting for native destroy to enter",
+            )
 
-            callerExecutor.submit { window.close() }.get()
+            callerExecutor.submit { window.close() }.get(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS)
             assertEquals(1, wakeup.signalCalls)
 
             allowDestroy.countDown()
-            assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), destroy.get())
+            assertEquals(
+                listOf<WindowEvent>(WindowEvent.Destroyed),
+                destroy.get(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS),
+            )
         } finally {
             allowDestroy.countDown()
             callerExecutor.shutdownNow()
@@ -558,6 +605,8 @@ class X11LoopContractTest {
         nativeAdapter = native,
     )
 }
+
+private const val CONCURRENCY_GUARD_SECONDS = 10L
 
 private class RecordingX11Wakeup : PosixWakeup {
     override val readFd: Int = 7

@@ -216,7 +216,7 @@ class X11Window internal constructor(
     override val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
     override fun requestRedraw() {
-        owner?.requestRedraw(id)
+        owner?.requestRedraw(this)
     }
 
     override fun setVisible(visible: Boolean) {
@@ -245,7 +245,7 @@ class X11Window internal constructor(
     override fun close() {
         val loop = owner
         if (loop != null) {
-            loop.closeWindow(id)
+            loop.closeWindow(this)
             return
         }
         if (!directCloseStarted.compareAndSet(false, true)) return

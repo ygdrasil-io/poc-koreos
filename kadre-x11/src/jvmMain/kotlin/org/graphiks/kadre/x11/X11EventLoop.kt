@@ -303,14 +303,14 @@ class X11EventLoop internal constructor(
         return window
     }
 
-    internal fun requestRedraw(windowId: WindowId): Boolean = windowLifecycle.requestRedraw(windowId)
+    internal fun requestRedraw(window: X11Window): Boolean = windowLifecycle.requestRedraw(window)
 
     internal fun enqueueExpose(windowId: WindowId): Boolean = windowLifecycle.enqueueExpose(windowId)
 
     internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean =
         windowLifecycle.enqueueWindowEvent(windowId, event)
 
-    internal fun closeWindow(windowId: WindowId): Boolean = windowLifecycle.closeWindow(windowId)
+    internal fun closeWindow(window: X11Window): Boolean = windowLifecycle.closeWindow(window)
 
     internal fun nativeWindowDestroyed(windowId: WindowId): Boolean =
         windowLifecycle.nativeWindowDestroyed(windowId)
