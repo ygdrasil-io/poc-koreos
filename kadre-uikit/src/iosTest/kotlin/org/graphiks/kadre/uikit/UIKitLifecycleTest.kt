@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
+import kotlin.test.assertIs
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.Fullscreen
@@ -338,6 +339,58 @@ class UIKitLifecycleTest {
             second.close()
             firstReuse?.close()
             secondReuse?.close()
+        }
+    }
+
+    @Test
+    fun terminalTeardownClosesAdmissionButOrdinaryDestroyedAllowsReplacement() {
+        val createdWindows = mutableListOf<Window>()
+        var terminalTeardown = false
+        var createOnDestroyed = true
+        var terminalCallbackFailure: Throwable? = null
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event != WindowEvent.Destroyed || !createOnDestroyed) return
+                val creation = runCatching {
+                    eventLoop.createWindow(WindowAttributes(visible = false))
+                }
+                if (terminalTeardown) {
+                    terminalCallbackFailure = creation.exceptionOrNull()
+                    creation.getOrNull()?.let(createdWindows::add)
+                } else {
+                    createdWindows += creation.getOrThrow()
+                }
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        createdWindows += loop.createWindow(WindowAttributes(visible = false))
+
+        try {
+            val original = createdWindows.single()
+            original.close()
+            val ordinaryReplacement = createdWindows.last()
+
+            assertNotSame(original, ordinaryReplacement)
+            assertNotEquals(original.id, ordinaryReplacement.id)
+
+            terminalTeardown = true
+            loop.dispatchWindowsDestroyed()
+            val afterTermination = runCatching {
+                loop.createWindow(WindowAttributes(visible = false))
+            }
+            afterTermination.getOrNull()?.let(createdWindows::add)
+
+            assertIs<IllegalStateException>(terminalCallbackFailure)
+            assertIs<IllegalStateException>(afterTermination.exceptionOrNull())
+        } finally {
+            createOnDestroyed = false
+            createdWindows.distinct().forEach(Window::close)
         }
     }
 }

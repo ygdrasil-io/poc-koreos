@@ -30,10 +30,16 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Whether the current surface generation still needs destruction. */
     private var surfacesActive = false
 
+    /** Closed before terminal callbacks so they cannot admit replacement windows. */
+    private var terminalAdmissionClosed = false
+
     /** Last observed system theme, used to detect changes across app activation. */
     internal var lastTheme: Theme? = null
 
     override fun createWindow(attributes: WindowAttributes): Window {
+        check(!terminalAdmissionClosed) {
+            "Cannot create a UIKit window during or after terminal teardown"
+        }
         recreationCursor?.let { cursor ->
             windows.getOrNull(cursor)?.let { existing ->
                 recreationCursor = cursor + 1
@@ -121,6 +127,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * the app-level [ApplicationHandler.destroySurfaces].
      */
     internal fun dispatchWindowsDestroyed() {
+        terminalAdmissionClosed = true
         windows.toList().forEach { closeWindow(it.id) }
     }
 
