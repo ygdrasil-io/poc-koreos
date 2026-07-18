@@ -1,7 +1,12 @@
 package org.graphiks.kadre.appkit
 
+import org.graphiks.kadre.core.ActiveEventLoop
+import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.EventLoopProxy
+import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -13,6 +18,41 @@ import kotlin.test.assertTrue
  *  the runtime paths are covered by the integration tests).
  */
 class AppKitEventLoopProxyTest {
+
+    @Test
+    fun `proxy installed on event loop completes three wake consume cycles`() {
+        val api = WakeRecordingCFRunLoopApi()
+        val state = AppKitLoopState { 1_000L }
+        val causes = mutableListOf<StartCause>()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = state,
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = { ControlFlow.Wait },
+        )
+        val eventLoop = AppKitEventLoop(NoOpHandler)
+        eventLoop.installRunLoopOwner(owner)
+        val proxy = eventLoop.createProxy()
+
+        CFRunLoopOwner.dispatchObserverCallback(
+            api.observer,
+            CFRunLoopOwner.AFTER_WAITING,
+        )
+        causes.clear()
+
+        repeat(3) {
+            assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.Wait))
+            proxy.wakeUp()
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.observer,
+                CFRunLoopOwner.AFTER_WAITING,
+            )
+        }
+
+        assertEquals(List<StartCause>(3) { StartCause.WaitCancelled() }, causes)
+        assertEquals(3, api.wakeCount)
+        owner.close()
+    }
 
     @Test
     fun `AppKitEventLoopProxy implements EventLoopProxy`() {
@@ -53,9 +93,36 @@ class AppKitEventLoopProxyTest {
     }
 
     @Test
-    fun `CFRunLoopRedrawObserver onBeforeWaiting accepts ControlFlow WaitUntil`() {
-        val cf = ControlFlow.WaitUntil(System.currentTimeMillis() + 100L)
+    fun `CFRunLoopOwner before waiting accepts ControlFlow WaitUntil`() {
+        val cf: ControlFlow = ControlFlow.WaitUntil(System.currentTimeMillis() + 100L)
         assertTrue(cf is ControlFlow.WaitUntil)
         assertTrue(cf.instant > 0)
+    }
+
+    private object NoOpHandler : ApplicationHandler {
+        override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+        override fun windowEvent(
+            eventLoop: ActiveEventLoop,
+            windowId: WindowId,
+            event: WindowEvent,
+        ) = Unit
+    }
+
+    private class WakeRecordingCFRunLoopApi : CFRunLoopApi {
+        var observer = 0L
+        var wakeCount = 0
+
+        override fun createObserver(activities: Long): Long = 100L.also { observer = it }
+        override fun addObserver(observer: Long) = Unit
+        override fun removeObserver(observer: Long) = Unit
+        override fun invalidateObserver(observer: Long) = Unit
+        override fun createTimer(deadlineEpochMillis: Long): Long = 200L
+        override fun addTimer(timer: Long) = Unit
+        override fun invalidateTimer(timer: Long) = Unit
+        override fun removeTimer(timer: Long) = Unit
+        override fun wakeUp() { wakeCount++ }
+        override fun release(ref: Long) = Unit
+        override fun close() = Unit
     }
 }

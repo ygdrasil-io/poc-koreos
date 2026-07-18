@@ -50,7 +50,7 @@ internal val appKitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
  *   [KadreWindowDelegate] on it for close handling.
  * - [exit]: raises the [isExiting] flag then triggers
  *   `[NSApp terminate:nil]` to quit the AppKit loop.
- * - [controlFlow] / [setControlFlow]: state driven by [CFRunLoopRedrawObserver] (GRA-136).
+ * - [controlFlow] / [setControlFlow]: state driven by [CFRunLoopOwner] (GRA-136).
  * - [createProxy]: implemented via [AppKitEventLoopProxy] (GRA-136) — thread-safe wakeUp.
  */
 internal class AppKitEventLoop(
@@ -71,6 +71,9 @@ internal class AppKitEventLoop(
 
     override val controlFlow: ControlFlow
         get() = _controlFlow
+
+    @Volatile
+    private var runLoopOwner: CFRunLoopOwner? = null
 
     override fun setControlFlow(controlFlow: ControlFlow) {
         _controlFlow = controlFlow
@@ -145,10 +148,27 @@ internal class AppKitEventLoop(
 
     /**
      * Creates an [EventLoopProxy] whose [EventLoopProxy.wakeUp] is thread-safe
-     * (GRA-136). Implemented via `CFRunLoopWakeUp(CFRunLoopGetMain())` — see
-     * [AppKitEventLoopProxy].
+     * (GRA-136). The proxy delegates to the closeable owner installed for this
+     * exact loop before `NSApp.run`, so wake state and native wake-up stay paired.
      */
-    override fun createProxy(): EventLoopProxy = AppKitEventLoopProxy.create()
+    override fun createProxy(): EventLoopProxy = AppKitEventLoopProxy.create(
+        checkNotNull(runLoopOwner) {
+            "AppKit run-loop owner must be installed before createProxy()"
+        },
+    )
+
+    internal fun installRunLoopOwner(owner: CFRunLoopOwner) {
+        synchronized(this) {
+            check(runLoopOwner == null) { "AppKit run-loop owner is already installed" }
+            runLoopOwner = owner
+        }
+    }
+
+    internal fun clearRunLoopOwner(owner: CFRunLoopOwner) {
+        synchronized(this) {
+            if (runLoopOwner === owner) runLoopOwner = null
+        }
+    }
 
     // ── Task 29: ownedDisplayHandle ─────────────────────────────────────────────
 
@@ -241,6 +261,8 @@ fun runApp(handler: ApplicationHandler) {
     // 1. Subclass KadreApplication + sharedApplication (stored in sharedApp)
     val app = KadreApplication.initialize()
 
+    var runLoopOwner: CFRunLoopOwner? = null
+    var runFailure: Throwable? = null
     try {
         // 2. Wire the loop onto the instance — retrieved via sharedApp (NSApp as? KadreApplication)
         //    in sendEvent:. No dedicated mutable static variable.
@@ -254,15 +276,31 @@ fun runApp(handler: ApplicationHandler) {
         app.setDelegate(appDelegate.ptr)
 
         // 5. Install the CFRunLoop observer for RedrawRequested coalescing (GRA-134)
-        CFRunLoopRedrawObserver.install(handler, eventLoop, eventLoop.windows)
+        runLoopOwner = CFRunLoopOwner.install(handler, eventLoop, eventLoop.windows)
+        eventLoop.installRunLoopOwner(runLoopOwner)
 
         // 6. Start the blocking AppKit loop — returns on close
         app.run()
+        runLoopOwner.throwPendingCallbackFailure()
+    } catch (failure: Throwable) {
+        runFailure = failure
+        throw failure
     } finally {
+        val closeFailure = runCatching {
+            runLoopOwner?.let { owner ->
+                eventLoop.clearRunLoopOwner(owner)
+                owner.close()
+            }
+        }.exceptionOrNull()
         // Cleanup: releases the references and resets the lock to false
         // to allow a possible restart (tests or reentrant processes).
         app.eventLoop = null
         KadreApplication.sharedApp = null
         appKitRunning.set(false)
+        if (runFailure == null) {
+            closeFailure?.let { throw it }
+        } else if (closeFailure != null && closeFailure !== runFailure) {
+            runFailure.addSuppressed(closeFailure)
+        }
     }
 }
