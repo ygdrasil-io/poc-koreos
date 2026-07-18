@@ -4,19 +4,21 @@
  * Verifies:
  * - x11Running starts at false.
  * - runApp enables/disables the x11Running flag (handler that quits immediately).
- * - X11EventLoopProxy.wakeUp() is safe on non-Linux (no-op).
+ * - X11EventLoopProxy.wakeUp() delegates exclusively to the shared POSIX fd.
  *
  * X11EventLoop smoke tests.
  */
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.ffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import java.lang.foreign.Arena
 import java.lang.foreign.ValueLayout
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -94,16 +96,28 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `X11EventLoopProxy wakeUp is a no-op if xSendEvent is absent`() {
-        // On macOS/Windows, xSendEvent is null → wakeUp must not throw an exception
-        if (libX11 != null) return // Skip on Linux
+    fun `X11EventLoopProxy wakeUp works with zero windows`() {
+        val wakeup = RecordingWakeup()
+        val proxy = X11EventLoopProxy(wakeup)
 
-        // Create a proxy with a fictitious displayPtr and an empty loop
-        val fakeLoop = X11EventLoop(displayPtr = 0L, screen = 0)
-        val proxy = X11EventLoopProxy(fakeLoop, displayPtr = 0L)
-
-        // Must not throw an exception
         proxy.wakeUp()
+
+        assertEquals(1, wakeup.signalCount)
+    }
+
+    @Test
+    fun `background X11EventLoopProxy wakeUp records no Xlib operation`() {
+        val trace = ConcurrentLinkedQueue<String>()
+        val wakeup = RecordingWakeup(trace)
+        val proxy = X11EventLoopProxy(wakeup)
+
+        val caller = Thread({
+            proxy.wakeUp()
+        }, "x11-proxy-caller")
+        caller.start()
+        caller.join()
+
+        assertEquals(listOf("wake:x11-proxy-caller"), trace.toList())
     }
 
     @Test
@@ -141,4 +155,22 @@ class X11EventLoopSmokeTest {
             assertEquals(30L, event.get(ValueLayout.JAVA_LONG, 56L))
         }
     }
+}
+
+private class RecordingWakeup(
+    private val trace: ConcurrentLinkedQueue<String>? = null,
+) : PosixWakeup {
+    override val readFd: Int = 73
+    var signalCount: Int = 0
+        private set
+
+    override fun signal(): Boolean {
+        signalCount += 1
+        trace?.add("wake:${Thread.currentThread().name}")
+        return true
+    }
+
+    override fun drain(): Boolean = true
+
+    override fun close() = Unit
 }

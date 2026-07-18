@@ -6,9 +6,8 @@
  * the X11 initialization (XOpenDisplay) and the event loop
  * with dynamic switching according to [ControlFlow]:
  *
- * - [ControlFlow.Poll]      → XFlush + while(XPending > 0) { XNextEvent } — non-blocking
- * - [ControlFlow.Wait]      → blocking XNextEvent — CPU < 1 % when idle
- * - [ControlFlow.WaitUntil] → poll with Thread.sleep(1) until the deadline
+ * All [ControlFlow] modes use the same POSIX poll pump over the X connection
+ * descriptor and a shared wake descriptor.
  *
  * Lazy FFM pattern (tryCreate): all MethodHandles are null on macOS/Windows,
  * which lets the build pass on all platforms.
@@ -18,6 +17,9 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.ffi.posix.PollFd
+import org.graphiks.kadre.ffi.posix.PosixException
+import org.graphiks.kadre.ffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ApplicationHandler
@@ -178,6 +180,7 @@ internal val x11Running = AtomicBoolean(false)
 class X11EventLoop internal constructor(
     internal val displayPtr: Long,
     internal val screen: Int,
+    internal val wakeup: PosixWakeup,
 ) : ActiveEventLoop {
 
     /** Live windows: windowId (XID) → X11Window. */
@@ -260,7 +263,7 @@ class X11EventLoop internal constructor(
      * Creates a thread-safe proxy to this event loop.
      */
     override fun createProxy(): EventLoopProxy =
-        X11EventLoopProxy(this, displayPtr)
+        X11EventLoopProxy(wakeup)
 
     /**
      * Returns a persistent X11 display handle usable independently from a window.
@@ -1102,111 +1105,226 @@ internal fun x11EventWindowXid(eventBuf: MemorySegment, eventType: Int): Long {
 
 // ── Dispatch modes ──────────────────────────────────────────────────────────
 
-/**
- * Poll mode: XFlush + while(XPending > 0) { XNextEvent; dispatch } — non-blocking.
- *
- * Drains the event queue in a single pass and returns immediately.
- */
-private fun dispatchPoll(
-    displaySeg: MemorySegment,
-    eventBuf: MemorySegment,
-    loop: X11EventLoop,
-    handler: ApplicationHandler,
-    wmDeleteWindow: Long,
-    xdnd: XdndAtoms?,
-): StartCause {
-    xFlush?.invokeExact(displaySeg) as? Int
-
-    val pendingHandle = xPending
-    val nextHandle    = xNextEvent
-
-    if (pendingHandle != null && nextHandle != null) {
-        while (!loop.isExiting) {
-            val pending = pendingHandle.invokeExact(displaySeg) as Int
-            if (pending <= 0) break
-            nextHandle.invokeExact(displaySeg, eventBuf) as Int
-            dispatchEvent(eventBuf, loop, handler, wmDeleteWindow, xdnd)
-        }
-    }
-
-    return StartCause.Poll
+/** Injectable XPending/XNextEvent/XFlush boundary used by deterministic pump tests. */
+internal interface X11PumpOperations {
+    fun pendingCount(): Int
+    fun dispatchNext()
+    fun flush()
 }
 
-/**
- * Wait mode: blocking XNextEvent — CPU < 1 % when idle.
- *
- * Blocks the thread until the next event is received.
- */
-private fun dispatchWait(
-    displaySeg: MemorySegment,
-    eventBuf: MemorySegment,
-    loop: X11EventLoop,
-    handler: ApplicationHandler,
-    wmDeleteWindow: Long,
-    xdnd: XdndAtoms?,
-): StartCause {
-    val nextHandle = xNextEvent ?: return StartCause.WaitCancelled()
-
-    // XNextEvent blocks until an event arrives
-    nextHandle.invokeExact(displaySeg, eventBuf) as Int
-    dispatchEvent(eventBuf, loop, handler, wmDeleteWindow, xdnd)
-
-    // Drain the additional events already available
-    val pendingHandle = xPending
-    if (pendingHandle != null) {
-        while (!loop.isExiting) {
-            val pending = pendingHandle.invokeExact(displaySeg) as Int
-            if (pending <= 0) break
-            nextHandle.invokeExact(displaySeg, eventBuf) as Int
-            dispatchEvent(eventBuf, loop, handler, wmDeleteWindow, xdnd)
-        }
-    }
-
-    return StartCause.WaitCancelled()
+internal fun interface X11Poller {
+    fun poll(xConnectionFd: Int, wakeFd: Int, timeoutMillis: Int): X11PollResult
 }
 
-/**
- * WaitUntil mode: poll with Thread.sleep(1ms) until the deadline.
- *
- * Dispatches available events and sleeps 1ms between each check,
- * until the timeout expires or an event is received.
- */
-private fun dispatchWaitUntil(
-    displaySeg: MemorySegment,
-    eventBuf: MemorySegment,
-    loop: X11EventLoop,
-    handler: ApplicationHandler,
-    cf: ControlFlow.WaitUntil,
-    wmDeleteWindow: Long,
-    xdnd: XdndAtoms?,
-): StartCause {
-    val deadline = cf.instant
-    val pendingHandle = xPending
-    val nextHandle    = xNextEvent
+internal data class X11PollResult(
+    val xReadable: Boolean,
+    val wakeReadable: Boolean,
+)
 
-    while (!loop.isExiting) {
-        val now = System.currentTimeMillis()
-        if (now >= deadline) {
-            return StartCause.ResumeTimeReached(
-                requestedResume = deadline,
-                start = now,
-            )
+internal sealed interface X11PollAttempt {
+    data class Ready(val result: X11PollResult) : X11PollAttempt
+    data class Failure(val errno: Int) : X11PollAttempt
+}
+
+internal data class X11PumpResult(
+    val pollResult: X11PollResult,
+    val eventsDispatched: Int,
+) {
+    val interrupted: Boolean
+        get() = eventsDispatched > 0 || pollResult.xReadable || pollResult.wakeReadable
+}
+
+private const val X11_POSIX_EINTR = 4
+private const val X11_NANOS_PER_MILLISECOND = 1_000_000L
+private const val X11_POLLERR: Int = 0x08
+private const val X11_POLLHUP: Int = 0x10
+private const val X11_POLLNVAL: Int = 0x20
+private const val X11_POLL_ERROR_MASK: Int = X11_POLLERR or X11_POLLHUP or X11_POLLNVAL
+
+private class NativeX11PumpOperations(
+    private val display: MemorySegment,
+    private val eventBuffer: MemorySegment,
+    private val loop: X11EventLoop,
+    private val handler: ApplicationHandler,
+    private val wmDeleteWindow: Long,
+    private val xdnd: XdndAtoms?,
+) : X11PumpOperations {
+    override fun pendingCount(): Int =
+        (xPending ?: error("XPending is unavailable")).invokeExact(display) as Int
+
+    override fun dispatchNext() {
+        (xNextEvent ?: error("XNextEvent is unavailable"))
+            .invokeExact(display, eventBuffer) as Int
+        dispatchEvent(eventBuffer, loop, handler, wmDeleteWindow, xdnd)
+    }
+
+    override fun flush() {
+        (xFlush ?: error("XFlush is unavailable")).invokeExact(display) as Int
+    }
+}
+
+private object NativeX11Poller : X11Poller {
+    override fun poll(
+        xConnectionFd: Int,
+        wakeFd: Int,
+        timeoutMillis: Int,
+    ): X11PollResult = Arena.ofConfined().use { arena ->
+        val pollFds = PollFd.allocate(arena, 2)
+        PollFd.set(pollFds, 0, xConnectionFd, PollFd.POLLIN)
+        PollFd.set(pollFds, 1, wakeFd, PollFd.POLLIN)
+
+        retryX11Poll(timeoutMillis) { currentTimeoutMillis ->
+            val result = invokeX11NativePoll(pollFds, 2L, currentTimeoutMillis)
+            if (result.value < 0) {
+                val errno = result.errno ?: error("poll failed without a captured errno")
+                return@retryX11Poll X11PollAttempt.Failure(errno)
+            }
+            if (result.value == 0) {
+                return@retryX11Poll X11PollAttempt.Ready(
+                    X11PollResult(xReadable = false, wakeReadable = false)
+                )
+            }
+
+            val xFlags = PollFd.revents(pollFds, 0).toInt() and 0xffff
+            val wakeFlags = PollFd.revents(pollFds, 1).toInt() and 0xffff
+            if ((xFlags and X11_POLL_ERROR_MASK) != 0 ||
+                (wakeFlags and X11_POLL_ERROR_MASK) != 0
+            ) {
+                error(
+                    "X11 poll descriptor failure: " +
+                        "x=0x${xFlags.toString(16)}, wake=0x${wakeFlags.toString(16)}"
+                )
+            }
+
+            val xReadable = (xFlags and PollFd.POLLIN.toInt()) != 0
+            val wakeReadable = (wakeFlags and PollFd.POLLIN.toInt()) != 0
+            if (!xReadable && !wakeReadable) {
+                error(
+                    "X11 poll returned ${result.value} without a readable descriptor: " +
+                        "x=0x${xFlags.toString(16)}, wake=0x${wakeFlags.toString(16)}"
+                )
+            }
+            X11PollAttempt.Ready(X11PollResult(xReadable, wakeReadable))
+        }
+    }
+}
+
+internal fun retryX11Poll(
+    timeoutMillis: Int,
+    nowNanos: () -> Long = System::nanoTime,
+    attempt: (Int) -> X11PollAttempt,
+): X11PollResult {
+    require(timeoutMillis >= -1) { "timeoutMillis must be -1 or non-negative" }
+    val durationNanos = timeoutMillis
+        .takeIf { it > 0 }
+        ?.toLong()
+        ?.times(X11_NANOS_PER_MILLISECOND)
+    val startedAtNanos = durationNanos?.let { nowNanos() }
+    var retryingAfterInterrupt = false
+
+    while (true) {
+        val currentTimeoutMillis = if (
+            durationNanos != null && startedAtNanos != null && retryingAfterInterrupt
+        ) {
+            val elapsedNanos = nowNanos() - startedAtNanos
+            val remainingNanos = durationNanos - elapsedNanos
+            if (remainingNanos <= 0L) {
+                return X11PollResult(xReadable = false, wakeReadable = false)
+            }
+            (((remainingNanos - 1L) / X11_NANOS_PER_MILLISECOND) + 1L)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+        } else {
+            timeoutMillis
         }
 
-        // Attempt to dispatch the available events
-        if (pendingHandle != null && nextHandle != null) {
-            val pending = pendingHandle.invokeExact(displaySeg) as Int
-            if (pending > 0) {
-                nextHandle.invokeExact(displaySeg, eventBuf) as Int
-                dispatchEvent(eventBuf, loop, handler, wmDeleteWindow, xdnd)
-                return StartCause.WaitCancelled(deadline)
+        when (val result = attempt(currentTimeoutMillis)) {
+            is X11PollAttempt.Ready -> return result.result
+            is X11PollAttempt.Failure -> {
+                if (result.errno != X11_POSIX_EINTR) {
+                    throw PosixException("poll", result.errno)
+                }
+                retryingAfterInterrupt = true
             }
         }
-
-        Thread.sleep(1L)
     }
+}
 
-    return StartCause.WaitCancelled(deadline)
+internal fun pumpX11Once(
+    operations: X11PumpOperations,
+    poller: X11Poller,
+    wakeup: PosixWakeup,
+    xConnectionFd: Int,
+    timeoutMillis: Int,
+    shouldContinue: () -> Boolean = { true },
+): X11PumpResult {
+    var eventsDispatched = drainPendingX11Events(operations, shouldContinue)
+    operations.flush()
+
+    val effectiveTimeout = if (eventsDispatched > 0) 0 else timeoutMillis
+    val pollResult = poller.poll(xConnectionFd, wakeup.readFd, effectiveTimeout)
+
+    if (pollResult.wakeReadable && !wakeup.drain()) {
+        error("X11 wake descriptor closed while the event loop is running")
+    }
+    eventsDispatched += drainPendingX11Events(operations, shouldContinue)
+
+    return X11PumpResult(pollResult, eventsDispatched)
+}
+
+private fun drainPendingX11Events(
+    operations: X11PumpOperations,
+    shouldContinue: () -> Boolean,
+): Int {
+    var dispatched = 0
+    while (shouldContinue() && operations.pendingCount() > 0) {
+        operations.dispatchNext()
+        dispatched += 1
+    }
+    return dispatched
+}
+
+internal fun dispatchX11Once(
+    controlFlow: ControlFlow,
+    operations: X11PumpOperations,
+    poller: X11Poller,
+    wakeup: PosixWakeup,
+    xConnectionFd: Int,
+    nowMillis: () -> Long = System::currentTimeMillis,
+    shouldContinue: () -> Boolean = { true },
+): StartCause {
+    val timeoutMillis = when (controlFlow) {
+        is ControlFlow.Poll -> 0
+        is ControlFlow.Wait -> -1
+        is ControlFlow.WaitUntil -> {
+            val remaining = controlFlow.instant - nowMillis()
+            if (remaining <= 0L) 0 else remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+    }
+    val result = pumpX11Once(
+        operations = operations,
+        poller = poller,
+        wakeup = wakeup,
+        xConnectionFd = xConnectionFd,
+        timeoutMillis = timeoutMillis,
+        shouldContinue = shouldContinue,
+    )
+
+    return when (controlFlow) {
+        is ControlFlow.Poll -> StartCause.Poll
+        is ControlFlow.Wait -> StartCause.WaitCancelled()
+        is ControlFlow.WaitUntil -> when {
+            result.interrupted -> StartCause.WaitCancelled(controlFlow.instant)
+            else -> {
+                val now = nowMillis()
+                if (now >= controlFlow.instant) {
+                    StartCause.ResumeTimeReached(controlFlow.instant, now)
+                } else {
+                    StartCause.Poll
+                }
+            }
+        }
+    }
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -1242,6 +1360,13 @@ fun runApp(handler: ApplicationHandler) {
         }
         val displayPtr = displaySeg.address()
         val screen = 0  // default screen
+        try {
+            val connectionHandle = xConnectionNumber
+                ?: error("XConnectionNumber is unavailable")
+            val xConnectionFd = connectionHandle.invokeExact(displaySeg) as Int
+            check(xConnectionFd >= 0) { "XConnectionNumber returned an invalid fd: $xConnectionFd" }
+            val wakeup = PosixWakeup.open()
+            try {
 
         // Obtain the WM_DELETE_WINDOW atom to detect a clean close
         val wmDeleteWindow: Long = Arena.ofConfined().use { arena ->
@@ -1252,7 +1377,7 @@ fun runApp(handler: ApplicationHandler) {
             xInternAtom?.invokeExact(displaySeg, namePtr, 0) as? Long ?: 0L
         }
 
-        val loop = X11EventLoop(displayPtr, screen)
+        val loop = X11EventLoop(displayPtr, screen, wakeup)
 
         // Intern Xdnd atoms needed for drag-and-drop
         val xdnd: XdndAtoms? = Arena.ofConfined().use { arena ->
@@ -1272,6 +1397,14 @@ fun runApp(handler: ApplicationHandler) {
         val arena = Arena.ofConfined()
         try {
             val eventBuf = arena.allocate(XEVENT_SIZE, XEVENT_ALIGN)
+            val pumpOperations = NativeX11PumpOperations(
+                display = displaySeg,
+                eventBuffer = eventBuf,
+                loop = loop,
+                handler = handler,
+                wmDeleteWindow = wmDeleteWindow,
+                xdnd = xdnd,
+            )
 
             // Notify the handler that the application resumes
             handler.resumed(loop)
@@ -1286,12 +1419,14 @@ fun runApp(handler: ApplicationHandler) {
                 handler.newEvents(loop, startCause)
                 if (loop.isExiting) break
 
-                // Dispatch the events according to the current ControlFlow
-                startCause = when (val cf = loop.controlFlow) {
-                    is ControlFlow.Poll      -> dispatchPoll(displaySeg, eventBuf, loop, handler, wmDeleteWindow, xdnd)
-                    is ControlFlow.Wait      -> dispatchWait(displaySeg, eventBuf, loop, handler, wmDeleteWindow, xdnd)
-                    is ControlFlow.WaitUntil -> dispatchWaitUntil(displaySeg, eventBuf, loop, handler, cf, wmDeleteWindow, xdnd)
-                }
+                startCause = dispatchX11Once(
+                    controlFlow = loop.controlFlow,
+                    operations = pumpOperations,
+                    poller = NativeX11Poller,
+                    wakeup = wakeup,
+                    xConnectionFd = xConnectionFd,
+                    shouldContinue = { !loop.isExiting },
+                )
 
                 // Notify the handler that the loop is about to wait
                 handler.aboutToWait(loop)
@@ -1300,6 +1435,11 @@ fun runApp(handler: ApplicationHandler) {
             handler.suspended(loop)
         } finally {
             arena.close()
+        }
+            } finally {
+                wakeup.close()
+            }
+        } finally {
             xCloseDisplay?.invokeExact(displaySeg) as? Int
         }
     } finally {
