@@ -3,10 +3,14 @@ package org.graphiks.kadre.uikit
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
+import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.Icon
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
+import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
+import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,150 +53,152 @@ class UiKitWindowNoOpTest {
 
     @Test
     fun `setCursor exists with CursorIcon parameter`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCursor" }
-        assertTrue(members.isNotEmpty(), "setCursor must exist on UiKitWindow")
+        val method: (UiKitWindow, CursorIcon) -> Unit = UiKitWindow::setCursor
+        assertNotNull(method)
     }
 
     @Test
     fun `setCursorVisible exists with Boolean parameter`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCursorVisible" }
-        assertTrue(members.isNotEmpty(), "setCursorVisible must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setCursorVisible
+        assertNotNull(method)
     }
 
     @Test
     fun `setCursorGrab returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCursorGrab" }
-        assertTrue(members.isNotEmpty(), "setCursorGrab must exist on UiKitWindow")
+        val method: (UiKitWindow, CursorGrabMode) -> WindowRequestResult = UiKitWindow::setCursorGrab
+        assertNotNull(method)
     }
 
     @Test
     fun `setCursorPosition returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCursorPosition" }
-        assertTrue(members.isNotEmpty(), "setCursorPosition must exist on UiKitWindow")
+        val method: (UiKitWindow, PhysicalPosition<Int>) -> WindowRequestResult =
+            UiKitWindow::setCursorPosition
+        assertNotNull(method)
     }
 
     @Test
     fun `setCursorHittest returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCursorHittest" }
-        assertTrue(members.isNotEmpty(), "setCursorHittest must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> WindowRequestResult = UiKitWindow::setCursorHittest
+        assertNotNull(method)
     }
 
     @Test
     fun `setMinimized exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setMinimized" }
-        assertTrue(members.isNotEmpty(), "setMinimized must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setMinimized
+        assertNotNull(method)
     }
 
     @Test
     fun `setMaximized exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setMaximized" }
-        assertTrue(members.isNotEmpty(), "setMaximized must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setMaximized
+        assertNotNull(method)
     }
 
     @Test
     fun `setDecorations exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setDecorations" }
-        assertTrue(members.isNotEmpty(), "setDecorations must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setDecorations
+        assertNotNull(method)
     }
 
     @Test
     fun `setResizable exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setResizable" }
-        assertTrue(members.isNotEmpty(), "setResizable must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setResizable
+        assertNotNull(method)
     }
 
     @Test
     fun `setWindowLevel exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setWindowLevel" }
-        assertTrue(members.isNotEmpty(), "setWindowLevel must exist on UiKitWindow")
+        val method: (UiKitWindow, WindowLevel) -> Unit = UiKitWindow::setWindowLevel
+        assertNotNull(method)
     }
 
     @Test
     fun `setFullscreen exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setFullscreen" }
-        assertTrue(members.isNotEmpty(), "setFullscreen must exist on UiKitWindow")
+        val method: (UiKitWindow, Fullscreen?) -> Unit = UiKitWindow::setFullscreen
+        assertNotNull(method)
     }
 
     @Test
     fun `setTheme exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setTheme" }
-        assertTrue(members.isNotEmpty(), "setTheme must exist on UiKitWindow")
+        val method: (UiKitWindow, Theme?) -> Unit = UiKitWindow::setTheme
+        assertNotNull(method)
     }
 
     @Test
     fun `setTransparent exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setTransparent" }
-        assertTrue(members.isNotEmpty(), "setTransparent must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setTransparent
+        assertNotNull(method)
     }
 
     @Test
     fun `setBlur exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setBlur" }
-        assertTrue(members.isNotEmpty(), "setBlur must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> Unit = UiKitWindow::setBlur
+        assertNotNull(method)
     }
 
     @Test
     fun `setWindowIcon exists`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setWindowIcon" }
-        assertTrue(members.isNotEmpty(), "setWindowIcon must exist on UiKitWindow")
+        val method: (UiKitWindow, Icon?) -> Unit = UiKitWindow::setWindowIcon
+        assertNotNull(method)
     }
 
     @Test
     fun `requestUserAttention returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "requestUserAttention" }
-        assertTrue(members.isNotEmpty(), "requestUserAttention must exist on UiKitWindow")
+        val method: (UiKitWindow, UserAttentionType?) -> WindowRequestResult =
+            UiKitWindow::requestUserAttention
+        assertNotNull(method)
     }
 
     @Test
     fun `setContentProtected returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setContentProtected" }
-        assertTrue(members.isNotEmpty(), "setContentProtected must exist on UiKitWindow")
+        val method: (UiKitWindow, Boolean) -> WindowRequestResult = UiKitWindow::setContentProtected
+        assertNotNull(method)
     }
 
     @Test
     fun `showWindowMenu returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "showWindowMenu" }
-        assertTrue(members.isNotEmpty(), "showWindowMenu must exist on UiKitWindow")
+        val method: (UiKitWindow, PhysicalPosition<Int>) -> WindowRequestResult =
+            UiKitWindow::showWindowMenu
+        assertNotNull(method)
     }
 
     @Test
     fun `dragWindow returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "dragWindow" }
-        assertTrue(members.isNotEmpty(), "dragWindow must exist on UiKitWindow")
+        val method: (UiKitWindow) -> WindowRequestResult = UiKitWindow::dragWindow
+        assertNotNull(method)
     }
 
     @Test
     fun `dragResizeWindow returns WindowRequestResult`() {
-        val members = UiKitWindow::class.members.filter { it.name == "dragResizeWindow" }
-        assertTrue(members.isNotEmpty(), "dragResizeWindow must exist on UiKitWindow")
+        val method: (UiKitWindow, ResizeDirection) -> WindowRequestResult = UiKitWindow::dragResizeWindow
+        assertNotNull(method)
     }
 
     @Test
     fun `setCustomCursor exists as no-op`() {
-        val members = UiKitWindow::class.members.filter { it.name == "setCustomCursor" }
-        assertTrue(members.isNotEmpty(), "setCustomCursor must exist on UiKitWindow")
+        val method: (UiKitWindow, CustomCursor) -> Unit = UiKitWindow::setCustomCursor
+        assertNotNull(method)
     }
 
     @Test
     fun `all cursor no-op methods exist`() {
-        val cursorMethods = listOf(
-            "setCursor", "setCursorVisible", "setCursorGrab",
-            "setCursorPosition", "setCursorHittest",
+        val cursorMethods = listOf<Any>(
+            UiKitWindow::setCursor,
+            UiKitWindow::setCursorVisible,
+            UiKitWindow::setCursorGrab,
+            UiKitWindow::setCursorPosition,
+            UiKitWindow::setCursorHittest,
         )
-        cursorMethods.forEach { name ->
-            val found = UiKitWindow::class.members.any { it.name == name }
-            assertTrue(found, "Cursor no-op method '$name' must exist on UiKitWindow")
-        }
+        assertEquals(5, cursorMethods.size)
     }
 
     @Test
     fun `all window management no-op methods exist`() {
-        val mgmtMethods = listOf(
-            "dragWindow", "dragResizeWindow", "showWindowMenu",
+        val mgmtMethods = listOf<Any>(
+            UiKitWindow::dragWindow,
+            UiKitWindow::dragResizeWindow,
+            UiKitWindow::showWindowMenu,
         )
-        mgmtMethods.forEach { name ->
-            val found = UiKitWindow::class.members.any { it.name == name }
-            assertTrue(found, "Window management no-op method '$name' must exist on UiKitWindow")
-        }
+        assertEquals(3, mgmtMethods.size)
     }
 }
