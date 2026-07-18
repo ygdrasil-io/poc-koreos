@@ -40,16 +40,24 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         check(!terminalAdmissionClosed) {
             "Cannot create a UIKit window during or after terminal teardown"
         }
-        recreationCursor?.let { cursor ->
-            windows.getOrNull(cursor)?.let { existing ->
-                recreationCursor = cursor + 1
-                existing.applyMutableAttributes(attributes)
-                return existing
-            }
-            // Newly created windows never become reusable in the same session.
-            recreationCursor = null
-        }
-        return UiKitWindow(attributes, this).also { windows.add(it) }
+        return reuseOrCreateUIKitWindow(
+            takeReusable = {
+                recreationCursor?.let { cursor ->
+                    windows.getOrNull(cursor)?.also {
+                        recreationCursor = cursor + 1
+                    } ?: run {
+                        // Newly created windows never become reusable in the same session.
+                        recreationCursor = null
+                        null
+                    }
+                }
+            },
+            isLive = windows::contains,
+            applyAttributes = { it.applyMutableAttributes(attributes) },
+            create = {
+                UiKitWindow(attributes, this).also { windows.add(it) }
+            },
+        )
     }
 
     /**
@@ -222,6 +230,22 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     override fun listenDeviceEvents(mode: DeviceEvents) {
         // no-op on UIKit
+    }
+}
+
+/** Selects a live reusable window, applies attributes, or creates a new one. */
+internal inline fun <T : Any> reuseOrCreateUIKitWindow(
+    takeReusable: () -> T?,
+    isLive: (T) -> Boolean,
+    applyAttributes: (T) -> Unit,
+    create: () -> T,
+): T {
+    while (true) {
+        val candidate = takeReusable() ?: return create()
+        if (isLive(candidate)) {
+            applyAttributes(candidate)
+            if (isLive(candidate)) return candidate
+        }
     }
 }
 

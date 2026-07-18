@@ -393,4 +393,29 @@ class UIKitLifecycleTest {
             createdWindows.distinct().forEach(Window::close)
         }
     }
+
+    @Test
+    fun attributeApplicationThatClosesCandidateCreatesLiveReplacement() {
+        val original = Any()
+        val replacement = Any()
+        val liveRegistry = mutableSetOf(original)
+        var reusableAvailable = true
+
+        val selected = reuseOrCreateUIKitWindow(
+            takeReusable = {
+                if (reusableAvailable) {
+                    reusableAvailable = false
+                    original
+                } else {
+                    null
+                }
+            },
+            isLive = liveRegistry::contains,
+            applyAttributes = { liveRegistry.remove(it) },
+            create = { replacement.also(liveRegistry::add) },
+        )
+
+        assertSame(replacement, selected)
+        assertFalse(original in liveRegistry)
+    }
 }
