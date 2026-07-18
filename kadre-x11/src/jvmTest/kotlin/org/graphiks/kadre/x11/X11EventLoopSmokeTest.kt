@@ -22,7 +22,9 @@ import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -37,8 +39,7 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `runApp stays a no-op on non-Linux`() {
-        // On macOS/Windows, libX11 is null → runApp returns immediately
+    fun `runApp fails explicitly without libX11`() {
         if (libX11 != null) return // Skip on Linux (requires an X server)
 
         var canCreateSurfacesCalled = false
@@ -50,10 +51,10 @@ class X11EventLoopSmokeTest {
             override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {}
         }
 
-        // runApp must not throw an exception
-        runApp(handler)
+        val failure = assertFailsWith<IllegalStateException> { runApp(handler) }
 
-        // On non-Linux: libX11 null → we do not enter the loop
+        assertContains(failure.message.orEmpty(), "backend=X11")
+        assertContains(failure.message.orEmpty(), "operation=XOpenDisplay")
         assertFalse(canCreateSurfacesCalled,
             "canCreateSurfaces must not be called if libX11 is absent")
         assertFalse(x11Running.get(),
@@ -61,7 +62,7 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `x11Running is reset to false after runApp on non-Linux`() {
+    fun `x11Running is reset to false after missing libX11 failure`() {
         if (libX11 != null) return // Skip on Linux
 
         val handler = object : ApplicationHandler {
@@ -70,9 +71,12 @@ class X11EventLoopSmokeTest {
         }
 
         assertFalse(x11Running.get())
-        runApp(handler)
+        assertFailsWith<IllegalStateException> { runApp(handler) }
         assertFalse(x11Running.get(),
-            "x11Running must be false after runApp() on non-Linux")
+            "x11Running must be false after a failed runApp()")
+        assertFailsWith<IllegalStateException> { runApp(handler) }
+        assertFalse(x11Running.get(),
+            "x11Running must remain false after a second failed runApp()")
     }
 
     @Test

@@ -65,8 +65,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 // ── XEvent constants ──────────────────────────────────────────────────────────
 
-/** Size of XEvent in bytes on 64-bit systems (96 bytes). */
-private const val XEVENT_SIZE: Long = 96L
+/** Size of XEvent in bytes on LP64 systems (`long pad[24]` = 192 bytes). */
+private const val XEVENT_SIZE: Long = 192L
 
 /** Alignment of XEvent (8 bytes for 64-bit pointers). */
 private const val XEVENT_ALIGN: Long = 8L
@@ -1464,6 +1464,14 @@ internal fun shutdownX11Lifecycle(loop: X11EventLoop, handler: ApplicationHandle
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+private fun x11OpenDisplayFailure(cause: Throwable? = null): IllegalStateException {
+    val display = System.getenv("DISPLAY") ?: "<unset>"
+    return IllegalStateException(
+        "backend=X11 operation=XOpenDisplay DISPLAY=$display",
+        cause,
+    )
+}
+
 /**
  * Entry point of the kadre event loop on Linux (X11).
  *
@@ -1484,14 +1492,17 @@ fun runApp(handler: ApplicationHandler) {
     try {
         val openHandle = xOpenDisplay
         if (openHandle == null) {
-            // libX11 unavailable (macOS/Windows) — graceful no-op
-            return
+            throw x11OpenDisplayFailure()
         }
 
         // XOpenDisplay(NULL) → uses the DISPLAY environment variable
-        val displaySeg = openHandle.invokeExact(MemorySegment.NULL) as MemorySegment
+        val displaySeg = try {
+            openHandle.invokeExact(MemorySegment.NULL) as? MemorySegment
+        } catch (cause: Throwable) {
+            throw x11OpenDisplayFailure(cause)
+        } ?: throw x11OpenDisplayFailure()
         if (displaySeg == MemorySegment.NULL || displaySeg.address() == 0L) {
-            return  // No X server available
+            throw x11OpenDisplayFailure()
         }
         val displayPtr = displaySeg.address()
         val screen = 0  // default screen
