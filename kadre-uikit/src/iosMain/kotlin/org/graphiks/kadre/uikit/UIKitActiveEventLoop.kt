@@ -160,15 +160,11 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         recreationCursor = recreationCursor?.let { cursor ->
             if (index < cursor) cursor - 1 else cursor
         }
-        try {
-            window.invalidateResources()
-        } finally {
-            try {
-                handler.windowEvent(this, id, WindowEvent.Destroyed)
-            } finally {
-                window.hideAndResign()
-            }
-        }
+        runUIKitWindowCloseStages(
+            invalidateResources = window::invalidateResources,
+            dispatchDestroyed = { handler.windowEvent(this, id, WindowEvent.Destroyed) },
+            hideAndResign = window::hideAndResign,
+        )
         return true
     }
 
@@ -262,6 +258,19 @@ internal fun runAllUIKitCleanupStages(vararg stages: () -> Unit) {
         }
     }
     firstFailure?.let { throw it }
+}
+
+/** Runs every per-window close stage in nominal order without replacing failures. */
+internal fun runUIKitWindowCloseStages(
+    invalidateResources: () -> Unit,
+    dispatchDestroyed: () -> Unit,
+    hideAndResign: () -> Unit,
+) {
+    runAllUIKitCleanupStages(
+        invalidateResources,
+        dispatchDestroyed,
+        hideAndResign,
+    )
 }
 
 /** Creates native structure, admits it, applies initial attributes, and revalidates it. */

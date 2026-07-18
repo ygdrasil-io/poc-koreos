@@ -239,6 +239,35 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun windowCloseRunsEveryStageAndPreservesFailuresInOrder() {
+        val trace = mutableListOf<String>()
+        val invalidateFailure = IllegalStateException("invalidate")
+        val destroyedFailure = IllegalArgumentException("destroyed")
+        val hideFailure = AssertionError("hide")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            runUIKitWindowCloseStages(
+                invalidateResources = {
+                    trace += "invalidate"
+                    throw invalidateFailure
+                },
+                dispatchDestroyed = {
+                    trace += "destroyed"
+                    throw destroyedFailure
+                },
+                hideAndResign = {
+                    trace += "hide"
+                    throw hideFailure
+                },
+            )
+        }
+
+        assertSame(invalidateFailure, thrown)
+        assertEquals(listOf(destroyedFailure, hideFailure), thrown.suppressedExceptions)
+        assertEquals(listOf("invalidate", "destroyed", "hide"), trace)
+    }
+
+    @Test
     fun closedWindowIsDestroyedOnceUnregisteredAndNeverReused() {
         val createdWindows = mutableListOf<Window>()
         val events = mutableListOf<Pair<WindowId, WindowEvent>>()
