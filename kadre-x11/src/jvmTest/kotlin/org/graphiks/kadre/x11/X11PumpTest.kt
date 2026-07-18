@@ -10,6 +10,35 @@ import kotlin.test.assertTrue
 
 class X11PumpTest {
     @Test
+    fun `pump drains poll-time events after wake consumption in strict order`() {
+        val trace = mutableListOf<String>()
+        val operations = FakeX11PumpOperations(trace = trace)
+        val wakeup = FakePosixWakeup(trace = trace)
+        wakeup.signal()
+
+        val result = pumpX11Once(
+            operations = operations,
+            poller = X11Poller { _, _, _ ->
+                trace += "poll"
+                operations.enqueueEvents(2)
+                X11PollResult(xReadable = true, wakeReadable = true)
+            },
+            wakeup = wakeup,
+            xConnectionFd = 41,
+            timeoutMillis = -1,
+        )
+
+        assertEquals(2, result.eventsDispatched)
+        assertEquals(
+            listOf(
+                "wake-signal", "pending", "flush", "poll", "wake-drain",
+                "pending", "next", "pending", "next", "pending",
+            ),
+            trace,
+        )
+    }
+
+    @Test
     fun `EINTR retry uses only the remaining monotonic timeout budget`() {
         val clock = ArrayDeque(listOf(0L, 90_000_000L))
         val attemptedTimeouts = mutableListOf<Int>()
@@ -185,35 +214,43 @@ class X11PumpTest {
 
 private class FakeX11PumpOperations(
     pendingEvents: Int = 0,
+    private val trace: MutableList<String> = mutableListOf(),
 ) : X11PumpOperations {
     private var remainingEvents = pendingEvents
     var dispatchedEvents: Int = 0
         private set
-    val traceWithPoll = mutableListOf<String>()
+    val traceWithPoll: List<String>
+        get() = trace
 
     override fun pendingCount(): Int {
-        traceWithPoll += "pending"
+        trace += "pending"
         return remainingEvents
     }
 
     override fun dispatchNext() {
         check(remainingEvents > 0)
-        traceWithPoll += "next"
+        trace += "next"
         remainingEvents -= 1
         dispatchedEvents += 1
     }
 
     override fun flush() {
-        traceWithPoll += "flush"
+        trace += "flush"
     }
 
     fun recordPoll() {
-        traceWithPoll += "poll"
+        trace += "poll"
+    }
+
+    fun enqueueEvents(count: Int) {
+        require(count >= 0)
+        remainingEvents += count
     }
 }
 
 private class FakePosixWakeup(
     override val readFd: Int = 73,
+    private val trace: MutableList<String>? = null,
 ) : PosixWakeup {
     var pending: Boolean = false
         private set
@@ -225,12 +262,14 @@ private class FakePosixWakeup(
     override fun signal(): Boolean {
         signalCount += 1
         pending = true
+        trace?.add("wake-signal")
         return true
     }
 
     override fun drain(): Boolean {
         drainCount += 1
         pending = false
+        trace?.add("wake-drain")
         return true
     }
 
