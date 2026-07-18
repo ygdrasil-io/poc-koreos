@@ -1482,7 +1482,8 @@ private fun x11OpenDisplayFailure(cause: Throwable? = null): IllegalStateExcepti
  * Must be called from the main thread (the one that opened the display).
  *
  * @param handler Lifecycle and event handler.
- * @throws IllegalStateException if an X11 loop is already active in this process.
+ * @throws IllegalStateException if `XOpenDisplay` is unavailable or cannot open
+ * the configured `DISPLAY`, or if an X11 loop is already active in this process.
  */
 fun runApp(handler: ApplicationHandler) {
     check(x11Running.compareAndSet(false, true)) {
