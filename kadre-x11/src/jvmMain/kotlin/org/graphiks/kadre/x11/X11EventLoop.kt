@@ -421,15 +421,12 @@ class X11EventLoop internal constructor(
      * Returns null on failure (missing symbols, invalid image, or OOM).
      */
     override fun createCustomCursor(image: CursorImage): CustomCursor? {
+        if (!validateCursorGeometry(image, Int.MAX_VALUE, Int.MAX_VALUE)) return null
+
         val createBitmap = xCreateBitmapFromData ?: return null
         val createPixmapCursor = xCreatePixmapCursor ?: return null
-        val freePixmap = xFreePixmap
+        val freePixmap = xFreePixmap ?: return null
         val rootHandle = xRootWindow ?: return null
-
-        if (image.width <= 0 || image.height <= 0) return null
-        val pixelCount = image.width * image.height
-        val byteCount = pixelCount * 4
-        if (byteCount > Int.MAX_VALUE || image.rgba.size != byteCount) return null
 
         val display = MemorySegment.ofAddress(displayPtr)
 
@@ -437,37 +434,48 @@ class X11EventLoop internal constructor(
             val root = rootHandle.invokeExact(display, screen) as Long
             if (root == 0L) return null
 
-            Arena.ofConfined().use { arena ->
-                val srcBytes = ByteArray(pixelCount) { index ->
-                    val offset = index * 4
-                    val r = image.rgba[offset].toInt() and 0xFF
-                    val g = image.rgba[offset + 1].toInt() and 0xFF
-                    val b = image.rgba[offset + 2].toInt() and 0xFF
-                    val alpha = image.rgba[offset + 3].toInt() and 0xFF
-                    if ((r + g + b) / 3 > 128) 1 else 0
+            var maxWidth = Int.MAX_VALUE
+            var maxHeight = Int.MAX_VALUE
+            val queryBestCursor = xQueryBestCursor
+            if (queryBestCursor != null) {
+                Arena.ofConfined().use { arena ->
+                    val widthReturn = arena.allocate(ValueLayout.JAVA_INT)
+                    val heightReturn = arena.allocate(ValueLayout.JAVA_INT)
+                    val status = queryBestCursor.invokeExact(
+                        display,
+                        root,
+                        image.width,
+                        image.height,
+                        widthReturn,
+                        heightReturn,
+                    ) as Int
+                    if (status == 0) return null
+                    maxWidth = widthReturn.get(ValueLayout.JAVA_INT, 0L)
+                        .toUInt().toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    maxHeight = heightReturn.get(ValueLayout.JAVA_INT, 0L)
+                        .toUInt().toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 }
-                val maskBytes = ByteArray(pixelCount) { index ->
-                    val alpha = image.rgba[index * 4 + 3].toInt() and 0xFF
-                    if (alpha > 0) 1 else 0
-                }
+            }
+            if (!validateCursorGeometry(image, maxWidth, maxHeight)) return null
+            val packed = packMonochromeCursor(image)
 
-                val srcData = arena.allocate(srcBytes.size.toLong(), 1L)
-                val maskData = arena.allocate(maskBytes.size.toLong(), 1L)
-                for (i in srcBytes.indices) srcData.setAtIndex(ValueLayout.JAVA_BYTE, i.toLong(), srcBytes[i])
-                for (i in maskBytes.indices) maskData.setAtIndex(ValueLayout.JAVA_BYTE, i.toLong(), maskBytes[i])
+            Arena.ofConfined().use { arena ->
+                val srcData = arena.allocate(packed.source.size.toLong(), 1L)
+                val maskData = arena.allocate(packed.mask.size.toLong(), 1L)
+                srcData.copyFrom(MemorySegment.ofArray(packed.source))
+                maskData.copyFrom(MemorySegment.ofArray(packed.mask))
 
                 val source = createBitmap.invokeExact(display, root, srcData, image.width, image.height) as Long
                 if (source == 0L) return@use null
-                val mask = createBitmap.invokeExact(display, root, maskData, image.width, image.height) as Long
-                if (mask == 0L) {
-                    if (freePixmap != null) freePixmap.invokeExact(display, source) as Int
-                    return@use null
-                }
+                var mask = 0L
                 try {
+                    mask = createBitmap.invokeExact(display, root, maskData, image.width, image.height) as Long
+                    if (mask == 0L) return@use null
+
                     val foreground = arena.allocate(X11_COLOR_SIZE_BYTES, X11_COLOR_ALIGN_BYTES)
                     val background = arena.allocate(X11_COLOR_SIZE_BYTES, X11_COLOR_ALIGN_BYTES)
-                    foreground.setAtIndex(ValueLayout.JAVA_BYTE, 0L, 1)
-                    background.fill(0)
+                    writeXColor(foreground, UShort.MAX_VALUE, UShort.MAX_VALUE, UShort.MAX_VALUE)
+                    writeXColor(background, 0u, 0u, 0u)
                     val cursor = createPixmapCursor.invokeExact(
                         display, source, mask, foreground, background,
                         image.hotspotX, image.hotspotY,
@@ -475,10 +483,14 @@ class X11EventLoop internal constructor(
                     if (cursor == 0L) return@use null
                     CustomCursor(id = cursor)
                 } finally {
-                    if (freePixmap != null) {
-                        freePixmap.invokeExact(display, source) as Int
-                        freePixmap.invokeExact(display, mask) as Int
+                    if (mask != 0L) {
+                        try {
+                            freePixmap.invokeExact(display, mask) as Int
+                        } catch (_: Throwable) {}
                     }
+                    try {
+                        freePixmap.invokeExact(display, source) as Int
+                    } catch (_: Throwable) {}
                 }
             }
         } catch (_: Throwable) { null }

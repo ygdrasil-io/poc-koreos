@@ -794,6 +794,26 @@ val xCreateBitmapFromData: MethodHandle? by lazy {
 }
 
 /**
+ * Status XQueryBestCursor(Display* display, Drawable d,
+ *     unsigned int width, unsigned int height,
+ *     unsigned int* width_return, unsigned int* height_return);
+ */
+val xQueryBestCursor: MethodHandle? by lazy {
+    libX11.downcall(
+        "XQueryBestCursor",
+        FunctionDescriptor.of(
+            ValueLayout.JAVA_INT,   // Status
+            ValueLayout.ADDRESS,    // Display*
+            ValueLayout.JAVA_LONG,  // Drawable
+            ValueLayout.JAVA_INT,   // unsigned int width
+            ValueLayout.JAVA_INT,   // unsigned int height
+            ValueLayout.ADDRESS,    // unsigned int* width_return
+            ValueLayout.ADDRESS,    // unsigned int* height_return
+        )
+    )
+}
+
+/**
  * Cursor XCreatePixmapCursor(Display* display, Pixmap source, Pixmap mask,
  *     XColor* foreground_color, XColor* background_color,
  *     unsigned int x, unsigned int y);
