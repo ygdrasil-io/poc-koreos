@@ -324,6 +324,461 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `public window close from application upcall defers native close and releases past return`() {
+        val trace = mutableListOf<String>()
+        val windowId = WindowId(0x973L)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = { trace += "unregister" },
+            sendNativeClose = { trace += "nativeClose" },
+            releaseNativeResources = { trace += "releaseWindowViewLayer" },
+            releaseDelegate = { trace += "releaseDelegate" },
+        )
+        val callbacks = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                trace += "handler"
+                eventLoop.closeWindow(windowId)
+                trace += "handlerReturn"
+            }
+        }
+        val token = KadreAppDelegate.registerDelegateRoute(0x974L, callbacks)
+        try {
+            trace += "callback"
+            KadreAppDelegate.Callbacks.applicationDidBecomeActiveForToken(token)
+            trace += "callbackReturn"
+
+            assertEquals(listOf("callback", "handler", "handlerReturn", "callbackReturn"), trace)
+            eventLoop.drainDeferredNativeCallbackCleanup()
+            assertEquals(
+                listOf(
+                    "callback",
+                    "handler",
+                    "handlerReturn",
+                    "callbackReturn",
+                    "unregister",
+                    "nativeClose",
+                    "releaseWindowViewLayer",
+                    "releaseDelegate",
+                ),
+                trace,
+            )
+        } finally {
+            KadreAppDelegate.unregisterDelegate(token, callbacks)
+        }
+    }
+
+    @Test
+    fun `public window close from window upcall defers native close and releases past return`() {
+        assertPublicWindowCloseDeferredFromUpcall { eventLoop, windowId, trace ->
+            val self = MemorySegment.ofAddress(0x975L)
+            val callbacks = object : AppKitWindowDelegateCallbacks {
+                override fun onWindowDidResize() {
+                    trace += "handler"
+                    eventLoop.closeWindow(windowId)
+                    trace += "handlerReturn"
+                }
+            }
+            val token = KadreWindowDelegate.registerDelegateRoute(self.address(), callbacks)
+            try {
+                KadreWindowDelegate.Callbacks.windowDidResize(self, MemorySegment.NULL, MemorySegment.NULL)
+            } finally {
+                KadreWindowDelegate.unregisterDelegate(token, callbacks)
+            }
+        }
+    }
+
+    @Test
+    fun `public window close from IME upcall defers native close and releases past return`() {
+        assertPublicWindowCloseDeferredFromUpcall { eventLoop, windowId, trace ->
+            val self = MemorySegment.ofAddress(0x976L)
+            val appKitLoop = eventLoop
+            val record = ImeViewRecord(
+                handler = object : ApplicationHandler {
+                    override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                    override fun windowEvent(
+                        eventLoop: ActiveEventLoop,
+                        windowId: WindowId,
+                        event: WindowEvent,
+                    ) {
+                        trace += "handler"
+                        appKitLoop.closeWindow(windowId)
+                        trace += "handlerReturn"
+                    }
+                },
+                eventLoop = eventLoop,
+                windowId = windowId,
+                imeCursorScreenRect = MemorySegment.NULL,
+            )
+            val token = AppKitImeTextInputClient.registerView(self, record)
+            try {
+                AppKitImeTextInputClient.Callbacks.unmarkText(self, MemorySegment.NULL)
+            } finally {
+                AppKitImeTextInputClient.unregisterView(token, record)
+            }
+        }
+    }
+
+    @Test
+    fun `public window close from drag upcall defers native close and releases past return`() {
+        assertPublicWindowCloseDeferredFromUpcall { eventLoop, windowId, trace ->
+            val record = ImeViewRecord(
+                handler = NoopHandler,
+                eventLoop = eventLoop,
+                windowId = windowId,
+                imeCursorScreenRect = MemorySegment.NULL,
+            )
+            AppKitImeTextInputClient.Callbacks.draggingEnteredSafely(
+                recordLookup = { record },
+                operation = {
+                    trace += "handler"
+                    eventLoop.closeWindow(windowId)
+                    trace += "handlerReturn"
+                    0L
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `public window close from sendEvent upcall defers native close and releases past return`() {
+        assertPublicWindowCloseDeferredFromUpcall { eventLoop, windowId, trace ->
+            appKitInvokeSendEventSafely(eventLoop) {
+                trace += "handler"
+                eventLoop.closeWindow(windowId)
+                trace += "handlerReturn"
+            }
+        }
+    }
+
+    @Test
+    fun `public window close from another thread waits for active native upcall`() {
+        val entered = CountDownLatch(1)
+        val allowReturn = CountDownLatch(1)
+        val closeReturned = CountDownLatch(1)
+        val released = CountDownLatch(1)
+        val windowId = WindowId(0x979L)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = {},
+            sendNativeClose = {},
+            releaseNativeResources = { released.countDown() },
+            releaseDelegate = {},
+        )
+        val callbackThread = thread(name = "active-native-upcall") {
+            AppKitNativeCallbackBoundary.invoke {
+                entered.countDown()
+                check(allowReturn.await(5, TimeUnit.SECONDS))
+            }
+        }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val closeThread = thread(name = "public-window-close") {
+            eventLoop.closeWindow(windowId)
+            closeReturned.countDown()
+        }
+        try {
+            assertTrue(closeReturned.await(5, TimeUnit.SECONDS))
+            assertEquals(1L, released.count)
+        } finally {
+            allowReturn.countDown()
+            callbackThread.join(5_000)
+            closeThread.join(5_000)
+        }
+        assertFalse(callbackThread.isAlive)
+        assertFalse(closeThread.isAlive)
+        eventLoop.drainDeferredNativeCallbackCleanup()
+        assertEquals(0L, released.count)
+    }
+
+    @Test
+    fun `applicationWillTerminate records intent and cleanup waits for run boundary`() {
+        val trace = mutableListOf<String>()
+        val windowId = WindowId(0x97AL)
+        val eventLoop = AppKitEventLoop(
+            handler = object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                    trace += "destroySurfaces"
+                }
+                override fun suspended(eventLoop: ActiveEventLoop) {
+                    trace += "suspended"
+                }
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) = Unit
+            },
+        )
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = { trace += "unregister" },
+            sendNativeClose = { trace += "nativeClose" },
+            releaseNativeResources = { trace += "releaseWindowViewLayer" },
+            releaseDelegate = { trace += "releaseDelegate" },
+        )
+        val self = MemorySegment.ofAddress(0x97BL)
+        val callbacks = object : AppKitApplicationDelegateCallbacks {
+            override fun onWillTerminate() {
+                trace += "handler"
+                eventLoop.noteApplicationWillTerminate()
+                trace += "handlerReturn"
+            }
+        }
+        val token = KadreAppDelegate.registerDelegateRoute(self.address(), callbacks)
+        try {
+            trace += "callback"
+            KadreAppDelegate.Callbacks.applicationWillTerminate(
+                self,
+                MemorySegment.NULL,
+                MemorySegment.NULL,
+            )
+            trace += "callbackReturn"
+
+            assertTrue(eventLoop.isExiting)
+            assertEquals(listOf("callback", "handler", "handlerReturn", "callbackReturn"), trace)
+            eventLoop.drainDeferredNativeCallbackCleanup()
+            assertEquals(listOf("callback", "handler", "handlerReturn", "callbackReturn"), trace)
+
+            eventLoop.willTerminate()
+            assertEquals(
+                listOf(
+                    "callback",
+                    "handler",
+                    "handlerReturn",
+                    "callbackReturn",
+                    "destroySurfaces",
+                    "unregister",
+                    "nativeClose",
+                    "releaseWindowViewLayer",
+                    "releaseDelegate",
+                    "suspended",
+                ),
+                trace,
+            )
+        } finally {
+            KadreAppDelegate.unregisterDelegate(token, callbacks)
+        }
+    }
+
+    @Test
+    fun `teardown closes callback admission before first release without TOCTOU gap`() {
+        val teardownReached = CountDownLatch(1)
+        val rejectedTicketHeld = CountDownLatch(1)
+        val allowRejectedReturn = CountDownLatch(1)
+        val releaseStarted = CountDownLatch(1)
+        val runFinished = CountDownLatch(1)
+        val callbackTouchedReleasedState = java.util.concurrent.atomic.AtomicBoolean(false)
+        val trace = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val runFailure = AtomicReference<Throwable?>()
+        val callbackThread = thread(name = "teardown-admission-racer") {
+            check(teardownReached.await(5, TimeUnit.SECONDS))
+            trace += "callbackAttempt"
+            AppKitNativeCallbackBoundary.invoke(
+                callback = {
+                    callbackTouchedReleasedState.set(true)
+                    trace += "callbackEntered"
+                },
+                onRejected = {
+                    trace += "rejectedTicketHeld"
+                    rejectedTicketHeld.countDown()
+                    check(allowRejectedReturn.await(5, TimeUnit.SECONDS))
+                },
+            )
+        }
+        val runThread = thread(name = "closed-admission-teardown") {
+            try {
+                runFailure.set(runCatching {
+                    runApp(
+                        handler = object : ApplicationHandler {
+                            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                                trace += "destroySurfaces"
+                                teardownReached.countDown()
+                                check(rejectedTicketHeld.await(5, TimeUnit.SECONDS))
+                            }
+                            override fun windowEvent(
+                                eventLoop: ActiveEventLoop,
+                                windowId: WindowId,
+                                event: WindowEvent,
+                            ) = Unit
+                        },
+                        operationsFactory = {
+                            object : AppKitRunAppOperations {
+                                override fun requireMainThread() = Unit
+                                override fun initialize() = Unit
+                                override fun attachApplicationDelegate() = Unit
+                                override fun installRunLoopOwner() = Unit
+                                override fun run() = Unit
+                                override fun throwPendingCallbackFailure() = Unit
+                                override fun suppressPendingCallbackFailureOnto(primary: Throwable) = Unit
+                                override fun closeRunLoopOwner() = Unit
+                                override fun detachApplicationDelegate() = Unit
+                                override fun releaseApplicationDelegate() {
+                                    trace += "releaseApplicationDelegate"
+                                    releaseStarted.countDown()
+                                }
+                                override fun clearApplicationReferences() = Unit
+                            }
+                        },
+                    )
+                }.exceptionOrNull())
+            } finally {
+                runFinished.countDown()
+            }
+        }
+
+        assertTrue(rejectedTicketHeld.await(5, TimeUnit.SECONDS))
+        try {
+            assertFalse(releaseStarted.await(100, TimeUnit.MILLISECONDS))
+            assertFalse(runFinished.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowRejectedReturn.countDown()
+            callbackThread.join(5_000)
+            runThread.join(5_000)
+        }
+
+        assertFalse(callbackThread.isAlive)
+        assertFalse(runThread.isAlive)
+        assertEquals(null, runFailure.get())
+        assertFalse(callbackTouchedReleasedState.get())
+        assertEquals(
+            listOf(
+                "destroySurfaces",
+                "callbackAttempt",
+                "rejectedTicketHeld",
+                "releaseApplicationDelegate",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `exclusive teardown admits only synchronous native upcalls on owner thread`() {
+        val trace = mutableListOf<String>()
+
+        AppKitNativeCallbackBoundary.runExclusive {
+            trace += "teardown"
+            AppKitNativeCallbackBoundary.invoke {
+                trace += "synchronousUpcall"
+            }
+            trace += "upcallReturn"
+        }
+
+        assertEquals(listOf("teardown", "synchronousUpcall", "upcallReturn"), trace)
+    }
+
+    @Test
+    fun `public close pause rejects callback arriving before first release`() {
+        val admissionPaused = CountDownLatch(1)
+        val allowRelease = CountDownLatch(1)
+        val callbackFinished = CountDownLatch(1)
+        val callbackTouchedReceiver = java.util.concurrent.atomic.AtomicBoolean(false)
+        val teardownThread = thread(name = "paused-public-close") {
+            AppKitNativeCallbackBoundary.runExclusive {
+                admissionPaused.countDown()
+                check(allowRelease.await(5, TimeUnit.SECONDS))
+            }
+        }
+        val callbackThread = thread(name = "callback-racing-paused-close") {
+            check(admissionPaused.await(5, TimeUnit.SECONDS))
+            AppKitNativeCallbackBoundary.invoke {
+                callbackTouchedReceiver.set(true)
+            }
+            callbackFinished.countDown()
+        }
+
+        assertTrue(admissionPaused.await(5, TimeUnit.SECONDS))
+        try {
+            assertTrue(callbackFinished.await(5, TimeUnit.SECONDS))
+            assertFalse(callbackTouchedReceiver.get())
+        } finally {
+            allowRelease.countDown()
+            teardownThread.join(5_000)
+            callbackThread.join(5_000)
+        }
+        assertFalse(teardownThread.isAlive)
+        assertFalse(callbackThread.isAlive)
+    }
+
+    @Test
+    fun `pre-interrupted run waits for callback then cleans resets and preserves failure identity`() {
+        val primaryFailure = IllegalStateException("run failure")
+        val cleanupFailure = IllegalArgumentException("detach failure")
+        val startCallback = CountDownLatch(1)
+        val callbackEntered = CountDownLatch(1)
+        val allowCallbackReturn = CountDownLatch(1)
+        val runFinished = CountDownLatch(1)
+        val trace = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val runFailure = AtomicReference<Throwable?>()
+        val interruptRestored = java.util.concurrent.atomic.AtomicBoolean(false)
+        val callbackThread = thread(name = "interrupted-run-active-callback") {
+            check(startCallback.await(5, TimeUnit.SECONDS))
+            AppKitNativeCallbackBoundary.invoke {
+                callbackEntered.countDown()
+                check(allowCallbackReturn.await(5, TimeUnit.SECONDS))
+            }
+        }
+        val runThread = thread(name = "pre-interrupted-appkit-run") {
+            Thread.currentThread().interrupt()
+            try {
+                runFailure.set(runCatching {
+                    runApp(NoopHandler) {
+                        object : AppKitRunAppOperations {
+                            override fun requireMainThread() = Unit
+                            override fun initialize() = Unit
+                            override fun attachApplicationDelegate() = Unit
+                            override fun installRunLoopOwner() = Unit
+                            override fun run() {
+                                startCallback.countDown()
+                                while (callbackEntered.count != 0L) Thread.onSpinWait()
+                                throw primaryFailure
+                            }
+                            override fun throwPendingCallbackFailure() = Unit
+                            override fun suppressPendingCallbackFailureOnto(primary: Throwable) = Unit
+                            override fun closeRunLoopOwner() {
+                                trace += "closeOwner"
+                            }
+                            override fun detachApplicationDelegate() {
+                                trace += "detachDelegate"
+                                throw cleanupFailure
+                            }
+                            override fun releaseApplicationDelegate() {
+                                trace += "releaseDelegate"
+                            }
+                            override fun clearApplicationReferences() {
+                                trace += "clearReferences"
+                            }
+                        }
+                    }
+                }.exceptionOrNull())
+            } finally {
+                interruptRestored.set(Thread.currentThread().isInterrupted)
+                runFinished.countDown()
+            }
+        }
+
+        assertTrue(callbackEntered.await(5, TimeUnit.SECONDS))
+        try {
+            assertFalse(runFinished.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowCallbackReturn.countDown()
+        }
+        assertTrue(runFinished.await(5, TimeUnit.SECONDS))
+        callbackThread.join(5_000)
+        runThread.join(5_000)
+
+        assertFalse(callbackThread.isAlive)
+        assertFalse(runThread.isAlive)
+        assertSame(primaryFailure, runFailure.get())
+        assertSame(cleanupFailure, primaryFailure.suppressed.single())
+        assertEquals(listOf("closeOwner", "detachDelegate", "releaseDelegate", "clearReferences"), trace)
+        assertTrue(interruptRestored.get())
+        assertFalse(appKitRunning.get())
+    }
+
+    @Test
     fun `native window close defers every owned release past callback return`() {
         val trace = mutableListOf<String>()
         val windowId = WindowId(0x904L)
@@ -739,6 +1194,46 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `production token attach read and detach flow through associated object store`() {
+        val stored = mutableMapOf<Long, AppKitNativeCallbackToken>()
+        var attachCalls = 0
+        var readCalls = 0
+        var detachCalls = 0
+        val store = object : AppKitNativeTokenStore {
+            override fun attach(receiver: MemorySegment, token: AppKitNativeCallbackToken) {
+                attachCalls += 1
+                stored[receiver.address()] = token
+            }
+
+            override fun read(receiver: MemorySegment): AppKitNativeCallbackToken? {
+                readCalls += 1
+                return stored[receiver.address()]
+            }
+
+            override fun detach(receiver: MemorySegment, token: AppKitNativeCallbackToken) {
+                detachCalls += 1
+                stored.remove(receiver.address(), token)
+            }
+        }
+
+        Arena.ofConfined().use { arena ->
+            val receiver = arena.allocate(1)
+            AppKitNativeCallbackTokens.withNativeStoreForTest(store) {
+                val attached = AppKitNativeCallbackTokens.attach(receiver)
+
+                assertEquals(attached, AppKitNativeCallbackTokens.read(receiver))
+                AppKitNativeCallbackTokens.detach(receiver, attached)
+                assertEquals(null, AppKitNativeCallbackTokens.read(receiver))
+            }
+        }
+
+        assertEquals(1, attachCalls)
+        assertEquals(2, readCalls)
+        assertEquals(1, detachCalls)
+        assertTrue(stored.isEmpty())
+    }
+
+    @Test
     fun `native callback quiescence blocks run turnover until in-flight callback returns`() {
         val address = 0x922L
         val entered = CountDownLatch(1)
@@ -1062,6 +1557,46 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `draggingEnded participates in callback boundary until trampoline returns`() {
+        val entered = CountDownLatch(1)
+        val allowReturn = CountDownLatch(1)
+        val closeReturned = CountDownLatch(1)
+        val released = CountDownLatch(1)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        val windowId = WindowId(0x97CL)
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = {},
+            sendNativeClose = {},
+            releaseNativeResources = { released.countDown() },
+            releaseDelegate = {},
+        )
+        val callbackThread = thread(name = "dragging-ended-upcall") {
+            AppKitImeTextInputClient.Callbacks.draggingEndedSafely {
+                entered.countDown()
+                check(allowReturn.await(5, TimeUnit.SECONDS))
+            }
+        }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val closeThread = thread(name = "close-during-dragging-ended") {
+            eventLoop.closeWindow(windowId)
+            closeReturned.countDown()
+        }
+        try {
+            assertTrue(closeReturned.await(5, TimeUnit.SECONDS))
+            assertEquals(1L, released.count)
+        } finally {
+            allowReturn.countDown()
+            callbackThread.join(5_000)
+            closeThread.join(5_000)
+        }
+        assertFalse(callbackThread.isAlive)
+        assertFalse(closeThread.isAlive)
+        eventLoop.drainDeferredNativeCallbackCleanup()
+        assertEquals(0L, released.count)
+    }
+
+    @Test
     fun `delegate installation failure rolls back delegate window layer and view ownership`() {
         val released = java.util.concurrent.atomic.AtomicBoolean(false)
         val setDelegateFailure = IllegalStateException("setDelegate failure")
@@ -1106,6 +1641,139 @@ class AppKitRegistryLifecycleTest {
             listOf(delegateFailure, windowFailure, layerFailure, viewFailure),
             thrown.suppressed.toList(),
         )
+    }
+
+    @Test
+    fun `native delegate initialization failure releases the allocated object`() {
+        val allocated = Any()
+        val initFailure = IllegalStateException("init failure")
+        val releaseFailure = IllegalArgumentException("release failure")
+        var allocations = 0
+        var initializations = 0
+        var releases = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            appKitInitializeOwnedNativeObject(
+                allocate = {
+                    allocations += 1
+                    allocated
+                },
+                initialize = {
+                    assertSame(allocated, it)
+                    initializations += 1
+                    throw initFailure
+                },
+                releaseAllocated = {
+                    assertSame(allocated, it)
+                    releases += 1
+                    throw releaseFailure
+                },
+            )
+        }
+
+        assertSame(initFailure, thrown)
+        assertEquals(listOf(releaseFailure), thrown.suppressed.toList())
+        assertEquals(1, allocations)
+        assertEquals(1, initializations)
+        assertEquals(1, releases)
+    }
+
+    @Test
+    fun `window callback setup transaction rolls back every failure boundary exactly once`() {
+        listOf("delegateToken", "setDelegate", "imeRegistration", "closeAction").forEach { phase ->
+            val primary = IllegalStateException("$phase failure")
+            val detachFailure = IllegalArgumentException("detach failure")
+            val imeFailure = UnsupportedOperationException("IME rollback failure")
+            val closeActionFailure = IllegalStateException("close-action rollback failure")
+            val delegateFailure = IllegalMonitorStateException("delegate release failure")
+            val windowFailure = NoSuchElementException("window release failure")
+            val layerFailure = IndexOutOfBoundsException("layer release failure")
+            val viewFailure = ArithmeticException("view release failure")
+            val counts = mutableMapOf<String, Int>()
+            fun count(name: String) {
+                counts[name] = counts.getOrDefault(name, 0) + 1
+            }
+            fun fail(name: String, failure: Throwable): Nothing {
+                count(name)
+                throw failure
+            }
+
+            val thrown = assertFailsWith<IllegalStateException> {
+                appKitInstallWindowCallbacksTransaction(
+                    resourcesReleased = java.util.concurrent.atomic.AtomicBoolean(false),
+                    createDelegate = {
+                        appKitAcquireOwnedRegistration(
+                            register = {
+                                count("createDelegate")
+                                if (phase == "delegateToken") throw primary
+                                "delegate"
+                            },
+                            rollback = { fail("releaseDelegate", delegateFailure) },
+                        )
+                    },
+                    setDelegate = {
+                        count("setDelegate")
+                        if (phase == "setDelegate") throw primary
+                    },
+                    registerIme = {
+                        appKitAcquireOwnedRegistration(
+                            register = {
+                                count("registerIme")
+                                if (phase == "imeRegistration") throw primary
+                                "ime"
+                            },
+                            rollback = { fail("unregisterIme", imeFailure) },
+                        )
+                    },
+                    registerCloseAction = { _, _ ->
+                        count("registerCloseAction")
+                        if (phase == "closeAction") throw primary
+                    },
+                    unregisterCloseAction = { fail("unregisterCloseAction", closeActionFailure) },
+                    detachDelegate = { fail("detachDelegate", detachFailure) },
+                    unregisterIme = { fail("unregisterIme", imeFailure) },
+                    releaseDelegate = { fail("releaseDelegate", delegateFailure) },
+                    releaseWindow = { fail("releaseWindow", windowFailure) },
+                    releaseLayer = { fail("releaseLayer", layerFailure) },
+                    releaseView = { fail("releaseView", viewFailure) },
+                )
+            }
+
+            assertSame(primary, thrown, phase)
+            val expectedSuppressed = when (phase) {
+                "delegateToken" -> listOf(delegateFailure, windowFailure, layerFailure, viewFailure)
+                "setDelegate" -> listOf(detachFailure, delegateFailure, windowFailure, layerFailure, viewFailure)
+                "imeRegistration" -> listOf(
+                    imeFailure,
+                    detachFailure,
+                    delegateFailure,
+                    windowFailure,
+                    layerFailure,
+                    viewFailure,
+                )
+                else -> listOf(
+                    closeActionFailure,
+                    detachFailure,
+                    imeFailure,
+                    delegateFailure,
+                    windowFailure,
+                    layerFailure,
+                    viewFailure,
+                )
+            }
+            assertEquals(expectedSuppressed, thrown.suppressed.toList(), phase)
+            listOf("releaseWindow", "releaseLayer", "releaseView").forEach {
+                assertEquals(1, counts[it], "$phase:$it")
+            }
+            assertEquals(1, counts["releaseDelegate"], "$phase:releaseDelegate")
+            assertEquals(if (phase == "delegateToken") 0 else 1, counts["detachDelegate"] ?: 0, "$phase:detach")
+            assertEquals(if (phase == "closeAction") 1 else 0, counts["unregisterCloseAction"] ?: 0, "$phase:close")
+            assertEquals(
+                if (phase == "imeRegistration" || phase == "closeAction") 1 else 0,
+                counts["unregisterIme"] ?: 0,
+                "$phase:ime",
+            )
+        }
     }
 
     @Test
@@ -1170,8 +1838,7 @@ class AppKitRegistryLifecycleTest {
             })
         }
 
-        assertTrue(failure.message.orEmpty().contains("applicationWillTerminate"))
-        assertEquals("destroy boom", failure.cause?.message)
+        assertEquals("destroy boom", failure.message)
         assertTrue(trace.indexOf("destroySurfaces") < trace.indexOf("run9:unregisterWindowCallbacks"))
         assertTrue(trace.indexOf("run9:unregisterWindowCallbacks") < trace.indexOf("run9:closeOwner"))
         assertEquals("run9:clearReferences", trace.last())
@@ -1518,6 +2185,41 @@ class AppKitRegistryLifecycleTest {
 
         assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
         assertEquals(0, callbackCount)
+    }
+
+    private fun assertPublicWindowCloseDeferredFromUpcall(
+        invokeUpcall: (AppKitEventLoop, WindowId, MutableList<String>) -> Unit,
+    ) {
+        val trace = mutableListOf<String>()
+        val windowId = WindowId(0x978L)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = { trace += "unregister" },
+            sendNativeClose = { trace += "nativeClose" },
+            releaseNativeResources = { trace += "releaseWindowViewLayer" },
+            releaseDelegate = { trace += "releaseDelegate" },
+        )
+
+        trace += "callback"
+        invokeUpcall(eventLoop, windowId, trace)
+        trace += "callbackReturn"
+
+        assertEquals(listOf("callback", "handler", "handlerReturn", "callbackReturn"), trace)
+        eventLoop.drainDeferredNativeCallbackCleanup()
+        assertEquals(
+            listOf(
+                "callback",
+                "handler",
+                "handlerReturn",
+                "callbackReturn",
+                "unregister",
+                "nativeClose",
+                "releaseWindowViewLayer",
+                "releaseDelegate",
+            ),
+            trace,
+        )
     }
 
     private object NoopHandler : ApplicationHandler {

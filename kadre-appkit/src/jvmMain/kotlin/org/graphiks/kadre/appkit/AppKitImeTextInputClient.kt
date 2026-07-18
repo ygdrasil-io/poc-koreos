@@ -94,8 +94,19 @@ internal object AppKitImeTextInputClient {
             imeViewTable[token] = record
         }
 
-    fun registerNativeView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken =
-        AppKitNativeCallbackTokens.attach(viewPtr).also { token -> imeViewTable[token] = record }
+    fun registerNativeView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken {
+        val token = AppKitNativeCallbackTokens.attach(viewPtr)
+        return appKitAcquireOwnedRegistration(
+            register = {
+                imeViewTable[token] = record
+                token
+            },
+            rollback = {
+                imeViewTable.remove(token, record)
+                AppKitNativeCallbackTokens.detach(viewPtr, token)
+            },
+        )
+    }
 
     /**
      * Removes a view from the IME table.
@@ -969,7 +980,13 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
         ) {
-            // No event — session end notification only
+            draggingEndedSafely {
+                // No event — session end notification only
+            }
+        }
+
+        internal fun draggingEndedSafely(callback: () -> Unit) {
+            AppKitNativeCallbackBoundary.invoke(callback)
         }
 
         private inline fun invokeSafely(
@@ -992,7 +1009,7 @@ internal object AppKitImeTextInputClient {
             context: String,
             defaultValue: T,
             query: () -> T,
-        ): T = AppKitNativeCallbackBoundary.invoke {
+        ): T = AppKitNativeCallbackBoundary.invokeOrDefault(defaultValue) {
             try {
                 query()
             } catch (failure: Throwable) {
@@ -1053,10 +1070,10 @@ internal object AppKitImeTextInputClient {
             defaultValue: T,
             recordLookup: () -> ImeViewRecord?,
             operation: (ImeViewRecord) -> T,
-        ): T = AppKitNativeCallbackBoundary.invoke {
+        ): T = AppKitNativeCallbackBoundary.invokeOrDefault(defaultValue) {
             var record: ImeViewRecord? = null
             try {
-                record = recordLookup() ?: return@invoke defaultValue
+                record = recordLookup() ?: return@invokeOrDefault defaultValue
                 operation(record)
             } catch (failure: Throwable) {
                 record?.let { captureSafely(it, context, failure) }

@@ -84,16 +84,25 @@ class KadreWindowDelegate(
         ensureClassRegistered()
 
         val cls = ObjCRuntime.getClass("KadreWindowDelegateNative")
-        val allocated = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            cls,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-        ptr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            allocated,
-            ObjCRuntime.sel("init"),
-        ) as MemorySegment
+        ptr = appKitInitializeOwnedNativeObject(
+            allocate = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    cls,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initialize = { allocated ->
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("init"),
+                ) as MemorySegment
+            },
+            releaseAllocated = { allocated ->
+                ObjCRuntime.msgSend(null, allocated, ObjCRuntime.sel("release"))
+            },
+        )
 
         routeCallbacks = object : AppKitWindowDelegateCallbacks {
             override fun onWindowShouldClose(): Byte = this@KadreWindowDelegate.onWindowShouldClose()
@@ -110,7 +119,10 @@ class KadreWindowDelegate(
                 (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
             }
         }
-        routeToken = registerDelegateRoute(ptr, routeCallbacks)
+        routeToken = appKitAcquireOwnedRegistration(
+            register = { registerDelegateRoute(ptr, routeCallbacks) },
+            rollback = { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) },
+        )
     }
 
     /**
@@ -306,8 +318,18 @@ class KadreWindowDelegate(
         private fun registerDelegateRoute(
             receiver: MemorySegment,
             callbacks: AppKitWindowDelegateCallbacks,
-        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attach(receiver).also { token ->
-            delegateTable[token] = callbacks
+        ): AppKitNativeCallbackToken {
+            val token = AppKitNativeCallbackTokens.attach(receiver)
+            return appKitAcquireOwnedRegistration(
+                register = {
+                    delegateTable[token] = callbacks
+                    token
+                },
+                rollback = {
+                    delegateTable.remove(token, callbacks)
+                    AppKitNativeCallbackTokens.detach(receiver, token)
+                },
+            )
         }
 
         internal fun registerDelegateRoute(
@@ -510,11 +532,11 @@ class KadreWindowDelegate(
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
-        ): Byte = AppKitNativeCallbackBoundary.invoke {
+        ): Byte = AppKitNativeCallbackBoundary.invokeOrDefault(1) {
             var callbacks: AppKitWindowDelegateCallbacks? = null
             try {
                 callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
-                    ?: return@invoke 1
+                    ?: return@invokeOrDefault 1
                 callbacks.onWindowShouldClose()
             } catch (failure: Throwable) {
                 callbacks?.let { captureSafely(it, "windowShouldClose", failure) }

@@ -141,6 +141,16 @@ internal class AppKitEventLoop(
     }
 
     internal fun willTerminate(closeWindows: () -> Unit = ::closeRemainingWindows) {
+        if (deferWhileNativeCallbackActive { willTerminate(closeWindows) }) {
+            noteApplicationWillTerminate()
+            return
+        }
+        AppKitNativeCallbackBoundary.runExclusive {
+            completeTermination(closeWindows)
+        }
+    }
+
+    private fun completeTermination(closeWindows: () -> Unit) {
         synchronized(this) {
             _isExiting = true
             if (terminationState == TerminationState.TERMINATING ||
@@ -157,6 +167,10 @@ internal class AppKitEventLoop(
             terminationState = TerminationState.TERMINATED
         }
         failure?.let { throw it }
+    }
+
+    internal fun noteApplicationWillTerminate() {
+        markExitRequested()
     }
 
     private fun closeRemainingWindows() {
@@ -201,8 +215,15 @@ internal class AppKitEventLoop(
     internal fun hasRegisteredWindow(windowId: WindowId): Boolean =
         windowCloseActions.containsKey(windowId.value)
 
+    internal fun unregisterWindowCloseActions(windowId: WindowId) {
+        windowCloseActions.remove(windowId.value)
+    }
+
     internal fun closeWindow(windowId: WindowId) {
-        closeWindow(windowId, nativeConfirmation = false)
+        if (deferWhileNativeCallbackActive { closeWindow(windowId) }) return
+        AppKitNativeCallbackBoundary.runExclusive {
+            closeWindow(windowId, nativeConfirmation = false)
+        }
     }
 
     internal fun confirmWindowClosed(windowId: WindowId) {
@@ -223,6 +244,7 @@ internal class AppKitEventLoop(
         }
         if (nativeConfirmation) {
             deferredNativeCallbackCleanup.add {
+                AppKitNativeCallbackBoundary.awaitQuiescence()
                 var deferredFailure: Throwable? = null
                 deferredFailure = appKitCleanupStep(deferredFailure, actions.releaseNativeResources)
                 deferredFailure = appKitCleanupStep(deferredFailure, actions.releaseDelegate)
@@ -230,6 +252,7 @@ internal class AppKitEventLoop(
             }
             failure = appKitCleanupStep(failure) { runLoopOwner?.wakeUp() }
         } else {
+            failure = appKitCleanupStep(failure) { AppKitNativeCallbackBoundary.awaitQuiescence() }
             failure = appKitCleanupStep(failure, actions.releaseNativeResources)
             failure = appKitCleanupStep(failure, actions.releaseDelegate)
         }
@@ -237,13 +260,25 @@ internal class AppKitEventLoop(
     }
 
     internal fun drainDeferredNativeCallbackCleanup() {
-        AppKitNativeCallbackBoundary.awaitQuiescence()
-        var failure: Throwable? = null
-        while (true) {
-            val cleanup = deferredNativeCallbackCleanup.poll() ?: break
-            failure = appKitCleanupStep(failure, cleanup)
+        AppKitNativeCallbackBoundary.runExclusive {
+            var failure: Throwable? = null
+            while (true) {
+                val cleanup = deferredNativeCallbackCleanup.poll() ?: break
+                failure = appKitCleanupStep(failure, cleanup)
+            }
+            failure?.let { recordCallbackFailure("deferredNativeCallbackCleanup", it) }
         }
-        failure?.let { recordCallbackFailure("deferredNativeCallbackCleanup", it) }
+    }
+
+    private fun deferWhileNativeCallbackActive(action: () -> Unit): Boolean {
+        if (!AppKitNativeCallbackBoundary.hasActiveCallbacks) return false
+        deferredNativeCallbackCleanup.add(action)
+        try {
+            runLoopOwner?.wakeUp()
+        } catch (wakeFailure: Throwable) {
+            recordCallbackFailure("deferredNativeCallbackWake", wakeFailure)
+        }
+        return true
     }
 
     internal fun recordCallbackFailure(context: String, failure: Throwable) {
@@ -581,18 +616,31 @@ internal fun runApp(
             if (callbackFailure !== failure) failure.addSuppressed(callbackFailure)
         }
     } finally {
-        AppKitNativeCallbackBoundary.awaitQuiescence()
-        primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.willTerminate() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.closeRunLoopOwner() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.detachApplicationDelegate() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.releaseApplicationDelegate() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.clearApplicationReferences() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
-        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
-        AppKitNativeCallbackBoundary.awaitQuiescence()
-        appKitRunning.set(false)
+        var admissionClosed = false
+        try {
+            AppKitNativeCallbackBoundary.closeAdmissionForTeardown()
+            admissionClosed = true
+            primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.willTerminate() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.closeRunLoopOwner() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.detachApplicationDelegate() }
+            primaryFailure = appKitCleanupStep(primaryFailure) {
+                AppKitNativeCallbackBoundary.awaitQuiescence()
+            }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.releaseApplicationDelegate() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.clearApplicationReferences() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
+            primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
+        } finally {
+            try {
+                if (admissionClosed) {
+                    AppKitNativeCallbackBoundary.finishTeardown { appKitRunning.set(false) }
+                }
+            } finally {
+                appKitRunning.set(false)
+            }
+        }
     }
     primaryFailure?.let { throw it }
 }

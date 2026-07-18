@@ -89,7 +89,7 @@ class KadreAppDelegate(
     }
 
     internal fun onWillTerminate() {
-        (eventLoop as AppKitEventLoop).willTerminate()
+        (eventLoop as AppKitEventLoop).noteApplicationWillTerminate()
     }
 
     /**
@@ -276,11 +276,13 @@ class KadreAppDelegate(
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
-        ): Long = AppKitNativeCallbackBoundary.invoke {
+        ): Long = AppKitNativeCallbackBoundary.invokeOrDefault(
+            NSApplicationTerminateReply.NSTerminateNow.value,
+        ) {
             var callbacks: AppKitApplicationDelegateCallbacks? = null
             try {
                 callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
-                    ?: return@invoke NSApplicationTerminateReply.NSTerminateNow.value
+                    ?: return@invokeOrDefault NSApplicationTerminateReply.NSTerminateNow.value
                 callbacks.onShouldTerminate()
             } catch (failure: Throwable) {
                 try {

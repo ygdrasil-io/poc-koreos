@@ -1070,71 +1070,71 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     fun setWindowDelegate(handler: ApplicationHandler, eventLoop: ActiveEventLoop) {
         MainThreadCheck.require()
         val appKitEventLoop = eventLoop as AppKitEventLoop
-        val del = KadreWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr, appKitEventLoop.windows)
-        try {
-            NSWindow(nsWindowPtr).setDelegate(del.ptr)
-        } catch (failure: Throwable) {
-            appKitRollbackFailedWindowCreation(
-                setDelegateFailure = failure,
-                resourcesReleased = nativeResourcesReleased,
-                releaseDelegate = del::releaseNative,
-                releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
-                releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
-                releaseView = {
-                    if (textInputViewPtr != MemorySegment.NULL) {
-                        ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
-                    }
-                },
-            )
-        }
-        delegate = del
-
-        // Store handler/eventLoop for IME event dispatch
-        _handler = handler
-        _eventLoop = eventLoop
-
-        // Register the IME text input view in the callbacks table
-        // The imeCursorScreenRect segment is shared: setImeCursorArea writes to it,
-        // and the NSTextInputClient callback reads from the same segment.
-        val imeRegistration = if (textInputViewPtr != MemorySegment.NULL) {
-            val record = ImeViewRecord(
-                handler = handler,
-                eventLoop = eventLoop,
-                windowId = id,
-                imeCursorScreenRect = imeCursorScreenRect,
-            )
-            record to AppKitImeTextInputClient.registerNativeView(textInputViewPtr, record)
-        } else null
-
-        appKitEventLoop.registerWindowCloseActions(
-            windowId = id,
-            unregisterCallbacks = {
-                appKitClearWindowCallbackReferences(
-                    cleanupCallbacks = {
-                        appKitUnregisterWindowCallbacks(
-                            detachNativeDelegate = {
-                                NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+        val setup = appKitInstallWindowCallbacksTransaction(
+            resourcesReleased = nativeResourcesReleased,
+            createDelegate = {
+                KadreWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr, appKitEventLoop.windows)
+            },
+            setDelegate = { NSWindow(nsWindowPtr).setDelegate(it.ptr) },
+            registerIme = {
+                if (textInputViewPtr == MemorySegment.NULL) null else {
+                    val record = ImeViewRecord(
+                        handler = handler,
+                        eventLoop = eventLoop,
+                        windowId = id,
+                        imeCursorScreenRect = imeCursorScreenRect,
+                    )
+                    record to AppKitImeTextInputClient.registerNativeView(textInputViewPtr, record)
+                }
+            },
+            registerCloseAction = { del, imeRegistration ->
+                appKitEventLoop.registerWindowCloseActions(
+                    windowId = id,
+                    unregisterCallbacks = {
+                        appKitClearWindowCallbackReferences(
+                            cleanupCallbacks = {
+                                appKitUnregisterWindowCallbacks(
+                                    detachNativeDelegate = {
+                                        NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+                                    },
+                                    unregisterDelegate = del::unregisterRoute,
+                                    unregisterImeView = {
+                                        imeRegistration?.let { (record, token) ->
+                                            AppKitImeTextInputClient.unregisterView(token, record)
+                                        }
+                                    },
+                                    releaseDelegate = {},
+                                )
                             },
-                            unregisterDelegate = del::unregisterRoute,
-                            unregisterImeView = {
-                                imeRegistration?.let { (record, token) ->
-                                    AppKitImeTextInputClient.unregisterView(token, record)
-                                }
+                            clearReferences = {
+                                delegate = null
+                                _handler = null
+                                _eventLoop = null
                             },
-                            releaseDelegate = {},
                         )
                     },
-                    clearReferences = {
-                        delegate = null
-                        _handler = null
-                        _eventLoop = null
-                    },
+                    sendNativeClose = { NSWindow(nsWindowPtr).close() },
+                    releaseNativeResources = ::releaseNativeWindowResources,
+                    releaseDelegate = del::releaseNative,
                 )
             },
-            sendNativeClose = { NSWindow(nsWindowPtr).close() },
-            releaseNativeResources = ::releaseNativeWindowResources,
-            releaseDelegate = del::releaseNative,
+            unregisterCloseAction = { appKitEventLoop.unregisterWindowCloseActions(id) },
+            detachDelegate = { NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL) },
+            unregisterIme = { (record, token) ->
+                AppKitImeTextInputClient.unregisterView(token, record)
+            },
+            releaseDelegate = KadreWindowDelegate::releaseNative,
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                }
+            },
         )
+        delegate = setup.delegate
+        _handler = handler
+        _eventLoop = eventLoop
     }
 
     private fun releaseNativeWindowResources() {
@@ -1604,6 +1604,85 @@ internal fun appKitReleaseNativeWindowResources(
     cleanup(releaseLayer)
     cleanup(releaseView)
     failure?.let { throw it }
+}
+
+internal data class AppKitWindowCallbacksSetup<D : Any, I : Any>(
+    val delegate: D,
+    val imeRegistration: I?,
+)
+
+internal inline fun <T> appKitAcquireOwnedRegistration(
+    register: () -> T,
+    rollback: () -> Unit,
+): T = try {
+    register()
+} catch (primary: Throwable) {
+    try {
+        rollback()
+    } catch (rollbackFailure: Throwable) {
+        if (rollbackFailure !== primary) primary.addSuppressed(rollbackFailure)
+    }
+    throw primary
+}
+
+internal inline fun <T : Any> appKitInitializeOwnedNativeObject(
+    allocate: () -> T,
+    initialize: (T) -> T,
+    releaseAllocated: (T) -> Unit,
+): T {
+    val allocated = allocate()
+    return appKitAcquireOwnedRegistration(
+        register = { initialize(allocated) },
+        rollback = { releaseAllocated(allocated) },
+    )
+}
+
+internal fun <D : Any, I : Any> appKitInstallWindowCallbacksTransaction(
+    resourcesReleased: AtomicBoolean,
+    createDelegate: () -> D,
+    setDelegate: (D) -> Unit,
+    registerIme: () -> I?,
+    registerCloseAction: (D, I?) -> Unit,
+    unregisterCloseAction: () -> Unit,
+    detachDelegate: () -> Unit,
+    unregisterIme: (I) -> Unit,
+    releaseDelegate: (D) -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+): AppKitWindowCallbacksSetup<D, I> {
+    var delegate: D? = null
+    var setDelegateAttempted = false
+    var imeRegistration: I? = null
+    var closeActionAttempted = false
+    try {
+        val createdDelegate = createDelegate()
+        delegate = createdDelegate
+        setDelegateAttempted = true
+        setDelegate(createdDelegate)
+        imeRegistration = registerIme()
+        closeActionAttempted = true
+        registerCloseAction(createdDelegate, imeRegistration)
+        return AppKitWindowCallbacksSetup(createdDelegate, imeRegistration)
+    } catch (primary: Throwable) {
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== primary) primary.addSuppressed(cleanupFailure)
+            }
+        }
+        if (closeActionAttempted) cleanup(unregisterCloseAction)
+        if (setDelegateAttempted) cleanup(detachDelegate)
+        imeRegistration?.let { cleanup { unregisterIme(it) } }
+        delegate?.let { cleanup { releaseDelegate(it) } }
+        if (resourcesReleased.compareAndSet(false, true)) {
+            cleanup(releaseWindow)
+            cleanup(releaseLayer)
+            cleanup(releaseView)
+        }
+        throw primary
+    }
 }
 
 internal fun appKitRollbackFailedWindowCreation(
