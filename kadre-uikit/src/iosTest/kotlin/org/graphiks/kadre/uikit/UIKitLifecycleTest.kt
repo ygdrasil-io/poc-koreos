@@ -8,12 +8,42 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.Fullscreen
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 
 class UIKitLifecycleTest {
+
+    @Test
+    fun initialCreationAppliesSupportedAttributes() {
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val fullscreen = Fullscreen.Borderless()
+        val window = loop.createWindow(
+            WindowAttributes(
+                title = "initial-title",
+                visible = false,
+                fullscreen = fullscreen,
+            ),
+        )
+
+        try {
+            assertEquals("initial-title", window.title)
+            assertEquals(fullscreen, window.fullscreen)
+        } finally {
+            window.close()
+        }
+    }
 
     @Test
     fun foregroundSurfaceRecreationReusesTheWindowInLifecycleOrder() {

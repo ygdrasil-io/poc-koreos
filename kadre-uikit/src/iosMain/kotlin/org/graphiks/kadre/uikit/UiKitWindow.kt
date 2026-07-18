@@ -717,6 +717,9 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     private var displayLink: CADisplayLink? = null
     private val displayLinkProxy = DisplayLinkProxy { emitRedraw() }
 
+    private var _title: String = ""
+    private var _fullscreen: Fullscreen? = null
+
     override val id: WindowId
 
     init {
@@ -744,10 +747,10 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
             vc.setView(metalView)
         }
 
-        // 5. Wire root VC and show
+        // 5. Wire root VC and apply the supported initial attributes once.
         uiWindow.rootViewController = viewController
+        applyMutableAttributes(attrs)
         if (attrs.visible) {
-            uiWindow.makeKeyAndVisible()
             // Become first responder so hardware-keyboard / controller key
             // presses reach pressesBegan/Ended.
             metalView.becomeFirstResponder()
@@ -998,8 +1001,6 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     // maximization, or decoration changes. UIKit manages the full-screen
     // window lifecycle. All members below are documented no-ops.
 
-    private var _title: String = ""
-
     /**
      * Sets the view controller title. On iOS the window has no decoration title bar;
      * this updates the UIViewController title for navigation controller integration.
@@ -1091,9 +1092,6 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
 
     override fun primaryMonitor(): MonitorHandle? =
         currentMonitor()
-
-    /** In-memory fullscreen state (R2). */
-    private var _fullscreen: Fullscreen? = null
 
     override val fullscreen: Fullscreen? get() = _fullscreen
 
