@@ -3,15 +3,599 @@ package org.graphiks.kadre.appkit
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitRegistryLifecycleTest {
+
+    @Test
+    fun `public exit requests termination before ordered best-effort lifecycle cleanup`() {
+        val trace = mutableListOf<String>()
+        val destroyFailure = IllegalStateException("destroy failure")
+        val closeFailure = IllegalArgumentException("close failure")
+        val eventLoop = AppKitEventLoop(
+            handler = object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+                override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                    trace += "destroySurfaces"
+                    throw destroyFailure
+                }
+
+                override fun suspended(eventLoop: ActiveEventLoop) {
+                    trace += "suspended"
+                }
+
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) {
+                    if (event === WindowEvent.Destroyed) trace += "Destroyed"
+                }
+            },
+            terminateApplication = { trace += "terminate" },
+        )
+        val windowId = WindowId(0x901L)
+        eventLoop.registerWindowCloseActions(
+            windowId,
+            unregisterCallbacks = { trace += "unregister" },
+            closeNative = {
+                trace += "closeNative"
+                throw closeFailure
+            },
+        )
+        eventLoop.didLaunch()
+
+        eventLoop.exit()
+
+        assertEquals(listOf("terminate"), trace)
+        val failure = assertFailsWith<IllegalStateException> {
+            eventLoop.willTerminate()
+        }
+        assertSame(destroyFailure, failure)
+        assertSame(closeFailure, failure.suppressed.single())
+        assertEquals(
+            listOf("terminate", "destroySurfaces", "unregister", "Destroyed", "closeNative", "suspended"),
+            trace,
+        )
+    }
+
+    @Test
+    fun `owned native window disables release-on-close and releases each owned object once`() {
+        val trace = mutableListOf<String>()
+        val released = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        appKitOwnNativeWindow { releasedWhenClosed ->
+            trace += "releasedWhenClosed=$releasedWhenClosed"
+        }
+        repeat(2) {
+            appKitReleaseNativeWindowResources(
+                released = released,
+                sendNativeClose = true,
+                closeWindow = { trace += "closeWindow" },
+                releaseWindow = { trace += "releaseWindow" },
+                releaseLayer = { trace += "releaseLayer" },
+                releaseView = { trace += "releaseView" },
+            )
+        }
+
+        assertEquals(
+            listOf(
+                "releasedWhenClosed=false",
+                "closeWindow",
+                "releaseWindow",
+                "releaseLayer",
+                "releaseView",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `sendEvent and IME query trampolines contain every failure and return safe defaults`() {
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        val view = MemorySegment.ofAddress(0x902L)
+        AppKitImeTextInputClient.registerView(
+            view,
+            ImeViewRecord(NoopHandler, eventLoop, WindowId(view.address()), MemorySegment.NULL),
+        )
+        val superFailure = IllegalStateException("super send failure")
+        val handlerFailure = IllegalArgumentException("handler failure")
+        val ffmFailure = UnsupportedOperationException("FFM failure")
+        val queryFailure = IndexOutOfBoundsException("range failure")
+        try {
+            appKitInvokeSendEventSafely(eventLoop) { throw superFailure }
+            appKitInvokeSendEventSafely(eventLoop) { throw handlerFailure }
+            appKitInvokeSendEventSafely(eventLoop) { throw ffmFailure }
+
+            val safeQuery = AppKitImeTextInputClient.Callbacks.querySafely(
+                self = view,
+                context = "selectedRange",
+                defaultValue = MemorySegment.NULL,
+            ) { throw queryFailure }
+            assertEquals(MemorySegment.NULL, safeQuery)
+
+            AppKitImeTextInputClient.Callbacks.firstRectForCharacterRange_actualRange(
+                MemorySegment.NULL,
+                view,
+                MemorySegment.NULL,
+                MemorySegment.NULL,
+                MemorySegment.NULL,
+            )
+
+            val queued = assertFailsWith<IllegalStateException> {
+                eventLoop.throwPendingCallbackFailure()
+            }
+            assertSame(superFailure, queued.cause)
+            assertSame(handlerFailure, queued.suppressed[0].cause)
+            assertSame(ffmFailure, queued.suppressed[1].cause)
+            assertSame(queryFailure, queued.suppressed[2].cause)
+            assertTrue(queued.suppressed[3].message.orEmpty().contains("firstRectForCharacterRange"))
+
+            appKitInvokeSendEventSafely(null) { error("no route") }
+            val staleDefault = AppKitImeTextInputClient.Callbacks.querySafely(
+                self = MemorySegment.ofAddress(0x903L),
+                context = "validAttributesForMarkedText",
+                defaultValue = MemorySegment.NULL,
+            ) { error("stale route") }
+            assertEquals(MemorySegment.NULL, staleDefault)
+        } finally {
+            AppKitImeTextInputClient.unregisterView(view)
+        }
+    }
+
+    @Test
+    fun `IME rect query resets actual range to NSNotFound after range read failure`() {
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        val view = MemorySegment.ofAddress(0x923L)
+        AppKitImeTextInputClient.registerView(
+            view,
+            ImeViewRecord(NoopHandler, eventLoop, WindowId(view.address()), MemorySegment.NULL),
+        )
+        try {
+            Arena.ofConfined().use { arena ->
+                val returnRect = arena.allocate(32L, 8L)
+                val actualRange = arena.allocate(AppKitImeTextInputClient.NS_RANGE_LAYOUT)
+
+                AppKitImeTextInputClient.Callbacks.firstRectForCharacterRange_actualRange(
+                    returnRect,
+                    view,
+                    MemorySegment.NULL,
+                    MemorySegment.NULL,
+                    actualRange,
+                )
+
+                assertEquals(Long.MAX_VALUE, actualRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                assertEquals(0L, actualRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+                repeat(4) { index ->
+                    assertEquals(0.0, returnRect.getAtIndex(ValueLayout.JAVA_DOUBLE, index.toLong()))
+                }
+            }
+            val queued = assertFailsWith<IllegalStateException> {
+                eventLoop.throwPendingCallbackFailure()
+            }
+            assertTrue(queued.message.orEmpty().contains("firstRectForCharacterRange"))
+        } finally {
+            AppKitImeTextInputClient.unregisterView(view)
+        }
+    }
+
+    @Test
+    fun `first callback failure terminates a blocking run and final cleanup failure is drained`() {
+        val trace = mutableListOf<String>()
+        val callbackFailure = IllegalStateException("callback failure")
+        val cleanupCallbackFailure = IllegalArgumentException("cleanup callback failure")
+        lateinit var loop: AppKitEventLoop
+        val failure = assertFailsWith<IllegalStateException> {
+            runApp(NoopHandler) { eventLoop ->
+                loop = eventLoop
+                object : AppKitRunAppOperations {
+                    override fun requestTermination() {
+                        trace += "requestTermination"
+                    }
+
+                    override fun requireMainThread() = Unit
+                    override fun initialize() = Unit
+                    override fun attachApplicationDelegate() = Unit
+                    override fun installRunLoopOwner() = Unit
+
+                    override fun run() {
+                        trace += "run"
+                        eventLoop.recordCallbackFailure("blockingCallback", callbackFailure)
+                        check(trace.last() == "requestTermination") {
+                            "callback failure did not request controlled termination"
+                        }
+                        trace += "runReturned"
+                    }
+
+                    override fun throwPendingCallbackFailure() = eventLoop.throwPendingCallbackFailure()
+
+                    override fun suppressPendingCallbackFailureOnto(primary: Throwable) =
+                        eventLoop.suppressPendingCallbackFailureOnto(primary)
+
+                    override fun closeRunLoopOwner() {
+                        trace += "closeOwner"
+                    }
+
+                    override fun detachApplicationDelegate() {
+                        trace += "detachDelegate"
+                        eventLoop.recordCallbackFailure("cleanupCallback", cleanupCallbackFailure)
+                    }
+
+                    override fun releaseApplicationDelegate() {
+                        trace += "releaseDelegate"
+                    }
+
+                    override fun clearApplicationReferences() {
+                        trace += "clearReferences"
+                    }
+                }
+            }
+        }
+
+        assertTrue(loop.isExiting)
+        assertSame(callbackFailure, failure.cause)
+        val cleanupQueued = failure.suppressed.single()
+        assertTrue(cleanupQueued.message.orEmpty().contains("cleanupCallback"))
+        assertSame(cleanupCallbackFailure, cleanupQueued.cause)
+        assertEquals(
+            listOf(
+                "run",
+                "requestTermination",
+                "runReturned",
+                "closeOwner",
+                "detachDelegate",
+                "releaseDelegate",
+                "clearReferences",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `native window close releases ownership but defers delegate release past callback return`() {
+        val trace = mutableListOf<String>()
+        val windowId = WindowId(0x904L)
+        val delegate = MemorySegment.ofAddress(0x905L)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        var callbackInFlight = false
+        var delegateReleased = false
+        KadreWindowDelegate.registerDelegateRoute(
+            delegate.address(),
+            object : AppKitWindowDelegateCallbacks {
+                override fun onWindowWillClose() {
+                    callbackInFlight = true
+                    trace += "callback"
+                    eventLoop.confirmWindowClosed(windowId)
+                    assertFalse(delegateReleased)
+                    trace += "callbackReturn"
+                    callbackInFlight = false
+                }
+            },
+        )
+        eventLoop.registerWindowCloseActions(
+            windowId = windowId,
+            unregisterCallbacks = {
+                KadreWindowDelegate.unregisterDelegate(delegate.address())
+                trace += "unregister"
+            },
+            sendNativeClose = { trace += "sendNativeClose" },
+            releaseNativeResources = { trace += "releaseWindowLayerView" },
+            releaseDelegate = {
+                assertFalse(callbackInFlight)
+                delegateReleased = true
+                trace += "releaseDelegate"
+            },
+        )
+
+        KadreWindowDelegate.Callbacks.windowWillClose(
+            delegate,
+            MemorySegment.NULL,
+            MemorySegment.NULL,
+        )
+
+        assertEquals(
+            listOf("callback", "unregister", "releaseWindowLayerView", "callbackReturn"),
+            trace,
+        )
+        assertFalse(delegateReleased)
+        eventLoop.drainDeferredNativeCallbackCleanup()
+        assertTrue(delegateReleased)
+        assertEquals(
+            listOf(
+                "callback",
+                "unregister",
+                "releaseWindowLayerView",
+                "callbackReturn",
+                "releaseDelegate",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `termination rejects reentrant windows and drains close actions to stability`() {
+        val trace = mutableListOf<String>()
+        lateinit var eventLoop: AppKitEventLoop
+        var attemptedFromDestroyed = false
+        eventLoop = AppKitEventLoop(object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                val failure = assertFailsWith<IllegalStateException> {
+                    eventLoop.createWindow(WindowAttributes())
+                }
+                assertTrue(failure.message.orEmpty().contains("terminating"))
+                trace += "destroyRejected"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event === WindowEvent.Destroyed && !attemptedFromDestroyed) {
+                    attemptedFromDestroyed = true
+                    val failure = assertFailsWith<IllegalStateException> {
+                        eventLoop.createWindow(WindowAttributes())
+                    }
+                    assertTrue(failure.message.orEmpty().contains("terminating"))
+                    trace += "destroyedRejected"
+                }
+            }
+        })
+        val first = WindowId(0x906L)
+        val reentrant = WindowId(0x907L)
+        eventLoop.registerWindowCloseActions(
+            first,
+            unregisterCallbacks = {
+                trace += "closeFirst"
+                eventLoop.registerWindowCloseActions(
+                    reentrant,
+                    unregisterCallbacks = { trace += "closeReentrant" },
+                    closeNative = {},
+                )
+            },
+            closeNative = {},
+        )
+
+        eventLoop.willTerminate()
+
+        assertEquals(
+            listOf("destroyRejected", "closeFirst", "destroyedRejected", "closeReentrant"),
+            trace,
+        )
+        assertFalse(eventLoop.hasRegisteredWindow(first))
+        assertFalse(eventLoop.hasRegisteredWindow(reentrant))
+    }
+
+    @Test
+    fun `setDelegate failure unregisters partial route and preserves cleanup identity`() {
+        val address = 0x908L
+        val callbacks = object : AppKitWindowDelegateCallbacks {}
+        val released = java.util.concurrent.atomic.AtomicBoolean(false)
+        val setDelegateFailure = IllegalStateException("setDelegate failure")
+        val releaseFailure = IllegalArgumentException("delegate release failure")
+        KadreWindowDelegate.registerDelegateRoute(address, callbacks)
+
+        val failure = assertFailsWith<IllegalStateException> {
+            appKitReleaseFailedWindowDelegate(setDelegateFailure) {
+                appKitReleaseWindowDelegateNative(
+                    released = released,
+                    address = address,
+                    callbacks = callbacks,
+                    releaseNative = { throw releaseFailure },
+                )
+            }
+        }
+
+        assertSame(setDelegateFailure, failure)
+        assertSame(releaseFailure, failure.suppressed.single())
+        assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
+        appKitReleaseWindowDelegateNative(
+            released = released,
+            address = address,
+            callbacks = callbacks,
+            releaseNative = { error("released twice") },
+        )
+    }
+
+    @Test
+    fun `terminal cleanup clears Kotlin references after detach or release failure`() {
+        listOf("detach", "release").forEachIndexed { index, failingStep ->
+            val windowId = WindowId(0x910L + index)
+            val delegateAddress = windowId.value + 0x10L
+            val view = MemorySegment.ofAddress(windowId.value + 0x20L)
+            val callbacks = object : AppKitWindowDelegateCallbacks {}
+            val failure = IllegalStateException("$failingStep failure")
+            var delegateReference: Any? = Any()
+            var handlerReference: Any? = Any()
+            var eventLoopReference: Any? = Any()
+            val eventLoop = AppKitEventLoop(NoopHandler)
+            KadreWindowDelegate.registerDelegateRoute(delegateAddress, callbacks)
+            AppKitImeTextInputClient.registerView(
+                view,
+                ImeViewRecord(NoopHandler, eventLoop, windowId, MemorySegment.NULL),
+            )
+            eventLoop.registerWindowCloseActions(
+                windowId = windowId,
+                unregisterCallbacks = {
+                    appKitClearWindowCallbackReferences(
+                        cleanupCallbacks = {
+                            appKitUnregisterWindowCallbacks(
+                                delegateAddress = delegateAddress,
+                                textInputView = view,
+                                detachNativeDelegate = {
+                                    if (failingStep == "detach") throw failure
+                                },
+                                releaseDelegate = {},
+                            )
+                        },
+                        clearReferences = {
+                            delegateReference = null
+                            handlerReference = null
+                            eventLoopReference = null
+                        },
+                    )
+                },
+                sendNativeClose = {},
+                releaseNativeResources = {},
+                releaseDelegate = {
+                    if (failingStep == "release") throw failure
+                },
+            )
+
+            val thrown = assertFailsWith<IllegalStateException> {
+                eventLoop.closeWindow(windowId)
+            }
+
+            assertSame(failure, thrown)
+            assertEquals(null, delegateReference)
+            assertEquals(null, handlerReference)
+            assertEquals(null, eventLoopReference)
+            assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
+            assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
+        }
+    }
+
+    @Test
+    fun `identity-aware routes isolate reused addresses and in-flight callbacks across runs`() {
+        val address = 0x920L
+        val self = MemorySegment.ofAddress(address)
+
+        val appEvents = mutableListOf<String>()
+        val appEntered = CountDownLatch(1)
+        val appRelease = CountDownLatch(1)
+        val appRun1 = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                appEntered.countDown()
+                check(appRelease.await(5, TimeUnit.SECONDS))
+                appEvents += "run1"
+            }
+        }
+        val appRun2 = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                appEvents += "run2"
+            }
+        }
+        KadreAppDelegate.registerDelegateRoute(address, appRun1)
+        val appThread = thread(name = "app-route-run1") {
+            KadreAppDelegate.Callbacks.applicationDidBecomeActive(
+                self,
+                MemorySegment.NULL,
+                MemorySegment.NULL,
+            )
+        }
+        assertTrue(appEntered.await(5, TimeUnit.SECONDS))
+        KadreAppDelegate.registerDelegateRoute(address, appRun2)
+        KadreAppDelegate.unregisterDelegate(address, appRun1)
+        appRelease.countDown()
+        appThread.join(5_000)
+        assertFalse(appThread.isAlive)
+        KadreAppDelegate.Callbacks.applicationDidBecomeActive(
+            self,
+            MemorySegment.NULL,
+            MemorySegment.NULL,
+        )
+        assertEquals(listOf("run1", "run2"), appEvents)
+        assertEquals(1, KadreAppDelegate.registeredDelegateCount())
+
+        val windowEvents = mutableListOf<String>()
+        val windowEntered = CountDownLatch(1)
+        val windowRelease = CountDownLatch(1)
+        val windowRun1 = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowWillClose() {
+                windowEntered.countDown()
+                check(windowRelease.await(5, TimeUnit.SECONDS))
+                windowEvents += "run1"
+            }
+        }
+        val windowRun2 = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowWillClose() {
+                windowEvents += "run2"
+            }
+        }
+        KadreWindowDelegate.registerDelegateRoute(address, windowRun1)
+        val windowThread = thread(name = "window-route-run1") {
+            KadreWindowDelegate.Callbacks.windowWillClose(
+                self,
+                MemorySegment.NULL,
+                MemorySegment.NULL,
+            )
+        }
+        assertTrue(windowEntered.await(5, TimeUnit.SECONDS))
+        KadreWindowDelegate.registerDelegateRoute(address, windowRun2)
+        KadreWindowDelegate.unregisterDelegate(address, windowRun1)
+        windowRelease.countDown()
+        windowThread.join(5_000)
+        assertFalse(windowThread.isAlive)
+        KadreWindowDelegate.Callbacks.windowWillClose(
+            self,
+            MemorySegment.NULL,
+            MemorySegment.NULL,
+        )
+        assertEquals(listOf("run1", "run2"), windowEvents)
+        assertEquals(1, KadreWindowDelegate.registeredDelegateCount())
+
+        val imeEvents = mutableListOf<String>()
+        val imeEntered = CountDownLatch(1)
+        val imeRelease = CountDownLatch(1)
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        fun imeRecord(run: String, entered: CountDownLatch? = null, release: CountDownLatch? = null) =
+            ImeViewRecord(
+                handler = object : ApplicationHandler {
+                    override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+                    override fun windowEvent(
+                        eventLoop: ActiveEventLoop,
+                        windowId: WindowId,
+                        event: WindowEvent,
+                    ) {
+                        entered?.countDown()
+                        release?.let { check(it.await(5, TimeUnit.SECONDS)) }
+                        imeEvents += run
+                    }
+                },
+                eventLoop = eventLoop,
+                windowId = WindowId(address),
+                imeCursorScreenRect = MemorySegment.NULL,
+            )
+        val imeRun1 = imeRecord("run1", imeEntered, imeRelease)
+        val imeRun2 = imeRecord("run2")
+        AppKitImeTextInputClient.registerView(self, imeRun1)
+        val imeThread = thread(name = "ime-route-run1") {
+            AppKitImeTextInputClient.Callbacks.unmarkText(self, MemorySegment.NULL)
+        }
+        assertTrue(imeEntered.await(5, TimeUnit.SECONDS))
+        AppKitImeTextInputClient.registerView(self, imeRun2)
+        AppKitImeTextInputClient.unregisterView(self, imeRun1)
+        imeRelease.countDown()
+        imeThread.join(5_000)
+        assertFalse(imeThread.isAlive)
+        AppKitImeTextInputClient.Callbacks.unmarkText(self, MemorySegment.NULL)
+        assertEquals(listOf("run1", "run2"), imeEvents)
+        assertEquals(1, AppKitImeTextInputClient.registeredViewCount())
+
+        KadreAppDelegate.unregisterDelegate(address, appRun2)
+        KadreWindowDelegate.unregisterDelegate(address, windowRun2)
+        AppKitImeTextInputClient.unregisterView(self, imeRun2)
+        assertEquals(0, KadreAppDelegate.registeredDelegateCount())
+        assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
+        assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
+    }
 
     @Test
     fun `terminal window close removes redraw state`() {

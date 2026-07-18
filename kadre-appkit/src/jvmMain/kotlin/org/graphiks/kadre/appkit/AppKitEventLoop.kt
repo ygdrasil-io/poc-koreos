@@ -31,6 +31,7 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Global lock guaranteeing that only a single AppKit event loop is active
@@ -41,6 +42,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * [IllegalStateException] if the value was already true.
  */
 internal val appKitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+private fun terminateAppKitApplication() {
+    val nsAppClass = ObjCRuntime.getClass("NSApplication")
+    val nsApp = ObjCRuntime.msgSend(
+        ValueLayout.ADDRESS,
+        nsAppClass,
+        ObjCRuntime.sel("sharedApplication"),
+    ) as MemorySegment
+    ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
+}
 
 /**
  * Internal implementation of [ActiveEventLoop] for the AppKit platform (macOS).
@@ -58,11 +69,14 @@ internal val appKitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
  */
 internal class AppKitEventLoop(
     internal val handler: ApplicationHandler,
+    terminateApplication: () -> Unit = {},
 ) : ActiveEventLoop {
 
     private data class WindowCloseActions(
         val unregisterCallbacks: () -> Unit,
-        val closeNative: () -> Unit,
+        val sendNativeClose: () -> Unit,
+        val releaseNativeResources: () -> Unit,
+        val releaseDelegate: () -> Unit,
     )
 
     /** Live windows: windowId → AppKitWindow. */
@@ -89,6 +103,11 @@ internal class AppKitEventLoop(
     private var didDestroySurfaces = false
     private var didCloseWindows = false
     private val callbackFailures = ConcurrentLinkedQueue<Throwable>()
+    private val deferredNativeCallbackCleanup = ConcurrentLinkedQueue<() -> Unit>()
+    private val callbackTerminationRequested = AtomicBoolean(false)
+
+    @Volatile
+    private var terminateApplication: () -> Unit = terminateApplication
 
     internal fun didLaunch() {
         synchronized(this) {
@@ -140,8 +159,12 @@ internal class AppKitEventLoop(
 
     private fun closeRemainingWindows() {
         var failure: Throwable? = null
-        windowCloseActions.keys.toList().forEach {
-            failure = appKitCleanupStep(failure) { closeWindow(WindowId(it)) }
+        while (true) {
+            val pendingWindowIds = windowCloseActions.keys.toList()
+            if (pendingWindowIds.isEmpty()) break
+            pendingWindowIds.forEach {
+                failure = appKitCleanupStep(failure) { closeWindow(WindowId(it)) }
+            }
         }
         failure?.let { throw it }
     }
@@ -150,22 +173,41 @@ internal class AppKitEventLoop(
         windowId: WindowId,
         unregisterCallbacks: () -> Unit,
         closeNative: () -> Unit,
+    ) = registerWindowCloseActions(
+        windowId = windowId,
+        unregisterCallbacks = unregisterCallbacks,
+        sendNativeClose = closeNative,
+        releaseNativeResources = {},
+        releaseDelegate = {},
+    )
+
+    internal fun registerWindowCloseActions(
+        windowId: WindowId,
+        unregisterCallbacks: () -> Unit,
+        sendNativeClose: () -> Unit,
+        releaseNativeResources: () -> Unit,
+        releaseDelegate: () -> Unit,
     ) {
-        windowCloseActions[windowId.value] = WindowCloseActions(unregisterCallbacks, closeNative)
+        windowCloseActions[windowId.value] = WindowCloseActions(
+            unregisterCallbacks,
+            sendNativeClose,
+            releaseNativeResources,
+            releaseDelegate,
+        )
     }
 
     internal fun hasRegisteredWindow(windowId: WindowId): Boolean =
         windowCloseActions.containsKey(windowId.value)
 
     internal fun closeWindow(windowId: WindowId) {
-        closeWindow(windowId, closeNative = true)
+        closeWindow(windowId, nativeConfirmation = false)
     }
 
     internal fun confirmWindowClosed(windowId: WindowId) {
-        closeWindow(windowId, closeNative = false)
+        closeWindow(windowId, nativeConfirmation = true)
     }
 
-    private fun closeWindow(windowId: WindowId, closeNative: Boolean) {
+    private fun closeWindow(windowId: WindowId, nativeConfirmation: Boolean) {
         val actions = windowCloseActions.remove(windowId.value) ?: return
         windows.remove(windowId.value)
         var failure: Throwable? = null
@@ -174,15 +216,39 @@ internal class AppKitEventLoop(
         failure = appKitCleanupStep(failure) {
             handler.windowEvent(this, windowId, org.graphiks.kadre.core.WindowEvent.Destroyed)
         }
-        if (closeNative) {
-            failure = appKitCleanupStep(failure, actions.closeNative)
+        if (!nativeConfirmation) {
+            failure = appKitCleanupStep(failure, actions.sendNativeClose)
+        }
+        failure = appKitCleanupStep(failure, actions.releaseNativeResources)
+        if (nativeConfirmation) {
+            deferredNativeCallbackCleanup.add(actions.releaseDelegate)
+            failure = appKitCleanupStep(failure) { runLoopOwner?.wakeUp() }
+        } else {
+            failure = appKitCleanupStep(failure, actions.releaseDelegate)
         }
         failure?.let { throw it }
+    }
+
+    internal fun drainDeferredNativeCallbackCleanup() {
+        var failure: Throwable? = null
+        while (true) {
+            val cleanup = deferredNativeCallbackCleanup.poll() ?: break
+            failure = appKitCleanupStep(failure, cleanup)
+        }
+        failure?.let { recordCallbackFailure("deferredNativeCallbackCleanup", it) }
     }
 
     internal fun recordCallbackFailure(context: String, failure: Throwable) {
         val contextualFailure = IllegalStateException("AppKit callback $context failed", failure)
         callbackFailures.add(contextualFailure)
+        if (callbackTerminationRequested.compareAndSet(false, true)) {
+            _isExiting = true
+            try {
+                terminateApplication()
+            } catch (terminationFailure: Throwable) {
+                if (terminationFailure !== contextualFailure) contextualFailure.addSuppressed(terminationFailure)
+            }
+        }
         try {
             runLoopOwner?.wakeUp()
         } catch (wakeFailure: Throwable) {
@@ -218,6 +284,7 @@ internal class AppKitEventLoop(
      * Must be called from the main thread (validated by [AppKitWindow.init]).
      */
     override fun createWindow(attributes: WindowAttributes): Window {
+        check(!_isExiting) { "Cannot create an AppKit window while the event loop is terminating" }
         val window = AppKitWindow(attributes)
         window.setWindowDelegate(handler, this)
         windows[window.id.value] = window
@@ -266,17 +333,7 @@ internal class AppKitEventLoop(
      */
     override fun exit() {
         _isExiting = true
-        // Close all open windows before terminating
-        windows.values.toList().forEach { window ->
-            try { window.close() } catch (_: Exception) { /* ignore */ }
-        }
-        val nsAppClass = ObjCRuntime.getClass("NSApplication")
-        val nsApp = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            nsAppClass,
-            ObjCRuntime.sel("sharedApplication"),
-        ) as MemorySegment
-        ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
+        terminateApplication()
     }
 
     /**
@@ -301,6 +358,10 @@ internal class AppKitEventLoop(
         synchronized(this) {
             if (runLoopOwner === owner) runLoopOwner = null
         }
+    }
+
+    internal fun installTerminationRequest(requestTermination: () -> Unit) {
+        terminateApplication = requestTermination
     }
 
     // ── Task 29: ownedDisplayHandle ─────────────────────────────────────────────
@@ -373,6 +434,7 @@ internal class AppKitEventLoop(
 }
 
 internal interface AppKitRunAppOperations {
+    fun requestTermination() = Unit
     fun requireMainThread()
     fun initialize()
     fun attachApplicationDelegate()
@@ -392,6 +454,10 @@ private class NativeAppKitRunAppOperations(
     private var app: KadreApplication? = null
     private var appDelegate: KadreAppDelegate? = null
     private var runLoopOwner: CFRunLoopOwner? = null
+
+    override fun requestTermination() {
+        terminateAppKitApplication()
+    }
 
     override fun requireMainThread() {
         MainThreadCheck.require()
@@ -475,6 +541,7 @@ internal fun runApp(
     try {
         val installedOperations = operationsFactory(eventLoop)
         operations = installedOperations
+        eventLoop.installTerminationRequest(installedOperations::requestTermination)
         installedOperations.requireMainThread()
         installedOperations.initialize()
         installedOperations.attachApplicationDelegate()
@@ -490,10 +557,14 @@ internal fun runApp(
         }
     } finally {
         primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.willTerminate() }
+        primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
+        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.closeRunLoopOwner() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.detachApplicationDelegate() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.releaseApplicationDelegate() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.clearApplicationReferences() }
+        primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
+        primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
         appKitRunning.set(false)
     }
     primaryFailure?.let { throw it }

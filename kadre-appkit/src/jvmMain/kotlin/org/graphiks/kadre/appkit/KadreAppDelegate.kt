@@ -42,6 +42,7 @@ class KadreAppDelegate(
     private val eventLoop: ActiveEventLoop,
 ) {
     private val released = AtomicBoolean(false)
+    private val routeCallbacks: AppKitApplicationDelegateCallbacks
     /** Pointer to the Objective-C object wrapped by this delegate. */
     val ptr: MemorySegment
 
@@ -60,19 +61,17 @@ class KadreAppDelegate(
             ObjCRuntime.sel("init"),
         ) as MemorySegment
 
-        registerDelegateRoute(
-            ptr.address(),
-            object : AppKitApplicationDelegateCallbacks {
-                override fun onDidFinishLaunching() = this@KadreAppDelegate.onDidFinishLaunching()
-                override fun onDidBecomeActive() = this@KadreAppDelegate.onDidBecomeActive()
-                override fun onWillResignActive() = this@KadreAppDelegate.onWillResignActive()
-                override fun onWillTerminate() = this@KadreAppDelegate.onWillTerminate()
-                override fun onShouldTerminate(): Long = this@KadreAppDelegate.onShouldTerminate()
-                override fun captureCallbackFailure(context: String, failure: Throwable) {
-                    (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
-                }
-            },
-        )
+        routeCallbacks = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidFinishLaunching() = this@KadreAppDelegate.onDidFinishLaunching()
+            override fun onDidBecomeActive() = this@KadreAppDelegate.onDidBecomeActive()
+            override fun onWillResignActive() = this@KadreAppDelegate.onWillResignActive()
+            override fun onWillTerminate() = this@KadreAppDelegate.onWillTerminate()
+            override fun onShouldTerminate(): Long = this@KadreAppDelegate.onShouldTerminate()
+            override fun captureCallbackFailure(context: String, failure: Throwable) {
+                (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
+            }
+        }
+        registerDelegateRoute(ptr.address(), routeCallbacks)
     }
 
     /** Kotlin callback for `applicationDidFinishLaunching:`. */
@@ -109,7 +108,7 @@ class KadreAppDelegate(
 
     internal fun releaseNative() {
         if (!released.compareAndSet(false, true)) return
-        unregisterDelegate(ptr.address())
+        unregisterDelegate(ptr.address(), routeCallbacks)
         ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release"))
     }
 
@@ -123,6 +122,10 @@ class KadreAppDelegate(
 
         internal fun unregisterDelegate(address: Long) {
             delegateTable.remove(address)
+        }
+
+        internal fun unregisterDelegate(address: Long, callbacks: AppKitApplicationDelegateCallbacks) {
+            delegateTable.remove(address, callbacks)
         }
 
         internal fun registeredDelegateCount(): Int = delegateTable.size

@@ -74,6 +74,7 @@ class KadreWindowDelegate(
     private val windows: ConcurrentHashMap<Long, AppKitWindow>,
 ) {
     private val released = AtomicBoolean(false)
+    private val routeCallbacks: AppKitWindowDelegateCallbacks
 
     /** Pointer to the Objective-C object wrapped by this delegate. */
     val ptr: MemorySegment
@@ -93,24 +94,22 @@ class KadreWindowDelegate(
             ObjCRuntime.sel("init"),
         ) as MemorySegment
 
-        registerDelegateRoute(
-            ptr.address(),
-            object : AppKitWindowDelegateCallbacks {
-                override fun onWindowShouldClose(): Byte = this@KadreWindowDelegate.onWindowShouldClose()
-                override fun onWindowWillClose() = this@KadreWindowDelegate.onWindowWillClose()
-                override fun onWindowDidMove() = this@KadreWindowDelegate.onWindowDidMove()
-                override fun onWindowDidBecomeKey() = this@KadreWindowDelegate.onWindowDidBecomeKey()
-                override fun onWindowDidResignKey() = this@KadreWindowDelegate.onWindowDidResignKey()
-                override fun onWindowDidMiniaturize() = this@KadreWindowDelegate.onWindowDidMiniaturize()
-                override fun onWindowDidDeminiaturize() = this@KadreWindowDelegate.onWindowDidDeminiaturize()
-                override fun onWindowDidResize() = this@KadreWindowDelegate.onWindowDidResize()
-                override fun onWindowDidChangeBackingProperties() =
-                    this@KadreWindowDelegate.onWindowDidChangeBackingProperties()
-                override fun captureCallbackFailure(context: String, failure: Throwable) {
-                    (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
-                }
-            },
-        )
+        routeCallbacks = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowShouldClose(): Byte = this@KadreWindowDelegate.onWindowShouldClose()
+            override fun onWindowWillClose() = this@KadreWindowDelegate.onWindowWillClose()
+            override fun onWindowDidMove() = this@KadreWindowDelegate.onWindowDidMove()
+            override fun onWindowDidBecomeKey() = this@KadreWindowDelegate.onWindowDidBecomeKey()
+            override fun onWindowDidResignKey() = this@KadreWindowDelegate.onWindowDidResignKey()
+            override fun onWindowDidMiniaturize() = this@KadreWindowDelegate.onWindowDidMiniaturize()
+            override fun onWindowDidDeminiaturize() = this@KadreWindowDelegate.onWindowDidDeminiaturize()
+            override fun onWindowDidResize() = this@KadreWindowDelegate.onWindowDidResize()
+            override fun onWindowDidChangeBackingProperties() =
+                this@KadreWindowDelegate.onWindowDidChangeBackingProperties()
+            override fun captureCallbackFailure(context: String, failure: Throwable) {
+                (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
+            }
+        }
+        registerDelegateRoute(ptr.address(), routeCallbacks)
     }
 
     /**
@@ -153,8 +152,16 @@ class KadreWindowDelegate(
     }
 
     internal fun releaseNative() {
-        if (!released.compareAndSet(false, true)) return
-        ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release"))
+        appKitReleaseWindowDelegateNative(
+            released = released,
+            address = ptr.address(),
+            callbacks = routeCallbacks,
+            releaseNative = { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) },
+        )
+    }
+
+    internal fun unregisterRoute() {
+        unregisterDelegate(ptr.address(), routeCallbacks)
     }
 
     /** Kotlin callback for `windowDidMove:` — dispatches [WindowEvent.Moved]. */
@@ -310,6 +317,10 @@ class KadreWindowDelegate(
 
         internal fun unregisterDelegate(address: Long) {
             delegateTable.remove(address)
+        }
+
+        internal fun unregisterDelegate(address: Long, callbacks: AppKitWindowDelegateCallbacks) {
+            delegateTable.remove(address, callbacks)
         }
 
         internal fun registeredDelegateCount(): Int = delegateTable.size
@@ -595,4 +606,27 @@ class KadreWindowDelegate(
             }
         }
     }
+}
+
+internal fun appKitReleaseWindowDelegateNative(
+    released: AtomicBoolean,
+    address: Long,
+    callbacks: AppKitWindowDelegateCallbacks,
+    releaseNative: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    KadreWindowDelegate.unregisterDelegate(address, callbacks)
+    releaseNative()
+}
+
+internal fun appKitReleaseFailedWindowDelegate(
+    setDelegateFailure: Throwable,
+    releaseDelegate: () -> Unit,
+): Nothing {
+    try {
+        releaseDelegate()
+    } catch (releaseFailure: Throwable) {
+        if (releaseFailure !== setDelegateFailure) setDelegateFailure.addSuppressed(releaseFailure)
+    }
+    throw setDelegateFailure
 }

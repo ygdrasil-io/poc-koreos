@@ -164,6 +164,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
 
         // 4. Create a KadreTextInputView (NSTextInputClient-adopting NSView) as contentView
         val nsWindow = NSWindow(nsWindowPtr)
+        appKitOwnNativeWindow(nsWindow::setReleasedWhenClosed)
         val defaultContentFrame = NSView(nsWindow.contentView()).frame()
         val imeViewPtr = AppKitImeTextInputClient.createInstance(defaultContentFrame)
         textInputViewPtr = imeViewPtr
@@ -1073,10 +1074,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         try {
             NSWindow(nsWindowPtr).setDelegate(del.ptr)
         } catch (failure: Throwable) {
-            runCatching { del.releaseNative() }.exceptionOrNull()?.let { releaseFailure ->
-                if (releaseFailure !== failure) failure.addSuppressed(releaseFailure)
-            }
-            throw failure
+            appKitReleaseFailedWindowDelegate(failure, del::releaseNative)
         }
         delegate = del
 
@@ -1087,59 +1085,72 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         // Register the IME text input view in the callbacks table
         // The imeCursorScreenRect segment is shared: setImeCursorArea writes to it,
         // and the NSTextInputClient callback reads from the same segment.
-        if (textInputViewPtr != MemorySegment.NULL) {
-            AppKitImeTextInputClient.registerView(
-                textInputViewPtr,
-                ImeViewRecord(
-                    handler = handler,
-                    eventLoop = eventLoop,
-                    windowId = id,
-                    imeCursorScreenRect = imeCursorScreenRect,
-                ),
-            )
-        }
+        val imeRecord = if (textInputViewPtr != MemorySegment.NULL) {
+            ImeViewRecord(
+                handler = handler,
+                eventLoop = eventLoop,
+                windowId = id,
+                imeCursorScreenRect = imeCursorScreenRect,
+            ).also { AppKitImeTextInputClient.registerView(textInputViewPtr, it) }
+        } else null
 
         appKitEventLoop.registerWindowCloseActions(
             windowId = id,
             unregisterCallbacks = {
-                appKitUnregisterWindowCallbacks(
-                    delegateAddress = del.ptr.address(),
-                    textInputView = textInputViewPtr,
-                    detachNativeDelegate = {
-                        NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+                appKitClearWindowCallbackReferences(
+                    cleanupCallbacks = {
+                        appKitUnregisterWindowCallbacks(
+                            detachNativeDelegate = {
+                                NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+                            },
+                            unregisterDelegate = del::unregisterRoute,
+                            unregisterImeView = {
+                                imeRecord?.let { AppKitImeTextInputClient.unregisterView(textInputViewPtr, it) }
+                            },
+                            releaseDelegate = {},
+                        )
                     },
-                    releaseDelegate = del::releaseNative,
+                    clearReferences = {
+                        delegate = null
+                        _handler = null
+                        _eventLoop = null
+                    },
                 )
-                delegate = null
-                _handler = null
-                _eventLoop = null
             },
-            closeNative = ::closeAndReleaseNativeWindow,
+            sendNativeClose = { NSWindow(nsWindowPtr).close() },
+            releaseNativeResources = ::releaseNativeWindowResources,
+            releaseDelegate = del::releaseNative,
+        )
+    }
+
+    private fun releaseNativeWindowResources() {
+        appKitReleaseNativeWindowResources(
+            released = nativeResourcesReleased,
+            sendNativeClose = false,
+            closeWindow = {},
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                }
+            },
         )
     }
 
     private fun closeAndReleaseNativeWindow() {
-        if (!nativeResourcesReleased.compareAndSet(false, true)) return
-        var failure: Throwable? = null
-        fun cleanup(step: () -> Unit) {
-            try {
-                step()
-            } catch (caught: Throwable) {
-                val primary = failure
-                if (primary == null) {
-                    failure = caught
-                } else if (caught !== primary) {
-                    primary.addSuppressed(caught)
+        appKitReleaseNativeWindowResources(
+            released = nativeResourcesReleased,
+            sendNativeClose = true,
+            closeWindow = { NSWindow(nsWindowPtr).close() },
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
                 }
-            }
-        }
-        cleanup { NSWindow(nsWindowPtr).close() }
-        cleanup { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) }
-        cleanup { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) }
-        if (textInputViewPtr != MemorySegment.NULL) {
-            cleanup { ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release")) }
-        }
-        failure?.let { throw it }
+            },
+        )
     }
 
     // ── R4: keyboard ─────────────────────────────────────────────────────────
@@ -1548,10 +1559,55 @@ internal fun appKitCloseWindow(
     }
 }
 
+internal fun appKitOwnNativeWindow(setReleasedWhenClosed: (Boolean) -> Unit) {
+    setReleasedWhenClosed(false)
+}
+
+internal fun appKitReleaseNativeWindowResources(
+    released: AtomicBoolean,
+    sendNativeClose: Boolean,
+    closeWindow: () -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    var failure: Throwable? = null
+    fun cleanup(step: () -> Unit) {
+        try {
+            step()
+        } catch (caught: Throwable) {
+            val primary = failure
+            if (primary == null) {
+                failure = caught
+            } else if (caught !== primary) {
+                primary.addSuppressed(caught)
+            }
+        }
+    }
+    if (sendNativeClose) cleanup(closeWindow)
+    cleanup(releaseWindow)
+    cleanup(releaseLayer)
+    cleanup(releaseView)
+    failure?.let { throw it }
+}
+
 internal fun appKitUnregisterWindowCallbacks(
     delegateAddress: Long,
     textInputView: MemorySegment,
     detachNativeDelegate: () -> Unit,
+    releaseDelegate: () -> Unit,
+) = appKitUnregisterWindowCallbacks(
+    detachNativeDelegate = detachNativeDelegate,
+    unregisterDelegate = { KadreWindowDelegate.unregisterDelegate(delegateAddress) },
+    unregisterImeView = { AppKitImeTextInputClient.unregisterView(textInputView) },
+    releaseDelegate = releaseDelegate,
+)
+
+internal fun appKitUnregisterWindowCallbacks(
+    detachNativeDelegate: () -> Unit,
+    unregisterDelegate: () -> Unit,
+    unregisterImeView: () -> Unit,
     releaseDelegate: () -> Unit,
 ) {
     var failure: Throwable? = null
@@ -1568,9 +1624,32 @@ internal fun appKitUnregisterWindowCallbacks(
         }
     }
     cleanup(detachNativeDelegate)
-    cleanup { KadreWindowDelegate.unregisterDelegate(delegateAddress) }
-    cleanup { AppKitImeTextInputClient.unregisterView(textInputView) }
+    cleanup(unregisterDelegate)
+    cleanup(unregisterImeView)
     cleanup(releaseDelegate)
+    failure?.let { throw it }
+}
+
+internal fun appKitClearWindowCallbackReferences(
+    cleanupCallbacks: () -> Unit,
+    clearReferences: () -> Unit,
+) {
+    var failure: Throwable? = null
+    try {
+        cleanupCallbacks()
+    } catch (caught: Throwable) {
+        failure = caught
+    }
+    try {
+        clearReferences()
+    } catch (caught: Throwable) {
+        val primary = failure
+        if (primary == null) {
+            failure = caught
+        } else if (caught !== primary) {
+            primary.addSuppressed(caught)
+        }
+    }
     failure?.let { throw it }
 }
 

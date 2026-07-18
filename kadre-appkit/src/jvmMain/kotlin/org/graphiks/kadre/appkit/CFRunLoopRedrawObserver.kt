@@ -272,6 +272,7 @@ internal class CFRunLoopOwner private constructor(
                 api = NativeCFRunLoopApi.create(),
                 state = state,
                 onAfterWaiting = { cause ->
+                    (eventLoop as? AppKitEventLoop)?.drainDeferredNativeCallbackCleanup()
                     if (!eventLoop.isExiting) handler.newEvents(eventLoop, cause)
                 },
                 onBeforeWaiting = {
