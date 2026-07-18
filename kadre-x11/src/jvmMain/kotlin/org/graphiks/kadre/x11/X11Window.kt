@@ -34,8 +34,6 @@ import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
-import org.graphiks.kadre.core.ActiveEventLoop
-import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ImeCapabilities
 import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
@@ -57,6 +55,7 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 
 /**
@@ -103,12 +102,16 @@ internal const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
  * @param xWindowId  XID identifier of the created window (unsigned long → Long).
  * @param attrs      Window creation attributes.
  */
-class X11Window private constructor(
+class X11Window internal constructor(
     private val displayPtr: Long,
     private val screen: Int,
     private val xWindowId: Long,
     private val attrs: WindowAttributes,
+    private val owner: X11EventLoop? = null,
+    initialScaleFactor: Double = readXftDpi(displayPtr),
 ) : Window {
+
+    private val directCloseStarted = AtomicBoolean(false)
 
     override val id: WindowId = WindowId(xWindowId)
 
@@ -187,7 +190,7 @@ class X11Window private constructor(
      *
      * ScaleFactorChanged is not emitted dynamically (no RRNotify subscription yet).
      */
-    override val scaleFactor: Double = readXftDpi(displayPtr)
+    override val scaleFactor: Double = initialScaleFactor
 
     /**
      * X11 has no platform safe-area concept — window managers handle decorations.
@@ -195,8 +198,7 @@ class X11Window private constructor(
     override val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
     override fun requestRedraw() {
-        // No direct action needed: the event loop picks up the Expose events.
-        // Optionally, we could send an XSendEvent Expose — deferred to later.
+        owner?.requestRedraw(id)
     }
 
     override fun setVisible(visible: Boolean) {
@@ -223,13 +225,26 @@ class X11Window private constructor(
     }
 
     override fun close() {
+        val loop = owner
+        if (loop != null) {
+            loop.closeWindow(id)
+            return
+        }
+        if (!directCloseStarted.compareAndSet(false, true)) return
         val display = MemorySegment.ofAddress(displayPtr)
         disableIme()
+        freeCachedCursors(display)
         val handle = xDestroyWindow ?: return
         handle.invokeExact(display, xWindowId) as Int
-        freeCachedCursors(display)
         val flush = xFlush
         if (flush != null) flush.invokeExact(display) as Int
+    }
+
+    /** Releases per-window resources before the owning loop destroys or forgets the XID. */
+    internal fun releaseLoopOwnedResources() {
+        val display = MemorySegment.ofAddress(displayPtr)
+        disableIme()
+        freeCachedCursors(display)
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -1193,10 +1208,10 @@ class X11Window private constructor(
         // No-op on X11: XIM has no concept of IME purpose hints.
     }
 
-    internal fun drainImeEvents(handler: ApplicationHandler, loop: ActiveEventLoop, windowId: WindowId) {
+    internal fun drainImeEvents(emit: (WindowEvent) -> Unit) {
         while (true) {
             val event = pendingImeEvents.poll() ?: break
-            handler.windowEvent(loop, windowId, event)
+            emit(event)
         }
     }
 
@@ -1839,7 +1854,15 @@ class X11Window private constructor(
          * @return The created window, or null if the libX11 bindings are not available
          *         (macOS/Windows) or if creation fails.
          */
-        fun create(display: Long, screen: Int, attrs: WindowAttributes): X11Window? {
+        fun create(display: Long, screen: Int, attrs: WindowAttributes): X11Window? =
+            create(display, screen, attrs, owner = null)
+
+        internal fun create(
+            display: Long,
+            screen: Int,
+            attrs: WindowAttributes,
+            owner: X11EventLoop?,
+        ): X11Window? {
             // The bindings are null on non-Linux — return null gracefully.
             val createHandle = xCreateSimpleWindow ?: return null
 
@@ -1897,7 +1920,7 @@ class X11Window private constructor(
                 }
             }
 
-            val window = X11Window(display, screen, xWindowId, attrs)
+            val window = X11Window(display, screen, xWindowId, attrs, owner)
             window.writeX11Title(attrs.title)
             attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()

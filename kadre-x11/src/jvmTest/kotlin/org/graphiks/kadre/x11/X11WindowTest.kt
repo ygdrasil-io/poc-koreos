@@ -10,11 +10,58 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowRequestResult
+import org.graphiks.kadre.ffi.posix.PosixWakeup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class X11WindowTest {
+
+    @Test
+    fun `loop-owned window redraw and close only publish work before loop dispatch`() {
+        val wakeup = object : PosixWakeup {
+            override val readFd: Int = 9
+            var signals = 0
+            override fun signal(): Boolean {
+                signals += 1
+                return true
+            }
+            override fun drain(): Boolean = true
+            override fun close() = Unit
+        }
+        var nativeDestroyCalls = 0
+        val native = object : X11NativeAdapter {
+            override fun createWindow(loop: X11EventLoop, attributes: WindowAttributes): X11Window =
+                X11Window(
+                    displayPtr = loop.displayPtr,
+                    screen = loop.screen,
+                    xWindowId = 77L,
+                    attrs = attributes,
+                    owner = loop,
+                    initialScaleFactor = 1.0,
+                )
+
+            override fun destroyWindow(displayPtr: Long, windowId: Long) {
+                nativeDestroyCalls += 1
+            }
+            override fun flush(displayPtr: Long) = Unit
+            override fun closeDisplay(displayPtr: Long) = Unit
+        }
+        val loop = X11EventLoop(1L, 0, wakeup, native)
+        val window = loop.createWindow(WindowAttributes(title = "owned"))
+
+        val caller = Thread({
+            window.requestRedraw()
+            window.close()
+        }, "x11-window-publisher")
+        caller.start()
+        caller.join()
+
+        assertEquals(2, wakeup.signals)
+        assertEquals(0, nativeDestroyCalls)
+        assertTrue(loop.windows.containsKey(window.id.value))
+    }
 
     @Test
     fun `X11Window is created without error on non-Linux`() {

@@ -151,6 +151,50 @@ private const val XK_Super_R: Int = 0xFFEC
  */
 internal val x11Running = AtomicBoolean(false)
 
+/** Native window/display boundary used by the loop and deterministic contract tests. */
+internal interface X11NativeAdapter {
+    fun createWindow(loop: X11EventLoop, attributes: WindowAttributes): X11Window?
+    fun destroyWindow(displayPtr: Long, windowId: Long)
+    fun flush(displayPtr: Long)
+    fun closeDisplay(displayPtr: Long)
+}
+
+private object NativeX11Adapter : X11NativeAdapter {
+    override fun createWindow(loop: X11EventLoop, attributes: WindowAttributes): X11Window? =
+        X11Window.create(loop.displayPtr, loop.screen, attributes, owner = loop)
+
+    override fun destroyWindow(displayPtr: Long, windowId: Long) {
+        val destroy = xDestroyWindow ?: error("XDestroyWindow is unavailable")
+        destroy.invokeExact(MemorySegment.ofAddress(displayPtr), windowId) as Int
+    }
+
+    override fun flush(displayPtr: Long) {
+        val flush = xFlush ?: error("XFlush is unavailable")
+        flush.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int
+    }
+
+    override fun closeDisplay(displayPtr: Long) {
+        xCloseDisplay?.invokeExact(MemorySegment.ofAddress(displayPtr)) as? Int
+    }
+}
+
+private class X11WindowOwner(val window: X11Window) {
+    val closeStarted = AtomicBoolean(false)
+    val destroyedDelivered = AtomicBoolean(false)
+}
+
+private sealed interface X11QueueItem
+
+private data class X11QueuedWindowEvent(
+    val owner: X11WindowOwner,
+    val event: WindowEvent,
+    val redrawToken: Any? = null,
+) : X11QueueItem
+
+private data class X11QueuedCloseCommand(val owner: X11WindowOwner) : X11QueueItem
+
+private class X11DispatchBoundary : X11QueueItem
+
 // ── X11EventLoop ──────────────────────────────────────────────────────────────
 
 /**
@@ -163,12 +207,18 @@ internal val x11Running = AtomicBoolean(false)
  * ```
  * runApp(handler)
  *   └─ handler.resumed(this)
+ *   └─ handler.newEvents(this, Init)
  *   └─ handler.canCreateSurfaces(this)
+ *   └─ handler.aboutToWait(this)
  *   └─ event loop
+ *        ├─ pump native events according to ControlFlow
  *        ├─ handler.newEvents(this, cause)
- *        ├─ dispatch events according to ControlFlow
+ *        ├─ dispatch queued window events
  *        └─ handler.aboutToWait(this)
+ *   └─ handler.destroySurfaces(this)
+ *   └─ close all windows
  *   └─ handler.suspended(this)
+ *   └─ close display
  * ```
  *
  * ### Thread-safety
@@ -181,10 +231,18 @@ class X11EventLoop internal constructor(
     internal val displayPtr: Long,
     internal val screen: Int,
     internal val wakeup: PosixWakeup,
+    internal val nativeAdapter: X11NativeAdapter = NativeX11Adapter,
 ) : ActiveEventLoop {
 
     /** Live windows: windowId (XID) → X11Window. */
     internal val windows = ConcurrentHashMap<Long, X11Window>()
+    private val windowOwners = ConcurrentHashMap<Long, X11WindowOwner>()
+    private val eventQueue = ConcurrentLinkedQueue<X11QueueItem>()
+    private val pendingCloseCommands = ConcurrentHashMap<X11WindowOwner, X11QueuedCloseCommand>()
+    private val redrawLock = Any()
+    private val pendingRedrawIds = LinkedHashSet<Long>()
+    private val pendingRedrawItems = HashMap<Long, X11QueuedWindowEvent>()
+    private val loopThread = Thread.currentThread()
     internal val keyboardModifierTracker = X11KeyboardModifierTracker()
 
     /**
@@ -226,12 +284,12 @@ class X11EventLoop internal constructor(
      * @throws IllegalStateException if the libX11 bindings are not available.
      */
     override fun createWindow(attributes: WindowAttributes): Window {
-        val window = X11Window.create(displayPtr, screen, attributes)
+        checkLoopThread()
+        val window = nativeAdapter.createWindow(this, attributes)
             ?: error(
                 "X11Window.create() returned null — libX11.so.6 bindings are not available on this platform."
             )
-        windows[window.id.value] = window
-        return window
+        return registerWindow(window)
     }
 
     /**
@@ -241,15 +299,198 @@ class X11EventLoop internal constructor(
      * and applies platform-specific settings at creation time.
      */
     fun createWindow(attrs: X11WindowAttributes): Window {
-        val window = X11Window.create(displayPtr, screen, attrs.core)
+        checkLoopThread()
+        val window = nativeAdapter.createWindow(this, attrs.core)
             ?: error(
                 "X11Window.create() returned null — libX11.so.6 bindings are not available on this platform."
             )
-        windows[window.id.value] = window
+        registerWindow(window)
         // Apply platform extension settings
         if (attrs.windowType != null) window.setWindowType(attrs.windowType)
         if (attrs.overrideRedirect) window.setOverrideRedirect(true)
         return window
+    }
+
+    private fun registerWindow(window: X11Window): X11Window {
+        val owner = X11WindowOwner(window)
+        windowOwners[window.id.value] = owner
+        windows[window.id.value] = window
+        return window
+    }
+
+    /** Publishes one redraw and wakes an idle loop only for the first insertion. */
+    internal fun requestRedraw(windowId: WindowId): Boolean {
+        synchronized(redrawLock) {
+            val owner = currentOwner(windowId) ?: return false
+            if (!pendingRedrawIds.add(windowId.value)) return true
+            val token = Any()
+            val queued = X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested, token)
+            pendingRedrawItems[windowId.value] = queued
+            eventQueue.add(queued)
+            val signalled = try {
+                wakeup.signal()
+            } catch (failure: Throwable) {
+                rollbackRedraw(windowId.value, queued)
+                throw IllegalStateException("X11 redraw wake failed", failure)
+            }
+            if (!signalled) {
+                rollbackRedraw(windowId.value, queued)
+                error("X11 redraw wake failed: wake fd is closed")
+            }
+            return true
+        }
+    }
+
+    private fun rollbackRedraw(windowId: Long, queued: X11QueuedWindowEvent) {
+        pendingRedrawIds.remove(windowId)
+        pendingRedrawItems.remove(windowId, queued)
+        eventQueue.remove(queued)
+    }
+
+    /** Native Expose supersedes a pending synthetic redraw for the same XID. */
+    internal fun enqueueExpose(windowId: WindowId): Boolean {
+        synchronized(redrawLock) {
+            val owner = currentOwner(windowId) ?: return false
+            if (pendingRedrawIds.remove(windowId.value)) {
+                pendingRedrawItems.remove(windowId.value)?.let(eventQueue::remove)
+            }
+            eventQueue.add(X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested))
+            return true
+        }
+    }
+
+    internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean {
+        val owner = currentOwner(windowId) ?: return false
+        eventQueue.add(X11QueuedWindowEvent(owner, event))
+        return true
+    }
+
+    /** Public-window terminal request; native work remains owned by the loop thread. */
+    internal fun closeWindow(windowId: WindowId): Boolean {
+        val owner = currentOwner(windowId) ?: return false
+        val candidate = X11QueuedCloseCommand(owner)
+        val command = pendingCloseCommands.putIfAbsent(owner, candidate)
+        if (command != null) return true
+        eventQueue.add(candidate)
+        val signalled = try {
+            wakeup.signal()
+        } catch (failure: Throwable) {
+            throw IllegalStateException("X11 close wake failed", failure)
+        }
+        check(signalled) { "X11 close wake failed: wake fd is closed" }
+        return true
+    }
+
+    /** Handles a server-side DestroyNotify without issuing a second XDestroyWindow. */
+    internal fun nativeWindowDestroyed(windowId: WindowId): Boolean {
+        checkLoopThread()
+        val owner = currentOwner(windowId) ?: return false
+        if (!owner.closeStarted.compareAndSet(false, true)) return false
+        detachOwner(owner)
+        owner.window.releaseLoopOwnedResources()
+        eventQueue.add(X11QueuedWindowEvent(owner, WindowEvent.Destroyed))
+        return true
+    }
+
+    private fun closeWindowNow(owner: X11WindowOwner): Boolean {
+        checkLoopThread()
+        if (!owner.closeStarted.compareAndSet(false, true)) return false
+        detachOwner(owner)
+        owner.window.releaseLoopOwnedResources()
+        nativeAdapter.destroyWindow(displayPtr, owner.window.id.value)
+        nativeAdapter.flush(displayPtr)
+        return true
+    }
+
+    private fun detachOwner(owner: X11WindowOwner) {
+        val windowId = owner.window.id.value
+        windowOwners.remove(windowId, owner)
+        windows.remove(windowId, owner.window)
+        pendingCloseCommands.remove(owner)
+        synchronized(redrawLock) {
+            pendingRedrawIds.remove(windowId)
+            pendingRedrawItems.remove(windowId)?.let(eventQueue::remove)
+        }
+        dragSourceWindows.remove(windowId)
+        pendingDropRequests.remove(windowId)
+        pendingXdndDrops.removeAll { it.targetWindow == windowId }
+        eventQueue.removeIf { item ->
+            (item is X11QueuedWindowEvent && item.owner === owner) ||
+                (item is X11QueuedCloseCommand && item.owner === owner)
+        }
+    }
+
+    private fun deliverDestroyed(owner: X11WindowOwner, handler: ApplicationHandler) {
+        if (!owner.destroyedDelivered.compareAndSet(false, true)) return
+        val current = windowOwners[owner.window.id.value]
+        if (current != null && current !== owner) return
+        handler.windowEvent(this, owner.window.id, WindowEvent.Destroyed)
+    }
+
+    internal fun drainOpenWindowEvents(handler: ApplicationHandler) {
+        checkLoopThread()
+        val boundary = X11DispatchBoundary()
+        eventQueue.add(boundary)
+        try {
+            val batch = mutableListOf<X11QueueItem>()
+            while (true) {
+                val item = eventQueue.poll() ?: break
+                if (item === boundary) break
+                batch += item
+            }
+            for (command in batch.filterIsInstance<X11QueuedCloseCommand>()) {
+                if (pendingCloseCommands.remove(command.owner, command) && closeWindowNow(command.owner)) {
+                    deliverDestroyed(command.owner, handler)
+                }
+            }
+            for (item in batch) {
+                if (item is X11QueuedCloseCommand) continue
+                val queued = item as X11QueuedWindowEvent
+                if (queued.event == WindowEvent.Destroyed) {
+                    deliverDestroyed(queued.owner, handler)
+                    continue
+                }
+                if (queued.redrawToken != null) {
+                    synchronized(redrawLock) {
+                        if (pendingRedrawItems[queued.owner.window.id.value] !== queued) continue
+                        pendingRedrawItems.remove(queued.owner.window.id.value)
+                        pendingRedrawIds.remove(queued.owner.window.id.value)
+                    }
+                }
+                if (!isCurrentOwner(queued.owner)) continue
+                handler.windowEvent(this, queued.owner.window.id, queued.event)
+            }
+        } finally {
+            eventQueue.remove(boundary)
+        }
+    }
+
+    internal fun hasPendingWork(): Boolean = eventQueue.isNotEmpty()
+
+    internal fun closeAllWindowsDirect() {
+        checkLoopThread()
+        var failure: Throwable? = null
+        for (owner in windowOwners.values.sortedBy { it.window.id.value }) {
+            try {
+                closeWindowNow(owner)
+            } catch (thrown: Throwable) {
+                failure = appendX11Failure(failure, thrown)
+            }
+        }
+        eventQueue.clear()
+        failure?.let { throw it }
+    }
+
+    private fun currentOwner(windowId: WindowId): X11WindowOwner? =
+        windowOwners[windowId.value]?.takeIf { windows[windowId.value] === it.window }
+
+    private fun isCurrentOwner(owner: X11WindowOwner): Boolean =
+        windowOwners[owner.window.id.value] === owner && windows[owner.window.id.value] === owner.window
+
+    private fun checkLoopThread() {
+        check(Thread.currentThread() === loopThread) {
+            "X11 native work must run on the display-owning event-loop thread"
+        }
     }
 
     /**
@@ -687,29 +928,28 @@ private fun keycodeToKeysym(keycode: Int): Int {
 }
 
 /**
- * Dispatches a single XEvent to the [ApplicationHandler] callbacks.
+ * Translates a single XEvent into loop-owned work for later Kotlin dispatch.
  *
  * @param eventBuf Buffer containing the XEvent read by XNextEvent.
  * @param loop     Active event loop.
- * @param handler  Application handler to notify.
  * @param wmDeleteWindow WM_DELETE_WINDOW atom for detecting window close.
  */
 private fun dispatchEvent(
     eventBuf: MemorySegment,
     loop: X11EventLoop,
-    handler: ApplicationHandler,
     wmDeleteWindow: Long,
     xdnd: XdndAtoms?,
 ) {
     val eventType = eventBuf.get(ValueLayout.JAVA_INT, XEVENT_TYPE_OFFSET)
     val windowXid = x11EventWindowXid(eventBuf, eventType)
     val windowId = WindowId(windowXid)
+    val window = loop.windows[windowXid] ?: return
 
     when (eventType) {
 
         // ── Exposure (redraw) ─────────────────────────────────────────────────
         Expose -> {
-            handler.windowEvent(loop, windowId, WindowEvent.RedrawRequested)
+            loop.enqueueExpose(windowId)
         }
 
         // ── Resize ────────────────────────────────────────────────────────────
@@ -719,7 +959,6 @@ private fun dispatchEvent(
             val y = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_Y_OFFSET)
             val width  = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_WIDTH_OFFSET)
             val height = eventBuf.get(ValueLayout.JAVA_INT, XCONFIGURE_HEIGHT_OFFSET)
-            val window = loop.windows[windowXid] ?: return
             val changes = window.onConfigureNotify(
                 width = width,
                 height = height,
@@ -727,26 +966,24 @@ private fun dispatchEvent(
                 positionIsRootRelative = isSynthetic,
             )
             if (changes.sizeChanged && width > 0 && height > 0) {
-                handler.windowEvent(loop, windowId, WindowEvent.Resized(PhysicalSize(width, height)))
+                loop.enqueueWindowEvent(windowId, WindowEvent.Resized(PhysicalSize(width, height)))
             }
             changes.movedPosition?.let { position ->
-                handler.windowEvent(loop, windowId, WindowEvent.Moved(position))
+                loop.enqueueWindowEvent(windowId, WindowEvent.Moved(position))
             }
         }
 
         // ── Keyboard ──────────────────────────────────────────────────────────
         KeyPress -> {
-            val window = loop.windows[windowXid]
-            if (window != null) {
-                val filterEvent = xFilterEvent
-                if (filterEvent != null) {
-                    try {
-                        val consumed = filterEvent.invokeExact(eventBuf, windowXid) as Int
-                        if (consumed != 0) {
-                            window.drainImeEvents(handler, loop, windowId)
-                            return
-                        }
-                    } catch (_: Throwable) {}
+            val filterEvent = xFilterEvent
+            if (filterEvent != null) {
+                try {
+                    val consumed = filterEvent.invokeExact(eventBuf, windowXid) as Int
+                    if (consumed != 0) {
+                        window.drainImeEvents { loop.enqueueWindowEvent(windowId, it) }
+                        return
+                    }
+                } catch (_: Throwable) {
                 }
             }
             val keycode = eventBuf.get(ValueLayout.JAVA_INT, XKEY_KEYCODE_OFFSET)
@@ -754,11 +991,15 @@ private fun dispatchEvent(
             val keysym  = keycodeToKeysym(keycode)
             val mappedCode = keysymToKeyCode(keysym)
             val modifierState = loop.keyboardModifierTracker.modifierStateFor(mappedCode, KeyState.Pressed)
-            loop.keyboardModifierTracker.modifiersChangedIfNeeded(modifierState)?.let { handler.windowEvent(loop, windowId, it) }
+            loop.keyboardModifierTracker.modifiersChangedIfNeeded(modifierState)
+                ?.let { loop.enqueueWindowEvent(windowId, it) }
             val mods = modifierState?.logical ?: x11StateToModifiers(state)
             val repeat = X11LiveRepeatTracker.update(keycode, KeyState.Pressed)
             val text = lookupX11Text(eventBuf)
-            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Pressed, mods, repeat, text))
+            loop.enqueueWindowEvent(
+                windowId,
+                x11KeyInput(keycode, keysym, mappedCode, KeyState.Pressed, mods, repeat, text),
+            )
         }
 
         KeyRelease -> {
@@ -767,10 +1008,14 @@ private fun dispatchEvent(
             val keysym  = keycodeToKeysym(keycode)
             val mappedCode = keysymToKeyCode(keysym)
             val modifierState = loop.keyboardModifierTracker.modifierStateFor(mappedCode, KeyState.Released)
-            loop.keyboardModifierTracker.modifiersChangedIfNeeded(modifierState)?.let { handler.windowEvent(loop, windowId, it) }
+            loop.keyboardModifierTracker.modifiersChangedIfNeeded(modifierState)
+                ?.let { loop.enqueueWindowEvent(windowId, it) }
             val mods = modifierState?.logical ?: x11StateToModifiers(state)
             X11LiveRepeatTracker.update(keycode, KeyState.Released)
-            handler.windowEvent(loop, windowId, x11KeyInput(keycode, keysym, mappedCode, KeyState.Released, mods))
+            loop.enqueueWindowEvent(
+                windowId,
+                x11KeyInput(keycode, keysym, mappedCode, KeyState.Released, mods),
+            )
         }
 
         // ── Mouse buttons ─────────────────────────────────────────────────────
@@ -781,23 +1026,25 @@ private fun dispatchEvent(
                 val state = eventBuf.get(ValueLayout.JAVA_INT, XKEY_STATE_OFFSET)
                 if (state and X11_CONTROL_MASK != 0) {
                     val delta = if (button == X11_BUTTON4) 1.0 else -1.0
-                    handler.windowEvent(loop, windowId,
-                        WindowEvent.PinchGesture(null, delta, TouchPhase.Moved))
+                    loop.enqueueWindowEvent(
+                        windowId,
+                        WindowEvent.PinchGesture(null, delta, TouchPhase.Moved),
+                    )
                     return
                 }
             }
             when (button) {
-                X11_BUTTON1 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON1 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Left, KeyState.Pressed, position))
-                X11_BUTTON2 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON2 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Middle, KeyState.Pressed, position))
-                X11_BUTTON3 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON3 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Right, KeyState.Pressed, position))
-                X11_BUTTON4 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON4 -> loop.enqueueWindowEvent(windowId,
                     WindowEvent.MouseWheel(null, deltaX = 0.0, deltaY = 1.0, phase = TouchPhase.Moved))
-                X11_BUTTON5 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON5 -> loop.enqueueWindowEvent(windowId,
                     WindowEvent.MouseWheel(null, deltaX = 0.0, deltaY = -1.0, phase = TouchPhase.Moved))
-                else -> handler.windowEvent(loop, windowId,
+                else -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Other(button), KeyState.Pressed, position))
             }
         }
@@ -807,14 +1054,14 @@ private fun dispatchEvent(
             val position = xButtonPosition(eventBuf)
             // Do not emit MouseInput Released for scroll wheel events (4 and 5)
             when (button) {
-                X11_BUTTON1 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON1 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Left, KeyState.Released, position))
-                X11_BUTTON2 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON2 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Middle, KeyState.Released, position))
-                X11_BUTTON3 -> handler.windowEvent(loop, windowId,
+                X11_BUTTON3 -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Right, KeyState.Released, position))
                 X11_BUTTON4, X11_BUTTON5 -> { /* scroll wheel — no Released */ }
-                else -> handler.windowEvent(loop, windowId,
+                else -> loop.enqueueWindowEvent(windowId,
                     pointerButton(MouseButton.Other(button), KeyState.Released, position))
             }
         }
@@ -823,50 +1070,44 @@ private fun dispatchEvent(
         MotionNotify -> {
             val x = eventBuf.get(ValueLayout.JAVA_INT, XMOTION_X_OFFSET).toDouble()
             val y = eventBuf.get(ValueLayout.JAVA_INT, XMOTION_Y_OFFSET).toDouble()
-            handler.windowEvent(loop, windowId, WindowEvent.PointerMoved(null, PhysicalPosition(x, y), primary = true, source = PointerSource.Mouse))
+            loop.enqueueWindowEvent(windowId, WindowEvent.PointerMoved(null, PhysicalPosition(x, y), primary = true, source = PointerSource.Mouse))
         }
 
         // ── Cursor enter/leave ────────────────────────────────────────────────
         EnterNotify -> {
-            handler.windowEvent(loop, windowId, WindowEvent.PointerEntered(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
+            loop.enqueueWindowEvent(windowId, WindowEvent.PointerEntered(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
         }
 
         LeaveNotify -> {
-            handler.windowEvent(loop, windowId, WindowEvent.PointerLeft(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
+            loop.enqueueWindowEvent(windowId, WindowEvent.PointerLeft(null, xCrossingPosition(eventBuf), primary = true, kind = PointerKind.Mouse))
         }
 
         FocusIn -> {
-            val window = loop.windows[windowXid] ?: return
             queryX11ModifierState(loop.displayPtr)
                 ?.let(loop.keyboardModifierTracker::initializeIfNeeded)
-                ?.let { handler.windowEvent(loop, windowId, it) }
+                ?.let { loop.enqueueWindowEvent(windowId, it) }
             if (window.onFocusChanged(true)) {
-                handler.windowEvent(loop, windowId, WindowEvent.Focused(gained = true))
+                loop.enqueueWindowEvent(windowId, WindowEvent.Focused(gained = true))
             }
         }
 
         FocusOut -> {
-            val window = loop.windows[windowXid] ?: return
             X11LiveRepeatTracker.reset()
-            loop.keyboardModifierTracker.resetIfNeeded()?.let { handler.windowEvent(loop, windowId, it) }
+            loop.keyboardModifierTracker.resetIfNeeded()?.let { loop.enqueueWindowEvent(windowId, it) }
             if (window.onFocusChanged(false)) {
-                handler.windowEvent(loop, windowId, WindowEvent.Focused(gained = false))
+                loop.enqueueWindowEvent(windowId, WindowEvent.Focused(gained = false))
             }
         }
 
         VisibilityNotify -> {
-            val window = loop.windows[windowXid] ?: return
             val state = eventBuf.get(ValueLayout.JAVA_INT, XVISIBILITY_STATE_OFFSET)
-            handler.windowEvent(loop, windowId, WindowEvent.Occluded(state == X11_VISIBILITY_FULLY_OBSCURED))
+            loop.enqueueWindowEvent(windowId, WindowEvent.Occluded(state == X11_VISIBILITY_FULLY_OBSCURED))
             window.onVisibilityNotify()
         }
 
         // ── Window destruction ────────────────────────────────────────────────
         DestroyNotify -> {
-            handler.windowEvent(loop, windowId, WindowEvent.Destroyed)
-            loop.windows.remove(windowXid)
-            loop.dragSourceWindows.remove(windowXid)
-            loop.pendingXdndDrops.removeAll { it.targetWindow == windowXid }
+            loop.nativeWindowDestroyed(windowId)
         }
 
         // ── ClientMessage (WM close + wakeUp + Xdnd) ─────────────────────────
@@ -874,16 +1115,16 @@ private fun dispatchEvent(
             val messageType = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_MESSAGE_TYPE_OFFSET)
             val data0 = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
             if (messageType == wmDeleteWindow || data0 == wmDeleteWindow) {
-                handler.windowEvent(loop, windowId, WindowEvent.CloseRequested)
+                loop.enqueueWindowEvent(windowId, WindowEvent.CloseRequested)
             } else if (xdnd != null) {
-                handleXdndClientMessage(eventBuf, loop, handler, windowXid, windowId, xdnd)
+                handleXdndClientMessage(eventBuf, loop, windowXid, windowId, xdnd)
             }
         }
 
         // ── SelectionNotify (Xdnd drop data) ─────────────────────────────────
         SelectionNotify -> {
             if (xdnd != null) {
-                handleSelectionNotify(eventBuf, loop, handler, windowXid, windowId, xdnd)
+                handleSelectionNotify(eventBuf, loop, windowXid, windowId, xdnd)
             }
         }
     }
@@ -892,7 +1133,6 @@ private fun dispatchEvent(
 private fun handleXdndClientMessage(
     eventBuf: MemorySegment,
     loop: X11EventLoop,
-    handler: ApplicationHandler,
     windowXid: Long,
     windowId: WindowId,
     xdnd: XdndAtoms,
@@ -918,7 +1158,7 @@ private fun handleXdndClientMessage(
                 if (t2 != 0L) types.add(t2)
             }
             loop.pendingDropRequests.remove(windowXid)
-            handler.windowEvent(loop, windowId, WindowEvent.DragEntered(
+            loop.enqueueWindowEvent(windowId, WindowEvent.DragEntered(
                 position = PhysicalPosition(0.0, 0.0),
                 paths = if (types.contains(xdnd.textUriList)) listOf("text/uri-list") else emptyList(),
             ))
@@ -933,14 +1173,14 @@ private fun handleXdndClientMessage(
             loop.dragSourceWindows[windowXid] = sourceWindow
             val displayMs = MemorySegment.ofAddress(loop.displayPtr)
             X11DragAndDrop.sendXdndStatus(displayMs, windowXid, sourceWindow, accept = true, rootX, rootY)
-            handler.windowEvent(loop, windowId, WindowEvent.DragMoved(localPos))
+            loop.enqueueWindowEvent(windowId, WindowEvent.DragMoved(localPos))
         }
 
         xdnd.xdndLeave -> {
             val sourceWindow = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
             loop.dragSourceWindows.remove(windowXid)
             loop.pendingDropRequests.remove(windowXid)
-            handler.windowEvent(loop, windowId, WindowEvent.DragLeft)
+            loop.enqueueWindowEvent(windowId, WindowEvent.DragLeft)
         }
 
         xdnd.xdndDrop -> {
@@ -965,7 +1205,7 @@ private fun handleXdndClientMessage(
                 ))
             } else {
                 loop.dragSourceWindows.remove(windowXid)
-                handler.windowEvent(loop, windowId, WindowEvent.DragDropped(localPos, emptyList()))
+                loop.enqueueWindowEvent(windowId, WindowEvent.DragDropped(localPos, emptyList()))
             }
         }
     }
@@ -974,7 +1214,6 @@ private fun handleXdndClientMessage(
 private fun handleSelectionNotify(
     eventBuf: MemorySegment,
     loop: X11EventLoop,
-    handler: ApplicationHandler,
     windowXid: Long,
     windowId: WindowId,
     xdnd: XdndAtoms,
@@ -999,7 +1238,7 @@ private fun handleSelectionNotify(
     }
     X11DragAndDrop.sendXdndFinished(display, windowXid, drop.sourceWindow, accept = true)
     loop.dragSourceWindows.remove(windowXid)
-    handler.windowEvent(loop, windowId, WindowEvent.DragDropped(drop.position, paths))
+    loop.enqueueWindowEvent(windowId, WindowEvent.DragDropped(drop.position, paths))
 }
 
 private fun readXdndTypeList(display: MemorySegment, sourceWindow: Long, types: MutableList<Long>) {
@@ -1145,7 +1384,6 @@ private class NativeX11PumpOperations(
     private val display: MemorySegment,
     private val eventBuffer: MemorySegment,
     private val loop: X11EventLoop,
-    private val handler: ApplicationHandler,
     private val wmDeleteWindow: Long,
     private val xdnd: XdndAtoms?,
 ) : X11PumpOperations {
@@ -1155,7 +1393,7 @@ private class NativeX11PumpOperations(
     override fun dispatchNext() {
         (xNextEvent ?: error("XNextEvent is unavailable"))
             .invokeExact(display, eventBuffer) as Int
-        dispatchEvent(eventBuffer, loop, handler, wmDeleteWindow, xdnd)
+        dispatchEvent(eventBuffer, loop, wmDeleteWindow, xdnd)
     }
 
     override fun flush() {
@@ -1292,8 +1530,9 @@ internal fun dispatchX11Once(
     xConnectionFd: Int,
     nowMillis: () -> Long = System::currentTimeMillis,
     shouldContinue: () -> Boolean = { true },
+    hasPendingWork: () -> Boolean = { false },
 ): StartCause {
-    val timeoutMillis = when (controlFlow) {
+    val timeoutMillis = if (hasPendingWork()) 0 else when (controlFlow) {
         is ControlFlow.Poll -> 0
         is ControlFlow.Wait -> -1
         is ControlFlow.WaitUntil -> {
@@ -1325,6 +1564,50 @@ internal fun dispatchX11Once(
             }
         }
     }
+}
+
+/** Dispatches the Kotlin-visible half of an iteration after its native pump. */
+internal fun dispatchX11Iteration(
+    loop: X11EventLoop,
+    handler: ApplicationHandler,
+    startCause: StartCause,
+) {
+    handler.newEvents(loop, startCause)
+    loop.drainOpenWindowEvents(handler)
+    handler.aboutToWait(loop)
+}
+
+internal fun startX11Lifecycle(loop: X11EventLoop, handler: ApplicationHandler) {
+    handler.resumed(loop)
+    handler.newEvents(loop, StartCause.Init)
+    handler.canCreateSurfaces(loop)
+    handler.aboutToWait(loop)
+}
+
+private fun appendX11Failure(primary: Throwable?, additional: Throwable): Throwable {
+    if (primary == null) return additional
+    if (additional !== primary) primary.addSuppressed(additional)
+    return primary
+}
+
+/** Runs terminal callbacks/resources in contract order and always closes the display last. */
+internal fun shutdownX11Lifecycle(loop: X11EventLoop, handler: ApplicationHandler) {
+    var failure: Throwable? = null
+    val actions = listOf<() -> Unit>(
+        { handler.destroySurfaces(loop) },
+        loop::closeAllWindowsDirect,
+        { handler.suspended(loop) },
+        loop.wakeup::close,
+        { loop.nativeAdapter.closeDisplay(loop.displayPtr) },
+    )
+    for (action in actions) {
+        try {
+            action()
+        } catch (thrown: Throwable) {
+            failure = appendX11Failure(failure, thrown)
+        }
+    }
+    failure?.let { throw it }
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -1360,89 +1643,82 @@ fun runApp(handler: ApplicationHandler) {
         }
         val displayPtr = displaySeg.address()
         val screen = 0  // default screen
+        var displayOwnedByLifecycle = false
         try {
             val connectionHandle = xConnectionNumber
                 ?: error("XConnectionNumber is unavailable")
             val xConnectionFd = connectionHandle.invokeExact(displaySeg) as Int
             check(xConnectionFd >= 0) { "XConnectionNumber returned an invalid fd: $xConnectionFd" }
             val wakeup = PosixWakeup.open()
+            var lifecycleStarted = false
             try {
+                // Obtain the WM_DELETE_WINDOW atom to detect a clean close.
+                val wmDeleteWindow: Long = Arena.ofConfined().use { arena ->
+                    val atomName = "WM_DELETE_WINDOW".toByteArray(Charsets.US_ASCII)
+                    val namePtr = arena.allocate(atomName.size.toLong() + 1)
+                    for (i in atomName.indices) {
+                        namePtr.set(ValueLayout.JAVA_BYTE, i.toLong(), atomName[i])
+                    }
+                    namePtr.set(ValueLayout.JAVA_BYTE, atomName.size.toLong(), 0)
+                    xInternAtom?.invokeExact(displaySeg, namePtr, 0) as? Long ?: 0L
+                }
 
-        // Obtain the WM_DELETE_WINDOW atom to detect a clean close
-        val wmDeleteWindow: Long = Arena.ofConfined().use { arena ->
-            val atomName = "WM_DELETE_WINDOW".toByteArray(Charsets.US_ASCII)
-            val namePtr = arena.allocate(atomName.size.toLong() + 1)
-            for (i in atomName.indices) namePtr.set(ValueLayout.JAVA_BYTE, i.toLong(), atomName[i])
-            namePtr.set(ValueLayout.JAVA_BYTE, atomName.size.toLong(), 0)
-            xInternAtom?.invokeExact(displaySeg, namePtr, 0) as? Long ?: 0L
-        }
+                val loop = X11EventLoop(displayPtr, screen, wakeup)
+                val xdnd = x11DragAndDropAtoms(displayPtr)
 
-        val loop = X11EventLoop(displayPtr, screen, wakeup)
-
-        // Intern Xdnd atoms needed for drag-and-drop
-        val xdnd: XdndAtoms? = Arena.ofConfined().use { arena ->
-            val displayMs = MemorySegment.ofAddress(displayPtr)
-            val enter = x11DragAndDropAtom(displayMs, "XdndEnter")
-            val position = x11DragAndDropAtom(displayMs, "XdndPosition")
-            val leave = x11DragAndDropAtom(displayMs, "XdndLeave")
-            val drop = x11DragAndDropAtom(displayMs, "XdndDrop")
-            val selection = x11DragAndDropAtom(displayMs, "XdndSelection")
-            val textUriList = x11DragAndDropAtom(displayMs, "text/uri-list")
-            if (enter != 0L && position != 0L && leave != 0L && drop != 0L && selection != 0L && textUriList != 0L) {
-                XdndAtoms(enter, position, leave, drop, selection, textUriList)
-            } else null
-        }
-
-        // Allocate the XEvent buffer (96 bytes, 8-aligned) for the duration of the loop
-        val arena = Arena.ofConfined()
-        try {
-            val eventBuf = arena.allocate(XEVENT_SIZE, XEVENT_ALIGN)
-            val pumpOperations = NativeX11PumpOperations(
-                display = displaySeg,
-                eventBuffer = eventBuf,
-                loop = loop,
-                handler = handler,
-                wmDeleteWindow = wmDeleteWindow,
-                xdnd = xdnd,
-            )
-
-            // Notify the handler that the application resumes
-            handler.resumed(loop)
-
-            // Notify that surfaces can be created
-            handler.canCreateSurfaces(loop)
-
-            var startCause: StartCause = StartCause.Init
-
-            while (!loop.isExiting) {
-                // Notify the handler of the iteration start
-                handler.newEvents(loop, startCause)
-                if (loop.isExiting) break
-
-                startCause = dispatchX11Once(
-                    controlFlow = loop.controlFlow,
-                    operations = pumpOperations,
-                    poller = NativeX11Poller,
-                    wakeup = wakeup,
-                    xConnectionFd = xConnectionFd,
-                    shouldContinue = { !loop.isExiting },
-                )
-
-                // Notify the handler that the loop is about to wait
-                handler.aboutToWait(loop)
-            }
-
-            handler.suspended(loop)
-        } finally {
-            arena.close()
-        }
+                Arena.ofConfined().use { arena ->
+                    val pumpOperations = NativeX11PumpOperations(
+                        display = displaySeg,
+                        eventBuffer = arena.allocate(XEVENT_SIZE, XEVENT_ALIGN),
+                        loop = loop,
+                        wmDeleteWindow = wmDeleteWindow,
+                        xdnd = xdnd,
+                    )
+                    lifecycleStarted = true
+                    displayOwnedByLifecycle = true
+                    try {
+                        startX11Lifecycle(loop, handler)
+                        while (!loop.isExiting) {
+                            val startCause = dispatchX11Once(
+                                controlFlow = loop.controlFlow,
+                                operations = pumpOperations,
+                                poller = NativeX11Poller,
+                                wakeup = wakeup,
+                                xConnectionFd = xConnectionFd,
+                                shouldContinue = { !loop.isExiting },
+                                hasPendingWork = loop::hasPendingWork,
+                            )
+                            dispatchX11Iteration(loop, handler, startCause)
+                        }
+                    } finally {
+                        shutdownX11Lifecycle(loop, handler)
+                    }
+                }
             } finally {
-                wakeup.close()
+                if (!lifecycleStarted) wakeup.close()
             }
         } finally {
-            xCloseDisplay?.invokeExact(displaySeg) as? Int
+            if (!displayOwnedByLifecycle) NativeX11Adapter.closeDisplay(displayPtr)
         }
     } finally {
         x11Running.set(false)
+    }
+}
+
+private fun x11DragAndDropAtoms(displayPtr: Long): XdndAtoms? {
+    val display = MemorySegment.ofAddress(displayPtr)
+    val enter = x11DragAndDropAtom(display, "XdndEnter")
+    val position = x11DragAndDropAtom(display, "XdndPosition")
+    val leave = x11DragAndDropAtom(display, "XdndLeave")
+    val drop = x11DragAndDropAtom(display, "XdndDrop")
+    val selection = x11DragAndDropAtom(display, "XdndSelection")
+    val textUriList = x11DragAndDropAtom(display, "text/uri-list")
+    return if (
+        enter != 0L && position != 0L && leave != 0L && drop != 0L &&
+        selection != 0L && textUriList != 0L
+    ) {
+        XdndAtoms(enter, position, leave, drop, selection, textUriList)
+    } else {
+        null
     }
 }
