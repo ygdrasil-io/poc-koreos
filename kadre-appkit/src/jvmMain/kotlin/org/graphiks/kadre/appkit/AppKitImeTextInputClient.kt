@@ -95,6 +95,8 @@ internal object AppKitImeTextInputClient {
         imeViewTable.remove(viewPtr.address())
     }
 
+    internal fun registeredViewCount(): Int = imeViewTable.size
+
     /**
      * Updates the cursor screen rect for a given view.
      */
@@ -623,13 +625,14 @@ internal object AppKitImeTextInputClient {
             textObj: MemorySegment,
             @Suppress("UNUSED_PARAMETER") replacementRange: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            val text = idToNSString(textObj) ?: return
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Commit(text)),
-            )
+            invokeSafely(self, "insertText_replacementRange") { record ->
+                val text = idToNSString(textObj) ?: return@invokeSafely
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Commit(text)),
+                )
+            }
         }
 
         /**
@@ -643,18 +646,19 @@ internal object AppKitImeTextInputClient {
             selectedRange: MemorySegment,
             @Suppress("UNUSED_PARAMETER") replacementRange: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            val text = idToNSString(textObj) ?: return
-            val selStart = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 0)
-            val selLen = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 1)
-            val cursorRange: Pair<Int, Int>? = if (selStart != NS_NOT_FOUND) {
-                Pair(selStart.toInt(), (selStart + selLen).toInt())
-            } else null
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Preedit(text, cursorRange)),
-            )
+            invokeSafely(self, "setMarkedText_selectedRange_replacementRange") { record ->
+                val text = idToNSString(textObj) ?: return@invokeSafely
+                val selStart = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 0)
+                val selLen = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 1)
+                val cursorRange: Pair<Int, Int>? = if (selStart != NS_NOT_FOUND) {
+                    Pair(selStart.toInt(), (selStart + selLen).toInt())
+                } else null
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Preedit(text, cursorRange)),
+                )
+            }
         }
 
         /**
@@ -666,12 +670,13 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
-            )
+            invokeSafely(self, "unmarkText") { record ->
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
+                )
+            }
         }
 
         /**
@@ -829,7 +834,9 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragEntered(pos, paths),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
+            } catch (failure: Throwable) {
+                captureSafely(record, "draggingEntered", failure)
+            }
             return 4L // NSDragOperationGeneric
         }
 
@@ -867,7 +874,9 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragMoved(pos),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
+            } catch (failure: Throwable) {
+                captureSafely(record, "draggingUpdated", failure)
+            }
             return 4L // NSDragOperationGeneric
         }
 
@@ -889,7 +898,9 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragLeft,
                 )
-            } catch (_: Throwable) { /* best-effort */ }
+            } catch (failure: Throwable) {
+                captureSafely(record, "draggingExited", failure)
+            }
         }
 
         /**
@@ -934,7 +945,9 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragDropped(pos, paths),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
+            } catch (failure: Throwable) {
+                captureSafely(record, "performDragOperation", failure)
+            }
             return 1 // YES
         }
 
@@ -951,6 +964,27 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
         ) {
             // No event — session end notification only
+        }
+
+        private inline fun invokeSafely(
+            self: MemorySegment,
+            context: String,
+            callback: (ImeViewRecord) -> Unit,
+        ) {
+            val record = imeViewTable[self.address()] ?: return
+            try {
+                callback(record)
+            } catch (failure: Throwable) {
+                captureSafely(record, context, failure)
+            }
+        }
+
+        private fun captureSafely(record: ImeViewRecord, context: String, failure: Throwable) {
+            try {
+                (record.eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
         }
     }
 }

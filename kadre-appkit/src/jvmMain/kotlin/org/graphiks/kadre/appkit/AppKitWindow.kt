@@ -50,6 +50,7 @@ import org.graphiks.kadre.core.WindowRequestResult
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native macOS window implementing [Window].
@@ -64,6 +65,7 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     private val nsWindowPtr: MemorySegment
     private val contentViewPtr: MemorySegment
     private val metalLayerPtr: MemorySegment
+    private val nativeResourcesReleased = AtomicBoolean(false)
 
     override val id: WindowId
 
@@ -413,7 +415,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     }
 
     override fun close() {
-        NSWindow(nsWindowPtr).close()
+        appKitCloseWindow(_eventLoop, id) {
+            closeAndReleaseNativeWindow()
+        }
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -1066,7 +1070,14 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         MainThreadCheck.require()
         val appKitEventLoop = eventLoop as AppKitEventLoop
         val del = KadreWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr, appKitEventLoop.windows)
-        NSWindow(nsWindowPtr).setDelegate(del.ptr)
+        try {
+            NSWindow(nsWindowPtr).setDelegate(del.ptr)
+        } catch (failure: Throwable) {
+            runCatching { del.releaseNative() }.exceptionOrNull()?.let { releaseFailure ->
+                if (releaseFailure !== failure) failure.addSuppressed(releaseFailure)
+            }
+            throw failure
+        }
         delegate = del
 
         // Store handler/eventLoop for IME event dispatch
@@ -1087,6 +1098,48 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
                 ),
             )
         }
+
+        appKitEventLoop.registerWindowCloseActions(
+            windowId = id,
+            unregisterCallbacks = {
+                appKitUnregisterWindowCallbacks(
+                    delegateAddress = del.ptr.address(),
+                    textInputView = textInputViewPtr,
+                    detachNativeDelegate = {
+                        NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+                    },
+                    releaseDelegate = del::releaseNative,
+                )
+                delegate = null
+                _handler = null
+                _eventLoop = null
+            },
+            closeNative = ::closeAndReleaseNativeWindow,
+        )
+    }
+
+    private fun closeAndReleaseNativeWindow() {
+        if (!nativeResourcesReleased.compareAndSet(false, true)) return
+        var failure: Throwable? = null
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (caught: Throwable) {
+                val primary = failure
+                if (primary == null) {
+                    failure = caught
+                } else if (caught !== primary) {
+                    primary.addSuppressed(caught)
+                }
+            }
+        }
+        cleanup { NSWindow(nsWindowPtr).close() }
+        cleanup { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) }
+        cleanup { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) }
+        if (textInputViewPtr != MemorySegment.NULL) {
+            cleanup { ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release")) }
+        }
+        failure?.let { throw it }
     }
 
     // ── R4: keyboard ─────────────────────────────────────────────────────────
@@ -1480,6 +1533,45 @@ private fun activateApplicationForWindowFocus() {
         ObjCRuntime.sel("sharedApplication"),
     ) as MemorySegment
     ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("activateIgnoringOtherApps:"), true)
+}
+
+internal fun appKitCloseWindow(
+    eventLoop: ActiveEventLoop?,
+    windowId: WindowId,
+    closeNative: () -> Unit,
+) {
+    val appKitEventLoop = eventLoop as? AppKitEventLoop
+    if (appKitEventLoop == null) {
+        closeNative()
+    } else {
+        appKitEventLoop.closeWindow(windowId)
+    }
+}
+
+internal fun appKitUnregisterWindowCallbacks(
+    delegateAddress: Long,
+    textInputView: MemorySegment,
+    detachNativeDelegate: () -> Unit,
+    releaseDelegate: () -> Unit,
+) {
+    var failure: Throwable? = null
+    fun cleanup(step: () -> Unit) {
+        try {
+            step()
+        } catch (caught: Throwable) {
+            val primary = failure
+            if (primary == null) {
+                failure = caught
+            } else if (caught !== primary) {
+                primary.addSuppressed(caught)
+            }
+        }
+    }
+    cleanup(detachNativeDelegate)
+    cleanup { KadreWindowDelegate.unregisterDelegate(delegateAddress) }
+    cleanup { AppKitImeTextInputClient.unregisterView(textInputView) }
+    cleanup(releaseDelegate)
+    failure?.let { throw it }
 }
 
 /**

@@ -11,6 +11,7 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -24,6 +25,119 @@ import kotlin.test.assertFailsWith
  * tests.
  */
 class KadreApplicationTest {
+
+    @Test
+    fun `launch emits resumed init and can-create-surfaces exactly once`() {
+        val callbacks = mutableListOf<String>()
+        val handler = object : ApplicationHandler {
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                callbacks += "resumed"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                assertTrue(startCause === StartCause.Init)
+                callbacks += "newEvents(Init)"
+            }
+
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                callbacks += "canCreateSurfaces"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val eventLoop = AppKitEventLoop(handler)
+
+        eventLoop.didLaunch()
+        eventLoop.didLaunch()
+
+        assertEquals(
+            listOf("resumed", "newEvents(Init)", "canCreateSurfaces"),
+            callbacks,
+        )
+    }
+
+    @Test
+    fun `application activation transitions emit suspended and resumed once`() {
+        val callbacks = mutableListOf<String>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                callbacks += "canCreateSurfaces"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                callbacks += "newEvents"
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                callbacks += "resumed"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                callbacks += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val eventLoop = AppKitEventLoop(handler)
+
+        eventLoop.didLaunch()
+        eventLoop.didBecomeActive()
+        eventLoop.didBecomeActive()
+        eventLoop.willResignActive()
+        eventLoop.willResignActive()
+        eventLoop.didBecomeActive()
+        eventLoop.didBecomeActive()
+
+        assertEquals(
+            listOf("resumed", "newEvents", "canCreateSurfaces", "suspended", "resumed"),
+            callbacks,
+        )
+    }
+
+    @Test
+    fun `termination destroys surfaces closes windows and suspends exactly once`() {
+        val callbacks = mutableListOf<String>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun resumed(eventLoop: ActiveEventLoop) = Unit
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) = Unit
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                callbacks += "destroySurfaces"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                callbacks += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val eventLoop = AppKitEventLoop(handler)
+        eventLoop.didLaunch()
+
+        eventLoop.willTerminate { callbacks += "closeWindows" }
+        eventLoop.willTerminate { callbacks += "duplicateCloseWindows" }
+
+        assertEquals(
+            listOf("destroySurfaces", "closeWindows", "suspended"),
+            callbacks,
+        )
+        assertTrue(eventLoop.isExiting)
+    }
 
     @Test
     fun `KadreApplication is a subclass of NSApplication`() {
@@ -123,6 +237,25 @@ class KadreApplicationTest {
             )
         assertTrue(java.lang.reflect.Modifier.isStatic(didFinish.modifiers))
         assertTrue(java.lang.reflect.Modifier.isStatic(shouldTerminate.modifiers))
+    }
+
+    @Test
+    fun `Callbacks exposes all AppKit lifecycle notifications`() {
+        val callbacks = KadreAppDelegate.Callbacks::class.java
+        listOf(
+            "applicationDidBecomeActive",
+            "applicationWillResignActive",
+            "applicationWillTerminate",
+        ).forEach { name ->
+            val method = callbacks.getDeclaredMethod(
+                name,
+                java.lang.foreign.MemorySegment::class.java,
+                java.lang.foreign.MemorySegment::class.java,
+                java.lang.foreign.MemorySegment::class.java,
+            )
+            assertTrue(java.lang.reflect.Modifier.isStatic(method.modifiers), name)
+            assertEquals(Void.TYPE, method.returnType, name)
+        }
     }
 
     /**

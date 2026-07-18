@@ -73,6 +73,13 @@ internal class CFRunLoopOwner private constructor(
         }
     }
 
+    fun closeWindow(windowId: org.graphiks.kadre.core.WindowId) {
+        synchronized(lock) {
+            if (closed) return
+            state.closeWindow(windowId)
+        }
+    }
+
     /** Kotlin-safe boundary for failures captured by native callbacks. */
     fun throwPendingCallbackFailure() {
         val primary = drainPendingCallbackFailure() ?: return
