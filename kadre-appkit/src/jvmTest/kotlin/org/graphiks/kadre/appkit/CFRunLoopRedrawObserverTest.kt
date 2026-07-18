@@ -1,121 +1,130 @@
 package org.graphiks.kadre.appkit
 
-import org.graphiks.kadre.core.ActiveEventLoop
-import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ControlFlow
-import org.graphiks.kadre.core.EventLoopProxy
-import org.graphiks.kadre.core.Window
-import org.graphiks.kadre.core.WindowAttributes
-import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowId
-import java.lang.foreign.MemorySegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Typing tests for CFRunLoopRedrawObserver (GRA-134 + GRA-135).
- *
- * Actual installation of the observer requires the macOS main thread and
- * an active CFRunLoop — these tests only verify the structure / signatures.
- */
 class CFRunLoopRedrawObserverTest {
-
     @Test
-    fun `WindowEvent RedrawRequested is a data object`() {
-        val event: WindowEvent = WindowEvent.RedrawRequested
-        assertTrue(event is WindowEvent.RedrawRequested)
-        // data object → stable toString + singleton
-        assertEquals(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested)
+    fun `startup dispatches lifecycle callbacks in AppKit order`() {
+        val loop = FakeRunLoop(nowMillis = 1_000L)
+
+        loop.resume()
+
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents(${StartCause.Init})",
+                "canCreateSurfaces",
+                "aboutToWait",
+            ),
+            loop.callbacks,
+        )
     }
 
     @Test
-    fun `CFRunLoopRedrawObserver redrawCallback exists with CFRunLoopObserverCallBack signature`() {
-        val method = CFRunLoopRedrawObserver::class.java.methods
-            .firstOrNull { it.name == "redrawCallback" }
-        assertNotNull(method, "CFRunLoopRedrawObserver must expose redrawCallback (static)")
-        assertEquals(Void.TYPE, method.returnType, "redrawCallback must return void")
-        assertEquals(3, method.parameterCount, "redrawCallback takes (observer, activity, info)")
-        assertEquals(MemorySegment::class.java, method.parameterTypes[0])
-        assertEquals(java.lang.Long.TYPE, method.parameterTypes[1])
-        assertEquals(MemorySegment::class.java, method.parameterTypes[2])
+    fun `coalesced redraw is dispatched between new events and about to wait`() {
+        val windowId = WindowId(7L)
+        val loop = FakeRunLoop(nowMillis = 1_000L)
+        loop.resume()
+        loop.callbacks.clear()
+
+        assertTrue(loop.requestRedraw(windowId))
+        assertFalse(loop.requestRedraw(windowId))
+        loop.apply(loop.arm(ControlFlow.Poll))
+
+        assertEquals(
+            listOf(
+                "newEvents(${StartCause.Poll})",
+                "redraw(${windowId.value})",
+                "aboutToWait",
+            ),
+            loop.callbacks,
+        )
     }
 
     @Test
-    fun `CFRunLoopRedrawObserver exposes install in its companion`() {
-        val companionInstance = CFRunLoopRedrawObserver::class.java
-            .getDeclaredField("Companion").get(null)
-        val installMethod = companionInstance.javaClass.methods
-            .firstOrNull { it.name == "install" }
-        assertNotNull(installMethod, "Companion must expose install(handler, eventLoop, windows)")
-        assertEquals(3, installMethod.parameterCount)
+    fun `close suppresses window callbacks and exit suppresses every later callback`() {
+        val closedWindowId = WindowId(7L)
+        val openWindowId = WindowId(8L)
+        val loop = FakeRunLoop(nowMillis = 1_000L)
+        loop.resume()
+        loop.callbacks.clear()
+
+        assertTrue(loop.requestRedraw(closedWindowId))
+        loop.closeWindow(closedWindowId)
+        assertFalse(loop.requestRedraw(closedWindowId))
+        assertTrue(loop.requestRedraw(openWindowId))
+        loop.apply(loop.arm(ControlFlow.Poll))
+        assertEquals(
+            listOf(
+                "newEvents(${StartCause.Poll})",
+                "redraw(${openWindowId.value})",
+                "aboutToWait",
+            ),
+            loop.callbacks,
+        )
+
+        loop.exit()
+        val callbacksAtExit = loop.callbacks.toList()
+        loop.signalExternalEvent()
+        loop.requestRedraw(WindowId(9L))
+        loop.apply(loop.arm(ControlFlow.Poll))
+
+        assertEquals(callbacksAtExit, loop.callbacks)
     }
 
-    @Test
-    fun `AppKitWindow exposes needsRedraw modifiable via requestRedraw`() {
-        // requestRedraw must mutate the needsRedraw flag (verified via generated getter/setter)
-        val getter = AppKitWindow::class.java.methods
-            .firstOrNull { it.name == "getNeedsRedraw\$kadre_appkit" || it.name == "getNeedsRedraw" || it.name == "getNeedsRedraw\$org_graphiks_kadre_kadre_appkit" }
-        assertNotNull(getter, "AppKitWindow must expose a getter for needsRedraw (internal)")
-        assertEquals(java.lang.Boolean.TYPE, getter.returnType)
-    }
+    private class FakeRunLoop(nowMillis: Long) {
+        private var exited = false
+        private var didCreateSurfaces = false
+        private val state = AppKitLoopState(nowMillis = { nowMillis })
+        val callbacks = mutableListOf<String>()
 
-    @Test
-    fun `AppKitWindow requestRedraw exists and returns void`() {
-        val method = AppKitWindow::class.java.methods
-            .firstOrNull { it.name == "requestRedraw" }
-        assertNotNull(method, "AppKitWindow must have requestRedraw()")
-        assertEquals(Void.TYPE, method.returnType)
-        assertEquals(0, method.parameterCount)
-    }
-
-    @Test
-    fun `ApplicationHandler aboutToWait exists with correct signature (GRA-135)`() {
-        val method = ApplicationHandler::class.java.methods
-            .firstOrNull { it.name == "aboutToWait" }
-        assertNotNull(method, "ApplicationHandler must have aboutToWait(eventLoop)")
-        assertEquals(Void.TYPE, method.returnType)
-        assertEquals(1, method.parameterCount)
-        assertTrue(ActiveEventLoop::class.java.isAssignableFrom(method.parameterTypes[0]))
-    }
-
-    @Test
-    fun `onBeforeWaiting calls aboutToWait after RedrawRequested (GRA-135)`() {
-        // Verify that onBeforeWaiting dispatches in the right order by simulating a call
-        val aboutToWaitCalled = mutableListOf<String>()
-        val windowEventsCalled = mutableListOf<String>()
-
-        val stubEventLoop = object : ActiveEventLoop {
-            override val isExiting = false
-            override val controlFlow = ControlFlow.Wait
-            override fun setControlFlow(controlFlow: ControlFlow) = Unit
-            override fun createWindow(attributes: WindowAttributes): Window = throw UnsupportedOperationException()
-            override fun exit() = Unit
-            override fun createProxy(): EventLoopProxy = throw UnsupportedOperationException()
-            // R2 stubs
-            override fun availableMonitors() = emptyList<org.graphiks.kadre.core.MonitorHandle>()
-            override fun primaryMonitor() = null
-            // R3 stub
-            override fun systemTheme() = null
-            // R4 stub
-            override fun listenDeviceEvents(mode: org.graphiks.kadre.core.DeviceEvents) = Unit
-        }
-        val stubHandler = object : ApplicationHandler {
-            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
-            override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
-                windowEventsCalled.add(event.toString())
-            }
-            override fun aboutToWait(eventLoop: ActiveEventLoop) {
-                aboutToWaitCalled.add("called")
-            }
+        fun resume() {
+            if (exited) return
+            callbacks += "resumed"
+            dispatchIteration()
         }
 
-        val observer = CFRunLoopRedrawObserver(stubHandler, stubEventLoop,
-            java.util.concurrent.ConcurrentHashMap())
-        observer.onBeforeWaiting()
+        fun requestRedraw(windowId: WindowId): Boolean = state.requestRedraw(windowId)
 
-        assertTrue(aboutToWaitCalled.size == 1, "aboutToWait must be called once")
-        assertTrue(windowEventsCalled.isEmpty(), "No RedrawRequested without a pending window")
+        fun closeWindow(windowId: WindowId) {
+            state.closeWindow(windowId)
+        }
+
+        fun arm(controlFlow: ControlFlow): TimerDecision = state.arm(controlFlow)
+
+        fun apply(decision: TimerDecision) {
+            if (exited || decision !== TimerDecision.FireNow) return
+            dispatchIteration()
+        }
+
+        fun signalExternalEvent() {
+            if (exited) return
+            state.signalExternalEvent()
+            dispatchIteration()
+        }
+
+        fun exit() {
+            state.exit()
+            exited = true
+        }
+
+        private fun dispatchIteration() {
+            val cause = state.beginIteration()
+            callbacks += "newEvents($cause)"
+            if (!didCreateSurfaces) {
+                didCreateSurfaces = true
+                callbacks += "canCreateSurfaces"
+            }
+            state.takeRedraws().forEach { windowId ->
+                callbacks += "redraw(${windowId.value})"
+            }
+            callbacks += "aboutToWait"
+        }
     }
 }
