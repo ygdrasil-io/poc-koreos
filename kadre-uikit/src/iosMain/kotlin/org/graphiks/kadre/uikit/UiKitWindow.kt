@@ -691,6 +691,17 @@ private class UiKitRootViewController(
     override fun preferredStatusBarStyle(): Long = statusBarStyle
 }
 
+/** Applies ordered window mutations only while their target remains live. */
+internal inline fun applyUIKitWindowMutationsWhileLive(
+    isLive: () -> Boolean,
+    mutations: Array<out () -> Unit>,
+) {
+    mutations.forEach { mutation ->
+        if (!isLive()) return
+        mutation()
+    }
+}
+
 /**
  * UiKitWindow — implements Window for iOS.
  *
@@ -794,35 +805,47 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
 
     /** Reapplies attributes whose [Window] API exposes a mutable counterpart. */
     internal fun applyMutableAttributes(attrs: WindowAttributes) {
-        setTitle(attrs.title)
-        setVisible(attrs.visible)
-        setResizable(attrs.resizable)
-        setMinSurfaceSize(attrs.minSize)
-        setMaxSurfaceSize(attrs.maxSize)
-        setSurfaceResizeIncrements(attrs.resizeIncrements)
-        attrs.position?.let(::setOuterPosition)
-        setEnabledButtons(attrs.enabledButtons)
-        setMaximized(attrs.maximized)
-        setDecorations(attrs.decorations)
-        setFullscreen(attrs.fullscreen)
-        setCursor(attrs.cursor)
-        setTheme(attrs.preferredTheme)
-        setTransparent(attrs.transparent)
-        setBlur(attrs.blur)
-        setWindowLevel(attrs.windowLevel)
-        setWindowIcon(attrs.windowIcon)
-        setContentProtected(attrs.contentProtected)
-        if (attrs.active) focusWindow()
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { !closed },
+            mutations = arrayOf(
+                { setTitle(attrs.title) },
+                { setVisible(attrs.visible) },
+                { setResizable(attrs.resizable) },
+                { setMinSurfaceSize(attrs.minSize) },
+                { setMaxSurfaceSize(attrs.maxSize) },
+                { setSurfaceResizeIncrements(attrs.resizeIncrements) },
+                { attrs.position?.let(::setOuterPosition) },
+                { setEnabledButtons(attrs.enabledButtons) },
+                { setMaximized(attrs.maximized) },
+                { setDecorations(attrs.decorations) },
+                { setFullscreen(attrs.fullscreen) },
+                { setCursor(attrs.cursor) },
+                { setTheme(attrs.preferredTheme) },
+                { setTransparent(attrs.transparent) },
+                { setBlur(attrs.blur) },
+                { setWindowLevel(attrs.windowLevel) },
+                { setWindowIcon(attrs.windowIcon) },
+                { setContentProtected(attrs.contentProtected) },
+                { if (attrs.active) focusWindow() },
+            ),
+        )
     }
 
     /** Applies initial attributes once, after this window is admitted to the live registry. */
     internal fun applyInitialAttributes(attrs: WindowAttributes) {
-        applyMutableAttributes(attrs)
-        if (attrs.visible && !closed) {
-            // Become first responder so hardware-keyboard / controller key
-            // presses reach pressesBegan/Ended.
-            metalView.becomeFirstResponder()
-        }
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { !closed },
+            mutations = arrayOf(
+                { applyMutableAttributes(attrs) },
+                {
+                    if (attrs.visible) {
+                        // Become first responder so hardware-keyboard / controller key
+                        // presses reach pressesBegan/Ended.
+                        metalView.becomeFirstResponder()
+                    }
+                },
+            ),
+        )
     }
 
     /**

@@ -597,4 +597,28 @@ class UIKitLifecycleTest {
         assertEquals(1, rollbackCount)
         assertFalse(candidate in liveRegistry)
     }
+
+    @Test
+    fun windowMutationPolicySkipsClosedWindowsAndStopsAfterSynchronousClose() {
+        val mutations = mutableListOf<String>()
+        var live = true
+
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { live },
+            mutations = arrayOf(
+                { mutations += "title" },
+                {
+                    mutations += "visible"
+                    live = false
+                },
+                { mutations += "resizable" },
+            ),
+        )
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { live },
+            mutations = arrayOf({ mutations += "already-closed" }),
+        )
+
+        assertEquals(listOf("title", "visible"), mutations)
+    }
 }
