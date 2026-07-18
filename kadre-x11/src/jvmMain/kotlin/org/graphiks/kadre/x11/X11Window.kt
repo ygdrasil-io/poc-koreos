@@ -113,23 +113,23 @@ private fun appendX11WindowFailure(primary: Throwable?, additional: Throwable): 
 /**
  * Native X11 window implementing [Window].
  *
- * The constructor is internal: use [X11Window.create] to instantiate.
+ * Instances are created and owned by [X11EventLoop]. Window lifecycle operations are therefore
+ * always serialized through that loop.
  *
  * @param displayPtr Pointer to the X11 Display structure (Long value of MemorySegment.address()).
  * @param xWindowId  XID identifier of the created window (unsigned long → Long).
  * @param attrs      Window creation attributes.
+ * @param owner      Event loop that owns this window for its complete lifecycle.
  */
 class X11Window internal constructor(
     private val displayPtr: Long,
     private val screen: Int,
     private val xWindowId: Long,
     private val attrs: WindowAttributes,
-    private val owner: X11EventLoop? = null,
+    private val owner: X11EventLoop,
     initialScaleFactor: Double = readXftDpi(displayPtr),
     private val imeLease: X11ImeLease = X11ImeLease(X11Window::releaseXIM),
 ) : Window {
-
-    private val directCloseStarted = AtomicBoolean(false)
 
     override val id: WindowId = WindowId(xWindowId)
 
@@ -216,7 +216,7 @@ class X11Window internal constructor(
     override val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
     override fun requestRedraw() {
-        owner?.requestRedraw(this)
+        owner.requestRedraw(this)
     }
 
     override fun setVisible(visible: Boolean) {
@@ -243,19 +243,7 @@ class X11Window internal constructor(
     }
 
     override fun close() {
-        val loop = owner
-        if (loop != null) {
-            loop.closeWindow(this)
-            return
-        }
-        if (!directCloseStarted.compareAndSet(false, true)) return
-        val display = MemorySegment.ofAddress(displayPtr)
-        disableIme()
-        freeCachedCursors(display)
-        val handle = xDestroyWindow ?: return
-        handle.invokeExact(display, xWindowId) as Int
-        val flush = xFlush
-        if (flush != null) flush.invokeExact(display) as Int
+        owner.closeWindow(this)
     }
 
     /** Releases per-window resources before the owning loop destroys or forgets the XID. */
@@ -1908,26 +1896,12 @@ class X11Window internal constructor(
             }
         }
 
-        /**
-         * Creates a native X11 window.
-         *
-         * Performs all the necessary initialization:
-         * XCreateSimpleWindow → XSelectInput → WM_DELETE_WINDOW → XStoreName → XMapWindow.
-         *
-         * @param display Long representing the Display* pointer (address of the MemorySegment).
-         * @param screen  X11 screen number (DefaultScreen).
-         * @param attrs   Window attributes (title, size, visibility, etc.).
-         * @return The created window, or null if the libX11 bindings are not available
-         *         (macOS/Windows) or if creation fails.
-         */
-        fun create(display: Long, screen: Int, attrs: WindowAttributes): X11Window? =
-            create(display, screen, attrs, owner = null)
-
+        /** Creates a native X11 window owned by [owner] for its complete lifecycle. */
         internal fun create(
             display: Long,
             screen: Int,
             attrs: WindowAttributes,
-            owner: X11EventLoop?,
+            owner: X11EventLoop,
         ): X11Window? {
             // The bindings are null on non-Linux — return null gracefully.
             val createHandle = xCreateSimpleWindow ?: return null

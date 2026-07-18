@@ -16,9 +16,11 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -122,15 +124,49 @@ class X11WindowTest {
     }
 
     @Test
-    fun `X11Window returns null if libX11 is absent`() {
-        // On macOS / Windows, libX11 is null → create() must return null
-        if (libX11 != null) return // Skip on Linux
-        val result = X11Window.create(
-            display = 0L,
-            screen = 0,
-            attrs = WindowAttributes(title = "Test"),
-        )
-        assertNull(result, "X11Window.create must return null if libX11 is absent")
+    fun `X11Window exposes no public standalone factory`() {
+        val standaloneFactory = X11Window.Companion::class.java.methods.firstOrNull { method ->
+            method.name == "create" && method.parameterTypes.contentEquals(
+                arrayOf(
+                    java.lang.Long.TYPE,
+                    java.lang.Integer.TYPE,
+                    WindowAttributes::class.java,
+                ),
+            )
+        }
+
+        assertNull(standaloneFactory, "X11 windows must only be created by X11EventLoop")
+    }
+
+    @Test
+    fun `X11Window rejects a missing event loop owner`() {
+        val ownedConstructor = X11Window::class.java.declaredConstructors.single { constructor ->
+            constructor.parameterTypes.contentEquals(
+                arrayOf(
+                    java.lang.Long.TYPE,
+                    java.lang.Integer.TYPE,
+                    java.lang.Long.TYPE,
+                    WindowAttributes::class.java,
+                    X11EventLoop::class.java,
+                    java.lang.Double.TYPE,
+                    X11ImeLease::class.java,
+                ),
+            )
+        }
+
+        val failure = assertFailsWith<InvocationTargetException> {
+            ownedConstructor.newInstance(
+                1L,
+                0,
+                77L,
+                WindowAttributes(title = "owned"),
+                null,
+                1.0,
+                X11ImeLease {},
+            )
+        }
+
+        assertTrue(failure.cause is NullPointerException)
     }
 
     // ── parseXftDpi unit tests (pure Kotlin, no X server needed) ─────────────
