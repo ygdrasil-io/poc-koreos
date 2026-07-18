@@ -266,7 +266,7 @@ jobs:
         run: |
           ./gradlew \
             :kadre-android:build \
-            :kadre:compileDebugKotlinAndroid \
+            :kadre:compileAndroidMain \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
             --no-daemon \
