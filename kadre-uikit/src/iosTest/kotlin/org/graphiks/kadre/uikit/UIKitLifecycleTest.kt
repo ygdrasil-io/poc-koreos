@@ -2,12 +2,12 @@ package org.graphiks.kadre.uikit
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
-import kotlin.test.assertIs
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.Fullscreen
@@ -87,19 +87,15 @@ class UIKitLifecycleTest {
             }
         }
         val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
 
         try {
-            loop.recreateSurfaces { handler.canCreateSurfaces(this) }
-            handler.resumed(loop)
-            loop.dispatchWindowFocused(gained = true)
-            loop.dispatchWindowFocused(gained = false)
-            handler.suspended(loop)
-            loop.dispatchOccluded(occluded = true)
-            loop.destroySurfaces()
-            loop.dispatchOccluded(occluded = false)
-            loop.recreateSurfaces { handler.canCreateSurfaces(this) }
-            handler.resumed(loop)
-            loop.dispatchWindowFocused(gained = true)
+            lifecycle.didFinishLaunching()
+            lifecycle.didBecomeActive()
+            lifecycle.willResignActive()
+            lifecycle.didEnterBackground()
+            lifecycle.willEnterForeground()
+            lifecycle.didBecomeActive()
 
             assertSame(createdWindows[0], createdWindows[1])
             assertEquals(createdWindows[0].id, createdWindows[1].id)
@@ -142,12 +138,13 @@ class UIKitLifecycleTest {
             ) = Unit
         }
         val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
 
-        loop.recreateSurfaces { handler.canCreateSurfaces(this) }
-        loop.destroySurfaces()
-        loop.destroySurfaces() // Immediate termination after background.
-        loop.recreateSurfaces { handler.canCreateSurfaces(this) }
-        loop.destroySurfaces()
+        lifecycle.didFinishLaunching()
+        lifecycle.didEnterBackground()
+        lifecycle.willEnterForeground()
+        lifecycle.didEnterBackground()
+        lifecycle.willTerminate() // No duplicate destruction after background.
 
         assertEquals(2, destroyCount)
     }
@@ -369,6 +366,7 @@ class UIKitLifecycleTest {
             }
         }
         val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
         createdWindows += loop.createWindow(WindowAttributes(visible = false))
 
         try {
@@ -380,7 +378,7 @@ class UIKitLifecycleTest {
             assertNotEquals(original.id, ordinaryReplacement.id)
 
             terminalTeardown = true
-            loop.dispatchWindowsDestroyed()
+            lifecycle.willTerminate()
             val afterTermination = runCatching {
                 loop.createWindow(WindowAttributes(visible = false))
             }

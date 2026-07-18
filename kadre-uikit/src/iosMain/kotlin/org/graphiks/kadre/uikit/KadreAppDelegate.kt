@@ -7,6 +7,45 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationDelegateProtocol
 import platform.UIKit.UIResponder
 
+/** Owns the production ordering shared by delegate callbacks and lifecycle tests. */
+internal class UIKitLifecycleOrchestrator(
+    private val eventLoop: UIKitActiveEventLoop,
+) {
+    internal fun didFinishLaunching() {
+        eventLoop.recreateSurfaces {
+            handler.canCreateSurfaces(this)
+        }
+    }
+
+    internal fun didBecomeActive() {
+        eventLoop.handler.resumed(eventLoop)
+        eventLoop.dispatchWindowFocused(gained = true)
+        eventLoop.dispatchThemeChangedIfNeeded()
+    }
+
+    internal fun willResignActive() {
+        eventLoop.dispatchWindowFocused(gained = false)
+        eventLoop.handler.suspended(eventLoop)
+    }
+
+    internal fun didEnterBackground() {
+        eventLoop.dispatchOccluded(occluded = true)
+        eventLoop.destroySurfaces()
+    }
+
+    internal fun willEnterForeground() {
+        eventLoop.dispatchOccluded(occluded = false)
+        eventLoop.recreateSurfaces {
+            handler.canCreateSurfaces(this)
+        }
+    }
+
+    internal fun willTerminate() {
+        eventLoop.dispatchWindowsDestroyed()
+        eventLoop.destroySurfaces()
+    }
+}
+
 /**
  * Kadre AppDelegate for iOS.
  *
@@ -61,7 +100,7 @@ import platform.UIKit.UIResponder
 @ExportObjCClass
 class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
 
-    private var eventLoop: UIKitActiveEventLoop? = null
+    private var lifecycle: UIKitLifecycleOrchestrator? = null
 
     // ── Startup ─────────────────────────────────────────────────────────────
 
@@ -78,9 +117,9 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         println("[KadreAppDelegate] applicationDidFinishLaunching → canCreateSurfaces")
         val handler = KadreRegistry.handler
             ?: error("[KadreAppDelegate] No handler registered — call startKadreApplication before UIApplicationMain")
-        val loop = UIKitActiveEventLoop(handler)
-        eventLoop = loop
-        loop.recreateSurfaces { handler.canCreateSurfaces(this) }
+        val orchestrator = UIKitLifecycleOrchestrator(UIKitActiveEventLoop(handler))
+        lifecycle = orchestrator
+        orchestrator.didFinishLaunching()
         return true
     }
 
@@ -93,11 +132,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationDidBecomeActive(application: UIApplication) {
         println("[KadreAppDelegate] applicationDidBecomeActive → resumed + Focused(true)")
-        eventLoop?.let {
-            it.handler.resumed(it)
-            it.dispatchWindowFocused(gained = true)
-            it.dispatchThemeChangedIfNeeded()
-        }
+        lifecycle?.didBecomeActive()
     }
 
     /**
@@ -107,11 +142,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationWillResignActive(application: UIApplication) {
         println("[KadreAppDelegate] applicationWillResignActive → Focused(false) + suspended")
-        eventLoop?.let {
-            // Lose window focus before the app-level suspend.
-            it.dispatchWindowFocused(gained = false)
-            it.handler.suspended(it)
-        }
+        lifecycle?.willResignActive()
     }
 
     // ── Background / Foreground ───────────────────────────────────────────
@@ -127,10 +158,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationDidEnterBackground(application: UIApplication) {
         println("[KadreAppDelegate] applicationDidEnterBackground → Occluded(true) + destroySurfaces")
-        eventLoop?.let {
-            it.dispatchOccluded(true)
-            it.destroySurfaces()
-        }
+        lifecycle?.didEnterBackground()
     }
 
     /**
@@ -144,10 +172,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationWillEnterForeground(application: UIApplication) {
         println("[KadreAppDelegate] applicationWillEnterForeground → Occluded(false) + canCreateSurfaces")
-        eventLoop?.let {
-            it.dispatchOccluded(false)
-            it.recreateSurfaces { handler.canCreateSurfaces(this) }
-        }
+        lifecycle?.willEnterForeground()
     }
 
     // ── Termination ───────────────────────────────────────────────────────────
@@ -160,12 +185,8 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationWillTerminate(application: UIApplication) {
         println("[KadreAppDelegate] applicationWillTerminate → Destroyed + destroySurfaces")
-        eventLoop?.let {
-            // Per-window terminal event before the app-level surface teardown.
-            it.dispatchWindowsDestroyed()
-            it.destroySurfaces()
-        }
-        eventLoop = null
+        lifecycle?.willTerminate()
+        lifecycle = null
         KadreRegistry.handler = null
     }
 }
