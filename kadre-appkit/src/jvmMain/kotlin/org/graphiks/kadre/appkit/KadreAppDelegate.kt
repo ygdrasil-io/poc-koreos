@@ -43,6 +43,7 @@ class KadreAppDelegate(
 ) {
     private val released = AtomicBoolean(false)
     private val routeCallbacks: AppKitApplicationDelegateCallbacks
+    private val routeToken: AppKitNativeCallbackToken
     /** Pointer to the Objective-C object wrapped by this delegate. */
     val ptr: MemorySegment
 
@@ -71,7 +72,7 @@ class KadreAppDelegate(
                 (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
             }
         }
-        registerDelegateRoute(ptr.address(), routeCallbacks)
+        routeToken = registerDelegateRoute(ptr, routeCallbacks)
     }
 
     /** Kotlin callback for `applicationDidFinishLaunching:`. */
@@ -108,24 +109,45 @@ class KadreAppDelegate(
 
     internal fun releaseNative() {
         if (!released.compareAndSet(false, true)) return
-        unregisterDelegate(ptr.address(), routeCallbacks)
+        unregisterDelegate(routeToken, routeCallbacks)
         ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release"))
     }
 
     companion object {
-        /** Global table: ObjC memory address → associated Kotlin delegate. */
-        private val delegateTable = ConcurrentHashMap<Long, AppKitApplicationDelegateCallbacks>()
+        /** Global table: native generation token → associated Kotlin delegate. */
+        private val delegateTable = ConcurrentHashMap<AppKitNativeCallbackToken, AppKitApplicationDelegateCallbacks>()
 
-        internal fun registerDelegateRoute(address: Long, callbacks: AppKitApplicationDelegateCallbacks) {
-            delegateTable[address] = callbacks
+        private fun registerDelegateRoute(
+            receiver: MemorySegment,
+            callbacks: AppKitApplicationDelegateCallbacks,
+        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attach(receiver).also { token ->
+            delegateTable[token] = callbacks
+        }
+
+        internal fun registerDelegateRoute(
+            address: Long,
+            callbacks: AppKitApplicationDelegateCallbacks,
+        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attachTestAddress(address).also { token ->
+            delegateTable[token] = callbacks
         }
 
         internal fun unregisterDelegate(address: Long) {
-            delegateTable.remove(address)
+            val token = AppKitNativeCallbackTokens.readTestAddress(address) ?: return
+            delegateTable.remove(token)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
         }
 
         internal fun unregisterDelegate(address: Long, callbacks: AppKitApplicationDelegateCallbacks) {
-            delegateTable.remove(address, callbacks)
+            val token = delegateTable.entries.firstOrNull { it.value === callbacks }?.key ?: return
+            delegateTable.remove(token, callbacks)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
+        }
+
+        internal fun unregisterDelegate(
+            token: AppKitNativeCallbackToken,
+            callbacks: AppKitApplicationDelegateCallbacks,
+        ) {
+            delegateTable.remove(token, callbacks)
         }
 
         internal fun registeredDelegateCount(): Int = delegateTable.size
@@ -254,14 +276,15 @@ class KadreAppDelegate(
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
-        ): Long {
-            val callbacks = delegateTable[self.address()]
-                ?: return NSApplicationTerminateReply.NSTerminateNow.value
-            return try {
+        ): Long = AppKitNativeCallbackBoundary.invoke {
+            var callbacks: AppKitApplicationDelegateCallbacks? = null
+            try {
+                callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                    ?: return@invoke NSApplicationTerminateReply.NSTerminateNow.value
                 callbacks.onShouldTerminate()
             } catch (failure: Throwable) {
                 try {
-                    callbacks.captureCallbackFailure("applicationShouldTerminate", failure)
+                    callbacks?.captureCallbackFailure("applicationShouldTerminate", failure)
                 } catch (_: Throwable) {
                     // No Kotlin exception may cross an Objective-C upcall.
                 }
@@ -272,9 +295,24 @@ class KadreAppDelegate(
         private inline fun invokeSafely(
             self: MemorySegment,
             context: String,
+            crossinline callback: (AppKitApplicationDelegateCallbacks) -> Unit,
+        ) {
+            AppKitNativeCallbackBoundary.invoke {
+                try {
+                    val callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                        ?: return@invoke
+                    invokeTokenSafely(callbacks, context, callback)
+                } catch (_: Throwable) {
+                    // A native token lookup failure has no safe Kotlin route to capture it on.
+                }
+            }
+        }
+
+        private inline fun invokeTokenSafely(
+            callbacks: AppKitApplicationDelegateCallbacks,
+            context: String,
             callback: (AppKitApplicationDelegateCallbacks) -> Unit,
         ) {
-            val callbacks = delegateTable[self.address()] ?: return
             try {
                 callback(callbacks)
             } catch (failure: Throwable) {
@@ -283,6 +321,13 @@ class KadreAppDelegate(
                 } catch (_: Throwable) {
                     // No Kotlin exception may cross an Objective-C upcall.
                 }
+            }
+        }
+
+        internal fun applicationDidBecomeActiveForToken(token: AppKitNativeCallbackToken) {
+            AppKitNativeCallbackBoundary.invoke {
+                val callbacks = delegateTable[token] ?: return@invoke
+                invokeTokenSafely(callbacks, "applicationDidBecomeActive") { it.onDidBecomeActive() }
             }
         }
     }

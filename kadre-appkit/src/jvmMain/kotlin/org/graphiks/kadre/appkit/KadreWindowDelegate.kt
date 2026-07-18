@@ -75,6 +75,7 @@ class KadreWindowDelegate(
 ) {
     private val released = AtomicBoolean(false)
     private val routeCallbacks: AppKitWindowDelegateCallbacks
+    private val routeToken: AppKitNativeCallbackToken
 
     /** Pointer to the Objective-C object wrapped by this delegate. */
     val ptr: MemorySegment
@@ -109,7 +110,7 @@ class KadreWindowDelegate(
                 (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
             }
         }
-        registerDelegateRoute(ptr.address(), routeCallbacks)
+        routeToken = registerDelegateRoute(ptr, routeCallbacks)
     }
 
     /**
@@ -122,15 +123,6 @@ class KadreWindowDelegate(
      */
     fun onWindowShouldClose(): Byte {
         handler.windowEvent(eventLoop, windowId, WindowEvent.CloseRequested)
-        if (eventLoop.isExiting) {
-            val nsAppClass = ObjCRuntime.getClass("NSApplication")
-            val nsApp = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS,
-                nsAppClass,
-                ObjCRuntime.sel("sharedApplication"),
-            ) as MemorySegment
-            ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
-        }
         return 0 // NO — the application controls closing via exit()
     }
 
@@ -154,14 +146,14 @@ class KadreWindowDelegate(
     internal fun releaseNative() {
         appKitReleaseWindowDelegateNative(
             released = released,
-            address = ptr.address(),
+            token = routeToken,
             callbacks = routeCallbacks,
             releaseNative = { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) },
         )
     }
 
     internal fun unregisterRoute() {
-        unregisterDelegate(ptr.address(), routeCallbacks)
+        unregisterDelegate(routeToken, routeCallbacks)
     }
 
     /** Kotlin callback for `windowDidMove:` — dispatches [WindowEvent.Moved]. */
@@ -308,19 +300,40 @@ class KadreWindowDelegate(
     }
 
     companion object {
-        /** Global table: ObjC memory address → associated Kotlin delegate. */
-        private val delegateTable = ConcurrentHashMap<Long, AppKitWindowDelegateCallbacks>()
+        /** Global table: native generation token → associated Kotlin delegate. */
+        private val delegateTable = ConcurrentHashMap<AppKitNativeCallbackToken, AppKitWindowDelegateCallbacks>()
 
-        internal fun registerDelegateRoute(address: Long, callbacks: AppKitWindowDelegateCallbacks) {
-            delegateTable[address] = callbacks
+        private fun registerDelegateRoute(
+            receiver: MemorySegment,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attach(receiver).also { token ->
+            delegateTable[token] = callbacks
+        }
+
+        internal fun registerDelegateRoute(
+            address: Long,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attachTestAddress(address).also { token ->
+            delegateTable[token] = callbacks
         }
 
         internal fun unregisterDelegate(address: Long) {
-            delegateTable.remove(address)
+            val token = AppKitNativeCallbackTokens.readTestAddress(address) ?: return
+            delegateTable.remove(token)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
         }
 
         internal fun unregisterDelegate(address: Long, callbacks: AppKitWindowDelegateCallbacks) {
-            delegateTable.remove(address, callbacks)
+            val token = delegateTable.entries.firstOrNull { it.value === callbacks }?.key ?: return
+            delegateTable.remove(token, callbacks)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
+        }
+
+        internal fun unregisterDelegate(
+            token: AppKitNativeCallbackToken,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ) {
+            delegateTable.remove(token, callbacks)
         }
 
         internal fun registeredDelegateCount(): Int = delegateTable.size
@@ -497,12 +510,14 @@ class KadreWindowDelegate(
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
-        ): Byte {
-            val callbacks = delegateTable[self.address()] ?: return 1
-            return try {
+        ): Byte = AppKitNativeCallbackBoundary.invoke {
+            var callbacks: AppKitWindowDelegateCallbacks? = null
+            try {
+                callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                    ?: return@invoke 1
                 callbacks.onWindowShouldClose()
             } catch (failure: Throwable) {
-                captureSafely(callbacks, "windowShouldClose", failure)
+                callbacks?.let { captureSafely(it, "windowShouldClose", failure) }
                 1
             }
         }
@@ -584,9 +599,24 @@ class KadreWindowDelegate(
         private inline fun invokeSafely(
             self: MemorySegment,
             context: String,
+            crossinline callback: (AppKitWindowDelegateCallbacks) -> Unit,
+        ) {
+            AppKitNativeCallbackBoundary.invoke {
+                try {
+                    val callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                        ?: return@invoke
+                    invokeTokenSafely(callbacks, context, callback)
+                } catch (_: Throwable) {
+                    // A native token lookup failure has no safe Kotlin route to capture it on.
+                }
+            }
+        }
+
+        private inline fun invokeTokenSafely(
+            callbacks: AppKitWindowDelegateCallbacks,
+            context: String,
             callback: (AppKitWindowDelegateCallbacks) -> Unit,
         ) {
-            val callbacks = delegateTable[self.address()] ?: return
             try {
                 callback(callbacks)
             } catch (failure: Throwable) {
@@ -605,7 +635,25 @@ class KadreWindowDelegate(
                 // No Kotlin exception may cross an Objective-C upcall.
             }
         }
+
+        internal fun windowWillCloseForToken(token: AppKitNativeCallbackToken) {
+            AppKitNativeCallbackBoundary.invoke {
+                val callbacks = delegateTable[token] ?: return@invoke
+                invokeTokenSafely(callbacks, "windowWillClose") { it.onWindowWillClose() }
+            }
+        }
     }
+}
+
+internal fun appKitReleaseWindowDelegateNative(
+    released: AtomicBoolean,
+    token: AppKitNativeCallbackToken,
+    callbacks: AppKitWindowDelegateCallbacks,
+    releaseNative: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    KadreWindowDelegate.unregisterDelegate(token, callbacks)
+    releaseNative()
 }
 
 internal fun appKitReleaseWindowDelegateNative(

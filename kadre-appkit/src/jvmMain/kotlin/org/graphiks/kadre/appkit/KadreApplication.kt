@@ -599,13 +599,15 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
 }
 
 internal fun appKitInvokeSendEventSafely(eventLoop: AppKitEventLoop?, callback: () -> Unit) {
-    try {
-        callback()
-    } catch (failure: Throwable) {
+    AppKitNativeCallbackBoundary.invoke {
         try {
-            eventLoop?.recordCallbackFailure("sendEvent", failure)
-        } catch (_: Throwable) {
-            // No Kotlin exception may cross an Objective-C upcall.
+            callback()
+        } catch (failure: Throwable) {
+            try {
+                eventLoop?.recordCallbackFailure("sendEvent", failure)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
         }
     }
 }

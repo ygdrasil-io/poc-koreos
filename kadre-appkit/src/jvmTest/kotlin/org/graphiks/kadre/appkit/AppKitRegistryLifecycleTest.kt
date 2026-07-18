@@ -10,6 +10,7 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -195,29 +196,63 @@ class AppKitRegistryLifecycleTest {
 
     @Test
     fun `first callback failure terminates a blocking run and final cleanup failure is drained`() {
-        val trace = mutableListOf<String>()
+        val trace = java.util.Collections.synchronizedList(mutableListOf<String>())
         val callbackFailure = IllegalStateException("callback failure")
         val cleanupCallbackFailure = IllegalArgumentException("cleanup callback failure")
-        lateinit var loop: AppKitEventLoop
-        val failure = assertFailsWith<IllegalStateException> {
-            runApp(NoopHandler) { eventLoop ->
-                loop = eventLoop
+        val runStarted = CountDownLatch(1)
+        val callbackRecorded = CountDownLatch(1)
+        val allowCallbackReturn = CountDownLatch(1)
+        val callbackToken = AtomicReference<AppKitNativeCallbackToken>()
+        val callbackRoute = AtomicReference<AppKitApplicationDelegateCallbacks>()
+        val runFailure = AtomicReference<Throwable?>()
+        val wakeApi = BlockingWakeCFRunLoopApi()
+
+        val runThread = thread(name = "blocking-appkit-run") {
+            runFailure.set(runCatching {
+                runApp(NoopHandler) { eventLoop ->
                 object : AppKitRunAppOperations {
+                    private var owner: CFRunLoopOwner? = null
+
                     override fun requestTermination() {
                         trace += "requestTermination"
+                        wakeApi.terminationRequested.countDown()
                     }
 
                     override fun requireMainThread() = Unit
                     override fun initialize() = Unit
-                    override fun attachApplicationDelegate() = Unit
-                    override fun installRunLoopOwner() = Unit
+                    override fun attachApplicationDelegate() {
+                        val callbacks = object : AppKitApplicationDelegateCallbacks {
+                            override fun onDidBecomeActive() = throw callbackFailure
+                            override fun captureCallbackFailure(context: String, failure: Throwable) {
+                                eventLoop.recordCallbackFailure(context, failure)
+                                callbackRecorded.countDown()
+                                check(allowCallbackReturn.await(5, TimeUnit.SECONDS))
+                            }
+                        }
+                        callbackRoute.set(callbacks)
+                        callbackToken.set(KadreAppDelegate.registerDelegateRoute(0x970L, callbacks))
+                    }
+
+                    override fun installRunLoopOwner() {
+                        val installedOwner = CFRunLoopOwner.install(
+                            api = wakeApi,
+                            state = AppKitLoopState { 0L },
+                            onAfterWaiting = { eventLoop.drainDeferredNativeCallbackCleanup() },
+                            onBeforeWaiting = { org.graphiks.kadre.core.ControlFlow.Wait },
+                        )
+                        owner = installedOwner
+                        eventLoop.installRunLoopOwner(installedOwner)
+                    }
 
                     override fun run() {
                         trace += "run"
-                        eventLoop.recordCallbackFailure("blockingCallback", callbackFailure)
-                        check(trace.last() == "requestTermination") {
-                            "callback failure did not request controlled termination"
-                        }
+                        runStarted.countDown()
+                        check(wakeApi.woken.await(5, TimeUnit.SECONDS))
+                        CFRunLoopOwner.dispatchObserverCallback(
+                            wakeApi.observer,
+                            CFRunLoopOwner.AFTER_WAITING,
+                        )
+                        check(wakeApi.terminationRequested.await(5, TimeUnit.SECONDS))
                         trace += "runReturned"
                     }
 
@@ -227,6 +262,9 @@ class AppKitRegistryLifecycleTest {
                         eventLoop.suppressPendingCallbackFailureOnto(primary)
 
                     override fun closeRunLoopOwner() {
+                        owner?.let(eventLoop::clearRunLoopOwner)
+                        owner?.close()
+                        owner = null
                         trace += "closeOwner"
                     }
 
@@ -236,6 +274,7 @@ class AppKitRegistryLifecycleTest {
                     }
 
                     override fun releaseApplicationDelegate() {
+                        KadreAppDelegate.unregisterDelegate(callbackToken.get(), callbackRoute.get())
                         trace += "releaseDelegate"
                     }
 
@@ -243,10 +282,27 @@ class AppKitRegistryLifecycleTest {
                         trace += "clearReferences"
                     }
                 }
-            }
+                }
+            }.exceptionOrNull())
         }
 
-        assertTrue(loop.isExiting)
+        assertTrue(runStarted.await(5, TimeUnit.SECONDS))
+        val callbackThread = thread(name = "controlled-native-callback") {
+            trace += "callback"
+            KadreAppDelegate.Callbacks.applicationDidBecomeActiveForToken(callbackToken.get())
+            trace += "callbackReturn"
+        }
+        assertTrue(callbackRecorded.await(5, TimeUnit.SECONDS))
+        assertFalse(wakeApi.terminationRequested.await(100, TimeUnit.MILLISECONDS))
+        allowCallbackReturn.countDown()
+        callbackThread.join(5_000)
+        runThread.join(5_000)
+
+        assertFalse(callbackThread.isAlive)
+        assertFalse(runThread.isAlive)
+        val failure = runFailure.get() as? IllegalStateException
+            ?: throw AssertionError("expected callback failure after blocking run cleanup", runFailure.get())
+
         assertSame(callbackFailure, failure.cause)
         val cleanupQueued = failure.suppressed.single()
         assertTrue(cleanupQueued.message.orEmpty().contains("cleanupCallback"))
@@ -254,6 +310,8 @@ class AppKitRegistryLifecycleTest {
         assertEquals(
             listOf(
                 "run",
+                "callback",
+                "callbackReturn",
                 "requestTermination",
                 "runReturned",
                 "closeOwner",
@@ -266,12 +324,13 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
-    fun `native window close releases ownership but defers delegate release past callback return`() {
+    fun `native window close defers every owned release past callback return`() {
         val trace = mutableListOf<String>()
         val windowId = WindowId(0x904L)
         val delegate = MemorySegment.ofAddress(0x905L)
         val eventLoop = AppKitEventLoop(NoopHandler)
         var callbackInFlight = false
+        var resourcesReleased = false
         var delegateReleased = false
         KadreWindowDelegate.registerDelegateRoute(
             delegate.address(),
@@ -280,6 +339,7 @@ class AppKitRegistryLifecycleTest {
                     callbackInFlight = true
                     trace += "callback"
                     eventLoop.confirmWindowClosed(windowId)
+                    assertFalse(resourcesReleased)
                     assertFalse(delegateReleased)
                     trace += "callbackReturn"
                     callbackInFlight = false
@@ -293,7 +353,11 @@ class AppKitRegistryLifecycleTest {
                 trace += "unregister"
             },
             sendNativeClose = { trace += "sendNativeClose" },
-            releaseNativeResources = { trace += "releaseWindowLayerView" },
+            releaseNativeResources = {
+                assertFalse(callbackInFlight)
+                resourcesReleased = true
+                trace += "releaseWindowLayerView"
+            },
             releaseDelegate = {
                 assertFalse(callbackInFlight)
                 delegateReleased = true
@@ -308,9 +372,10 @@ class AppKitRegistryLifecycleTest {
         )
 
         assertEquals(
-            listOf("callback", "unregister", "releaseWindowLayerView", "callbackReturn"),
+            listOf("callback", "unregister", "callbackReturn"),
             trace,
         )
+        assertFalse(resourcesReleased)
         assertFalse(delegateReleased)
         eventLoop.drainDeferredNativeCallbackCleanup()
         assertTrue(delegateReleased)
@@ -318,8 +383,8 @@ class AppKitRegistryLifecycleTest {
             listOf(
                 "callback",
                 "unregister",
-                "releaseWindowLayerView",
                 "callbackReturn",
+                "releaseWindowLayerView",
                 "releaseDelegate",
             ),
             trace,
@@ -595,6 +660,452 @@ class AppKitRegistryLifecycleTest {
         assertEquals(0, KadreAppDelegate.registeredDelegateCount())
         assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
         assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
+    }
+
+    @Test
+    fun `native generation tokens reject late callbacks after address reuse for every route`() {
+        val address = 0x921L
+        val self = MemorySegment.ofAddress(address)
+
+        val appEvents = mutableListOf<String>()
+        val appRun1 = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                appEvents += "run1"
+            }
+        }
+        val appRun2 = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                appEvents += "run2"
+            }
+        }
+        val appToken1 = KadreAppDelegate.registerDelegateRoute(address, appRun1)
+        val appToken2 = KadreAppDelegate.registerDelegateRoute(address, appRun2)
+        KadreAppDelegate.unregisterDelegate(appToken1, appRun1)
+        KadreAppDelegate.Callbacks.applicationDidBecomeActiveForToken(appToken1)
+        KadreAppDelegate.Callbacks.applicationDidBecomeActiveForToken(appToken2)
+        assertEquals(listOf("run2"), appEvents)
+
+        val windowEvents = mutableListOf<String>()
+        val windowRun1 = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowWillClose() {
+                windowEvents += "run1"
+            }
+        }
+        val windowRun2 = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowWillClose() {
+                windowEvents += "run2"
+            }
+        }
+        val windowToken1 = KadreWindowDelegate.registerDelegateRoute(address, windowRun1)
+        val windowToken2 = KadreWindowDelegate.registerDelegateRoute(address, windowRun2)
+        KadreWindowDelegate.unregisterDelegate(windowToken1, windowRun1)
+        KadreWindowDelegate.Callbacks.windowWillCloseForToken(windowToken1)
+        KadreWindowDelegate.Callbacks.windowWillCloseForToken(windowToken2)
+        assertEquals(listOf("run2"), windowEvents)
+
+        val imeEvents = mutableListOf<String>()
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        fun imeRecord(run: String) = ImeViewRecord(
+            handler = object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) {
+                    imeEvents += run
+                }
+            },
+            eventLoop = eventLoop,
+            windowId = WindowId(address),
+            imeCursorScreenRect = MemorySegment.NULL,
+        )
+        val imeRun1 = imeRecord("run1")
+        val imeRun2 = imeRecord("run2")
+        val imeToken1 = AppKitImeTextInputClient.registerView(self, imeRun1)
+        val imeToken2 = AppKitImeTextInputClient.registerView(self, imeRun2)
+        AppKitImeTextInputClient.unregisterView(imeToken1, imeRun1)
+        AppKitImeTextInputClient.Callbacks.unmarkTextForToken(imeToken1)
+        AppKitImeTextInputClient.Callbacks.unmarkTextForToken(imeToken2)
+        assertEquals(listOf("run2"), imeEvents)
+
+        KadreAppDelegate.unregisterDelegate(appToken2, appRun2)
+        KadreWindowDelegate.unregisterDelegate(windowToken2, windowRun2)
+        AppKitImeTextInputClient.unregisterView(imeToken2, imeRun2)
+        assertEquals(0, KadreAppDelegate.registeredDelegateCount())
+        assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
+        assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
+    }
+
+    @Test
+    fun `native callback quiescence blocks run turnover until in-flight callback returns`() {
+        val address = 0x922L
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val quiescent = CountDownLatch(1)
+        val callbacks = object : AppKitApplicationDelegateCallbacks {
+            override fun onDidBecomeActive() {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            }
+        }
+        val token = KadreAppDelegate.registerDelegateRoute(address, callbacks)
+        val callbackThread = thread(name = "native-callback-in-flight") {
+            KadreAppDelegate.Callbacks.applicationDidBecomeActiveForToken(token)
+        }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+
+        val turnoverThread = thread(name = "run-turnover") {
+            AppKitNativeCallbackBoundary.awaitQuiescence()
+            quiescent.countDown()
+        }
+        assertFalse(quiescent.await(100, TimeUnit.MILLISECONDS))
+        release.countDown()
+        callbackThread.join(5_000)
+        turnoverThread.join(5_000)
+
+        assertFalse(callbackThread.isAlive)
+        assertFalse(turnoverThread.isAlive)
+        assertEquals(0L, quiescent.count)
+        KadreAppDelegate.unregisterDelegate(token, callbacks)
+    }
+
+    @Test
+    fun `reentrant callback termination defers every native release past upcall return`() {
+        listOf("resize", "ime", "windowShouldClose").forEachIndexed { index, selector ->
+            val trace = mutableListOf<String>()
+            lateinit var eventLoop: AppKitEventLoop
+            eventLoop = AppKitEventLoop(
+                handler = NoopHandler,
+                terminateApplication = {
+                    trace += "terminate"
+                    eventLoop.willTerminate()
+                },
+            )
+            val windowId = WindowId(0x930L + index)
+            eventLoop.registerWindowCloseActions(
+                windowId = windowId,
+                unregisterCallbacks = { trace += "unregister" },
+                sendNativeClose = { trace += "closeWindow" },
+                releaseNativeResources = { trace += "releaseWindowViewLayer" },
+                releaseDelegate = { trace += "releaseDelegate" },
+            )
+
+            val self = MemorySegment.ofAddress(0x940L + index)
+            when (selector) {
+                "resize" -> {
+                    val callbacks = object : AppKitWindowDelegateCallbacks {
+                        override fun onWindowDidResize() = error("resize failure")
+                        override fun captureCallbackFailure(context: String, failure: Throwable) {
+                            eventLoop.recordCallbackFailure(context, failure)
+                        }
+                    }
+                    val token = KadreWindowDelegate.registerDelegateRoute(self.address(), callbacks)
+                    trace += "callback"
+                    KadreWindowDelegate.Callbacks.windowDidResize(
+                        self,
+                        MemorySegment.NULL,
+                        MemorySegment.NULL,
+                    )
+                    trace += "callbackReturn"
+                    KadreWindowDelegate.unregisterDelegate(token, callbacks)
+                }
+                "ime" -> {
+                    val record = ImeViewRecord(
+                        handler = object : ApplicationHandler {
+                            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                            override fun windowEvent(
+                                eventLoop: ActiveEventLoop,
+                                windowId: WindowId,
+                                event: WindowEvent,
+                            ) = error("IME failure")
+                        },
+                        eventLoop = eventLoop,
+                        windowId = windowId,
+                        imeCursorScreenRect = MemorySegment.NULL,
+                    )
+                    val token = AppKitImeTextInputClient.registerView(self, record)
+                    trace += "callback"
+                    AppKitImeTextInputClient.Callbacks.unmarkText(self, MemorySegment.NULL)
+                    trace += "callbackReturn"
+                    AppKitImeTextInputClient.unregisterView(token, record)
+                }
+                else -> {
+                    val callbacks = object : AppKitWindowDelegateCallbacks {
+                        override fun onWindowShouldClose(): Byte = error("close query failure")
+                        override fun captureCallbackFailure(context: String, failure: Throwable) {
+                            eventLoop.recordCallbackFailure(context, failure)
+                        }
+                    }
+                    val token = KadreWindowDelegate.registerDelegateRoute(self.address(), callbacks)
+                    trace += "callback"
+                    KadreWindowDelegate.Callbacks.windowShouldClose(
+                        self,
+                        MemorySegment.NULL,
+                        MemorySegment.NULL,
+                    )
+                    trace += "callbackReturn"
+                    KadreWindowDelegate.unregisterDelegate(token, callbacks)
+                }
+            }
+
+            eventLoop.drainDeferredNativeCallbackCleanup()
+
+            assertEquals(
+                listOf(
+                    "callback",
+                    "callbackReturn",
+                    "terminate",
+                    "unregister",
+                    "closeWindow",
+                    "releaseWindowViewLayer",
+                    "releaseDelegate",
+                ),
+                trace,
+                selector,
+            )
+        }
+    }
+
+    @Test
+    fun `sendEvent exit defers termination and native releases past upcall return`() {
+        val trace = mutableListOf<String>()
+        lateinit var eventLoop: AppKitEventLoop
+        eventLoop = AppKitEventLoop(
+            handler = NoopHandler,
+            terminateApplication = {
+                trace += "terminate"
+                eventLoop.willTerminate()
+            },
+        )
+        eventLoop.registerWindowCloseActions(
+            windowId = WindowId(0x949L),
+            unregisterCallbacks = { trace += "unregister" },
+            sendNativeClose = { trace += "closeWindow" },
+            releaseNativeResources = { trace += "releaseWindowViewLayer" },
+            releaseDelegate = { trace += "releaseDelegate" },
+        )
+
+        trace += "callback"
+        appKitInvokeSendEventSafely(eventLoop) {
+            trace += "handler"
+            eventLoop.exit()
+        }
+        trace += "callbackReturn"
+
+        assertEquals(listOf("callback", "handler", "callbackReturn"), trace)
+        eventLoop.drainDeferredNativeCallbackCleanup()
+        assertEquals(
+            listOf(
+                "callback",
+                "handler",
+                "callbackReturn",
+                "terminate",
+                "unregister",
+                "closeWindow",
+                "releaseWindowViewLayer",
+                "releaseDelegate",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun `serialized terminal state preserves close ordering across reentrant exit and inactivity`() {
+        listOf("destroySurfaces", "Destroyed").forEachIndexed { index, reentrantPhase ->
+            val trace = mutableListOf<String>()
+            lateinit var eventLoop: AppKitEventLoop
+            eventLoop = AppKitEventLoop(
+                handler = object : ApplicationHandler {
+                    override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                    override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                        trace += "destroySurfaces"
+                        if (reentrantPhase == "destroySurfaces") eventLoop.exit()
+                    }
+                    override fun suspended(eventLoop: ActiveEventLoop) {
+                        trace += "suspended"
+                    }
+                    override fun windowEvent(
+                        eventLoop: ActiveEventLoop,
+                        windowId: WindowId,
+                        event: WindowEvent,
+                    ) {
+                        if (event === WindowEvent.Destroyed) {
+                            trace += "Destroyed"
+                            if (reentrantPhase == "Destroyed") eventLoop.exit()
+                        }
+                    }
+                },
+                terminateApplication = {
+                    trace += "terminate"
+                    eventLoop.willTerminate()
+                },
+            )
+            eventLoop.registerWindowCloseActions(
+                windowId = WindowId(0x950L + index),
+                unregisterCallbacks = { trace += "unregister" },
+                sendNativeClose = { trace += "closeWindow" },
+                releaseNativeResources = {},
+                releaseDelegate = {},
+            )
+
+            eventLoop.exit()
+
+            assertEquals(
+                listOf(
+                    "terminate",
+                    "destroySurfaces",
+                    "unregister",
+                    "Destroyed",
+                    "closeWindow",
+                    "suspended",
+                ),
+                trace,
+                reentrantPhase,
+            )
+        }
+
+        val inactiveTrace = mutableListOf<String>()
+        val inactiveLoop = AppKitEventLoop(object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                inactiveTrace += "resumed"
+            }
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                inactiveTrace += "destroySurfaces"
+            }
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                inactiveTrace += "suspended"
+            }
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event === WindowEvent.Destroyed) inactiveTrace += "Destroyed"
+            }
+        })
+        inactiveLoop.didLaunch()
+        inactiveLoop.willResignActive()
+        inactiveTrace.clear()
+        inactiveLoop.registerWindowCloseActions(
+            windowId = WindowId(0x952L),
+            unregisterCallbacks = {},
+            sendNativeClose = { inactiveTrace += "closeWindow" },
+            releaseNativeResources = {},
+            releaseDelegate = {},
+        )
+
+        inactiveLoop.willTerminate()
+
+        assertEquals(
+            listOf("destroySurfaces", "Destroyed", "closeWindow", "suspended"),
+            inactiveTrace,
+        )
+    }
+
+    @Test
+    fun `every drag trampoline returns rejection for lookup FFM and handler failures`() {
+        val eventLoop = AppKitEventLoop(NoopHandler)
+        val record = ImeViewRecord(
+            handler = object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) = error("handler failure")
+            },
+            eventLoop = eventLoop,
+            windowId = WindowId(0x960L),
+            imeCursorScreenRect = MemorySegment.NULL,
+        )
+
+        fun assertLongDefaults(
+            invoke: (() -> ImeViewRecord?, (ImeViewRecord) -> Long) -> Long,
+        ) {
+            assertEquals(0L, invoke({ error("lookup failure") }, { 4L }))
+            assertEquals(0L, invoke({ record }, { error("FFM failure") }))
+            assertEquals(0L, invoke({ record }) {
+                it.handler.windowEvent(it.eventLoop, it.windowId, WindowEvent.DragLeft)
+                4L
+            })
+        }
+
+        assertLongDefaults(AppKitImeTextInputClient.Callbacks::draggingEnteredSafely)
+        assertLongDefaults(AppKitImeTextInputClient.Callbacks::draggingUpdatedSafely)
+        assertEquals(
+            0,
+            AppKitImeTextInputClient.Callbacks.performDragOperationSafely(
+                recordLookup = { error("lookup failure") },
+                operation = { 1 },
+            ),
+        )
+        assertEquals(
+            0,
+            AppKitImeTextInputClient.Callbacks.performDragOperationSafely(
+                recordLookup = { record },
+                operation = { error("FFM failure") },
+            ),
+        )
+        assertEquals(
+            0,
+            AppKitImeTextInputClient.Callbacks.performDragOperationSafely(
+                recordLookup = { record },
+                operation = {
+                    it.handler.windowEvent(it.eventLoop, it.windowId, WindowEvent.DragLeft)
+                    1
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `delegate installation failure rolls back delegate window layer and view ownership`() {
+        val released = java.util.concurrent.atomic.AtomicBoolean(false)
+        val setDelegateFailure = IllegalStateException("setDelegate failure")
+        val delegateFailure = IllegalArgumentException("delegate release failure")
+        val windowFailure = UnsupportedOperationException("window release failure")
+        val layerFailure = IllegalMonitorStateException("layer release failure")
+        val viewFailure = NoSuchElementException("view release failure")
+        var delegateReleases = 0
+        var windowReleases = 0
+        var layerReleases = 0
+        var viewReleases = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            appKitRollbackFailedWindowCreation(
+                setDelegateFailure = setDelegateFailure,
+                resourcesReleased = released,
+                releaseDelegate = {
+                    delegateReleases += 1
+                    throw delegateFailure
+                },
+                releaseWindow = {
+                    windowReleases += 1
+                    throw windowFailure
+                },
+                releaseLayer = {
+                    layerReleases += 1
+                    throw layerFailure
+                },
+                releaseView = {
+                    viewReleases += 1
+                    throw viewFailure
+                },
+            )
+        }
+
+        assertSame(setDelegateFailure, thrown)
+        assertEquals(1, delegateReleases)
+        assertEquals(1, windowReleases)
+        assertEquals(1, layerReleases)
+        assertEquals(1, viewReleases)
+        assertEquals(
+            listOf(delegateFailure, windowFailure, layerFailure, viewFailure),
+            thrown.suppressed.toList(),
+        )
     }
 
     @Test
@@ -1123,6 +1634,26 @@ class AppKitRegistryLifecycleTest {
         override fun removeTimer(timer: Long) = Unit
         override fun wakeUp() {
             wakeCount++
+        }
+        override fun release(ref: Long) = Unit
+        override fun close() = Unit
+    }
+
+    private class BlockingWakeCFRunLoopApi : CFRunLoopApi {
+        val observer = 0x971L
+        val woken = CountDownLatch(1)
+        val terminationRequested = CountDownLatch(1)
+
+        override fun createObserver(activities: Long): Long = observer
+        override fun addObserver(observer: Long) = Unit
+        override fun removeObserver(observer: Long) = Unit
+        override fun invalidateObserver(observer: Long) = Unit
+        override fun createTimer(deadlineEpochMillis: Long): Long = 0x972L
+        override fun addTimer(timer: Long) = Unit
+        override fun invalidateTimer(timer: Long) = Unit
+        override fun removeTimer(timer: Long) = Unit
+        override fun wakeUp() {
+            woken.countDown()
         }
         override fun release(ref: Long) = Unit
         override fun close() = Unit

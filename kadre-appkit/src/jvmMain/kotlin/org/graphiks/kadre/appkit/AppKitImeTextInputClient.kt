@@ -51,8 +51,8 @@ internal class ImeViewRecord(
  */
 internal object AppKitImeTextInputClient {
 
-    /** Global table: ObjC NSView address -> ImeViewRecord. */
-    private val imeViewTable = ConcurrentHashMap<Long, ImeViewRecord>()
+    /** Global table: native generation token -> ImeViewRecord. */
+    private val imeViewTable = ConcurrentHashMap<AppKitNativeCallbackToken, ImeViewRecord>()
 
     /** NSNotFound constant for range location. */
     private const val NS_NOT_FOUND = Long.MAX_VALUE
@@ -89,19 +89,31 @@ internal object AppKitImeTextInputClient {
      * Registers a view in the IME table.
      * The ObjC class must be registered before creating instances.
      */
-    fun registerView(viewPtr: MemorySegment, record: ImeViewRecord) {
-        imeViewTable[viewPtr.address()] = record
-    }
+    fun registerView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken =
+        AppKitNativeCallbackTokens.attachTestAddress(viewPtr.address()).also { token ->
+            imeViewTable[token] = record
+        }
+
+    fun registerNativeView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken =
+        AppKitNativeCallbackTokens.attach(viewPtr).also { token -> imeViewTable[token] = record }
 
     /**
      * Removes a view from the IME table.
      */
     fun unregisterView(viewPtr: MemorySegment) {
-        imeViewTable.remove(viewPtr.address())
+        val token = AppKitNativeCallbackTokens.readTestAddress(viewPtr.address()) ?: return
+        imeViewTable.remove(token)
+        AppKitNativeCallbackTokens.detachTestAddress(viewPtr.address(), token)
     }
 
     fun unregisterView(viewPtr: MemorySegment, record: ImeViewRecord) {
-        imeViewTable.remove(viewPtr.address(), record)
+        val token = imeViewTable.entries.firstOrNull { it.value === record }?.key ?: return
+        imeViewTable.remove(token, record)
+        AppKitNativeCallbackTokens.detachTestAddress(viewPtr.address(), token)
+    }
+
+    fun unregisterView(token: AppKitNativeCallbackToken, record: ImeViewRecord) {
+        imeViewTable.remove(token, record)
     }
 
     internal fun registeredViewCount(): Int = imeViewTable.size
@@ -110,7 +122,7 @@ internal object AppKitImeTextInputClient {
      * Updates the cursor screen rect for a given view.
      */
     fun updateCursorRect(viewPtr: MemorySegment, screenRect: MemorySegment) {
-        imeViewTable[viewPtr.address()]?.imeCursorScreenRect = screenRect
+        AppKitNativeCallbackTokens.read(viewPtr)?.let(imeViewTable::get)?.imeCursorScreenRect = screenRect
     }
 
     /**
@@ -729,31 +741,33 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") characterRange: MemorySegment,
             actualRange: MemorySegment,
         ) {
-            try {
-                writeZeroRect(returnRect)
-                writeNotFoundRange(actualRange)
-                val screenRect = imeViewTable[self.address()]?.imeCursorScreenRect
-                if (screenRect != null && screenRect != MemorySegment.NULL) {
-                    returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
-                    returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
-                    returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
-                    returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
-                }
-                if (actualRange != MemorySegment.NULL) {
-                    actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
-                    actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
-                }
-            } catch (failure: Throwable) {
-                captureSafely(self, "firstRectForCharacterRange_actualRange", failure)
+            AppKitNativeCallbackBoundary.invoke {
                 try {
                     writeZeroRect(returnRect)
-                } catch (_: Throwable) {
-                    // No Kotlin exception may cross an Objective-C upcall.
-                }
-                try {
                     writeNotFoundRange(actualRange)
-                } catch (_: Throwable) {
-                    // No Kotlin exception may cross an Objective-C upcall.
+                    val screenRect = recordFor(self)?.imeCursorScreenRect
+                    if (screenRect != null && screenRect != MemorySegment.NULL) {
+                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
+                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
+                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
+                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
+                    }
+                    if (actualRange != MemorySegment.NULL) {
+                        actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                        actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+                    }
+                } catch (failure: Throwable) {
+                    captureSafely(self, "firstRectForCharacterRange_actualRange", failure)
+                    try {
+                        writeZeroRect(returnRect)
+                    } catch (_: Throwable) {
+                        // No Kotlin exception may cross an Objective-C upcall.
+                    }
+                    try {
+                        writeNotFoundRange(actualRange)
+                    } catch (_: Throwable) {
+                        // No Kotlin exception may cross an Objective-C upcall.
+                    }
                 }
             }
         }
@@ -813,9 +827,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Long {
-            val record = imeViewTable[self.address()] ?: return 0L
-            try {
+        ): Long = draggingEnteredSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -844,10 +856,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragEntered(pos, paths),
                 )
-            } catch (failure: Throwable) {
-                captureSafely(record, "draggingEntered", failure)
-            }
-            return 4L // NSDragOperationGeneric
+                4L // NSDragOperationGeneric
         }
 
         /**
@@ -860,9 +869,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Long {
-            val record = imeViewTable[self.address()] ?: return 0L
-            try {
+        ): Long = draggingUpdatedSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -884,10 +891,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragMoved(pos),
                 )
-            } catch (failure: Throwable) {
-                captureSafely(record, "draggingUpdated", failure)
-            }
-            return 4L // NSDragOperationGeneric
+                4L // NSDragOperationGeneric
         }
 
         /**
@@ -901,15 +905,12 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            try {
+            dragSafely("draggingExited", Unit, recordLookup = { recordFor(self) }) { record ->
                 record.handler.windowEvent(
                     record.eventLoop,
                     record.windowId,
                     WindowEvent.DragLeft,
                 )
-            } catch (failure: Throwable) {
-                captureSafely(record, "draggingExited", failure)
             }
         }
 
@@ -924,9 +925,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Byte {
-            val record = imeViewTable[self.address()] ?: return 0
-            try {
+        ): Byte = performDragOperationSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -955,10 +954,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragDropped(pos, paths),
                 )
-            } catch (failure: Throwable) {
-                captureSafely(record, "performDragOperation", failure)
-            }
-            return 1 // YES
+                1 // YES
         }
 
         /**
@@ -979,13 +975,15 @@ internal object AppKitImeTextInputClient {
         private inline fun invokeSafely(
             self: MemorySegment,
             context: String,
-            callback: (ImeViewRecord) -> Unit,
+            crossinline callback: (ImeViewRecord) -> Unit,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            try {
-                callback(record)
-            } catch (failure: Throwable) {
-                captureSafely(record, context, failure)
+            AppKitNativeCallbackBoundary.invoke {
+                try {
+                    val record = recordFor(self) ?: return@invoke
+                    callback(record)
+                } catch (failure: Throwable) {
+                    captureSafely(self, context, failure)
+                }
             }
         }
 
@@ -994,11 +992,13 @@ internal object AppKitImeTextInputClient {
             context: String,
             defaultValue: T,
             query: () -> T,
-        ): T = try {
-            query()
-        } catch (failure: Throwable) {
-            captureSafely(self, context, failure)
-            defaultValue
+        ): T = AppKitNativeCallbackBoundary.invoke {
+            try {
+                query()
+            } catch (failure: Throwable) {
+                captureSafely(self, context, failure)
+                defaultValue
+            }
         }
 
         private fun writeZeroRect(returnRect: MemorySegment) {
@@ -1016,7 +1016,7 @@ internal object AppKitImeTextInputClient {
 
         private fun captureSafely(self: MemorySegment, context: String, failure: Throwable) {
             try {
-                imeViewTable[self.address()]?.let { captureSafely(it, context, failure) }
+                recordFor(self)?.let { captureSafely(it, context, failure) }
             } catch (_: Throwable) {
                 // No Kotlin exception may cross an Objective-C upcall.
             }
@@ -1027,6 +1027,55 @@ internal object AppKitImeTextInputClient {
                 (record.eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
             } catch (_: Throwable) {
                 // No Kotlin exception may cross an Objective-C upcall.
+            }
+        }
+
+        private fun recordFor(self: MemorySegment): ImeViewRecord? =
+            AppKitNativeCallbackTokens.read(self)?.let(imeViewTable::get)
+
+        internal fun draggingEnteredSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Long,
+        ): Long = dragSafely("draggingEntered", 0L, recordLookup, operation)
+
+        internal fun draggingUpdatedSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Long,
+        ): Long = dragSafely("draggingUpdated", 0L, recordLookup, operation)
+
+        internal fun performDragOperationSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Byte,
+        ): Byte = dragSafely("performDragOperation", 0, recordLookup, operation)
+
+        private fun <T> dragSafely(
+            context: String,
+            defaultValue: T,
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> T,
+        ): T = AppKitNativeCallbackBoundary.invoke {
+            var record: ImeViewRecord? = null
+            try {
+                record = recordLookup() ?: return@invoke defaultValue
+                operation(record)
+            } catch (failure: Throwable) {
+                record?.let { captureSafely(it, context, failure) }
+                defaultValue
+            }
+        }
+
+        internal fun unmarkTextForToken(token: AppKitNativeCallbackToken) {
+            AppKitNativeCallbackBoundary.invoke {
+                val record = imeViewTable[token] ?: return@invoke
+                try {
+                    record.handler.windowEvent(
+                        record.eventLoop,
+                        record.windowId,
+                        WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
+                    )
+                } catch (failure: Throwable) {
+                    captureSafely(record, "unmarkText", failure)
+                }
             }
         }
     }

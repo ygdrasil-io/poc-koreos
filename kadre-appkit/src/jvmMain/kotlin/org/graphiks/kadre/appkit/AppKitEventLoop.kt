@@ -31,7 +31,6 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Global lock guaranteeing that only a single AppKit event loop is active
@@ -79,6 +78,13 @@ internal class AppKitEventLoop(
         val releaseDelegate: () -> Unit,
     )
 
+    private enum class TerminationState {
+        RUNNING,
+        EXIT_REQUESTED,
+        TERMINATING,
+        TERMINATED,
+    }
+
     /** Live windows: windowId → AppKitWindow. */
     internal val windows = ConcurrentHashMap<Long, AppKitWindow>()
     private val windowCloseActions = ConcurrentHashMap<Long, WindowCloseActions>()
@@ -100,11 +106,9 @@ internal class AppKitEventLoop(
 
     private var didLaunch = false
     private var isActive = false
-    private var didDestroySurfaces = false
-    private var didCloseWindows = false
+    private var terminationState = TerminationState.RUNNING
     private val callbackFailures = ConcurrentLinkedQueue<Throwable>()
     private val deferredNativeCallbackCleanup = ConcurrentLinkedQueue<() -> Unit>()
-    private val callbackTerminationRequested = AtomicBoolean(false)
 
     @Volatile
     private var terminateApplication: () -> Unit = terminateApplication
@@ -137,23 +141,21 @@ internal class AppKitEventLoop(
     }
 
     internal fun willTerminate(closeWindows: () -> Unit = ::closeRemainingWindows) {
-        val destroySurfaces: Boolean
-        val closeRegisteredWindows: Boolean
         synchronized(this) {
             _isExiting = true
-            destroySurfaces = !didDestroySurfaces
-            didDestroySurfaces = true
-            closeRegisteredWindows = !didCloseWindows
-            didCloseWindows = true
+            if (terminationState == TerminationState.TERMINATING ||
+                terminationState == TerminationState.TERMINATED
+            ) return
+            terminationState = TerminationState.TERMINATING
         }
         var failure: Throwable? = null
-        if (destroySurfaces) {
-            failure = appKitCleanupStep(failure) { handler.destroySurfaces(this) }
+        failure = appKitCleanupStep(failure) { handler.destroySurfaces(this) }
+        failure = appKitCleanupStep(failure, closeWindows)
+        failure = appKitCleanupStep(failure) { handler.suspended(this) }
+        synchronized(this) {
+            isActive = false
+            terminationState = TerminationState.TERMINATED
         }
-        if (closeRegisteredWindows) {
-            failure = appKitCleanupStep(failure, closeWindows)
-        }
-        failure = appKitCleanupStep(failure) { willResignActive() }
         failure?.let { throw it }
     }
 
@@ -219,17 +221,23 @@ internal class AppKitEventLoop(
         if (!nativeConfirmation) {
             failure = appKitCleanupStep(failure, actions.sendNativeClose)
         }
-        failure = appKitCleanupStep(failure, actions.releaseNativeResources)
         if (nativeConfirmation) {
-            deferredNativeCallbackCleanup.add(actions.releaseDelegate)
+            deferredNativeCallbackCleanup.add {
+                var deferredFailure: Throwable? = null
+                deferredFailure = appKitCleanupStep(deferredFailure, actions.releaseNativeResources)
+                deferredFailure = appKitCleanupStep(deferredFailure, actions.releaseDelegate)
+                deferredFailure?.let { throw it }
+            }
             failure = appKitCleanupStep(failure) { runLoopOwner?.wakeUp() }
         } else {
+            failure = appKitCleanupStep(failure, actions.releaseNativeResources)
             failure = appKitCleanupStep(failure, actions.releaseDelegate)
         }
         failure?.let { throw it }
     }
 
     internal fun drainDeferredNativeCallbackCleanup() {
+        AppKitNativeCallbackBoundary.awaitQuiescence()
         var failure: Throwable? = null
         while (true) {
             val cleanup = deferredNativeCallbackCleanup.poll() ?: break
@@ -241,12 +249,14 @@ internal class AppKitEventLoop(
     internal fun recordCallbackFailure(context: String, failure: Throwable) {
         val contextualFailure = IllegalStateException("AppKit callback $context failed", failure)
         callbackFailures.add(contextualFailure)
-        if (callbackTerminationRequested.compareAndSet(false, true)) {
-            _isExiting = true
-            try {
-                terminateApplication()
-            } catch (terminationFailure: Throwable) {
-                if (terminationFailure !== contextualFailure) contextualFailure.addSuppressed(terminationFailure)
+        if (markExitRequested()) {
+            deferredNativeCallbackCleanup.add {
+                try {
+                    terminateApplication()
+                } catch (terminationFailure: Throwable) {
+                    if (terminationFailure !== contextualFailure) contextualFailure.addSuppressed(terminationFailure)
+                    throw terminationFailure
+                }
             }
         }
         try {
@@ -332,8 +342,23 @@ internal class AppKitEventLoop(
      * `NSTerminateNow` because [isExiting] is already true.
      */
     override fun exit() {
+        if (!markExitRequested()) return
+        if (AppKitNativeCallbackBoundary.isInCallback) {
+            deferredNativeCallbackCleanup.add(terminateApplication)
+            runLoopOwner?.wakeUp()
+        } else {
+            terminateApplication()
+        }
+    }
+
+    private fun markExitRequested(): Boolean = synchronized(this) {
         _isExiting = true
-        terminateApplication()
+        if (terminationState != TerminationState.RUNNING) {
+            false
+        } else {
+            terminationState = TerminationState.EXIT_REQUESTED
+            true
+        }
     }
 
     /**
@@ -556,6 +581,7 @@ internal fun runApp(
             if (callbackFailure !== failure) failure.addSuppressed(callbackFailure)
         }
     } finally {
+        AppKitNativeCallbackBoundary.awaitQuiescence()
         primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.willTerminate() }
         primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
@@ -565,6 +591,7 @@ internal fun runApp(
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.clearApplicationReferences() }
         primaryFailure = appKitCleanupStep(primaryFailure) { eventLoop.drainDeferredNativeCallbackCleanup() }
         primaryFailure = appKitCleanupStep(primaryFailure) { operations?.throwPendingCallbackFailure() }
+        AppKitNativeCallbackBoundary.awaitQuiescence()
         appKitRunning.set(false)
     }
     primaryFailure?.let { throw it }

@@ -1074,7 +1074,18 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         try {
             NSWindow(nsWindowPtr).setDelegate(del.ptr)
         } catch (failure: Throwable) {
-            appKitReleaseFailedWindowDelegate(failure, del::releaseNative)
+            appKitRollbackFailedWindowCreation(
+                setDelegateFailure = failure,
+                resourcesReleased = nativeResourcesReleased,
+                releaseDelegate = del::releaseNative,
+                releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+                releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+                releaseView = {
+                    if (textInputViewPtr != MemorySegment.NULL) {
+                        ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                    }
+                },
+            )
         }
         delegate = del
 
@@ -1085,13 +1096,14 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         // Register the IME text input view in the callbacks table
         // The imeCursorScreenRect segment is shared: setImeCursorArea writes to it,
         // and the NSTextInputClient callback reads from the same segment.
-        val imeRecord = if (textInputViewPtr != MemorySegment.NULL) {
-            ImeViewRecord(
+        val imeRegistration = if (textInputViewPtr != MemorySegment.NULL) {
+            val record = ImeViewRecord(
                 handler = handler,
                 eventLoop = eventLoop,
                 windowId = id,
                 imeCursorScreenRect = imeCursorScreenRect,
-            ).also { AppKitImeTextInputClient.registerView(textInputViewPtr, it) }
+            )
+            record to AppKitImeTextInputClient.registerNativeView(textInputViewPtr, record)
         } else null
 
         appKitEventLoop.registerWindowCloseActions(
@@ -1105,7 +1117,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
                             },
                             unregisterDelegate = del::unregisterRoute,
                             unregisterImeView = {
-                                imeRecord?.let { AppKitImeTextInputClient.unregisterView(textInputViewPtr, it) }
+                                imeRegistration?.let { (record, token) ->
+                                    AppKitImeTextInputClient.unregisterView(token, record)
+                                }
                             },
                             releaseDelegate = {},
                         )
@@ -1590,6 +1604,31 @@ internal fun appKitReleaseNativeWindowResources(
     cleanup(releaseLayer)
     cleanup(releaseView)
     failure?.let { throw it }
+}
+
+internal fun appKitRollbackFailedWindowCreation(
+    setDelegateFailure: Throwable,
+    resourcesReleased: AtomicBoolean,
+    releaseDelegate: () -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+): Nothing {
+    fun suppressReleaseFailure(step: () -> Unit) {
+        try {
+            step()
+        } catch (releaseFailure: Throwable) {
+            if (releaseFailure !== setDelegateFailure) setDelegateFailure.addSuppressed(releaseFailure)
+        }
+    }
+
+    suppressReleaseFailure(releaseDelegate)
+    if (resourcesReleased.compareAndSet(false, true)) {
+        suppressReleaseFailure(releaseWindow)
+        suppressReleaseFailure(releaseLayer)
+        suppressReleaseFailure(releaseView)
+    }
+    throw setDelegateFailure
 }
 
 internal fun appKitUnregisterWindowCallbacks(
