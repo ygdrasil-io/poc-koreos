@@ -80,7 +80,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
             ?: error("[KadreAppDelegate] No handler registered — call startKadreApplication before UIApplicationMain")
         val loop = UIKitActiveEventLoop(handler)
         eventLoop = loop
-        handler.canCreateSurfaces(loop)
+        loop.recreateSurfaces { handler.canCreateSurfaces(this) }
         return true
     }
 
@@ -129,7 +129,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         println("[KadreAppDelegate] applicationDidEnterBackground → Occluded(true) + destroySurfaces")
         eventLoop?.let {
             it.dispatchOccluded(true)
-            it.handler.destroySurfaces(it)
+            it.destroySurfaces()
         }
     }
 
@@ -146,7 +146,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         println("[KadreAppDelegate] applicationWillEnterForeground → Occluded(false) + canCreateSurfaces")
         eventLoop?.let {
             it.dispatchOccluded(false)
-            it.handler.canCreateSurfaces(it)
+            it.recreateSurfaces { handler.canCreateSurfaces(this) }
         }
     }
 
@@ -163,7 +163,7 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         eventLoop?.let {
             // Per-window terminal event before the app-level surface teardown.
             it.dispatchWindowsDestroyed()
-            it.handler.destroySurfaces(it)
+            it.destroySurfaces()
         }
         eventLoop = null
         KadreRegistry.handler = null

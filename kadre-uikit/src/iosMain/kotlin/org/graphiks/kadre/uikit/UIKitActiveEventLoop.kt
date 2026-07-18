@@ -21,11 +21,49 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Windows created by this loop, used to scope app-level lifecycle events. */
     private val windows = mutableListOf<UiKitWindow>()
 
+    /** Next live window to return while surfaces are being recreated. */
+    private var recreationCursor: Int? = null
+
+    /** Whether the current surface generation still needs destruction. */
+    private var surfacesActive = false
+
     /** Last observed system theme, used to detect changes across app activation. */
     internal var lastTheme: Theme? = null
 
-    override fun createWindow(attributes: WindowAttributes): Window =
-        UiKitWindow(attributes, this).also { windows.add(it) }
+    override fun createWindow(attributes: WindowAttributes): Window {
+        recreationCursor?.let { cursor ->
+            windows.getOrNull(cursor)?.let { existing ->
+                recreationCursor = cursor + 1
+                existing.applyMutableAttributes(attributes)
+                return existing
+            }
+            // Newly created windows never become reusable in the same session.
+            recreationCursor = null
+        }
+        return UiKitWindow(attributes, this).also { windows.add(it) }
+    }
+
+    /**
+     * Reuses live windows, in creation order, for one surface-creation callback.
+     * Calls beyond the number of existing windows create and register new ones.
+     */
+    internal fun recreateSurfaces(block: UIKitActiveEventLoop.() -> Unit) {
+        val previousCursor = recreationCursor
+        recreationCursor = 0
+        try {
+            block()
+            surfacesActive = true
+        } finally {
+            recreationCursor = previousCursor
+        }
+    }
+
+    /** Destroys the current surface generation at most once. */
+    internal fun destroySurfaces() {
+        if (!surfacesActive) return
+        surfacesActive = false
+        handler.destroySurfaces(this)
+    }
 
     fun createWindow(attrs: UiKitWindowAttributes): Window {
         val window = createWindow(attrs.core) as UiKitWindow
@@ -53,7 +91,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * that switch on [WindowEvent] (desktop/winit parity) also receive focus.
      */
     internal fun dispatchWindowFocused(gained: Boolean) {
-        windows.forEach {
+        forEachLiveWindow {
             if (!gained) it.resetKeyboardModifiersIfNeeded()
             handler.windowEvent(this, it.id, WindowEvent.Focused(gained))
         }
@@ -68,7 +106,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     internal fun dispatchOccluded(occluded: Boolean) {
         val event = WindowEvent.Occluded(occluded)
-        windows.forEach { handler.windowEvent(this, it.id, event) }
+        forEachLiveWindow { handler.windowEvent(this, it.id, event) }
     }
 
     /**
@@ -78,8 +116,33 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * the app-level [ApplicationHandler.destroySurfaces].
      */
     internal fun dispatchWindowsDestroyed() {
-        windows.forEach { handler.windowEvent(this, it.id, WindowEvent.Destroyed) }
-        windows.clear()
+        windows.toList().forEach { closeWindow(it.id) }
+    }
+
+    /** Removes a window from the live set before performing terminal cleanup. */
+    internal fun closeWindow(id: WindowId): Boolean {
+        val index = windows.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val window = windows.removeAt(index)
+        recreationCursor = recreationCursor?.let { cursor ->
+            if (index < cursor) cursor - 1 else cursor
+        }
+        try {
+            window.invalidateResources()
+        } finally {
+            try {
+                handler.windowEvent(this, id, WindowEvent.Destroyed)
+            } finally {
+                window.hideAndResign()
+            }
+        }
+        return true
+    }
+
+    private inline fun forEachLiveWindow(block: (UiKitWindow) -> Unit) {
+        windows.toList().forEach { window ->
+            if (window in windows) block(window)
+        }
     }
 
     override fun setControlFlow(controlFlow: ControlFlow) { _controlFlow = controlFlow }
@@ -134,7 +197,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         val current = systemTheme()
         if (current != null && current != lastTheme) {
             lastTheme = current
-            windows.forEach {
+            forEachLiveWindow {
                 handler.windowEvent(this, it.id, WindowEvent.ThemeChanged(current))
             }
         }

@@ -34,12 +34,15 @@ private class IosHelloTouchHandler : ApplicationHandler {
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         println("[HelloTouch] canCreateSurfaces — surface ready for rendering")
-        window = eventLoop.createWindow(WindowAttributes(title = "Hello Touch"))
+        window = window ?: eventLoop.createWindow(WindowAttributes(title = "Hello Touch"))
         println("[HelloTouch] window created id=${window?.id?.value}")
     }
 
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
         when (event) {
+            WindowEvent.Destroyed -> if (window?.id == windowId) {
+                window = null
+            }
             is WindowEvent.PointerMoved -> if (event.source is PointerSource.Touch) {
                 println("[HelloTouch] Touch move @ (${event.position.x.toInt()}, ${event.position.y.toInt()})")
             }

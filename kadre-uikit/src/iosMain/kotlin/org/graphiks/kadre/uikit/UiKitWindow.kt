@@ -367,6 +367,18 @@ class KadreMetalView(
 
     override fun endOfDocument(): UITextPosition = imeEndOfDocument
 
+    /** Releases gesture and IME state before the owning window becomes terminal. */
+    internal fun invalidateInputResources() {
+        recognizePinchGesture(false)
+        recognizePanGesture(false, 1, 1)
+        recognizeRotationGesture(false)
+        recognizeDoubleTapGesture(false)
+        imeInputDelegate = null
+        imeMarkedTextRange = null
+        imeSelectedTextRange = null
+        resignFirstResponder()
+    }
+
     // ── Hardware keyboard / game controller keys (iOS 13.4+) ──────────────────
 
     /** The view must be first responder to receive key presses. */
@@ -694,6 +706,13 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     private val viewController: UIViewController
     private val metalView: KadreMetalView
 
+    /** Terminal state; set before any callback-producing cleanup. */
+    private var closed = false
+
+    /** Drag-and-drop objects retained until [close]. */
+    private var dropDelegate: KadreDropDelegate? = null
+    private var dropInteraction: UIDropInteraction? = null
+
     /** Per-frame redraw driver (vsync-paced). Invalidated on [close]. */
     private var displayLink: CADisplayLink? = null
     private val displayLinkProxy = DisplayLinkProxy { emitRedraw() }
@@ -714,7 +733,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
 
         // 1. Full-screen KadreMetalView (dispatch lambda uses windowId)
         metalView = KadreMetalView(frame = screenBounds) { event ->
-            eventLoop.handler.windowEvent(eventLoop, windowId, event)
+            emitWindowEvent(windowId, event)
         }
 
         // 2. contentsScale for HiDPI / Retina
@@ -776,6 +795,29 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         viewController.setNeedsStatusBarAppearanceUpdate()
     }
 
+    /** Reapplies attributes whose [Window] API exposes a mutable counterpart. */
+    internal fun applyMutableAttributes(attrs: WindowAttributes) {
+        setTitle(attrs.title)
+        setVisible(attrs.visible)
+        setResizable(attrs.resizable)
+        setMinSurfaceSize(attrs.minSize)
+        setMaxSurfaceSize(attrs.maxSize)
+        setSurfaceResizeIncrements(attrs.resizeIncrements)
+        attrs.position?.let(::setOuterPosition)
+        setEnabledButtons(attrs.enabledButtons)
+        setMaximized(attrs.maximized)
+        setDecorations(attrs.decorations)
+        setFullscreen(attrs.fullscreen)
+        setCursor(attrs.cursor)
+        setTheme(attrs.preferredTheme)
+        setTransparent(attrs.transparent)
+        setBlur(attrs.blur)
+        setWindowLevel(attrs.windowLevel)
+        setWindowIcon(attrs.windowIcon)
+        setContentProtected(attrs.contentProtected)
+        if (attrs.active) focusWindow()
+    }
+
     /**
      * Creates and schedules the [CADisplayLink] on the main run loop so
      * [emitRedraw] fires once per screen refresh.
@@ -797,12 +839,13 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * further frame is emitted after shutdown.
      */
     private fun emitRedraw() {
+        if (closed) return
         if (eventLoop.isExiting) {
             displayLink?.invalidate()
             displayLink = null
             return
         }
-        eventLoop.handler.windowEvent(eventLoop, id, WindowEvent.RedrawRequested)
+        emitWindowEvent(id, WindowEvent.RedrawRequested)
     }
 
     /**
@@ -813,13 +856,19 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     @OptIn(kotlinx.cinterop.BetaInteropApi::class)
     private fun setupDropInteraction(windowId: WindowId) {
         if (NSClassFromString("UIDropInteraction") != null) {
-            val dropDelegate = KadreDropDelegate { event ->
-                eventLoop.handler.windowEvent(eventLoop, windowId, event)
+            val delegate = KadreDropDelegate { event ->
+                emitWindowEvent(windowId, event)
             }
-            val interaction = UIDropInteraction(delegate = dropDelegate)
+            val interaction = UIDropInteraction(delegate = delegate)
             val selector = NSSelectorFromString("addInteraction:")
             metalView.performSelector(selector, withObject = interaction)
+            dropDelegate = delegate
+            dropInteraction = interaction
         }
+    }
+
+    private fun emitWindowEvent(windowId: WindowId, event: WindowEvent) {
+        if (!closed) eventLoop.handler.windowEvent(eventLoop, windowId, event)
     }
 
     override val rawWindowHandle: RawWindowHandle
@@ -917,8 +966,28 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     }
 
     override fun close() {
+        eventLoop.closeWindow(id)
+    }
+
+    /** Invalidates scheduler, gesture, IME, and drop resources exactly once. */
+    internal fun invalidateResources() {
+        if (closed) return
+        closed = true
         displayLink?.invalidate()
         displayLink = null
+        dropInteraction?.let { interaction ->
+            metalView.performSelector(
+                NSSelectorFromString("removeInteraction:"),
+                withObject = interaction,
+            )
+        }
+        dropInteraction = null
+        dropDelegate = null
+        metalView.invalidateInputResources()
+    }
+
+    /** Hides and resigns the native window after [WindowEvent.Destroyed]. */
+    internal fun hideAndResign() {
         uiWindow.setHidden(true)
         uiWindow.resignKeyWindow()
     }
