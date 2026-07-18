@@ -178,23 +178,6 @@ private object NativeX11Adapter : X11NativeAdapter {
     }
 }
 
-private class X11WindowOwner(val window: X11Window) {
-    val closeStarted = AtomicBoolean(false)
-    val destroyedDelivered = AtomicBoolean(false)
-}
-
-private sealed interface X11QueueItem
-
-private data class X11QueuedWindowEvent(
-    val owner: X11WindowOwner,
-    val event: WindowEvent,
-    val redrawToken: Any? = null,
-) : X11QueueItem
-
-private data class X11QueuedCloseCommand(val owner: X11WindowOwner) : X11QueueItem
-
-private class X11DispatchBoundary : X11QueueItem
-
 // ── X11EventLoop ──────────────────────────────────────────────────────────────
 
 /**
@@ -234,14 +217,6 @@ class X11EventLoop internal constructor(
     internal val nativeAdapter: X11NativeAdapter = NativeX11Adapter,
 ) : ActiveEventLoop {
 
-    /** Live windows: windowId (XID) → X11Window. */
-    internal val windows = ConcurrentHashMap<Long, X11Window>()
-    private val windowOwners = ConcurrentHashMap<Long, X11WindowOwner>()
-    private val eventQueue = ConcurrentLinkedQueue<X11QueueItem>()
-    private val pendingCloseCommands = ConcurrentHashMap<X11WindowOwner, X11QueuedCloseCommand>()
-    private val redrawLock = Any()
-    private val pendingRedrawIds = LinkedHashSet<Long>()
-    private val pendingRedrawItems = HashMap<Long, X11QueuedWindowEvent>()
     private val loopThread = Thread.currentThread()
     internal val keyboardModifierTracker = X11KeyboardModifierTracker()
 
@@ -259,6 +234,23 @@ class X11EventLoop internal constructor(
 
     /** Queue of pending Xdnd drops awaiting selection data. */
     internal val pendingXdndDrops = ConcurrentLinkedQueue<PendingXdndDrop>()
+
+    private val windowLifecycle = X11WindowLifecycle(
+        loop = this,
+        displayPtr = displayPtr,
+        wakeup = wakeup,
+        nativeAdapter = nativeAdapter,
+        checkLoopThread = ::checkLoopThread,
+        detachAuxiliaryState = { windowId ->
+            dragSourceWindows.remove(windowId)
+            pendingDropRequests.remove(windowId)
+            pendingXdndDrops.removeAll { it.targetWindow == windowId }
+        },
+    )
+
+    /** Live windows: windowId (XID) → X11Window. */
+    internal val windows: ConcurrentHashMap<Long, X11Window>
+        get() = windowLifecycle.windows
 
     @Volatile
     private var _isExiting = false
@@ -289,7 +281,7 @@ class X11EventLoop internal constructor(
             ?: error(
                 "X11Window.create() returned null — libX11.so.6 bindings are not available on this platform."
             )
-        return registerWindow(window)
+        return windowLifecycle.register(window)
     }
 
     /**
@@ -304,188 +296,30 @@ class X11EventLoop internal constructor(
             ?: error(
                 "X11Window.create() returned null — libX11.so.6 bindings are not available on this platform."
             )
-        registerWindow(window)
+        windowLifecycle.register(window)
         // Apply platform extension settings
         if (attrs.windowType != null) window.setWindowType(attrs.windowType)
         if (attrs.overrideRedirect) window.setOverrideRedirect(true)
         return window
     }
 
-    private fun registerWindow(window: X11Window): X11Window {
-        val owner = X11WindowOwner(window)
-        windowOwners[window.id.value] = owner
-        windows[window.id.value] = window
-        return window
-    }
+    internal fun requestRedraw(windowId: WindowId): Boolean = windowLifecycle.requestRedraw(windowId)
 
-    /** Publishes one redraw and wakes an idle loop only for the first insertion. */
-    internal fun requestRedraw(windowId: WindowId): Boolean {
-        synchronized(redrawLock) {
-            val owner = currentOwner(windowId) ?: return false
-            if (!pendingRedrawIds.add(windowId.value)) return true
-            val token = Any()
-            val queued = X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested, token)
-            pendingRedrawItems[windowId.value] = queued
-            eventQueue.add(queued)
-            val signalled = try {
-                wakeup.signal()
-            } catch (failure: Throwable) {
-                rollbackRedraw(windowId.value, queued)
-                throw IllegalStateException("X11 redraw wake failed", failure)
-            }
-            if (!signalled) {
-                rollbackRedraw(windowId.value, queued)
-                error("X11 redraw wake failed: wake fd is closed")
-            }
-            return true
-        }
-    }
+    internal fun enqueueExpose(windowId: WindowId): Boolean = windowLifecycle.enqueueExpose(windowId)
 
-    private fun rollbackRedraw(windowId: Long, queued: X11QueuedWindowEvent) {
-        pendingRedrawIds.remove(windowId)
-        pendingRedrawItems.remove(windowId, queued)
-        eventQueue.remove(queued)
-    }
+    internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean =
+        windowLifecycle.enqueueWindowEvent(windowId, event)
 
-    /** Native Expose supersedes a pending synthetic redraw for the same XID. */
-    internal fun enqueueExpose(windowId: WindowId): Boolean {
-        synchronized(redrawLock) {
-            val owner = currentOwner(windowId) ?: return false
-            if (pendingRedrawIds.remove(windowId.value)) {
-                pendingRedrawItems.remove(windowId.value)?.let(eventQueue::remove)
-            }
-            eventQueue.add(X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested))
-            return true
-        }
-    }
+    internal fun closeWindow(windowId: WindowId): Boolean = windowLifecycle.closeWindow(windowId)
 
-    internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean {
-        val owner = currentOwner(windowId) ?: return false
-        eventQueue.add(X11QueuedWindowEvent(owner, event))
-        return true
-    }
+    internal fun nativeWindowDestroyed(windowId: WindowId): Boolean =
+        windowLifecycle.nativeWindowDestroyed(windowId)
 
-    /** Public-window terminal request; native work remains owned by the loop thread. */
-    internal fun closeWindow(windowId: WindowId): Boolean {
-        val owner = currentOwner(windowId) ?: return false
-        val candidate = X11QueuedCloseCommand(owner)
-        val command = pendingCloseCommands.putIfAbsent(owner, candidate)
-        if (command != null) return true
-        eventQueue.add(candidate)
-        val signalled = try {
-            wakeup.signal()
-        } catch (failure: Throwable) {
-            throw IllegalStateException("X11 close wake failed", failure)
-        }
-        check(signalled) { "X11 close wake failed: wake fd is closed" }
-        return true
-    }
+    internal fun drainOpenWindowEvents(handler: ApplicationHandler) = windowLifecycle.drain(handler)
 
-    /** Handles a server-side DestroyNotify without issuing a second XDestroyWindow. */
-    internal fun nativeWindowDestroyed(windowId: WindowId): Boolean {
-        checkLoopThread()
-        val owner = currentOwner(windowId) ?: return false
-        if (!owner.closeStarted.compareAndSet(false, true)) return false
-        detachOwner(owner)
-        owner.window.releaseLoopOwnedResources()
-        eventQueue.add(X11QueuedWindowEvent(owner, WindowEvent.Destroyed))
-        return true
-    }
+    internal fun hasPendingWork(): Boolean = windowLifecycle.hasPendingWork()
 
-    private fun closeWindowNow(owner: X11WindowOwner): Boolean {
-        checkLoopThread()
-        if (!owner.closeStarted.compareAndSet(false, true)) return false
-        detachOwner(owner)
-        owner.window.releaseLoopOwnedResources()
-        nativeAdapter.destroyWindow(displayPtr, owner.window.id.value)
-        nativeAdapter.flush(displayPtr)
-        return true
-    }
-
-    private fun detachOwner(owner: X11WindowOwner) {
-        val windowId = owner.window.id.value
-        windowOwners.remove(windowId, owner)
-        windows.remove(windowId, owner.window)
-        pendingCloseCommands.remove(owner)
-        synchronized(redrawLock) {
-            pendingRedrawIds.remove(windowId)
-            pendingRedrawItems.remove(windowId)?.let(eventQueue::remove)
-        }
-        dragSourceWindows.remove(windowId)
-        pendingDropRequests.remove(windowId)
-        pendingXdndDrops.removeAll { it.targetWindow == windowId }
-        eventQueue.removeIf { item ->
-            (item is X11QueuedWindowEvent && item.owner === owner) ||
-                (item is X11QueuedCloseCommand && item.owner === owner)
-        }
-    }
-
-    private fun deliverDestroyed(owner: X11WindowOwner, handler: ApplicationHandler) {
-        if (!owner.destroyedDelivered.compareAndSet(false, true)) return
-        val current = windowOwners[owner.window.id.value]
-        if (current != null && current !== owner) return
-        handler.windowEvent(this, owner.window.id, WindowEvent.Destroyed)
-    }
-
-    internal fun drainOpenWindowEvents(handler: ApplicationHandler) {
-        checkLoopThread()
-        val boundary = X11DispatchBoundary()
-        eventQueue.add(boundary)
-        try {
-            val batch = mutableListOf<X11QueueItem>()
-            while (true) {
-                val item = eventQueue.poll() ?: break
-                if (item === boundary) break
-                batch += item
-            }
-            for (command in batch.filterIsInstance<X11QueuedCloseCommand>()) {
-                if (pendingCloseCommands.remove(command.owner, command) && closeWindowNow(command.owner)) {
-                    deliverDestroyed(command.owner, handler)
-                }
-            }
-            for (item in batch) {
-                if (item is X11QueuedCloseCommand) continue
-                val queued = item as X11QueuedWindowEvent
-                if (queued.event == WindowEvent.Destroyed) {
-                    deliverDestroyed(queued.owner, handler)
-                    continue
-                }
-                if (queued.redrawToken != null) {
-                    synchronized(redrawLock) {
-                        if (pendingRedrawItems[queued.owner.window.id.value] !== queued) continue
-                        pendingRedrawItems.remove(queued.owner.window.id.value)
-                        pendingRedrawIds.remove(queued.owner.window.id.value)
-                    }
-                }
-                if (!isCurrentOwner(queued.owner)) continue
-                handler.windowEvent(this, queued.owner.window.id, queued.event)
-            }
-        } finally {
-            eventQueue.remove(boundary)
-        }
-    }
-
-    internal fun hasPendingWork(): Boolean = eventQueue.isNotEmpty()
-
-    internal fun closeAllWindowsDirect() {
-        checkLoopThread()
-        var failure: Throwable? = null
-        for (owner in windowOwners.values.sortedBy { it.window.id.value }) {
-            try {
-                closeWindowNow(owner)
-            } catch (thrown: Throwable) {
-                failure = appendX11Failure(failure, thrown)
-            }
-        }
-        eventQueue.clear()
-        failure?.let { throw it }
-    }
-
-    private fun currentOwner(windowId: WindowId): X11WindowOwner? =
-        windowOwners[windowId.value]?.takeIf { windows[windowId.value] === it.window }
-
-    private fun isCurrentOwner(owner: X11WindowOwner): Boolean =
-        windowOwners[owner.window.id.value] === owner && windows[owner.window.id.value] === owner.window
+    internal fun closeAllWindowsDirect() = windowLifecycle.closeAllWindowsDirect()
 
     private fun checkLoopThread() {
         check(Thread.currentThread() === loopThread) {

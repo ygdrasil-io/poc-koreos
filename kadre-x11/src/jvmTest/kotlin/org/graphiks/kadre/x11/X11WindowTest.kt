@@ -1,9 +1,14 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.core.ActiveEventLoop
+import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowAttributes
+import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -11,6 +16,7 @@ import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowRequestResult
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -51,16 +57,60 @@ class X11WindowTest {
         val loop = X11EventLoop(1L, 0, wakeup, native)
         val window = loop.createWindow(WindowAttributes(title = "owned"))
 
-        val caller = Thread({
-            window.requestRedraw()
-            window.close()
-        }, "x11-window-publisher")
-        caller.start()
-        caller.join()
+        val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "x11-window-publisher") }
+        try {
+            executor.submit {
+                window.requestRedraw()
+                window.close()
+            }.get()
+        } finally {
+            executor.shutdownNow()
+        }
 
         assertEquals(2, wakeup.signals)
         assertEquals(0, nativeDestroyCalls)
         assertTrue(loop.windows.containsKey(window.id.value))
+    }
+
+    @Test
+    fun `closing window without XIM lease does not release another window lease`() {
+        var releases = 0
+        val acquired = X11ImeLease { releases += 1 }.also(X11ImeLease::markAcquired)
+        val idle = X11ImeLease { releases += 1 }
+        val leases = ArrayDeque(listOf(acquired, idle))
+        var nextXid = 80L
+        val native = object : X11NativeAdapter {
+            override fun createWindow(loop: X11EventLoop, attributes: WindowAttributes): X11Window =
+                X11Window(
+                    displayPtr = loop.displayPtr,
+                    screen = loop.screen,
+                    xWindowId = nextXid++,
+                    attrs = attributes,
+                    owner = loop,
+                    initialScaleFactor = 1.0,
+                    imeLease = leases.removeFirst(),
+                )
+
+            override fun destroyWindow(displayPtr: Long, windowId: Long) = Unit
+            override fun flush(displayPtr: Long) = Unit
+            override fun closeDisplay(displayPtr: Long) = Unit
+        }
+        val loop = X11EventLoop(1L, 0, object : PosixWakeup {
+            override val readFd: Int = 10
+            override fun signal(): Boolean = true
+            override fun drain(): Boolean = true
+            override fun close() = Unit
+        }, native)
+        val withIme = loop.createWindow(WindowAttributes(title = "with-ime"))
+        val withoutIme = loop.createWindow(WindowAttributes(title = "without-ime"))
+
+        withoutIme.close()
+        dispatchX11Iteration(loop, emptyX11Handler(), StartCause.Poll)
+        assertEquals(0, releases)
+
+        withIme.close()
+        dispatchX11Iteration(loop, emptyX11Handler(), StartCause.Poll)
+        assertEquals(1, releases)
     }
 
     @Test
@@ -482,4 +532,9 @@ class X11WindowTest {
         val resources = "Xft.dpi:\t96"
         assertEquals(1.0, parseXftDpi(resources), "96 DPI should yield scale factor 1.0")
     }
+}
+
+private fun emptyX11Handler(): ApplicationHandler = object : ApplicationHandler {
+    override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) = Unit
 }

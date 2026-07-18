@@ -2,12 +2,15 @@ package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -39,19 +42,43 @@ class X11LoopContractTest {
         val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
         val window = loop.createWindow(WindowAttributes(title = "iteration"))
         val trace = mutableListOf<String>()
+        val operations = ContractPumpOperations(trace) {
+            loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true))
+        }
+        var pollCount = 0
+        val poller = X11Poller { _, _, _ ->
+            pollCount += 1
+            trace += if (pollCount == 1) "pump-poll" else "next-poll"
+            if (pollCount == 1) operations.enqueueEvent()
+            X11PollResult(xReadable = pollCount == 1, wakeReadable = false)
+        }
 
-        trace += "pump-${StartCause.WaitCancelled()}"
-        assertTrue(loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true)))
-        dispatchX11Iteration(loop, recordingHandler(trace = trace), StartCause.WaitCancelled())
-        trace += "poll"
+        val cause = dispatchX11Once(
+            controlFlow = ControlFlow.Wait,
+            operations = operations,
+            poller = poller,
+            wakeup = loop.wakeup,
+            xConnectionFd = 41,
+        )
+        trace += "cause-$cause"
+        dispatchX11Iteration(loop, recordingHandler(trace = trace), cause)
+        dispatchX11Once(
+            controlFlow = ControlFlow.Poll,
+            operations = operations,
+            poller = poller,
+            wakeup = loop.wakeup,
+            xConnectionFd = 41,
+        )
 
         assertEquals(
             listOf(
-                "pump-${StartCause.WaitCancelled()}",
+                "pump-poll",
+                "native-dispatch",
+                "cause-${StartCause.WaitCancelled()}",
                 "newEvents-${StartCause.WaitCancelled()}",
                 "event-Focused",
                 "aboutToWait",
-                "poll",
+                "next-poll",
             ),
             trace,
         )
@@ -84,6 +111,49 @@ class X11LoopContractTest {
 
         assertEquals(1, wakeup.signalCalls)
         assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
+    fun `requested redraw coalesces with an already queued native expose`() {
+        val wakeup = RecordingX11Wakeup()
+        val loop = testLoop(wakeup, FakeX11NativeAdapter())
+        val window = loop.createWindow(WindowAttributes(title = "expose-first"))
+        val events = mutableListOf<WindowEvent>()
+
+        assertTrue(loop.enqueueExpose(window.id))
+        window.requestRedraw()
+        dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
+
+        assertEquals(0, wakeup.signalCalls)
+        assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
+    }
+
+    @Test
+    fun `redraw requested from redraw callback is deferred to the next boundary`() {
+        val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
+        val window = loop.createWindow(WindowAttributes(title = "rearm"))
+        val events = mutableListOf<WindowEvent>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                events += event
+                if (events.size == 1) window.requestRedraw()
+            }
+        }
+
+        loop.enqueueExpose(window.id)
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+        assertEquals(listOf<WindowEvent>(WindowEvent.RedrawRequested), events)
+
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+        assertEquals(
+            listOf<WindowEvent>(WindowEvent.RedrawRequested, WindowEvent.RedrawRequested),
+            events,
+        )
     }
 
     @Test
@@ -127,13 +197,16 @@ class X11LoopContractTest {
         val window = loop.createWindow(WindowAttributes(title = "close"))
         val events = mutableListOf<WindowEvent>()
 
-        val caller = Thread({
-            window.requestRedraw()
-            window.close()
-            window.close()
-        }, "x11-window-caller")
-        caller.start()
-        caller.join()
+        val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "x11-window-caller") }
+        try {
+            executor.submit {
+                window.requestRedraw()
+                window.close()
+                window.close()
+            }.get()
+        } finally {
+            executor.shutdownNow()
+        }
         assertTrue(loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true)))
         loop.dragSourceWindows[window.id.value] = 900L
         loop.pendingDropRequests[window.id.value] = PhysicalPosition(1.0, 2.0)
@@ -162,6 +235,193 @@ class X11LoopContractTest {
         dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertTrue(events.isEmpty())
         assertEquals(listOf("destroy-41", "flush"), native.trace)
+    }
+
+    @Test
+    fun `failed close wake rolls back publication and retry signals again`() {
+        val wakeup = ScriptedX11Wakeup(results = ArrayDeque(listOf(false, true)))
+        val native = FakeX11NativeAdapter()
+        val loop = testLoop(wakeup, native)
+        val window = loop.createWindow(WindowAttributes(title = "retry-false"))
+
+        assertFailsWith<IllegalStateException> { window.close() }
+        window.close()
+        dispatchX11Iteration(loop, recordingHandler(), StartCause.WaitCancelled())
+
+        assertEquals(2, wakeup.signalCalls)
+        assertEquals(listOf("destroy-41", "flush"), native.trace)
+    }
+
+    @Test
+    fun `throwing close wake rolls back publication and retry signals again`() {
+        val wakeFailure = IllegalStateException("signal")
+        val wakeup = ScriptedX11Wakeup(
+            failures = ArrayDeque(listOf(wakeFailure)),
+            results = ArrayDeque(listOf(true)),
+        )
+        val native = FakeX11NativeAdapter()
+        val loop = testLoop(wakeup, native)
+        val window = loop.createWindow(WindowAttributes(title = "retry-throw"))
+
+        val thrown = assertFailsWith<IllegalStateException> { window.close() }
+        assertSame(wakeFailure, thrown.cause)
+        window.close()
+        dispatchX11Iteration(loop, recordingHandler(), StartCause.WaitCancelled())
+
+        assertEquals(2, wakeup.signalCalls)
+        assertEquals(listOf("destroy-41", "flush"), native.trace)
+    }
+
+    @Test
+    fun `old tombstone is delivered when XID is reused before close batch drain completes`() {
+        lateinit var loop: X11EventLoop
+        var replacement: org.graphiks.kadre.core.Window? = null
+        val native = FakeX11NativeAdapter(
+            windowIds = ArrayDeque(listOf(41L, 41L)),
+            onDestroy = { replacement = loop.createWindow(WindowAttributes(title = "replacement")) },
+        )
+        loop = testLoop(RecordingX11Wakeup(), native)
+        val old = loop.createWindow(WindowAttributes(title = "old"))
+        val delivered = mutableListOf<Pair<WindowId, WindowEvent>>()
+        old.close()
+
+        dispatchX11Iteration(loop, object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                delivered += windowId to event
+            }
+        }, StartCause.WaitCancelled())
+
+        assertEquals(old.id, replacement?.id)
+        assertTrue(loop.windows[old.id.value] === replacement)
+        assertEquals<List<Pair<WindowId, WindowEvent>>>(
+            listOf(old.id to WindowEvent.Destroyed),
+            delivered,
+        )
+    }
+
+    @Test
+    fun `close batch delivers every tombstone and aggregates native failures`() {
+        val primary = IllegalStateException("destroy first")
+        val secondary = IllegalArgumentException("flush second")
+        val native = FakeX11NativeAdapter(
+            destroyFailures = mapOf(41L to primary),
+            flushFailures = mapOf(2 to secondary),
+        )
+        val loop = testLoop(RecordingX11Wakeup(), native)
+        val first = loop.createWindow(WindowAttributes(title = "first"))
+        val second = loop.createWindow(WindowAttributes(title = "second"))
+        val delivered = mutableListOf<Pair<WindowId, WindowEvent>>()
+        first.close()
+        second.close()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchX11Iteration(loop, object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) {
+                    delivered += windowId to event
+                }
+            }, StartCause.WaitCancelled())
+        }
+
+        assertSame(primary, thrown)
+        assertEquals(listOf(secondary), thrown.suppressed.toList())
+        assertEquals<List<Pair<WindowId, WindowEvent>>>(
+            listOf(first.id to WindowEvent.Destroyed, second.id to WindowEvent.Destroyed),
+            delivered,
+        )
+        assertEquals(listOf("destroy-41", "flush", "destroy-42", "flush"), native.trace)
+    }
+
+    @Test
+    fun `resource release failure still destroys flushes and emits tombstone before propagation`() {
+        val releaseFailure = IllegalStateException("release")
+        val lease = X11ImeLease { throw releaseFailure }.also(X11ImeLease::markAcquired)
+        val native = FakeX11NativeAdapter(imeLeases = ArrayDeque(listOf(lease)))
+        val loop = testLoop(RecordingX11Wakeup(), native)
+        val window = loop.createWindow(WindowAttributes(title = "release-failure"))
+        val events = mutableListOf<WindowEvent>()
+        window.close()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchX11Iteration(
+                loop,
+                recordingHandler(events = events),
+                StartCause.WaitCancelled(),
+            )
+        }
+
+        assertSame(releaseFailure, thrown)
+        assertEquals(listOf("destroy-41", "flush"), native.trace)
+        assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+    }
+
+    @Test
+    fun `native destroy defers resource failure until after tombstone callback`() {
+        val releaseFailure = IllegalStateException("native release")
+        val lease = X11ImeLease { throw releaseFailure }.also(X11ImeLease::markAcquired)
+        val loop = testLoop(
+            RecordingX11Wakeup(),
+            FakeX11NativeAdapter(imeLeases = ArrayDeque(listOf(lease))),
+        )
+        val window = loop.createWindow(WindowAttributes(title = "native-release-failure"))
+        val events = mutableListOf<WindowEvent>()
+
+        assertTrue(loop.nativeWindowDestroyed(window.id))
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.Poll)
+        }
+
+        assertSame(releaseFailure, thrown)
+        assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+    }
+
+    @Test
+    fun `close racing after detach publishes no stale command`() {
+        val destroyEntered = CountDownLatch(1)
+        val allowDestroy = CountDownLatch(1)
+        val loopExecutor = Executors.newSingleThreadExecutor { task -> Thread(task, "x11-loop-owner") }
+        val callerExecutor = Executors.newSingleThreadExecutor { task -> Thread(task, "x11-close-racer") }
+        try {
+            val context = loopExecutor.submit(java.util.concurrent.Callable {
+                val wakeup = RecordingX11Wakeup()
+                val native = FakeX11NativeAdapter(
+                    onDestroy = {
+                        destroyEntered.countDown()
+                        allowDestroy.await()
+                    },
+                )
+                val loop = testLoop(wakeup, native)
+                val window = loop.createWindow(WindowAttributes(title = "race"))
+                Triple(loop, window, wakeup)
+            }).get()
+            val (loop, window, wakeup) = context
+            window.close()
+            val destroy = loopExecutor.submit(java.util.concurrent.Callable {
+                val events = mutableListOf<WindowEvent>()
+                dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
+                events
+            })
+            destroyEntered.await()
+
+            callerExecutor.submit { window.close() }.get()
+            assertEquals(1, wakeup.signalCalls)
+
+            allowDestroy.countDown()
+            assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), destroy.get())
+        } finally {
+            allowDestroy.countDown()
+            callerExecutor.shutdownNow()
+            loopExecutor.shutdownNow()
+        }
     }
 
     @Test
@@ -314,10 +574,54 @@ private class RecordingX11Wakeup : PosixWakeup {
     override fun close() = Unit
 }
 
+private class ScriptedX11Wakeup(
+    private val results: ArrayDeque<Boolean> = ArrayDeque(),
+    private val failures: ArrayDeque<Throwable> = ArrayDeque(),
+) : PosixWakeup {
+    override val readFd: Int = 8
+    var signalCalls = 0
+        private set
+
+    override fun signal(): Boolean {
+        signalCalls += 1
+        failures.removeFirstOrNull()?.let { throw it }
+        return results.removeFirstOrNull() ?: true
+    }
+
+    override fun drain(): Boolean = true
+    override fun close() = Unit
+}
+
+private class ContractPumpOperations(
+    private val trace: MutableList<String>,
+    private val onDispatch: () -> Unit,
+) : X11PumpOperations {
+    private var pending = 0
+
+    fun enqueueEvent() {
+        pending += 1
+    }
+
+    override fun pendingCount(): Int = pending
+
+    override fun dispatchNext() {
+        pending -= 1
+        trace += "native-dispatch"
+        onDispatch()
+    }
+
+    override fun flush() = Unit
+}
+
 private class FakeX11NativeAdapter(
     private val onDestroy: (Long) -> Unit = {},
+    private val windowIds: ArrayDeque<Long> = ArrayDeque(),
+    private val destroyFailures: Map<Long, Throwable> = emptyMap(),
+    private val flushFailures: Map<Int, Throwable> = emptyMap(),
+    private val imeLeases: ArrayDeque<X11ImeLease> = ArrayDeque(),
 ) : X11NativeAdapter {
     private var nextXid = 41L
+    private var flushCalls = 0
     val trace = mutableListOf<String>()
     var traceSink: MutableList<String> = trace
 
@@ -327,19 +631,23 @@ private class FakeX11NativeAdapter(
     ): X11Window = X11Window(
         displayPtr = loop.displayPtr,
         screen = loop.screen,
-        xWindowId = nextXid++,
+        xWindowId = windowIds.removeFirstOrNull() ?: nextXid++,
         attrs = attributes,
         owner = loop,
         initialScaleFactor = 1.0,
+        imeLease = imeLeases.removeFirstOrNull() ?: X11ImeLease(X11Window::releaseXIM),
     )
 
     override fun destroyWindow(displayPtr: Long, windowId: Long) {
         onDestroy(windowId)
         traceSink += "destroy-$windowId"
+        destroyFailures[windowId]?.let { throw it }
     }
 
     override fun flush(displayPtr: Long) {
+        flushCalls += 1
         traceSink += "flush"
+        flushFailures[flushCalls]?.let { throw it }
     }
 
     override fun closeDisplay(displayPtr: Long) {

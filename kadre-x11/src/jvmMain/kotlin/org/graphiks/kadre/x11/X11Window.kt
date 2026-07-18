@@ -93,6 +93,23 @@ private const val X11_RECTANGLE_SIZE_BYTES: Long = 8L
 private const val X11_WM_HINTS_FLAGS_OFFSET: Long = 0L
 internal const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
 
+/** Per-window ownership token for one successful global XIM reference acquisition. */
+internal class X11ImeLease(private val release: () -> Unit) {
+    private val acquired = AtomicBoolean(false)
+
+    internal fun markAcquired(): Boolean = acquired.compareAndSet(false, true)
+
+    internal fun releaseIfAcquired() {
+        if (acquired.compareAndSet(true, false)) release()
+    }
+}
+
+private fun appendX11WindowFailure(primary: Throwable?, additional: Throwable): Throwable {
+    if (primary == null) return additional
+    if (additional !== primary) primary.addSuppressed(additional)
+    return primary
+}
+
 /**
  * Native X11 window implementing [Window].
  *
@@ -109,6 +126,7 @@ class X11Window internal constructor(
     private val attrs: WindowAttributes,
     private val owner: X11EventLoop? = null,
     initialScaleFactor: Double = readXftDpi(displayPtr),
+    private val imeLease: X11ImeLease = X11ImeLease(X11Window::releaseXIM),
 ) : Window {
 
     private val directCloseStarted = AtomicBoolean(false)
@@ -243,8 +261,18 @@ class X11Window internal constructor(
     /** Releases per-window resources before the owning loop destroys or forgets the XID. */
     internal fun releaseLoopOwnedResources() {
         val display = MemorySegment.ofAddress(displayPtr)
-        disableIme()
-        freeCachedCursors(display)
+        var failure: Throwable? = null
+        try {
+            disableIme()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        try {
+            freeCachedCursors(display)
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        failure?.let { throw it }
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -1103,8 +1131,19 @@ class X11Window internal constructor(
     private fun enableIme() {
         val im = X11Window.acquireXIM(displayPtr)
         if (im == MemorySegment.NULL || im.address() == 0L) return
+        if (!imeLease.markAcquired()) {
+            X11Window.releaseXIM()
+            return
+        }
 
-        val arena = Arena.ofShared()
+        val arena = try {
+            Arena.ofShared()
+        } catch (_: Throwable) {
+            imeLease.releaseIfAcquired()
+            return
+        }
+        var enabled = false
+        var createdIc = MemorySegment.NULL
         try {
             val clientData = arena.allocate(ValueLayout.JAVA_LONG)
             clientData.set(ValueLayout.JAVA_LONG, 0L, xWindowId)
@@ -1137,10 +1176,9 @@ class X11Window internal constructor(
                 cmName, cmCb,
                 MemorySegment.NULL,
             ) as MemorySegment
+            createdIc = ic
 
             if (ic == MemorySegment.NULL || ic.address() == 0L) {
-                X11Window.releaseXIM()
-                arena.close()
                 return
             }
 
@@ -1148,15 +1186,32 @@ class X11Window internal constructor(
             this.ximArena = arena
             this.clientDataSegment = clientData
             X11Window.activeWindows[xWindowId] = this
+            enabled = true
 
             if (_hasFocus) {
                 try {
                     xSetICFocus?.invokeExact(ic)
                 } catch (_: Throwable) {}
             }
-        } catch (t: Throwable) {
-            X11Window.releaseXIM()
-            arena.close()
+        } catch (_: Throwable) {
+            // The finally block balances the XIM acquisition on every failed path.
+        } finally {
+            if (!enabled) {
+                if (createdIc.address() != 0L) {
+                    try {
+                        xDestroyIC?.invokeExact(createdIc)
+                    } catch (_: Throwable) {}
+                }
+                xic = MemorySegment.NULL
+                ximArena = null
+                clientDataSegment = MemorySegment.NULL
+                X11Window.activeWindows.remove(xWindowId)
+                try {
+                    arena.close()
+                } finally {
+                    imeLease.releaseIfAcquired()
+                }
+            }
         }
     }
 
@@ -1168,11 +1223,22 @@ class X11Window internal constructor(
             } catch (_: Throwable) {}
             xic = MemorySegment.NULL
         }
-        ximArena?.close()
+        val arena = ximArena
         ximArena = null
         clientDataSegment = MemorySegment.NULL
         X11Window.activeWindows.remove(xWindowId)
-        X11Window.releaseXIM()
+        var failure: Throwable? = null
+        try {
+            arena?.close()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        try {
+            imeLease.releaseIfAcquired()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        failure?.let { throw it }
     }
 
     override fun setImeCursorArea(position: PhysicalPosition<Int>, size: PhysicalSize<Int>) {
