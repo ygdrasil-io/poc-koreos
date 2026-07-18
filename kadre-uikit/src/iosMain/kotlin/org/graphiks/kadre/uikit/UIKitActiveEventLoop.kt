@@ -21,6 +21,19 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Windows created by this loop, used to scope app-level lifecycle events. */
     private val windows = mutableListOf<UiKitWindow>()
 
+    /** Single demand-driven scheduler shared by every window owned by this loop. */
+    internal val scheduler = UIKitScheduler(
+        operations = UIKitNativeSchedulerOperations(),
+        controlFlow = { _controlFlow },
+        newEvents = { cause -> handler.newEvents(this, cause) },
+        redraw = { id ->
+            if (windows.any { it.id == id }) {
+                handler.windowEvent(this, id, WindowEvent.RedrawRequested)
+            }
+        },
+        aboutToWait = { handler.aboutToWait(this) },
+    )
+
     /** Next live window to return while surfaces are being recreated. */
     private var recreationCursor: Int? = null
 
@@ -57,7 +70,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
             create = {
                 createRegisteredUIKitWindow(
                     createStructure = { UiKitWindow(this) },
-                    register = { windows.add(it) },
+                    register = ::registerWindow,
                     applyInitialAttributes = { it.applyInitialAttributes(attributes) },
                     isLive = windows::contains,
                     rollback = UiKitWindow::close,
@@ -160,6 +173,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         recreationCursor = recreationCursor?.let { cursor ->
             if (index < cursor) cursor - 1 else cursor
         }
+        scheduler.closeWindow(id)
         runUIKitWindowCloseStages(
             invalidateResources = window::invalidateResources,
             dispatchDestroyed = { handler.windowEvent(this, id, WindowEvent.Destroyed) },
@@ -174,12 +188,18 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         }
     }
 
-    override fun setControlFlow(controlFlow: ControlFlow) { _controlFlow = controlFlow }
+    override fun setControlFlow(controlFlow: ControlFlow) {
+        _controlFlow = controlFlow
+        scheduler.controlFlowChanged()
+    }
     override val controlFlow: ControlFlow get() = _controlFlow
-    override fun exit() { _isExiting = true }
+    override fun exit() {
+        _isExiting = true
+        scheduler.exit()
+    }
     override val isExiting: Boolean get() = _isExiting
 
-    override fun createProxy(): EventLoopProxy = UIKitEventLoopProxy(this)
+    override fun createProxy(): EventLoopProxy = UIKitEventLoopProxy(scheduler)
 
     override fun ownedDisplayHandle(): OwnedDisplayHandle? =
         OwnedDisplayHandle(RawDisplayHandle.UiKit)
@@ -239,6 +259,20 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     override fun listenDeviceEvents(mode: DeviceEvents) {
         // no-op on UIKit
+    }
+
+    private fun registerWindow(window: UiKitWindow) {
+        windows.add(window)
+        try {
+            scheduler.registerWindow(window.id)
+        } catch (failure: Throwable) {
+            windows.remove(window)
+            throw failure
+        }
+    }
+
+    internal fun requestRedraw(id: WindowId) {
+        scheduler.requestRedraw(id)
     }
 }
 

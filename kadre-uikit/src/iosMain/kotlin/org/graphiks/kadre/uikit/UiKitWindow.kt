@@ -54,11 +54,8 @@ import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSClassFromString
 import platform.Foundation.NSNotFound
-import platform.Foundation.NSRunLoop
-import platform.Foundation.NSRunLoopCommonModes
 import platform.Foundation.NSSelectorFromString
 import platform.Foundation._NSRange
-import platform.QuartzCore.CADisplayLink
 import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.UIEvent
 import platform.UIKit.UIGestureRecognizer
@@ -99,6 +96,7 @@ import platform.UIKit.UIViewController
 import platform.UIKit.UIViewMeta
 import platform.UIKit.UIWindow
 import platform.darwin.NSObject
+import kotlin.math.roundToInt
 
 /**
  * KadreMetalView : UIView backed by CAMetalLayer.
@@ -549,19 +547,6 @@ class KadreMetalView(
     }
 }
 
-/**
- * Objective-C target for a [CADisplayLink].
- *
- * `CADisplayLink` requires a target/selector pair; this NSObject subclass
- * exposes [onFrame] (an `@ObjCAction`) as that selector and forwards each
- * vsync tick to the Kotlin lambda.
- */
-@OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-private class DisplayLinkProxy(private val onFrame: () -> Unit) : NSObject() {
-    @ObjCAction
-    fun handleDisplayLink() = onFrame()
-}
-
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 private class UIKitGestureRecognizerProxy(
     private val view: UIView,
@@ -702,13 +687,34 @@ internal inline fun applyUIKitWindowMutationsWhileLive(
     }
 }
 
+/** Converts a logical UIKit inset to the nearest non-negative physical pixel. */
+internal fun physicalInset(points: Double, scale: Double): Int {
+    if (!points.isFinite() || points < 0.0 || !scale.isFinite() || scale < 0.0) return 0
+    val physical = points * scale
+    return if (physical.isFinite()) physical.roundToInt() else 0
+}
+
+/** Applies the physical-pixel conversion consistently to all safe-area edges. */
+internal fun physicalSafeArea(
+    topPoints: Double,
+    bottomPoints: Double,
+    leftPoints: Double,
+    rightPoints: Double,
+    scale: Double,
+): Insets<Int> = Insets(
+    top = physicalInset(topPoints, scale),
+    bottom = physicalInset(bottomPoints, scale),
+    left = physicalInset(leftPoints, scale),
+    right = physicalInset(rightPoints, scale),
+)
+
 /**
  * UiKitWindow — implements Window for iOS.
  *
  * Creates UIWindow → UIViewController → KadreMetalView (full screen).
  * CAMetalLayer is the view's backing layer (via +layerClass).
- * Touch and resize events are dispatched to [eventLoop].handler, and a
- * [CADisplayLink] paces [WindowEvent.RedrawRequested] on every screen refresh.
+ * Touch and resize events are dispatched to [eventLoop].handler. Redraw requests
+ * are coalesced by the loop-level [UIKitScheduler].
  */
 @OptIn(ExperimentalForeignApi::class)
 internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window {
@@ -723,10 +729,6 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
     /** Drag-and-drop objects retained until [close]. */
     private var dropDelegate: KadreDropDelegate? = null
     private var dropInteraction: UIDropInteraction? = null
-
-    /** Per-frame redraw driver (vsync-paced). Invalidated on [close]. */
-    private var displayLink: CADisplayLink? = null
-    private val displayLinkProxy = DisplayLinkProxy { emitRedraw() }
 
     private var _title: String = ""
     private var _fullscreen: Fullscreen? = null
@@ -764,8 +766,6 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
         // 6. Enable drag-and-drop via UIDropInteraction (iOS 11+).
         setupDropInteraction(windowId)
 
-        // 7. Start the vsync-paced redraw loop.
-        startDisplayLink()
     }
 
     internal fun resetKeyboardModifiersIfNeeded() {
@@ -849,35 +849,6 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
     }
 
     /**
-     * Creates and schedules the [CADisplayLink] on the main run loop so
-     * [emitRedraw] fires once per screen refresh.
-     */
-    private fun startDisplayLink() {
-        if (displayLink != null) return
-        val link = CADisplayLink.displayLinkWithTarget(
-            target = displayLinkProxy,
-            selector = NSSelectorFromString("handleDisplayLink"),
-        )
-        link.addToRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
-        displayLink = link
-    }
-
-    /**
-     * Dispatches [WindowEvent.RedrawRequested] for this window each frame.
-     *
-     * Stops and releases the display link once the loop is exiting so no
-     * further frame is emitted after shutdown.
-     */
-    private fun emitRedraw() {
-        if (eventLoop.isExiting) {
-            displayLink?.invalidate()
-            displayLink = null
-            return
-        }
-        emitWindowEvent(id, WindowEvent.RedrawRequested)
-    }
-
-    /**
      * Creates and attaches a [UIDropInteraction] to the metal view so the
      * window can receive drag-and-drop content (files, text, images) from
      * other apps via the iOS drag-and-drop system (iOS 11+).
@@ -950,8 +921,7 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
     }
 
     override fun requestRedraw() {
-        // No-op: the CADisplayLink paces RedrawRequested on every screen refresh.
-        // Kept for API parity with the desktop backends.
+        eventLoop.requestRedraw(id)
     }
 
     override val innerSize: PhysicalSize<Int>
@@ -981,11 +951,12 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
 
     override val safeArea: Insets<Int>
         get() = metalView.safeAreaInsets.useContents {
-            Insets(
-                top = top.toInt(),
-                bottom = bottom.toInt(),
-                left = left.toInt(),
-                right = right.toInt(),
+            physicalSafeArea(
+                topPoints = top,
+                bottomPoints = bottom,
+                leftPoints = left,
+                rightPoints = right,
+                scale = uiWindow.screen.scale,
             )
         }
 
@@ -998,12 +969,10 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
         eventLoop.closeWindow(id)
     }
 
-    /** Invalidates scheduler, gesture, IME, and drop resources exactly once. */
+    /** Invalidates this window's gesture, IME, and drop resources exactly once. */
     internal fun invalidateResources() {
         if (closed) return
         closed = true
-        displayLink?.invalidate()
-        displayLink = null
         dropInteraction?.let { interaction ->
             metalView.performSelector(
                 NSSelectorFromString("removeInteraction:"),

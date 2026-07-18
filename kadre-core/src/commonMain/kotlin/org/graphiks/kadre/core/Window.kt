@@ -184,6 +184,8 @@ interface Window {
 
     /**
      * Insets of the unobstructed renderable area, in physical pixels inside [surfaceSize].
+     * Backends convert platform logical units with the window's current scale and
+     * round each edge to the nearest integer physical pixel.
      */
     val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
