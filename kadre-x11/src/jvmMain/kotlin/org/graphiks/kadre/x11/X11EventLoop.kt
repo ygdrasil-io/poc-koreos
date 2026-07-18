@@ -420,12 +420,14 @@ class X11EventLoop internal constructor(
      * This is a monochrome fallback — no XRender or ARGB cursor support yet.
      * Returns null on failure (missing symbols, invalid image, or OOM).
      */
-    override fun createCustomCursor(image: CursorImage): CustomCursor? {
-        if (!validateCursorGeometry(image, Int.MAX_VALUE, Int.MAX_VALUE)) return null
+    override fun createCustomCursor(image: CursorImage): CustomCursor? =
+        withValidX11CursorGeometry(image) { createValidatedCustomCursor(image) }
 
+    private fun createValidatedCustomCursor(image: CursorImage): CustomCursor? {
         val createBitmap = xCreateBitmapFromData ?: return null
         val createPixmapCursor = xCreatePixmapCursor ?: return null
         val freePixmap = xFreePixmap ?: return null
+        val freeCursor = xFreeCursor ?: return null
         val rootHandle = xRootWindow ?: return null
 
         val display = MemorySegment.ofAddress(displayPtr)
@@ -434,8 +436,8 @@ class X11EventLoop internal constructor(
             val root = rootHandle.invokeExact(display, screen) as Long
             if (root == 0L) return null
 
-            var maxWidth = Int.MAX_VALUE
-            var maxHeight = Int.MAX_VALUE
+            var maxWidth = X11_CURSOR_DIMENSION_LIMIT
+            var maxHeight = X11_CURSOR_DIMENSION_LIMIT
             val queryBestCursor = xQueryBestCursor
             if (queryBestCursor != null) {
                 Arena.ofConfined().use { arena ->
@@ -450,10 +452,8 @@ class X11EventLoop internal constructor(
                         heightReturn,
                     ) as Int
                     if (status == 0) return null
-                    maxWidth = widthReturn.get(ValueLayout.JAVA_INT, 0L)
-                        .toUInt().toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                    maxHeight = heightReturn.get(ValueLayout.JAVA_INT, 0L)
-                        .toUInt().toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    maxWidth = capServerCursorLimit(widthReturn.get(ValueLayout.JAVA_INT, 0L).toUInt())
+                    maxHeight = capServerCursorLimit(heightReturn.get(ValueLayout.JAVA_INT, 0L).toUInt())
                 }
             }
             if (!validateCursorGeometry(image, maxWidth, maxHeight)) return null
@@ -481,7 +481,13 @@ class X11EventLoop internal constructor(
                         image.hotspotX, image.hotspotY,
                     ) as Long
                     if (cursor == 0L) return@use null
-                    CustomCursor(id = cursor)
+                    wrapOwnedX11Cursor(
+                        cursor = cursor,
+                        wrap = { ownedCursor -> CustomCursor(id = ownedCursor) },
+                        free = { ownedCursor ->
+                            freeCursor.invokeExact(display, ownedCursor) as Int
+                        },
+                    )
                 } finally {
                     if (mask != 0L) {
                         try {

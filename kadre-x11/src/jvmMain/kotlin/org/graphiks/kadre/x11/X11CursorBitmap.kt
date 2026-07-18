@@ -1,6 +1,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.CursorImage
+import org.graphiks.kadre.core.MAX_CURSOR_SIZE
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -8,6 +9,34 @@ internal data class PackedCursor(
     val source: ByteArray,
     val mask: ByteArray,
 )
+
+internal val X11_CURSOR_DIMENSION_LIMIT: Int = minOf(MAX_CURSOR_SIZE, 0xFFFF)
+
+internal inline fun <T> withValidX11CursorGeometry(image: CursorImage, block: () -> T): T? {
+    if (!validateCursorGeometry(image, X11_CURSOR_DIMENSION_LIMIT, X11_CURSOR_DIMENSION_LIMIT)) return null
+    return block()
+}
+
+internal fun capServerCursorLimit(serverLimit: UInt): Int =
+    minOf(X11_CURSOR_DIMENSION_LIMIT.toLong(), serverLimit.toLong()).toInt()
+
+internal fun <T : Any> wrapOwnedX11Cursor(
+    cursor: Long,
+    wrap: (Long) -> T,
+    free: (Long) -> Unit,
+): T {
+    require(cursor != 0L) { "Cannot wrap a null X11 cursor" }
+    return try {
+        wrap(cursor)
+    } catch (primary: Throwable) {
+        try {
+            free(cursor)
+        } catch (cleanup: Throwable) {
+            if (cleanup !== primary) primary.addSuppressed(cleanup)
+        }
+        throw primary
+    }
+}
 
 internal fun packMonochromeCursor(image: CursorImage, alphaThreshold: Int = 1): PackedCursor {
     require(alphaThreshold in 1..255) { "alphaThreshold must be between 1 and 255" }

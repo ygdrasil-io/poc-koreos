@@ -1,6 +1,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.CursorImage
+import org.graphiks.kadre.core.MAX_CURSOR_SIZE
 import java.lang.foreign.Arena
 import java.lang.foreign.ValueLayout
 import kotlin.test.Test
@@ -8,6 +9,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class X11CursorBitmapTest {
@@ -111,15 +114,41 @@ class X11CursorBitmapTest {
     }
 
     @Test
-    fun `cursor geometry rejects checked pixel byte overflow`() {
+    fun `cursor geometry rejects Int wraparound with checked Long arithmetic`() {
         val overflowing = CursorImage(
             rgba = ByteArray(0),
-            width = Int.MAX_VALUE,
-            height = Int.MAX_VALUE,
+            width = 1 shl 30,
+            height = 4,
         )
 
         assertFalse(validateCursorGeometry(overflowing, Int.MAX_VALUE, Int.MAX_VALUE))
         assertFailsWith<IllegalArgumentException> { packMonochromeCursor(overflowing) }
+    }
+
+    @Test
+    fun `client cursor cap rejects oversized geometry before native work`() {
+        assertEquals(minOf(MAX_CURSOR_SIZE, 0xFFFF), X11_CURSOR_DIMENSION_LIMIT)
+        val oversizedImages = listOf(
+            cursorImage(width = MAX_CURSOR_SIZE + 1, height = 1),
+            cursorImage(width = 65_536, height = 1),
+        )
+        var nativeCalls = 0
+
+        oversizedImages.forEach { image ->
+            val result = withValidX11CursorGeometry(image) {
+                nativeCalls += 1
+                "native cursor"
+            }
+
+            assertNull(result)
+        }
+        assertEquals(0, nativeCalls)
+    }
+
+    @Test
+    fun `server cursor limits can reduce but never enlarge client cap`() {
+        assertEquals(64, capServerCursorLimit(64u))
+        assertEquals(X11_CURSOR_DIMENSION_LIMIT, capServerCursorLimit(UInt.MAX_VALUE))
     }
 
     @Test
@@ -129,6 +158,62 @@ class X11CursorBitmapTest {
         assertFalse(validateCursorGeometry(image, maxWidth = 8, maxHeight = 7))
         assertFalse(validateCursorGeometry(image, maxWidth = 9, maxHeight = 6))
         assertTrue(validateCursorGeometry(image, maxWidth = 9, maxHeight = 7))
+    }
+
+    @Test
+    fun `successful cursor wrapping transfers ownership without freeing`() {
+        var frees = 0
+
+        val wrapped = wrapOwnedX11Cursor(
+            cursor = 42L,
+            wrap = { cursor -> "cursor-$cursor" },
+            free = { frees += 1 },
+        )
+
+        assertEquals("cursor-42", wrapped)
+        assertEquals(0, frees)
+    }
+
+    @Test
+    fun `failed cursor wrapping frees native cursor exactly once`() {
+        val wrapperFailure = IllegalStateException("wrapper failed")
+        var frees = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            wrapOwnedX11Cursor(
+                cursor = 42L,
+                wrap = { throw wrapperFailure },
+                free = { cursor ->
+                    assertEquals(42L, cursor)
+                    frees += 1
+                },
+            )
+        }
+
+        assertSame(wrapperFailure, thrown)
+        assertEquals(1, frees)
+    }
+
+    @Test
+    fun `cursor cleanup failure is suppressed on wrapper failure`() {
+        val wrapperFailure = IllegalStateException("wrapper failed")
+        val cleanupFailure = IllegalArgumentException("cleanup failed")
+        var frees = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            wrapOwnedX11Cursor(
+                cursor = 42L,
+                wrap = { throw wrapperFailure },
+                free = {
+                    frees += 1
+                    throw cleanupFailure
+                },
+            )
+        }
+
+        assertSame(wrapperFailure, thrown)
+        assertEquals(1, frees)
+        assertEquals(listOf(cleanupFailure), thrown.suppressed.toList())
     }
 
     private fun cursorImage(
