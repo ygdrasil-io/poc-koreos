@@ -150,6 +150,95 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun terminationClosesEveryWindowDestroysSurfacesAndPreservesFailures() {
+        val trace = mutableListOf<String>()
+        val firstDestroyedFailure = IllegalStateException("first destroyed")
+        val secondDestroyedFailure = IllegalArgumentException("second destroyed")
+        val destroySurfacesFailure = AssertionError("destroy surfaces")
+        var firstId: WindowId? = null
+        var admissionFailure: Throwable? = null
+        var destroySurfacesCount = 0
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+                destroySurfacesCount += 1
+                throw destroySurfacesFailure
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event != WindowEvent.Destroyed) return
+                if (windowId == firstId) {
+                    trace += "destroyed-first"
+                    admissionFailure = runCatching {
+                        eventLoop.createWindow(WindowAttributes(visible = false))
+                    }.exceptionOrNull()
+                    throw firstDestroyedFailure
+                }
+                trace += "destroyed-second"
+                throw secondDestroyedFailure
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
+        val first = loop.createWindow(WindowAttributes(visible = false))
+        val second = loop.createWindow(WindowAttributes(visible = false))
+        firstId = first.id
+        lifecycle.didFinishLaunching()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.willTerminate()
+        }
+
+        assertSame(firstDestroyedFailure, thrown)
+        assertEquals(
+            listOf(secondDestroyedFailure, destroySurfacesFailure),
+            thrown.suppressedExceptions,
+        )
+        assertEquals(
+            listOf("destroyed-first", "destroyed-second", "destroySurfaces"),
+            trace,
+        )
+        assertEquals(1, destroySurfacesCount)
+        assertIs<IllegalStateException>(admissionFailure)
+        assertFailsWith<IllegalStateException> {
+            loop.createWindow(WindowAttributes(visible = false))
+        }
+
+        first.close()
+        second.close()
+        assertEquals(2, trace.count { it.startsWith("destroyed-") })
+    }
+
+    @Test
+    fun delegateTerminationClearsLifecycleAndRegistryAfterFailure() {
+        val trace = mutableListOf<String>()
+        val orchestratorFailure = IllegalStateException("orchestrator")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            runUIKitDelegateTermination(
+                terminateLifecycle = {
+                    trace += "terminateLifecycle"
+                    throw orchestratorFailure
+                },
+                clearLifecycle = { trace += "clearLifecycle" },
+                clearRegistry = { trace += "clearRegistry" },
+            )
+        }
+
+        assertSame(orchestratorFailure, thrown)
+        assertEquals(
+            listOf("terminateLifecycle", "clearLifecycle", "clearRegistry"),
+            trace,
+        )
+    }
+
+    @Test
     fun closedWindowIsDestroyedOnceUnregisteredAndNeverReused() {
         val createdWindows = mutableListOf<Window>()
         val events = mutableListOf<Pair<WindowId, WindowEvent>>()

@@ -136,7 +136,14 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     internal fun dispatchWindowsDestroyed() {
         terminalAdmissionClosed = true
-        windows.toList().forEach { closeWindow(it.id) }
+        runAllUIKitCleanupStages(
+            *windows.toList().map { window ->
+                {
+                    closeWindow(window.id)
+                    Unit
+                }
+            }.toTypedArray(),
+        )
     }
 
     /** Removes a window from the live set before performing terminal cleanup. */
@@ -231,6 +238,24 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     override fun listenDeviceEvents(mode: DeviceEvents) {
         // no-op on UIKit
     }
+}
+
+/** Runs every UIKit cleanup stage and propagates the first failure. */
+internal fun runAllUIKitCleanupStages(vararg stages: () -> Unit) {
+    var firstFailure: Throwable? = null
+    stages.forEach { stage ->
+        try {
+            stage()
+        } catch (failure: Throwable) {
+            val primary = firstFailure
+            if (primary == null) {
+                firstFailure = failure
+            } else if (primary !== failure) {
+                primary.addSuppressed(failure)
+            }
+        }
+    }
+    firstFailure?.let { throw it }
 }
 
 /** Selects a live reusable window, applies attributes, or creates a new one. */

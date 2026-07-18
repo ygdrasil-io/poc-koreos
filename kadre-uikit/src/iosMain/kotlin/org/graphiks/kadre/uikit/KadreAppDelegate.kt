@@ -41,9 +41,24 @@ internal class UIKitLifecycleOrchestrator(
     }
 
     internal fun willTerminate() {
-        eventLoop.dispatchWindowsDestroyed()
-        eventLoop.destroySurfaces()
+        runAllUIKitCleanupStages(
+            eventLoop::dispatchWindowsDestroyed,
+            eventLoop::destroySurfaces,
+        )
     }
+}
+
+/** Completes delegate-owned terminal cleanup before propagating any failure. */
+internal fun runUIKitDelegateTermination(
+    terminateLifecycle: () -> Unit,
+    clearLifecycle: () -> Unit,
+    clearRegistry: () -> Unit,
+) {
+    runAllUIKitCleanupStages(
+        terminateLifecycle,
+        clearLifecycle,
+        clearRegistry,
+    )
 }
 
 /**
@@ -185,8 +200,10 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      */
     override fun applicationWillTerminate(application: UIApplication) {
         println("[KadreAppDelegate] applicationWillTerminate → Destroyed + destroySurfaces")
-        lifecycle?.willTerminate()
-        lifecycle = null
-        KadreRegistry.handler = null
+        runUIKitDelegateTermination(
+            terminateLifecycle = { lifecycle?.willTerminate() },
+            clearLifecycle = { lifecycle = null },
+            clearRegistry = { KadreRegistry.handler = null },
+        )
     }
 }
