@@ -227,6 +227,124 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `rejected IME rect query writes exact safe defaults without reading global routes`() {
+        var globalReads = 0
+        val store = object : AppKitNativeTokenStore {
+            override fun attach(receiver: MemorySegment, token: AppKitNativeCallbackToken) =
+                error("unexpected token attach")
+
+            override fun read(receiver: MemorySegment): AppKitNativeCallbackToken? {
+                globalReads += 1
+                return null
+            }
+
+            override fun detach(receiver: MemorySegment, token: AppKitNativeCallbackToken) =
+                error("unexpected token detach")
+        }
+
+        Arena.ofConfined().use { arena ->
+            val self = arena.allocate(1)
+            val characterRange = arena.allocate(AppKitImeTextInputClient.NS_RANGE_LAYOUT).also { range ->
+                range.setAtIndex(ValueLayout.JAVA_LONG, 0, 23L)
+                range.setAtIndex(ValueLayout.JAVA_LONG, 1, 29L)
+            }
+
+            for (closed in listOf(false, true)) {
+                val returnRect = arena.allocate(32L, 8L).also { rect ->
+                    repeat(4) { index ->
+                        rect.setAtIndex(ValueLayout.JAVA_DOUBLE, index.toLong(), index + 1.5)
+                    }
+                }
+                val actualRange = arena.allocate(AppKitImeTextInputClient.NS_RANGE_LAYOUT).also { range ->
+                    range.setAtIndex(ValueLayout.JAVA_LONG, 0, 31L)
+                    range.setAtIndex(ValueLayout.JAVA_LONG, 1, 37L)
+                }
+
+                withRejectedCallbackAdmission(closed) {
+                    AppKitNativeCallbackTokens.withNativeStoreForTest(store) {
+                        AppKitImeTextInputClient.Callbacks.firstRectForCharacterRange_actualRange(
+                            returnRect,
+                            self,
+                            MemorySegment.NULL,
+                            characterRange,
+                            actualRange,
+                        )
+                    }
+                }
+
+                repeat(4) { index ->
+                    assertEquals(0.0, returnRect.getAtIndex(ValueLayout.JAVA_DOUBLE, index.toLong()))
+                }
+                assertEquals(Long.MAX_VALUE, actualRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                assertEquals(0L, actualRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+            }
+        }
+
+        assertEquals(0, globalReads)
+    }
+
+    @Test
+    fun `rejected IME rect query contains each safe default write failure`() {
+        var globalReads = 0
+        val store = object : AppKitNativeTokenStore {
+            override fun attach(receiver: MemorySegment, token: AppKitNativeCallbackToken) =
+                error("unexpected token attach")
+
+            override fun read(receiver: MemorySegment): AppKitNativeCallbackToken? {
+                globalReads += 1
+                return null
+            }
+
+            override fun detach(receiver: MemorySegment, token: AppKitNativeCallbackToken) =
+                error("unexpected token detach")
+        }
+
+        Arena.ofConfined().use { arena ->
+            val self = arena.allocate(1)
+            val characterRange = arena.allocate(AppKitImeTextInputClient.NS_RANGE_LAYOUT)
+
+            for (closed in listOf(false, true)) {
+                val writableRange = arena.allocate(AppKitImeTextInputClient.NS_RANGE_LAYOUT).also { range ->
+                    range.setAtIndex(ValueLayout.JAVA_LONG, 0, 41L)
+                    range.setAtIndex(ValueLayout.JAVA_LONG, 1, 43L)
+                }
+                val writableRect = arena.allocate(32L, 8L).also { rect ->
+                    repeat(4) { index ->
+                        rect.setAtIndex(ValueLayout.JAVA_DOUBLE, index.toLong(), index + 5.5)
+                    }
+                }
+
+                withRejectedCallbackAdmission(closed) {
+                    AppKitNativeCallbackTokens.withNativeStoreForTest(store) {
+                        AppKitImeTextInputClient.Callbacks.firstRectForCharacterRange_actualRange(
+                            MemorySegment.NULL,
+                            self,
+                            MemorySegment.NULL,
+                            characterRange,
+                            writableRange,
+                        )
+                        AppKitImeTextInputClient.Callbacks.firstRectForCharacterRange_actualRange(
+                            writableRect,
+                            self,
+                            MemorySegment.NULL,
+                            characterRange,
+                            MemorySegment.ofAddress(0x924L),
+                        )
+                    }
+                }
+
+                assertEquals(Long.MAX_VALUE, writableRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                assertEquals(0L, writableRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+                repeat(4) { index ->
+                    assertEquals(0.0, writableRect.getAtIndex(ValueLayout.JAVA_DOUBLE, index.toLong()))
+                }
+            }
+        }
+
+        assertEquals(0, globalReads)
+    }
+
+    @Test
     fun `first callback failure terminates a blocking run and final cleanup failure is drained`() {
         val trace = java.util.Collections.synchronizedList(mutableListOf<String>())
         val callbackFailure = IllegalStateException("callback failure")
@@ -2546,6 +2664,44 @@ class AppKitRegistryLifecycleTest {
             ),
             trace,
         )
+    }
+
+    private fun withRejectedCallbackAdmission(closed: Boolean, callback: () -> Unit) {
+        val admissionReady = CountDownLatch(1)
+        val allowAdmissionReopen = CountDownLatch(1)
+        val admissionFailure = AtomicReference<Throwable?>()
+        val admissionThread = thread(name = if (closed) "closed-admission" else "paused-admission") {
+            try {
+                if (closed) {
+                    AppKitNativeCallbackBoundary.closeAdmissionForTeardown()
+                    try {
+                        admissionReady.countDown()
+                        check(allowAdmissionReopen.await(5, TimeUnit.SECONDS))
+                    } finally {
+                        AppKitNativeCallbackBoundary.finishTeardown {}
+                    }
+                } else {
+                    AppKitNativeCallbackBoundary.runExclusive {
+                        admissionReady.countDown()
+                        check(allowAdmissionReopen.await(5, TimeUnit.SECONDS))
+                    }
+                }
+            } catch (failure: Throwable) {
+                admissionFailure.set(failure)
+                admissionReady.countDown()
+            }
+        }
+
+        assertTrue(admissionReady.await(5, TimeUnit.SECONDS))
+        try {
+            callback()
+        } finally {
+            allowAdmissionReopen.countDown()
+            admissionThread.join(5_000)
+        }
+
+        assertFalse(admissionThread.isAlive)
+        assertEquals(null, admissionFailure.get())
     }
 
     private object NoopHandler : ApplicationHandler {

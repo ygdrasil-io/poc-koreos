@@ -780,35 +780,29 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") characterRange: MemorySegment,
             actualRange: MemorySegment,
         ) {
-            AppKitNativeCallbackBoundary.invoke {
-                try {
-                    writeZeroRect(returnRect)
-                    writeNotFoundRange(actualRange)
-                    val screenRect = recordFor(self)?.imeCursorScreenRect
-                    if (screenRect != null && screenRect != MemorySegment.NULL) {
-                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
-                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
-                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
-                        returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
-                    }
-                    if (actualRange != MemorySegment.NULL) {
-                        actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
-                        actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
-                    }
-                } catch (failure: Throwable) {
-                    captureSafely(self, "firstRectForCharacterRange_actualRange", failure)
+            AppKitNativeCallbackBoundary.invoke(
+                callback = {
                     try {
                         writeZeroRect(returnRect)
-                    } catch (_: Throwable) {
-                        // No Kotlin exception may cross an Objective-C upcall.
-                    }
-                    try {
                         writeNotFoundRange(actualRange)
-                    } catch (_: Throwable) {
-                        // No Kotlin exception may cross an Objective-C upcall.
+                        val screenRect = recordFor(self)?.imeCursorScreenRect
+                        if (screenRect != null && screenRect != MemorySegment.NULL) {
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
+                        }
+                        if (actualRange != MemorySegment.NULL) {
+                            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+                        }
+                    } catch (failure: Throwable) {
+                        captureSafely(self, "firstRectForCharacterRange_actualRange", failure)
+                        writeSafeDefaultsSafely(returnRect, actualRange)
                     }
-                }
-            }
+                },
+                onRejected = { writeSafeDefaultsSafely(returnRect, actualRange) },
+            )
         }
 
         /**
@@ -1057,6 +1051,19 @@ internal object AppKitImeTextInputClient {
             if (actualRange == MemorySegment.NULL) return
             actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, NS_NOT_FOUND)
             actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, 0L)
+        }
+
+        private fun writeSafeDefaultsSafely(returnRect: MemorySegment, actualRange: MemorySegment) {
+            try {
+                writeZeroRect(returnRect)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+            try {
+                writeNotFoundRange(actualRange)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
         }
 
         private fun captureSafely(self: MemorySegment, context: String, failure: Throwable) {
