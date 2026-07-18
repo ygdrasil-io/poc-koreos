@@ -31,6 +31,16 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 
+internal inline fun <T : Any> appKitCreateOwnedNativeView(
+    allocate: () -> T,
+    initialize: (T) -> T,
+    release: (T) -> Unit,
+): T = appKitInitializeOwnedNativeObject(
+    allocate = allocate,
+    initialize = initialize,
+    releaseAllocated = release,
+)
+
 /**
  * Per-view record stored in the IME callbacks table.
  * Holds the handler, event loop, window id, and the IME cursor rect
@@ -125,6 +135,15 @@ internal object AppKitImeTextInputClient {
 
     fun unregisterView(token: AppKitNativeCallbackToken, record: ImeViewRecord) {
         imeViewTable.remove(token, record)
+    }
+
+    fun unregisterNativeView(
+        viewPtr: MemorySegment,
+        token: AppKitNativeCallbackToken,
+        record: ImeViewRecord,
+    ) {
+        imeViewTable.remove(token, record)
+        AppKitNativeCallbackTokens.detach(viewPtr, token)
     }
 
     internal fun registeredViewCount(): Int = imeViewTable.size
@@ -537,17 +556,26 @@ internal object AppKitImeTextInputClient {
     fun createInstance(frame: MemorySegment): MemorySegment {
         ensureClassRegistered()
         val viewClass = ObjCRuntime.getClass("KadreTextInputView")
-        val alloced = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            viewClass,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-        return ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            alloced,
-            ObjCRuntime.sel("initWithFrame:"),
-            ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT_SRET),
-        ) as MemorySegment
+        return appKitCreateOwnedNativeView(
+            allocate = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    viewClass,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initialize = { allocated ->
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("initWithFrame:"),
+                    ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT_SRET),
+                ) as MemorySegment
+            },
+            release = { allocated ->
+                ObjCRuntime.msgSend(null, allocated, ObjCRuntime.sel("release"))
+            },
+        )
     }
 
     /**

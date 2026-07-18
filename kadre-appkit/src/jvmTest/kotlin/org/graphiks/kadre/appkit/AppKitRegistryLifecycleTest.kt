@@ -159,6 +159,38 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `rejected sendEvent acquires admission before resolving any run global`() {
+        val callbackFinished = CountDownLatch(1)
+        var globalReads = 0
+        var dispatches = 0
+
+        AppKitNativeCallbackBoundary.closeAdmissionForTeardown()
+        val callbackThread = thread(name = "rejected-send-event") {
+            try {
+                appKitInvokeSendEventSafely(
+                    resolveEventLoop = {
+                        globalReads += 1
+                        AppKitEventLoop(NoopHandler)
+                    },
+                    callback = { dispatches += 1 },
+                )
+            } finally {
+                callbackFinished.countDown()
+            }
+        }
+        try {
+            assertTrue(callbackFinished.await(5, TimeUnit.SECONDS))
+        } finally {
+            AppKitNativeCallbackBoundary.finishTeardown {}
+            callbackThread.join(5_000)
+        }
+
+        assertFalse(callbackThread.isAlive)
+        assertEquals(0, globalReads)
+        assertEquals(0, dispatches)
+    }
+
+    @Test
     fun `IME rect query resets actual range to NSNotFound after range read failure`() {
         val eventLoop = AppKitEventLoop(NoopHandler)
         val view = MemorySegment.ofAddress(0x923L)
@@ -652,6 +684,106 @@ class AppKitRegistryLifecycleTest {
             ),
             trace,
         )
+    }
+
+    @Test
+    fun `ownership release executes only at an atomic zero-ticket barrier`() {
+        val callbackEntered = CountDownLatch(1)
+        val allowCallbackReturn = CountDownLatch(1)
+        val releaseStarted = CountDownLatch(1)
+        val releaseFinished = CountDownLatch(1)
+        val callbackThread = thread(name = "active-before-ownership-release") {
+            AppKitNativeCallbackBoundary.invoke {
+                callbackEntered.countDown()
+                check(allowCallbackReturn.await(5, TimeUnit.SECONDS))
+            }
+        }
+        assertTrue(callbackEntered.await(5, TimeUnit.SECONDS))
+        val releaseThread = thread(name = "atomic-ownership-release") {
+            AppKitNativeCallbackBoundary.releaseWhenQuiescent {
+                releaseStarted.countDown()
+            }
+            releaseFinished.countDown()
+        }
+
+        try {
+            assertFalse(releaseStarted.await(100, TimeUnit.MILLISECONDS))
+            assertFalse(releaseFinished.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowCallbackReturn.countDown()
+            callbackThread.join(5_000)
+            releaseThread.join(5_000)
+        }
+
+        assertFalse(callbackThread.isAlive)
+        assertFalse(releaseThread.isAlive)
+        assertEquals(0L, releaseStarted.count)
+        assertEquals(0L, releaseFinished.count)
+    }
+
+    @Test
+    fun `callback entering from application delegate release keeps run slot closed until return`() {
+        val callbackAttempted = CountDownLatch(1)
+        val rejectedTicketHeld = CountDownLatch(1)
+        val allowRejectedReturn = CountDownLatch(1)
+        val runFinished = CountDownLatch(1)
+        val callbackTouchedRunState = java.util.concurrent.atomic.AtomicBoolean(false)
+        val runFailure = AtomicReference<Throwable?>()
+        val callbackThread = AtomicReference<Thread?>()
+
+        val runThread = thread(name = "release-application-delegate-racer") {
+            try {
+                runFailure.set(runCatching {
+                    runApp(NoopHandler) {
+                        object : AppKitRunAppOperations {
+                            override fun requireMainThread() = Unit
+                            override fun initialize() = Unit
+                            override fun attachApplicationDelegate() = Unit
+                            override fun installRunLoopOwner() = Unit
+                            override fun run() = Unit
+                            override fun throwPendingCallbackFailure() = Unit
+                            override fun suppressPendingCallbackFailureOnto(primary: Throwable) = Unit
+                            override fun closeRunLoopOwner() = Unit
+                            override fun detachApplicationDelegate() = Unit
+                            override fun releaseApplicationDelegate() {
+                                callbackThread.set(thread(name = "callback-from-app-delegate-release") {
+                                    callbackAttempted.countDown()
+                                    AppKitNativeCallbackBoundary.invoke(
+                                        callback = { callbackTouchedRunState.set(true) },
+                                        onRejected = {
+                                            rejectedTicketHeld.countDown()
+                                            check(allowRejectedReturn.await(5, TimeUnit.SECONDS))
+                                        },
+                                    )
+                                })
+                            }
+                            override fun clearApplicationReferences() {
+                                check(callbackAttempted.await(5, TimeUnit.SECONDS))
+                                check(rejectedTicketHeld.await(5, TimeUnit.SECONDS))
+                            }
+                        }
+                    }
+                }.exceptionOrNull())
+            } finally {
+                runFinished.countDown()
+            }
+        }
+
+        assertTrue(rejectedTicketHeld.await(5, TimeUnit.SECONDS))
+        try {
+            assertFalse(runFinished.await(100, TimeUnit.MILLISECONDS))
+            assertTrue(appKitRunning.get())
+        } finally {
+            allowRejectedReturn.countDown()
+            callbackThread.get()?.join(5_000)
+            runThread.join(5_000)
+        }
+
+        assertFalse(runThread.isAlive)
+        assertFalse(callbackThread.get()?.isAlive ?: true)
+        assertEquals(null, runFailure.get())
+        assertFalse(callbackTouchedRunState.get())
+        assertFalse(appKitRunning.get())
     }
 
     @Test
@@ -1679,6 +1811,184 @@ class AppKitRegistryLifecycleTest {
     }
 
     @Test
+    fun `native IME view initialization failure releases the allocated view`() {
+        val initFailure = IllegalStateException("view init failure")
+        val releaseFailure = IllegalArgumentException("view release failure")
+        val trace = mutableListOf<String>()
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            appKitCreateOwnedNativeView(
+                allocate = { trace += "allocateView"; "view" },
+                initialize = { trace += "initializeView"; throw initFailure },
+                release = { trace += "releaseView"; throw releaseFailure },
+            )
+        }
+
+        assertSame(initFailure, thrown)
+        assertEquals(listOf(releaseFailure), thrown.suppressed.toList())
+        assertEquals(listOf("allocateView", "initializeView", "releaseView"), trace)
+    }
+
+    @Test
+    fun `native window acquisition rolls back init view drag and layer failures in reverse order`() {
+        val expectedTrace = mapOf(
+            "windowInit" to listOf("allocateWindow", "initializeWindow", "releaseWindow"),
+            "viewInit" to listOf("allocateWindow", "initializeWindow", "createView", "releaseWindow"),
+            "dragRegistration" to listOf(
+                "allocateWindow",
+                "initializeWindow",
+                "createView",
+                "attachView",
+                "registerDrag",
+                "unregisterDrag",
+                "detachView",
+                "releaseView",
+                "releaseWindow",
+            ),
+            "layerSetup" to listOf(
+                "allocateWindow",
+                "initializeWindow",
+                "createView",
+                "attachView",
+                "registerDrag",
+                "createLayer",
+                "attachLayer",
+                "detachLayer",
+                "releaseLayer",
+                "unregisterDrag",
+                "detachView",
+                "releaseView",
+                "releaseWindow",
+            ),
+            "windowConfiguration" to listOf(
+                "allocateWindow",
+                "initializeWindow",
+                "createView",
+                "attachView",
+                "registerDrag",
+                "createLayer",
+                "attachLayer",
+                "configureLayer",
+                "completeAcquisition",
+                "detachLayer",
+                "releaseLayer",
+                "unregisterDrag",
+                "detachView",
+                "releaseView",
+                "releaseWindow",
+            ),
+        )
+
+        expectedTrace.forEach { (phase, expected) ->
+            val primary = IllegalStateException("$phase failure")
+            val trace = mutableListOf<String>()
+            val rollbackFailures = expected
+                .filter { it.startsWith("release") || it.startsWith("detach") || it.startsWith("unregister") }
+                .associateWith { IllegalArgumentException("$it rollback failure") }
+            fun step(name: String) {
+                trace += name
+                if (name == "initializeWindow" && phase == "windowInit") throw primary
+                if (name == "createView" && phase == "viewInit") throw primary
+                if (name == "registerDrag" && phase == "dragRegistration") throw primary
+                if (name == "attachLayer" && phase == "layerSetup") throw primary
+                if (name == "completeAcquisition" && phase == "windowConfiguration") throw primary
+                rollbackFailures[name]?.let { throw it }
+            }
+
+            val thrown = assertFailsWith<IllegalStateException> {
+                appKitAcquireNativeWindowTransaction(
+                    allocateWindow = { step("allocateWindow"); "window" },
+                    initializeWindow = { step("initializeWindow"); it },
+                    createView = { step("createView"); "view" },
+                    attachView = { _, _ -> step("attachView") },
+                    registerDrag = { step("registerDrag") },
+                    createLayer = { step("createLayer"); "layer" },
+                    attachLayer = { _, _ -> step("attachLayer") },
+                    configureLayer = { _, _, _ -> step("configureLayer") },
+                    completeAcquisition = { _, _, _ -> step("completeAcquisition") },
+                    detachLayer = { step("detachLayer") },
+                    releaseLayer = { step("releaseLayer") },
+                    unregisterDrag = { step("unregisterDrag") },
+                    detachView = { step("detachView") },
+                    releaseView = { step("releaseView") },
+                    releaseWindow = { step("releaseWindow") },
+                )
+            }
+
+            assertSame(primary, thrown, phase)
+            assertEquals(expected, trace, phase)
+            assertEquals(
+                expected.mapNotNull(rollbackFailures::get),
+                thrown.suppressed.toList(),
+                phase,
+            )
+        }
+    }
+
+    @Test
+    fun `application delegate acquisition rolls back alloc init token and route boundaries`() {
+        val expectedTrace = mapOf(
+            "alloc" to listOf("allocateNative"),
+            "init" to listOf("allocateNative", "initializeNative", "releaseNative"),
+            "tokenAttach" to listOf(
+                "allocateNative",
+                "initializeNative",
+                "allocateToken",
+                "attachToken",
+                "detachToken",
+                "releaseNative",
+            ),
+            "routeInsert" to listOf(
+                "allocateNative",
+                "initializeNative",
+                "allocateToken",
+                "attachToken",
+                "insertRoute",
+                "removeRoute",
+                "detachToken",
+                "releaseNative",
+            ),
+        )
+
+        expectedTrace.forEach { (phase, expected) ->
+            val primary = IllegalStateException("$phase failure")
+            val trace = mutableListOf<String>()
+            val rollbackFailures = expected
+                .filter { it == "removeRoute" || it == "detachToken" || it == "releaseNative" }
+                .associateWith { IllegalArgumentException("$it rollback failure") }
+            fun step(name: String) {
+                trace += name
+                if (name == "allocateNative" && phase == "alloc") throw primary
+                if (name == "initializeNative" && phase == "init") throw primary
+                if (name == "attachToken" && phase == "tokenAttach") throw primary
+                if (name == "insertRoute" && phase == "routeInsert") throw primary
+                rollbackFailures[name]?.let { throw it }
+            }
+
+            val thrown = assertFailsWith<IllegalStateException> {
+                appKitAcquireNativeCallbackRouteTransaction<String, String>(
+                    allocateNative = { step("allocateNative"); "native" },
+                    initializeNative = { native -> step("initializeNative"); native },
+                    allocateToken = { step("allocateToken"); "token" },
+                    attachToken = { _, _ -> step("attachToken") },
+                    insertRoute = { step("insertRoute") },
+                    removeRoute = { step("removeRoute") },
+                    detachToken = { _, _ -> step("detachToken") },
+                    releaseNative = { step("releaseNative") },
+                )
+            }
+
+            assertSame(primary, thrown, phase)
+            assertEquals(expected, trace, phase)
+            assertEquals(
+                expected.mapNotNull(rollbackFailures::get),
+                thrown.suppressed.toList(),
+                phase,
+            )
+        }
+    }
+
+    @Test
     fun `window callback setup transaction rolls back every failure boundary exactly once`() {
         listOf("delegateToken", "setDelegate", "imeRegistration", "closeAction").forEach { phase ->
             val primary = IllegalStateException("$phase failure")
@@ -1686,8 +1996,11 @@ class AppKitRegistryLifecycleTest {
             val imeFailure = UnsupportedOperationException("IME rollback failure")
             val closeActionFailure = IllegalStateException("close-action rollback failure")
             val delegateFailure = IllegalMonitorStateException("delegate release failure")
+            val detachLayerFailure = SecurityException("layer detach failure")
             val windowFailure = NoSuchElementException("window release failure")
             val layerFailure = IndexOutOfBoundsException("layer release failure")
+            val unregisterDragFailure = UnsupportedOperationException("drag unregister failure")
+            val detachViewFailure = IllegalArgumentException("view detach failure")
             val viewFailure = ArithmeticException("view release failure")
             val counts = mutableMapOf<String, Int>()
             fun count(name: String) {
@@ -1733,6 +2046,9 @@ class AppKitRegistryLifecycleTest {
                     detachDelegate = { fail("detachDelegate", detachFailure) },
                     unregisterIme = { fail("unregisterIme", imeFailure) },
                     releaseDelegate = { fail("releaseDelegate", delegateFailure) },
+                    detachLayer = { fail("detachLayer", detachLayerFailure) },
+                    unregisterDrag = { fail("unregisterDrag", unregisterDragFailure) },
+                    detachView = { fail("detachView", detachViewFailure) },
                     releaseWindow = { fail("releaseWindow", windowFailure) },
                     releaseLayer = { fail("releaseLayer", layerFailure) },
                     releaseView = { fail("releaseView", viewFailure) },
@@ -1740,29 +2056,38 @@ class AppKitRegistryLifecycleTest {
             }
 
             assertSame(primary, thrown, phase)
+            val nativeResourceFailures = listOf(
+                detachLayerFailure,
+                layerFailure,
+                unregisterDragFailure,
+                detachViewFailure,
+                viewFailure,
+                windowFailure,
+            )
             val expectedSuppressed = when (phase) {
-                "delegateToken" -> listOf(delegateFailure, windowFailure, layerFailure, viewFailure)
-                "setDelegate" -> listOf(detachFailure, delegateFailure, windowFailure, layerFailure, viewFailure)
+                "delegateToken" -> listOf(delegateFailure) + nativeResourceFailures
+                "setDelegate" -> listOf(detachFailure, delegateFailure) + nativeResourceFailures
                 "imeRegistration" -> listOf(
                     imeFailure,
                     detachFailure,
                     delegateFailure,
-                    windowFailure,
-                    layerFailure,
-                    viewFailure,
-                )
+                ) + nativeResourceFailures
                 else -> listOf(
                     closeActionFailure,
-                    detachFailure,
                     imeFailure,
+                    detachFailure,
                     delegateFailure,
-                    windowFailure,
-                    layerFailure,
-                    viewFailure,
-                )
+                ) + nativeResourceFailures
             }
             assertEquals(expectedSuppressed, thrown.suppressed.toList(), phase)
-            listOf("releaseWindow", "releaseLayer", "releaseView").forEach {
+            listOf(
+                "detachLayer",
+                "releaseLayer",
+                "unregisterDrag",
+                "detachView",
+                "releaseView",
+                "releaseWindow",
+            ).forEach {
                 assertEquals(1, counts[it], "$phase:$it")
             }
             assertEquals(1, counts["releaseDelegate"], "$phase:releaseDelegate")
@@ -2050,6 +2375,7 @@ class AppKitRegistryLifecycleTest {
             delegateAddress = delegateAddress,
             textInputView = view,
             detachNativeDelegate = { trace += "detachDelegate" },
+            detachNativeViewCallbacks = { trace += "detachViewCallbacks" },
             releaseDelegate = {
                 assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
                 assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
@@ -2057,7 +2383,7 @@ class AppKitRegistryLifecycleTest {
             },
         )
 
-        assertEquals(listOf("detachDelegate", "releaseDelegate"), trace)
+        assertEquals(listOf("detachDelegate", "detachViewCallbacks", "releaseDelegate"), trace)
         assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
         assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
     }

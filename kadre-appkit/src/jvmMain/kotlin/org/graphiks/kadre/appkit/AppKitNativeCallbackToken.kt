@@ -39,10 +39,14 @@ internal object AppKitNativeCallbackTokens {
 
     private val nativeStore: NativeStore by lazy(::NativeStore)
 
+    fun allocate(): AppKitNativeCallbackToken = next()
+
+    fun attach(receiver: MemorySegment, token: AppKitNativeCallbackToken) {
+        nativeStoreLock.withLock { currentNativeStore().attach(receiver, token) }
+    }
+
     fun attach(receiver: MemorySegment): AppKitNativeCallbackToken =
-        next().also { token ->
-            nativeStoreLock.withLock { currentNativeStore().attach(receiver, token) }
-        }
+        allocate().also { token -> attach(receiver, token) }
 
     fun attachTestAddress(address: Long): AppKitNativeCallbackToken =
         next().also {
@@ -142,8 +146,64 @@ internal object AppKitNativeCallbackTokens {
     }
 }
 
+internal data class AppKitNativeCallbackRouteAcquisition<N : Any, T : Any>(
+    val native: N,
+    val token: T,
+)
+
+internal fun <N : Any, T : Any> appKitAcquireNativeCallbackRouteTransaction(
+    allocateNative: () -> N,
+    initializeNative: (N) -> N,
+    allocateToken: () -> T,
+    attachToken: (N, T) -> Unit,
+    insertRoute: (T) -> Unit,
+    removeRoute: (T) -> Unit,
+    detachToken: (N, T) -> Unit,
+    releaseNative: (N) -> Unit,
+): AppKitNativeCallbackRouteAcquisition<N, T> {
+    var allocatedNative: N? = null
+    var initializedNative: N? = null
+    var token: T? = null
+    var tokenAttachAttempted = false
+    var routeInsertAttempted = false
+    try {
+        val allocated = allocateNative()
+        allocatedNative = allocated
+        val initialized = initializeNative(allocated)
+        initializedNative = initialized
+        val allocatedToken = allocateToken()
+        token = allocatedToken
+        tokenAttachAttempted = true
+        attachToken(initialized, allocatedToken)
+        routeInsertAttempted = true
+        insertRoute(allocatedToken)
+        return AppKitNativeCallbackRouteAcquisition(initialized, allocatedToken)
+    } catch (primary: Throwable) {
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== primary) primary.addSuppressed(cleanupFailure)
+            }
+        }
+        if (routeInsertAttempted) token?.let { cleanup { removeRoute(it) } }
+        if (tokenAttachAttempted) {
+            val native = initializedNative
+            val attachedToken = token
+            if (native != null && attachedToken != null) cleanup { detachToken(native, attachedToken) }
+        }
+        (initializedNative ?: allocatedNative)?.let { cleanup { releaseNative(it) } }
+        throw primary
+    }
+}
+
 /** Tracks all native upcalls so a completed run cannot hand its slot to the next run too early. */
 internal object AppKitNativeCallbackBoundary {
+    private const val RELEASE_GATE = Long.MIN_VALUE
+    private const val COUNT_MASK = 0x0000_0000_FFFF_FFFFL
+    private const val EPOCH_MASK = 0x7FFF_FFFF_0000_0000L
+    private const val EPOCH_INCREMENT = 0x0000_0001_0000_0000L
+
     private data class AdmissionTicket(
         val epoch: Long,
         val admitted: Boolean,
@@ -157,17 +217,18 @@ internal object AppKitNativeCallbackBoundary {
 
     private val lock = ReentrantLock()
     private val teardownLock = ReentrantLock()
+    private val ownershipGateLock = ReentrantLock(true)
     private val quiescent = lock.newCondition()
-    private var activeCallbacks = 0
+    private val ticketGateChanged = lock.newCondition()
+    private val ticketState = AtomicLong(0L)
     private var admissionState = AdmissionState.OPEN
-    private var admissionEpoch = 0L
     private val callbackDepth = ThreadLocal.withInitial { 0 }
 
     val isInCallback: Boolean
         get() = callbackDepth.get() > 0
 
     val hasActiveCallbacks: Boolean
-        get() = lock.withLock { activeCallbacks != 0 }
+        get() = ticketCount(ticketState.get()) != 0L
 
     fun invoke(callback: () -> Unit) {
         invoke(callback, onRejected = {})
@@ -195,27 +256,49 @@ internal object AppKitNativeCallbackBoundary {
         }
     }
 
-    private fun enter(): AdmissionTicket = lock.withLock {
-        val synchronousTeardownUpcall = teardownLock.isHeldByCurrentThread
-        activeCallbacks += 1
-        AdmissionTicket(
-            epoch = admissionEpoch,
-            admitted = admissionState == AdmissionState.OPEN || synchronousTeardownUpcall,
-        )
+    private fun enter(): AdmissionTicket {
+        var state = ticketState.get()
+        val observedEpoch = epochOf(state)
+        while (true) {
+            val synchronousReleaseUpcall = ownershipGateLock.isHeldByCurrentThread
+            if (!isReleaseGateClosed(state) || synchronousReleaseUpcall) {
+                check(ticketCount(state) != COUNT_MASK) { "Native callback ticket count overflow" }
+                if (ticketState.compareAndSet(state, state + 1L)) break
+            } else {
+                lock.withLock {
+                    while (isReleaseGateClosed(ticketState.get()) &&
+                        !ownershipGateLock.isHeldByCurrentThread
+                    ) {
+                        ticketGateChanged.awaitUninterruptibly()
+                    }
+                }
+            }
+            state = ticketState.get()
+        }
+        return lock.withLock {
+            val currentEpoch = epochOf(ticketState.get())
+            val synchronousTeardownUpcall = teardownLock.isHeldByCurrentThread
+            AdmissionTicket(
+                epoch = currentEpoch,
+                admitted = synchronousTeardownUpcall ||
+                    (admissionState == AdmissionState.OPEN && observedEpoch == currentEpoch),
+            )
+        }
     }
 
     private fun leave(ticket: AdmissionTicket) {
+        val previousState = ticketState.getAndDecrement()
+        check(ticketCount(previousState) != 0L) { "Native callback ticket count underflow" }
         lock.withLock {
-            check(ticket.epoch <= admissionEpoch) { "Native callback admission epoch moved backwards" }
-            activeCallbacks -= 1
-            if (activeCallbacks == 0) quiescent.signalAll()
+            check(ticket.epoch <= epochOf(ticketState.get())) { "Native callback admission epoch moved backwards" }
+            if (ticketCount(ticketState.get()) == 0L) quiescent.signalAll()
         }
     }
 
     fun awaitQuiescence() {
         check(!isInCallback) { "Cannot await native callback quiescence from an active upcall" }
         lock.withLock {
-            while (activeCallbacks != 0) quiescent.awaitUninterruptibly()
+            awaitZeroTickets()
         }
     }
 
@@ -224,20 +307,28 @@ internal object AppKitNativeCallbackBoundary {
         var pausedHere = false
         lock.withLock {
             if (admissionState == AdmissionState.OPEN) {
+                advanceEpoch()
                 admissionState = AdmissionState.PAUSED
                 pausedHere = true
             }
-            while (activeCallbacks != 0) quiescent.awaitUninterruptibly()
+            awaitZeroTickets()
         }
         try {
             action()
         } finally {
             if (pausedHere) {
                 lock.withLock {
+                    awaitZeroTickets()
+                    advanceEpoch()
                     admissionState = AdmissionState.OPEN
                 }
             }
         }
+    }
+
+    fun <T> releaseWhenQuiescent(releaseOwnership: () -> T): T {
+        check(!isInCallback) { "Cannot release native ownership from an active upcall" }
+        return withClosedTicketGate(releaseOwnership)
     }
 
     fun closeAdmissionForTeardown() {
@@ -245,9 +336,9 @@ internal object AppKitNativeCallbackBoundary {
         teardownLock.lock()
         try {
             lock.withLock {
-                admissionEpoch += 1
+                advanceEpoch()
                 admissionState = AdmissionState.CLOSED
-                while (activeCallbacks != 0) quiescent.awaitUninterruptibly()
+                awaitZeroTickets()
             }
         } catch (failure: Throwable) {
             teardownLock.unlock()
@@ -257,15 +348,52 @@ internal object AppKitNativeCallbackBoundary {
 
     fun finishTeardown(releaseRunSlot: () -> Unit) {
         try {
-            lock.withLock {
-                try {
-                    releaseRunSlot()
-                } finally {
-                    admissionState = AdmissionState.OPEN
+            withClosedTicketGate {
+                lock.withLock {
+                    awaitZeroTickets()
+                    try {
+                        releaseRunSlot()
+                    } finally {
+                        advanceEpoch()
+                        admissionState = AdmissionState.OPEN
+                    }
                 }
             }
         } finally {
             teardownLock.unlock()
         }
     }
+
+    private fun awaitZeroTickets() {
+        while (ticketCount(ticketState.get()) != 0L) quiescent.awaitUninterruptibly()
+    }
+
+    private fun advanceEpoch() {
+        ticketState.updateAndGet { state ->
+            val nextEpoch = ((state and EPOCH_MASK) + EPOCH_INCREMENT) and EPOCH_MASK
+            (state and (RELEASE_GATE or COUNT_MASK)) or nextEpoch
+        }
+    }
+
+    private fun <T> withClosedTicketGate(action: () -> T): T = ownershipGateLock.withLock {
+        val gateWasAlreadyClosed = isReleaseGateClosed(ticketState.get())
+        if (!gateWasAlreadyClosed) {
+            ticketState.updateAndGet { state -> state or RELEASE_GATE }
+        }
+        try {
+            lock.withLock { awaitZeroTickets() }
+            action()
+        } finally {
+            if (!gateWasAlreadyClosed) {
+                ticketState.updateAndGet { state -> state and RELEASE_GATE.inv() }
+                lock.withLock { ticketGateChanged.signalAll() }
+            }
+        }
+    }
+
+    private fun epochOf(state: Long): Long = state and EPOCH_MASK
+
+    private fun ticketCount(state: Long): Long = state and COUNT_MASK
+
+    private fun isReleaseGateClosed(state: Long): Boolean = state and RELEASE_GATE != 0L
 }

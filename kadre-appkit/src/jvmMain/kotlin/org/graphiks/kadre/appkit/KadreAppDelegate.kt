@@ -49,19 +49,6 @@ class KadreAppDelegate(
 
     init {
         ensureClassRegistered()
-
-        val cls = ObjCRuntime.getClass("KadreAppDelegateNative")
-        val allocated = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            cls,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-        ptr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            allocated,
-            ObjCRuntime.sel("init"),
-        ) as MemorySegment
-
         routeCallbacks = object : AppKitApplicationDelegateCallbacks {
             override fun onDidFinishLaunching() = this@KadreAppDelegate.onDidFinishLaunching()
             override fun onDidBecomeActive() = this@KadreAppDelegate.onDidBecomeActive()
@@ -72,7 +59,33 @@ class KadreAppDelegate(
                 (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
             }
         }
-        routeToken = registerDelegateRoute(ptr, routeCallbacks)
+        val cls = ObjCRuntime.getClass("KadreAppDelegateNative")
+        val acquisition = appKitAcquireNativeCallbackRouteTransaction(
+            allocateNative = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    cls,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initializeNative = { allocated ->
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("init"),
+                ) as MemorySegment
+            },
+            allocateToken = AppKitNativeCallbackTokens::allocate,
+            attachToken = AppKitNativeCallbackTokens::attach,
+            insertRoute = { token -> delegateTable[token] = routeCallbacks },
+            removeRoute = { token -> delegateTable.remove(token, routeCallbacks) },
+            detachToken = AppKitNativeCallbackTokens::detach,
+            releaseNative = { native ->
+                ObjCRuntime.msgSend(null, native, ObjCRuntime.sel("release"))
+            },
+        )
+        ptr = acquisition.native
+        routeToken = acquisition.token
     }
 
     /** Kotlin callback for `applicationDidFinishLaunching:`. */
@@ -109,20 +122,24 @@ class KadreAppDelegate(
 
     internal fun releaseNative() {
         if (!released.compareAndSet(false, true)) return
-        unregisterDelegate(routeToken, routeCallbacks)
-        ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release"))
+        var failure: Throwable? = null
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (caught: Throwable) {
+                val primary = failure
+                if (primary == null) failure = caught else if (caught !== primary) primary.addSuppressed(caught)
+            }
+        }
+        cleanup { unregisterDelegate(routeToken, routeCallbacks) }
+        cleanup { AppKitNativeCallbackTokens.detach(ptr, routeToken) }
+        cleanup { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) }
+        failure?.let { throw it }
     }
 
     companion object {
         /** Global table: native generation token → associated Kotlin delegate. */
         private val delegateTable = ConcurrentHashMap<AppKitNativeCallbackToken, AppKitApplicationDelegateCallbacks>()
-
-        private fun registerDelegateRoute(
-            receiver: MemorySegment,
-            callbacks: AppKitApplicationDelegateCallbacks,
-        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attach(receiver).also { token ->
-            delegateTable[token] = callbacks
-        }
 
         internal fun registerDelegateRoute(
             address: Long,

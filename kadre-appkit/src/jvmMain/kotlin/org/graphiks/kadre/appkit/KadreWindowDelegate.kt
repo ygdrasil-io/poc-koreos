@@ -166,6 +166,7 @@ class KadreWindowDelegate(
 
     internal fun unregisterRoute() {
         unregisterDelegate(routeToken, routeCallbacks)
+        AppKitNativeCallbackTokens.detach(ptr, routeToken)
     }
 
     /** Kotlin callback for `windowDidMove:` — dispatches [WindowEvent.Moved]. */
