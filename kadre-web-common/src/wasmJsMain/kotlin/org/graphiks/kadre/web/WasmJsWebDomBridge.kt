@@ -683,17 +683,15 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     private fun dispatchPointerEvent(e: JsAny) {
         val pe = e.unsafeCast<JsPointerEvent>()
-        dispatch(
-            domPointerEvent(
-                eventType = pe.type.toString(),
-                x = pe.clientX.toDouble(),
-                y = pe.clientY.toDouble(),
-                pointerId = pe.pointerId.toDouble().toLong(),
-                pointerType = pe.pointerType.toString(),
-                domPrimary = pe.isPrimary.toBoolean(),
-                button = pe.button.toDouble().toInt().toShort(),
-            )
-        )
+        domPointerEvent(
+            eventType = pe.type.toString(),
+            x = pe.clientX.toDouble(),
+            y = pe.clientY.toDouble(),
+            pointerId = pe.pointerId.toDouble().toLong(),
+            pointerType = pe.pointerType.toString(),
+            domPrimary = pe.isPrimary.toBoolean(),
+            button = pe.button.toDouble().toInt().toShort(),
+        )?.let(::dispatch)
     }
 
     // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────

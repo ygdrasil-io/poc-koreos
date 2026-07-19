@@ -5,6 +5,7 @@ import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.PointerKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class WebInputPolicyTest {
     @Test
@@ -71,15 +72,8 @@ class WebInputPolicyTest {
     }
 
     @Test
-    fun `pointercancel emits exact left semantics without retaining pointer state`() {
-        assertEquals(
-            WebWindowEvent.PointerLeft(
-                x = 18.5,
-                y = 19.75,
-                pointerId = 42L,
-                primary = true,
-                kind = PointerKind.Touch,
-            ),
+    fun `pointercancel alone emits no core event`() {
+        assertNull(
             domPointerEvent(
                 "pointercancel",
                 18.5,
@@ -90,18 +84,32 @@ class WebInputPolicyTest {
                 button = 0,
             ),
         )
+    }
+
+    @Test
+    fun `pointercancel then leave and re-entry emits one left followed by entered`() {
+        val actual = listOf(
+            "pointercancel" to true,
+            "pointerleave" to true,
+            "pointerenter" to false,
+        ).mapIndexedNotNull { index, (eventType, domPrimary) ->
+            domPointerEvent(
+                eventType = eventType,
+                x = 18.5 + index,
+                y = 19.75 + index,
+                pointerId = 42L,
+                pointerType = "touch",
+                domPrimary = domPrimary,
+                button = (-1).toShort(),
+            )
+        }
 
         assertEquals(
-            WebWindowEvent.PointerEntered(20.0, 21.0, 42L, false, PointerKind.Touch),
-            domPointerEvent(
-                "pointerenter",
-                20.0,
-                21.0,
-                42L,
-                "touch",
-                domPrimary = false,
-                button = (-1).toShort(),
+            listOf(
+                WebWindowEvent.PointerLeft(19.5, 20.75, 42L, true, PointerKind.Touch),
+                WebWindowEvent.PointerEntered(20.5, 21.75, 42L, false, PointerKind.Touch),
             ),
+            actual,
         )
     }
 }

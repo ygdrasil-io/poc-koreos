@@ -319,17 +319,15 @@ class JsWebDomBridge : WebDomBridge {
 
     private fun dispatchPointerEvent(e: Event) {
         val pe = e.unsafeCast<PointerEventData>()
-        dispatch(
-            domPointerEvent(
-                eventType = e.type,
-                x = pe.clientX,
-                y = pe.clientY,
-                pointerId = pe.pointerId.toLong(),
-                pointerType = pe.pointerType,
-                domPrimary = pe.isPrimary,
-                button = pe.button,
-            )
-        )
+        domPointerEvent(
+            eventType = e.type,
+            x = pe.clientX,
+            y = pe.clientY,
+            pointerId = pe.pointerId.toLong(),
+            pointerType = pe.pointerType,
+            domPrimary = pe.isPrimary,
+            button = pe.button,
+        )?.let(::dispatch)
     }
 
     /**

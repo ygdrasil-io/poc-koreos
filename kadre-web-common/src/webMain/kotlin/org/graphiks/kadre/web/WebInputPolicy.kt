@@ -38,7 +38,7 @@ internal fun domPointerEvent(
     pointerType: String,
     domPrimary: Boolean,
     button: Short,
-): WebWindowEvent {
+): WebWindowEvent? {
     val pointer = domPointerSnapshot(pointerId, pointerType, domPrimary)
     return when (eventType) {
         "pointermove" -> WebWindowEvent.PointerMoved(x, y, pointer.pointerId, pointer.primary, pointer.source)
@@ -59,8 +59,9 @@ internal fun domPointerEvent(
             WebKeyState.Released,
         )
         "pointerenter" -> WebWindowEvent.PointerEntered(x, y, pointer.pointerId, pointer.primary, pointer.kind)
-        "pointerleave", "pointercancel" ->
+        "pointerleave" ->
             WebWindowEvent.PointerLeft(x, y, pointer.pointerId, pointer.primary, pointer.kind)
+        "pointercancel" -> null
         else -> error("Unsupported DOM pointer event type: $eventType")
     }
 }
