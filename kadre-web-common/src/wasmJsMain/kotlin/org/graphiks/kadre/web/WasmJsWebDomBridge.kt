@@ -457,26 +457,23 @@ class WasmJsWebDomBridge : WebDomBridge {
     private var resizeObserverRef: JsAny? = null
     private val eventAdapter = WebBridgeEventAdapter(
         metricsProvider = ::readCurrentCanvasMetrics,
-        eventSink = ::dispatch,
+        eventSink = { event -> onWindowEvent?.invoke(event) },
         metricsSink = ::dispatchMetrics,
     )
 
     /** Hidden <input> used for IME composition events. */
     private var imeInput: JsEventTarget? = null
 
-    /** `false` once [detach] runs — stops the re-arming devicePixelRatio chain. */
-    private var attached = false
-    private var attachmentGeneration = 0
+    private var attachmentToken: WebAttachmentToken? = null
 
     override fun attach(targetElementId: String) {
         val canvas = getElementById(targetElementId.toJsString()) ?: return
         targetElement = canvas
-        attached = true
-        val generation = ++attachmentGeneration
-        eventAdapter.attach()
+        val token = eventAdapter.attach()
+        attachmentToken = token
 
         // --- Keyboard ---
-        addDomListener(canvas, "keydown") { e ->
+        addDomListener(canvas, "keydown", token) { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
             val mods = domModifiers(
                 shiftKey = ke.shiftKey.toBoolean(),
@@ -485,7 +482,7 @@ class WasmJsWebDomBridge : WebDomBridge {
                 metaKey  = ke.metaKey.toBoolean(),
             )
             val keyStr = ke.key.toString()
-            dispatch(
+            dispatch(token,
                 WebWindowEvent.KeyInput(
                     domKeyEvent(
                         code = ke.code.toString(),
@@ -501,11 +498,11 @@ class WasmJsWebDomBridge : WebDomBridge {
             )
             // R4: emit ModifiersChanged on modifier key press
             if (keyStr in setOf("Shift", "Control", "Alt", "Meta")) {
-                dispatch(WebWindowEvent.ModifiersChanged(mods))
+                dispatch(token, WebWindowEvent.ModifiersChanged(mods))
             }
         }
 
-        addDomListener(canvas, "keyup") { e ->
+        addDomListener(canvas, "keyup", token) { e ->
             val ke = e.unsafeCast<JsKeyboardEvent>()
             val mods = domModifiers(
                 shiftKey = ke.shiftKey.toBoolean(),
@@ -514,7 +511,7 @@ class WasmJsWebDomBridge : WebDomBridge {
                 metaKey  = ke.metaKey.toBoolean(),
             )
             val keyStr = ke.key.toString()
-            dispatch(
+            dispatch(token,
                 WebWindowEvent.KeyInput(
                     domKeyEvent(
                         code = ke.code.toString(),
@@ -530,7 +527,7 @@ class WasmJsWebDomBridge : WebDomBridge {
             )
             // R4: emit ModifiersChanged on modifier key release
             if (keyStr in setOf("Shift", "Control", "Alt", "Meta")) {
-                dispatch(WebWindowEvent.ModifiersChanged(mods))
+                dispatch(token, WebWindowEvent.ModifiersChanged(mods))
             }
         }
 
@@ -539,17 +536,18 @@ class WasmJsWebDomBridge : WebDomBridge {
         val inputRegistration = selectWebInputRegistration(pointerEventsSupported().toBoolean())
         when (inputRegistration.family) {
             WebInputFamily.PointerEvents -> inputRegistration.eventTypes.forEach { type ->
-                addDomListener(canvas, type, ::dispatchPointerEvent)
+                addDomListener(canvas, type, token) { event -> dispatchPointerEvent(token, event) }
             }
             WebInputFamily.LegacyTouchEvents -> inputRegistration.eventTypes.forEach { type ->
-                addDomListener(canvas, type) { e -> dispatchTouches(e) }
+                addDomListener(canvas, type, token) { event -> dispatchTouches(token, event) }
             }
         }
 
         // --- Wheel ---
-        addDomListener(canvas, "wheel") { e ->
+        addDomListener(canvas, "wheel", token) { e ->
             val we = e.unsafeCast<JsWheelEvent>()
             eventAdapter.wheel(
+                token = token,
                 deltaX = we.deltaX.toDouble(),
                 deltaY = we.deltaY.toDouble(),
                 deltaMode = we.deltaMode.toDouble().toInt(),
@@ -560,55 +558,55 @@ class WasmJsWebDomBridge : WebDomBridge {
         }
 
         // --- DnD ---
-        addDomListener(canvas, "dragenter") { e ->
+        addDomListener(canvas, "dragenter", token) { e ->
             domPreventDefault(e)
             val x = dragClientX(e)
             val y = dragClientY(e)
             val count = dragItemCount(e)
             val files = (0 until count).map { dragItemType(e, it) }
-            eventAdapter.dragEntered(x, y, files)
+            eventAdapter.dragEntered(token, x, y, files)
         }
 
-        addDomListener(canvas, "dragover") { e ->
+        addDomListener(canvas, "dragover", token) { e ->
             domPreventDefault(e)
-            eventAdapter.dragMoved(dragClientX(e), dragClientY(e))
+            eventAdapter.dragMoved(token, dragClientX(e), dragClientY(e))
         }
 
-        addDomListener(canvas, "drop") { e ->
+        addDomListener(canvas, "drop", token) { e ->
             domPreventDefault(e)
             val x = dragClientX(e)
             val y = dragClientY(e)
             val count = dragFileCount(e)
             val files = (0 until count).map { dragFileName(e, it) }
-            eventAdapter.dragDropped(x, y, files)
+            eventAdapter.dragDropped(token, x, y, files)
         }
 
-        addDomListener(canvas, "dragleave") { _ ->
-            dispatch(WebWindowEvent.DragLeft)
+        addDomListener(canvas, "dragleave", token) { _ ->
+            dispatch(token, WebWindowEvent.DragLeft)
         }
 
         // --- Gesture (Safari trackpad: gesturestart/change/end) ---
-        addDomListener(canvas, "gesturestart") { e ->
+        addDomListener(canvas, "gesturestart", token) { e ->
             domPreventDefault(e)
-            dispatch(
+            dispatch(token,
                 WebWindowEvent.WebGestureStart(
                     scale = gestureScale(e),
                     rotation = gestureRotation(e),
                 )
             )
         }
-        addDomListener(canvas, "gesturechange") { e ->
+        addDomListener(canvas, "gesturechange", token) { e ->
             domPreventDefault(e)
-            dispatch(
+            dispatch(token,
                 WebWindowEvent.WebGestureChange(
                     scale = gestureScale(e),
                     rotation = gestureRotation(e),
                 )
             )
         }
-        addDomListener(canvas, "gestureend") { e ->
+        addDomListener(canvas, "gestureend", token) { e ->
             domPreventDefault(e)
-            dispatch(
+            dispatch(token,
                 WebWindowEvent.WebGestureEnd(
                     scale = gestureScale(e),
                     rotation = gestureRotation(e),
@@ -620,39 +618,39 @@ class WasmJsWebDomBridge : WebDomBridge {
         resizeObserverRef = createResizeObserver(
             canvas,
             wrapCallback {
-                if (isAttachmentCurrent(generation)) eventAdapter.resized()
+                eventAdapter.resized(token)
             },
         )
 
         // --- Visibility → Focused + Occluded ---
         val doc = getDocument()
-        addDomListener(doc, "visibilitychange") { _ ->
+        addDomListener(doc, "visibilitychange", token) { _ ->
             val hidden = isDocumentHidden().toBoolean()
-            dispatch(WebWindowEvent.Focused(gained = !hidden))
-            dispatch(WebWindowEvent.WebOccluded(hidden))
+            dispatch(token, WebWindowEvent.Focused(gained = !hidden))
+            dispatch(token, WebWindowEvent.WebOccluded(hidden))
         }
 
         // --- Unload: beforeunload → CloseRequested, pagehide → Destroyed ---
         val win = getWindow()
-        addDomListener(win, "beforeunload") { _ ->
-            dispatch(WebWindowEvent.CloseRequested)
+        addDomListener(win, "beforeunload", token) { _ ->
+            dispatch(token, WebWindowEvent.CloseRequested)
         }
-        addDomListener(win, "pagehide") { _ ->
-            dispatch(WebWindowEvent.Destroyed)
+        addDomListener(win, "pagehide", token) { _ ->
+            dispatch(token, WebWindowEvent.Destroyed)
         }
 
         // --- devicePixelRatio changes → ScaleFactorChanged ---
         observeDevicePixelRatioJs(
             cb = wrapDoubleCallback { _ ->
-                if (isAttachmentCurrent(generation)) eventAdapter.devicePixelRatioChanged()
+                eventAdapter.devicePixelRatioChanged(token)
             },
-            isAttached = wrapBoolSupplier { isAttachmentCurrent(generation) },
+            isAttached = wrapBoolSupplier { eventAdapter.isCurrent(token) },
         )
 
         // --- prefers-color-scheme changes → ThemeChanged ---
         observeColorSchemeJs(
             cb = wrapBoolCallback { dark ->
-                if (isAttachmentCurrent(generation)) onThemeChange?.invoke(dark)
+                eventAdapter.runIfCurrent(token) { onThemeChange?.invoke(dark) }
             },
         )
     }
@@ -663,7 +661,7 @@ class WasmJsWebDomBridge : WebDomBridge {
      * `preventDefault()` stops the browser from also synthesizing mouse events
      * and page scrolling for the contacts.
      */
-    private fun dispatchTouches(e: JsAny) {
+    private fun dispatchTouches(token: WebAttachmentToken, e: JsAny) {
         val phase = domTouchTypeToPhase(e.unsafeCast<JsDomEvent>().type.toString())
         val count = touchCount(e)
         val contacts = (0 until count).map { i ->
@@ -673,13 +671,14 @@ class WasmJsWebDomBridge : WebDomBridge {
                 clientY = touchClientY(e, i),
             )
         }
-        eventAdapter.touches(phase, contacts)
+        eventAdapter.touches(token, phase, contacts)
         if (preventDefaultEnabled) touchPreventDefault(e)
     }
 
-    private fun dispatchPointerEvent(e: JsAny) {
+    private fun dispatchPointerEvent(token: WebAttachmentToken, e: JsAny) {
         val pe = e.unsafeCast<JsPointerEvent>()
         eventAdapter.pointer(
+            token = token,
             eventType = pe.type.toString(),
             clientX = pe.clientX.toDouble(),
             clientY = pe.clientY.toDouble(),
@@ -712,7 +711,8 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override fun setImeAllowed(allowed: Boolean) {
         if (allowed) {
-            val input = imeInput ?: createImeInputBox().also { imeInput = it }
+            val token = attachmentToken ?: return
+            val input = imeInput ?: createImeInputBox(token).also { imeInput = it }
             jsFocusElement(input)
         } else {
             imeInput?.let { jsBlurElement(it) }
@@ -731,26 +731,26 @@ class WasmJsWebDomBridge : WebDomBridge {
      * Creates the hidden <input> element and wires IME composition event
      * listeners. Appends it to the canvas parent (or document as fallback).
      */
-    private fun createImeInputBox(): JsEventTarget {
+    private fun createImeInputBox(token: WebAttachmentToken): JsEventTarget {
         val input = createImeInputElement()
         val parent = targetElement?.let { jsGetParentElement(it) } ?: getDocument()
         jsAppendChild(parent, input)
 
-        addDomListener(input, "compositionstart") { _ ->
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Enabled))
+        addDomListener(input, "compositionstart", token) { _ ->
+            dispatch(token, WebWindowEvent.Ime(WebImeEvent.Enabled))
         }
 
-        addDomListener(input, "compositionupdate") { e ->
+        addDomListener(input, "compositionupdate", token) { e ->
             val ce = e.unsafeCast<JsCompositionEvent>()
             val text = ce.data?.toString() ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Preedit(text = text, cursorRange = null)))
+            dispatch(token, WebWindowEvent.Ime(WebImeEvent.Preedit(text = text, cursorRange = null)))
         }
 
-        addDomListener(input, "compositionend") { e ->
+        addDomListener(input, "compositionend", token) { e ->
             val ce = e.unsafeCast<JsCompositionEvent>()
             val text = ce.data?.toString() ?: ""
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Commit(text = text)))
-            dispatch(WebWindowEvent.Ime(WebImeEvent.Disabled))
+            dispatch(token, WebWindowEvent.Ime(WebImeEvent.Commit(text = text)))
+            dispatch(token, WebWindowEvent.Ime(WebImeEvent.Disabled))
             jsSetInputValue(input, "")
         }
 
@@ -758,8 +758,9 @@ class WasmJsWebDomBridge : WebDomBridge {
     }
 
     override fun detach() {
-        // Stop the re-arming devicePixelRatio chain before tearing down listeners.
-        attached = false
+        WebMetricsTransactions.disconnectActive(this)
+        eventAdapter.detach()
+        attachmentToken = null
 
         for ((target, type, ref) in listenerRefs) {
             jsRemoveEventListener(target, type.toJsString(), ref)
@@ -771,8 +772,6 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         imeInput?.let { jsRemoveElement(it) }
         imeInput = null
-
-        eventAdapter.detach()
 
         targetElement = null
     }
@@ -795,28 +794,28 @@ class WasmJsWebDomBridge : WebDomBridge {
         )
     }
 
-    private fun addDomListener(target: JsEventTarget, type: String, handler: (JsAny) -> Unit) {
+    private fun addDomListener(
+        target: JsEventTarget,
+        type: String,
+        token: WebAttachmentToken,
+        handler: (JsAny) -> Unit,
+    ) {
         // `wrapEventHandler` triggers the JS wrapping that makes the Kotlin lambda
         // callable from `addEventListener` (see the wrapper doc above).
-        val generation = attachmentGeneration
         val ref = wrapEventHandler { event ->
-            if (isAttachmentCurrent(generation)) handler(event)
+            eventAdapter.runIfCurrent(token) { handler(event) }
         }
         jsAddEventListener(target, type.toJsString(), ref)
         listenerRefs.add(Triple(target, type, ref))
     }
 
-    private fun isAttachmentCurrent(generation: Int): Boolean =
-        attached && generation == attachmentGeneration
+    private fun dispatch(token: WebAttachmentToken, event: WebWindowEvent) =
+        eventAdapter.emit(token, event)
 
-    private fun dispatch(event: WebWindowEvent) {
-        if (attached) onWindowEvent?.invoke(event)
-    }
-
-    private fun dispatchMetrics(transaction: WebMetricsTransaction) {
+    private fun dispatchMetrics(token: WebAttachmentToken, transaction: WebMetricsTransaction) {
         if (WebMetricsTransactions.dispatch(this, transaction)) return
-        dispatch(WebWindowEvent.ScaleFactorChanged(transaction.scaleFactor))
-        dispatch(
+        dispatch(token, WebWindowEvent.ScaleFactorChanged(transaction.scaleFactor))
+        dispatch(token,
             WebWindowEvent.Resized(
                 transaction.physicalSize.width,
                 transaction.physicalSize.height,

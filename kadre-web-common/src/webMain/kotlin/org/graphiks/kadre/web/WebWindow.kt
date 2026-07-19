@@ -111,6 +111,9 @@ class WebWindow(
     internal val bridge: WebDomBridge,
 ) : Window {
 
+    internal var metricsConnection: WebMetricsConnection? = null
+    private var closed = false
+
     constructor(canvasElementId: String, bridge: WebDomBridge)
             : this(
                 id = WindowId(canvasElementId.hashCode().toLong()),
@@ -244,8 +247,12 @@ class WebWindow(
      * and release the associated resources.
      */
     override fun close() {
-        WebMetricsTransactions.disconnect(bridge)
-        bridge.detach()
+        if (closed) return
+        closed = true
+        val connection = metricsConnection
+        if (connection == null || WebMetricsTransactions.disconnect(connection)) {
+            bridge.detach()
+        }
     }
 
     // ── R1: window state & geometry — mostly no-ops on Web ────────────────────

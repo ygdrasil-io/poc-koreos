@@ -65,7 +65,7 @@ open class WebEventLoop : ActiveEventLoop {
 
     private sealed interface PendingWebEvent {
         data class Window(
-            val windowId: WindowId,
+            val window: WebWindow,
             val event: WindowEvent,
         ) : PendingWebEvent
 
@@ -159,7 +159,7 @@ open class WebEventLoop : ActiveEventLoop {
                 val theme = if (dark) Theme.Dark else Theme.Light
                 // Dispatch ThemeChanged for every window attached to this event loop.
                 for (win in windows) {
-                    pendingEvents.add(PendingWebEvent.Window(win.id, WindowEvent.ThemeChanged(theme)))
+                    pendingEvents.add(PendingWebEvent.Window(win, WindowEvent.ThemeChanged(theme)))
                 }
                 // In Wait mode, wake the loop immediately
                 if (_controlFlow is ControlFlow.Wait) {
@@ -180,22 +180,14 @@ open class WebEventLoop : ActiveEventLoop {
         window.updateScaleFactor(bridge.readDevicePixelRatio())
 
         bridge.onWindowEvent = { event ->
-            // Keep WebWindow's cached state in sync with DOM events.
-            when (event) {
-                is WebWindowEvent.Resized ->
-                    window.updatePhysicalSize(event.width, event.height)
-                is WebWindowEvent.ScaleFactorChanged ->
-                    window.updateScaleFactor(event.factor)
-                else -> Unit
-            }
             // Queue the event for the window owned by this DOM bridge.
-            pendingEvents.add(PendingWebEvent.Window(window.id, event.toWindowEvent()))
+            pendingEvents.add(PendingWebEvent.Window(window, event.toWindowEvent()))
             // In Wait mode, wake the loop immediately
             if (_controlFlow is ControlFlow.Wait) {
                 scheduleWakeUp()
             }
         }
-        WebMetricsTransactions.connect(bridge) { transaction ->
+        window.metricsConnection = WebMetricsTransactions.connect(bridge) { transaction ->
             pendingEvents.add(PendingWebEvent.Metrics(window, transaction))
             if (_controlFlow is ControlFlow.Wait) {
                 scheduleWakeUp()
@@ -351,8 +343,16 @@ open class WebEventLoop : ActiveEventLoop {
         pendingEvents.clear()
         for (pending in snapshot) {
             when (pending) {
-                is PendingWebEvent.Window ->
-                    handler.windowEvent(this, pending.windowId, pending.event)
+                is PendingWebEvent.Window -> {
+                    when (val event = pending.event) {
+                        is WindowEvent.Resized ->
+                            pending.window.updatePhysicalSize(event.size.width, event.size.height)
+                        is WindowEvent.ScaleFactorChanged ->
+                            pending.window.updateScaleFactor(event.factor)
+                        else -> Unit
+                    }
+                    handler.windowEvent(this, pending.window.id, pending.event)
+                }
                 is PendingWebEvent.Metrics -> {
                     val window = pending.window
                     val metrics = pending.transaction

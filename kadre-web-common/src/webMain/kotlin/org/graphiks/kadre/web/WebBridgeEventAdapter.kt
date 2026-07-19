@@ -13,21 +13,51 @@ internal data class WebMetricsTransaction(
     val physicalSize: PhysicalSize<Int>,
 )
 
-internal object WebMetricsTransactions {
-    private val sinks = mutableMapOf<WebDomBridge, (WebMetricsTransaction) -> Unit>()
+internal class WebAttachmentToken internal constructor(
+    internal val generation: Int,
+)
 
-    fun connect(bridge: WebDomBridge, sink: (WebMetricsTransaction) -> Unit) {
-        sinks[bridge] = sink
+private var nextAttachmentGeneration = 0
+
+internal class WebMetricsConnection internal constructor()
+
+internal object WebMetricsTransactions {
+    private data class Entry(
+        val bridge: WebDomBridge,
+        val connection: WebMetricsConnection,
+        val sink: (WebMetricsTransaction) -> Unit,
+    )
+
+    private val entries = mutableListOf<Entry>()
+
+    internal val connectionCount: Int
+        get() = entries.size
+
+    fun connect(bridge: WebDomBridge, sink: (WebMetricsTransaction) -> Unit): WebMetricsConnection {
+        entries.removeAll { it.bridge === bridge }
+        val connection = WebMetricsConnection()
+        entries += Entry(bridge, connection, sink)
+        return connection
     }
 
     fun dispatch(bridge: WebDomBridge, transaction: WebMetricsTransaction): Boolean {
-        val sink = sinks[bridge] ?: return false
-        sink(transaction)
+        val entry = entries.firstOrNull { it.bridge === bridge } ?: return false
+        entry.sink(transaction)
         return true
     }
 
-    fun disconnect(bridge: WebDomBridge) {
-        sinks.remove(bridge)
+    fun disconnect(connection: WebMetricsConnection): Boolean {
+        val index = entries.indexOfFirst { it.connection === connection }
+        if (index < 0) return false
+        entries.removeAt(index)
+        return true
+    }
+
+    fun disconnectActive(bridge: WebDomBridge): Boolean {
+        val index = entries.indexOfFirst { it.bridge === bridge }
+        if (index < 0) return false
+        entries.removeAt(index)
+        return true
     }
 }
 
@@ -40,22 +70,34 @@ internal object WebMetricsTransactions {
 internal class WebBridgeEventAdapter(
     private val metricsProvider: () -> CanvasMetrics,
     private val eventSink: (WebWindowEvent) -> Unit,
-    private val metricsSink: (WebMetricsTransaction) -> Unit,
+    private val metricsSink: (WebAttachmentToken, WebMetricsTransaction) -> Unit,
 ) {
     private val touchTracker = WebPointerTracker()
-    private var attached = false
+    private var currentToken: WebAttachmentToken? = null
 
-    fun attach() {
+    fun attach(): WebAttachmentToken {
         touchTracker.close()
-        attached = true
+        return WebAttachmentToken(++nextAttachmentGeneration).also { currentToken = it }
     }
 
     fun detach() {
-        attached = false
+        currentToken = null
         touchTracker.close()
     }
 
+    fun isCurrent(token: WebAttachmentToken): Boolean =
+        currentToken?.generation == token.generation
+
+    fun runIfCurrent(token: WebAttachmentToken, action: () -> Unit) {
+        if (isCurrent(token)) action()
+    }
+
+    fun emit(token: WebAttachmentToken, event: WebWindowEvent) {
+        if (isCurrent(token)) eventSink(event)
+    }
+
     fun pointer(
+        token: WebAttachmentToken,
         eventType: String,
         clientX: Double,
         clientY: Double,
@@ -64,7 +106,7 @@ internal class WebBridgeEventAdapter(
         domPrimary: Boolean,
         button: Int,
     ) {
-        if (!attached) return
+        if (!isCurrent(token)) return
         val position = metricsProvider().toPhysical(clientX, clientY)
         domPointerEvent(
             eventType = eventType,
@@ -77,8 +119,8 @@ internal class WebBridgeEventAdapter(
         )?.let(eventSink)
     }
 
-    fun touches(phase: WebTouchPhase, contacts: List<WebTouchContact>) {
-        if (!attached) return
+    fun touches(token: WebAttachmentToken, phase: WebTouchPhase, contacts: List<WebTouchContact>) {
+        if (!isCurrent(token)) return
         val metrics = metricsProvider()
         contacts.forEach { contact ->
             val pointer = when (phase) {
@@ -101,6 +143,7 @@ internal class WebBridgeEventAdapter(
     }
 
     fun wheel(
+        token: WebAttachmentToken,
         deltaX: Double,
         deltaY: Double,
         deltaMode: Int,
@@ -108,7 +151,7 @@ internal class WebBridgeEventAdapter(
         clientX: Double,
         clientY: Double,
     ) {
-        if (!attached) return
+        if (!isCurrent(token)) return
         val metrics = metricsProvider()
         eventSink(
             if (ctrlKey) {
@@ -127,28 +170,29 @@ internal class WebBridgeEventAdapter(
         )
     }
 
-    fun dragEntered(clientX: Double, clientY: Double, files: List<String>) {
-        positional(clientX, clientY) { x, y -> WebWindowEvent.DragEntered(x, y, files) }
+    fun dragEntered(token: WebAttachmentToken, clientX: Double, clientY: Double, files: List<String>) {
+        positional(token, clientX, clientY) { x, y -> WebWindowEvent.DragEntered(x, y, files) }
     }
 
-    fun dragMoved(clientX: Double, clientY: Double) {
-        positional(clientX, clientY) { x, y -> WebWindowEvent.DragMoved(x, y) }
+    fun dragMoved(token: WebAttachmentToken, clientX: Double, clientY: Double) {
+        positional(token, clientX, clientY) { x, y -> WebWindowEvent.DragMoved(x, y) }
     }
 
-    fun dragDropped(clientX: Double, clientY: Double, files: List<String>) {
-        positional(clientX, clientY) { x, y -> WebWindowEvent.DragDropped(x, y, files) }
+    fun dragDropped(token: WebAttachmentToken, clientX: Double, clientY: Double, files: List<String>) {
+        positional(token, clientX, clientY) { x, y -> WebWindowEvent.DragDropped(x, y, files) }
     }
 
-    fun resized() {
-        if (!attached) return
+    fun resized(token: WebAttachmentToken) {
+        if (!isCurrent(token)) return
         val size = metricsProvider().physicalSize()
         eventSink(WebWindowEvent.Resized(size.width, size.height))
     }
 
-    fun devicePixelRatioChanged() {
-        if (!attached) return
+    fun devicePixelRatioChanged(token: WebAttachmentToken) {
+        if (!isCurrent(token)) return
         val metrics = metricsProvider()
         metricsSink(
+            token,
             WebMetricsTransaction(
                 scaleFactor = metrics.normalizedDevicePixelRatio(),
                 physicalSize = metrics.physicalSize(),
@@ -157,11 +201,12 @@ internal class WebBridgeEventAdapter(
     }
 
     private fun positional(
+        token: WebAttachmentToken,
         clientX: Double,
         clientY: Double,
         event: (Double, Double) -> WebWindowEvent,
     ) {
-        if (!attached) return
+        if (!isCurrent(token)) return
         val position = metricsProvider().toPhysical(clientX, clientY)
         eventSink(event(position.x, position.y))
     }

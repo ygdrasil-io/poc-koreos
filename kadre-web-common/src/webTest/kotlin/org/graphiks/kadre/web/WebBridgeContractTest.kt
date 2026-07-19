@@ -32,16 +32,17 @@ class WebBridgeContractTest {
                 metrics
             },
             eventSink = events::add,
-            metricsSink = transactions::add,
+            metricsSink = { _, transaction -> transactions += transaction },
         )
 
-        adapter.attach()
-        adapter.pointer("pointermove", 9.75, 19.5, 5L, "mouse", true, 0)
-        adapter.pointer("pointerenter", 11.0, 21.0, 5L, "mouse", true, 0)
-        adapter.pointer("pointerleave", 12.0, 22.0, 5L, "mouse", true, 0)
-        adapter.pointer("pointerdown", 20.5, 30.25, 5L, "mouse", true, 0)
-        adapter.pointer("pointerup", 30.25, 40.5, 5L, "mouse", true, 0)
+        val token = adapter.attach()
+        adapter.pointer(token, "pointermove", 9.75, 19.5, 5L, "mouse", true, 0)
+        adapter.pointer(token, "pointerenter", 11.0, 21.0, 5L, "mouse", true, 0)
+        adapter.pointer(token, "pointerleave", 12.0, 22.0, 5L, "mouse", true, 0)
+        adapter.pointer(token, "pointerdown", 20.5, 30.25, 5L, "mouse", true, 0)
+        adapter.pointer(token, "pointerup", 30.25, 40.5, 5L, "mouse", true, 0)
         adapter.touches(
+            token,
             WebTouchPhase.Started,
             listOf(
                 WebTouchContact(id = 42L, clientX = 10.25, clientY = 20.5),
@@ -49,6 +50,7 @@ class WebBridgeContractTest {
             ),
         )
         adapter.wheel(
+            token = token,
             deltaX = 0.0,
             deltaY = -25.0,
             deltaMode = 0,
@@ -56,24 +58,25 @@ class WebBridgeContractTest {
             clientX = 15.25,
             clientY = 27.5,
         )
-        adapter.dragEntered(12.5, 24.5, listOf("image/png"))
-        adapter.dragMoved(13.5, 25.5)
-        adapter.dragDropped(14.5, 26.5, listOf("sprite.png"))
-        adapter.resized()
+        adapter.dragEntered(token, 12.5, 24.5, listOf("image/png"))
+        adapter.dragMoved(token, 13.5, 25.5)
+        adapter.dragDropped(token, 14.5, 26.5, listOf("sprite.png"))
+        adapter.resized(token)
 
         metrics = metrics.copy(devicePixelRatio = 3.0)
-        adapter.devicePixelRatioChanged()
+        adapter.devicePixelRatioChanged(token)
 
         val readsBeforeDetach = metricsReads
         val eventCountBeforeDetach = events.size
         val transactionCountBeforeDetach = transactions.size
         adapter.detach()
-        adapter.pointer("pointermove", 100.0, 100.0, 5L, "mouse", true, 0)
-        adapter.resized()
-        adapter.devicePixelRatioChanged()
+        adapter.pointer(token, "pointermove", 100.0, 100.0, 5L, "mouse", true, 0)
+        adapter.resized(token)
+        adapter.devicePixelRatioChanged(token)
 
-        adapter.attach()
+        val reattachedToken = adapter.attach()
         adapter.touches(
+            reattachedToken,
             WebTouchPhase.Started,
             listOf(WebTouchContact(id = 7L, clientX = 11.0, clientY = 21.0)),
         )
@@ -119,6 +122,56 @@ class WebBridgeContractTest {
     }
 
     @Test
+    fun `callbacks captured by an old attachment remain stale after reattach`() {
+        var metricsReads = 0
+        val events = mutableListOf<WebWindowEvent>()
+        val transactions = mutableListOf<WebMetricsTransaction>()
+        val adapter = WebBridgeEventAdapter(
+            metricsProvider = {
+                metricsReads += 1
+                CanvasMetrics(10.0, 20.0, 300.0, 150.0, 2.0)
+            },
+            eventSink = events::add,
+            metricsSink = { _, transaction -> transactions += transaction },
+        )
+
+        val oldToken = adapter.attach()
+        adapter.touches(
+            oldToken,
+            WebTouchPhase.Started,
+            listOf(WebTouchContact(id = 42L, clientX = 11.0, clientY = 21.0)),
+        )
+        val oldPointerCallback = {
+            adapter.pointer(oldToken, "pointermove", 12.0, 22.0, 5L, "mouse", true, 0)
+        }
+        val oldResizeCallback = { adapter.resized(oldToken) }
+        val oldDprCallback = { adapter.devicePixelRatioChanged(oldToken) }
+
+        adapter.detach()
+        val newToken = adapter.attach()
+        val readsBeforeOldCallbacks = metricsReads
+        val eventsBeforeOldCallbacks = events.size
+        val transactionsBeforeOldCallbacks = transactions.size
+
+        oldPointerCallback()
+        oldResizeCallback()
+        oldDprCallback()
+
+        assertEquals(readsBeforeOldCallbacks, metricsReads)
+        assertEquals(eventsBeforeOldCallbacks, events.size)
+        assertEquals(transactionsBeforeOldCallbacks, transactions.size)
+
+        adapter.pointer(newToken, "pointermove", 12.0, 22.0, 5L, "mouse", true, 0)
+        adapter.touches(
+            newToken,
+            WebTouchPhase.Started,
+            listOf(WebTouchContact(id = 42L, clientX = 11.0, clientY = 21.0)),
+        )
+        assertIs<WebWindowEvent.PointerMoved>(events[eventsBeforeOldCallbacks])
+        assertTrue(assertIs<WebWindowEvent.Touch>(events.last()).primary)
+    }
+
+    @Test
     fun `DPR transaction updates both window caches before either public callback`() {
         val bridge = ScriptedBridge()
         val loop = TestWebEventLoop(bridge)
@@ -136,7 +189,7 @@ class WebBridgeContractTest {
         }
 
         bridge.metrics = bridge.metrics.copy(devicePixelRatio = 3.0)
-        bridge.adapter.devicePixelRatioChanged()
+        bridge.emitDevicePixelRatioChanged()
         loop.pump(handler)
 
         assertEquals(2, observations.size)
@@ -162,6 +215,207 @@ class WebBridgeContractTest {
         )
     }
 
+    @Test
+    fun `queued DPR transaction drains before a later ordinary resize without premature cache mutation`() {
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
+        val observations = mutableListOf<CacheObservation>()
+        val handler = observingHandler(window, observations)
+
+        bridge.metrics = bridge.metrics.copy(devicePixelRatio = 3.0)
+        bridge.emitDevicePixelRatioChanged()
+        bridge.emit(WebWindowEvent.Resized(1000, 500))
+
+        assertEquals(2.0, window.scaleFactor, "queued events must not mutate the cache before drain")
+        assertEquals(PhysicalSize(600, 300), window.innerSize)
+
+        loop.pump(handler)
+
+        assertEquals(
+            listOf(
+                CacheObservation(WindowEvent.ScaleFactorChanged(3.0), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.Resized(PhysicalSize(900, 450)), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.Resized(PhysicalSize(1000, 500)), 3.0, PhysicalSize(1000, 500)),
+            ),
+            observations,
+        )
+        assertEquals(3.0, window.scaleFactor)
+        assertEquals(PhysicalSize(1000, 500), window.innerSize)
+        window.close()
+    }
+
+    @Test
+    fun `ordinary resize enqueued reentrantly cannot split an atomic DPR transaction`() {
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
+        val observations = mutableListOf<CacheObservation>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) = Unit
+
+            override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
+                if (event is WindowEvent.ScaleFactorChanged) {
+                    bridge.emit(WebWindowEvent.Resized(1000, 500))
+                }
+                if (event is WindowEvent.ScaleFactorChanged || event is WindowEvent.Resized) {
+                    observations += CacheObservation(event, window.scaleFactor, window.innerSize)
+                }
+            }
+        }
+
+        bridge.metrics = bridge.metrics.copy(devicePixelRatio = 3.0)
+        bridge.emitDevicePixelRatioChanged()
+        loop.pump(handler)
+
+        assertEquals(
+            listOf(
+                CacheObservation(WindowEvent.ScaleFactorChanged(3.0), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.Resized(PhysicalSize(900, 450)), 3.0, PhysicalSize(900, 450)),
+            ),
+            observations,
+        )
+        assertEquals(PhysicalSize(900, 450), window.innerSize)
+
+        loop.pump(handler)
+
+        assertEquals(
+            CacheObservation(WindowEvent.Resized(PhysicalSize(1000, 500)), 3.0, PhysicalSize(1000, 500)),
+            observations.last(),
+        )
+        window.close()
+    }
+
+    @Test
+    fun `older DPR transaction cannot overwrite a later ordinary scale factor event`() {
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
+        val observations = mutableListOf<CacheObservation>()
+
+        bridge.metrics = bridge.metrics.copy(devicePixelRatio = 3.0)
+        bridge.emitDevicePixelRatioChanged()
+        bridge.emit(WebWindowEvent.ScaleFactorChanged(4.0))
+
+        assertEquals(2.0, window.scaleFactor, "queued events must not mutate the cache before drain")
+        loop.pump(observingHandler(window, observations))
+
+        assertEquals(
+            listOf(
+                CacheObservation(WindowEvent.ScaleFactorChanged(3.0), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.Resized(PhysicalSize(900, 450)), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.ScaleFactorChanged(4.0), 4.0, PhysicalSize(900, 450)),
+            ),
+            observations,
+        )
+        assertEquals(4.0, window.scaleFactor)
+        window.close()
+    }
+
+    @Test
+    fun `custom-equal bridges retain independent metrics routes`() {
+        val first = EqualBridge()
+        val second = EqualBridge()
+        var firstDeliveries = 0
+        var secondDeliveries = 0
+        val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
+
+        val firstConnection = WebMetricsTransactions.connect(first) { firstDeliveries += 1 }
+        val secondConnection = WebMetricsTransactions.connect(second) { secondDeliveries += 1 }
+        try {
+            assertTrue(WebMetricsTransactions.dispatch(first, transaction))
+            assertTrue(WebMetricsTransactions.dispatch(second, transaction))
+            assertEquals(1, firstDeliveries)
+            assertEquals(1, secondDeliveries)
+        } finally {
+            WebMetricsTransactions.disconnect(firstConnection)
+            WebMetricsTransactions.disconnect(secondConnection)
+        }
+    }
+
+    @Test
+    fun `a stale window cannot disconnect or detach a newer owner of the same bridge`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val oldWindow = loop.createWindow(WebWindowAttributes(canvasId = "old")) as WebWindow
+        val newWindow = loop.createWindow(WebWindowAttributes(canvasId = "new")) as WebWindow
+        val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
+
+        oldWindow.close()
+        val detachCallsAfterStaleClose = bridge.detachCalls
+        val newerRouteSurvived = WebMetricsTransactions.dispatch(bridge, transaction)
+        val countAfterStaleClose = WebMetricsTransactions.connectionCount
+        newWindow.close()
+
+        assertEquals(0, detachCallsAfterStaleClose)
+        assertTrue(newerRouteSurvived)
+        assertEquals(baseline + 1, countAfterStaleClose)
+        assertEquals(1, bridge.detachCalls)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    @Test
+    fun `connection tokens disconnect only their exact active owner and are idempotent`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val oldConnection = WebMetricsTransactions.connect(bridge) { }
+        val newConnection = WebMetricsTransactions.connect(bridge) { }
+
+        assertFalse(WebMetricsTransactions.disconnect(oldConnection))
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+        assertTrue(WebMetricsTransactions.disconnect(newConnection))
+        assertFalse(WebMetricsTransactions.disconnect(newConnection))
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    @Test
+    fun `direct bridge detach releases its active metrics route exactly once`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val connection = WebMetricsTransactions.connect(bridge) { }
+        val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
+
+        bridge.detach()
+        bridge.detach()
+
+        assertFalse(WebMetricsTransactions.dispatch(bridge, transaction))
+        assertFalse(WebMetricsTransactions.disconnect(connection))
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+        assertEquals(2, bridge.detachCalls, "the bridge implementation remains callable but registry release is idempotent")
+    }
+
+    @Test
+    fun `two normal windows own and release two independent registry connections`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val firstBridge = ScriptedBridge()
+        val secondBridge = ScriptedBridge()
+        val loop = SequencedWebEventLoop(firstBridge, secondBridge)
+        val firstWindow = loop.createWindow(WebWindowAttributes(canvasId = "first")) as WebWindow
+        val secondWindow = loop.createWindow(WebWindowAttributes(canvasId = "second")) as WebWindow
+
+        assertEquals(baseline + 2, WebMetricsTransactions.connectionCount)
+        firstWindow.close()
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+        secondWindow.close()
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    private fun observingHandler(
+        window: WebWindow,
+        observations: MutableList<CacheObservation>,
+    ): ApplicationHandler = object : ApplicationHandler {
+        override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+        override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) = Unit
+
+        override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
+            if (event is WindowEvent.ScaleFactorChanged || event is WindowEvent.Resized) {
+                observations += CacheObservation(event, window.scaleFactor, window.innerSize)
+            }
+        }
+    }
+
     private fun assertPosition(event: WebWindowEvent, x: Double, y: Double) {
         val actual = when (event) {
             is WebWindowEvent.PointerEntered -> event.x to event.y
@@ -184,17 +438,43 @@ class WebBridgeContractTest {
     private class ScriptedBridge : WebDomBridge {
         override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
         var metrics = CanvasMetrics(10.0, 20.0, 300.0, 150.0, 2.0)
-        val adapter = WebBridgeEventAdapter(
+        var detachCalls = 0
+        private val adapter = WebBridgeEventAdapter(
             metricsProvider = { metrics },
             eventSink = { onWindowEvent?.invoke(it) },
-            metricsSink = { WebMetricsTransactions.dispatch(this, it) },
+            metricsSink = { _, transaction -> WebMetricsTransactions.dispatch(this, transaction) },
         )
+        private var attachmentToken: WebAttachmentToken? = null
 
-        override fun attach(targetElementId: String) = adapter.attach()
-        override fun detach() = adapter.detach()
+        override fun attach(targetElementId: String) {
+            attachmentToken = adapter.attach()
+        }
+        override fun detach() {
+            detachCalls += 1
+            WebMetricsTransactions.disconnectActive(this)
+            adapter.detach()
+        }
         override fun readDevicePixelRatio(): Double = metrics.devicePixelRatio
         override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> =
             metrics.physicalSize().let { it.width to it.height }
+
+        fun emit(event: WebWindowEvent) {
+            onWindowEvent?.invoke(event)
+        }
+
+        fun emitDevicePixelRatioChanged() {
+            adapter.devicePixelRatioChanged(attachmentToken ?: error("bridge is not attached"))
+        }
+    }
+
+    private class EqualBridge : WebDomBridge {
+        override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
+        override fun attach(targetElementId: String) = Unit
+        override fun detach() = Unit
+        override fun readDevicePixelRatio(): Double = 1.0
+        override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> = 1 to 1
+        override fun equals(other: Any?): Boolean = other is EqualBridge
+        override fun hashCode(): Int = 0
     }
 
     private class TestWebEventLoop(
@@ -202,5 +482,12 @@ class WebBridgeContractTest {
     ) : WebEventLoop() {
         override fun createDomBridge(): WebDomBridge = bridge
         fun pump(handler: ApplicationHandler) = tick(handler)
+    }
+
+    private class SequencedWebEventLoop(
+        vararg bridges: WebDomBridge,
+    ) : WebEventLoop() {
+        private val remaining = bridges.toMutableList()
+        override fun createDomBridge(): WebDomBridge = remaining.removeAt(0)
     }
 }
