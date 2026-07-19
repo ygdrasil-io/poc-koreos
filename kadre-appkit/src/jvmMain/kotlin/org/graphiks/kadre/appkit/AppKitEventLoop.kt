@@ -220,6 +220,11 @@ internal class AppKitEventLoop(
         windowCloseActions.remove(windowId.value)
     }
 
+    internal fun requestRedraw(windowId: WindowId): Boolean {
+        val owner = runLoopOwner ?: return false
+        return owner.requestRedraw(windowId)
+    }
+
     internal fun closeWindow(windowId: WindowId) {
         if (deferWhileNativeCallbackActive { closeWindow(windowId) }) return
         AppKitNativeCallbackBoundary.runExclusive {

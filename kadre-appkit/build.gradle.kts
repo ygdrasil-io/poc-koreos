@@ -39,5 +39,8 @@ if (System.getProperty("os.name", "").let { osName ->
 ) {
     tasks.named<org.gradle.api.tasks.testing.Test>("jvmTest") {
         jvmArgs("-XstartOnFirstThread", "--enable-native-access=ALL-UNNAMED")
+        testLogging {
+            events("started", "passed", "failed")
+        }
     }
 }

@@ -328,11 +328,15 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     internal var needsRedraw: Boolean = false
 
     /**
-     * Requests a redraw: sets the [needsRedraw] flag, which will be consumed
-     * by the CFRunLoop observer before the next sleep (native coalescing).
+     * Requests a redraw and persistently wakes the owning run loop when this
+     * starts a new pending batch. Requests made before owner attachment retain
+     * the fallback flag consumed by the observer.
      */
     override fun requestRedraw() {
-        needsRedraw = true
+        val appKitEventLoop = _eventLoop as? AppKitEventLoop
+        if (appKitEventLoop == null || !appKitEventLoop.requestRedraw(id)) {
+            needsRedraw = true
+        }
     }
 
     override fun setTitle(title: String) {
@@ -1154,6 +1158,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         delegate = setup.delegate
         _handler = handler
         _eventLoop = eventLoop
+        if (needsRedraw && appKitEventLoop.requestRedraw(id)) {
+            needsRedraw = false
+        }
     }
 
     private fun releaseNativeWindowResources() {

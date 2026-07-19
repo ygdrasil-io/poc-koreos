@@ -16,6 +16,13 @@ internal sealed interface TimerDecision {
     ) : TimerDecision
 }
 
+/** Admission result for one redraw request. */
+internal enum class RedrawRequestResult {
+    Queued,
+    Coalesced,
+    Rejected,
+}
+
 /** Pure synchronous state owned by the AppKit event-loop adapter. */
 internal class AppKitLoopState(private val nowMillis: () -> Long) {
     private data class ArmedDeadline(
@@ -33,11 +40,17 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
     private var handledExpiredDeadline: Long? = null
     private var pendingCause: StartCause? = null
 
-    fun requestRedraw(windowId: WindowId): Boolean {
-        if (exited || windowId in closedWindows) return false
-        return pendingRedraws.add(windowId)
+    @Synchronized
+    fun requestRedraw(windowId: WindowId): RedrawRequestResult {
+        if (exited || windowId in closedWindows) return RedrawRequestResult.Rejected
+        return if (pendingRedraws.add(windowId)) {
+            RedrawRequestResult.Queued
+        } else {
+            RedrawRequestResult.Coalesced
+        }
     }
 
+    @Synchronized
     fun arm(controlFlow: ControlFlow): TimerDecision {
         if (exited) return TimerDecision.Cancel
         if (pendingCause != null) return TimerDecision.FireNow
@@ -47,7 +60,12 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
             ControlFlow.Wait -> {
                 requestedResume = null
                 handledExpiredDeadline = null
-                TimerDecision.Cancel
+                if (pendingRedraws.isEmpty()) {
+                    TimerDecision.Cancel
+                } else {
+                    signalExternalEvent()
+                    TimerDecision.FireNow
+                }
             }
 
             ControlFlow.Poll -> {
@@ -57,7 +75,16 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
                 TimerDecision.FireNow
             }
 
-            is ControlFlow.WaitUntil -> armDeadline(controlFlow.instant)
+            is ControlFlow.WaitUntil -> {
+                if (pendingRedraws.isEmpty()) {
+                    armDeadline(controlFlow.instant)
+                } else {
+                    requestedResume = controlFlow.instant
+                    handledExpiredDeadline = null
+                    signalExternalEvent()
+                    TimerDecision.FireNow
+                }
+            }
         }
     }
 
@@ -97,19 +124,23 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
         }
     }
 
-    fun beginIteration(): StartCause {
+    fun beginPendingIterationOrNull(): StartCause? {
         if (firstIteration) {
             firstIteration = false
             return StartCause.Init
         }
 
-        return checkNotNull(pendingCause) {
-            "AppKit iteration began without a run-loop signal"
-        }.also {
+        return pendingCause?.also {
             pendingCause = null
         }
     }
 
+    fun beginIteration(): StartCause =
+        checkNotNull(beginPendingIterationOrNull()) {
+            "AppKit iteration began without a run-loop signal"
+        }
+
+    @Synchronized
     fun takeRedraws(): List<WindowId> {
         if (exited) return emptyList()
         return pendingRedraws.toList().also {
@@ -117,11 +148,13 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
         }
     }
 
+    @Synchronized
     fun closeWindow(windowId: WindowId) {
         closedWindows.add(windowId)
         pendingRedraws.remove(windowId)
     }
 
+    @Synchronized
     fun exit() {
         exited = true
         pendingRedraws.clear()

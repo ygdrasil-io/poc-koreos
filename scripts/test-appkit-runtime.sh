@@ -16,6 +16,24 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
 
 cd "$REPO_ROOT"
-run_with_timeout 600 \
+
+run_appkit_phase() {
+    local phase="$1"
+    shift
+    echo "AppKit $phase: started"
+    if run_with_timeout 600 "$@"; then
+        echo "AppKit $phase: passed"
+    else
+        local status=$?
+        echo "AppKit $phase: failed (status $status)" >&2
+        return "$status"
+    fi
+}
+
+run_appkit_phase preparation \
+    ./gradlew :kadre-appkit:jvmTestClasses \
+    --no-daemon --stacktrace --console=plain
+
+run_appkit_phase runtime \
     ./gradlew :kadre-appkit:jvmTest \
     --no-daemon --stacktrace --console=plain

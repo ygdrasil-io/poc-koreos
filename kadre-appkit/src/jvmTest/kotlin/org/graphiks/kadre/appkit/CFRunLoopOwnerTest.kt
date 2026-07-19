@@ -2,17 +2,65 @@ package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class CFRunLoopOwnerTest {
     @Test
-    fun `pre-run wake is re-fired before waiting and consumed once`() {
+    fun `pre-run immediate timer waits for first before-waiting phase`() {
+        val causes = mutableListOf<StartCause>()
+        var aboutToWaitCount = 0
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = {
+                aboutToWaitCount++
+                ControlFlow.Wait
+            },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            owner.wakeUp()
+            val preRunTimer = api.createdTimers.single()
+
+            CFRunLoopOwner.dispatchTimerCallback(preRunTimer)
+            assertTrue(causes.isEmpty())
+            assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val deliveryTimer = api.createdTimers.last()
+            assertFalse(deliveryTimer == preRunTimer)
+            assertEquals(1, aboutToWaitCount)
+
+            CFRunLoopOwner.dispatchTimerCallback(deliveryTimer)
+            assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
+            assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+
+            val traceAfterDelivery = api.trace.toList()
+            CFRunLoopOwner.dispatchTimerCallback(preRunTimer)
+            CFRunLoopOwner.dispatchTimerCallback(deliveryTimer)
+            assertEquals(traceAfterDelivery, api.trace)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `after waiting cannot consume an immediate timer cause`() {
         val causes = mutableListOf<StartCause>()
         val api = RecordingCFRunLoopApi()
         val owner = CFRunLoopOwner.install(
@@ -22,29 +70,303 @@ class CFRunLoopOwnerTest {
             onBeforeWaiting = { ControlFlow.Wait },
         )
         owner.consumeLaunchIteration()
-        val traceStart = api.trace.size
-
-        owner.wakeUp()
         CFRunLoopOwner.dispatchObserverCallback(
             api.createdObserver,
             CFRunLoopOwner.BEFORE_WAITING,
         )
-        val traceBeforeAfterWaiting = api.trace.drop(traceStart).toList()
 
-        CFRunLoopOwner.dispatchObserverCallback(
-            api.createdObserver,
-            CFRunLoopOwner.AFTER_WAITING,
+        try {
+            owner.wakeUp()
+            val immediateTimer = api.createdTimers.single()
+
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.AFTER_WAITING,
+            )
+            assertTrue(causes.isEmpty())
+
+            CFRunLoopOwner.dispatchTimerCallback(immediateTimer)
+            assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `proxy wake while delivering an iteration preserves the next about-to-wait`() {
+        val causes = mutableListOf<StartCause>()
+        var aboutToWaitCount = 0
+        var wakeAgain = true
+        val api = RecordingCFRunLoopApi()
+        lateinit var owner: CFRunLoopOwner
+        owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = { cause ->
+                causes += cause
+                if (wakeAgain) {
+                    wakeAgain = false
+                    owner.wakeUp()
+                }
+            },
+            onBeforeWaiting = {
+                aboutToWaitCount++
+                ControlFlow.Wait
+            },
         )
+        owner.consumeLaunchIteration()
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            owner.wakeUp()
+            val firstTimer = api.createdTimers.single()
+
+            CFRunLoopOwner.dispatchTimerCallback(firstTimer)
+
+            assertEquals(1, api.trace.count { it == "wake-up" })
+            assertEquals(1, aboutToWaitCount)
+            assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
+
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val secondTimer = api.createdTimers.last()
+            assertFalse(firstTimer == secondTimer)
+            assertEquals(2, api.trace.count { it == "wake-up" })
+            assertEquals(2, aboutToWaitCount)
+
+            CFRunLoopOwner.dispatchTimerCallback(secondTimer)
+            assertEquals(List<StartCause>(2) { StartCause.WaitCancelled() }, causes)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `proxy wake after event delivery waits for the open iteration before-waiting phase`() {
+        val causes = mutableListOf<StartCause>()
+        var aboutToWaitCount = 0
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = {
+                aboutToWaitCount++
+                ControlFlow.Wait
+            },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            owner.wakeUp()
+            val firstTimer = api.createdTimers.single()
+            CFRunLoopOwner.dispatchTimerCallback(firstTimer)
+
+            owner.wakeUp()
+
+            assertEquals(1, api.trace.count { it == "wake-up" })
+            assertEquals(1, api.createdTimers.size)
+            assertEquals(1, aboutToWaitCount)
+
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val secondTimer = api.createdTimers.last()
+            assertFalse(firstTimer == secondTimer)
+            assertEquals(2, aboutToWaitCount)
+            assertEquals(2, api.trace.count { it == "wake-up" })
+
+            CFRunLoopOwner.dispatchTimerCallback(secondTimer)
+            assertEquals(List<StartCause>(2) { StartCause.WaitCancelled() }, causes)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `iteration opens atomically before a claimed cause can admit another wake`() {
+        val causes = mutableListOf<StartCause>()
+        var aboutToWaitCount = 0
+        var wakeAtClaim = true
+        val api = RecordingCFRunLoopApi()
+        lateinit var owner: CFRunLoopOwner
+        owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = {
+                aboutToWaitCount++
+                ControlFlow.Wait
+            },
+            afterIterationClaimed = {
+                if (wakeAtClaim) {
+                    wakeAtClaim = false
+                    owner.wakeUp()
+                }
+            },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            owner.wakeUp()
+            val firstTimer = api.createdTimers.single()
+
+            CFRunLoopOwner.dispatchTimerCallback(firstTimer)
+
+            assertEquals(1, api.trace.count { it == "wake-up" })
+            assertEquals(1, api.createdTimers.size)
+            assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
+
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val secondTimer = api.createdTimers.last()
+            assertFalse(firstTimer == secondTimer)
+            assertEquals(2, aboutToWaitCount)
+            assertEquals(2, api.trace.count { it == "wake-up" })
+
+            CFRunLoopOwner.dispatchTimerCallback(secondTimer)
+            assertEquals(List<StartCause>(2) { StartCause.WaitCancelled() }, causes)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `three wake consume cycles use distinct immediate timers`() {
+        val causes = mutableListOf<StartCause>()
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = { ControlFlow.Wait },
+        )
+        owner.consumeLaunchIteration()
         CFRunLoopOwner.dispatchObserverCallback(
             api.createdObserver,
             CFRunLoopOwner.BEFORE_WAITING,
         )
-        val traceAfterConsumption = api.trace.drop(traceStart).toList()
-        owner.close()
 
-        assertEquals(listOf("wake-up", "wake-up"), traceBeforeAfterWaiting)
-        assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
-        assertEquals(listOf("wake-up", "wake-up"), traceAfterConsumption)
+        try {
+            repeat(3) {
+                owner.wakeUp()
+                val timer = api.createdTimers.last()
+                CFRunLoopOwner.dispatchTimerCallback(timer)
+                CFRunLoopOwner.dispatchObserverCallback(
+                    api.createdObserver,
+                    CFRunLoopOwner.BEFORE_WAITING,
+                )
+                assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+            }
+
+            assertEquals(3, api.createdTimers.distinct().size)
+            assertEquals(List<StartCause>(3) { StartCause.WaitCancelled() }, causes)
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `external wake replaces a deadline with an immediate timer`() {
+        val deadline = 2_000L
+        val causes = mutableListOf<StartCause>()
+        var controlFlow: ControlFlow = ControlFlow.WaitUntil(deadline)
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = { controlFlow },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val deadlineTimer = api.createdTimers.single()
+
+            owner.wakeUp()
+            val immediateTimer = api.createdTimers.last()
+            assertFalse(immediateTimer == deadlineTimer)
+            assertEquals(
+                listOf(
+                    "invalidate-timer-$deadlineTimer",
+                    "remove-timer-$deadlineTimer",
+                    "release-$deadlineTimer",
+                ),
+                api.trace.windowed(3).first { it.first() == "invalidate-timer-$deadlineTimer" },
+            )
+
+            val traceAfterReplacement = api.trace.toList()
+            CFRunLoopOwner.dispatchTimerCallback(deadlineTimer)
+            assertEquals(traceAfterReplacement, api.trace)
+
+            controlFlow = ControlFlow.Wait
+            CFRunLoopOwner.dispatchTimerCallback(immediateTimer)
+            assertEquals(
+                listOf<StartCause>(StartCause.WaitCancelled(requestedResume = deadline)),
+                causes,
+            )
+        } finally {
+            owner.close()
+        }
+    }
+
+    @Test
+    fun `deadline timer callback delivers without after waiting`() {
+        var nowMillis = 1_000L
+        val deadline = 2_000L
+        val causes = mutableListOf<StartCause>()
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { nowMillis },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = { ControlFlow.WaitUntil(deadline) },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+            val timer = api.createdTimers.single()
+            nowMillis = 2_007L
+
+            CFRunLoopOwner.dispatchTimerCallback(timer)
+
+            assertEquals(
+                listOf<StartCause>(
+                    StartCause.ResumeTimeReached(
+                        requestedResume = deadline,
+                        start = nowMillis,
+                    ),
+                ),
+                causes,
+            )
+            assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+        } finally {
+            owner.close()
+        }
     }
 
     @Test
@@ -86,6 +408,92 @@ class CFRunLoopOwnerTest {
             ),
             order,
         )
+    }
+
+    @Test
+    fun `close releases an immediate timer before observer and ignores stale callback`() {
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = {},
+            onBeforeWaiting = { ControlFlow.Wait },
+        )
+        owner.consumeLaunchIteration()
+        owner.wakeUp()
+        val immediateTimer = api.createdTimers.single()
+        val traceStart = api.trace.size
+
+        owner.close()
+
+        assertEquals(
+            listOf(
+                "invalidate-timer-$immediateTimer",
+                "remove-timer-$immediateTimer",
+                "release-$immediateTimer",
+                "remove-observer-${api.createdObserver}",
+                "release-${api.createdObserver}",
+                "close-arena",
+            ),
+            api.trace.drop(traceStart),
+        )
+        assertEquals(0, CFRunLoopOwner.registeredObserverCount())
+        assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+
+        val traceAfterClose = api.trace.toList()
+        CFRunLoopOwner.dispatchTimerCallback(immediateTimer)
+        assertEquals(traceAfterClose, api.trace)
+    }
+
+    @Test
+    fun `poll creates one immediate timer per iteration without synchronous spin`() {
+        val causes = mutableListOf<StartCause>()
+        var aboutToWaitCount = 0
+        var controlFlow: ControlFlow = ControlFlow.Poll
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = {
+                aboutToWaitCount++
+                controlFlow
+            },
+        )
+        owner.consumeLaunchIteration()
+
+        try {
+            repeat(3) { cycle ->
+                CFRunLoopOwner.dispatchObserverCallback(
+                    api.createdObserver,
+                    CFRunLoopOwner.BEFORE_WAITING,
+                )
+                val timer = api.createdTimers.last()
+                assertEquals(cycle + 1, api.createdTimers.size)
+
+                CFRunLoopOwner.dispatchObserverCallback(
+                    api.createdObserver,
+                    CFRunLoopOwner.BEFORE_WAITING,
+                )
+                assertEquals(cycle + 1, api.createdTimers.size)
+                assertEquals(cycle + 1, aboutToWaitCount)
+
+                CFRunLoopOwner.dispatchTimerCallback(timer)
+            }
+
+            controlFlow = ControlFlow.Wait
+            CFRunLoopOwner.dispatchObserverCallback(
+                api.createdObserver,
+                CFRunLoopOwner.BEFORE_WAITING,
+            )
+
+            assertEquals(List<StartCause>(3) { StartCause.Poll }, causes)
+            assertEquals(3, api.createdTimers.distinct().size)
+            assertEquals(4, aboutToWaitCount)
+            assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+        } finally {
+            owner.close()
+        }
     }
 
     @Test
@@ -230,6 +638,9 @@ class CFRunLoopOwnerTest {
         val actual = assertFailsWith<IllegalStateException> {
             owner.throwPendingCallbackFailure()
         }
+        val deadlineTimer = api.createdTimers.first()
+        val immediateTimer = api.createdTimers.last()
+        val callbackTrace = api.trace.drop(traceStart).toList()
         api.clearFailures()
         owner.close()
 
@@ -238,17 +649,21 @@ class CFRunLoopOwnerTest {
             listOf(invalidateFailure, removeFailure, releaseFailure),
             actual.suppressed.toList(),
         )
-        val timer = api.createdTimers.single()
         assertEquals(
             listOf(
-                "create-timer-$timer-2000",
-                "add-timer-$timer",
-                "invalidate-timer-$timer",
-                "remove-timer-$timer",
-                "release-$timer",
+                "create-timer-$deadlineTimer-2000",
+                "add-timer-$deadlineTimer",
+                "invalidate-timer-$deadlineTimer",
+                "remove-timer-$deadlineTimer",
+                "release-$deadlineTimer",
+                "create-immediate-timer-$immediateTimer",
+                "add-timer-$immediateTimer",
+                "invalidate-timer-$immediateTimer",
+                "remove-timer-$immediateTimer",
+                "release-$immediateTimer",
                 "wake-up",
             ),
-            api.trace.drop(traceStart).take(6),
+            callbackTrace,
         )
     }
 
@@ -297,12 +712,38 @@ class CFRunLoopOwnerTest {
         val actual = assertFailsWith<IllegalStateException> {
             owner.throwPendingCallbackFailure()
         }
+        val immediateTimer = api.createdTimers.single()
         api.clearFailures()
         owner.close()
 
         assertSame(callbackFailure, actual)
         assertEquals(listOf(wakeFailure), actual.suppressed.toList())
-        assertEquals(listOf("wake-up"), api.trace.drop(traceStart).take(1))
+        assertTrue(api.trace.drop(traceStart).contains("wake-up"))
+        assertTrue(api.trace.contains("invalidate-timer-$immediateTimer"))
+        assertEquals(0, CFRunLoopOwner.registeredTimerCount())
+    }
+
+    @Test
+    fun `callback failure remains primary when persistent timer creation fails`() {
+        val callbackFailure = IllegalStateException("callback")
+        val api = RecordingCFRunLoopApi().apply { returnNullTimer = true }
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = { throw callbackFailure },
+            onBeforeWaiting = { ControlFlow.Wait },
+        )
+
+        CFRunLoopOwner.dispatchObserverCallback(api.createdObserver, CFRunLoopOwner.AFTER_WAITING)
+        val actual = assertFailsWith<IllegalStateException> {
+            owner.throwPendingCallbackFailure()
+        }
+        owner.close()
+
+        assertSame(callbackFailure, actual)
+        assertEquals(1, actual.suppressed.size)
+        assertEquals("CFRunLoopTimerCreate returned NULL", actual.suppressed.single().message)
+        assertEquals(0, CFRunLoopOwner.registeredTimerCount())
     }
 
     @Test
@@ -372,7 +813,14 @@ class CFRunLoopOwnerTest {
         owner.close()
 
         assertEquals("CFRunLoopTimerCreate returned NULL", actual.message)
-        assertEquals(listOf("create-timer-0-2000", "wake-up"), callbackTrace)
+        assertEquals(
+            listOf(
+                "create-timer-0-2000",
+                "create-immediate-timer-0",
+                "wake-up",
+            ),
+            callbackTrace,
+        )
     }
 
     @Test
@@ -404,12 +852,15 @@ class CFRunLoopOwnerTest {
             api.createdObserver,
             CFRunLoopOwner.BEFORE_WAITING,
         )
+        val persistentTimer = api.createdTimers.last()
 
         assertEquals(
             listOf(
                 "invalidate-timer-$timer",
                 "remove-timer-$timer",
                 "release-$timer",
+                "create-immediate-timer-$persistentTimer",
+                "add-timer-$persistentTimer",
                 "wake-up",
             ),
             api.trace.drop(cleanupStart),
@@ -421,6 +872,7 @@ class CFRunLoopOwnerTest {
         val traceAfterFailure = api.trace.toList()
         CFRunLoopOwner.dispatchTimerCallback(timer)
         assertEquals(traceAfterFailure, api.trace)
+        api.clearFailures()
         owner.close()
     }
 
@@ -544,6 +996,12 @@ class CFRunLoopOwnerTest {
             createdTimers += it
             trace += "create-timer-$it-$deadlineEpochMillis"
         }
+
+        override fun createImmediateTimer(): Long =
+            (if (returnNullTimer) 0L else nextRef++).also {
+                createdTimers += it
+                trace += "create-immediate-timer-$it"
+            }
 
         override fun addTimer(timer: Long) {
             trace += "add-timer-$timer"

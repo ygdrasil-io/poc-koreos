@@ -71,7 +71,7 @@ class AppKitNativeIntegrationTest {
 
             assertEquals(1, handler.lifecycle.count { it == "newEvents(Init)" })
             assertEquals(EXPECTED_LIFECYCLE, handler.lifecycle)
-            assertEquals(3, handler.proxyWakeCount)
+            assertEquals(2, handler.proxyWakeCount)
             assertEquals(0, KadreAppDelegate.registeredDelegateCount())
             assertEquals(0, KadreWindowDelegate.registeredDelegateCount())
             assertEquals(0, AppKitImeTextInputClient.registeredViewCount())
@@ -100,8 +100,6 @@ class AppKitNativeIntegrationTest {
             if (startCause is StartCause.WaitCancelled && !redrawRequestedAfterIdle) {
                 redrawRequestedAfterIdle = true
                 window.requestRedraw()
-                eventLoop.createProxy().wakeUp()
-                proxyWakeCount++
             }
         }
 

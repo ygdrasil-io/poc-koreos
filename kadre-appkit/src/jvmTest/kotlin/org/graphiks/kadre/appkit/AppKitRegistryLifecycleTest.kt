@@ -398,10 +398,12 @@ class AppKitRegistryLifecycleTest {
                         trace += "run"
                         runStarted.countDown()
                         check(wakeApi.woken.await(5, TimeUnit.SECONDS))
+                        CFRunLoopOwner.dispatchTimerCallback(wakeApi.timer)
                         CFRunLoopOwner.dispatchObserverCallback(
                             wakeApi.observer,
-                            CFRunLoopOwner.AFTER_WAITING,
+                            CFRunLoopOwner.BEFORE_WAITING,
                         )
+                        CFRunLoopOwner.dispatchTimerCallback(wakeApi.timer)
                         check(wakeApi.terminationRequested.await(5, TimeUnit.SECONDS))
                         trace += "runReturned"
                     }
@@ -2237,7 +2239,7 @@ class AppKitRegistryLifecycleTest {
             eventLoop.closeWindow(windowId)
 
             assertEquals(emptyList(), state.takeRedraws())
-            assertFalse(state.requestRedraw(windowId))
+            assertEquals(RedrawRequestResult.Rejected, state.requestRedraw(windowId))
         } finally {
             eventLoop.clearRunLoopOwner(owner)
             owner.close()
@@ -2813,6 +2815,7 @@ class AppKitRegistryLifecycleTest {
         override fun removeObserver(observer: Long) = Unit
         override fun invalidateObserver(observer: Long) = Unit
         override fun createTimer(deadlineEpochMillis: Long): Long = 2L
+        override fun createImmediateTimer(): Long = 2L
         override fun addTimer(timer: Long) = Unit
         override fun invalidateTimer(timer: Long) = Unit
         override fun removeTimer(timer: Long) = Unit
@@ -2825,6 +2828,7 @@ class AppKitRegistryLifecycleTest {
 
     private class BlockingWakeCFRunLoopApi : CFRunLoopApi {
         val observer = 0x971L
+        val timer = 0x972L
         val woken = CountDownLatch(1)
         val terminationRequested = CountDownLatch(1)
 
@@ -2832,7 +2836,8 @@ class AppKitRegistryLifecycleTest {
         override fun addObserver(observer: Long) = Unit
         override fun removeObserver(observer: Long) = Unit
         override fun invalidateObserver(observer: Long) = Unit
-        override fun createTimer(deadlineEpochMillis: Long): Long = 0x972L
+        override fun createTimer(deadlineEpochMillis: Long): Long = timer
+        override fun createImmediateTimer(): Long = timer
         override fun addTimer(timer: Long) = Unit
         override fun invalidateTimer(timer: Long) = Unit
         override fun removeTimer(timer: Long) = Unit

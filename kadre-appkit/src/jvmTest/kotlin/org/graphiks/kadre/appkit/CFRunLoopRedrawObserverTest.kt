@@ -90,7 +90,8 @@ class CFRunLoopRedrawObserverTest {
             dispatchIteration()
         }
 
-        fun requestRedraw(windowId: WindowId): Boolean = state.requestRedraw(windowId)
+        fun requestRedraw(windowId: WindowId): Boolean =
+            state.requestRedraw(windowId) === RedrawRequestResult.Queued
 
         fun closeWindow(windowId: WindowId) {
             state.closeWindow(windowId)

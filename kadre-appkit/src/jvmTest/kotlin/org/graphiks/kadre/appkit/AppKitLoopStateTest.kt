@@ -3,6 +3,10 @@ package org.graphiks.kadre.appkit
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowId
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -12,6 +16,45 @@ import kotlin.test.assertTrue
 
 class AppKitLoopStateTest {
     private val windowId = WindowId(1L)
+
+    @Test
+    fun `redraw mutations serialize with redraw draining`() {
+        val state = AppKitLoopState(nowMillis = { 1_000L })
+        val mutationStarted = CountDownLatch(1)
+        val mutationReturned = CountDownLatch(1)
+
+        val worker = synchronized(state) {
+            thread(name = "appkit-redraw-mutation") {
+                mutationStarted.countDown()
+                state.requestRedraw(windowId)
+                mutationReturned.countDown()
+            }.also {
+                assertTrue(mutationStarted.await(5, TimeUnit.SECONDS))
+                assertFalse(mutationReturned.await(1, TimeUnit.SECONDS))
+            }
+        }
+
+        assertTrue(mutationReturned.await(5, TimeUnit.SECONDS))
+        worker.join()
+
+        val drained = AtomicReference<List<WindowId>>()
+        val drainStarted = CountDownLatch(1)
+        val drainReturned = CountDownLatch(1)
+        val drainWorker = synchronized(state) {
+            thread(name = "appkit-redraw-drain") {
+                drainStarted.countDown()
+                drained.set(state.takeRedraws())
+                drainReturned.countDown()
+            }.also {
+                assertTrue(drainStarted.await(5, TimeUnit.SECONDS))
+                assertFalse(drainReturned.await(1, TimeUnit.SECONDS))
+            }
+        }
+
+        assertTrue(drainReturned.await(5, TimeUnit.SECONDS))
+        drainWorker.join()
+        assertEquals(listOf(windowId), drained.get())
+    }
 
     @Test
     fun `first iteration starts with init then poll starts immediately`() {
@@ -229,38 +272,38 @@ class AppKitLoopStateTest {
         val secondWindowId = WindowId(2L)
         val state = initializedState(nowMillis = { 1_000L })
 
-        assertTrue(state.requestRedraw(secondWindowId))
-        assertTrue(state.requestRedraw(windowId))
-        assertFalse(state.requestRedraw(secondWindowId))
+        assertEquals(RedrawRequestResult.Queued, state.requestRedraw(secondWindowId))
+        assertEquals(RedrawRequestResult.Queued, state.requestRedraw(windowId))
+        assertEquals(RedrawRequestResult.Coalesced, state.requestRedraw(secondWindowId))
         assertEquals(listOf(secondWindowId, windowId), state.takeRedraws())
 
-        assertTrue(state.requestRedraw(secondWindowId))
+        assertEquals(RedrawRequestResult.Queued, state.requestRedraw(secondWindowId))
         assertEquals(listOf(secondWindowId), state.takeRedraws())
     }
 
     @Test
     fun `close removes queued redraw and permanently rejects that window`() {
         val state = initializedState(nowMillis = { 1_000L })
-        assertTrue(state.requestRedraw(windowId))
+        assertEquals(RedrawRequestResult.Queued, state.requestRedraw(windowId))
 
         state.closeWindow(windowId)
 
         assertEquals(emptyList(), state.takeRedraws())
-        assertFalse(state.requestRedraw(windowId))
+        assertEquals(RedrawRequestResult.Rejected, state.requestRedraw(windowId))
     }
 
     @Test
     fun `exit cancels timer and suppresses pending and later redraws`() {
         val state = initializedState(nowMillis = { 1_000L })
         val timer = assertIs<TimerDecision.Arm>(state.arm(ControlFlow.WaitUntil(2_000L)))
-        assertTrue(state.requestRedraw(windowId))
+        assertEquals(RedrawRequestResult.Queued, state.requestRedraw(windowId))
 
         state.exit()
         state.signalExternalEvent()
         state.signalDeadline(timer.generation)
 
         assertEquals(emptyList(), state.takeRedraws())
-        assertFalse(state.requestRedraw(WindowId(2L)))
+        assertEquals(RedrawRequestResult.Rejected, state.requestRedraw(WindowId(2L)))
         assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.Poll))
     }
 

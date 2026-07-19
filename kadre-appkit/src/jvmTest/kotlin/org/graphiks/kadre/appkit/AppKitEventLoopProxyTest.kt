@@ -33,25 +33,29 @@ class AppKitEventLoopProxyTest {
         val eventLoop = AppKitEventLoop(NoOpHandler)
         eventLoop.installRunLoopOwner(owner)
         val proxy = eventLoop.createProxy()
-
+        owner.consumeLaunchIteration()
         CFRunLoopOwner.dispatchObserverCallback(
             api.observer,
-            CFRunLoopOwner.AFTER_WAITING,
+            CFRunLoopOwner.BEFORE_WAITING,
         )
-        causes.clear()
 
-        repeat(3) {
-            assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.Wait))
-            proxy.wakeUp()
-            CFRunLoopOwner.dispatchObserverCallback(
-                api.observer,
-                CFRunLoopOwner.AFTER_WAITING,
-            )
+        try {
+            repeat(3) {
+                assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.Wait))
+                proxy.wakeUp()
+                CFRunLoopOwner.dispatchTimerCallback(api.timer)
+                CFRunLoopOwner.dispatchObserverCallback(
+                    api.observer,
+                    CFRunLoopOwner.BEFORE_WAITING,
+                )
+            }
+
+            assertEquals(List<StartCause>(3) { StartCause.WaitCancelled() }, causes)
+            assertEquals(3, api.wakeCount)
+        } finally {
+            eventLoop.clearRunLoopOwner(owner)
+            owner.close()
         }
-
-        assertEquals(List<StartCause>(3) { StartCause.WaitCancelled() }, causes)
-        assertEquals(3, api.wakeCount)
-        owner.close()
     }
 
     @Test
@@ -111,13 +115,15 @@ class AppKitEventLoopProxyTest {
 
     private class WakeRecordingCFRunLoopApi : CFRunLoopApi {
         var observer = 0L
+        val timer = 200L
         var wakeCount = 0
 
         override fun createObserver(activities: Long): Long = 100L.also { observer = it }
         override fun addObserver(observer: Long) = Unit
         override fun removeObserver(observer: Long) = Unit
         override fun invalidateObserver(observer: Long) = Unit
-        override fun createTimer(deadlineEpochMillis: Long): Long = 200L
+        override fun createTimer(deadlineEpochMillis: Long): Long = timer
+        override fun createImmediateTimer(): Long = timer
         override fun addTimer(timer: Long) = Unit
         override fun invalidateTimer(timer: Long) = Unit
         override fun removeTimer(timer: Long) = Unit

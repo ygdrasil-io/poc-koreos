@@ -30,6 +30,8 @@ internal interface CFRunLoopApi : AutoCloseable {
 
     fun createTimer(deadlineEpochMillis: Long): Long
 
+    fun createImmediateTimer(): Long
+
     fun addTimer(timer: Long)
 
     fun invalidateTimer(timer: Long)
@@ -52,16 +54,26 @@ internal class CFRunLoopOwner private constructor(
     private val state: AppKitLoopState,
     private val onAfterWaiting: (StartCause) -> Unit,
     private val onBeforeWaiting: () -> ControlFlow,
+    private val afterIterationClaimed: () -> Unit,
     private val observer: Long,
 ) : AutoCloseable {
+    private sealed interface TimerKind {
+        data object Immediate : TimerKind
+
+        data class Deadline(val generation: Long) : TimerKind
+    }
+
     private data class ArmedTimer(
         val ref: Long,
-        val generation: Long,
+        val kind: TimerKind,
     )
 
     private val lock = Any()
     private val callbackFailures = ConcurrentLinkedQueue<Throwable>()
     private var currentTimer: ArmedTimer? = null
+    private var immediateTimerAfterAboutToWait: Long? = null
+    private var reachedBeforeWaiting = false
+    private var iterationOpenUntilBeforeWaiting = false
     private var closed = false
 
     /** Marks an external event before waking Core Foundation. */
@@ -69,7 +81,7 @@ internal class CFRunLoopOwner private constructor(
         synchronized(lock) {
             if (closed) return
             state.signalExternalEvent()
-            api.wakeUp()
+            if (!iterationOpenUntilBeforeWaiting) persistImmediateWake()
         }
     }
 
@@ -89,6 +101,23 @@ internal class CFRunLoopOwner private constructor(
             state.closeWindow(windowId)
         }
     }
+
+    /** Queues one redraw batch and persistently wakes an idle run loop. */
+    fun requestRedraw(windowId: org.graphiks.kadre.core.WindowId): Boolean =
+        synchronized(lock) {
+            if (closed) return@synchronized false
+            when (state.requestRedraw(windowId)) {
+                RedrawRequestResult.Rejected -> false
+                RedrawRequestResult.Coalesced -> true
+                RedrawRequestResult.Queued -> {
+                    if (!iterationOpenUntilBeforeWaiting) {
+                        state.signalExternalEvent()
+                        persistImmediateWake()
+                    }
+                    true
+                }
+            }
+        }
 
     /** Kotlin-safe boundary for failures captured by native callbacks. */
     fun throwPendingCallbackFailure() {
@@ -118,7 +147,9 @@ internal class CFRunLoopOwner private constructor(
             closed = true
             timerToRelease = currentTimer
             currentTimer = null
-            timerToRelease?.let { timerRoutes.remove(it.ref, TimerRoute(this, it.generation)) }
+            immediateTimerAfterAboutToWait = null
+            iterationOpenUntilBeforeWaiting = false
+            timerToRelease?.let { timerRoutes.remove(it.ref, TimerRoute(this, it.kind)) }
             observerRoutes.remove(observer, this)
         }
 
@@ -142,65 +173,152 @@ internal class CFRunLoopOwner private constructor(
         if (activity and AFTER_WAITING != 0L) {
             val cause = synchronized(lock) {
                 if (closed) return
-                state.classifyWake(currentTimer?.generation)
-                state.beginIteration()
+                val timerKind = currentTimer?.kind
+                if (timerKind === TimerKind.Immediate) {
+                    null
+                } else {
+                    state.classifyWake((timerKind as? TimerKind.Deadline)?.generation)
+                    state.beginPendingIterationOrNull()?.also {
+                        iterationOpenUntilBeforeWaiting = true
+                    }
+                }
             }
-            onAfterWaiting(cause)
+            cause?.let { claimedCause ->
+                afterIterationClaimed()
+                deliverConsumedIteration(claimedCause)
+            }
         }
 
         if (activity and BEFORE_WAITING != 0L) {
-            synchronized(lock) {
+            val shouldNotifyAboutToWait = synchronized(lock) {
                 if (closed) return
+                val timer = currentTimer
+                timer?.kind !== TimerKind.Immediate ||
+                    immediateTimerAfterAboutToWait != timer.ref
             }
-            val controlFlow = onBeforeWaiting()
-            synchronized(lock) {
-                if (closed) return
-                applyTimerDecision(state.arm(controlFlow))
+            if (shouldNotifyAboutToWait) {
+                try {
+                    val controlFlow = onBeforeWaiting()
+                    synchronized(lock) {
+                        if (closed) return
+                        reachedBeforeWaiting = true
+                        applyTimerDecision(state.arm(controlFlow))
+                        currentTimer
+                            ?.takeIf { it.kind === TimerKind.Immediate }
+                            ?.let { immediateTimerAfterAboutToWait = it.ref }
+                        iterationOpenUntilBeforeWaiting = false
+                    }
+                } catch (failure: Throwable) {
+                    synchronized(lock) {
+                        iterationOpenUntilBeforeWaiting = false
+                    }
+                    throw failure
+                }
             }
         }
     }
 
-    private fun timerCallback(ref: Long, generation: Long) {
-        synchronized(lock) {
+    private fun timerCallback(ref: Long, kind: TimerKind) {
+        val timer = synchronized(lock) {
             if (closed) return
             val timer = currentTimer?.takeIf {
-                it.ref == ref && it.generation == generation
+                it.ref == ref && it.kind == kind
             } ?: return
             currentTimer = null
-            timerRoutes.remove(ref, TimerRoute(this, generation))
-            releaseTimer(timer)?.let { throw it }
+            if (immediateTimerAfterAboutToWait == ref) {
+                immediateTimerAfterAboutToWait = null
+            }
+            timerRoutes.remove(ref, TimerRoute(this, kind))
+            timer
+        }
+
+        releaseTimer(timer)?.let { throw it }
+
+        val cause = synchronized(lock) {
+            if (closed) return
+            if (kind === TimerKind.Immediate && !reachedBeforeWaiting) {
+                null
+            } else {
+                if (kind is TimerKind.Deadline) state.signalDeadline(kind.generation)
+                state.beginPendingIterationOrNull()?.also {
+                    iterationOpenUntilBeforeWaiting = true
+                }
+            }
+        }
+        cause?.let { claimedCause ->
+            afterIterationClaimed()
+            deliverConsumedIteration(claimedCause)
+        }
+    }
+
+    private fun deliverConsumedIteration(cause: StartCause) {
+        synchronized(lock) {
+            if (closed) return
+        }
+        try {
+            onAfterWaiting(cause)
+        } catch (failure: Throwable) {
+            synchronized(lock) {
+                iterationOpenUntilBeforeWaiting = false
+            }
+            throw failure
         }
     }
 
     private fun applyTimerDecision(decision: TimerDecision) {
-        cancelCurrentTimer()
         when (decision) {
-            TimerDecision.Cancel -> Unit
-            TimerDecision.FireNow -> api.wakeUp()
+            TimerDecision.Cancel -> cancelCurrentTimer()
+            TimerDecision.FireNow -> persistImmediateWake()
             is TimerDecision.Arm -> {
-                val timerRef = api.createTimer(decision.deadline)
-                check(timerRef != 0L) { "CFRunLoopTimerCreate returned NULL" }
-                val timer = ArmedTimer(timerRef, decision.generation)
-                timerRoutes[timerRef] = TimerRoute(this, decision.generation)
-                try {
-                    api.addTimer(timerRef)
-                    currentTimer = timer
-                } catch (failure: Throwable) {
-                    timerRoutes.remove(timerRef, TimerRoute(this, decision.generation))
-                    var primary = failure
-                    primary = cleanupStep(primary) { api.invalidateTimer(timerRef) }!!
-                    primary = cleanupStep(primary) { api.removeTimer(timerRef) }!!
-                    primary = cleanupStep(primary) { api.release(timerRef) }!!
-                    throw primary
+                cancelCurrentTimer()
+                installTimer(TimerKind.Deadline(decision.generation)) {
+                    api.createTimer(decision.deadline)
                 }
             }
+        }
+    }
+
+    private fun persistImmediateWake() {
+        var failure: Throwable? = null
+        failure = cleanupStep(failure) { ensureImmediateTimer() }
+        failure = cleanupStep(failure) { api.wakeUp() }
+        failure?.let { throw it }
+    }
+
+    private fun ensureImmediateTimer() {
+        if (currentTimer?.kind === TimerKind.Immediate) return
+        cancelCurrentTimer()
+        installTimer(TimerKind.Immediate, api::createImmediateTimer)
+    }
+
+    private fun installTimer(kind: TimerKind, create: () -> Long) {
+        val timerRef = create()
+        check(timerRef != 0L) { "CFRunLoopTimerCreate returned NULL" }
+        val timer = ArmedTimer(timerRef, kind)
+        timerRoutes[timerRef] = TimerRoute(this, kind)
+        try {
+            api.addTimer(timerRef)
+            currentTimer = timer
+            if (kind === TimerKind.Immediate && reachedBeforeWaiting) {
+                immediateTimerAfterAboutToWait = timerRef
+            }
+        } catch (failure: Throwable) {
+            timerRoutes.remove(timerRef, TimerRoute(this, kind))
+            var primary = failure
+            primary = cleanupStep(primary) { api.invalidateTimer(timerRef) }!!
+            primary = cleanupStep(primary) { api.removeTimer(timerRef) }!!
+            primary = cleanupStep(primary) { api.release(timerRef) }!!
+            throw primary
         }
     }
 
     private fun cancelCurrentTimer() {
         val timer = currentTimer ?: return
         currentTimer = null
-        timerRoutes.remove(timer.ref, TimerRoute(this, timer.generation))
+        if (immediateTimerAfterAboutToWait == timer.ref) {
+            immediateTimerAfterAboutToWait = null
+        }
+        timerRoutes.remove(timer.ref, TimerRoute(this, timer.kind))
         releaseTimer(timer)?.let { throw it }
     }
 
@@ -215,15 +333,17 @@ internal class CFRunLoopOwner private constructor(
     private fun recordCallbackFailure(failure: Throwable) {
         callbackFailures.add(failure)
         try {
-            api.wakeUp()
-        } catch (wakeFailure: Throwable) {
-            if (wakeFailure !== failure) failure.addSuppressed(wakeFailure)
+            synchronized(lock) {
+                if (!closed) persistImmediateWake()
+            }
+        } catch (deliveryFailure: Throwable) {
+            if (deliveryFailure !== failure) failure.addSuppressed(deliveryFailure)
         }
     }
 
     private data class TimerRoute(
         val owner: CFRunLoopOwner,
-        val generation: Long,
+        val kind: TimerKind,
     )
 
     companion object {
@@ -243,6 +363,7 @@ internal class CFRunLoopOwner private constructor(
             state: AppKitLoopState,
             onAfterWaiting: (StartCause) -> Unit,
             onBeforeWaiting: () -> ControlFlow,
+            afterIterationClaimed: () -> Unit = {},
         ): CFRunLoopOwner {
             var observer: Long? = null
             var owner: CFRunLoopOwner? = null
@@ -255,6 +376,7 @@ internal class CFRunLoopOwner private constructor(
                     state,
                     onAfterWaiting,
                     onBeforeWaiting,
+                    afterIterationClaimed,
                     createdObserver,
                 )
                 owner = installedOwner
@@ -333,7 +455,7 @@ internal class CFRunLoopOwner private constructor(
         internal fun dispatchTimerCallback(timer: Long) {
             val route = timerRoutes[timer] ?: return
             try {
-                route.owner.timerCallback(timer, route.generation)
+                route.owner.timerCallback(timer, route.kind)
             } catch (failure: Throwable) {
                 try {
                     route.owner.recordCallbackFailure(failure)
@@ -349,7 +471,9 @@ internal class CFRunLoopOwner private constructor(
                 primary
             } catch (failure: Throwable) {
                 if (primary == null) failure else primary.also {
-                    if (failure !== it) it.addSuppressed(failure)
+                    if (failure !== it && it.suppressed.none { suppressed -> suppressed === failure }) {
+                        it.addSuppressed(failure)
+                    }
                 }
             }
     }
@@ -399,6 +523,12 @@ internal class NativeCFRunLoopApi private constructor(
 
     override fun createTimer(deadlineEpochMillis: Long): Long {
         val cfAbsoluteTime = deadlineEpochMillis / 1_000.0 - CF_ABSOLUTE_TIME_UNIX_OFFSET
+        return createTimerAtAbsoluteTime(cfAbsoluteTime)
+    }
+
+    override fun createImmediateTimer(): Long = createTimerAtAbsoluteTime(0.0)
+
+    private fun createTimerAtAbsoluteTime(cfAbsoluteTime: Double): Long {
         return (timerCreate.invoke(
             MemorySegment.NULL,
             cfAbsoluteTime,
