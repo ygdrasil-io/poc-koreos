@@ -15,6 +15,9 @@ import kotlin.test.assertTrue
 @JsFun("() => Object.getOwnPropertyDescriptor(window, 'devicePixelRatio') || null")
 private external fun readDevicePixelRatioDescriptor(): JsAny?
 
+@JsFun("() => globalThis.ResizeObserver")
+private external fun readResizeObserver(): JsAny
+
 @JsFun("""(id) => {
     Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.0 });
     const canvas = document.createElement('canvas');
@@ -71,7 +74,92 @@ private external fun dispatchPointer(
     button: Int,
 )
 
+@JsFun("""(id) => {
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.0 });
+    const canvas = document.createElement('canvas');
+    canvas.id = id;
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    canvas.style.border = '2px solid black';
+    document.body.appendChild(canvas);
+    globalThis.ResizeObserver = class {
+        constructor(callback) { this.callback = callback; }
+        observe() { for (let i = 0; i < 5; i += 1) this.callback([]); }
+        disconnect() {}
+    };
+}""")
+private external fun installBorderedDom(id: JsString)
+
+@JsFun("""(id, originalDpr, originalResizeObserver) => {
+    const canvas = document.getElementById(id);
+    if (canvas) canvas.remove();
+    if (originalDpr === null) delete window.devicePixelRatio;
+    else Object.defineProperty(window, 'devicePixelRatio', originalDpr);
+    globalThis.ResizeObserver = originalResizeObserver;
+}""")
+private external fun restoreBorderedDom(
+    id: JsString,
+    originalDpr: JsAny?,
+    originalResizeObserver: JsAny,
+)
+
+@JsFun("""(id) => {
+    const canvas = document.getElementById(id);
+    const rect = canvas.getBoundingClientRect();
+    let event = null;
+    const options = {
+        bubbles: true,
+        clientX: rect.left + canvas.clientLeft,
+        clientY: rect.top + canvas.clientTop,
+        pointerId: 11,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0
+    };
+    if (typeof window.PointerEvent === 'function') {
+        try { event = new PointerEvent('pointermove', options); } catch (_) {}
+    }
+    if (!event) {
+        event = new Event('pointermove', { bubbles: true });
+        for (const [name, value] of Object.entries(options)) {
+            Object.defineProperty(event, name, { configurable: true, value: value });
+        }
+    }
+    canvas.dispatchEvent(event);
+}""")
+private external fun dispatchPointerAtContentOrigin(id: JsString)
+
 class WasmJsWebDomBridgeIntegrationTest {
+
+    @Test
+    fun `real Wasm bridge excludes canvas border from physical metrics and pointer origin`() {
+        val canvasId = "kadre-wasm-bordered-canvas"
+        val originalDpr = readDevicePixelRatioDescriptor()
+        val originalResizeObserver = readResizeObserver()
+        val bridge = WasmJsWebDomBridge()
+        val events = mutableListOf<WebWindowEvent>()
+        bridge.onWindowEvent = { event -> events.add(event) }
+
+        try {
+            installBorderedDom(canvasId.toJsString())
+            bridge.attach(canvasId)
+
+            val sizes = List(5) { bridge.readCanvasPhysicalSize(canvasId) }
+            assertEquals(List(5) { 1600 to 1200 }, sizes)
+            assertEquals(
+                List(5) { WebWindowEvent.Resized(1600, 1200) },
+                events.filterIsInstance<WebWindowEvent.Resized>(),
+            )
+
+            dispatchPointerAtContentOrigin(canvasId.toJsString())
+            val moved = assertIs<WebWindowEvent.PointerMoved>(events.last())
+            assertEquals(0.0, moved.x)
+            assertEquals(0.0, moved.y)
+        } finally {
+            bridge.detach()
+            restoreBorderedDom(canvasId.toJsString(), originalDpr, originalResizeObserver)
+        }
+    }
 
     @Test
     fun `real Wasm bridge maps pointer events and reactivates only its suspended route`() {

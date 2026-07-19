@@ -544,12 +544,15 @@ class JsWebDomBridge : WebDomBridge {
         readCanvasMetrics(canvasElement ?: error("Web bridge is not attached to a canvas"))
 
     private fun readCanvasMetrics(canvas: Element): CanvasMetrics {
-        val rect = canvas.asDynamic().getBoundingClientRect()
+        val target = canvas.asDynamic()
+        val rect = target.getBoundingClientRect()
         return CanvasMetrics(
-            leftCss = (rect.left as Number).toDouble(),
-            topCss = (rect.top as Number).toDouble(),
-            widthCss = (rect.width as Number).toDouble(),
-            heightCss = (rect.height as Number).toDouble(),
+            leftCss = (rect.left as Number).toDouble() +
+                (target.clientLeft as Number).toDouble(),
+            topCss = (rect.top as Number).toDouble() +
+                (target.clientTop as Number).toDouble(),
+            widthCss = (target.clientWidth as Number).toDouble(),
+            heightCss = (target.clientHeight as Number).toDouble(),
             devicePixelRatio = window.devicePixelRatio,
         )
     }

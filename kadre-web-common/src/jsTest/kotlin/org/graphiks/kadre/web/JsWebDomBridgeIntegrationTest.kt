@@ -16,6 +16,49 @@ import kotlin.test.assertTrue
 class JsWebDomBridgeIntegrationTest {
 
     @Test
+    fun `real JS bridge excludes canvas border from physical metrics and pointer origin`() {
+        val canvasId = "kadre-js-bordered-canvas"
+        val canvas = document.createElement("canvas")
+        canvas.id = canvasId
+        canvas.setAttribute("style", "width: 800px; height: 600px; border: 2px solid black;")
+        val originalDpr = readDevicePixelRatioDescriptor()
+        val originalResizeObserver: dynamic = js("globalThis.ResizeObserver")
+        val bridge = JsWebDomBridge()
+        val events = mutableListOf<WebWindowEvent>()
+        bridge.onWindowEvent = events::add
+
+        try {
+            document.body?.appendChild(canvas) ?: error("document.body is required by the browser test")
+            installDevicePixelRatio()
+            installImmediateResizeObserver()
+            bridge.attach(canvasId)
+
+            val sizes = List(5) { bridge.readCanvasPhysicalSize(canvasId) }
+            assertEquals(List(5) { 1600 to 1200 }, sizes)
+            assertEquals(
+                List(5) { WebWindowEvent.Resized(1600, 1200) },
+                events.filterIsInstance<WebWindowEvent.Resized>(),
+            )
+
+            val rect = canvas.asDynamic().getBoundingClientRect()
+            val contentX = (rect.left as Number).toDouble() +
+                (canvas.asDynamic().clientLeft as Number).toDouble()
+            val contentY = (rect.top as Number).toDouble() +
+                (canvas.asDynamic().clientTop as Number).toDouble()
+            canvas.dispatchEvent(pointerEvent("pointermove", contentX, contentY, 11L, 0))
+
+            val moved = assertIs<WebWindowEvent.PointerMoved>(events.last())
+            assertEquals(0.0, moved.x)
+            assertEquals(0.0, moved.y)
+        } finally {
+            bridge.detach()
+            restoreResizeObserver(originalResizeObserver)
+            restoreDevicePixelRatio(originalDpr)
+            canvas.parentNode?.removeChild(canvas)
+        }
+    }
+
+    @Test
     fun `real JS bridge maps pointer events and reactivates only its suspended route`() {
         val canvasId = "kadre-js-bridge-integration"
         val canvas = document.createElement("canvas")
@@ -100,6 +143,14 @@ class JsWebDomBridgeIntegrationTest {
 
     private fun installDevicePixelRatio() {
         js("Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.0 })")
+    }
+
+    private fun installImmediateResizeObserver() {
+        js("globalThis.ResizeObserver = class { constructor(callback) { this.callback = callback; } observe() { for (let i = 0; i < 5; i += 1) this.callback([]); } disconnect() {} }")
+    }
+
+    private fun restoreResizeObserver(original: dynamic) {
+        js("globalThis.ResizeObserver = original")
     }
 
     private fun restoreDevicePixelRatio(descriptor: dynamic) {

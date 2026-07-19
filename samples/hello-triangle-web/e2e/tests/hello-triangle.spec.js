@@ -5,6 +5,7 @@
 // of adapter/device acquisition errors and JS errors, then captures a screenshot
 // of the canvas as a proof artifact.
 const { test, expect } = require('@playwright/test');
+const { expectStablePhysicalCanvas } = require('./canvas-sizing');
 
 test('hello-triangle-web initializes wgpu4k and displays frames', async ({ page }) => {
   const logs = [];
@@ -27,8 +28,9 @@ test('hello-triangle-web initializes wgpu4k and displays frames', async ({ page 
   const acquisitionFailure = logs.find((l) => l.includes('Acquisition failed'));
   expect(acquisitionFailure, `WebGPU acquisition failure: ${acquisitionFailure}`).toBeUndefined();
 
-  // Let a few frames present (the requestRedraw loop runs continuously).
-  await page.waitForTimeout(2_000);
+  // A physical resize must converge without feeding DPR-scaled dimensions back
+  // into the CSS layout or multiplying them by DPR a second time.
+  await expectStablePhysicalCanvas(page, logs);
 
   // Visual proof artifact.
   await page.locator('#kadre-canvas').screenshot({ path: 'triangle.png' });

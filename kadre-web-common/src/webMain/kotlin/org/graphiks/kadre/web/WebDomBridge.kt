@@ -69,8 +69,9 @@ interface WebDomBridge {
     fun readDevicePixelRatio(): Double = 1.0
 
     /**
-     * Returns the current CSS dimensions of the canvas identified by [canvasId]
-     * in physical pixels (CSS pixels × devicePixelRatio, rounded to nearest Int).
+     * Returns the current client/rendering dimensions of the canvas identified
+     * by [canvasId] in physical pixels (client CSS pixels × devicePixelRatio,
+     * rounded to nearest Int). CSS borders are excluded.
      *
      * Used by [WebWindow] to initialize [WebWindow.innerSize] synchronously at
      * window-creation time (before the first [WebWindowEvent.Resized]).

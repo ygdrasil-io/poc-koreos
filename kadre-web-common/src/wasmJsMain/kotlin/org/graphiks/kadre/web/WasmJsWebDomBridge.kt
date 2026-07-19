@@ -138,6 +138,18 @@ private external fun getDevicePixelRatio(): Double
 @JsFun("(canvas) => canvas.getBoundingClientRect()")
 private external fun canvasBoundingClientRect(canvas: JsEventTarget): JsDomRect
 
+@JsFun("(canvas) => canvas.clientLeft")
+private external fun canvasClientLeft(canvas: JsEventTarget): Double
+
+@JsFun("(canvas) => canvas.clientTop")
+private external fun canvasClientTop(canvas: JsEventTarget): Double
+
+@JsFun("(canvas) => canvas.clientWidth")
+private external fun canvasClientWidth(canvas: JsEventTarget): Double
+
+@JsFun("(canvas) => canvas.clientHeight")
+private external fun canvasClientHeight(canvas: JsEventTarget): Double
+
 // --- DnD (Drag & Drop) helpers ---
 
 @JsFun("(e) => { e.preventDefault(); }")
@@ -813,10 +825,10 @@ class WasmJsWebDomBridge : WebDomBridge {
     private fun readCanvasMetrics(canvas: JsEventTarget): CanvasMetrics {
         val rect = canvasBoundingClientRect(canvas)
         return CanvasMetrics(
-            leftCss = rect.left.toDouble(),
-            topCss = rect.top.toDouble(),
-            widthCss = rect.width.toDouble(),
-            heightCss = rect.height.toDouble(),
+            leftCss = rect.left.toDouble() + canvasClientLeft(canvas),
+            topCss = rect.top.toDouble() + canvasClientTop(canvas),
+            widthCss = canvasClientWidth(canvas),
+            heightCss = canvasClientHeight(canvas),
             devicePixelRatio = getDevicePixelRatio(),
         )
     }
