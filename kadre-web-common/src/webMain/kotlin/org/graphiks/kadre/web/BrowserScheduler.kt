@@ -74,6 +74,12 @@ internal class BrowserScheduler(
         invalidateAndCancelOwnedIds()
     }
 
+    /** Cancels the currently owned browser IDs without making this scheduler terminal. */
+    fun cancelPending() {
+        if (cancelled) return
+        invalidateAndCancelOwnedIds()
+    }
+
     private fun wakeCause(controlFlow: ControlFlow): StartCause = when (controlFlow) {
         ControlFlow.Poll -> StartCause.Poll
         ControlFlow.Wait -> StartCause.WaitCancelled()

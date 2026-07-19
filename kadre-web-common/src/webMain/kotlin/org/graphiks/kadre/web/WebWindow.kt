@@ -112,7 +112,16 @@ class WebWindow(
 ) : Window {
 
     internal var metricsConnection: WebMetricsConnection? = null
+    internal var closeHandler: ((WebWindow) -> Unit)? = null
     private var closed = false
+
+    internal val isClosed: Boolean get() = closed
+
+    internal fun markClosed(): Boolean {
+        if (closed) return false
+        closed = true
+        return true
+    }
 
     constructor(canvasElementId: String, bridge: WebDomBridge)
             : this(
@@ -220,6 +229,7 @@ class WebWindow(
      * Emits the event to [WebDomBridge.onWindowEvent] if it is registered.
      */
     override fun requestRedraw() {
+        if (closed) return
         bridge.onWindowEvent?.invoke(WebWindowEvent.RedrawRequested)
     }
 
@@ -248,7 +258,11 @@ class WebWindow(
      */
     override fun close() {
         if (closed) return
-        closed = true
+        closeHandler?.let { handler ->
+            handler(this)
+            return
+        }
+        if (!markClosed()) return
         val connection = metricsConnection
         if (connection == null || WebMetricsTransactions.disconnect(connection)) {
             bridge.detach()

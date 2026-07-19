@@ -369,19 +369,26 @@ private external fun jsIsPointerLocked(canvas: JsEventTarget?): Boolean
 // ── Task 14: safeArea insets + ownedDisplayHandle ──────────────────────────
 
 @JsFun("""() => {
+    const body = document.body;
+    if (!body) return '0,0,0,0';
     const div = document.createElement('div');
     div.style.paddingTop = 'env(safe-area-inset-top, 0px)';
     div.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
     div.style.paddingLeft = 'env(safe-area-inset-left, 0px)';
     div.style.paddingRight = 'env(safe-area-inset-right, 0px)';
-    document.body.appendChild(div);
-    const cs = getComputedStyle(div);
-    const r = (parseInt(cs.paddingTop) || 0) + ',' +
-              (parseInt(cs.paddingBottom) || 0) + ',' +
-              (parseInt(cs.paddingLeft) || 0) + ',' +
-              (parseInt(cs.paddingRight) || 0);
-    document.body.removeChild(div);
-    return r;
+    body.appendChild(div);
+    try {
+        const cs = getComputedStyle(div);
+        const value = css => Number.isFinite(Number.parseFloat(css))
+            ? Number.parseFloat(css)
+            : 0;
+        return value(cs.paddingTop) + ',' +
+               value(cs.paddingBottom) + ',' +
+               value(cs.paddingLeft) + ',' +
+               value(cs.paddingRight);
+    } finally {
+        body.removeChild(div);
+    }
 }""")
 private external fun measureSafeAreaInsetsJs(): String
 
@@ -727,11 +734,12 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override fun getSafeAreaInsets(): Insets<Int> {
         val parts = measureSafeAreaInsetsJs().split(',')
-        return Insets(
-            top = parts.getOrNull(0)?.toIntOrNull() ?: 0,
-            bottom = parts.getOrNull(1)?.toIntOrNull() ?: 0,
-            left = parts.getOrNull(2)?.toIntOrNull() ?: 0,
-            right = parts.getOrNull(3)?.toIntOrNull() ?: 0,
+        return physicalSafeAreaInsets(
+            topCss = parts.getOrNull(0)?.toDoubleOrNull() ?: 0.0,
+            bottomCss = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
+            leftCss = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0,
+            rightCss = parts.getOrNull(3)?.toDoubleOrNull() ?: 0.0,
+            devicePixelRatio = readDevicePixelRatio(),
         )
     }
 

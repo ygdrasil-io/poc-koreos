@@ -74,6 +74,7 @@ open class WebEventLoop internal constructor(
         data class Window(
             val window: WebWindow,
             val event: WindowEvent,
+            val terminal: Boolean = false,
         ) : PendingWebEvent
 
         data class Metrics(
@@ -90,6 +91,7 @@ open class WebEventLoop internal constructor(
     private var _isExiting = false
     private var handler: ApplicationHandler? = null
     private var suspendedDelivered = false
+    private var schedulerPausedAfterLastWindowClose = false
     private val scheduler = schedulingApi?.let { api ->
         BrowserScheduler(api, ::runScheduledIteration)
     }
@@ -169,16 +171,7 @@ open class WebEventLoop internal constructor(
     fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
         if (primaryBridge == null) {
-            primaryBridge = bridge
-            // Wire the theme change listener on the primary bridge.
-            // Each window receives ThemeChanged whenever prefers-color-scheme toggles.
-            bridge.onThemeChange = { dark ->
-                val theme = if (dark) Theme.Dark else Theme.Light
-                // Dispatch ThemeChanged for every window attached to this event loop.
-                for (win in windows) {
-                    enqueueWindowEvent(win, WindowEvent.ThemeChanged(theme))
-                }
-            }
+            installPrimaryBridge(bridge)
         }
         val canvasId = bridge.ensureCanvas(attrs)
         val window = WebWindow(
@@ -186,22 +179,21 @@ open class WebEventLoop internal constructor(
             canvasElementId = canvasId,
             bridge = bridge,
         )
+        window.closeHandler = ::closeWindow
 
         // Initialise synchronously from the current DOM state (before any event fires).
         val (initW, initH) = bridge.readCanvasPhysicalSize(canvasId)
         window.updatePhysicalSize(initW, initH)
         window.updateScaleFactor(bridge.readDevicePixelRatio())
 
-        bridge.onWindowEvent = { event ->
-            // Queue the event for the window owned by this DOM bridge.
-            enqueueWindowEvent(window, event.toWindowEvent())
-        }
-        window.metricsConnection = WebMetricsTransactions.connect(bridge) { transaction ->
-            pendingEvents.add(PendingWebEvent.Metrics(window, transaction))
+        val wasPausedAfterLastClose = schedulerPausedAfterLastWindowClose
+        schedulerPausedAfterLastWindowClose = false
+        windows.add(window)
+        installWindowBridge(window)
+        bridge.attach(canvasId)
+        if (wasPausedAfterLastClose) {
             signalScheduling()
         }
-        windows.add(window)
-        bridge.attach(canvasId)
         return window
     }
 
@@ -312,7 +304,10 @@ open class WebEventLoop internal constructor(
         // creation right away (parity with the AppKit/Win32 desktop loops).
         handler.canCreateSurfaces(this)
         handler.aboutToWait(this)
-        if (!_isExiting) {
+        if (
+            !_isExiting &&
+            (!schedulerPausedAfterLastWindowClose || pendingEvents.isNotEmpty())
+        ) {
             if (scheduler != null) {
                 scheduler.arm(_controlFlow, pendingEvents.isNotEmpty())
             } else {
@@ -362,6 +357,7 @@ open class WebEventLoop internal constructor(
         for (pending in snapshot) {
             when (pending) {
                 is PendingWebEvent.Window -> {
+                    if (pending.window.isClosed && !pending.terminal) continue
                     if (pending.event == WindowEvent.RedrawRequested) {
                         queuedRedrawWindows.remove(pending.window)
                     }
@@ -376,6 +372,7 @@ open class WebEventLoop internal constructor(
                 }
                 is PendingWebEvent.Metrics -> {
                     val window = pending.window
+                    if (window.isClosed) continue
                     val metrics = pending.transaction
                     window.updateScaleFactor(metrics.scaleFactor)
                     window.updatePhysicalSize(metrics.physicalSize.width, metrics.physicalSize.height)
@@ -384,27 +381,32 @@ open class WebEventLoop internal constructor(
                         window.id,
                         WebWindowEvent.ScaleFactorChanged(metrics.scaleFactor).toWindowEvent(),
                     )
-                    currentHandler.windowEvent(
-                        this,
-                        window.id,
-                        WebWindowEvent.Resized(
-                            metrics.physicalSize.width,
-                            metrics.physicalSize.height,
-                        ).toWindowEvent(),
-                    )
+                    if (!window.isClosed) {
+                        currentHandler.windowEvent(
+                            this,
+                            window.id,
+                            WebWindowEvent.Resized(
+                                metrics.physicalSize.width,
+                                metrics.physicalSize.height,
+                            ).toWindowEvent(),
+                        )
+                    }
                 }
             }
         }
 
         currentHandler.aboutToWait(this)
         // Schedule the next frame according to the current mode
-        if (!_isExiting) {
+        if (
+            !_isExiting &&
+            (!schedulerPausedAfterLastWindowClose || pendingEvents.isNotEmpty())
+        ) {
             if (scheduler != null) {
                 scheduler.arm(_controlFlow, pendingEvents.isNotEmpty())
             } else {
                 scheduleNextFrame(currentHandler)
             }
-        } else if (!suspendedDelivered) {
+        } else if (_isExiting && !suspendedDelivered) {
             // Notify the handler of the imminent end
             suspendedDelivered = true
             currentHandler.suspended(this)
@@ -412,12 +414,97 @@ open class WebEventLoop internal constructor(
     }
 
     private fun enqueueWindowEvent(window: WebWindow, event: WindowEvent) {
+        if (window.isClosed || window !in windows) return
         if (event == WindowEvent.RedrawRequested) {
             if (!queuedRedrawWindows.add(window)) return
         }
 
         pendingEvents.add(PendingWebEvent.Window(window, event))
         signalScheduling()
+    }
+
+    private fun closeWindow(window: WebWindow) {
+        if (!window.markClosed()) return
+        if (!windows.remove(window)) return
+
+        window.closeHandler = null
+        val bridge = window.bridge
+        val bridgeStillOwned = windows.any { it.bridge === bridge }
+        if (!bridgeStillOwned) {
+            bridge.onWindowEvent = null
+        }
+        val connection = window.metricsConnection
+        window.metricsConnection = null
+        val ownsDetachment = connection == null || WebMetricsTransactions.disconnect(connection)
+
+        pendingEvents.removeAll { pending ->
+            when (pending) {
+                is PendingWebEvent.Window -> pending.window === window
+                is PendingWebEvent.Metrics -> pending.window === window
+            }
+        }
+        queuedRedrawWindows.remove(window)
+
+        val wasPrimary = primaryBridge === bridge && !bridgeStillOwned
+        if (wasPrimary) {
+            bridge.onThemeChange = null
+            primaryBridge = null
+        }
+        if (!bridgeStillOwned && ownsDetachment) {
+            bridge.detach()
+        } else if (bridgeStillOwned && ownsDetachment) {
+            windows.lastOrNull { it.bridge === bridge }?.let(::installWindowBridge)
+        }
+        if (wasPrimary) {
+            windows.firstOrNull()?.bridge?.let(::installPrimaryBridge)
+        }
+
+        try {
+            val currentHandler = handler
+            if (currentHandler != null) {
+                currentHandler.windowEvent(this, window.id, WindowEvent.Destroyed)
+            } else {
+                pendingEvents.add(
+                    PendingWebEvent.Window(
+                        window = window,
+                        event = WindowEvent.Destroyed,
+                        terminal = true,
+                    ),
+                )
+            }
+        } finally {
+            if (windows.isEmpty()) {
+                schedulerPausedAfterLastWindowClose = true
+                scheduler?.cancelPending()
+            }
+        }
+    }
+
+    private fun installPrimaryBridge(bridge: WebDomBridge) {
+        primaryBridge = bridge
+        bridge.onThemeChange = { dark ->
+            val theme = if (dark) Theme.Dark else Theme.Light
+            for (window in windows.toList()) {
+                enqueueWindowEvent(window, WindowEvent.ThemeChanged(theme))
+            }
+        }
+    }
+
+    private fun installWindowBridge(window: WebWindow) {
+        val bridge = window.bridge
+        bridge.onWindowEvent = callback@{ event ->
+            if (window.isClosed || window !in windows) return@callback
+            if (event == WebWindowEvent.Destroyed) {
+                closeWindow(window)
+                return@callback
+            }
+            enqueueWindowEvent(window, event.toWindowEvent())
+        }
+        window.metricsConnection = WebMetricsTransactions.connect(bridge) { transaction ->
+            if (window.isClosed || window !in windows) return@connect
+            pendingEvents.add(PendingWebEvent.Metrics(window, transaction))
+            signalScheduling()
+        }
     }
 
     private fun signalScheduling() {

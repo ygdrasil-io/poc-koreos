@@ -19,6 +19,26 @@
 package org.graphiks.kadre.web
 
 import org.graphiks.kadre.core.Insets
+import kotlin.math.roundToInt
+
+internal fun physicalSafeAreaInsets(
+    topCss: Double,
+    bottomCss: Double,
+    leftCss: Double,
+    rightCss: Double,
+    devicePixelRatio: Double,
+): Insets<Int> {
+    val scale = normalizedDevicePixelRatio(devicePixelRatio)
+    fun physical(cssPixels: Double): Int =
+        ((cssPixels.takeIf(Double::isFinite) ?: 0.0) * scale).roundToInt()
+
+    return Insets(
+        top = physical(topCss),
+        bottom = physical(bottomCss),
+        left = physical(leftCss),
+        right = physical(rightCss),
+    )
+}
 
 /**
  * Binding interface between the browser DOM and the Kadre engine.
@@ -264,7 +284,8 @@ interface WebDomBridge {
     // ── Task 14: safeArea insets ─────────────────────────────────────────────
 
     /**
-     * Returns the CSS `env(safe-area-inset-*)` values for the current viewport.
+     * Returns the CSS `env(safe-area-inset-*)` values for the current viewport
+     * converted to physical pixels with the active device pixel ratio.
      *
      * On devices with a notch (iPhone X+) these values are non-zero. Default
      * implementation returns zero insets (test / desktop browser bridge).

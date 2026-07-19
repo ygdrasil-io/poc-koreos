@@ -614,23 +614,30 @@ class JsWebDomBridge : WebDomBridge {
         val body = document.body ?: return Insets(0, 0, 0, 0)
         val div = document.createElement("div").asDynamic()
         body.asDynamic().appendChild(div)
-        div.style.setProperty("padding-top", "env(safe-area-inset-top, 0px)")
-        div.style.setProperty("padding-bottom", "env(safe-area-inset-bottom, 0px)")
-        div.style.setProperty("padding-left", "env(safe-area-inset-left, 0px)")
-        div.style.setProperty("padding-right", "env(safe-area-inset-right, 0px)")
-        val cs = window.asDynamic().getComputedStyle(div)
-        fun parsePx(v: Any?): Int {
-            val s = v as? String ?: "0px"
-            return if (s.endsWith("px")) s.removeSuffix("px").trim().toIntOrNull() ?: 0 else 0
+        try {
+            div.style.setProperty("padding-top", "env(safe-area-inset-top, 0px)")
+            div.style.setProperty("padding-bottom", "env(safe-area-inset-bottom, 0px)")
+            div.style.setProperty("padding-left", "env(safe-area-inset-left, 0px)")
+            div.style.setProperty("padding-right", "env(safe-area-inset-right, 0px)")
+            val cs = window.asDynamic().getComputedStyle(div)
+            fun parsePx(v: Any?): Double {
+                val value = v as? String ?: return 0.0
+                return value
+                    .removeSuffix("px")
+                    .trim()
+                    .toDoubleOrNull()
+                    ?: 0.0
+            }
+            return physicalSafeAreaInsets(
+                topCss = parsePx(cs.paddingTop),
+                bottomCss = parsePx(cs.paddingBottom),
+                leftCss = parsePx(cs.paddingLeft),
+                rightCss = parsePx(cs.paddingRight),
+                devicePixelRatio = readDevicePixelRatio(),
+            )
+        } finally {
+            body.asDynamic().removeChild(div)
         }
-        val insets = Insets(
-            top = parsePx(cs.paddingTop),
-            bottom = parsePx(cs.paddingBottom),
-            left = parsePx(cs.paddingLeft),
-            right = parsePx(cs.paddingRight),
-        )
-        body.asDynamic().removeChild(div)
-        return insets
     }
 
     override fun getDisplayHandle(): Long {
