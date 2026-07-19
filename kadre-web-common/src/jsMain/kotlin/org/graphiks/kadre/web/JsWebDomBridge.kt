@@ -86,7 +86,6 @@ class JsWebDomBridge : WebDomBridge {
     private val documentListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private val windowListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private var resizeObserver: dynamic = null
-    private val pointerTracker = WebPointerTracker()
     private val touchTracker = WebPointerTracker()
 
     /** Hidden <input> used for IME composition events. */
@@ -97,7 +96,6 @@ class JsWebDomBridge : WebDomBridge {
 
     override fun attach(targetElementId: String) {
         val canvas = document.getElementById(targetElementId) ?: return
-        pointerTracker.close()
         touchTracker.close()
         targetElement = canvas
         canvasElement = canvas
@@ -150,61 +148,16 @@ class JsWebDomBridge : WebDomBridge {
             }
         }
 
-        // --- Pointer (unified PointerEvent) ---
-        addListener(canvas, "pointermove") { e ->
-            val pe = e.unsafeCast<PointerEventData>()
-            val pointer = pointerTracker.onMove(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
-            dispatch(
-                WebWindowEvent.PointerMoved(
-                    x = pe.clientX,
-                    y = pe.clientY,
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    source = pointer.source,
-                )
-            )
-        }
-
-        addListener(canvas, "pointerdown") { e ->
-            val pe = e.unsafeCast<PointerEventData>()
-            val pointer = pointerTracker.onStart(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
-            dispatch(
-                WebWindowEvent.PointerButton(
-                    x = pe.clientX,
-                    y = pe.clientY,
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    button = domPointerButtonSource(pe.button, pointer),
-                    state = WebKeyState.Pressed,
-                )
-            )
-        }
-
-        addListener(canvas, "pointerup") { e ->
-            val pe = e.unsafeCast<PointerEventData>()
-            val pointer = pointerTracker.onEnd(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
-            dispatch(
-                WebWindowEvent.PointerButton(
-                    x = pe.clientX,
-                    y = pe.clientY,
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    button = domPointerButtonSource(pe.button, pointer),
-                    state = WebKeyState.Released,
-                )
-            )
-        }
-
-        addListener(canvas, "pointerenter") { e ->
-            val pe = e.unsafeCast<PointerEventData>()
-            val pointer = pointerTracker.onStart(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
-            dispatch(WebWindowEvent.PointerEntered(pe.clientX, pe.clientY, pointer.pointerId, pointer.primary, pointer.kind))
-        }
-
-        addListener(canvas, "pointerleave") { e ->
-            val pe = e.unsafeCast<PointerEventData>()
-            val pointer = pointerTracker.onLeave(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
-            dispatch(WebWindowEvent.PointerLeft(pe.clientX, pe.clientY, pointer.pointerId, pointer.primary, pointer.kind))
+        // Pointer Events are authoritative when available. Legacy Touch Events
+        // are registered only as a feature-detected fallback, never alongside them.
+        val inputRegistration = selectWebInputRegistration(pointerEventsSupported())
+        when (inputRegistration.family) {
+            WebInputFamily.PointerEvents -> inputRegistration.eventTypes.forEach { type ->
+                addListener(canvas, type, ::dispatchPointerEvent)
+            }
+            WebInputFamily.LegacyTouchEvents -> inputRegistration.eventTypes.forEach { type ->
+                addListener(canvas, type) { e -> dispatchTouches(e) }
+            }
         }
 
         // --- Wheel ---
@@ -309,11 +262,6 @@ class JsWebDomBridge : WebDomBridge {
         })(function(w, h) { self.dispatchResized(w, h); })""")
         resizeObserver.observe(canvas)
 
-        // --- Touch (touchscreen / mobile) ---
-        for (type in listOf("touchstart", "touchmove", "touchend", "touchcancel")) {
-            addListener(canvas, type) { e -> dispatchTouches(e) }
-        }
-
         // --- Page visibility → Focused + Occluded ---
         addDocumentListener("visibilitychange") { _ ->
             val hidden: Boolean = js("document.hidden")
@@ -367,6 +315,21 @@ class JsWebDomBridge : WebDomBridge {
             )
         }
         if (preventDefaultEnabled) e.preventDefault()
+    }
+
+    private fun dispatchPointerEvent(e: Event) {
+        val pe = e.unsafeCast<PointerEventData>()
+        dispatch(
+            domPointerEvent(
+                eventType = e.type,
+                x = pe.clientX,
+                y = pe.clientY,
+                pointerId = pe.pointerId.toLong(),
+                pointerType = pe.pointerType,
+                domPrimary = pe.isPrimary,
+                button = pe.button,
+            )
+        )
     }
 
     /**
@@ -537,7 +500,6 @@ class JsWebDomBridge : WebDomBridge {
         imeInput?.remove()
         imeInput = null
 
-        pointerTracker.close()
         touchTracker.close()
 
         targetElement = null
@@ -724,3 +686,6 @@ private external interface PointerEventData {
     val pointerType: String
     val isPrimary: Boolean
 }
+
+private fun pointerEventsSupported(): Boolean =
+    js("typeof window.PointerEvent !== 'undefined'") as Boolean

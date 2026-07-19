@@ -297,7 +297,6 @@ internal fun domPointerButtonSource(button: Short, pointer: WebPointerSnapshot):
             kind = source.kind,
             button = when (button.toInt()) {
                 0 -> TabletToolButton.Tip
-                1 -> TabletToolButton.SecondaryBarrel
                 2 -> TabletToolButton.Barrel
                 5 -> TabletToolButton.Eraser
                 else -> TabletToolButton.Unknown

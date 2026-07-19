@@ -263,8 +263,8 @@ sealed interface WebWindowEvent {
     /**
      * The pointer has moved.
      *
-     * @property x         X position in physical pixels.
-     * @property y         Y position in physical pixels.
+     * @property x         Raw DOM client X in CSS pixels until bridge normalization is added.
+     * @property y         Raw DOM client Y in CSS pixels until bridge normalization is added.
      * @property pointerId DOM pointer identity for this contact.
      * @property primary   Whether this is the primary pointer for its kind.
      * @property source    Pointer source, including touch or tablet identity.
@@ -277,7 +277,7 @@ sealed interface WebWindowEvent {
         val source: PointerSource,
     ) : WebWindowEvent
 
-    /** The pointer entered the canvas at the supplied physical position. */
+    /** The pointer entered the canvas at the supplied raw DOM client/CSS position. */
     data class PointerEntered(
         val x: Double,
         val y: Double,
@@ -286,7 +286,7 @@ sealed interface WebWindowEvent {
         val kind: PointerKind,
     ) : WebWindowEvent
 
-    /** The pointer left the canvas at the supplied physical position. */
+    /** The pointer left the canvas at the supplied raw DOM client/CSS position. */
     data class PointerLeft(
         val x: Double,
         val y: Double,
@@ -298,8 +298,8 @@ sealed interface WebWindowEvent {
     /**
      * A pointer button changed state.
      *
-     * @property x         X position in physical pixels.
-     * @property y         Y position in physical pixels.
+     * @property x         Raw DOM client X in CSS pixels until bridge normalization is added.
+     * @property y         Raw DOM client Y in CSS pixels until bridge normalization is added.
      * @property pointerId DOM pointer identity for this contact.
      * @property primary   Whether this is the primary pointer for its kind.
      * @property button    Button source, including mouse/touch/tablet identity.
@@ -332,8 +332,8 @@ sealed interface WebWindowEvent {
      * A touch contact changed state.
      *
      * @property phase Contact phase.
-     * @property x     X position in physical pixels (client coordinates).
-     * @property y     Y position in physical pixels (client coordinates).
+     * @property x     Raw DOM client X in CSS pixels until bridge normalization is added.
+     * @property y     Raw DOM client Y in CSS pixels until bridge normalization is added.
      * @property id    Contact identifier (DOM `Touch.identifier`), stable between
      *   [WebTouchPhase.Started] and [WebTouchPhase.Ended] / [WebTouchPhase.Cancelled].
      * @property primary Whether this is the oldest active touch contact.

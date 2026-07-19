@@ -12,6 +12,31 @@ internal data class WebPointerSnapshot(
     val kind: PointerKind,
 )
 
+/** Maps one PointerEvent from its real DOM identity fields without retaining state. */
+internal fun domPointerSnapshot(
+    pointerId: Long,
+    pointerType: String,
+    domPrimary: Boolean,
+): WebPointerSnapshot = WebPointerSnapshot(
+    pointerId = pointerId,
+    primary = when (pointerType) {
+        "mouse" -> true
+        else -> domPrimary
+    },
+    source = when (pointerType) {
+        "mouse" -> PointerSource.Mouse
+        "touch" -> PointerSource.Touch(FingerId(pointerId))
+        "pen" -> PointerSource.TabletTool(TabletToolKind.Pen)
+        else -> PointerSource.Unknown
+    },
+    kind = when (pointerType) {
+        "mouse" -> PointerKind.Mouse
+        "touch" -> PointerKind.Touch
+        "pen" -> PointerKind.TabletTool
+        else -> PointerKind.Unknown
+    },
+)
+
 internal class WebPointerTracker {
     private val activeTouchIds = linkedSetOf<Long>()
 
@@ -66,30 +91,16 @@ internal class WebPointerTracker {
         pointerId: Long,
         pointerType: String,
         domPrimary: Boolean,
-    ): WebPointerSnapshot = WebPointerSnapshot(
-        pointerId = pointerId,
-        primary = when (pointerType) {
-            MOUSE -> true
-            TOUCH -> activeTouchIds.firstOrNull() == pointerId
-            else -> domPrimary
-        },
-        source = when (pointerType) {
-            MOUSE -> PointerSource.Mouse
-            TOUCH -> PointerSource.Touch(FingerId(pointerId))
-            PEN -> PointerSource.TabletTool(TabletToolKind.Pen)
-            else -> PointerSource.Unknown
-        },
-        kind = when (pointerType) {
-            MOUSE -> PointerKind.Mouse
-            TOUCH -> PointerKind.Touch
-            PEN -> PointerKind.TabletTool
-            else -> PointerKind.Unknown
-        },
-    )
+    ): WebPointerSnapshot {
+        val pointer = domPointerSnapshot(pointerId, pointerType, domPrimary)
+        return if (pointerType == TOUCH) {
+            pointer.copy(primary = activeTouchIds.firstOrNull() == pointerId)
+        } else {
+            pointer
+        }
+    }
 
     private companion object {
-        const val MOUSE = "mouse"
         const val TOUCH = "touch"
-        const val PEN = "pen"
     }
 }

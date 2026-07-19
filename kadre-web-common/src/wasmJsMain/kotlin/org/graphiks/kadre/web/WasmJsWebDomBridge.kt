@@ -122,6 +122,9 @@ private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
 @JsFun("() => window")
 private external fun getWindow(): JsEventTarget
 
+@JsFun("() => typeof window.PointerEvent !== 'undefined'")
+private external fun pointerEventsSupported(): JsBoolean
+
 @JsFun("() => window.devicePixelRatio || 1")
 private external fun getDevicePixelRatio(): Double
 
@@ -448,7 +451,6 @@ class WasmJsWebDomBridge : WebDomBridge {
     private var targetElement: JsEventTarget? = null
     private val listenerRefs = mutableListOf<Triple<JsEventTarget, String, JsAny>>()
     private var resizeObserverRef: JsAny? = null
-    private val pointerTracker = WebPointerTracker()
     private val touchTracker = WebPointerTracker()
 
     /** Hidden <input> used for IME composition events. */
@@ -459,7 +461,6 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override fun attach(targetElementId: String) {
         val canvas = getElementById(targetElementId.toJsString()) ?: return
-        pointerTracker.close()
         touchTracker.close()
         targetElement = canvas
         attached = true
@@ -523,97 +524,16 @@ class WasmJsWebDomBridge : WebDomBridge {
             }
         }
 
-        // --- Pointer ---
-        addDomListener(canvas, "pointermove") { e ->
-            val pe = e.unsafeCast<JsPointerEvent>()
-            val pointer = pointerTracker.onMove(
-                pe.pointerId.toDouble().toLong(),
-                pe.pointerType.toString(),
-                pe.isPrimary.toBoolean(),
-            )
-            dispatch(
-                WebWindowEvent.PointerMoved(
-                    x = pe.clientX.toDouble(),
-                    y = pe.clientY.toDouble(),
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    source = pointer.source,
-                )
-            )
-        }
-
-        addDomListener(canvas, "pointerdown") { e ->
-            val pe = e.unsafeCast<JsPointerEvent>()
-            val pointer = pointerTracker.onStart(
-                pe.pointerId.toDouble().toLong(),
-                pe.pointerType.toString(),
-                pe.isPrimary.toBoolean(),
-            )
-            dispatch(
-                WebWindowEvent.PointerButton(
-                    x = pe.clientX.toDouble(),
-                    y = pe.clientY.toDouble(),
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    button = domPointerButtonSource(pe.button.toDouble().toInt().toShort(), pointer),
-                    state = WebKeyState.Pressed,
-                )
-            )
-        }
-
-        addDomListener(canvas, "pointerup") { e ->
-            val pe = e.unsafeCast<JsPointerEvent>()
-            val pointer = pointerTracker.onEnd(
-                pe.pointerId.toDouble().toLong(),
-                pe.pointerType.toString(),
-                pe.isPrimary.toBoolean(),
-            )
-            dispatch(
-                WebWindowEvent.PointerButton(
-                    x = pe.clientX.toDouble(),
-                    y = pe.clientY.toDouble(),
-                    pointerId = pointer.pointerId,
-                    primary = pointer.primary,
-                    button = domPointerButtonSource(pe.button.toDouble().toInt().toShort(), pointer),
-                    state = WebKeyState.Released,
-                )
-            )
-        }
-
-        addDomListener(canvas, "pointerenter") { e ->
-            val pe = e.unsafeCast<JsPointerEvent>()
-            val pointer = pointerTracker.onStart(
-                pe.pointerId.toDouble().toLong(),
-                pe.pointerType.toString(),
-                pe.isPrimary.toBoolean(),
-            )
-            dispatch(
-                WebWindowEvent.PointerEntered(
-                    pe.clientX.toDouble(),
-                    pe.clientY.toDouble(),
-                    pointer.pointerId,
-                    pointer.primary,
-                    pointer.kind,
-                )
-            )
-        }
-
-        addDomListener(canvas, "pointerleave") { e ->
-            val pe = e.unsafeCast<JsPointerEvent>()
-            val pointer = pointerTracker.onLeave(
-                pe.pointerId.toDouble().toLong(),
-                pe.pointerType.toString(),
-                pe.isPrimary.toBoolean(),
-            )
-            dispatch(
-                WebWindowEvent.PointerLeft(
-                    pe.clientX.toDouble(),
-                    pe.clientY.toDouble(),
-                    pointer.pointerId,
-                    pointer.primary,
-                    pointer.kind,
-                )
-            )
+        // Pointer Events are authoritative when available. Legacy Touch Events
+        // are registered only as a feature-detected fallback, never alongside them.
+        val inputRegistration = selectWebInputRegistration(pointerEventsSupported().toBoolean())
+        when (inputRegistration.family) {
+            WebInputFamily.PointerEvents -> inputRegistration.eventTypes.forEach { type ->
+                addDomListener(canvas, type, ::dispatchPointerEvent)
+            }
+            WebInputFamily.LegacyTouchEvents -> inputRegistration.eventTypes.forEach { type ->
+                addDomListener(canvas, type) { e -> dispatchTouches(e) }
+            }
         }
 
         // --- Wheel ---
@@ -702,11 +622,6 @@ class WasmJsWebDomBridge : WebDomBridge {
         }
         resizeObserverRef = createResizeObserver(canvas, wrapCallback(callback))
 
-        // --- Touch (touchscreen / mobile) ---
-        for (type in listOf("touchstart", "touchmove", "touchend", "touchcancel")) {
-            addDomListener(canvas, type) { e -> dispatchTouches(e) }
-        }
-
         // --- Visibility → Focused + Occluded ---
         val doc = getDocument()
         addDomListener(doc, "visibilitychange") { _ ->
@@ -764,6 +679,21 @@ class WasmJsWebDomBridge : WebDomBridge {
             )
         }
         if (preventDefaultEnabled) touchPreventDefault(e)
+    }
+
+    private fun dispatchPointerEvent(e: JsAny) {
+        val pe = e.unsafeCast<JsPointerEvent>()
+        dispatch(
+            domPointerEvent(
+                eventType = pe.type.toString(),
+                x = pe.clientX.toDouble(),
+                y = pe.clientY.toDouble(),
+                pointerId = pe.pointerId.toDouble().toLong(),
+                pointerType = pe.pointerType.toString(),
+                domPrimary = pe.isPrimary.toBoolean(),
+                button = pe.button.toDouble().toInt().toShort(),
+            )
+        )
     }
 
     // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────
@@ -848,7 +778,6 @@ class WasmJsWebDomBridge : WebDomBridge {
         imeInput?.let { jsRemoveElement(it) }
         imeInput = null
 
-        pointerTracker.close()
         touchTracker.close()
 
         targetElement = null

@@ -211,6 +211,16 @@ class DomEventMapperTest {
         )
     }
 
+    @Test
+    fun `DOM pen button one remains unknown without a documented convention`() {
+        val pen = WebPointerTracker().onStart(91L, "pen", domPrimary = true)
+
+        assertEquals(
+            ButtonSource.TabletTool(TabletToolKind.Pen, TabletToolButton.Unknown),
+            domPointerButtonSource(1, pen),
+        )
+    }
+
     // -----------------------------------------------------------------------
     // domKeyStateFromEventType
     // -----------------------------------------------------------------------
