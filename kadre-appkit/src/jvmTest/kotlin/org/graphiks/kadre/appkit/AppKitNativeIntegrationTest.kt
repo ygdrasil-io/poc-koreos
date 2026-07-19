@@ -8,6 +8,10 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import java.io.FileDescriptor
+import java.io.FileOutputStream
+import java.lang.foreign.Arena
+import java.lang.foreign.MemoryLayout
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import kotlin.test.Test
@@ -65,9 +69,13 @@ class AppKitNativeIntegrationTest {
         if (!isMacOs()) return
 
         repeat(2) { index ->
-            val handler = NativeLifecycleHandler(index + 1)
+            val run = index + 1
+            val stopCoordinator = AppKitTestStopCoordinator(NativeStopOperations(run))
+            val handler = NativeLifecycleHandler(run, stopCoordinator)
 
+            milestone(run, "before runApp")
             runApp(handler)
+            milestone(run, "after runApp")
 
             assertEquals(1, handler.lifecycle.count { it == "newEvents(Init)" })
             assertEquals(EXPECTED_LIFECYCLE, handler.lifecycle)
@@ -83,6 +91,7 @@ class AppKitNativeIntegrationTest {
 
     private class NativeLifecycleHandler(
         private val run: Int,
+        private val stopCoordinator: AppKitTestStopCoordinator<MemorySegment>,
     ) : ApplicationHandler {
         val lifecycle = mutableListOf<String>()
         var proxyWakeCount = 0
@@ -147,22 +156,83 @@ class AppKitNativeIntegrationTest {
         }
 
         private fun stopApplicationRunLoop() {
-            val applicationClass = ObjCRuntime.getClass("NSApplication")
-            val application = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS,
-                applicationClass,
-                ObjCRuntime.sel("sharedApplication"),
-            ) as MemorySegment
-            ObjCRuntime.msgSend(
-                null,
-                application,
-                ObjCRuntime.sel("stop:"),
-                MemorySegment.NULL,
-            )
+            ObjCRuntime.autoreleasePool {
+                stopCoordinator.requestStop()
+            }
         }
     }
 
+    private class NativeStopOperations(
+        private val run: Int,
+    ) : AppKitTestStopCoordinator.Operations<MemorySegment> {
+        override fun stop() {
+            milestone(run, "stop: begin")
+            ObjCRuntime.msgSend(
+                null,
+                sharedApplication(),
+                ObjCRuntime.sel("stop:"),
+                MemorySegment.NULL,
+            )
+            milestone(run, "stop: complete")
+        }
+
+        override fun createApplicationDefinedEvent(): MemorySegment? {
+            milestone(run, "create application-defined event: begin")
+            val event = Arena.ofConfined().use { arena ->
+                val location = arena.allocate(NS_POINT_LAYOUT)
+                location.set(ValueLayout.JAVA_DOUBLE, 0L, 0.0)
+                location.set(ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE.byteSize(), 0.0)
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    ObjCRuntime.getClass("NSEvent"),
+                    ObjCRuntime.sel(
+                        "otherEventWithType:location:modifierFlags:timestamp:" +
+                            "windowNumber:context:subtype:data1:data2:",
+                    ),
+                    NSEVENT_TYPE_APPLICATION_DEFINED,
+                    ObjCRuntime.ObjCStructArg(location, NS_POINT_LAYOUT),
+                    0L,
+                    0.0,
+                    0L,
+                    MemorySegment.NULL,
+                    0.toShort(),
+                    0L,
+                    0L,
+                ) as MemorySegment
+            }
+            milestone(run, "create application-defined event: complete")
+            return event.takeUnless { it == MemorySegment.NULL }
+        }
+
+        override fun postEventAtStart(event: MemorySegment) {
+            milestone(run, "post event at start: begin")
+            ObjCRuntime.msgSend(
+                null,
+                sharedApplication(),
+                ObjCRuntime.sel("postEvent:atStart:"),
+                event,
+                true,
+            )
+            milestone(run, "post event at start: complete")
+        }
+
+        private fun sharedApplication(): MemorySegment = ObjCRuntime.msgSend(
+            ValueLayout.ADDRESS,
+            ObjCRuntime.getClass("NSApplication"),
+            ObjCRuntime.sel("sharedApplication"),
+        ) as MemorySegment
+    }
+
     private companion object {
+        const val NSEVENT_TYPE_APPLICATION_DEFINED = 15L
+
+        val MILESTONE_OUTPUT = FileOutputStream(FileDescriptor.out)
+
+        val NS_POINT_LAYOUT = MemoryLayout.structLayout(
+            ValueLayout.JAVA_DOUBLE.withName("x"),
+            ValueLayout.JAVA_DOUBLE.withName("y"),
+        ).withName("NSPoint")
+
         val EXPECTED_LIFECYCLE = listOf(
             "resumed",
             "newEvents(Init)",
@@ -181,6 +251,13 @@ class AppKitNativeIntegrationTest {
             StartCause.Poll -> "Poll"
             is StartCause.ResumeTimeReached -> "ResumeTimeReached"
             is StartCause.WaitCancelled -> "WaitCancelled"
+        }
+
+        @Synchronized
+        fun milestone(run: Int, message: String) {
+            val line = "[appkit-native-lifecycle] run $run: $message\n"
+            MILESTONE_OUTPUT.write(line.toByteArray(Charsets.UTF_8))
+            MILESTONE_OUTPUT.flush()
         }
     }
 }
