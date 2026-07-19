@@ -452,3 +452,125 @@ it is absent from both fresh final gates.
 
 None. The final worktree after the proxy mutation check exactly matches
 implementation commit `6f4e23a` plus this report update.
+
+## Corrective review wave 2
+
+### Status and implementation
+
+DONE — both remaining Important findings and the warning Minor are fixed in
+implementation commit `68dba10` (`fix(uikit): preserve scheduler activation
+state`), based on `73f814a3`.
+
+1. The scheduler's no-live-window branch now cancels only the armed deadline
+   generation and native frame work. It no longer substitutes
+   `ControlFlow.Wait`, so a last-window close that already classified
+   `ResumeTimeReached` preserves `requestedResume` and `handledDeadline` until
+   the zero-window proxy iteration. A replacement window receives the cause
+   exactly once and the unchanged reached deadline is not rearmed.
+2. Native display-link ownership remains loop-level with at most one active
+   link, but every activation now creates a fresh `CADisplayLink` and
+   `UIKitSchedulerDisplayLinkTarget`. The target callback is an immutable
+   `private val` bound to that activation's scheduler generation. Stop
+   invalidates and clears both owner references; dispose delegates to the same
+   idempotent operation. A queued old selector can therefore invoke only its
+   old generation, which the scheduler rejects after reactivation.
+3. Warning cleanup is deliberately narrow: the selected Dokka V1 convention
+   script has a file-scoped `DEPRECATION` suppression,
+   `kotlin.native.ignoreDisabledTargets=true` suppresses only disabled native
+   target warnings, and `UIKitScreenCapturer` removes the redundant
+   `scale.toDouble()` and unnecessary display cast without changing behavior.
+
+### Strict RED/GREEN evidence
+
+Both behavioral cycles used the deterministic simulator command with
+`/Volumes/Cache/poc-koreos/.gradle-plan06-uikit-task5-fixes`, the exact test
+filter, `--rerun-tasks`, and `--no-daemon`. No sleep or wall-clock timing was
+added.
+
+1. `closeLastAtDeadlinePreservesOneResumeAcrossZeroWindowReplacement`:
+   RED failed 1/1 in 37s with 32/32 tasks. The expected single retained timer
+   was actually two, proving that the no-window `state.arm(Wait)` erased the
+   reached-deadline semantic state and allowed a rearm. GREEN passed 1/1 in
+   35s with 32/32 tasks after replacing that call with
+   `cancelArmedDeadline()`. The test closes the only window at `deadline + 7`,
+   uses a real proxy/main-queue wake at zero windows, registers a replacement
+   from `newEvents`, keeps the same `WaitUntil`, receives one exact
+   `ResumeTimeReached`, and proves the stale original timer is inert.
+2. `selectorTargetRetainsItsActivationGenerationAcrossReactivation`:
+   RED failed during test compilation in 27s with 17/17 tasks because the
+   actual Objective-C selector target was private and no immutable test seam
+   existed. GREEN passed 1/1 in 27s with 32/32 tasks. The deterministic fake
+   now carries the real `UIKitSchedulerDisplayLinkTarget`: after stop and
+   reactivation, the old and current targets are distinct; invoking the old
+   target transports only its stale generation and consumes no work, while
+   invoking the current target dispatches the current redraw iteration.
+
+### Warning output characterization
+
+Before warning cleanup, the exact full/cross command completed successfully in
+53s with 50/50 tasks but printed all named warning classes:
+
+- three `DokkaTask` V1 deprecation instances from
+  `kmp-dokka.gradle.kts`;
+- the disabled `iosX64Test` host-architecture warning;
+- `UIKitScreenCapturer.kt` "Redundant call of conversion method";
+- `UIKitScreenCapturer.kt` "No cast needed" (repeated per native compile).
+
+After the narrow changes, a forced compile of UIKit
+`iosSimulatorArm64`, `iosArm64`, and `iosX64` completed in 1m 16s with 22/22
+tasks. Its complete output contained none of those warnings and no unrelated
+warning. The final focused and full/cross gates below were also pristine.
+
+### Fresh required gates
+
+Focused gate:
+
+```text
+rtk proxy env \
+  GRADLE_USER_HOME=/Volumes/Cache/poc-koreos/.gradle-plan06-uikit-task5-fixes \
+  ./gradlew :kadre-uikit:iosSimulatorArm64Test \
+  --tests '*UIKitSchedulerTest' --tests '*UIKitLifecycleTest' \
+  --tests '*UIKitSafeAreaTest' --rerun-tasks --no-daemon
+```
+
+Exit 0, `BUILD SUCCESSFUL in 39s`, 32/32 tasks, and 55/55 tests with
+zero failures, errors, skips, or warnings: Scheduler 28, Lifecycle 21, and
+SafeArea 6.
+
+Full UIKit and cross-target gate:
+
+```text
+rtk proxy env \
+  GRADLE_USER_HOME=/Volumes/Cache/poc-koreos/.gradle-plan06-uikit-task5-fixes \
+  ./gradlew :kadre-uikit:iosSimulatorArm64Test \
+  :kadre-uikit:compileKotlinIosArm64 \
+  :kadre-uikit:compileKotlinIosX64 \
+  :samples:hello-touch:compileKotlinIosArm64 \
+  :samples:hello-touch:compileKotlinIosSimulatorArm64 \
+  --rerun-tasks --no-daemon
+```
+
+Exit 0, `BUILD SUCCESSFUL in 40s`, 50/50 tasks. The full UIKit suite is
+65/65 with zero failures, errors, skips, or warnings: Scheduler 28,
+Lifecycle 21, SafeArea 6, gesture mapper 6, key mapper 2, and window no-op 2.
+The UIKit simulator tests, library `iosArm64` and `iosX64`, and both requested
+hello-touch targets all completed.
+
+### Final self-review and hygiene
+
+- `iosX64()` remains at `kadre-uikit/build.gradle.kts:21` and is absent from
+  hello-touch; the disabled host test warning property does not remove the
+  target or its explicit compile gate.
+- The complete diff changes no sample or public KLIB API file. The selector
+  target is `internal`, and no public signature changes.
+- Existing pre-deadline close, ordinary zero-window wake, weak timer,
+  generation, permanent exit, transactional lifecycle, logical ID, safe-area,
+  and first/suppressed failure tests remain green.
+- No sleep, test-only production method, broad warning suppression, Dokka
+  migration, publication-task change, or wall-clock test was introduced.
+- `rtk git diff --check` and the staged diff check completed with no output
+  before the implementation commit.
+
+### Wave 2 concerns
+
+None.
