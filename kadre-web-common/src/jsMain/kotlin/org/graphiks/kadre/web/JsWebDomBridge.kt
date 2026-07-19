@@ -732,15 +732,17 @@ class JsWebDomBridge : WebDomBridge {
      * and returns `canvas.toDataURL("image/png")`.
      */
     override fun createCursorDataUrl(rgba: ByteArray, width: Int, height: Int, hotspotX: Int, hotspotY: Int): String {
+        if (!isValidCursorRgba(rgba.size, width, height, hotspotX, hotspotY)) return ""
+
         try {
             val canvas = document.createElement("canvas").asDynamic()
             canvas.width = width
             canvas.height = height
-            val ctx = canvas.getContext("2d").asDynamic()
-            val imageData = ctx.createImageData(width, height).asDynamic()
+            val ctx = canvas.getContext("2d")
+            val imageData = ctx.createImageData(width, height)
             val data = imageData.data
             for (i in rgba.indices) {
-                data[i] = rgba[i]
+                data[i] = rgba[i].toInt() and 0xFF
             }
             ctx.putImageData(imageData, 0.0, 0.0)
             val url: String = canvas.toDataURL("image/png") as String
@@ -762,6 +764,9 @@ class JsWebDomBridge : WebDomBridge {
         } catch (_: Throwable) {}
     }
 }
+
+/** Pure component conversion shared with the JS browser regression harness. */
+internal fun widenCursorRgbaByte(byte: Byte): Int = byte.toInt() and 0xFF
 
 /**
  * External interface describing the fields of a DOM PointerEvent accessible from JS.

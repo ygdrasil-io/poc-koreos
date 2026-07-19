@@ -949,8 +949,11 @@ class WasmJsWebDomBridge : WebDomBridge {
      * and returns `canvas.toDataURL("image/png")`.
      */
     override fun createCursorDataUrl(rgba: ByteArray, width: Int, height: Int, hotspotX: Int, hotspotY: Int): String {
+        if (!isValidCursorRgba(rgba.size, width, height, hotspotX, hotspotY)) return ""
+
         try {
-            val hex = buildString(rgba.size * 2) {
+            val hexCapacity = (rgba.size.toLong() * 2L).toInt()
+            val hex = buildString(hexCapacity) {
                 for (b in rgba) {
                     val v = b.toInt() and 0xFF
                     append("0123456789abcdef"[v shr 4])
