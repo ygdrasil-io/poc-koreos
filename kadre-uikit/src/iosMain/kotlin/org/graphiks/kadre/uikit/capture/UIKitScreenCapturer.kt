@@ -38,7 +38,7 @@ class UIKitScreenCapturer : ScreenCapturer {
                     (w * scale).toInt(),
                     (h * scale).toInt(),
                 ),
-                scaleFactor = scale.toDouble(),
+                scaleFactor = scale,
             )
         )
     }
@@ -52,7 +52,7 @@ class UIKitScreenCapturer : ScreenCapturer {
         require(source is CaptureSource.Display) {
             "iOS supports display capture only"
         }
-        return UIKitCaptureSession(source as CaptureSource.Display, config)
+        return UIKitCaptureSession(source, config)
     }
 
     override suspend fun requestPermission(): CapturePermission = CapturePermission.Pending

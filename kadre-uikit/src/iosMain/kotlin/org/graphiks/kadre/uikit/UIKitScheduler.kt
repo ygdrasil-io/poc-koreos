@@ -33,42 +33,41 @@ internal interface UIKitSchedulerOperations {
     fun scheduleDeadline(deadlineMillis: Long, onDeadline: () -> Unit)
 }
 
-/** Production UIKit operations; one reusable display link is owned per scheduler. */
+/** Production UIKit operations; one fresh display link is owned per active generation. */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 internal class UIKitNativeSchedulerOperations : UIKitSchedulerOperations {
     private var displayLink: CADisplayLink? = null
     private var displayLinkTarget: UIKitSchedulerDisplayLinkTarget? = null
-    private var displayLinkActive = false
 
     override fun nowMillis(): Long = (NSDate().timeIntervalSince1970 * 1_000.0).toLong()
 
     override fun startDisplayLink(onFrame: () -> Unit) {
-        if (displayLinkActive) return
-        val link = displayLink ?: run {
-            val target = UIKitSchedulerDisplayLinkTarget(onFrame)
-            displayLinkTarget = target
-            CADisplayLink.displayLinkWithTarget(
-                target = target,
-                selector = NSSelectorFromString("handleDisplayLink"),
-            ).also { displayLink = it }
+        if (displayLink != null) return
+        val target = UIKitSchedulerDisplayLinkTarget(onFrame)
+        val link = CADisplayLink.displayLinkWithTarget(
+            target = target,
+            selector = NSSelectorFromString("handleDisplayLink"),
+        )
+        displayLinkTarget = target
+        displayLink = link
+        try {
+            link.addToRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
+        } catch (failure: Throwable) {
+            displayLink = null
+            displayLinkTarget = null
+            link.invalidate()
+            throw failure
         }
-        displayLinkTarget?.onFrame = onFrame
-        link.addToRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
-        displayLinkActive = true
     }
 
     override fun stopDisplayLink() {
-        if (!displayLinkActive) return
-        displayLink?.removeFromRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
-        displayLinkActive = false
-    }
-
-    override fun disposeDisplayLink() {
-        displayLink?.invalidate()
+        val link = displayLink ?: return
         displayLink = null
         displayLinkTarget = null
-        displayLinkActive = false
+        link.invalidate()
     }
+
+    override fun disposeDisplayLink() = stopDisplayLink()
 
     override fun scheduleDeadline(deadlineMillis: Long, onDeadline: () -> Unit) {
         dispatch_after(
@@ -81,8 +80,8 @@ internal class UIKitNativeSchedulerOperations : UIKitSchedulerOperations {
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private class UIKitSchedulerDisplayLinkTarget(
-    internal var onFrame: () -> Unit,
+internal class UIKitSchedulerDisplayLinkTarget(
+    private val onFrame: () -> Unit,
 ) : NSObject() {
     @ObjCAction
     fun handleDisplayLink() = onFrame()
@@ -197,7 +196,7 @@ internal class UIKitScheduler(
     private fun armOrStop() {
         if (state.isTerminal()) return
         if (!state.hasLiveWindows()) {
-            state.arm(ControlFlow.Wait)
+            state.cancelArmedDeadline()
             stopDisplayLink()
             return
         }

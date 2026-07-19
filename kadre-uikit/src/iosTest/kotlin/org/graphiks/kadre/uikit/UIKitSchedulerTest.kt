@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -110,6 +111,34 @@ class UIKitSchedulerTest {
         assertTrue(harness.operations.displayLinkActive)
 
         harness.operations.fireFrame()
+        assertEquals(
+            listOf(
+                "newEvents:${StartCause.WaitCancelled()}",
+                "redraw:${harness.windowId.value}",
+                "aboutToWait",
+            ),
+            harness.trace,
+        )
+    }
+
+    @Test
+    fun selectorTargetRetainsItsActivationGenerationAcrossReactivation() {
+        val harness = SchedulerHarness()
+        harness.registerWindow()
+        harness.scheduler.requestRedraw(harness.windowId)
+        val oldTarget = harness.operations.capturedFrameTargets.single()
+        harness.operations.fireFrame()
+        harness.trace.clear()
+
+        harness.scheduler.requestRedraw(harness.windowId)
+        val currentTarget = harness.operations.capturedFrameTargets.last()
+        assertNotSame(oldTarget, currentTarget)
+
+        oldTarget.handleDisplayLink()
+        assertEquals(emptyList(), harness.trace)
+        assertTrue(harness.operations.displayLinkActive)
+
+        currentTarget.handleDisplayLink()
         assertEquals(
             listOf(
                 "newEvents:${StartCause.WaitCancelled()}",
@@ -369,6 +398,40 @@ class UIKitSchedulerTest {
         assertEquals(expectedCause, proxyHarness.trace.first())
         assertEquals(expectedCause, redrawHarness.trace.first())
         assertEquals(expectedCause, closeHarness.trace.first())
+    }
+
+    @Test
+    fun closeLastAtDeadlinePreservesOneResumeAcrossZeroWindowReplacement() {
+        val deadline = 2_000L
+        val observedAt = deadline + 7L
+        val harness = SchedulerHarness(controlFlow = ControlFlow.WaitUntil(deadline))
+        val mainQueue = FakeMainQueue()
+        val proxy = UIKitEventLoopProxy(
+            scheduler = harness.scheduler,
+            dispatchMain = mainQueue::dispatch,
+        )
+        harness.registerWindow()
+        val staleTimer = harness.operations.timers.single()
+        harness.operations.nowMillis = observedAt
+        assertTrue(harness.scheduler.closeWindow(harness.windowId))
+        harness.onNewEvents = { harness.registerWindow(WindowId(42L)) }
+
+        proxy.wakeUp()
+        mainQueue.runNext()
+
+        assertEquals(
+            listOf(
+                "newEvents:${StartCause.ResumeTimeReached(deadline, observedAt)}",
+                "aboutToWait",
+            ),
+            harness.trace,
+        )
+        assertEquals(1, harness.operations.timers.size)
+        assertFalse(harness.operations.displayLinkActive)
+
+        staleTimer.fire()
+        assertEquals(1, harness.operations.timers.size)
+        assertEquals(1, harness.trace.count { it.startsWith("newEvents:") })
     }
 
     @Test
@@ -680,19 +743,22 @@ private class FakeUIKitSchedulerOperations : UIKitSchedulerOperations {
     var displayLinkDisposals = 0
     var startDisplayLinkFailure: Throwable? = null
     var stopDisplayLinkFailure: Throwable? = null
-    private var frame: (() -> Unit)? = null
+    private var frame: UIKitSchedulerDisplayLinkTarget? = null
     val capturedFrames = mutableListOf<() -> Unit>()
+    val capturedFrameTargets = mutableListOf<UIKitSchedulerDisplayLinkTarget>()
     val timers = mutableListOf<FakeTimer>()
 
     override fun nowMillis(): Long = nowMillis
 
     override fun startDisplayLink(onFrame: () -> Unit) {
         startDisplayLinkFailure?.let { throw it }
-        frame = onFrame
         if (!displayLinkActive) {
+            val target = UIKitSchedulerDisplayLinkTarget(onFrame)
+            frame = target
             displayLinkActive = true
             displayLinkStarts += 1
-            capturedFrames += onFrame
+            capturedFrameTargets += target
+            capturedFrames += target::handleDisplayLink
         }
     }
 
@@ -716,11 +782,11 @@ private class FakeUIKitSchedulerOperations : UIKitSchedulerOperations {
 
     fun fireFrame() {
         check(displayLinkActive) { "display link is stopped" }
-        checkNotNull(frame).invoke()
+        checkNotNull(frame).handleDisplayLink()
     }
 
     fun fireCapturedFrame() {
-        checkNotNull(frame).invoke()
+        checkNotNull(frame).handleDisplayLink()
     }
 }
 
