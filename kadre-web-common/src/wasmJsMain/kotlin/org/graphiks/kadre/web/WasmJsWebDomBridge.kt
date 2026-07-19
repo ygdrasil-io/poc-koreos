@@ -56,6 +56,9 @@ external interface JsPointerEvent : JsDomEvent {
     val clientX: JsNumber
     val clientY: JsNumber
     val button: JsNumber
+    val pointerId: JsNumber
+    val pointerType: JsString
+    val isPrimary: JsBoolean
 }
 
 /**
@@ -445,6 +448,8 @@ class WasmJsWebDomBridge : WebDomBridge {
     private var targetElement: JsEventTarget? = null
     private val listenerRefs = mutableListOf<Triple<JsEventTarget, String, JsAny>>()
     private var resizeObserverRef: JsAny? = null
+    private val pointerTracker = WebPointerTracker()
+    private val touchTracker = WebPointerTracker()
 
     /** Hidden <input> used for IME composition events. */
     private var imeInput: JsEventTarget? = null
@@ -454,6 +459,8 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override fun attach(targetElementId: String) {
         val canvas = getElementById(targetElementId.toJsString()) ?: return
+        pointerTracker.close()
+        touchTracker.close()
         targetElement = canvas
         attached = true
 
@@ -519,14 +526,36 @@ class WasmJsWebDomBridge : WebDomBridge {
         // --- Pointer ---
         addDomListener(canvas, "pointermove") { e ->
             val pe = e.unsafeCast<JsPointerEvent>()
-            dispatch(WebWindowEvent.PointerMoved(x = pe.clientX.toDouble(), y = pe.clientY.toDouble()))
+            val pointer = pointerTracker.onMove(
+                pe.pointerId.toDouble().toLong(),
+                pe.pointerType.toString(),
+                pe.isPrimary.toBoolean(),
+            )
+            dispatch(
+                WebWindowEvent.PointerMoved(
+                    x = pe.clientX.toDouble(),
+                    y = pe.clientY.toDouble(),
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    source = pointer.source,
+                )
+            )
         }
 
         addDomListener(canvas, "pointerdown") { e ->
             val pe = e.unsafeCast<JsPointerEvent>()
+            val pointer = pointerTracker.onStart(
+                pe.pointerId.toDouble().toLong(),
+                pe.pointerType.toString(),
+                pe.isPrimary.toBoolean(),
+            )
             dispatch(
-                WebWindowEvent.MouseInput(
-                    button = domButtonToMouseButton(pe.button.toDouble().toInt().toShort()),
+                WebWindowEvent.PointerButton(
+                    x = pe.clientX.toDouble(),
+                    y = pe.clientY.toDouble(),
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    button = domPointerButtonSource(pe.button.toDouble().toInt().toShort(), pointer),
                     state = WebKeyState.Pressed,
                 )
             )
@@ -534,20 +563,57 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         addDomListener(canvas, "pointerup") { e ->
             val pe = e.unsafeCast<JsPointerEvent>()
+            val pointer = pointerTracker.onEnd(
+                pe.pointerId.toDouble().toLong(),
+                pe.pointerType.toString(),
+                pe.isPrimary.toBoolean(),
+            )
             dispatch(
-                WebWindowEvent.MouseInput(
-                    button = domButtonToMouseButton(pe.button.toDouble().toInt().toShort()),
+                WebWindowEvent.PointerButton(
+                    x = pe.clientX.toDouble(),
+                    y = pe.clientY.toDouble(),
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    button = domPointerButtonSource(pe.button.toDouble().toInt().toShort(), pointer),
                     state = WebKeyState.Released,
                 )
             )
         }
 
-        addDomListener(canvas, "pointerenter") { _ ->
-            dispatch(WebWindowEvent.PointerEntered)
+        addDomListener(canvas, "pointerenter") { e ->
+            val pe = e.unsafeCast<JsPointerEvent>()
+            val pointer = pointerTracker.onStart(
+                pe.pointerId.toDouble().toLong(),
+                pe.pointerType.toString(),
+                pe.isPrimary.toBoolean(),
+            )
+            dispatch(
+                WebWindowEvent.PointerEntered(
+                    pe.clientX.toDouble(),
+                    pe.clientY.toDouble(),
+                    pointer.pointerId,
+                    pointer.primary,
+                    pointer.kind,
+                )
+            )
         }
 
-        addDomListener(canvas, "pointerleave") { _ ->
-            dispatch(WebWindowEvent.PointerLeft)
+        addDomListener(canvas, "pointerleave") { e ->
+            val pe = e.unsafeCast<JsPointerEvent>()
+            val pointer = pointerTracker.onLeave(
+                pe.pointerId.toDouble().toLong(),
+                pe.pointerType.toString(),
+                pe.isPrimary.toBoolean(),
+            )
+            dispatch(
+                WebWindowEvent.PointerLeft(
+                    pe.clientX.toDouble(),
+                    pe.clientY.toDouble(),
+                    pointer.pointerId,
+                    pointer.primary,
+                    pointer.kind,
+                )
+            )
         }
 
         // --- Wheel ---
@@ -680,12 +746,20 @@ class WasmJsWebDomBridge : WebDomBridge {
         val phase = domTouchTypeToPhase(e.unsafeCast<JsDomEvent>().type.toString())
         val count = touchCount(e)
         for (i in 0 until count) {
+            val id = touchIdentifier(e, i).toLong()
+            val pointer = when (phase) {
+                WebTouchPhase.Started -> touchTracker.onStart(id, "touch", domPrimary = false)
+                WebTouchPhase.Moved -> touchTracker.onMove(id, "touch", domPrimary = false)
+                WebTouchPhase.Ended -> touchTracker.onEnd(id, "touch", domPrimary = false)
+                WebTouchPhase.Cancelled -> touchTracker.onCancel(id, "touch", domPrimary = false)
+            }
             dispatch(
                 WebWindowEvent.Touch(
                     phase = phase,
                     x = touchClientX(e, i),
                     y = touchClientY(e, i),
-                    id = touchIdentifier(e, i).toLong(),
+                    id = id,
+                    primary = pointer.primary,
                 )
             )
         }
@@ -773,6 +847,9 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         imeInput?.let { jsRemoveElement(it) }
         imeInput = null
+
+        pointerTracker.close()
+        touchTracker.close()
 
         targetElement = null
     }

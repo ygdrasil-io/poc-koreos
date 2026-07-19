@@ -17,7 +17,10 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
 
 // ---------------------------------------------------------------------------
 // Logical keys
@@ -260,24 +263,56 @@ sealed interface WebWindowEvent {
     /**
      * The pointer has moved.
      *
-     * @property x X position in physical pixels.
-     * @property y Y position in physical pixels.
+     * @property x         X position in physical pixels.
+     * @property y         Y position in physical pixels.
+     * @property pointerId DOM pointer identity for this contact.
+     * @property primary   Whether this is the primary pointer for its kind.
+     * @property source    Pointer source, including touch or tablet identity.
      */
-    data class PointerMoved(val x: Double, val y: Double) : WebWindowEvent
+    data class PointerMoved(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val source: PointerSource,
+    ) : WebWindowEvent
 
-    /** The pointer entered the canvas. */
-    data object PointerEntered : WebWindowEvent
+    /** The pointer entered the canvas at the supplied physical position. */
+    data class PointerEntered(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WebWindowEvent
 
-    /** The pointer left the canvas. */
-    data object PointerLeft : WebWindowEvent
+    /** The pointer left the canvas at the supplied physical position. */
+    data class PointerLeft(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WebWindowEvent
 
     /**
-     * A mouse button changed state.
+     * A pointer button changed state.
      *
-     * @property button Button concerned.
-     * @property state  Button state.
+     * @property x         X position in physical pixels.
+     * @property y         Y position in physical pixels.
+     * @property pointerId DOM pointer identity for this contact.
+     * @property primary   Whether this is the primary pointer for its kind.
+     * @property button    Button source, including mouse/touch/tablet identity.
+     * @property state     Button state.
      */
-    data class MouseInput(val button: WebMouseButton, val state: WebKeyState) : WebWindowEvent
+    data class PointerButton(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val button: ButtonSource,
+        val state: WebKeyState,
+    ) : WebWindowEvent
 
     /**
      * The wheel produced a scroll.
@@ -301,12 +336,14 @@ sealed interface WebWindowEvent {
      * @property y     Y position in physical pixels (client coordinates).
      * @property id    Contact identifier (DOM `Touch.identifier`), stable between
      *   [WebTouchPhase.Started] and [WebTouchPhase.Ended] / [WebTouchPhase.Cancelled].
+     * @property primary Whether this is the oldest active touch contact.
      */
     data class Touch(
         val phase: WebTouchPhase,
         val x: Double,
         val y: Double,
         val id: Long,
+        val primary: Boolean,
     ) : WebWindowEvent
 
     /**

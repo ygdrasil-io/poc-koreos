@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * Listens to and dispatches the following DOM events:
  * - Keyboard: `keydown` / `keyup` → [WebWindowEvent.KeyInput]
  * - Pointer: `pointermove` → [WebWindowEvent.PointerMoved]
- * - Pointer: `pointerdown` / `pointerup` → [WebWindowEvent.MouseInput]
+ * - Pointer: `pointerdown` / `pointerup` → [WebWindowEvent.PointerButton]
  * - Pointer: `pointerenter` / `pointerleave` → [WebWindowEvent.PointerEntered] / [WebWindowEvent.PointerLeft]
  * - Wheel: `wheel` → [WebWindowEvent.MouseWheel]
  * - Touch: `touchstart` / `touchmove` / `touchend` / `touchcancel` → [WebWindowEvent.Touch]
@@ -86,6 +86,8 @@ class JsWebDomBridge : WebDomBridge {
     private val documentListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private val windowListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private var resizeObserver: dynamic = null
+    private val pointerTracker = WebPointerTracker()
+    private val touchTracker = WebPointerTracker()
 
     /** Hidden <input> used for IME composition events. */
     private var imeInput: HTMLInputElement? = null
@@ -95,6 +97,8 @@ class JsWebDomBridge : WebDomBridge {
 
     override fun attach(targetElementId: String) {
         val canvas = document.getElementById(targetElementId) ?: return
+        pointerTracker.close()
+        touchTracker.close()
         targetElement = canvas
         canvasElement = canvas
         attached = true
@@ -149,14 +153,28 @@ class JsWebDomBridge : WebDomBridge {
         // --- Pointer (unified PointerEvent) ---
         addListener(canvas, "pointermove") { e ->
             val pe = e.unsafeCast<PointerEventData>()
-            dispatch(WebWindowEvent.PointerMoved(x = pe.clientX, y = pe.clientY))
+            val pointer = pointerTracker.onMove(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
+            dispatch(
+                WebWindowEvent.PointerMoved(
+                    x = pe.clientX,
+                    y = pe.clientY,
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    source = pointer.source,
+                )
+            )
         }
 
         addListener(canvas, "pointerdown") { e ->
             val pe = e.unsafeCast<PointerEventData>()
+            val pointer = pointerTracker.onStart(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
             dispatch(
-                WebWindowEvent.MouseInput(
-                    button = domButtonToMouseButton(pe.button),
+                WebWindowEvent.PointerButton(
+                    x = pe.clientX,
+                    y = pe.clientY,
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    button = domPointerButtonSource(pe.button, pointer),
                     state = WebKeyState.Pressed,
                 )
             )
@@ -164,20 +182,29 @@ class JsWebDomBridge : WebDomBridge {
 
         addListener(canvas, "pointerup") { e ->
             val pe = e.unsafeCast<PointerEventData>()
+            val pointer = pointerTracker.onEnd(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
             dispatch(
-                WebWindowEvent.MouseInput(
-                    button = domButtonToMouseButton(pe.button),
+                WebWindowEvent.PointerButton(
+                    x = pe.clientX,
+                    y = pe.clientY,
+                    pointerId = pointer.pointerId,
+                    primary = pointer.primary,
+                    button = domPointerButtonSource(pe.button, pointer),
                     state = WebKeyState.Released,
                 )
             )
         }
 
-        addListener(canvas, "pointerenter") { _ ->
-            dispatch(WebWindowEvent.PointerEntered)
+        addListener(canvas, "pointerenter") { e ->
+            val pe = e.unsafeCast<PointerEventData>()
+            val pointer = pointerTracker.onStart(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
+            dispatch(WebWindowEvent.PointerEntered(pe.clientX, pe.clientY, pointer.pointerId, pointer.primary, pointer.kind))
         }
 
-        addListener(canvas, "pointerleave") { _ ->
-            dispatch(WebWindowEvent.PointerLeft)
+        addListener(canvas, "pointerleave") { e ->
+            val pe = e.unsafeCast<PointerEventData>()
+            val pointer = pointerTracker.onLeave(pe.pointerId.toLong(), pe.pointerType, pe.isPrimary)
+            dispatch(WebWindowEvent.PointerLeft(pe.clientX, pe.clientY, pointer.pointerId, pointer.primary, pointer.kind))
         }
 
         // --- Wheel ---
@@ -322,12 +349,20 @@ class JsWebDomBridge : WebDomBridge {
         val count = (touches.length as Number).toInt()
         for (i in 0 until count) {
             val t = touches[i]
+            val id = (t.identifier as Number).toDouble().toLong()
+            val pointer = when (phase) {
+                WebTouchPhase.Started -> touchTracker.onStart(id, "touch", domPrimary = false)
+                WebTouchPhase.Moved -> touchTracker.onMove(id, "touch", domPrimary = false)
+                WebTouchPhase.Ended -> touchTracker.onEnd(id, "touch", domPrimary = false)
+                WebTouchPhase.Cancelled -> touchTracker.onCancel(id, "touch", domPrimary = false)
+            }
             dispatch(
                 WebWindowEvent.Touch(
                     phase = phase,
                     x = (t.clientX as Number).toDouble(),
                     y = (t.clientY as Number).toDouble(),
-                    id = (t.identifier as Number).toDouble().toLong(),
+                    id = id,
+                    primary = pointer.primary,
                 )
             )
         }
@@ -501,6 +536,9 @@ class JsWebDomBridge : WebDomBridge {
 
         imeInput?.remove()
         imeInput = null
+
+        pointerTracker.close()
+        touchTracker.close()
 
         targetElement = null
     }
@@ -682,4 +720,7 @@ private external interface PointerEventData {
     val clientX: Double
     val clientY: Double
     val button: Short
+    val pointerId: Double
+    val pointerType: String
+    val isPrimary: Boolean
 }

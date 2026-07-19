@@ -7,6 +7,18 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.DeviceId
+import org.graphiks.kadre.core.FingerId
+import org.graphiks.kadre.core.KeyState
+import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.TabletToolButton
+import org.graphiks.kadre.core.TabletToolKind
+import org.graphiks.kadre.core.TouchPhase
+import org.graphiks.kadre.core.WindowEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -182,6 +194,23 @@ class DomEventMapperTest {
         assertEquals(WebMouseButton.Other(10), domButtonToMouseButton(10))
     }
 
+    @Test
+    fun `DOM pointer button source preserves mouse touch and pen identity`() {
+        val tracker = WebPointerTracker()
+        assertEquals(
+            ButtonSource.Mouse(MouseButton.Right),
+            domPointerButtonSource(2, tracker.onStart(5L, "mouse", domPrimary = false)),
+        )
+        assertEquals(
+            ButtonSource.Touch(FingerId(42L)),
+            domPointerButtonSource(0, tracker.onStart(42L, "touch", domPrimary = false)),
+        )
+        assertEquals(
+            ButtonSource.TabletTool(TabletToolKind.Pen, TabletToolButton.Barrel),
+            domPointerButtonSource(2, tracker.onStart(91L, "pen", domPrimary = false)),
+        )
+    }
+
     // -----------------------------------------------------------------------
     // domKeyStateFromEventType
     // -----------------------------------------------------------------------
@@ -265,7 +294,7 @@ class DomEventMapperTest {
     }
 
     // -----------------------------------------------------------------------
-    // WebWindowEvent — data class equals verification
+    // WebWindowEvent → WindowEvent pointer contracts
     // -----------------------------------------------------------------------
 
     @Test
@@ -286,26 +315,150 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `WebWindowEvent PointerMoved structural equality`() {
+    fun `mouse movement preserves physical position identity primary and source`() {
         assertEquals(
-            WebWindowEvent.PointerMoved(x = 10.0, y = 20.0),
-            WebWindowEvent.PointerMoved(x = 10.0, y = 20.0),
+            WindowEvent.PointerMoved(
+                deviceId = DeviceId(5L),
+                position = PhysicalPosition(10.25, 20.5),
+                primary = true,
+                source = PointerSource.Mouse,
+            ),
+            WebWindowEvent.PointerMoved(
+                x = 10.25,
+                y = 20.5,
+                pointerId = 5L,
+                primary = true,
+                source = PointerSource.Mouse,
+            ).toWindowEvent(),
         )
     }
 
     @Test
-    fun `WebWindowEvent MouseInput structural equality`() {
+    fun `touch ID 42 movement can be primary without numeric ID inference`() {
         assertEquals(
-            WebWindowEvent.MouseInput(WebMouseButton.Left, WebKeyState.Pressed),
-            WebWindowEvent.MouseInput(WebMouseButton.Left, WebKeyState.Pressed),
+            WindowEvent.PointerMoved(
+                deviceId = DeviceId(42L),
+                position = PhysicalPosition(12.0, 34.0),
+                primary = true,
+                source = PointerSource.Touch(FingerId(42L)),
+            ),
+            WebWindowEvent.PointerMoved(
+                x = 12.0,
+                y = 34.0,
+                pointerId = 42L,
+                primary = true,
+                source = PointerSource.Touch(FingerId(42L)),
+            ).toWindowEvent(),
         )
     }
 
     @Test
-    fun `WebWindowEvent MouseWheel structural equality`() {
+    fun `second touch movement remains non-primary`() {
         assertEquals(
-            WebWindowEvent.MouseWheel(deltaX = 1.0, deltaY = -2.0),
-            WebWindowEvent.MouseWheel(deltaX = 1.0, deltaY = -2.0),
+            WindowEvent.PointerMoved(
+                deviceId = DeviceId(7L),
+                position = PhysicalPosition(-2.0, 8.5),
+                primary = false,
+                source = PointerSource.Touch(FingerId(7L)),
+            ),
+            WebWindowEvent.PointerMoved(
+                x = -2.0,
+                y = 8.5,
+                pointerId = 7L,
+                primary = false,
+                source = PointerSource.Touch(FingerId(7L)),
+            ).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `pointer enter and leave preserve exact mouse fields`() {
+        assertEquals(
+            WindowEvent.PointerEntered(
+                deviceId = DeviceId(3L),
+                position = PhysicalPosition(1.5, 2.5),
+                primary = true,
+                kind = PointerKind.Mouse,
+            ),
+            WebWindowEvent.PointerEntered(
+                x = 1.5,
+                y = 2.5,
+                pointerId = 3L,
+                primary = true,
+                kind = PointerKind.Mouse,
+            ).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerLeft(
+                deviceId = DeviceId(3L),
+                position = PhysicalPosition(-1.0, 4.0),
+                primary = true,
+                kind = PointerKind.Mouse,
+            ),
+            WebWindowEvent.PointerLeft(
+                x = -1.0,
+                y = 4.0,
+                pointerId = 3L,
+                primary = true,
+                kind = PointerKind.Mouse,
+            ).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `tablet move enter and leave preserve source kind identity and position`() {
+        val source = PointerSource.TabletTool(TabletToolKind.Pen)
+        assertEquals(
+            WindowEvent.PointerMoved(DeviceId(91L), PhysicalPosition(6.25, 7.75), false, source),
+            WebWindowEvent.PointerMoved(6.25, 7.75, 91L, false, source).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerEntered(DeviceId(91L), PhysicalPosition(6.0, 7.0), false, PointerKind.TabletTool),
+            WebWindowEvent.PointerEntered(6.0, 7.0, 91L, false, PointerKind.TabletTool).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerLeft(DeviceId(91L), PhysicalPosition(8.0, 9.0), false, PointerKind.TabletTool),
+            WebWindowEvent.PointerLeft(8.0, 9.0, 91L, false, PointerKind.TabletTool).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `mouse and tablet buttons preserve actual position identity primary source and state`() {
+        assertEquals(
+            WindowEvent.PointerButton(
+                deviceId = DeviceId(5L),
+                state = KeyState.Pressed,
+                position = PhysicalPosition(30.5, 40.25),
+                primary = true,
+                button = ButtonSource.Mouse(MouseButton.Right),
+            ),
+            WebWindowEvent.PointerButton(
+                x = 30.5,
+                y = 40.25,
+                pointerId = 5L,
+                primary = true,
+                button = ButtonSource.Mouse(MouseButton.Right),
+                state = WebKeyState.Pressed,
+            ).toWindowEvent(),
+        )
+        val barrel = ButtonSource.TabletTool(TabletToolKind.Pen, TabletToolButton.Barrel)
+        assertEquals(
+            WindowEvent.PointerButton(
+                deviceId = DeviceId(91L),
+                state = KeyState.Released,
+                position = PhysicalPosition(3.75, 4.5),
+                primary = false,
+                button = barrel,
+            ),
+            WebWindowEvent.PointerButton(3.75, 4.5, 91L, false, barrel, WebKeyState.Released).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `wheel deltas pass through unchanged`() {
+        assertEquals(
+            WindowEvent.MouseWheel(deviceId = null, deltaX = 1.25, deltaY = -2.5, phase = TouchPhase.Moved),
+            WebWindowEvent.MouseWheel(deltaX = 1.25, deltaY = -2.5).toWindowEvent(),
         )
     }
 
@@ -318,10 +471,76 @@ class DomEventMapperTest {
     }
 
     @Test
-    fun `WebWindowEvent Touch structural equality`() {
+    fun `legacy touch mapping uses explicit primary for non-zero ID`() {
         assertEquals(
-            WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
-            WebWindowEvent.Touch(WebTouchPhase.Started, x = 12.0, y = 34.0, id = 1L),
+            WindowEvent.PointerButton(
+                deviceId = DeviceId(42L),
+                state = KeyState.Pressed,
+                position = PhysicalPosition(12.0, 34.0),
+                primary = true,
+                button = ButtonSource.Touch(FingerId(42L)),
+            ),
+            WebWindowEvent.Touch(
+                phase = WebTouchPhase.Started,
+                x = 12.0,
+                y = 34.0,
+                id = 42L,
+                primary = true,
+            ).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerMoved(
+                deviceId = DeviceId(7L),
+                position = PhysicalPosition(50.0, 60.0),
+                primary = false,
+                source = PointerSource.Touch(FingerId(7L)),
+            ),
+            WebWindowEvent.Touch(WebTouchPhase.Moved, 50.0, 60.0, 7L, primary = false).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `touch enter leave and button canonical mappings preserve identity`() {
+        assertEquals(
+            WindowEvent.PointerEntered(DeviceId(42L), PhysicalPosition(4.0, 5.0), true, PointerKind.Touch),
+            WebWindowEvent.PointerEntered(4.0, 5.0, 42L, true, PointerKind.Touch).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerLeft(DeviceId(7L), PhysicalPosition(6.0, 7.0), false, PointerKind.Touch),
+            WebWindowEvent.PointerLeft(6.0, 7.0, 7L, false, PointerKind.Touch).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.PointerButton(
+                DeviceId(42L),
+                KeyState.Released,
+                PhysicalPosition(8.0, 9.0),
+                true,
+                ButtonSource.Touch(FingerId(42L)),
+            ),
+            WebWindowEvent.PointerButton(
+                8.0,
+                9.0,
+                42L,
+                true,
+                ButtonSource.Touch(FingerId(42L)),
+                WebKeyState.Released,
+            ).toWindowEvent(),
+        )
+    }
+
+    @Test
+    fun `drag positions and files pass through unchanged`() {
+        assertEquals(
+            WindowEvent.DragEntered(PhysicalPosition(100.25, 200.5), listOf("image/png")),
+            WebWindowEvent.DragEntered(100.25, 200.5, listOf("image/png")).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.DragMoved(PhysicalPosition(-3.5, 4.25)),
+            WebWindowEvent.DragMoved(-3.5, 4.25).toWindowEvent(),
+        )
+        assertEquals(
+            WindowEvent.DragDropped(PhysicalPosition(9.75, 10.5), listOf("file.txt")),
+            WebWindowEvent.DragDropped(9.75, 10.5, listOf("file.txt")).toWindowEvent(),
         )
     }
 
