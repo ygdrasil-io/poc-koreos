@@ -44,6 +44,7 @@ internal class UIKitLifecycleOrchestrator(
         runAllUIKitCleanupStages(
             eventLoop::dispatchWindowsDestroyed,
             eventLoop::destroySurfaces,
+            eventLoop::exit,
         )
     }
 }

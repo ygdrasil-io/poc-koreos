@@ -13,7 +13,10 @@ import platform.UIKit.UIScreen
  * This implementation exposes the ActiveEventLoop contract to the
  * KadreAppDelegate callbacks without duplicating the loop.
  */
-internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : ActiveEventLoop {
+internal class UIKitActiveEventLoop(
+    internal val handler: ApplicationHandler,
+    schedulerOperations: UIKitSchedulerOperations = UIKitNativeSchedulerOperations(),
+) : ActiveEventLoop {
 
     private var _controlFlow: ControlFlow = ControlFlow.Wait
     private var _isExiting = false
@@ -21,9 +24,12 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Windows created by this loop, used to scope app-level lifecycle events. */
     private val windows = mutableListOf<UiKitWindow>()
 
+    /** Logical identity is loop-owned; native pointers remain handles only. */
+    private var nextWindowId = 1L
+
     /** Single demand-driven scheduler shared by every window owned by this loop. */
     internal val scheduler = UIKitScheduler(
-        operations = UIKitNativeSchedulerOperations(),
+        operations = schedulerOperations,
         controlFlow = { _controlFlow },
         newEvents = { cause -> handler.newEvents(this, cause) },
         redraw = { id ->
@@ -50,7 +56,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     internal var lastTheme: Theme? = null
 
     override fun createWindow(attributes: WindowAttributes): Window {
-        check(!terminalAdmissionClosed) {
+        check(!_isExiting && !terminalAdmissionClosed) {
             "Cannot create a UIKit window during or after terminal teardown"
         }
         return reuseOrCreateUIKitWindow(
@@ -69,7 +75,13 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
             applyAttributes = { it.applyMutableAttributes(attributes) },
             create = {
                 createRegisteredUIKitWindow(
-                    createStructure = { UiKitWindow(this) },
+                    createStructure = {
+                        val (window, followingId) = createUIKitWindowWithLogicalId(nextWindowId) { id ->
+                            UiKitWindow(this, id)
+                        }
+                        nextWindowId = followingId
+                        window
+                    },
                     register = ::registerWindow,
                     applyInitialAttributes = { it.applyInitialAttributes(attributes) },
                     isLive = windows::contains,
@@ -173,11 +185,11 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         recreationCursor = recreationCursor?.let { cursor ->
             if (index < cursor) cursor - 1 else cursor
         }
-        scheduler.closeWindow(id)
-        runUIKitWindowCloseStages(
-            invalidateResources = window::invalidateResources,
-            dispatchDestroyed = { handler.windowEvent(this, id, WindowEvent.Destroyed) },
-            hideAndResign = window::hideAndResign,
+        runAllUIKitCleanupStages(
+            { scheduler.closeWindow(id) },
+            window::invalidateResources,
+            { handler.windowEvent(this, id, WindowEvent.Destroyed) },
+            window::hideAndResign,
         )
         return true
     }
@@ -189,11 +201,13 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     }
 
     override fun setControlFlow(controlFlow: ControlFlow) {
+        if (_isExiting) return
         _controlFlow = controlFlow
         scheduler.controlFlowChanged()
     }
     override val controlFlow: ControlFlow get() = _controlFlow
     override fun exit() {
+        if (_isExiting) return
         _isExiting = true
         scheduler.exit()
     }
@@ -263,17 +277,21 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
 
     private fun registerWindow(window: UiKitWindow) {
         windows.add(window)
-        try {
-            scheduler.registerWindow(window.id)
-        } catch (failure: Throwable) {
-            windows.remove(window)
-            throw failure
-        }
+        scheduler.registerWindow(window.id)
     }
 
     internal fun requestRedraw(id: WindowId) {
         scheduler.requestRedraw(id)
     }
+}
+
+/** Guards logical-ID exhaustion before invoking native UIKit allocation. */
+internal inline fun <T : Any> createUIKitWindowWithLogicalId(
+    nextWindowId: Long,
+    createStructure: (WindowId) -> T,
+): Pair<T, Long> {
+    check(nextWindowId < Long.MAX_VALUE) { "UIKit WindowId space exhausted" }
+    return createStructure(WindowId(nextWindowId)) to (nextWindowId + 1L)
 }
 
 /** Runs every UIKit cleanup stage and propagates the first failure. */
@@ -316,7 +334,16 @@ internal inline fun <T : Any> createRegisteredUIKitWindow(
     rollback: (T) -> Unit,
 ): T {
     val created = createStructure()
-    register(created)
+    try {
+        register(created)
+    } catch (failure: Throwable) {
+        try {
+            rollback(created)
+        } catch (rollbackFailure: Throwable) {
+            if (rollbackFailure !== failure) failure.addSuppressed(rollbackFailure)
+        }
+        throw failure
+    }
     try {
         applyInitialAttributes(created)
     } catch (failure: Throwable) {

@@ -16,11 +16,19 @@ internal sealed interface UIKitTimerDecision {
     ) : UIKitTimerDecision
 }
 
+/** Result of consuming a native deadline callback. */
+internal sealed interface UIKitDeadlineSignal {
+    data object Stale : UIKitDeadlineSignal
+
+    data class Early(val replacement: UIKitTimerDecision.Arm) : UIKitDeadlineSignal
+
+    data object Reached : UIKitDeadlineSignal
+}
+
 /** Pure synchronous state owned by the UIKit event-loop scheduler. */
 internal class UIKitLoopState(
     private val nowMillis: () -> Long,
 ) {
-    private val claimedWindows = mutableSetOf<WindowId>()
     private val liveWindows = mutableSetOf<WindowId>()
     private val pendingRedraws = linkedSetOf<WindowId>()
     private var pendingCause: StartCause? = null
@@ -28,12 +36,26 @@ internal class UIKitLoopState(
     private var nextDeadlineGeneration = 0L
     private var armedDeadline: UIKitTimerDecision.Arm? = null
     private var handledDeadline: Long? = null
+    private var terminal = false
 
-    fun registerWindow(windowId: WindowId) {
-        check(claimedWindows.add(windowId)) {
+    fun registerWindow(windowId: WindowId): Boolean {
+        check(!terminal) { "UIKit event loop is terminal" }
+        val wasEmpty = liveWindows.isEmpty()
+        check(liveWindows.add(windowId)) {
             "WindowId ${windowId.value} has already been registered"
         }
-        liveWindows.add(windowId)
+        return wasEmpty
+    }
+
+    fun rollbackWindowRegistration(windowId: WindowId) {
+        liveWindows.remove(windowId)
+        pendingRedraws.remove(windowId)
+        armedDeadline = null
+        if (liveWindows.isEmpty()) {
+            pendingCause = null
+            requestedResume = null
+            handledDeadline = null
+        }
     }
 
     fun requestRedraw(
@@ -41,7 +63,7 @@ internal class UIKitLoopState(
         controlFlow: ControlFlow,
         wakeIteration: Boolean,
     ): Boolean {
-        if (windowId !in liveWindows) return false
+        if (terminal || windowId !in liveWindows) return false
         if (wakeIteration && controlFlow != ControlFlow.Poll) {
             signalEarlierEvent()
         }
@@ -49,7 +71,7 @@ internal class UIKitLoopState(
     }
 
     fun wakeExternal(controlFlow: ControlFlow): Boolean {
-        if (liveWindows.isEmpty()) return false
+        if (terminal) return false
         if (controlFlow != ControlFlow.Poll) signalEarlierEvent()
         return true
     }
@@ -85,23 +107,34 @@ internal class UIKitLoopState(
         }
     }
 
-    fun signalDeadline(generation: Long): Boolean {
-        val armed = armedDeadline?.takeIf { it.generation == generation } ?: return false
+    fun signalDeadline(generation: Long): UIKitDeadlineSignal {
+        val armed = armedDeadline?.takeIf { it.generation == generation }
+            ?: return UIKitDeadlineSignal.Stale
         val observedAt = nowMillis()
-        if (observedAt < armed.deadlineMillis) return false
         armedDeadline = null
+        if (observedAt < armed.deadlineMillis) {
+            val replacement = UIKitTimerDecision.Arm(
+                deadlineMillis = armed.deadlineMillis,
+                generation = ++nextDeadlineGeneration,
+            )
+            armedDeadline = replacement
+            return UIKitDeadlineSignal.Early(replacement)
+        }
         requestedResume = armed.deadlineMillis
         handledDeadline = armed.deadlineMillis
         pendingCause = StartCause.ResumeTimeReached(
             requestedResume = armed.deadlineMillis,
             start = observedAt,
         )
-        return true
+        return UIKitDeadlineSignal.Reached
     }
 
-    fun beginIteration(controlFlow: ControlFlow): StartCause? =
+    fun beginIteration(controlFlow: ControlFlow): StartCause? = if (terminal) {
+        null
+    } else {
         pendingCause?.also { pendingCause = null }
             ?: if (controlFlow == ControlFlow.Poll) StartCause.Poll else null
+    }
 
     fun takeRedraws(): List<WindowId> = pendingRedraws.toList().also {
         pendingRedraws.clear()
@@ -113,6 +146,8 @@ internal class UIKitLoopState(
 
     fun hasLiveWindows(): Boolean = liveWindows.isNotEmpty()
 
+    fun isTerminal(): Boolean = terminal
+
     fun isLive(windowId: WindowId): Boolean = windowId in liveWindows
 
     fun cancelArmedDeadline() {
@@ -123,17 +158,18 @@ internal class UIKitLoopState(
         if (!liveWindows.remove(windowId)) return false
         pendingRedraws.remove(windowId)
         armedDeadline = null
-        if (liveWindows.isEmpty()) {
-            pendingCause = null
-        } else if (controlFlow != ControlFlow.Poll) {
+        if (controlFlow != ControlFlow.Poll) {
             signalEarlierEvent()
         }
         return true
     }
 
-    fun exit() {
+    fun exit(): Boolean {
+        if (terminal) return false
+        terminal = true
         liveWindows.clear()
         abortIteration()
+        return true
     }
 
     fun abortIteration() {
@@ -145,8 +181,19 @@ internal class UIKitLoopState(
     }
 
     private fun signalEarlierEvent() {
-        if (pendingCause == null) {
-            pendingCause = StartCause.WaitCancelled(requestedResume)
+        val deadline = requestedResume
+        val observedAt = nowMillis()
+        val deadlineReached = deadline != null && observedAt >= deadline
+        if (pendingCause == null || pendingCause is StartCause.WaitCancelled && deadlineReached) {
+            pendingCause = if (deadlineReached) {
+                handledDeadline = deadline
+                StartCause.ResumeTimeReached(
+                    requestedResume = checkNotNull(deadline),
+                    start = observedAt,
+                )
+            } else {
+                StartCause.WaitCancelled(deadline)
+            }
         }
         armedDeadline = null
     }

@@ -41,11 +41,16 @@ internal class UIKitEventLoopProxy(
         // CAS: only enqueue if no dispatch is already pending.
         if (!pending.compareAndSet(0, 1)) return
 
-        dispatchMain {
-            // Reset before the scheduler tick so a wakeUp() issued from one of
-            // its callbacks can enqueue the following tick independently.
+        try {
+            dispatchMain {
+                // Reset before the scheduler tick so a wakeUp() issued from one of
+                // its callbacks can enqueue the following tick independently.
+                pending.value = 0
+                scheduler.wakeExternal()
+            }
+        } catch (failure: Throwable) {
             pending.value = 0
-            scheduler.wakeExternal()
+            throw failure
         }
     }
 }

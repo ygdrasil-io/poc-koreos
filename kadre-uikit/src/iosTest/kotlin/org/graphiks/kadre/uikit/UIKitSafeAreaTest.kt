@@ -49,4 +49,14 @@ class UIKitSafeAreaTest {
         }
         assertEquals(0, physicalInset(points = 10.25, scale = 0.0))
     }
+
+    @Test
+    fun positiveProductOverflowAndFiniteOversizeSaturateWhileNormalValuesRound() {
+        assertEquals(Int.MAX_VALUE, physicalInset(points = Double.MAX_VALUE, scale = 2.0))
+        assertEquals(
+            Int.MAX_VALUE,
+            physicalInset(points = Int.MAX_VALUE.toDouble() + 1_024.0, scale = 1.0),
+        )
+        assertEquals(31, physicalInset(points = 10.25, scale = 3.0))
+    }
 }

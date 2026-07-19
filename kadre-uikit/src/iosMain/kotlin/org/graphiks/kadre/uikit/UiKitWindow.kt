@@ -691,7 +691,7 @@ internal inline fun applyUIKitWindowMutationsWhileLive(
 internal fun physicalInset(points: Double, scale: Double): Int {
     if (!points.isFinite() || points < 0.0 || !scale.isFinite() || scale < 0.0) return 0
     val physical = points * scale
-    return if (physical.isFinite()) physical.roundToInt() else 0
+    return if (physical.isFinite()) physical.roundToInt() else Int.MAX_VALUE
 }
 
 /** Applies the physical-pixel conversion consistently to all safe-area edges. */
@@ -717,7 +717,10 @@ internal fun physicalSafeArea(
  * are coalesced by the loop-level [UIKitScheduler].
  */
 @OptIn(ExperimentalForeignApi::class)
-internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window {
+internal class UiKitWindow(
+    private val eventLoop: UIKitActiveEventLoop,
+    override val id: WindowId,
+) : Window {
 
     private val uiWindow: UIWindow
     private val viewController: UIViewController
@@ -733,18 +736,14 @@ internal class UiKitWindow(private val eventLoop: UIKitActiveEventLoop) : Window
     private var _title: String = ""
     private var _fullscreen: Fullscreen? = null
 
-    override val id: WindowId
-
     init {
         val screen = UIScreen.mainScreen
         val screenBounds = screen.bounds
 
-        // 4. UIWindow first — needed to derive the WindowId
+        // 4. UIWindow is a native handle; logical identity is owned by the loop.
         uiWindow = UIWindow(frame = screenBounds)
-        id = WindowId(uiWindow.objcPtr().toLong())
 
-        // Capture id in a local val so the lambda does not close over a val
-        // that the compiler might consider uninitialized at lambda-definition time.
+        // Capture id in a local val for all native callback bridges.
         val windowId = id
 
         // 1. Full-screen KadreMetalView (dispatch lambda uses windowId)

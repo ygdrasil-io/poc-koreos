@@ -216,6 +216,39 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun terminationDisposesTheLoopSchedulerOnceEvenWhenWindowDestructionFails() {
+        val operations = LifecycleSchedulerOperations()
+        val destroyedFailure = IllegalStateException("destroyed")
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event == WindowEvent.Destroyed) throw destroyedFailure
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler, schedulerOperations = operations)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
+        loop.createWindow(WindowAttributes(visible = false))
+        loop.setControlFlow(org.graphiks.kadre.core.ControlFlow.Poll)
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.willTerminate()
+        }
+
+        assertSame(destroyedFailure, thrown)
+        assertEquals(1, operations.displayLinkDisposals)
+        lifecycle.willTerminate()
+        assertEquals(1, operations.displayLinkDisposals)
+        assertFailsWith<IllegalStateException> {
+            loop.createWindow(WindowAttributes(visible = false))
+        }
+    }
+
+    @Test
     fun delegateTerminationClearsLifecycleAndRegistryAfterFailure() {
         val trace = mutableListOf<String>()
         val orchestratorFailure = IllegalStateException("orchestrator")
@@ -312,6 +345,43 @@ class UIKitLifecycleTest {
             assertNotEquals(closed.id, replacement.id)
         } finally {
             createdWindows.distinct().forEach(Window::close)
+        }
+    }
+
+    @Test
+    fun windowIdsAreLoopOwnedMonotonicAndNeverReuseAClosedNativeHandleIdentity() {
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val first = loop.createWindow(WindowAttributes(visible = false))
+        val second = loop.createWindow(WindowAttributes(visible = false))
+        first.close()
+        val third = loop.createWindow(WindowAttributes(visible = false))
+
+        try {
+            assertEquals(
+                listOf(WindowId(1L), WindowId(2L), WindowId(3L)),
+                listOf(first.id, second.id, third.id),
+            )
+            var nativeAllocationRan = false
+            assertFailsWith<IllegalStateException> {
+                createUIKitWindowWithLogicalId(Long.MAX_VALUE) {
+                    nativeAllocationRan = true
+                    Any()
+                }
+            }
+            assertFalse(nativeAllocationRan)
+        } finally {
+            first.close()
+            second.close()
+            third.close()
         }
     }
 
@@ -599,6 +669,102 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun registrationFailureRollsBackTheCreatedStructureAndPreservesFailures() {
+        val candidate = Any()
+        val liveRegistry = mutableSetOf<Any>()
+        val registrationFailure = IllegalStateException("registration")
+        val rollbackFailure = IllegalArgumentException("rollback")
+        var rollbackCount = 0
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            createRegisteredUIKitWindow(
+                createStructure = { candidate },
+                register = {
+                    liveRegistry.add(it)
+                    throw registrationFailure
+                },
+                applyInitialAttributes = { error("attributes must not run") },
+                isLive = liveRegistry::contains,
+                rollback = {
+                    rollbackCount += 1
+                    liveRegistry.remove(it)
+                    throw rollbackFailure
+                },
+            )
+        }
+
+        assertSame(registrationFailure, thrown)
+        assertEquals(listOf(rollbackFailure), thrown.suppressedExceptions)
+        assertEquals(1, rollbackCount)
+        assertFalse(candidate in liveRegistry)
+    }
+
+    @Test
+    fun schedulerRegistrationFailureRemovesAndClosesTheNativeWindowCandidate() {
+        val operations = LifecycleSchedulerOperations()
+        val schedulingFailure = IllegalStateException("schedule registration")
+        val destroyedIds = mutableListOf<WindowId>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event == WindowEvent.Destroyed) destroyedIds += windowId
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler, schedulerOperations = operations)
+        loop.setControlFlow(org.graphiks.kadre.core.ControlFlow.Poll)
+        operations.startDisplayLinkFailure = schedulingFailure
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            loop.createWindow(WindowAttributes(visible = false))
+        }
+
+        assertSame(schedulingFailure, thrown)
+        assertEquals(1, destroyedIds.size)
+        operations.startDisplayLinkFailure = null
+        loop.createWindow(WindowAttributes(visible = false)).close()
+    }
+
+    @Test
+    fun schedulerCloseFailureStillInvalidatesDispatchesDestroyedAndPreservesSuppressedFailures() {
+        val operations = LifecycleSchedulerOperations()
+        val schedulingFailure = IllegalStateException("stop display link")
+        val destroyedFailure = IllegalArgumentException("destroyed")
+        var destroyedCount = 0
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event == WindowEvent.Destroyed) {
+                    destroyedCount += 1
+                    throw destroyedFailure
+                }
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler, schedulerOperations = operations)
+        val window = loop.createWindow(WindowAttributes(visible = false))
+        operations.stopDisplayLinkFailure = schedulingFailure
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            window.close()
+        }
+
+        assertSame(schedulingFailure, thrown)
+        assertEquals(listOf(destroyedFailure), thrown.suppressedExceptions)
+        assertEquals(1, destroyedCount)
+        window.close()
+        assertEquals(1, destroyedCount)
+    }
+
+    @Test
     fun windowMutationPolicySkipsClosedWindowsAndStopsAfterSynchronousClose() {
         val mutations = mutableListOf<String>()
         var live = true
@@ -621,4 +787,26 @@ class UIKitLifecycleTest {
 
         assertEquals(listOf("title", "visible"), mutations)
     }
+}
+
+private class LifecycleSchedulerOperations : UIKitSchedulerOperations {
+    var displayLinkDisposals = 0
+    var startDisplayLinkFailure: Throwable? = null
+    var stopDisplayLinkFailure: Throwable? = null
+
+    override fun nowMillis(): Long = 1_000L
+
+    override fun startDisplayLink(onFrame: () -> Unit) {
+        startDisplayLinkFailure?.let { throw it }
+    }
+
+    override fun stopDisplayLink() {
+        stopDisplayLinkFailure?.let { throw it }
+    }
+
+    override fun disposeDisplayLink() {
+        displayLinkDisposals += 1
+    }
+
+    override fun scheduleDeadline(deadlineMillis: Long, onDeadline: () -> Unit) = Unit
 }
