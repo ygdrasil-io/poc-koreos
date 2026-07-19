@@ -37,7 +37,10 @@ private fun physicalDimension(cssDimension: Double, scale: Double): Int {
     val scaled = cssDimension * scale
     return when {
         scaled.isNaN() || scaled <= 0.0 -> 0
-        scaled >= Int.MAX_VALUE.toDouble() - 0.5 -> Int.MAX_VALUE
-        else -> (scaled + 0.5).toInt()
+        scaled >= Int.MAX_VALUE.toDouble() -> Int.MAX_VALUE
+        else -> {
+            val wholePixels = scaled.toInt()
+            if (scaled - wholePixels.toDouble() >= 0.5) wholePixels + 1 else wholePixels
+        }
     }
 }

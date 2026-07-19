@@ -43,6 +43,39 @@ class WebPointerTrackerTest {
     }
 
     @Test
+    fun `duplicate touch start does not change insertion order`() {
+        val tracker = WebPointerTracker()
+        tracker.onStart(42L, "touch", domPrimary = false)
+        tracker.onStart(7L, "touch", domPrimary = false)
+
+        assertTrue(tracker.onStart(42L, "touch", domPrimary = false).primary)
+        tracker.onEnd(42L, "touch", domPrimary = false)
+        assertTrue(tracker.onMove(7L, "touch", domPrimary = false).primary)
+    }
+
+    @Test
+    fun `ended then restarted touch is reinserted after active touches`() {
+        val tracker = WebPointerTracker()
+        tracker.onStart(42L, "touch", domPrimary = false)
+        tracker.onStart(7L, "touch", domPrimary = false)
+        tracker.onEnd(42L, "touch", domPrimary = false)
+
+        assertFalse(tracker.onStart(42L, "touch", domPrimary = false).primary)
+        assertTrue(tracker.onMove(7L, "touch", domPrimary = false).primary)
+    }
+
+    @Test
+    fun `move and end for unknown touch never register or corrupt touch order`() {
+        val tracker = WebPointerTracker()
+
+        assertFalse(tracker.onMove(42L, "touch", domPrimary = true).primary)
+        assertFalse(tracker.onEnd(42L, "touch", domPrimary = true).primary)
+        assertTrue(tracker.onStart(7L, "touch", domPrimary = false).primary)
+        assertFalse(tracker.onEnd(42L, "touch", domPrimary = true).primary)
+        assertTrue(tracker.onMove(7L, "touch", domPrimary = false).primary)
+    }
+
+    @Test
     fun `mouse is always primary and does not alter touch state`() {
         val tracker = WebPointerTracker()
         tracker.onStart(42L, "touch", domPrimary = false)
@@ -102,5 +135,20 @@ class WebPointerTrackerTest {
         assertEquals(PointerSource.Unknown, unknown.source)
         assertEquals(PointerKind.Unknown, unknown.kind)
         assertTrue(tracker.onMove(42L, "touch", domPrimary = false).primary)
+    }
+
+    @Test
+    fun `pen and unknown pointer types preserve true DOM primary`() {
+        val tracker = WebPointerTracker()
+
+        val pen = tracker.onMove(8L, "pen", domPrimary = true)
+        val unknown = tracker.onMove(11L, "something-else", domPrimary = true)
+
+        assertTrue(pen.primary)
+        assertEquals(PointerSource.TabletTool(TabletToolKind.Pen), pen.source)
+        assertEquals(PointerKind.TabletTool, pen.kind)
+        assertTrue(unknown.primary)
+        assertEquals(PointerSource.Unknown, unknown.source)
+        assertEquals(PointerKind.Unknown, unknown.kind)
     }
 }

@@ -71,6 +71,21 @@ class DomCoordinateTransformTest {
     }
 
     @Test
+    fun `physical canvas size rounds exactly around half and saturation boundaries`() {
+        assertEquals(0, physicalWidth(0.49999999999999994))
+        assertEquals(1, physicalWidth(0.5))
+        assertEquals(1, physicalWidth(0.5000000000000001))
+
+        val saturationTie = Int.MAX_VALUE.toDouble() - 0.5
+        val justBelowSaturationTie = Double.fromBits(saturationTie.toBits() - 1L)
+        val justAboveSaturationTie = Double.fromBits(saturationTie.toBits() + 1L)
+
+        assertEquals(Int.MAX_VALUE - 1, physicalWidth(justBelowSaturationTie))
+        assertEquals(Int.MAX_VALUE, physicalWidth(saturationTie))
+        assertEquals(Int.MAX_VALUE, physicalWidth(justAboveSaturationTie))
+    }
+
+    @Test
     fun `invalid and overflowing CSS dimensions have explicit bounds`() {
         assertEquals(
             PhysicalSize(0, 0),
@@ -87,4 +102,12 @@ class DomCoordinateTransformTest {
             ).physicalSize(),
         )
     }
+
+    private fun physicalWidth(widthCss: Double): Int = CanvasMetrics(
+        leftCss = 0.0,
+        topCss = 0.0,
+        widthCss = widthCss,
+        heightCss = 0.0,
+        devicePixelRatio = 1.0,
+    ).physicalSize().width
 }
