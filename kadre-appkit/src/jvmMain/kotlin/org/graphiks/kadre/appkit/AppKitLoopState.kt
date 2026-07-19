@@ -40,6 +40,7 @@ internal class AppKitLoopState(private val nowMillis: () -> Long) {
 
     fun arm(controlFlow: ControlFlow): TimerDecision {
         if (exited) return TimerDecision.Cancel
+        if (pendingCause != null) return TimerDecision.FireNow
 
         armedDeadline = null
         return when (controlFlow) {

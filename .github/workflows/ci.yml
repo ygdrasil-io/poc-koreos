@@ -131,6 +131,7 @@ jobs:
   macos-build:
     name: macos-build
     runs-on: macos-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -146,13 +147,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run AppKit runtime gate
+        run: scripts/test-appkit-runtime.sh
+
       # Compile the macOS-only modules + JVM samples
       # hello-triangle requires wgpu4k — compiled but not run in CI.
       - name: Build macOS modules + JVM samples
         run: |
           ./gradlew \
             :kadre-core:jvmTest \
-            :kadre-appkit:build \
+            :kadre-appkit:assemble \
             :kadre:jvmTest \
             :samples:hello-metal:build \
             :samples:hello-triangle:build \

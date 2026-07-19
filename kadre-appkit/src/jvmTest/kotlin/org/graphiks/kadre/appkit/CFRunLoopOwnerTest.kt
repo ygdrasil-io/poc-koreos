@@ -12,6 +12,42 @@ import kotlin.test.assertSame
 
 class CFRunLoopOwnerTest {
     @Test
+    fun `pre-run wake is re-fired before waiting and consumed once`() {
+        val causes = mutableListOf<StartCause>()
+        val api = RecordingCFRunLoopApi()
+        val owner = CFRunLoopOwner.install(
+            api = api,
+            state = AppKitLoopState { 1_000L },
+            onAfterWaiting = causes::add,
+            onBeforeWaiting = { ControlFlow.Wait },
+        )
+        owner.consumeLaunchIteration()
+        val traceStart = api.trace.size
+
+        owner.wakeUp()
+        CFRunLoopOwner.dispatchObserverCallback(
+            api.createdObserver,
+            CFRunLoopOwner.BEFORE_WAITING,
+        )
+        val traceBeforeAfterWaiting = api.trace.drop(traceStart).toList()
+
+        CFRunLoopOwner.dispatchObserverCallback(
+            api.createdObserver,
+            CFRunLoopOwner.AFTER_WAITING,
+        )
+        CFRunLoopOwner.dispatchObserverCallback(
+            api.createdObserver,
+            CFRunLoopOwner.BEFORE_WAITING,
+        )
+        val traceAfterConsumption = api.trace.drop(traceStart).toList()
+        owner.close()
+
+        assertEquals(listOf("wake-up", "wake-up"), traceBeforeAfterWaiting)
+        assertEquals(listOf<StartCause>(StartCause.WaitCancelled()), causes)
+        assertEquals(listOf("wake-up", "wake-up"), traceAfterConsumption)
+    }
+
+    @Test
     fun `after waiting classifies deadline before timer callback confirms cleanup`() {
         var nowMillis = 1_000L
         var controlFlow: ControlFlow = ControlFlow.WaitUntil(2_000L)

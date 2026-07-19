@@ -33,6 +33,33 @@ class AppKitLoopStateTest {
     }
 
     @Test
+    fun `pending external event fires before wait and does not spin after consumption`() {
+        val state = initializedState(nowMillis = { 1_000L })
+        state.signalExternalEvent()
+
+        assertEquals(TimerDecision.FireNow, state.arm(ControlFlow.Wait))
+        assertEquals(StartCause.WaitCancelled(), state.beginIteration())
+        assertEquals(TimerDecision.Cancel, state.arm(ControlFlow.Wait))
+    }
+
+    @Test
+    fun `pending deadline cancellation fires before a replacement deadline is armed`() {
+        val state = initializedState(nowMillis = { 1_000L })
+        state.arm(ControlFlow.WaitUntil(2_000L))
+        state.signalExternalEvent()
+
+        assertEquals(TimerDecision.FireNow, state.arm(ControlFlow.WaitUntil(3_000L)))
+        assertEquals(
+            StartCause.WaitCancelled(requestedResume = 2_000L),
+            state.beginIteration(),
+        )
+        assertEquals(
+            TimerDecision.Arm(deadline = 3_000L, generation = 2L),
+            state.arm(ControlFlow.WaitUntil(3_000L)),
+        )
+    }
+
+    @Test
     fun `future deadline arms an epoch millisecond timer`() {
         val deadline = 2_000L
         val state = initializedState(nowMillis = { 1_000L })
