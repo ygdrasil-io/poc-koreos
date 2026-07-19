@@ -64,6 +64,7 @@ import kotlin.js.unsafeCast
 
 // 32 bytes (cf. UNIFORM_BYTES_LONG in commonMain — wgpu4k wants a ULong on the API side).
 private val UNIFORM_BYTES: ULong = 32uL
+private const val PRESENTED_FRAME_ATTRIBUTE = "data-kadre-pong-presented-frame"
 
 // ---------------------------------------------------------------------------
 // PongRendererWeb
@@ -79,6 +80,7 @@ class PongRendererWeb(windowHandle: RawWindowHandle) : PongRendererInterface {
     private val bindGroups = mutableListOf<GPUBindGroup>()
     private var format: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
     private var ready = false
+    private var presentedFrameCount = 0L
 
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -271,9 +273,19 @@ class PongRendererWeb(windowHandle: RawWindowHandle) : PongRendererInterface {
         val commandBuffer = encoder.finish()
         dev.queue.submit(listOf(commandBuffer))
         surf.present()
+        publishPresentedFrame(state)
 
         textureView.close()
         encoder.close()
+    }
+
+    /** Sample-internal E2E probe: only publish state after its frame was presented. */
+    private fun publishPresentedFrame(state: GameState) {
+        presentedFrameCount += 1L
+        document.getElementById("kadre-canvas")?.setAttribute(
+            PRESENTED_FRAME_ATTRIBUTE,
+            """{"frame":$presentedFrameCount,"ballX":${state.ball.x},"ballY":${state.ball.y},"playerY":${state.player.y},"aiY":${state.ai.y}}""",
+        )
     }
 
     override fun release() {
