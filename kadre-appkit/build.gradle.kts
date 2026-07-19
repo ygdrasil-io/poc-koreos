@@ -32,3 +32,12 @@ kotlin {
         }
     }
 }
+
+if (System.getProperty("os.name", "").let { osName ->
+        osName.contains("Mac", ignoreCase = true) || osName.contains("Darwin", ignoreCase = true)
+    }
+) {
+    tasks.named<org.gradle.api.tasks.testing.Test>("jvmTest") {
+        jvmArgs("-XstartOnFirstThread", "--enable-native-access=ALL-UNNAMED")
+    }
+}

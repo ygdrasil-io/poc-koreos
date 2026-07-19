@@ -224,6 +224,10 @@ internal class CFRunLoopOwner private constructor(
         private val observerRoutes = ConcurrentHashMap<Long, CFRunLoopOwner>()
         private val timerRoutes = ConcurrentHashMap<Long, TimerRoute>()
 
+        internal fun registeredObserverCount(): Int = observerRoutes.size
+
+        internal fun registeredTimerCount(): Int = timerRoutes.size
+
         fun install(
             api: CFRunLoopApi,
             state: AppKitLoopState,
@@ -439,7 +443,10 @@ internal class NativeCFRunLoopApi private constructor(
                 fun downcall(name: String, descriptor: FunctionDescriptor): MethodHandle =
                     linker.downcallHandle(symbol(name), descriptor)
 
-                val lookup = MethodHandles.lookup()
+                val lookup = MethodHandles.privateLookupIn(
+                    NativeCFRunLoopApi::class.java,
+                    MethodHandles.lookup(),
+                )
                 val observerCallback = lookup.findStatic(
                     NativeCFRunLoopApi::class.java,
                     "nativeObserverCallback",

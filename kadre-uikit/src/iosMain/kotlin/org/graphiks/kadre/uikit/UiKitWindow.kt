@@ -708,6 +708,54 @@ internal fun physicalSafeArea(
     right = physicalInset(rightPoints, scale),
 )
 
+/** Pure UIKit policy for requests that never require a native window. */
+@Suppress("UNUSED_PARAMETER")
+internal object UIKitWindowCapabilities {
+    val isResizable: Boolean = false
+    val isMinimized: Boolean? = null
+    val isMaximized: Boolean = false
+    val isDecorated: Boolean = false
+
+    fun setResizable(resizable: Boolean) = Unit
+    fun setMinimized(minimized: Boolean) = Unit
+    fun setMaximized(maximized: Boolean) = Unit
+    fun setDecorations(decorated: Boolean) = Unit
+    fun setCursor(cursor: CursorIcon) = Unit
+    fun setCursorVisible(visible: Boolean) = Unit
+    fun setWindowLevel(level: WindowLevel) = Unit
+    fun setTransparent(transparent: Boolean) = Unit
+    fun setBlur(blur: Boolean) = Unit
+    fun setWindowIcon(icon: Icon?) = Unit
+    fun setCustomCursor(cursor: CustomCursor) = Unit
+
+    fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
+        unsupported("iOS has no system cursor")
+
+    fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
+        unsupported("iOS has no cursor to warp")
+
+    fun setCursorHittest(hittest: Boolean): WindowRequestResult =
+        unsupported("iOS has no system cursor")
+
+    fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        WindowRequestResult.Success
+
+    fun setContentProtected(protected: Boolean): WindowRequestResult =
+        unsupported("Content protection is unsupported on iOS")
+
+    fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        unsupported("Window menu is unsupported on iOS")
+
+    fun dragWindow(): WindowRequestResult =
+        unsupported("Window dragging is unsupported on iOS")
+
+    fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        unsupported("Window resizing is unsupported on iOS")
+
+    private fun unsupported(message: String): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported(message))
+}
+
 /**
  * UiKitWindow — implements Window for iOS.
  *
@@ -1013,37 +1061,45 @@ internal class UiKitWindow(
      * iOS does not support programmatic window resizing.
      * This is a no-op — the system controls the window geometry.
      */
-    override fun setResizable(resizable: Boolean) { /* no-op: iOS does not support programmatic resizing */ }
+    override fun setResizable(resizable: Boolean) {
+        UIKitWindowCapabilities.setResizable(resizable)
+    }
 
     /** iOS windows are not user-resizable. Always returns false. */
-    override val isResizable: Boolean get() = false
+    override val isResizable: Boolean get() = UIKitWindowCapabilities.isResizable
 
     /**
      * iOS does not support programmatic minimization.
      * This is a no-op.
      */
-    override fun setMinimized(minimized: Boolean) { /* no-op: iOS does not support programmatic minimization */ }
+    override fun setMinimized(minimized: Boolean) {
+        UIKitWindowCapabilities.setMinimized(minimized)
+    }
 
     /** iOS does not expose a reliable minimized state. */
-    override val isMinimized: Boolean? get() = null
+    override val isMinimized: Boolean? get() = UIKitWindowCapabilities.isMinimized
 
     /**
      * iOS does not support programmatic maximization.
      * This is a no-op — windows always fill the available screen area.
      */
-    override fun setMaximized(maximized: Boolean) { /* no-op: iOS windows always fill the screen */ }
+    override fun setMaximized(maximized: Boolean) {
+        UIKitWindowCapabilities.setMaximized(maximized)
+    }
 
     /** iOS windows always fill the screen. Always returns false. */
-    override val isMaximized: Boolean get() = false
+    override val isMaximized: Boolean get() = UIKitWindowCapabilities.isMaximized
 
     /**
      * iOS does not have platform window decorations (title bar, resize borders).
      * This is a no-op.
      */
-    override fun setDecorations(decorated: Boolean) { /* no-op: iOS has no platform window decorations */ }
+    override fun setDecorations(decorated: Boolean) {
+        UIKitWindowCapabilities.setDecorations(decorated)
+    }
 
     /** iOS windows have no platform decorations. Always returns false. */
-    override val isDecorated: Boolean get() = false
+    override val isDecorated: Boolean get() = UIKitWindowCapabilities.isDecorated
 
     /**
      * iOS does not support surface size constraints.
@@ -1092,10 +1148,14 @@ internal class UiKitWindow(
     // ── R3: cursor, theme & appearance ───────────────────────────────────────
 
     /** No-op on iOS: there is no visible cursor on touchscreen devices. */
-    override fun setCursor(cursor: CursorIcon) { /* no-op: iOS has no cursor */ }
+    override fun setCursor(cursor: CursorIcon) {
+        UIKitWindowCapabilities.setCursor(cursor)
+    }
 
     /** No-op on iOS. */
-    override fun setCursorVisible(visible: Boolean) { /* no-op: iOS has no cursor */ }
+    override fun setCursorVisible(visible: Boolean) {
+        UIKitWindowCapabilities.setCursorVisible(visible)
+    }
 
     /**
      * Sets the cursor grab mode for this window.
@@ -1104,7 +1164,7 @@ internal class UiKitWindow(
      * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
+        UIKitWindowCapabilities.setCursorGrab(mode)
 
     /**
      * Warps the cursor to the given position.
@@ -1113,7 +1173,7 @@ internal class UiKitWindow(
      * Cursor warping is unsupported; returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no cursor to warp"))
+        UIKitWindowCapabilities.setCursorPosition(position)
 
     /**
      * Enables or disables cursor hit-testing for this window.
@@ -1122,7 +1182,7 @@ internal class UiKitWindow(
      * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
+        UIKitWindowCapabilities.setCursorHittest(hittest)
 
     /**
      * Returns the current theme via the view controller's traitCollection.
@@ -1154,16 +1214,24 @@ internal class UiKitWindow(
     }
 
     /** No-op on iOS: Z-ordering is managed by UIKit. */
-    override fun setWindowLevel(level: WindowLevel) { /* no-op: UIKit manages Z-ordering */ }
+    override fun setWindowLevel(level: WindowLevel) {
+        UIKitWindowCapabilities.setWindowLevel(level)
+    }
 
     /** No-op on iOS: transparency is a renderer concern. */
-    override fun setTransparent(transparent: Boolean) { /* no-op: iOS transparency is renderer-side */ }
+    override fun setTransparent(transparent: Boolean) {
+        UIKitWindowCapabilities.setTransparent(transparent)
+    }
 
     /** No-op on iOS. */
-    override fun setBlur(blur: Boolean) { /* no-op: iOS has no standard window blur API */ }
+    override fun setBlur(blur: Boolean) {
+        UIKitWindowCapabilities.setBlur(blur)
+    }
 
     /** No-op on iOS: application icon is set via the Info.plist. */
-    override fun setWindowIcon(icon: Icon?) { /* no-op: iOS icon is set via the app bundle */ }
+    override fun setWindowIcon(icon: Icon?) {
+        UIKitWindowCapabilities.setWindowIcon(icon)
+    }
 
     /**
      * Enters or exits fullscreen on iOS.
@@ -1248,7 +1316,9 @@ internal class UiKitWindow(
      *
      * **Platform note (iOS):** No-op — touch-first platform with no system cursor.
      */
-    override fun setCustomCursor(cursor: CustomCursor) { /* no-op on iOS */ }
+    override fun setCustomCursor(cursor: CustomCursor) {
+        UIKitWindowCapabilities.setCustomCursor(cursor)
+    }
 
     // ── R5-MiscWindow ─────────────────────────────────────────────────────────
 
@@ -1260,7 +1330,7 @@ internal class UiKitWindow(
      * Returns [WindowRequestResult.Success] to match local winit semantics.
      */
     override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
-        WindowRequestResult.Success
+        UIKitWindowCapabilities.requestUserAttention(requestType)
 
     /**
      * Enables or disables screen-capture protection for this window.
@@ -1269,7 +1339,7 @@ internal class UiKitWindow(
      * capture-protection mechanism at the UIWindow level.
      */
     override fun setContentProtected(protected: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Content protection is unsupported on iOS"))
+        UIKitWindowCapabilities.setContentProtected(protected)
 
     /**
      * Shows the platform window menu (system / title-bar context menu) at the given position.
@@ -1277,7 +1347,7 @@ internal class UiKitWindow(
      * **Platform note (iOS):** Unsupported — UIKit has no system window menu concept.
      */
     override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window menu is unsupported on iOS"))
+        UIKitWindowCapabilities.showWindowMenu(position)
 
     /**
      * Initiates a user-driven window drag from the current cursor position.
@@ -1286,7 +1356,7 @@ internal class UiKitWindow(
      * with user-draggable windows.
      */
     override fun dragWindow(): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported on iOS"))
+        UIKitWindowCapabilities.dragWindow()
 
     /**
      * Initiates a user-driven window resize from the current cursor position.
@@ -1294,5 +1364,5 @@ internal class UiKitWindow(
      * **Platform note (iOS):** Unsupported — UIKit windows are not user-resizable.
      */
     override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window resizing is unsupported on iOS"))
+        UIKitWindowCapabilities.dragResizeWindow(direction)
 }

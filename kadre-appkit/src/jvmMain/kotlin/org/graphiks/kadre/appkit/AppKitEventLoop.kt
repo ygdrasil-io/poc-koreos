@@ -549,6 +549,7 @@ private class NativeAppKitRunAppOperations(
     }
 
     override fun run() {
+        eventLoop.didLaunch()
         checkNotNull(app).run()
     }
 
