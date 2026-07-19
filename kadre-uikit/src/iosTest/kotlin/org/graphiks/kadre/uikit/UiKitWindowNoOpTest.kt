@@ -3,7 +3,9 @@ package org.graphiks.kadre.uikit
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
+import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.PhysicalPosition
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.UserAttentionType
@@ -81,6 +83,28 @@ class UiKitWindowNoOpTest {
         assertNull(UIKitWindowCapabilities.isMinimized)
         assertFalse(UIKitWindowCapabilities.isMaximized)
         assertFalse(UIKitWindowCapabilities.isDecorated)
+    }
+
+    @Test
+    fun `unsupported geometry mutations preserve UIKit fixed geometry and visibility`() {
+        assertNull(UIKitWindowCapabilities.isVisible)
+        assertEquals(PhysicalPosition(0, 0), UIKitWindowCapabilities.outerPosition)
+
+        assertEquals(Unit, UIKitWindowCapabilities.setMinSurfaceSize(PhysicalSize(320, 240)))
+        assertEquals(Unit, UIKitWindowCapabilities.setMinSurfaceSize(null))
+        assertEquals(Unit, UIKitWindowCapabilities.setMaxSurfaceSize(PhysicalSize(1_920, 1_080)))
+        assertEquals(Unit, UIKitWindowCapabilities.setMaxSurfaceSize(null))
+        assertEquals(Unit, UIKitWindowCapabilities.setOuterPosition(PhysicalPosition(41, 73)))
+
+        assertNull(UIKitWindowCapabilities.isVisible)
+        assertEquals(PhysicalPosition(0, 0), UIKitWindowCapabilities.outerPosition)
+    }
+
+    @Test
+    fun `presentation IME and dead-key capability requests are successful no-ops`() {
+        assertEquals(Unit, UIKitWindowCapabilities.prePresentNotify())
+        assertEquals(Unit, UIKitWindowCapabilities.setImePurpose(ImePurpose.Password))
+        assertEquals(Unit, UIKitWindowCapabilities.resetDeadKeys())
     }
 
     private fun unsupported(message: String): WindowRequestResult =

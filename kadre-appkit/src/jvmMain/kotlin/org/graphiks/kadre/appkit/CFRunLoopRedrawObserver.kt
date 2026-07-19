@@ -73,6 +73,16 @@ internal class CFRunLoopOwner private constructor(
         }
     }
 
+    /** Consumes the startup iteration already delivered by [AppKitEventLoop.didLaunch]. */
+    fun consumeLaunchIteration() {
+        synchronized(lock) {
+            check(!closed) { "AppKit run-loop owner is closed" }
+            check(state.beginIteration() === StartCause.Init) {
+                "AppKit launch must consume the initial run-loop iteration"
+            }
+        }
+    }
+
     fun closeWindow(windowId: org.graphiks.kadre.core.WindowId) {
         synchronized(lock) {
             if (closed) return

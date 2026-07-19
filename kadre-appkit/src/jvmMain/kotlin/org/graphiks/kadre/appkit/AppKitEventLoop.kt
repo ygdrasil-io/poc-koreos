@@ -116,6 +116,7 @@ internal class AppKitEventLoop(
     internal fun didLaunch() {
         synchronized(this) {
             if (didLaunch) return
+            runLoopOwner?.consumeLaunchIteration()
             didLaunch = true
             isActive = true
         }

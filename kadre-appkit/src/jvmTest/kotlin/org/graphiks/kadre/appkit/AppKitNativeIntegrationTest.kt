@@ -69,6 +69,7 @@ class AppKitNativeIntegrationTest {
 
             runApp(handler)
 
+            assertEquals(1, handler.lifecycle.count { it == "newEvents(Init)" })
             assertEquals(EXPECTED_LIFECYCLE, handler.lifecycle)
             assertEquals(3, handler.proxyWakeCount)
             assertEquals(0, KadreAppDelegate.registeredDelegateCount())
@@ -168,8 +169,6 @@ class AppKitNativeIntegrationTest {
             "resumed",
             "newEvents(Init)",
             "canCreateSurfaces",
-            "aboutToWait",
-            "newEvents(Init)",
             "aboutToWait",
             "newEvents(WaitCancelled)",
             "RedrawRequested",

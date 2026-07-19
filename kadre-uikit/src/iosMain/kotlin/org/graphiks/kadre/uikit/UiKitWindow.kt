@@ -711,15 +711,21 @@ internal fun physicalSafeArea(
 /** Pure UIKit policy for requests that never require a native window. */
 @Suppress("UNUSED_PARAMETER")
 internal object UIKitWindowCapabilities {
+    val isVisible: Boolean? = null
     val isResizable: Boolean = false
     val isMinimized: Boolean? = null
     val isMaximized: Boolean = false
     val isDecorated: Boolean = false
+    val outerPosition: PhysicalPosition<Int> = PhysicalPosition(0, 0)
 
     fun setResizable(resizable: Boolean) = Unit
     fun setMinimized(minimized: Boolean) = Unit
     fun setMaximized(maximized: Boolean) = Unit
     fun setDecorations(decorated: Boolean) = Unit
+    fun setMinSurfaceSize(size: PhysicalSize<Int>?) = Unit
+    fun setMaxSurfaceSize(size: PhysicalSize<Int>?) = Unit
+    fun setOuterPosition(position: PhysicalPosition<Int>) = Unit
+    fun prePresentNotify() = Unit
     fun setCursor(cursor: CursorIcon) = Unit
     fun setCursorVisible(visible: Boolean) = Unit
     fun setWindowLevel(level: WindowLevel) = Unit
@@ -727,6 +733,8 @@ internal object UIKitWindowCapabilities {
     fun setBlur(blur: Boolean) = Unit
     fun setWindowIcon(icon: Icon?) = Unit
     fun setCustomCursor(cursor: CustomCursor) = Unit
+    fun setImePurpose(purpose: ImePurpose) = Unit
+    fun resetDeadKeys() = Unit
 
     fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
         unsupported("iOS has no system cursor")
@@ -1055,7 +1063,7 @@ internal class UiKitWindow(
     override val title: String get() = _title
 
     /** UIKit does not expose a reliable winit-style window visibility state. */
-    override val isVisible: Boolean? get() = null
+    override val isVisible: Boolean? get() = UIKitWindowCapabilities.isVisible
 
     /**
      * iOS does not support programmatic window resizing.
@@ -1105,30 +1113,38 @@ internal class UiKitWindow(
      * iOS does not support surface size constraints.
      * This is a no-op.
      */
-    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
+        UIKitWindowCapabilities.setMinSurfaceSize(size)
+    }
 
     /**
      * iOS does not support surface size constraints.
      * This is a no-op.
      */
-    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
+        UIKitWindowCapabilities.setMaxSurfaceSize(size)
+    }
 
     /**
      * iOS does not expose a global window position.
      * Returns PhysicalPosition(0, 0) as the window always fills the screen.
      */
-    override val outerPosition: PhysicalPosition<Int> get() = PhysicalPosition(0, 0)
+    override val outerPosition: PhysicalPosition<Int> get() = UIKitWindowCapabilities.outerPosition
 
     /**
      * iOS does not support programmatic window positioning.
      * This is a no-op.
      */
-    override fun setOuterPosition(position: PhysicalPosition<Int>) { /* no-op: iOS does not support programmatic window positioning */ }
+    override fun setOuterPosition(position: PhysicalPosition<Int>) {
+        UIKitWindowCapabilities.setOuterPosition(position)
+    }
 
     /**
      * No-op on iOS: there is no Wayland-style pre-commit concept on this platform.
      */
-    override fun prePresentNotify() { /* no-op on iOS */ }
+    override fun prePresentNotify() {
+        UIKitWindowCapabilities.prePresentNotify()
+    }
 
     // ── R2: monitor & fullscreen ──────────────────────────────────────────────
 
@@ -1293,9 +1309,7 @@ internal class UiKitWindow(
      * for application use and future ObjC runtime wiring.
      */
     override fun setImePurpose(purpose: ImePurpose) {
-        // no-op: UITextInputTraits properties are final in Kotlin/Native.
-        // To set them, ObjC runtime method implementations would need to be
-        // added via class_addMethod / objc_msgSend.
+        UIKitWindowCapabilities.setImePurpose(purpose)
     }
 
     // ── R4: keyboard ──────────────────────────────────────────────────────────
@@ -1306,7 +1320,7 @@ internal class UiKitWindow(
      * TODO(R4-uikit-dead-keys): call UITextInputDelegate.textDidChange to reset.
      */
     override fun resetDeadKeys() {
-        // no-op: UIKit manages dead-key state internally
+        UIKitWindowCapabilities.resetDeadKeys()
     }
 
     // ── R5-CustomCursor ───────────────────────────────────────────────────────
