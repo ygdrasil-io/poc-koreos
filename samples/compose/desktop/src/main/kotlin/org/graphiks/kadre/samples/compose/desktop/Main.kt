@@ -1,9 +1,7 @@
 package org.graphiks.kadre.samples.compose.desktop
 
-import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.PhysicalSize
 import org.graphiks.kadre.WindowAttributes
-import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.coroutines.kadreApplication
 import org.graphiks.kadre.samples.compose.infra.ComposeWindowRenderer
@@ -12,37 +10,104 @@ import org.graphiks.kadre.samples.compose.infra.applyWindowEvent
 import org.graphiks.kadre.samples.compose.showcase.PlatformContext
 import org.graphiks.kadre.samples.compose.showcase.ShowcaseApp
 
-private fun runShowcase() = kadreApplication {
-    val keys = KeyForwarder()
-    val win = createWindow(
-        WindowAttributes("Compose Showcase", PhysicalSize(900, 700), visible = true, resizable = true),
-    )
-    val handle = win.window.rawWindowHandle as? RawWindowHandle ?: run { exit(); return@kadreApplication }
-    val renderer = ComposeWindowRenderer.create(handle, win.window.scaleFactor, dispatcher).getOrElse {
-        println("[compose-showcase] Cannot create renderer: ${it.message}")
-        exit(); return@kadreApplication
-    }
-    val inner = win.window.innerSize
-    renderer.resize(inner.width, inner.height, win.window.scaleFactor)
-    renderer.setContent { ShowcaseApp(PlatformContext()) }
+internal class WindowCaptureController(
+    private val capturePath: String,
+    private val captureFrameToPng: (String) -> Boolean,
+    private val pngValidator: (String, Int, Int) -> Unit = ::validatePng,
+    private val disposeRenderer: () -> Unit,
+    private val requestExit: () -> Unit,
+) {
+    private var attempted = false
 
-    var lastRenderNanos = 0L
-    val frameIntervalNanos = 50_000_000L
+    var completedSuccessfully: Boolean = false
+        private set
 
-    win.events.collect { event ->
-        when (event) {
-            is WindowEvent.CloseRequested -> {
-                renderer.dispose(); exit()
+    fun onRedrawRequested() {
+        if (attempted) return
+        attempted = true
+        var validated = false
+        try {
+            check(captureFrameToPng(capturePath)) {
+                "window-capture renderer failed: $capturePath"
             }
-            is WindowEvent.RedrawRequested -> {
-                val now = System.nanoTime()
-                if (now - lastRenderNanos >= frameIntervalNanos) {
-                    lastRenderNanos = now
-                    renderer.applyWindowEvent(event, win.window, keys)
+            pngValidator(capturePath, CAPTURE_MIN_WIDTH, CAPTURE_MIN_HEIGHT)
+            validated = true
+        } finally {
+            try {
+                disposeRenderer()
+            } finally {
+                requestExit()
+            }
+        }
+        completedSuccessfully = validated
+    }
+}
+
+private fun runShowcase(capturePath: String? = null) {
+    var captureCompleted = false
+    kadreApplication {
+        val keys = KeyForwarder()
+        val win = createWindow(
+            WindowAttributes("Compose Showcase", PhysicalSize(900, 700), visible = true, resizable = true),
+        )
+        val handle = win.window.rawWindowHandle
+        val renderer = ComposeWindowRenderer.create(handle, win.window.scaleFactor, dispatcher).getOrElse {
+            println("[compose-showcase] Cannot create renderer: ${it.message}")
+            exit(); return@kadreApplication
+        }
+        var rendererDisposed = false
+        fun disposeRenderer() {
+            if (!rendererDisposed) {
+                rendererDisposed = true
+                renderer.dispose()
+            }
+        }
+
+        try {
+            renderer.setContent { ShowcaseApp(PlatformContext()) }
+            val inner = win.window.innerSize
+            renderer.resize(inner.width, inner.height, win.window.scaleFactor)
+            val captureController = capturePath?.let { requestedPath ->
+                WindowCaptureController(
+                    capturePath = requestedPath,
+                    captureFrameToPng = renderer::captureFrameToPng,
+                    disposeRenderer = ::disposeRenderer,
+                    requestExit = { exit() },
+                )
+            }
+            win.window.requestRedraw()
+
+            var lastRenderNanos = 0L
+            val frameIntervalNanos = 50_000_000L
+
+            win.events.collect { event ->
+                when (event) {
+                    is WindowEvent.CloseRequested -> {
+                        disposeRenderer()
+                        exit()
+                    }
+                    is WindowEvent.RedrawRequested -> {
+                        if (captureController != null) {
+                            captureController.onRedrawRequested()
+                            captureCompleted = captureController.completedSuccessfully
+                        } else {
+                            val now = System.nanoTime()
+                            if (now - lastRenderNanos >= frameIntervalNanos) {
+                                lastRenderNanos = now
+                                renderer.applyWindowEvent(event, win.window, keys)
+                            }
+                        }
+                    }
+                    else -> renderer.applyWindowEvent(event, win.window, keys)
                 }
             }
-            else -> renderer.applyWindowEvent(event, win.window, keys)
+        } finally {
+            disposeRenderer()
         }
+    }
+
+    check(capturePath == null || captureCompleted) {
+        "window-capture did not produce a validated PNG: $capturePath"
     }
 }
 
@@ -90,9 +155,8 @@ fun main(args: Array<String>) {
     if (windowCaptureIndex >= 0) {
         val path = args.getOrNull(windowCaptureIndex + 1)
             ?: error("--window-capture requires a file path: --window-capture <path>")
-        // Use the old hello-compose Capture app path for windowed GL capture
         startCaptureWatchdog()
-        println("[compose-showcase] window-capture not yet implemented for new desktop module")
+        runShowcase(path)
         return
     }
 
@@ -100,3 +164,6 @@ fun main(args: Array<String>) {
     runShowcase()
     println("[compose-showcase] Done")
 }
+
+private const val CAPTURE_MIN_WIDTH = 640
+private const val CAPTURE_MIN_HEIGHT = 480
