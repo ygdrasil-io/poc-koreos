@@ -10,6 +10,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WebBridgeContractTest {
@@ -335,6 +337,64 @@ class WebBridgeContractTest {
     }
 
     @Test
+    fun `mismatched local owner slot cannot cancel another bridge connection`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val first = ScriptedBridge()
+        val second = ScriptedBridge()
+        val firstConnection = WebMetricsTransactions.connect(first) { }
+        val secondConnection = WebMetricsTransactions.connect(second) { }
+        first.metricsConnection = secondConnection
+
+        val replacement = WebMetricsTransactions.connect(first) { }
+
+        assertEquals(WebMetricsConnection.State.Cancelled, firstConnection.state)
+        assertEquals(WebMetricsConnection.State.Active, secondConnection.state)
+        assertTrue(
+            WebMetricsTransactions.dispatch(
+                second,
+                WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+            ),
+        )
+        assertEquals(baseline + 2, WebMetricsTransactions.connectionCount)
+
+        WebMetricsTransactions.disconnect(replacement)
+        WebMetricsTransactions.disconnect(secondConnection)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    @Test
+    fun `mismatched local owner slot cannot suspend or reactivate another bridge connection`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val first = ScriptedBridge()
+        val second = ScriptedBridge()
+        val firstConnection = WebMetricsTransactions.connect(first) { }
+        val secondConnection = WebMetricsTransactions.connect(second) { }
+        val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
+
+        first.metricsConnection = secondConnection
+        first.detach()
+
+        assertEquals(WebMetricsConnection.State.Suspended, firstConnection.state)
+        assertEquals(WebMetricsConnection.State.Active, secondConnection.state)
+        assertFalse(WebMetricsTransactions.dispatch(first, transaction))
+        assertTrue(WebMetricsTransactions.dispatch(second, transaction))
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+
+        first.metricsConnection = secondConnection
+        first.attach("first")
+
+        assertEquals(WebMetricsConnection.State.Suspended, firstConnection.state)
+        assertEquals(WebMetricsConnection.State.Active, secondConnection.state)
+        assertFalse(WebMetricsTransactions.dispatch(first, transaction))
+        assertTrue(WebMetricsTransactions.dispatch(second, transaction))
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+
+        WebMetricsTransactions.disconnect(firstConnection)
+        WebMetricsTransactions.disconnect(secondConnection)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    @Test
     fun `a stale window cannot disconnect or detach a newer owner of the same bridge`() {
         val baseline = WebMetricsTransactions.connectionCount
         val bridge = ScriptedBridge()
@@ -377,13 +437,121 @@ class WebBridgeContractTest {
         val connection = WebMetricsTransactions.connect(bridge) { }
         val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
 
+        assertEquals(WebMetricsConnection.State.Active, connection.state)
         bridge.detach()
         bridge.detach()
 
         assertFalse(WebMetricsTransactions.dispatch(bridge, transaction))
+        assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+        assertNotNull(connection.sink, "the opaque owner retains its dormant sink outside the active registry")
+        assertTrue(WebMetricsTransactions.disconnect(connection))
+        assertEquals(WebMetricsConnection.State.Cancelled, connection.state)
+        assertNull(connection.sink)
         assertFalse(WebMetricsTransactions.disconnect(connection))
         assertEquals(baseline, WebMetricsTransactions.connectionCount)
         assertEquals(2, bridge.detachCalls, "the bridge implementation remains callable but registry release is idempotent")
+    }
+
+    @Test
+    fun `loop owner reactivates after direct detach and closes the reattached bridge`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
+        val connection = window.metricsConnection ?: error("loop-owned window must have a metrics connection")
+        val observations = mutableListOf<CacheObservation>()
+        val transaction = WebMetricsTransaction(3.0, PhysicalSize(900, 450))
+
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+        bridge.detach()
+        assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+        assertFalse(WebMetricsTransactions.dispatch(bridge, transaction))
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+        bridge.attach("canvas")
+        assertEquals(WebMetricsConnection.State.Active, connection.state)
+        bridge.metrics = bridge.metrics.copy(devicePixelRatio = 3.0)
+        bridge.emitDevicePixelRatioChanged()
+        loop.pump(observingHandler(window, observations))
+
+        assertEquals(
+            listOf(
+                CacheObservation(WindowEvent.ScaleFactorChanged(3.0), 3.0, PhysicalSize(900, 450)),
+                CacheObservation(WindowEvent.Resized(PhysicalSize(900, 450)), 3.0, PhysicalSize(900, 450)),
+            ),
+            observations,
+        )
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+
+        window.close()
+        assertEquals(WebMetricsConnection.State.Cancelled, connection.state)
+        assertNull(connection.sink)
+        assertFalse(WebMetricsTransactions.dispatch(bridge, transaction))
+        assertEquals(2, bridge.detachCalls)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+        window.close()
+        bridge.detach()
+        assertFalse(WebMetricsTransactions.dispatch(bridge, transaction))
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+    }
+
+    @Test
+    fun `closing an exactly suspended loop owner cancels and detaches it once`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
+        val connection = window.metricsConnection ?: error("loop-owned window must have a metrics connection")
+
+        bridge.detach()
+        assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+        window.close()
+        assertEquals(WebMetricsConnection.State.Cancelled, connection.state)
+        assertNull(connection.sink)
+        assertEquals(2, bridge.detachCalls)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+        window.close()
+        assertEquals(2, bridge.detachCalls)
+    }
+
+    @Test
+    fun `suspended owner replaced by a newer window stays stale`() {
+        val baseline = WebMetricsTransactions.connectionCount
+        val bridge = ScriptedBridge()
+        val loop = TestWebEventLoop(bridge)
+        val oldWindow = loop.createWindow(WebWindowAttributes(canvasId = "old")) as WebWindow
+        val oldConnection = oldWindow.metricsConnection ?: error("old window must own a metrics connection")
+
+        bridge.detach()
+        assertEquals(WebMetricsConnection.State.Suspended, oldConnection.state)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
+        bridge.onWindowEvent = { }
+
+        val newWindow = loop.createWindow(WebWindowAttributes(canvasId = "new")) as WebWindow
+        val newConnection = newWindow.metricsConnection ?: error("new window must own a metrics connection")
+        assertEquals(WebMetricsConnection.State.Cancelled, oldConnection.state)
+        assertNull(oldConnection.sink)
+        assertEquals(WebMetricsConnection.State.Active, newConnection.state)
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+
+        oldWindow.close()
+        assertEquals(1, bridge.detachCalls, "a stale suspended owner must not detach the replacement")
+        assertTrue(
+            WebMetricsTransactions.dispatch(
+                bridge,
+                WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+            ),
+        )
+        assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+
+        newWindow.close()
+        assertEquals(WebMetricsConnection.State.Cancelled, newConnection.state)
+        assertEquals(2, bridge.detachCalls)
+        assertEquals(baseline, WebMetricsTransactions.connectionCount)
     }
 
     @Test
@@ -435,7 +603,7 @@ class WebBridgeContractTest {
         val size: PhysicalSize<Int>,
     )
 
-    private class ScriptedBridge : WebDomBridge {
+    private class ScriptedBridge : WebDomBridge, WebMetricsConnectionOwner {
         override var onWindowEvent: ((WebWindowEvent) -> Unit)? = null
         var metrics = CanvasMetrics(10.0, 20.0, 300.0, 150.0, 2.0)
         var detachCalls = 0
@@ -445,13 +613,22 @@ class WebBridgeContractTest {
             metricsSink = { _, transaction -> WebMetricsTransactions.dispatch(this, transaction) },
         )
         private var attachmentToken: WebAttachmentToken? = null
+        override var metricsConnection: WebMetricsConnection? = null
 
         override fun attach(targetElementId: String) {
             attachmentToken = adapter.attach()
+            metricsConnection
+                ?.takeIf { it.bridge === this }
+                ?.let(WebMetricsTransactions::reactivate)
         }
         override fun detach() {
             detachCalls += 1
-            WebMetricsTransactions.disconnectActive(this)
+            val ownerConnection = metricsConnection?.takeIf { it.bridge === this }
+            if (ownerConnection == null) {
+                WebMetricsTransactions.suspendActive(this)
+            } else {
+                WebMetricsTransactions.suspend(ownerConnection)
+            }
             adapter.detach()
         }
         override fun readDevicePixelRatio(): Double = metrics.devicePixelRatio

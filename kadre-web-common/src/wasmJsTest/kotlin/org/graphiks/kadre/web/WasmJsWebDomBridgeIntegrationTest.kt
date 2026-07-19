@@ -4,6 +4,7 @@ package org.graphiks.kadre.web
 
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.PointerSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -73,19 +74,20 @@ private external fun dispatchPointer(
 class WasmJsWebDomBridgeIntegrationTest {
 
     @Test
-    fun `real Wasm bridge maps scripted canvas pointer events and releases its route on detach`() {
+    fun `real Wasm bridge maps pointer events and reactivates only its suspended route`() {
         val canvasId = "kadre-wasm-bridge-integration"
         val originalDpr = readDevicePixelRatioDescriptor()
         val baseline = WebMetricsTransactions.connectionCount
         val bridge = WasmJsWebDomBridge()
         val events = mutableListOf<WebWindowEvent>()
+        var metricsDeliveries = 0
         bridge.onWindowEvent = { event -> events.add(event) }
         var connection: WebMetricsConnection? = null
 
         try {
             installDom(canvasId.toJsString())
+            connection = WebMetricsTransactions.connect(bridge) { metricsDeliveries += 1 }
             bridge.attach(canvasId)
-            connection = WebMetricsTransactions.connect(bridge) { }
 
             dispatchPointer(canvasId.toJsString(), "pointermove".toJsString(), 9.75, 19.5, 7.0, 0)
             dispatchPointer(canvasId.toJsString(), "pointerdown".toJsString(), 20.5, 30.25, 7.0, 0)
@@ -106,7 +108,35 @@ class WasmJsWebDomBridgeIntegrationTest {
 
             bridge.detach()
             assertEquals(baseline, WebMetricsTransactions.connectionCount)
+            assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+            assertFalse(
+                WebMetricsTransactions.dispatch(
+                    bridge,
+                    WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+                ),
+            )
+
+            bridge.onWindowEvent = { event -> events.add(event) }
+            bridge.attach("missing-$canvasId")
+            assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+            assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+            bridge.attach(canvasId)
+            assertEquals(WebMetricsConnection.State.Active, connection.state)
+            assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+            assertTrue(
+                WebMetricsTransactions.dispatch(
+                    bridge,
+                    WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+                ),
+            )
+            assertEquals(1, metricsDeliveries)
+
+            bridge.detach()
+            assertTrue(WebMetricsTransactions.disconnect(connection))
+            assertEquals(WebMetricsConnection.State.Cancelled, connection.state)
             assertFalse(WebMetricsTransactions.disconnect(connection))
+            assertEquals(baseline, WebMetricsTransactions.connectionCount)
         } finally {
             bridge.detach()
             connection?.let { activeConnection -> WebMetricsTransactions.disconnect(activeConnection) }

@@ -3,6 +3,7 @@ package org.graphiks.kadre.web
 import kotlinx.browser.document
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.MouseButton
+import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.PointerSource
 import org.w3c.dom.Element
 import org.w3c.dom.events.Event
@@ -15,7 +16,7 @@ import kotlin.test.assertTrue
 class JsWebDomBridgeIntegrationTest {
 
     @Test
-    fun `real JS bridge maps scripted canvas pointer events and releases its route on detach`() {
+    fun `real JS bridge maps pointer events and reactivates only its suspended route`() {
         val canvasId = "kadre-js-bridge-integration"
         val canvas = document.createElement("canvas")
         canvas.id = canvasId
@@ -25,6 +26,7 @@ class JsWebDomBridgeIntegrationTest {
         val baseline = WebMetricsTransactions.connectionCount
         val bridge = JsWebDomBridge()
         val events = mutableListOf<WebWindowEvent>()
+        var metricsDeliveries = 0
         bridge.onWindowEvent = events::add
         var connection: WebMetricsConnection? = null
 
@@ -33,8 +35,8 @@ class JsWebDomBridgeIntegrationTest {
             installDevicePixelRatio()
             originalRect = installCanvasRect(canvas)
             rectInstalled = true
+            connection = WebMetricsTransactions.connect(bridge) { metricsDeliveries += 1 }
             bridge.attach(canvasId)
-            connection = WebMetricsTransactions.connect(bridge) { }
 
             canvas.dispatchEvent(pointerEvent("pointermove", 9.75, 19.5, 7L, 0))
             canvas.dispatchEvent(pointerEvent("pointerdown", 20.5, 30.25, 7L, 0))
@@ -55,7 +57,35 @@ class JsWebDomBridgeIntegrationTest {
 
             bridge.detach()
             assertEquals(baseline, WebMetricsTransactions.connectionCount)
+            assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+            assertFalse(
+                WebMetricsTransactions.dispatch(
+                    bridge,
+                    WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+                ),
+            )
+
+            bridge.onWindowEvent = { event -> events.add(event) }
+            bridge.attach("missing-$canvasId")
+            assertEquals(WebMetricsConnection.State.Suspended, connection.state)
+            assertEquals(baseline, WebMetricsTransactions.connectionCount)
+
+            bridge.attach(canvasId)
+            assertEquals(WebMetricsConnection.State.Active, connection.state)
+            assertEquals(baseline + 1, WebMetricsTransactions.connectionCount)
+            assertTrue(
+                WebMetricsTransactions.dispatch(
+                    bridge,
+                    WebMetricsTransaction(3.0, PhysicalSize(900, 450)),
+                ),
+            )
+            assertEquals(1, metricsDeliveries)
+
+            bridge.detach()
+            assertTrue(WebMetricsTransactions.disconnect(connection))
+            assertEquals(WebMetricsConnection.State.Cancelled, connection.state)
             assertFalse(WebMetricsTransactions.disconnect(connection))
+            assertEquals(baseline, WebMetricsTransactions.connectionCount)
         } finally {
             bridge.detach()
             connection?.let(WebMetricsTransactions::disconnect)

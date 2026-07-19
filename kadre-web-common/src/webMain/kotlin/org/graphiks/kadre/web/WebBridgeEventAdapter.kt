@@ -19,45 +19,105 @@ internal class WebAttachmentToken internal constructor(
 
 private var nextAttachmentGeneration = 0
 
-internal class WebMetricsConnection internal constructor()
+internal class WebMetricsConnection internal constructor(
+    internal val bridge: WebDomBridge,
+    internal var sink: ((WebMetricsTransaction) -> Unit)?,
+) {
+    internal var state: State = State.Active
+
+    internal enum class State {
+        Active,
+        Suspended,
+        Cancelled,
+    }
+}
+
+internal interface WebMetricsConnectionOwner {
+    var metricsConnection: WebMetricsConnection?
+}
+
+internal expect fun metricsConnectionOf(bridge: WebDomBridge): WebMetricsConnection?
+
+internal expect fun bindMetricsConnection(
+    bridge: WebDomBridge,
+    connection: WebMetricsConnection?,
+)
 
 internal object WebMetricsTransactions {
-    private data class Entry(
-        val bridge: WebDomBridge,
-        val connection: WebMetricsConnection,
-        val sink: (WebMetricsTransaction) -> Unit,
-    )
-
-    private val entries = mutableListOf<Entry>()
+    private val activeConnections = mutableListOf<WebMetricsConnection>()
 
     internal val connectionCount: Int
-        get() = entries.size
+        get() = activeConnections.size
 
     fun connect(bridge: WebDomBridge, sink: (WebMetricsTransaction) -> Unit): WebMetricsConnection {
-        entries.removeAll { it.bridge === bridge }
-        val connection = WebMetricsConnection()
-        entries += Entry(bridge, connection, sink)
+        metricsConnectionOf(bridge)
+            ?.takeIf { it.bridge === bridge }
+            ?.let(::cancel)
+        activeConnections.filter { it.bridge === bridge }.forEach(::cancel)
+        val connection = WebMetricsConnection(bridge, sink)
+        activeConnections += connection
+        bindMetricsConnection(bridge, connection)
         return connection
     }
 
     fun dispatch(bridge: WebDomBridge, transaction: WebMetricsTransaction): Boolean {
-        val entry = entries.firstOrNull { it.bridge === bridge } ?: return false
-        entry.sink(transaction)
+        val connection = activeConnections.firstOrNull { it.bridge === bridge } ?: return false
+        val sink = connection.sink ?: return false
+        sink(transaction)
         return true
     }
 
     fun disconnect(connection: WebMetricsConnection): Boolean {
-        val index = entries.indexOfFirst { it.connection === connection }
-        if (index < 0) return false
-        entries.removeAt(index)
+        return when (connection.state) {
+            WebMetricsConnection.State.Active -> {
+                if (activeConnections.none { it === connection }) return false
+                cancel(connection)
+                true
+            }
+            WebMetricsConnection.State.Suspended -> {
+                cancel(connection)
+                true
+            }
+            WebMetricsConnection.State.Cancelled -> false
+        }
+    }
+
+    fun suspendActive(bridge: WebDomBridge): Boolean {
+        val connection = activeConnections.firstOrNull { it.bridge === bridge } ?: return false
+        bindMetricsConnection(bridge, connection)
+        return suspend(connection)
+    }
+
+    fun suspend(connection: WebMetricsConnection): Boolean {
+        if (connection.state != WebMetricsConnection.State.Active) return false
+        if (activeConnections.none { it === connection }) return false
+        activeConnections.removeAll { it === connection }
+        connection.state = WebMetricsConnection.State.Suspended
         return true
     }
 
-    fun disconnectActive(bridge: WebDomBridge): Boolean {
-        val index = entries.indexOfFirst { it.bridge === bridge }
-        if (index < 0) return false
-        entries.removeAt(index)
+    fun reactivate(connection: WebMetricsConnection): Boolean {
+        if (connection.state == WebMetricsConnection.State.Active) {
+            return activeConnections.any { it === connection }
+        }
+        if (connection.state != WebMetricsConnection.State.Suspended) return false
+        val current = activeConnections.firstOrNull { it.bridge === connection.bridge }
+        if (current != null) {
+            cancel(connection)
+            return false
+        }
+        connection.state = WebMetricsConnection.State.Active
+        activeConnections += connection
         return true
+    }
+
+    private fun cancel(connection: WebMetricsConnection) {
+        activeConnections.removeAll { it === connection }
+        connection.state = WebMetricsConnection.State.Cancelled
+        connection.sink = null
+        if (metricsConnectionOf(connection.bridge) === connection) {
+            bindMetricsConnection(connection.bridge, null)
+        }
     }
 }
 

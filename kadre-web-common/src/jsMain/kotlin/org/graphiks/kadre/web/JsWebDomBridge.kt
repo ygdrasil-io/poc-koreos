@@ -21,6 +21,23 @@ import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.WheelEvent
 
+internal actual fun metricsConnectionOf(bridge: WebDomBridge): WebMetricsConnection? =
+    when (bridge) {
+        is JsWebDomBridge -> bridge.metricsConnection
+        is WebMetricsConnectionOwner -> bridge.metricsConnection
+        else -> null
+    }
+
+internal actual fun bindMetricsConnection(
+    bridge: WebDomBridge,
+    connection: WebMetricsConnection?,
+) {
+    when (bridge) {
+        is JsWebDomBridge -> bridge.metricsConnection = connection
+        is WebMetricsConnectionOwner -> bridge.metricsConnection = connection
+    }
+}
+
 /**
  * JS DOM bridge to the Kadre engine.
  *
@@ -93,6 +110,7 @@ class JsWebDomBridge : WebDomBridge {
     private var imeInput: HTMLInputElement? = null
 
     private var attachmentToken: WebAttachmentToken? = null
+    internal var metricsConnection: WebMetricsConnection? = null
 
     override fun attach(targetElementId: String) {
         val canvas = document.getElementById(targetElementId) ?: return
@@ -272,6 +290,10 @@ class JsWebDomBridge : WebDomBridge {
 
         // --- prefers-color-scheme changes → ThemeChanged ---
         observeColorScheme(generation)
+
+        metricsConnection
+            ?.takeIf { it.bridge === this }
+            ?.let(WebMetricsTransactions::reactivate)
     }
 
     /**
@@ -474,7 +496,12 @@ class JsWebDomBridge : WebDomBridge {
     override fun getCanvasElement(): Any? = canvasElement
 
     override fun detach() {
-        WebMetricsTransactions.disconnectActive(this)
+        val ownerConnection = metricsConnection?.takeIf { it.bridge === this }
+        if (ownerConnection == null) {
+            WebMetricsTransactions.suspendActive(this)
+        } else {
+            WebMetricsTransactions.suspend(ownerConnection)
+        }
         eventAdapter.detach()
         attachmentToken = null
 

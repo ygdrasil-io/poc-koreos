@@ -408,6 +408,23 @@ private external fun ensureCanvasInDom(
 // Implementation
 // ---------------------------------------------------------------------------
 
+internal actual fun metricsConnectionOf(bridge: WebDomBridge): WebMetricsConnection? =
+    when (bridge) {
+        is WasmJsWebDomBridge -> bridge.metricsConnection
+        is WebMetricsConnectionOwner -> bridge.metricsConnection
+        else -> null
+    }
+
+internal actual fun bindMetricsConnection(
+    bridge: WebDomBridge,
+    connection: WebMetricsConnection?,
+) {
+    when (bridge) {
+        is WasmJsWebDomBridge -> bridge.metricsConnection = connection
+        is WebMetricsConnectionOwner -> bridge.metricsConnection = connection
+    }
+}
+
 /**
  * wasmJs DOM bridge to the Kadre engine.
  *
@@ -465,6 +482,7 @@ class WasmJsWebDomBridge : WebDomBridge {
     private var imeInput: JsEventTarget? = null
 
     private var attachmentToken: WebAttachmentToken? = null
+    internal var metricsConnection: WebMetricsConnection? = null
 
     override fun attach(targetElementId: String) {
         val canvas = getElementById(targetElementId.toJsString()) ?: return
@@ -653,6 +671,10 @@ class WasmJsWebDomBridge : WebDomBridge {
                 eventAdapter.runIfCurrent(token) { onThemeChange?.invoke(dark) }
             },
         )
+
+        metricsConnection
+            ?.takeIf { it.bridge === this }
+            ?.let(WebMetricsTransactions::reactivate)
     }
 
     /**
@@ -758,7 +780,12 @@ class WasmJsWebDomBridge : WebDomBridge {
     }
 
     override fun detach() {
-        WebMetricsTransactions.disconnectActive(this)
+        val ownerConnection = metricsConnection?.takeIf { it.bridge === this }
+        if (ownerConnection == null) {
+            WebMetricsTransactions.suspendActive(this)
+        } else {
+            WebMetricsTransactions.suspend(ownerConnection)
+        }
         eventAdapter.detach()
         attachmentToken = null
 
