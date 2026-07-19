@@ -63,6 +63,18 @@ import org.graphiks.kadre.core.WindowId
  */
 open class WebEventLoop : ActiveEventLoop {
 
+    private sealed interface PendingWebEvent {
+        data class Window(
+            val windowId: WindowId,
+            val event: WindowEvent,
+        ) : PendingWebEvent
+
+        data class Metrics(
+            val window: WebWindow,
+            val transaction: WebMetricsTransaction,
+        ) : PendingWebEvent
+    }
+
     // -------------------------------------------------------------------------
     // Internal state
     // -------------------------------------------------------------------------
@@ -86,7 +98,7 @@ open class WebEventLoop : ActiveEventLoop {
     private var nextWindowId: Long = 1L
 
     /** Queue of DOM events received between two frames. */
-    private val pendingEvents = mutableListOf<Pair<WindowId, WindowEvent>>()
+    private val pendingEvents = mutableListOf<PendingWebEvent>()
 
     // -------------------------------------------------------------------------
     // ActiveEventLoop
@@ -147,7 +159,7 @@ open class WebEventLoop : ActiveEventLoop {
                 val theme = if (dark) Theme.Dark else Theme.Light
                 // Dispatch ThemeChanged for every window attached to this event loop.
                 for (win in windows) {
-                    pendingEvents.add(Pair(win.id, WindowEvent.ThemeChanged(theme)))
+                    pendingEvents.add(PendingWebEvent.Window(win.id, WindowEvent.ThemeChanged(theme)))
                 }
                 // In Wait mode, wake the loop immediately
                 if (_controlFlow is ControlFlow.Wait) {
@@ -177,8 +189,14 @@ open class WebEventLoop : ActiveEventLoop {
                 else -> Unit
             }
             // Queue the event for the window owned by this DOM bridge.
-            pendingEvents.add(Pair(window.id, event.toWindowEvent()))
+            pendingEvents.add(PendingWebEvent.Window(window.id, event.toWindowEvent()))
             // In Wait mode, wake the loop immediately
+            if (_controlFlow is ControlFlow.Wait) {
+                scheduleWakeUp()
+            }
+        }
+        WebMetricsTransactions.connect(bridge) { transaction ->
+            pendingEvents.add(PendingWebEvent.Metrics(window, transaction))
             if (_controlFlow is ControlFlow.Wait) {
                 scheduleWakeUp()
             }
@@ -331,8 +349,30 @@ open class WebEventLoop : ActiveEventLoop {
         // Dispatch the accumulated DOM events
         val snapshot = pendingEvents.toList()
         pendingEvents.clear()
-        for ((windowId, event) in snapshot) {
-            handler.windowEvent(this, windowId, event)
+        for (pending in snapshot) {
+            when (pending) {
+                is PendingWebEvent.Window ->
+                    handler.windowEvent(this, pending.windowId, pending.event)
+                is PendingWebEvent.Metrics -> {
+                    val window = pending.window
+                    val metrics = pending.transaction
+                    window.updateScaleFactor(metrics.scaleFactor)
+                    window.updatePhysicalSize(metrics.physicalSize.width, metrics.physicalSize.height)
+                    handler.windowEvent(
+                        this,
+                        window.id,
+                        WebWindowEvent.ScaleFactorChanged(metrics.scaleFactor).toWindowEvent(),
+                    )
+                    handler.windowEvent(
+                        this,
+                        window.id,
+                        WebWindowEvent.Resized(
+                            metrics.physicalSize.width,
+                            metrics.physicalSize.height,
+                        ).toWindowEvent(),
+                    )
+                }
+            }
         }
 
         handler.aboutToWait(this)

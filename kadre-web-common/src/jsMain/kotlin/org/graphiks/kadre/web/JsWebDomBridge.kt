@@ -20,7 +20,6 @@ import org.w3c.dom.events.Event
 import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.WheelEvent
-import kotlin.math.roundToInt
 
 /**
  * JS DOM bridge to the Kadre engine.
@@ -45,14 +44,12 @@ class JsWebDomBridge : WebDomBridge {
 
     override var preventDefaultEnabled: Boolean = true
 
-    override fun readDevicePixelRatio(): Double = window.devicePixelRatio
+    override fun readDevicePixelRatio(): Double = normalizedDevicePixelRatio(window.devicePixelRatio)
 
     override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> {
         val canvas = document.getElementById(canvasId) ?: return Pair(0, 0)
-        val dpr = readDevicePixelRatio()
-        val w = ((canvas.asDynamic().clientWidth as Double) * dpr).roundToInt()
-        val h = ((canvas.asDynamic().clientHeight as Double) * dpr).roundToInt()
-        return Pair(w, h)
+        val size = readCanvasMetrics(canvas).physicalSize()
+        return Pair(size.width, size.height)
     }
 
     override fun ensureCanvas(attrs: WebWindowAttributes): String {
@@ -86,20 +83,26 @@ class JsWebDomBridge : WebDomBridge {
     private val documentListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private val windowListeners = mutableListOf<Pair<String, (Event) -> Unit>>()
     private var resizeObserver: dynamic = null
-    private val touchTracker = WebPointerTracker()
+    private val eventAdapter = WebBridgeEventAdapter(
+        metricsProvider = ::readCurrentCanvasMetrics,
+        eventSink = ::dispatch,
+        metricsSink = ::dispatchMetrics,
+    )
 
     /** Hidden <input> used for IME composition events. */
     private var imeInput: HTMLInputElement? = null
 
     /** `false` once [detach] runs — stops the re-arming devicePixelRatio chain. */
     private var attached = false
+    private var attachmentGeneration = 0
 
     override fun attach(targetElementId: String) {
         val canvas = document.getElementById(targetElementId) ?: return
-        touchTracker.close()
         targetElement = canvas
         canvasElement = canvas
         attached = true
+        val generation = ++attachmentGeneration
+        eventAdapter.attach()
 
         // --- Keyboard ---
         addListener(canvas, "keydown") { e ->
@@ -163,23 +166,14 @@ class JsWebDomBridge : WebDomBridge {
         // --- Wheel ---
         addListener(canvas, "wheel") { e ->
             val we = e as WheelEvent
-            // Ctrl+Wheel → pinch zoom (works across all browsers)
-            if (we.ctrlKey) {
-                dispatch(
-                    WebWindowEvent.WebPinchZoom(
-                        delta = (-we.deltaY / 100.0).toFloat(),
-                        centerX = we.clientX.toDouble(),
-                        centerY = we.clientY.toDouble(),
-                    )
-                )
-            } else {
-                dispatch(
-                    WebWindowEvent.MouseWheel(
-                        deltaX = normalizeWheelDelta(we.deltaX, we.deltaMode),
-                        deltaY = normalizeWheelDelta(we.deltaY, we.deltaMode),
-                    )
-                )
-            }
+            eventAdapter.wheel(
+                deltaX = we.deltaX,
+                deltaY = we.deltaY,
+                deltaMode = we.deltaMode,
+                ctrlKey = we.ctrlKey,
+                clientX = we.clientX.toDouble(),
+                clientY = we.clientY.toDouble(),
+            )
         }
 
         // --- DnD ---
@@ -195,13 +189,13 @@ class JsWebDomBridge : WebDomBridge {
                     }
                 } else emptyList()
             } else emptyList()
-            dispatch(WebWindowEvent.DragEntered(x = pe.clientX, y = pe.clientY, files = files))
+            eventAdapter.dragEntered(pe.clientX, pe.clientY, files)
         }
 
         addListener(canvas, "dragover") { e ->
             e.preventDefault()
             val pe = e.unsafeCast<PointerEventData>()
-            dispatch(WebWindowEvent.DragMoved(x = pe.clientX, y = pe.clientY))
+            eventAdapter.dragMoved(pe.clientX, pe.clientY)
         }
 
         addListener(canvas, "drop") { e ->
@@ -213,7 +207,7 @@ class JsWebDomBridge : WebDomBridge {
                     dt.files[i].asDynamic().name as? String
                 }
             } else emptyList()
-            dispatch(WebWindowEvent.DragDropped(x = pe.clientX, y = pe.clientY, files = files))
+            eventAdapter.dragDropped(pe.clientX, pe.clientY, files)
         }
 
         addListener(canvas, "dragleave") { _ ->
@@ -253,13 +247,10 @@ class JsWebDomBridge : WebDomBridge {
         resizeObserver = js("new ResizeObserver(function(entries) { return entries; })")
         val self = this
         resizeObserver = js("""(function(callback) {
-            return new ResizeObserver(function(entries) {
-                for (var i = 0; i < entries.length; i++) {
-                    var rect = entries[i].contentRect;
-                    callback(Math.round(rect.width), Math.round(rect.height));
-                }
+            return new ResizeObserver(function() {
+                callback();
             });
-        })(function(w, h) { self.dispatchResized(w, h); })""")
+        })(function() { self.dispatchResizedForAttachment(generation); })""")
         resizeObserver.observe(canvas)
 
         // --- Page visibility → Focused + Occluded ---
@@ -278,10 +269,10 @@ class JsWebDomBridge : WebDomBridge {
         }
 
         // --- devicePixelRatio changes → ScaleFactorChanged ---
-        observeDevicePixelRatio()
+        observeDevicePixelRatio(generation)
 
         // --- prefers-color-scheme changes → ThemeChanged ---
-        observeColorScheme()
+        observeColorScheme(generation)
     }
 
     /**
@@ -295,39 +286,29 @@ class JsWebDomBridge : WebDomBridge {
         val phase = domTouchTypeToPhase(e.type)
         val touches = e.asDynamic().changedTouches
         val count = (touches.length as Number).toInt()
-        for (i in 0 until count) {
+        val contacts = (0 until count).map { i ->
             val t = touches[i]
-            val id = (t.identifier as Number).toDouble().toLong()
-            val pointer = when (phase) {
-                WebTouchPhase.Started -> touchTracker.onStart(id, "touch", domPrimary = false)
-                WebTouchPhase.Moved -> touchTracker.onMove(id, "touch", domPrimary = false)
-                WebTouchPhase.Ended -> touchTracker.onEnd(id, "touch", domPrimary = false)
-                WebTouchPhase.Cancelled -> touchTracker.onCancel(id, "touch", domPrimary = false)
-            }
-            dispatch(
-                WebWindowEvent.Touch(
-                    phase = phase,
-                    x = (t.clientX as Number).toDouble(),
-                    y = (t.clientY as Number).toDouble(),
-                    id = id,
-                    primary = pointer.primary,
-                )
+            WebTouchContact(
+                id = (t.identifier as Number).toDouble().toLong(),
+                clientX = (t.clientX as Number).toDouble(),
+                clientY = (t.clientY as Number).toDouble(),
             )
         }
+        eventAdapter.touches(phase, contacts)
         if (preventDefaultEnabled) e.preventDefault()
     }
 
     private fun dispatchPointerEvent(e: Event) {
         val pe = e.unsafeCast<PointerEventData>()
-        domPointerEvent(
+        eventAdapter.pointer(
             eventType = e.type,
-            x = pe.clientX,
-            y = pe.clientY,
+            clientX = pe.clientX,
+            clientY = pe.clientY,
             pointerId = pe.pointerId.toLong(),
             pointerType = pe.pointerType,
             domPrimary = pe.isPrimary,
-            button = pe.button,
-        )?.let(::dispatch)
+            button = pe.button.toInt(),
+        )
     }
 
     /**
@@ -337,7 +318,7 @@ class JsWebDomBridge : WebDomBridge {
      * leaves the current value, so the handler re-arms a fresh query each time.
      * The chain stops when [attached] becomes false (see [detach]).
      */
-    private fun observeDevicePixelRatio() {
+    private fun observeDevicePixelRatio(generation: Int) {
         val self = this
         js(
             """(function(cb, isAttached) {
@@ -353,7 +334,8 @@ class JsWebDomBridge : WebDomBridge {
                     mq.addEventListener('change', handler);
                 }
                 arm();
-            })(function(f) { self.dispatchScaleFactor(f); }, function() { return self.isAttached(); })"""
+            })(function(f) { self.dispatchScaleFactorForAttachment(generation); },
+               function() { return self.isAttachmentCurrent(generation); })"""
         )
     }
 
@@ -361,7 +343,7 @@ class JsWebDomBridge : WebDomBridge {
      * Observes `prefers-color-scheme` via `matchMedia` and calls [onThemeChange]
      * when the user toggles between dark and light mode.
      */
-    private fun observeColorScheme() {
+    private fun observeColorScheme(generation: Int) {
         val self = this
         js(
             """(function(cb) {
@@ -370,32 +352,53 @@ class JsWebDomBridge : WebDomBridge {
                     cb(mq.matches);
                 };
                 mq.addEventListener('change', handler);
-            })(function(dark) { self.dispatchThemeChanged(dark); })"""
+            })(function(dark) { self.dispatchThemeChangedForAttachment(generation, dark); })"""
         )
     }
 
     /** Called from the matchMedia handler when prefers-color-scheme toggles. */
     @JsName("dispatchThemeChanged")
     fun dispatchThemeChanged(dark: Boolean) {
-        onThemeChange?.invoke(dark)
+        if (attached) onThemeChange?.invoke(dark)
+    }
+
+    @JsName("dispatchThemeChangedForAttachment")
+    internal fun dispatchThemeChangedForAttachment(generation: Int, dark: Boolean) {
+        if (isAttachmentCurrent(generation)) onThemeChange?.invoke(dark)
     }
 
     /** Called from the re-arming matchMedia handler with the new devicePixelRatio. */
     @JsName("dispatchScaleFactor")
+    @Suppress("UNUSED_PARAMETER")
     fun dispatchScaleFactor(factor: Double) {
-        dispatch(WebWindowEvent.ScaleFactorChanged(factor))
+        eventAdapter.devicePixelRatioChanged()
+    }
+
+    @JsName("dispatchScaleFactorForAttachment")
+    internal fun dispatchScaleFactorForAttachment(generation: Int) {
+        if (isAttachmentCurrent(generation)) eventAdapter.devicePixelRatioChanged()
     }
 
     /** Predicate exposed to JS so the re-arming DPR chain stops after [detach]. */
     @JsName("isAttached")
     fun isAttached(): Boolean = attached
 
+    @JsName("isAttachmentCurrent")
+    internal fun isAttachmentCurrent(generation: Int): Boolean =
+        attached && generation == attachmentGeneration
+
     /**
      * Called from the JS ResizeObserver with the new dimensions.
      */
     @JsName("dispatchResized")
+    @Suppress("UNUSED_PARAMETER")
     fun dispatchResized(width: Int, height: Int) {
-        dispatch(WebWindowEvent.Resized(width = width, height = height))
+        eventAdapter.resized()
+    }
+
+    @JsName("dispatchResizedForAttachment")
+    internal fun dispatchResizedForAttachment(generation: Int) {
+        if (isAttachmentCurrent(generation)) eventAdapter.resized()
     }
 
     // ── R5-IME: hidden input overlay ─────────────────────────────────────────
@@ -498,32 +501,70 @@ class JsWebDomBridge : WebDomBridge {
         imeInput?.remove()
         imeInput = null
 
-        touchTracker.close()
+        eventAdapter.detach()
 
         targetElement = null
+        canvasElement = null
     }
 
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 
+    private fun readCurrentCanvasMetrics(): CanvasMetrics =
+        readCanvasMetrics(canvasElement ?: error("Web bridge is not attached to a canvas"))
+
+    private fun readCanvasMetrics(canvas: Element): CanvasMetrics {
+        val rect = canvas.asDynamic().getBoundingClientRect()
+        return CanvasMetrics(
+            leftCss = (rect.left as Number).toDouble(),
+            topCss = (rect.top as Number).toDouble(),
+            widthCss = (rect.width as Number).toDouble(),
+            heightCss = (rect.height as Number).toDouble(),
+            devicePixelRatio = window.devicePixelRatio,
+        )
+    }
+
     private fun addListener(target: Element, type: String, handler: (Event) -> Unit) {
-        target.addEventListener(type, handler)
-        canvasListeners.add(Pair(type, handler))
+        val generation = attachmentGeneration
+        val guarded: (Event) -> Unit = { event ->
+            if (isAttachmentCurrent(generation)) handler(event)
+        }
+        target.addEventListener(type, guarded)
+        canvasListeners.add(Pair(type, guarded))
     }
 
     private fun addDocumentListener(type: String, handler: (Event) -> Unit) {
-        document.asDynamic().addEventListener(type, handler)
-        documentListeners.add(Pair(type, handler))
+        val generation = attachmentGeneration
+        val guarded: (Event) -> Unit = { event ->
+            if (isAttachmentCurrent(generation)) handler(event)
+        }
+        document.asDynamic().addEventListener(type, guarded)
+        documentListeners.add(Pair(type, guarded))
     }
 
     private fun addWindowListener(type: String, handler: (Event) -> Unit) {
-        window.asDynamic().addEventListener(type, handler)
-        windowListeners.add(Pair(type, handler))
+        val generation = attachmentGeneration
+        val guarded: (Event) -> Unit = { event ->
+            if (isAttachmentCurrent(generation)) handler(event)
+        }
+        window.asDynamic().addEventListener(type, guarded)
+        windowListeners.add(Pair(type, guarded))
     }
 
     private fun dispatch(event: WebWindowEvent) {
-        onWindowEvent?.invoke(event)
+        if (attached) onWindowEvent?.invoke(event)
+    }
+
+    private fun dispatchMetrics(transaction: WebMetricsTransaction) {
+        if (WebMetricsTransactions.dispatch(this, transaction)) return
+        dispatch(WebWindowEvent.ScaleFactorChanged(transaction.scaleFactor))
+        dispatch(
+            WebWindowEvent.Resized(
+                transaction.physicalSize.width,
+                transaction.physicalSize.height,
+            ),
+        )
     }
 
     // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────
@@ -584,6 +625,11 @@ class JsWebDomBridge : WebDomBridge {
         el.asDynamic().style.cursor = cssCursorValue
     }
 
+    override fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
+        val el = document.getElementById(canvasId) ?: canvasElement ?: return
+        el.asDynamic().style.pointerEvents = pointerEventsValue
+    }
+
     /**
      * Requests Pointer Lock on the canvas element (handles vendor prefixes).
      *
@@ -624,9 +670,9 @@ class JsWebDomBridge : WebDomBridge {
     /**
      * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
      */
+    @Deprecated("Use setPointerEvents")
     override fun setCursorHittest(canvasId: String, hittest: Boolean) {
-        val el = document.getElementById(canvasId) ?: canvasElement ?: return
-        el.asDynamic().style.pointerEvents = if (hittest) "auto" else "none"
+        setPointerEvents(canvasId, if (hittest) "auto" else "none")
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────

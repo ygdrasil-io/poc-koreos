@@ -169,7 +169,10 @@ interface WebDomBridge {
      * the canvas (`"none"`) or restore normal hit-testing (`"auto"`).
      * Default: no-op (test / non-browser bridge).
      */
-    fun setPointerEvents(canvasId: String, pointerEventsValue: String) { /* no-op by default */ }
+    @Suppress("DEPRECATION")
+    fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
+        setCursorHittest(canvasId, pointerEventsValue != "none")
+    }
 
     /**
      * Requests Pointer Lock on the canvas element (for [CursorGrabMode.Locked]).
@@ -205,7 +208,8 @@ interface WebDomBridge {
      *
      * Default: no-op (test / non-browser bridge).
      */
-    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* no-op by default */ }
+    @Deprecated("Use setPointerEvents")
+    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* compatibility no-op by default */ }
 
     /**
      * Returns true if `window.matchMedia('(prefers-color-scheme: dark)')` matches.

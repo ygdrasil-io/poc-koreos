@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 /**
  * wasmJs implementation of [WebDomBridge].
  *
@@ -82,6 +84,14 @@ external interface JsCompositionEvent : JsDomEvent {
     val data: JsString?
 }
 
+/** One immutable `getBoundingClientRect()` snapshot. */
+external interface JsDomRect : JsAny {
+    val left: JsNumber
+    val top: JsNumber
+    val width: JsNumber
+    val height: JsNumber
+}
+
 // ---------------------------------------------------------------------------
 // Wasm JS interop functions — global DOM access
 // ---------------------------------------------------------------------------
@@ -102,11 +112,8 @@ private external fun getDocument(): JsEventTarget
 private external fun isDocumentHidden(): JsBoolean
 
 @JsFun("""(canvas, callback) => {
-    const ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-            const rect = entry.contentRect;
-            callback(Math.round(rect.width), Math.round(rect.height));
-        }
+    const ro = new ResizeObserver(() => {
+        callback();
     });
     ro.observe(canvas);
     return ro;
@@ -117,7 +124,7 @@ private external fun createResizeObserver(canvas: JsEventTarget, callback: JsAny
 private external fun disconnectResizeObserver(ro: JsAny)
 
 @JsFun("(fn) => fn")
-private external fun wrapCallback(fn: (Int, Int) -> Unit): JsAny
+private external fun wrapCallback(fn: () -> Unit): JsAny
 
 @JsFun("() => window")
 private external fun getWindow(): JsEventTarget
@@ -128,11 +135,8 @@ private external fun pointerEventsSupported(): JsBoolean
 @JsFun("() => window.devicePixelRatio || 1")
 private external fun getDevicePixelRatio(): Double
 
-@JsFun("(canvas, dpr) => Math.round(canvas.clientWidth * dpr)")
-private external fun canvasPhysicalWidth(canvas: JsEventTarget, dpr: Double): Int
-
-@JsFun("(canvas, dpr) => Math.round(canvas.clientHeight * dpr)")
-private external fun canvasPhysicalHeight(canvas: JsEventTarget, dpr: Double): Int
+@JsFun("(canvas) => canvas.getBoundingClientRect()")
+private external fun canvasBoundingClientRect(canvas: JsEventTarget): JsDomRect
 
 // --- DnD (Drag & Drop) helpers ---
 
@@ -418,12 +422,12 @@ class WasmJsWebDomBridge : WebDomBridge {
 
     override var preventDefaultEnabled: Boolean = true
 
-    override fun readDevicePixelRatio(): Double = getDevicePixelRatio()
+    override fun readDevicePixelRatio(): Double = normalizedDevicePixelRatio(getDevicePixelRatio())
 
     override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> {
         val canvas = getElementById(canvasId.toJsString()) ?: return Pair(0, 0)
-        val dpr = getDevicePixelRatio()
-        return Pair(canvasPhysicalWidth(canvas, dpr), canvasPhysicalHeight(canvas, dpr))
+        val size = readCanvasMetrics(canvas).physicalSize()
+        return Pair(size.width, size.height)
     }
 
     override fun ensureCanvas(attrs: WebWindowAttributes): String {
@@ -451,19 +455,25 @@ class WasmJsWebDomBridge : WebDomBridge {
     private var targetElement: JsEventTarget? = null
     private val listenerRefs = mutableListOf<Triple<JsEventTarget, String, JsAny>>()
     private var resizeObserverRef: JsAny? = null
-    private val touchTracker = WebPointerTracker()
+    private val eventAdapter = WebBridgeEventAdapter(
+        metricsProvider = ::readCurrentCanvasMetrics,
+        eventSink = ::dispatch,
+        metricsSink = ::dispatchMetrics,
+    )
 
     /** Hidden <input> used for IME composition events. */
     private var imeInput: JsEventTarget? = null
 
     /** `false` once [detach] runs — stops the re-arming devicePixelRatio chain. */
     private var attached = false
+    private var attachmentGeneration = 0
 
     override fun attach(targetElementId: String) {
         val canvas = getElementById(targetElementId.toJsString()) ?: return
-        touchTracker.close()
         targetElement = canvas
         attached = true
+        val generation = ++attachmentGeneration
+        eventAdapter.attach()
 
         // --- Keyboard ---
         addDomListener(canvas, "keydown") { e ->
@@ -539,24 +549,14 @@ class WasmJsWebDomBridge : WebDomBridge {
         // --- Wheel ---
         addDomListener(canvas, "wheel") { e ->
             val we = e.unsafeCast<JsWheelEvent>()
-            // Ctrl+Wheel → pinch zoom (works across all browsers)
-            if (we.ctrlKey.toBoolean()) {
-                dispatch(
-                    WebWindowEvent.WebPinchZoom(
-                        delta = (-we.deltaY.toDouble() / 100f).toFloat(),
-                        centerX = we.clientX.toDouble(),
-                        centerY = we.clientY.toDouble(),
-                    )
-                )
-            } else {
-                val mode = we.deltaMode.toDouble().toInt()
-                dispatch(
-                    WebWindowEvent.MouseWheel(
-                        deltaX = normalizeWheelDelta(we.deltaX.toDouble(), mode),
-                        deltaY = normalizeWheelDelta(we.deltaY.toDouble(), mode),
-                    )
-                )
-            }
+            eventAdapter.wheel(
+                deltaX = we.deltaX.toDouble(),
+                deltaY = we.deltaY.toDouble(),
+                deltaMode = we.deltaMode.toDouble().toInt(),
+                ctrlKey = we.ctrlKey.toBoolean(),
+                clientX = we.clientX.toDouble(),
+                clientY = we.clientY.toDouble(),
+            )
         }
 
         // --- DnD ---
@@ -566,12 +566,12 @@ class WasmJsWebDomBridge : WebDomBridge {
             val y = dragClientY(e)
             val count = dragItemCount(e)
             val files = (0 until count).map { dragItemType(e, it) }
-            dispatch(WebWindowEvent.DragEntered(x = x, y = y, files = files))
+            eventAdapter.dragEntered(x, y, files)
         }
 
         addDomListener(canvas, "dragover") { e ->
             domPreventDefault(e)
-            dispatch(WebWindowEvent.DragMoved(x = dragClientX(e), y = dragClientY(e)))
+            eventAdapter.dragMoved(dragClientX(e), dragClientY(e))
         }
 
         addDomListener(canvas, "drop") { e ->
@@ -580,7 +580,7 @@ class WasmJsWebDomBridge : WebDomBridge {
             val y = dragClientY(e)
             val count = dragFileCount(e)
             val files = (0 until count).map { dragFileName(e, it) }
-            dispatch(WebWindowEvent.DragDropped(x = x, y = y, files = files))
+            eventAdapter.dragDropped(x, y, files)
         }
 
         addDomListener(canvas, "dragleave") { _ ->
@@ -617,10 +617,12 @@ class WasmJsWebDomBridge : WebDomBridge {
         }
 
         // --- ResizeObserver ---
-        val callback: (Int, Int) -> Unit = { w, h ->
-            dispatch(WebWindowEvent.Resized(width = w, height = h))
-        }
-        resizeObserverRef = createResizeObserver(canvas, wrapCallback(callback))
+        resizeObserverRef = createResizeObserver(
+            canvas,
+            wrapCallback {
+                if (isAttachmentCurrent(generation)) eventAdapter.resized()
+            },
+        )
 
         // --- Visibility → Focused + Occluded ---
         val doc = getDocument()
@@ -641,13 +643,17 @@ class WasmJsWebDomBridge : WebDomBridge {
 
         // --- devicePixelRatio changes → ScaleFactorChanged ---
         observeDevicePixelRatioJs(
-            cb = wrapDoubleCallback { factor -> dispatch(WebWindowEvent.ScaleFactorChanged(factor)) },
-            isAttached = wrapBoolSupplier { attached },
+            cb = wrapDoubleCallback { _ ->
+                if (isAttachmentCurrent(generation)) eventAdapter.devicePixelRatioChanged()
+            },
+            isAttached = wrapBoolSupplier { isAttachmentCurrent(generation) },
         )
 
         // --- prefers-color-scheme changes → ThemeChanged ---
         observeColorSchemeJs(
-            cb = wrapBoolCallback { dark -> onThemeChange?.invoke(dark) },
+            cb = wrapBoolCallback { dark ->
+                if (isAttachmentCurrent(generation)) onThemeChange?.invoke(dark)
+            },
         )
     }
 
@@ -660,38 +666,28 @@ class WasmJsWebDomBridge : WebDomBridge {
     private fun dispatchTouches(e: JsAny) {
         val phase = domTouchTypeToPhase(e.unsafeCast<JsDomEvent>().type.toString())
         val count = touchCount(e)
-        for (i in 0 until count) {
-            val id = touchIdentifier(e, i).toLong()
-            val pointer = when (phase) {
-                WebTouchPhase.Started -> touchTracker.onStart(id, "touch", domPrimary = false)
-                WebTouchPhase.Moved -> touchTracker.onMove(id, "touch", domPrimary = false)
-                WebTouchPhase.Ended -> touchTracker.onEnd(id, "touch", domPrimary = false)
-                WebTouchPhase.Cancelled -> touchTracker.onCancel(id, "touch", domPrimary = false)
-            }
-            dispatch(
-                WebWindowEvent.Touch(
-                    phase = phase,
-                    x = touchClientX(e, i),
-                    y = touchClientY(e, i),
-                    id = id,
-                    primary = pointer.primary,
-                )
+        val contacts = (0 until count).map { i ->
+            WebTouchContact(
+                id = touchIdentifier(e, i).toLong(),
+                clientX = touchClientX(e, i),
+                clientY = touchClientY(e, i),
             )
         }
+        eventAdapter.touches(phase, contacts)
         if (preventDefaultEnabled) touchPreventDefault(e)
     }
 
     private fun dispatchPointerEvent(e: JsAny) {
         val pe = e.unsafeCast<JsPointerEvent>()
-        domPointerEvent(
+        eventAdapter.pointer(
             eventType = pe.type.toString(),
-            x = pe.clientX.toDouble(),
-            y = pe.clientY.toDouble(),
+            clientX = pe.clientX.toDouble(),
+            clientY = pe.clientY.toDouble(),
             pointerId = pe.pointerId.toDouble().toLong(),
             pointerType = pe.pointerType.toString(),
             domPrimary = pe.isPrimary.toBoolean(),
-            button = pe.button.toDouble().toInt().toShort(),
-        )?.let(::dispatch)
+            button = pe.button.toDouble().toInt(),
+        )
     }
 
     // ── Task 14: safeArea insets + ownedDisplayHandle ─────────────────────────
@@ -776,7 +772,7 @@ class WasmJsWebDomBridge : WebDomBridge {
         imeInput?.let { jsRemoveElement(it) }
         imeInput = null
 
-        touchTracker.close()
+        eventAdapter.detach()
 
         targetElement = null
     }
@@ -785,16 +781,47 @@ class WasmJsWebDomBridge : WebDomBridge {
     // Private helpers
     // -----------------------------------------------------------------------
 
+    private fun readCurrentCanvasMetrics(): CanvasMetrics =
+        readCanvasMetrics(targetElement ?: error("Web bridge is not attached to a canvas"))
+
+    private fun readCanvasMetrics(canvas: JsEventTarget): CanvasMetrics {
+        val rect = canvasBoundingClientRect(canvas)
+        return CanvasMetrics(
+            leftCss = rect.left.toDouble(),
+            topCss = rect.top.toDouble(),
+            widthCss = rect.width.toDouble(),
+            heightCss = rect.height.toDouble(),
+            devicePixelRatio = getDevicePixelRatio(),
+        )
+    }
+
     private fun addDomListener(target: JsEventTarget, type: String, handler: (JsAny) -> Unit) {
         // `wrapEventHandler` triggers the JS wrapping that makes the Kotlin lambda
         // callable from `addEventListener` (see the wrapper doc above).
-        val ref = wrapEventHandler(handler)
+        val generation = attachmentGeneration
+        val ref = wrapEventHandler { event ->
+            if (isAttachmentCurrent(generation)) handler(event)
+        }
         jsAddEventListener(target, type.toJsString(), ref)
         listenerRefs.add(Triple(target, type, ref))
     }
 
+    private fun isAttachmentCurrent(generation: Int): Boolean =
+        attached && generation == attachmentGeneration
+
     private fun dispatch(event: WebWindowEvent) {
-        onWindowEvent?.invoke(event)
+        if (attached) onWindowEvent?.invoke(event)
+    }
+
+    private fun dispatchMetrics(transaction: WebMetricsTransaction) {
+        if (WebMetricsTransactions.dispatch(this, transaction)) return
+        dispatch(WebWindowEvent.ScaleFactorChanged(transaction.scaleFactor))
+        dispatch(
+            WebWindowEvent.Resized(
+                transaction.physicalSize.width,
+                transaction.physicalSize.height,
+            ),
+        )
     }
 
     // ── R2: Fullscreen API ────────────────────────────────────────────────────
@@ -861,9 +888,9 @@ class WasmJsWebDomBridge : WebDomBridge {
     /**
      * Toggles `style.pointerEvents` on the canvas to enable/disable hit-testing.
      */
+    @Deprecated("Use setPointerEvents")
     override fun setCursorHittest(canvasId: String, hittest: Boolean) {
-        val el = getElementById(canvasId.toJsString()) ?: targetElement ?: return
-        jsSetPointerEvents(el, if (hittest) "auto" else "none")
+        setPointerEvents(canvasId, if (hittest) "auto" else "none")
     }
 
     // ── R5-CustomCursor ─────────────────────────────────────────────────────────

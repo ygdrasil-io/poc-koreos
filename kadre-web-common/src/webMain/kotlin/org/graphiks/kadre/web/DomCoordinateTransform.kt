@@ -30,8 +30,11 @@ internal fun CanvasMetrics.physicalSize(): PhysicalSize<Int> {
     )
 }
 
-private fun CanvasMetrics.normalizedDevicePixelRatio(): Double =
-    devicePixelRatio.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+internal fun CanvasMetrics.normalizedDevicePixelRatio(): Double =
+    normalizedDevicePixelRatio(devicePixelRatio)
+
+internal fun normalizedDevicePixelRatio(value: Double): Double =
+    value.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
 
 private fun physicalDimension(cssDimension: Double, scale: Double): Int {
     val scaled = cssDimension * scale

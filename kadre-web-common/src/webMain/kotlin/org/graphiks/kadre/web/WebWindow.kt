@@ -244,6 +244,7 @@ class WebWindow(
      * and release the associated resources.
      */
     override fun close() {
+        WebMetricsTransactions.disconnect(bridge)
         bridge.detach()
     }
 
