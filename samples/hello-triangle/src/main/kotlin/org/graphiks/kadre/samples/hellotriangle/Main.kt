@@ -17,6 +17,7 @@ package org.graphiks.kadre.samples.hellotriangle
 import ffi.JvmNativeAddress
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
+import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.PhysicalSize
 import org.graphiks.kadre.WindowAttributes
@@ -41,7 +42,6 @@ import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.SurfaceConfiguration
-import io.ygdrasil.webgpu.SurfaceTextureStatus
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPULowLevelApi
@@ -123,6 +123,7 @@ class HelloTriangleApp : ApplicationHandler {
     private var window: org.graphiks.kadre.core.Window? = null
     private var surfaceFormat: GPUTextureFormat = GPUTextureFormat.BGRA8Unorm
     private var surfaceAlphaMode: CompositeAlphaMode = CompositeAlphaMode.Auto
+    private val framePacer = FramePacer()
 
     // FPS counter
     private var frameCount = 0
@@ -312,7 +313,12 @@ class HelloTriangleApp : ApplicationHandler {
      * Requests a continuous redraw to maintain ~60 fps.
      */
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
-        window?.requestRedraw()
+        val schedule = framePacer.schedule(System.currentTimeMillis())
+        val win = window
+        if (schedule.requestRedraw && pipeline != null && win != null) {
+            win.requestRedraw()
+        }
+        eventLoop.setControlFlow(ControlFlow.WaitUntil(schedule.nextDeadlineMillis))
     }
 
     /**
@@ -325,7 +331,12 @@ class HelloTriangleApp : ApplicationHandler {
      */
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {
         when (event) {
-            is WindowEvent.RedrawRequested -> renderFrame()
+            is WindowEvent.RedrawRequested -> {
+                if (renderFrame()) {
+                    releaseResources()
+                    eventLoop.exit()
+                }
+            }
             is WindowEvent.Resized -> {
                 println("[hello-triangle] Resized → ${event.size.width}×${event.size.height}")
                 handleResize(event.size.width, event.size.height)
@@ -385,96 +396,96 @@ class HelloTriangleApp : ApplicationHandler {
      * 6. `finish()` → command buffer
      * 7. `queue.submit(...)` → submission to the GPU
      * 8. `present()` → display
+     *
+     * @return `true` when acquisition reached a terminal failure and the event loop
+     *   must release long-lived resources and exit; otherwise `false`.
      */
-    private fun renderFrame() {
-        val surf = surface ?: return
-        val device = gpuDevice ?: return
-        val pipe = pipeline ?: return
+    private fun renderFrame(): Boolean {
+        val surf = surface ?: return false
+        val device = gpuDevice ?: return false
+        val pipe = pipeline ?: return false
 
-        // 1. Presentation texture
-        //
-        // NOTE — wgpu-native 0.25+ / wgpu4k 0.1.1 compatibility:
-        //   Old API:  Success(0) Timeout(1)     Outdated(2) Lost(3) OutOfMemory(4) DeviceLost(5)
-        //   New API:  SuccessOptimal(0) SuccessSuboptimal(1) Timeout(2) Outdated(3) ...
-        //
-        //   wgpu4k 0.1.1 maps the raw values of the old API:
-        //     rawStatus=0 → success    (SuccessOptimal   → render OK)
-        //     rawStatus=1 → timeout    (SuccessSuboptimal→ VALID texture, but suboptimal)
-        //     rawStatus=2 → outdated   (real Timeout     → no drawable)
-        //     rawStatus=3 → lost       (Outdated         → reconfigure)
-        //
-        //   ⇒ Treat `timeout` (=successSuboptimal) as `success`: the texture is valid.
-        val surfaceTexture = surf.getCurrentTexture()
-        when (surfaceTexture.status) {
-            // lost (3) in wgpu4k = Outdated (3) in the new API → reconfigure the surface
-            SurfaceTextureStatus.lost -> {
-                surfaceTexture.texture.close()
-                val win = window
-                if (win != null) {
-                    val inner = win.innerSize
-                    handleResize(inner.width, inner.height)
-                }
-                return
-            }
-            // outdated (2) in wgpu4k = Timeout (2) in the new API → no drawable, skip
-            // (compatible with the old API where outdated=2 → reconfigure)
-            SurfaceTextureStatus.outdated -> {
-                surfaceTexture.texture.close()
-                val win = window
-                if (win != null) {
-                    val inner = win.innerSize
-                    handleResize(inner.width, inner.height)
-                }
-                return
-            }
-            // Terminal errors
-            SurfaceTextureStatus.outOfMemory,
-            SurfaceTextureStatus.deviceLost -> {
-                println("[hello-triangle] getCurrentTexture status=${surfaceTexture.status} — terminal error")
-                surfaceTexture.texture.close()
-                return
-            }
-            // success (0) = SuccessOptimal, timeout (1) = SuccessSuboptimal → VALID texture
-            SurfaceTextureStatus.success,
-            SurfaceTextureStatus.timeout -> { /* continue rendering */ }
+        // wgpu4k 0.1.1 exposes stale names for the v25 raw statuses: timeout(1)
+        // is SuccessOptimal, outdated(2) is SuccessSuboptimal, lost(3) is Timeout,
+        // outOfMemory(4) is Outdated, and deviceLost(5) is Lost. The pure policy
+        // below maps those names to the only safe ownership action.
+        val surfaceTexture = try {
+            surf.getCurrentTexture()
+        } catch (exception: IllegalStateException) {
+            println("[hello-triangle] getCurrentTexture failed - $exception")
+            return true
         }
+
+        val action = surfaceFrameAction(surfaceTexture.status)
+        when (action) {
+            SurfaceFrameAction.Skip -> return false
+            SurfaceFrameAction.Reconfigure -> {
+                reconfigureSurface()
+                return false
+            }
+            SurfaceFrameAction.Stop -> {
+                println("[hello-triangle] getCurrentTexture status=${surfaceTexture.status} - terminal error")
+                return true
+            }
+            SurfaceFrameAction.Render,
+            SurfaceFrameAction.RenderThenReconfigure -> Unit
+        }
+
         val texture = surfaceTexture.texture
-
-        // 2. Texture view
-        val textureView = texture.createView(null)
-
-        // 3. Command encoder
-        val encoder = device.createCommandEncoder()
-
-        // 4. Render pass
-        val renderPass = encoder.beginRenderPass(
-            RenderPassDescriptor(
-                colorAttachments = listOf(
-                    RenderPassColorAttachment(
-                        view = textureView,
-                        loadOp = GPULoadOp.Clear,
-                        storeOp = GPUStoreOp.Store,
-                        clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 1.0),
+        try {
+            val textureView = texture.createView(null)
+            try {
+                val encoder = try {
+                    device.createCommandEncoder()
+                } catch (exception: Throwable) {
+                    textureView.close()
+                    throw exception
+                }
+                try {
+                    val renderPass = encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = textureView,
+                                    loadOp = GPULoadOp.Clear,
+                                    storeOp = GPUStoreOp.Store,
+                                    clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 1.0),
+                                )
+                            )
+                        )
                     )
-                )
-            )
-        )
-        renderPass.setPipeline(pipe)
-        renderPass.draw(3u, 1u, 0u, 0u)
-        renderPass.end()
+                    try {
+                        renderPass.setPipeline(pipe)
+                        renderPass.draw(3u, 1u, 0u, 0u)
+                    } finally {
+                        renderPass.end()
+                    }
 
-        // 5. Submission
-        val commandBuffer = encoder.finish()
-        device.queue.submit(listOf(commandBuffer))
+                    val commandBuffer = encoder.finish()
+                    try {
+                        device.queue.submit(listOf(commandBuffer))
+                        surf.present()
+                    } finally {
+                        commandBuffer.close()
+                    }
+                } finally {
+                    try {
+                        textureView.close()
+                    } finally {
+                        encoder.close()
+                    }
+                }
+            } finally {
+                // The encoder-creation failure path closes the view before reaching here.
+            }
+        } finally {
+            texture.close()
+        }
 
-        // 6. Presentation
-        surf.present()
+        if (action == SurfaceFrameAction.RenderThenReconfigure) {
+            reconfigureSurface()
+        }
 
-        // 7. Release of temporary resources
-        textureView.close()
-        encoder.close()
-
-        // FPS counter
         frameCount++
         val now = System.currentTimeMillis()
         val elapsed = now - fpsWindowStart
@@ -484,6 +495,13 @@ class HelloTriangleApp : ApplicationHandler {
             frameCount = 0
             fpsWindowStart = now
         }
+        return false
+    }
+
+    private fun reconfigureSurface() {
+        val win = window ?: return
+        val inner = win.innerSize
+        handleResize(inner.width, inner.height)
     }
 
     // ---------------------------------------------------------------------------
