@@ -1,13 +1,13 @@
 /**
- * Sample hello-triangle — wgpu4k integration: Instance + Surface from CAMetalLayer (GRA-137).
+ * Sample hello-triangle — interactive wgpu4k RGB rendering (GRA-137/GRA-138).
  *
  * Consumes Kadre's [RawWindowHandle] to initialize wgpu4k:
- *   EventLoop → AppKitEventLoop → NSWindow + CAMetalLayer → WGPU Instance + Surface + Adapter + Device
+ *   AppKit → CAMetalLayer → Metal surface, or Win32 → HWND/HINSTANCE → Primary surface
  *
- * M2 scope — no rendering yet: the window stays empty (default clear).
+ * Both paths create the adapter, device, surface, and render pipeline used by the triangle.
  *
  * Usage: ./gradlew :samples:hello-triangle:run
- * Requirements: macOS with JDK 25 (main thread — launched by Gradle).
+ * Requirements: JDK 25 on macOS or Windows (launched by Gradle).
  */
 plugins {
     kotlin("jvm")
