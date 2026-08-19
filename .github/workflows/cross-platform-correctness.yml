@@ -141,7 +141,6 @@ jobs:
       - run: >-
           sudo apt-get update && sudo apt-get install -y weston libwayland-client0
           libwayland-egl1 libxkbcommon0 libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
-          mesa-utils-extra
       - name: Start deterministic headless Weston
         run: |
           export XDG_RUNTIME_DIR=/tmp/kadre-wl-runtime
@@ -157,9 +156,6 @@ jobs:
           test -S "$XDG_RUNTIME_DIR/wayland-ci"
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
           echo "WAYLAND_DISPLAY=wayland-ci" >> "$GITHUB_ENV"
-      - name: Report software EGL driver
-        run: |
-          EGL_LOG_LEVEL=debug eglinfo -B
       - run: chmod +x gradlew scripts/*.sh
       - run: scripts/test-linux-compose-windowed-capture.sh
       - uses: actions/upload-artifact@v4

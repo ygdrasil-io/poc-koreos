@@ -21,6 +21,12 @@ private const val EGL_CONTEXT_MAJOR_VERSION_KHR = 0x3098
 private const val EGL_CONTEXT_MINOR_VERSION_KHR = 0x30FB
 private const val EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR = 0x30FD
 private const val EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR = 0x0001
+private const val EGL_VENDOR = 0x3053
+private const val EGL_VERSION = 0x3054
+private const val EGL_CLIENT_APIS = 0x308D
+private const val GL_VENDOR = 0x1F00
+private const val GL_RENDERER = 0x1F01
+private const val GL_VERSION = 0x1F02
 
 class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
 
@@ -33,6 +39,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
     private var eglSurface = MemorySegment.NULL
     private var eglWindow = MemorySegment.NULL
     private var created = false
+    private var diagnosticsReported = false
 
     private var width = 1
     private var height = 1
@@ -43,6 +50,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         check(madeCurrent != 0) {
             "eglMakeCurrent failed (EGL error 0x${(eglGetError.call() as Int).toString(16)})"
         }
+        reportDriverOnce()
         // Disable vsync throttling. The default swap interval is 1, so eglSwapBuffers blocks on
         // the compositor's frame callback — which never fires until the surface is mapped and
         // presented. For the synchronous headless capture path that deadlocks, so present
@@ -126,8 +134,31 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         return seg
     }
 
+    private fun eglString(name: Int): String =
+        cString(eglQueryString.call(eglDisplay, name) as MemorySegment)
+
+    private fun glString(name: Int): String =
+        cString(glGetString.call(name) as MemorySegment)
+
+    private fun reportDriverOnce() {
+        if (diagnosticsReported || System.getenv("KADRE_DIAGNOSE_WAYLAND_EGL") != "1") return
+        diagnosticsReported = true
+        println(
+            "[wayland-egl] EGL vendor=${eglString(EGL_VENDOR)}, version=${eglString(EGL_VERSION)}, " +
+                "client APIs=${eglString(EGL_CLIENT_APIS)}",
+        )
+        println(
+            "[wayland-egl] GL vendor=${glString(GL_VENDOR)}, renderer=${glString(GL_RENDERER)}, " +
+                "version=${glString(GL_VERSION)}",
+        )
+    }
+
+    private fun cString(pointer: MemorySegment): String =
+        if (pointer == MemorySegment.NULL) "<null>" else pointer.reinterpret(1024).getString(0)
+
     private companion object {
         val egl = NativeFfi.lookup("EGL", "libEGL.so.1", "libEGL.so")
+        val gl = NativeFfi.lookup("GL", "libGL.so.1", "libGL.so")
         val wlEgl = NativeFfi.lookup("wayland-egl", "libwayland-egl.so.1", "libwayland-egl.so")
 
         val wlEglWindowCreate = NativeFfi.handle(wlEgl, "wl_egl_window_create", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT, JAVA_INT))
@@ -142,9 +173,11 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         val eglCreateContext = NativeFfi.handle(egl, "eglCreateContext", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglMakeCurrent = NativeFfi.handle(egl, "eglMakeCurrent", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglGetError = NativeFfi.handle(egl, "eglGetError", FunctionDescriptor.of(JAVA_INT))
+        val eglQueryString = NativeFfi.handle(egl, "eglQueryString", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT))
         val eglSwapBuffers = NativeFfi.handle(egl, "eglSwapBuffers", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))
         val eglSwapInterval = NativeFfi.handle(egl, "eglSwapInterval", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT))
         val eglDestroySurface = NativeFfi.handle(egl, "eglDestroySurface", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))
         val eglDestroyContext = NativeFfi.handle(egl, "eglDestroyContext", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))
+        val glGetString = NativeFfi.handle(gl, "glGetString", FunctionDescriptor.of(ADDRESS, JAVA_INT))
     }
 }
