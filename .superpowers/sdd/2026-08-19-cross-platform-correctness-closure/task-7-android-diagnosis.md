@@ -215,3 +215,17 @@ rtk bash -n scripts/android-emulator-test.sh scripts/test-android-device-selecti
 ```
 
 Résultat : exit 0 — `PASS: Android device selection is explicit, unique, and preconditioned`; la vérification de syntaxe ne produit aucun diagnostic. Les cas existants unique, zéro, ambiguous et `ANDROID_SERIAL` explicite restent couverts, en plus des nouveaux cas mixed et multi qui ne peuvent plus atteindre Gradle.
+
+### Reruns post-commit
+
+Le code a été commité atomiquement sous `838982a8c3429f9a48dc4a1bfc0b65ad4c28cebb`, puis les reruns suivants ont testé exactement ce SHA avant la mise à jour documentaire. `adb devices -l` montrait `emulator-5554` (API 29) et `emulator-5556` (API 36) online. La sonde `cmd gpu vkjson` donnait respectivement `devices: [{}]` et un unique objet avec `properties.deviceName: llvmpipe (LLVM 21.1.4, 128 bits)`.
+
+```text
+rtk bash scripts/test-android-device-selection.sh
+rtk env -u ANDROID_SERIAL scripts/android-emulator-test.sh
+rtk scripts/test-workflow-contract.sh
+rtk python3 scripts/verify-test-results.py --report docs/kadre/cross-platform-correctness-report.md
+rtk git diff --check origin/codex/cross-platform-correctness-design...838982a8c3429f9a48dc4a1bfc0b65ad4c28cebb
+```
+
+Chaque commande a renvoyé exit 0. Le script complet a lancé exactement un test sur `Medium_Phone(AVD) - 16`, avec JUnit 1/1 sans erreur ni échec et un PNG `android-triangle` 800×600 (47,436 couleurs, 60,000 pixels non-background). L’API 29 a été écarté avant Gradle. Le temporary API 29 a ensuite été arrêté, sans changement durable d’AVD.

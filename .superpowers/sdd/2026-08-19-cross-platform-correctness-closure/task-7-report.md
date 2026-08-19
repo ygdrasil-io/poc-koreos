@@ -1,8 +1,23 @@
 # Task 7 — integration verification report
 
 Run date: 2026-08-19 (Europe/Paris)
-Commit under test: `56818a5feb23ecc7c5e530ac26787aa2ea229f71`
+Historical host-matrix commit: `56818a5feb23ecc7c5e530ac26787aa2ea229f71`
+Correction rerun commit: `838982a8c3429f9a48dc4a1bfc0b65ad4c28cebb`
 Base ref after fetch: `origin/codex/cross-platform-correctness-design` = `9bdc7f1eeaf6c94c48cb9228d4146b56288984a1`
+
+## Provenance
+
+The host/browser/native matrix recorded below was first collected on `56818a5feb23ecc7c5e530ac26787aa2ea229f71`. It remains historical host evidence; it must not be attributed to the Android-device-selection correction, which did not exist at that SHA.
+
+The correction reruns were executed after the atomic fix commit `838982a8c3429f9a48dc4a1bfc0b65ad4c28cebb`, before this evidence-only report update. They exercised the exact tree of that publishable code commit:
+
+| Command | Result |
+| --- | --- |
+| `rtk bash scripts/test-android-device-selection.sh` | PASS — unique, zero, ambiguous, mixed, multi, explicit-compatible, and explicit-incompatible cases passed. |
+| `rtk env -u ANDROID_SERIAL scripts/android-emulator-test.sh` | PASS — API 29 (`devices: [{}]`) and API 36 (`llvmpipe` named device) were online; only `Medium_Phone(AVD) - 16` ran. JUnit: 1 test, 0 failures/errors; PNG: 800×600, 47,436 colors, 60,000 non-background pixels. |
+| `rtk scripts/test-workflow-contract.sh` | PASS — JUnit: 2 tests, 0 failures/errors. |
+| `rtk python3 scripts/verify-test-results.py --report docs/kadre/cross-platform-correctness-report.md` | PASS — 19 complete traceability rows. |
+| `rtk git diff --check origin/codex/cross-platform-correctness-design...838982a8c3429f9a48dc4a1bfc0b65ad4c28cebb` | PASS — no diagnostics. |
 
 ## Host and browser matrix
 
@@ -24,9 +39,9 @@ The former diff-check blocker was resolved by the closure-markdown normalization
 | `scripts/test-x11-xvfb.sh` | HOST LIMITATION — not a pass | Exit 1 before test execution: `[test-x11-xvfb] ERROR: Xvfb is not installed`. The macOS host does not provide the required Xvfb runner; the corresponding Linux CI job remains required. |
 | `scripts/test-linux-container.sh glibc` | HOST LIMITATION — not a pass | Exit 1 before container execution: `Cannot connect to the Docker daemon at unix:///Users/chaos/.docker/run/docker.sock. Is the docker daemon running?` The Docker daemon is unavailable; the glibc CI job remains required. |
 | `scripts/test-linux-container.sh musl` | HOST LIMITATION — not a pass | Exit 1 before container execution: `Cannot connect to the Docker daemon at unix:///Users/chaos/.docker/run/docker.sock. Is the docker daemon running?` The Docker daemon is unavailable; the musl CI job remains required. |
-| `scripts/android-emulator-test.sh` | PASS (exit 0) — automatic Vulkan selection | With API 29 and API 36 both online and `ANDROID_SERIAL` unset, the preflight rejected API 29’s `devices: [{}]`, selected API 36’s named `llvmpipe` physical device, then ran exactly one `Medium_Phone(AVD) - 16` test: JUnit 1/1, 0 failures/errors; PNG 800×600, 47,436 colors and 60,000 non-background pixels. |
+| `scripts/android-emulator-test.sh` | PASS (exit 0) — correction rerun at `838982a` | With API 29 and API 36 both online and `ANDROID_SERIAL` unset, the preflight rejected API 29’s `devices: [{}]`, selected API 36’s single named `llvmpipe` physical device, then ran exactly one `Medium_Phone(AVD) - 16` test: JUnit 1/1, 0 failures/errors; PNG 800×600, 47,436 colors and 60,000 non-background pixels. |
 
-Android resolution evidence: `scripts/test-android-device-selection.sh` exercises the real script with fake `adb`/Gradle and covers unique, zero, ambiguous, explicit-compatible, and explicit-incompatible selection. It passed after the preflight implementation. The real full-script run with both AVDs online produced only `TEST-Medium_Phone(AVD) - 16-_samples_hello-triangle-android-capture-.xml` and `.../Medium_Phone(AVD) - 16/hello-triangle-android.png`; API 29 was excluded before Gradle. An explicit `ANDROID_SERIAL` is honored only after the same physical-device precondition, with no fallback.
+Android correction evidence at `838982a`: `scripts/test-android-device-selection.sh` exercises the real script with fake `adb`/Gradle and covers unique, zero, ambiguous, mixed (`[named, {}]`), multi-adapter (`[named, named]`), explicit-compatible, and explicit-incompatible selection. It passed after the strict preflight implementation. The real full-script run with both AVDs online produced only `TEST-Medium_Phone(AVD) - 16-_samples_hello-triangle-android-capture-.xml` and `.../Medium_Phone(AVD) - 16/hello-triangle-android.png`; API 29 was excluded before Gradle. An explicit `ANDROID_SERIAL` is honored only after the same single-device precondition, with no fallback.
 
 ## Traceability audit (findings 1–19)
 
@@ -59,8 +74,8 @@ Each numbered row below has a unique ordinal, non-empty Finding, Test/command, E
 
 ## Integration and publication gate
 
-`git fetch origin codex/cross-platform-correctness-design` completed (`ok fetched (1 new refs)`). `git merge-base --is-ancestor origin/codex/cross-platform-correctness-design HEAD` exited 0, so HEAD is fast-forward compatible with the fetched base. The intended range lists commits from `71bbf631` through `56818a5f`.
+`git fetch origin codex/cross-platform-correctness-design` completed (`ok fetched (1 new refs)`). `git merge-base --is-ancestor origin/codex/cross-platform-correctness-design HEAD` exited 0 during the historical verification, so its HEAD was fast-forward compatible with the fetched base. The historical intended range lists commits from `71bbf631` through `56818a5f`. The correction diff check above establishes formatting cleanliness through `838982a`.
 
-The worktree was clean before verification. It now has the Gradle-generated untracked file `kotlin-js-store/wasm/yarn.lock` from the browser/build matrix. It was not removed by this task. No branch change, rebase, force operation, or push was performed.
+The historical worktree was clean before verification. The correction worktree retains the pre-existing Gradle-generated untracked `kotlin-js-store/wasm/` output; it was not removed by this task. No branch change, rebase, force operation, or push was performed.
 
 Publication remains blocked pending: (1) the unavailable Xvfb/Docker CI integrations and (2) the independent read-only review required by the closure brief. The fresh diff check and the Android gate are no longer local blockers.
