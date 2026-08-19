@@ -2,6 +2,7 @@ package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.DeviceId
 import org.graphiks.kadre.core.StartCause
@@ -30,6 +31,47 @@ class WaylandLoopContractTest {
         dispatchWaylandIteration(testLoop(RecordingWakeup()), handler, StartCause.Poll)
 
         assertIterationOrder(handler.trace)
+    }
+
+    @Test
+    fun `WaitUntil keeps its deadline across an early clamped poll`() {
+        val deadline = Int.MAX_VALUE.toLong() + 1L
+        var now = 0L
+        val pollTimeouts = mutableListOf<Int>()
+        val operations = object : WaylandPumpOperations {
+            override fun prepareRead(): Int = 0
+            override fun dispatchPending() = Unit
+            override fun flush() = Unit
+            override fun readEvents() = Unit
+            override fun cancelRead() = Unit
+        }
+        val poller = WaylandPoller { _, _, timeoutMillis ->
+            pollTimeouts += timeoutMillis
+            WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
+        }
+        val controlFlow = ControlFlow.WaitUntil(deadline)
+
+        val earlyCause = dispatchWaylandOnce(
+            controlFlow = controlFlow,
+            operations = operations,
+            poller = poller,
+            wakeup = RecordingWakeup(),
+            displayFd = 41,
+            nowMillis = { now },
+        )
+        now = deadline
+        val deadlineCause = dispatchWaylandOnce(
+            controlFlow = controlFlow,
+            operations = operations,
+            poller = poller,
+            wakeup = RecordingWakeup(),
+            displayFd = 41,
+            nowMillis = { now },
+        )
+
+        assertEquals(listOf(Int.MAX_VALUE, 0), pollTimeouts)
+        assertEquals(StartCause.Poll, earlyCause)
+        assertEquals(StartCause.ResumeTimeReached(deadline, deadline), deadlineCause)
     }
 
     @Test

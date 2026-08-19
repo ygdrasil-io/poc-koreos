@@ -114,6 +114,35 @@ class WebEventLoopTest {
     }
 
     @Test
+    fun `WaitUntil re-arms a premature timeout without delivering an iteration`() {
+        val api = FakeSchedulingApi(epochNowMillis = 9_000L)
+        val delivered = mutableListOf<StartCause>()
+        val scheduler = BrowserScheduler(api, delivered::add)
+
+        scheduler.arm(ControlFlow.WaitUntil(10_000L))
+        api.epochNowMillis = 9_500L
+        api.fireTimeout(1)
+
+        assertEquals(emptySet(), api.activeRafIds)
+        assertEquals(setOf(2), api.activeTimeoutIds)
+        assertEquals(emptyList<StartCause>(), delivered)
+        assertEquals(
+            listOf("setTimeout(1,1000)", "setTimeout(2,500)"),
+            api.operations,
+        )
+
+        api.epochNowMillis = 10_000L
+        api.fireTimeout(2)
+
+        assertEquals(setOf(3), api.activeRafIds)
+        api.fireAnimationFrame(3)
+        assertEquals(
+            listOf<StartCause>(StartCause.ResumeTimeReached(10_000L, 10_000L)),
+            delivered,
+        )
+    }
+
+    @Test
     fun `legacy tick timestamp is accepted but cannot influence epoch start`() {
         val api = FakeSchedulingApi(epochNowMillis = 10_005L)
         val loop = TestWebEventLoop(api)

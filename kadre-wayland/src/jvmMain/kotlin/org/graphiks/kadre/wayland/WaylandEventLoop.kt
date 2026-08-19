@@ -989,22 +989,16 @@ private fun runAppInternal(handler: ApplicationHandler) {
 
         // ── 8. Main loop ──────────────────────────────────────────────────────
         while (!eventLoop.isExiting) {
-            // Compute the timeout in milliseconds. If we already have queued window events (e.g.
-            // a pending RedrawRequested), don't block in poll — drain them this iteration.
-            val timeoutMs: Int = if (eventLoop.eventQueue.isNotEmpty()) {
-                0
-            } else when (val cf = eventLoop.controlFlow) {
-                is ControlFlow.Wait -> -1
-                is ControlFlow.Poll -> 0
-                is ControlFlow.WaitUntil -> {
-                    val delta = cf.instant - System.currentTimeMillis()
-                    if (delta <= 0) 0 else delta.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                }
-            }
-
             // Canonical Wayland prepare_read / poll / read_events sequence. This dispatches the
             // pending Wayland protocol events, whose native upcalls enqueue WindowEvents.
-            val startCause = pumpOnce(displaySeg, displayFd, wakeup, timeoutMs, eventLoop)
+            val startCause = dispatchWaylandOnce(
+                controlFlow = eventLoop.controlFlow,
+                operations = NativeWaylandPumpOperations(displaySeg),
+                poller = NativeWaylandPoller,
+                wakeup = wakeup,
+                displayFd = displayFd,
+                hasPendingWork = { eventLoop.eventQueue.isNotEmpty() },
+            )
             eventLoop.throwPendingNativeFailure()
             dispatchWaylandIteration(eventLoop, handler, startCause)
         }
@@ -1307,27 +1301,27 @@ private fun cancelPreparedRead(
     }
 }
 
-/**
- * Performs one iteration of the canonical Wayland pump.
- *
- * Sequence:
- *  1. Drain the queue (prepare_read retry)
- *  2. Flush
- *  3. poll([displayFd, wakeup.readFd], timeoutMs)
- *  4. Conditional processing of the results
- *
- * @return [StartCause] describing the cause of the wakeup.
- */
-private fun pumpOnce(
-    displaySeg: MemorySegment,
+/** Performs one Wayland poll and classifies its wakeup without changing [controlFlow]. */
+internal fun dispatchWaylandOnce(
+    controlFlow: ControlFlow,
+    operations: WaylandPumpOperations,
+    poller: WaylandPoller,
     displayFd: Int,
     wakeup: PosixWakeup,
-    timeoutMs: Int,
-    eventLoop: WaylandEventLoop,
+    nowMillis: () -> Long = System::currentTimeMillis,
+    hasPendingWork: () -> Boolean = { false },
 ): StartCause {
+    val timeoutMs = if (hasPendingWork()) 0 else when (controlFlow) {
+        ControlFlow.Wait -> -1
+        ControlFlow.Poll -> 0
+        is ControlFlow.WaitUntil -> {
+            val remaining = controlFlow.instant - nowMillis()
+            if (remaining <= 0L) 0 else remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+    }
     val readiness = pumpWaylandOnce(
-        operations = NativeWaylandPumpOperations(displaySeg),
-        poller = NativeWaylandPoller,
+        operations = operations,
+        poller = poller,
         wakeup = wakeup,
         displayFd = displayFd,
         timeoutMs = timeoutMs,
@@ -1339,10 +1333,10 @@ private fun pumpOnce(
     return when {
         wakeReady -> StartCause.WaitCancelled()
         displayReady -> StartCause.Poll
-        else -> when (val cf = eventLoop.controlFlow) {
+        else -> when (controlFlow) {
             is ControlFlow.WaitUntil -> {
-                val now = System.currentTimeMillis()
-                if (now >= cf.instant) StartCause.ResumeTimeReached(cf.instant, now)
+                val now = nowMillis()
+                if (now >= controlFlow.instant) StartCause.ResumeTimeReached(controlFlow.instant, now)
                 else StartCause.Poll
             }
             else -> StartCause.Poll

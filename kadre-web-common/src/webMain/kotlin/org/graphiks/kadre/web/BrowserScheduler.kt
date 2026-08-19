@@ -98,6 +98,10 @@ internal class BrowserScheduler(
 
             timeoutId = null
             val observedEpoch = api.epochNowMillis()
+            if (observedEpoch < deadline) {
+                requestDeadline(deadline)
+                return@setTimeout
+            }
             requestFrame(StartCause.ResumeTimeReached(deadline, observedEpoch))
         }
         callbackId = id

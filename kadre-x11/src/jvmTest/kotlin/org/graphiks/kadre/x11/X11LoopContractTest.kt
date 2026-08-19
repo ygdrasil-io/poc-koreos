@@ -98,6 +98,45 @@ class X11LoopContractTest {
     }
 
     @Test
+    fun `WaitUntil keeps its deadline across an early clamped poll`() {
+        val deadline = Int.MAX_VALUE.toLong() + 1L
+        var now = 0L
+        val pollTimeouts = mutableListOf<Int>()
+        val operations = object : X11PumpOperations {
+            override fun pendingCount(): Int = 0
+            override fun dispatchNext() = Unit
+            override fun flush() = Unit
+        }
+        val poller = X11Poller { _, _, timeoutMillis ->
+            pollTimeouts += timeoutMillis
+            X11PollResult(xReadable = false, wakeReadable = false)
+        }
+        val controlFlow = ControlFlow.WaitUntil(deadline)
+
+        val earlyCause = dispatchX11Once(
+            controlFlow = controlFlow,
+            operations = operations,
+            poller = poller,
+            wakeup = RecordingX11Wakeup(),
+            xConnectionFd = 41,
+            nowMillis = { now },
+        )
+        now = deadline
+        val deadlineCause = dispatchX11Once(
+            controlFlow = controlFlow,
+            operations = operations,
+            poller = poller,
+            wakeup = RecordingX11Wakeup(),
+            xConnectionFd = 41,
+            nowMillis = { now },
+        )
+
+        assertEquals(listOf(Int.MAX_VALUE, 0), pollTimeouts)
+        assertEquals(StartCause.Poll, earlyCause)
+        assertEquals(StartCause.ResumeTimeReached(deadline, deadline), deadlineCause)
+    }
+
+    @Test
     fun `ten redraw requests coalesce to one event and one idle wake`() {
         val wakeup = RecordingX11Wakeup()
         val loop = testLoop(wakeup, FakeX11NativeAdapter())
