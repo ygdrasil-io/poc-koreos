@@ -1,9 +1,9 @@
 # Cross-platform correctness closure design
 
-Date: 2026-08-19  
-Status: approved for implementation  
-Supersedes: the unfinished closure items in `2026-07-17-cross-platform-correctness-design.md`  
-Scope: Android, Linux X11/Wayland, AppKit, UIKit, Web JS/Wasm, samples, build, CI, and release documentation  
+Date: 2026-08-19
+Status: approved for implementation
+Supersedes: the unfinished closure items in `2026-07-17-cross-platform-correctness-design.md`
+Scope: Android, Linux X11/Wayland, AppKit, UIKit, Web JS/Wasm, samples, build, CI, and release documentation
 Out of scope: Windows and Win32-specific behavior
 
 ## Purpose

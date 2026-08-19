@@ -422,4 +422,3 @@ rtk git push origin HEAD:refs/heads/codex/cross-platform-correctness-design
 ```
 
 Expected: a fast-forward push only after fresh verification and a review without unresolved Critical or Important findings.
-
