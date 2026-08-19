@@ -87,3 +87,24 @@
 
 - Hosted iOS, Android, browser, Docker glibc/musl, and artifact checks remain expected CI executions rather than local evidence. The canonical checker validates workflow structure only; it does not execute GitHub Actions or parse arbitrary shell.
 - The checker deliberately permits only the documented canonical command forms, so a legitimate future command change must update the workflow contract and its fixtures together. PyYAML package-index availability remains an external CI dependency.
+
+## Fix round 3 — Android runner-step binding
+
+### Commit
+
+- `65a4b715683463fc5daed0fe08ca345415f3cce7` — `ci: bind Android runner contract`
+
+### Corrections
+
+- The Android required-job contract now validates one complete structured step: `uses` must equal `reactivecircus/android-emulator-runner@v2` and that same step's `with.script` must equal the whitespace-normalized `scripts/android-emulator-test.sh` command. No SHA variant is admitted by this contract.
+- Added `workflow-contract-android-noop-action.yml`, which supplies the expected `with.script` to `actions/checkout@v4`. The checker rejects it with `android-emulator-contracts: missing canonical Android emulator runner step`, proving that a no-op action cannot satisfy the Android requirement.
+
+### Validation
+
+- RED evidence produced before this correction: `rtk bash scripts/test-workflow-contract.sh` failed because the no-op Android fixture lacked no Android-contract error, even though it contained the expected script field.
+- GREEN local evidence: direct validation of the fixture reported `missing canonical Android emulator runner step`; `rtk scripts/test-workflow-contract.sh` then exited 0, rejecting it alongside all prior negative fixtures and accepting the actual workflow/report.
+- `rtk python3 scripts/check-workflow-contract.py .github/workflows/cross-platform-correctness.yml`, `rtk python3 -m py_compile scripts/check-workflow-contract.py`, `rtk bash -n scripts/test-workflow-contract.sh`, and `rtk git diff --check` all exited 0.
+
+### Remaining risks
+
+- Android emulator execution itself remains an expected GitHub Actions run, not local evidence. The contract deliberately pins the accepted action reference to `reactivecircus/android-emulator-runner@v2`; a future SHA pin must be explicitly designed, documented, and covered by fixtures before it is admitted.
