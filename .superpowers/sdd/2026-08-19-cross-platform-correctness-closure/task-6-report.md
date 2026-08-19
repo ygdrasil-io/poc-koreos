@@ -129,3 +129,25 @@
 ### Remaining risks
 
 - The checker validates GitHub Actions YAML structure and intentionally cannot establish that hosted actions execute correctly. iOS, Android, browser, Docker glibc/musl, and artifact paths remain expected CI executions, not local evidence.
+
+## Fix round 5 — proof-step execution context
+
+### Commit
+
+- `dc0e6c5d0ce273aab2324b2f5f67ab37a10a97db` — `ci: harden proof step execution`
+
+### Corrections
+
+- Every required `run` and aggregate assertion now rejects proof steps carrying a `shell` key, so a custom shell such as `shell: echo {0}` cannot turn a canonical command into a no-op. The same proof-step predicate rejects `working-directory`, preserving repository-root interpretation of relative script paths.
+- The Android proof step also rejects `working-directory`; it continues to require the exact emulator-runner action and canonical `with.script` in the same unconditional step.
+- Added negative fixtures for a required host command and aggregate assertion using `shell: echo {0}`, plus `working-directory` fixtures for a host required command and the Android runner. The real workflow has none of these keys on proof steps and remains accepted.
+
+### Validation
+
+- RED evidence produced before this correction: `rtk bash scripts/test-workflow-contract.sh` failed at `workflow-contract-command-step-shell.yml`, showing that the custom-shell host proof was previously accepted.
+- GREEN local evidence: `rtk scripts/test-workflow-contract.sh` exited 0 and rejected all four new `shell`/`working-directory` fixtures, alongside all preceding negative fixtures, while accepting the actual workflow and the 19-row evidence report.
+- `rtk python3 scripts/check-workflow-contract.py .github/workflows/cross-platform-correctness.yml`, `rtk python3 -m py_compile scripts/check-workflow-contract.py`, `rtk bash -n scripts/test-workflow-contract.sh`, and `rtk git diff --check` all exited 0.
+
+### Remaining risks
+
+- This fifth authorized correction is intentionally limited to the reviewer-identified execution-context bypass. Further Critical findings require the planned adjudication rather than another iterative corrective loop. Hosted iOS, Android, browser, Docker glibc/musl, and artifact checks remain expected CI executions, not local evidence.
