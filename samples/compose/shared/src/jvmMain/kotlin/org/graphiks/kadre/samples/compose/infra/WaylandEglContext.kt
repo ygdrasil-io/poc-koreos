@@ -39,7 +39,10 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
 
     override fun makeCurrent() {
         if (!created) create()
-        eglMakeCurrent.call(eglDisplay, eglSurface, eglSurface, eglContext)
+        val madeCurrent = eglMakeCurrent.call(eglDisplay, eglSurface, eglSurface, eglContext) as Int
+        check(madeCurrent != 0) {
+            "eglMakeCurrent failed (EGL error 0x${(eglGetError.call() as Int).toString(16)})"
+        }
         // Disable vsync throttling. The default swap interval is 1, so eglSwapBuffers blocks on
         // the compositor's frame callback — which never fires until the surface is mapped and
         // presented. For the synchronous headless capture path that deadlocks, so present
@@ -138,6 +141,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         val eglCreateWindowSurface = NativeFfi.handle(egl, "eglCreateWindowSurface", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglCreateContext = NativeFfi.handle(egl, "eglCreateContext", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglMakeCurrent = NativeFfi.handle(egl, "eglMakeCurrent", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
+        val eglGetError = NativeFfi.handle(egl, "eglGetError", FunctionDescriptor.of(JAVA_INT))
         val eglSwapBuffers = NativeFfi.handle(egl, "eglSwapBuffers", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))
         val eglSwapInterval = NativeFfi.handle(egl, "eglSwapInterval", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT))
         val eglDestroySurface = NativeFfi.handle(egl, "eglDestroySurface", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))

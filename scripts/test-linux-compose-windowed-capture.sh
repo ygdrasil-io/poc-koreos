@@ -10,6 +10,7 @@ cd "$repo_root"
 test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
 
 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KADRE_LINUX_BACKEND=wayland \
+  EGL_LOG_LEVEL=debug LIBGL_DEBUG=verbose MESA_DEBUG=context \
   timeout -k 30 600 ./gradlew :samples:compose:desktop:run \
   --args="--window-capture build/cross-platform-correctness/compose-desktop.window.png" \
   --no-daemon --console=plain
