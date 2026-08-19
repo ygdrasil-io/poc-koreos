@@ -10,6 +10,7 @@ import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
 import org.graphiks.kadre.test.RecordingApplicationHandler
 import org.graphiks.kadre.test.assertIterationOrder
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -331,19 +332,19 @@ class WaylandLoopContractTest {
         )
         loop.registerWindow(window)
 
-        val thrown = assertFailsWith<IllegalStateException> { window.close() }
+        assertEquals(0, nativeDestroyCalls)
+        window.close()
+        assertFalse(loop.windows.containsKey(window.id.value))
+
+        window.close()
+        val events = mutableListOf<WindowEvent>()
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
+        }
 
         assertEquals("Wayland close wake failed", thrown.message)
         assertTrue(thrown.cause?.message.orEmpty().contains("wake owner is closed"))
-        assertEquals(0, nativeDestroyCalls)
-        assertTrue(loop.windows.containsKey(window.id.value))
-
-        wakeup.signalResult = true
-        window.close()
-        val events = mutableListOf<WindowEvent>()
-        dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
-
-        assertEquals(2, wakeup.signalCalls)
+        assertEquals(1, wakeup.signalCalls)
         assertEquals(1, nativeDestroyCalls)
         assertFalse(loop.windows.containsKey(window.id.value))
         assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
@@ -374,7 +375,7 @@ class WaylandLoopContractTest {
         callbacks.close()
 
         assertTrue(failures.isEmpty())
-        assertTrue(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.windows.containsKey(window.id.value))
         assertEquals(0, nativeDestroyCalls)
 
         val events = mutableListOf<WindowEvent>()
@@ -432,8 +433,8 @@ class WaylandLoopContractTest {
         loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true))
 
         assertEquals(0, nativeDestroyCalls)
-        assertTrue(loop.windows.containsKey(window.id.value))
-        assertEquals(3, wakeup.signalCalls)
+        assertFalse(loop.windows.containsKey(window.id.value))
+        assertEquals(2, wakeup.signalCalls)
         dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
 
         assertEquals(1, nativeDestroyCalls)
@@ -442,6 +443,78 @@ class WaylandLoopContractTest {
         dispatchWaylandIteration(loop, recordingHandler(events = events), StartCause.Poll)
         assertTrue(events.isEmpty())
         assertFalse(loop.requestRedraw(window.id))
+    }
+
+    @Test
+    fun `public close tombstones an event already captured by the boundary while other windows remain live`() {
+        val loop = testLoop(RecordingWakeup())
+        val closing = WaylandWindow.createForTest(
+            surface = 65L,
+            surfaceProxyDestroyer = {},
+            surfaceFlusher = { 0 },
+        )
+        val other = WaylandWindow.createForTest(
+            surface = 66L,
+            surfaceProxyDestroyer = {},
+            surfaceFlusher = { 0 },
+        )
+        loop.registerWindow(closing)
+        loop.registerWindow(other)
+        val delivered = mutableListOf<Pair<WindowId, WindowEvent>>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                delivered += windowId to event
+                if (windowId == other.id && event == WindowEvent.Focused(true)) closing.close()
+            }
+        }
+
+        loop.enqueueWindowEvent(other.id, WindowEvent.Focused(true))
+        loop.enqueueWindowEvent(closing.id, WindowEvent.Focused(true))
+
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+
+        assertEquals(
+            listOf(
+                other.id to WindowEvent.Focused(true),
+                closing.id to WindowEvent.Destroyed,
+            ),
+            delivered,
+        )
+    }
+
+    @Test
+    fun `removing the final discovered output leaves no available monitor`() {
+        val loop = testLoop(RecordingWakeup())
+        Arena.ofShared().use { arena ->
+            val registry = WaylandRegistryOwner(
+                registryPtr = 9_000L,
+                listenerArena = arena,
+                collector = GlobalsCollector(),
+                bindOutput = { name, version -> name * 100L to version },
+                installOutputListener = { AutoCloseable {} },
+                destroyProxy = {},
+                closeListenerArena = {},
+            )
+            loop._globals = WaylandGlobals(
+                compositorPtr = 2L,
+                xdgWmBasePtr = 3L,
+                registryOwner = registry,
+            )
+            registry.onGlobal(1, "wl_output", 4)
+            assertEquals(1, loop.availableMonitors().size)
+
+            registry.onGlobalRemove(1)
+
+            assertTrue(loop.availableMonitors().isEmpty())
+            registry.close()
+        }
     }
 
     @Test
@@ -464,7 +537,7 @@ class WaylandLoopContractTest {
         caller.join()
 
         assertTrue(trace.isEmpty())
-        assertTrue(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.windows.containsKey(window.id.value))
         assertEquals(1, wakeup.signalCalls)
 
         dispatchWaylandIteration(loop, recordingHandler(), StartCause.Poll)
@@ -513,7 +586,7 @@ class WaylandLoopContractTest {
         )
 
         callbacks.close()
-        assertTrue(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.windows.containsKey(window.id.value))
 
         val events = mutableListOf<WindowEvent>()
         val thrown = assertFailsWith<IllegalStateException> {

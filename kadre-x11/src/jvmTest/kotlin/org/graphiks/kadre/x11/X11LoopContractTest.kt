@@ -209,6 +209,15 @@ class X11LoopContractTest {
         loop = testLoop(wakeup, native)
         val window = loop.createWindow(WindowAttributes(title = "close"))
         val events = mutableListOf<WindowEvent>()
+        loop.dragSourceWindows[window.id.value] = 900L
+        loop.pendingDropRequests[window.id.value] = PhysicalPosition(1.0, 2.0)
+        loop.pendingXdndDrops.add(
+            PendingXdndDrop(
+                targetWindow = window.id.value,
+                sourceWindow = 900L,
+                position = PhysicalPosition(1.0, 2.0),
+            ),
+        )
 
         val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "x11-window-caller") }
         try {
@@ -220,18 +229,9 @@ class X11LoopContractTest {
         } finally {
             executor.shutdownNow()
         }
-        assertTrue(loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true)))
-        loop.dragSourceWindows[window.id.value] = 900L
-        loop.pendingDropRequests[window.id.value] = PhysicalPosition(1.0, 2.0)
-        loop.pendingXdndDrops.add(
-            PendingXdndDrop(
-                targetWindow = window.id.value,
-                sourceWindow = 900L,
-                position = PhysicalPosition(1.0, 2.0),
-            ),
-        )
+        assertFalse(loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true)))
 
-        assertTrue(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.windows.containsKey(window.id.value))
         assertTrue(native.trace.isEmpty())
         assertEquals(2, wakeup.signalCalls)
         dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
@@ -251,22 +251,63 @@ class X11LoopContractTest {
     }
 
     @Test
-    fun `failed close wake rolls back publication and retry signals again`() {
+    fun `public close tombstones an event already captured by the boundary while other windows remain live`() {
+        val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
+        val closing = loop.createWindow(WindowAttributes(title = "closing"))
+        val other = loop.createWindow(WindowAttributes(title = "other"))
+        val delivered = mutableListOf<Pair<WindowId, WindowEvent>>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                delivered += windowId to event
+                if (windowId == other.id && event == WindowEvent.Focused(true)) closing.close()
+            }
+        }
+
+        loop.enqueueWindowEvent(other.id, WindowEvent.Focused(true))
+        loop.enqueueWindowEvent(closing.id, WindowEvent.Focused(true))
+
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+
+        assertEquals(
+            listOf(
+                other.id to WindowEvent.Focused(true),
+                closing.id to WindowEvent.Destroyed,
+            ),
+            delivered,
+        )
+    }
+
+    @Test
+    fun `failed close wake retains the tombstone and reports it at the loop boundary`() {
         val wakeup = ScriptedX11Wakeup(results = ArrayDeque(listOf(false, true)))
         val native = FakeX11NativeAdapter()
         val loop = testLoop(wakeup, native)
         val window = loop.createWindow(WindowAttributes(title = "retry-false"))
+        val events = mutableListOf<WindowEvent>()
 
-        assertFailsWith<IllegalStateException> { window.close() }
         window.close()
-        dispatchX11Iteration(loop, recordingHandler(), StartCause.WaitCancelled())
+        window.close()
+        assertFalse(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true)))
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
+        }
 
-        assertEquals(2, wakeup.signalCalls)
+        assertTrue(thrown.message.orEmpty().contains("X11 close wake failed"))
+        assertEquals(1, wakeup.signalCalls)
         assertEquals(listOf("destroy-41", "flush"), native.trace)
+        assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
     }
 
     @Test
-    fun `throwing close wake rolls back publication and retry signals again`() {
+    fun `throwing close wake retains the tombstone and reports its cause at the loop boundary`() {
         val wakeFailure = IllegalStateException("signal")
         val wakeup = ScriptedX11Wakeup(
             failures = ArrayDeque(listOf(wakeFailure)),
@@ -275,14 +316,19 @@ class X11LoopContractTest {
         val native = FakeX11NativeAdapter()
         val loop = testLoop(wakeup, native)
         val window = loop.createWindow(WindowAttributes(title = "retry-throw"))
+        val events = mutableListOf<WindowEvent>()
 
-        val thrown = assertFailsWith<IllegalStateException> { window.close() }
-        assertSame(wakeFailure, thrown.cause)
         window.close()
-        dispatchX11Iteration(loop, recordingHandler(), StartCause.WaitCancelled())
+        window.close()
+        assertFalse(loop.windows.containsKey(window.id.value))
+        val thrown = assertFailsWith<IllegalStateException> {
+            dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.WaitCancelled())
+        }
 
-        assertEquals(2, wakeup.signalCalls)
+        assertSame(wakeFailure, thrown.cause)
+        assertEquals(1, wakeup.signalCalls)
         assertEquals(listOf("destroy-41", "flush"), native.trace)
+        assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
     }
 
     @Test

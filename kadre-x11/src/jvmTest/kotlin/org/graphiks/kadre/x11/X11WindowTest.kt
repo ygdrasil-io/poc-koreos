@@ -20,6 +20,7 @@ import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -71,7 +72,7 @@ class X11WindowTest {
 
         assertEquals(2, wakeup.signals)
         assertEquals(0, nativeDestroyCalls)
-        assertTrue(loop.windows.containsKey(window.id.value))
+        assertFalse(loop.windows.containsKey(window.id.value))
     }
 
     @Test

@@ -61,7 +61,8 @@ internal class WaylandWindowOwner(
     val window: WaylandWindow,
 ) {
     val redrawTransactionLock = Any()
-    val closeStarted = AtomicBoolean(false)
+    val tombstoned = AtomicBoolean(false)
+    val nativeClosed = AtomicBoolean(false)
     val destroyedDelivered = AtomicBoolean(false)
 }
 
@@ -149,13 +150,11 @@ class WaylandEventLoop internal constructor(
         windows[window.id.value] = window
         window.attachWindowEventSink { event -> enqueueWindowEvent(owner, event) }
         window.onRedrawRequested = { requestRedraw(owner) }
-        window.onCloseRequested = { enqueueCloseWindow(owner, associateWakeFailure = false) }
-        window.onCompositorCloseRequested = {
-            enqueueCloseWindow(owner, associateWakeFailure = true)
-        }
+        window.onCloseRequested = { enqueueCloseWindow(owner) }
+        window.onCompositorCloseRequested = { enqueueCloseWindow(owner) }
         window.registryOwner = _globals?.registryOwner
         if (window.takePendingCompositorClose()) {
-            enqueueCloseWindow(owner, associateWakeFailure = true)
+            enqueueCloseWindow(owner)
         }
         return owner
     }
@@ -244,36 +243,25 @@ class WaylandEventLoop internal constructor(
         eventQueue.add(WaylandQueuedDeviceEvent(event))
     }
 
-    private fun enqueueCloseWindow(
-        owner: WaylandWindowOwner,
-        associateWakeFailure: Boolean,
-    ) {
-        if (!isCurrentOwner(owner)) return
-        var command = pendingCloseCommands[owner]
-        if (command == null) {
-            val candidate = WaylandQueuedCloseCommand(owner, Any())
-            val raced = pendingCloseCommands.putIfAbsent(owner, candidate)
-            command = raced ?: candidate.also(eventQueue::add)
-        }
-        try {
-            signalCloseWake()
-        } catch (failure: Throwable) {
-            if (!associateWakeFailure) throw failure
-            command.wakeFailures.add(failure)
-        }
+    /** Tombstones ownership before publishing the loop-thread native close command. */
+    private fun enqueueCloseWindow(owner: WaylandWindowOwner) {
+        if (!tombstoneWindow(owner)) return
+        val command = WaylandQueuedCloseCommand(owner, Any())
+        pendingCloseCommands[owner] = command
+        eventQueue.add(command)
+        signalCloseWake()?.let(command.wakeFailures::add)
     }
 
-    private fun signalCloseWake() {
-        val wakeFailure = try {
-            if (wakeup.signal()) return
+    private fun signalCloseWake(): Throwable? = try {
+        if (wakeup.signal()) {
+            null
+        } else {
             IllegalStateException("portable POSIX wake owner is closed")
-        } catch (failure: Throwable) {
-            failure
         }
-        // Close is terminal: keep the command published even if the wake owner failed. A close
-        // received while pumping native events is still dispatched by the iteration that follows
-        // the pump, and losing it would leave a compositor-closed window live indefinitely.
-        throw IllegalStateException("Wayland close wake failed", wakeFailure)
+    } catch (failure: Throwable) {
+        failure
+    }.let { wakeFailure ->
+        wakeFailure?.let { IllegalStateException("Wayland close wake failed", it) }
     }
 
     internal fun consumeCloseCommand(command: WaylandQueuedCloseCommand): Boolean =
@@ -290,21 +278,33 @@ class WaylandEventLoop internal constructor(
 
     /** Removes loop ownership before releasing any child or surface proxy. */
     internal fun closeWindow(owner: WaylandWindowOwner): WaylandCloseResult {
-        if (!owner.closeStarted.compareAndSet(false, true)) {
+        tombstoneWindow(owner)
+        if (!owner.nativeClosed.compareAndSet(false, true)) {
             return WaylandCloseResult(owner, closed = false, failure = null)
         }
-        windowOwners.remove(owner.window.id.value, owner)
-        windows.remove(owner.window.id.value, owner.window)
-        pendingRedraws.remove(owner)
-        pendingCloseCommands.remove(owner)
-        owner.window.detachFromEventLoop()
+
         var failure: Throwable? = null
         try {
+            owner.window.detachFromEventLoop()
             owner.window.closeNativeResources()
         } catch (thrown: Throwable) {
             failure = thrown
         }
         return WaylandCloseResult(owner, closed = true, failure = failure)
+    }
+
+    /** Removes logical ownership and all non-terminal work without touching native resources. */
+    private fun tombstoneWindow(owner: WaylandWindowOwner): Boolean {
+        if (!owner.tombstoned.compareAndSet(false, true)) return false
+        windowOwners.remove(owner.window.id.value, owner)
+        windows.remove(owner.window.id.value, owner.window)
+        pendingRedraws.remove(owner)
+        pendingCloseCommands.remove(owner)
+        eventQueue.removeIf { item ->
+            (item is WaylandQueuedWindowEvent && item.owner === owner) ||
+                (item is WaylandQueuedCloseCommand && item.owner === owner)
+        }
+        return true
     }
 
     internal fun deliverDestroyed(
@@ -450,13 +450,15 @@ class WaylandEventLoop internal constructor(
      * Prior to Sprint 3, this returned a synthetic monitor derived from the first
      * window's size. Now it uses real [WaylandOutputInfo] data collected from the
      * wl_output listener. If no output info is available yet (e.g. during early
-     * startup), falls back to a synthetic monitor.
+     * startup), falls back to a synthetic monitor. Once global discovery has completed, this
+     * returns the live output map verbatim; removing the final `wl_output` therefore returns an
+     * empty list.
      */
     override fun availableMonitors(): List<MonitorHandle> {
         val realOutputs = _globals?.registryOwner?.outputs?.map { it.info.toMonitorHandle() }.orEmpty()
-        if (realOutputs.isNotEmpty()) return realOutputs
+        if (_globals != null) return realOutputs
 
-        // Fallback: synthetic monitor from first window
+        // Before startup discovery completes, retain the historical synthetic fallback.
         val win = windows.values.firstOrNull()
         val scale = win?._scaleFactor ?: 1.0
         val size = win?.innerSize ?: PhysicalSize(1920, 1080)

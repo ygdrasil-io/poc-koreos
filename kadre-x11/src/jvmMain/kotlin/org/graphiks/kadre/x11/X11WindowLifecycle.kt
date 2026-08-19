@@ -69,23 +69,24 @@ internal class X11WindowLifecycle(
         true
     }
 
-    /** Publishes close plus wake as one transaction, rolling both records back on wake failure. */
+    /**
+     * Tombstones ownership before publishing native destruction. A failed wake is attached to
+     * the terminal command and reported by [drain]; it never makes the window live again.
+     */
     fun closeWindow(window: X11Window): Boolean = synchronized(stateLock) {
         val owner = currentOwnerLocked(window) ?: return false
-        if (pendingCloseCommands.containsKey(owner)) return true
+        if (!tombstoneLocked(owner)) return false
 
         val command = X11QueuedCloseCommand(owner)
         pendingCloseCommands[owner] = command
         eventQueue.add(command)
-        val signalled = try {
-            wakeup.signal()
+        val wakeFailure = try {
+            if (wakeup.signal()) null else IllegalStateException("X11 close wake failed: wake fd is closed")
         } catch (failure: Throwable) {
-            rollbackCloseLocked(owner, command)
-            throw IllegalStateException("X11 close wake failed", failure)
+            IllegalStateException("X11 close wake failed", failure)
         }
-        if (!signalled) {
-            rollbackCloseLocked(owner, command)
-            error("X11 close wake failed: wake fd is closed")
+        if (wakeFailure != null) {
+            command.wakeFailures.add(wakeFailure)
         }
         true
     }
@@ -95,7 +96,8 @@ internal class X11WindowLifecycle(
         checkLoopThread()
         val owner = synchronized(stateLock) {
             val current = currentOwnerLocked(windowId) ?: return false
-            if (!beginCloseLocked(current)) return false
+            if (!tombstoneLocked(current)) return false
+            current.nativeClosed.compareAndSet(false, true)
             current
         }
 
@@ -129,7 +131,7 @@ internal class X11WindowLifecycle(
                     false
                 } else {
                     pendingCloseCommands.remove(command.owner)
-                    beginCloseLocked(command.owner)
+                    true
                 }
             }
             if (!claimed) continue
@@ -139,6 +141,10 @@ internal class X11WindowLifecycle(
                 deliverDestroyed(command.owner, handler)
             } catch (thrown: Throwable) {
                 terminalFailure = appendLifecycleFailure(terminalFailure, thrown)
+            }
+            while (true) {
+                val wakeFailure = command.wakeFailures.poll() ?: break
+                terminalFailure = appendLifecycleFailure(terminalFailure, wakeFailure)
             }
         }
 
@@ -183,14 +189,14 @@ internal class X11WindowLifecycle(
     fun closeAllWindowsDirect() {
         checkLoopThread()
         val snapshot = synchronized(stateLock) {
-            owners.values.sortedBy { it.window.id.value }
+            (owners.values + pendingCloseCommands.keys)
+                .distinct()
+                .sortedBy { it.window.id.value }
         }
         var failure: Throwable? = null
         for (owner in snapshot) {
-            val claimed = synchronized(stateLock) { beginCloseLocked(owner) }
-            if (claimed) {
-                failure = closeNative(owner, failure)
-            }
+            synchronized(stateLock) { tombstoneLocked(owner) }
+            failure = closeNative(owner, failure)
         }
         synchronized(stateLock) {
             eventQueue.clear()
@@ -213,6 +219,7 @@ internal class X11WindowLifecycle(
     }
 
     private fun closeNative(owner: X11WindowOwner, initialFailure: Throwable?): Throwable? {
+        if (!owner.nativeClosed.compareAndSet(false, true)) return initialFailure
         var failure = initialFailure
         val actions = listOf<() -> Unit>(
             owner.window::releaseLoopOwnedResources,
@@ -229,8 +236,8 @@ internal class X11WindowLifecycle(
         return failure
     }
 
-    private fun beginCloseLocked(owner: X11WindowOwner): Boolean {
-        if (!owner.closeStarted.compareAndSet(false, true)) return false
+    private fun tombstoneLocked(owner: X11WindowOwner): Boolean {
+        if (!owner.tombstoned.compareAndSet(false, true)) return false
         val windowId = owner.window.id.value
         owners.remove(windowId, owner)
         windows.remove(windowId, owner.window)
@@ -262,13 +269,6 @@ internal class X11WindowLifecycle(
         }
     }
 
-    private fun rollbackCloseLocked(owner: X11WindowOwner, command: X11QueuedCloseCommand) {
-        if (pendingCloseCommands[owner] === command) {
-            pendingCloseCommands.remove(owner)
-            eventQueue.remove(command)
-        }
-    }
-
     private fun deliverDestroyed(owner: X11WindowOwner, handler: ApplicationHandler) {
         if (owner.destroyedDelivered.compareAndSet(false, true)) {
             handler.windowEvent(loop, owner.window.id, WindowEvent.Destroyed)
@@ -277,7 +277,8 @@ internal class X11WindowLifecycle(
 }
 
 private class X11WindowOwner(val window: X11Window) {
-    val closeStarted = AtomicBoolean(false)
+    val tombstoned = AtomicBoolean(false)
+    val nativeClosed = AtomicBoolean(false)
     val destroyedDelivered = AtomicBoolean(false)
 }
 
@@ -290,7 +291,9 @@ private data class X11QueuedWindowEvent(
     val terminalFailure: Throwable? = null,
 ) : X11QueueItem
 
-private data class X11QueuedCloseCommand(val owner: X11WindowOwner) : X11QueueItem
+private data class X11QueuedCloseCommand(val owner: X11WindowOwner) : X11QueueItem {
+    val wakeFailures = ConcurrentLinkedQueue<Throwable>()
+}
 
 private class X11DispatchBoundary : X11QueueItem
 
