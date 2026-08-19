@@ -5,19 +5,23 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import re
 import sys
 
 import yaml
 
 
 REQUIRED_JOBS = {
-    "host-contracts": "scripts/test-workflow-contract.sh",
-    "web-browser-contracts": "scripts/test-web-browsers.sh",
-    "ios-simulator-contracts": "scripts/test-uikit-simulator.sh",
-    "android-emulator-contracts": "scripts/android-emulator-test.sh",
-    "linux-container-contracts": "scripts/test-linux-container.sh",
-    "deterministic-captures": "scripts/verify-test-results.py",
+    "host-contracts": ("run", "scripts/test-workflow-contract.sh"),
+    "web-browser-contracts": ("run", "scripts/test-web-browsers.sh"),
+    "ios-simulator-contracts": ("run", "scripts/test-uikit-simulator.sh"),
+    "android-emulator-contracts": ("script", "scripts/android-emulator-test.sh"),
+    "linux-container-contracts": ("run", "scripts/test-linux-container.sh ${{ matrix.libc }}"),
+    "deterministic-captures": (
+        "run",
+        "python3 scripts/verify-test-results.py "
+        "--png samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png "
+        "--png-target compose-raster",
+    ),
 }
 AGGREGATE_JOB = "cross-platform-correctness"
 REQUIRED_JOB_NAMES = list(REQUIRED_JOBS)
@@ -65,7 +69,7 @@ def has_forbidden_masking(value: object) -> bool:
     return False
 
 
-def executable_steps(job: dict[str, object]) -> list[str]:
+def canonical_step_values(job: dict[str, object], field: str) -> list[str]:
     steps = job.get("steps")
     if not is_sequence(steps):
         return []
@@ -73,30 +77,24 @@ def executable_steps(job: dict[str, object]) -> list[str]:
     for step in steps:
         if not is_mapping(step):
             continue
-        run = step.get("run")
-        if isinstance(run, str):
-            commands.append(run)
-        with_values = step.get("with")
-        if is_mapping(with_values) and isinstance(with_values.get("script"), str):
-            commands.append(with_values["script"])
+        if field == "run":
+            value = step.get("run")
+        else:
+            with_values = step.get("with")
+            value = with_values.get("script") if is_mapping(with_values) else None
+        if isinstance(value, str):
+            commands.append(" ".join(value.split()))
     return commands
 
 
-def runs_required_command(job: dict[str, object], command: str) -> bool:
-    escaped = re.escape(command)
-    command_pattern = re.compile(
-        rf"(?:^|[;|&]\s*|\n\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+)\s+)*(?:(?:python3|bash|sh)\s+)?{escaped}(?=\s|$)"
-    )
-    return any(command_pattern.search(run) for run in executable_steps(job))
+def runs_required_command(job: dict[str, object], form: tuple[str, str]) -> bool:
+    field, expected = form
+    return expected in canonical_step_values(job, field)
 
 
-def has_success_assertion(runs: list[str], job_name: str) -> bool:
-    escaped = re.escape(job_name)
-    assertion = re.compile(
-        rf"^\s*\[\[\s*\"\$\{{\{{\s*needs\.{escaped}\.result\s*\}}\}}\"\s*==\s*\"success\"\s*\]\]\s*$",
-        re.MULTILINE,
-    )
-    return any(assertion.search(run) for run in runs)
+def has_success_assertion(aggregate: dict[str, object], job_name: str) -> bool:
+    expected = f'[[ "${{{{ needs.{job_name}.result }}}}" == "success" ]]'
+    return expected in canonical_step_values(aggregate, "run")
 
 
 def validate(path: pathlib.Path) -> list[str]:
@@ -115,7 +113,7 @@ def validate(path: pathlib.Path) -> list[str]:
     if not is_mapping(jobs):
         return errors + ["workflow must define a jobs mapping"]
 
-    for name, required_command in REQUIRED_JOBS.items():
+    for name, required_form in REQUIRED_JOBS.items():
         job = jobs.get(name)
         if not is_mapping(job):
             errors.append(f"missing required matrix job: {name}")
@@ -127,8 +125,8 @@ def validate(path: pathlib.Path) -> list[str]:
             errors.append(f"{name}: timeout-minutes must be at most 25")
         if has_forbidden_masking(job):
             errors.append(f"{name}: success masking is forbidden")
-        if not runs_required_command(job, required_command):
-            errors.append(f"{name}: missing executable script-owned command {required_command}")
+        if not runs_required_command(job, required_form):
+            errors.append(f"{name}: missing canonical script-owned command {required_form[1]}")
 
     aggregate = jobs.get(AGGREGATE_JOB)
     if not is_mapping(aggregate):
@@ -144,10 +142,9 @@ def validate(path: pathlib.Path) -> list[str]:
     needs = aggregate.get("needs")
     if not is_sequence(needs) or needs != REQUIRED_JOB_NAMES:
         errors.append(f"{AGGREGATE_JOB}: needs must equal the required matrix jobs")
-    aggregate_runs = executable_steps(aggregate)
     for name in REQUIRED_JOB_NAMES:
-        if not has_success_assertion(aggregate_runs, name):
-            errors.append(f"{AGGREGATE_JOB}: missing executable success assertion for {name}")
+        if not has_success_assertion(aggregate, name):
+            errors.append(f"{AGGREGATE_JOB}: missing canonical success assertion for {name}")
     return errors
 
 

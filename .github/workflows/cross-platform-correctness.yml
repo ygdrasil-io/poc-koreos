@@ -129,11 +129,15 @@ jobs:
       - linux-container-contracts
       - deterministic-captures
     steps:
-      - name: Require every correctness job to succeed
-        run: |
-          [[ "${{ needs.host-contracts.result }}" == "success" ]]
-          [[ "${{ needs.web-browser-contracts.result }}" == "success" ]]
-          [[ "${{ needs.ios-simulator-contracts.result }}" == "success" ]]
-          [[ "${{ needs.android-emulator-contracts.result }}" == "success" ]]
-          [[ "${{ needs.linux-container-contracts.result }}" == "success" ]]
-          [[ "${{ needs.deterministic-captures.result }}" == "success" ]]
+      - name: Require host contracts to succeed
+        run: '[[ "${{ needs.host-contracts.result }}" == "success" ]]'
+      - name: Require web browser contracts to succeed
+        run: '[[ "${{ needs.web-browser-contracts.result }}" == "success" ]]'
+      - name: Require iOS simulator contracts to succeed
+        run: '[[ "${{ needs.ios-simulator-contracts.result }}" == "success" ]]'
+      - name: Require Android emulator contracts to succeed
+        run: '[[ "${{ needs.android-emulator-contracts.result }}" == "success" ]]'
+      - name: Require Linux container contracts to succeed
+        run: '[[ "${{ needs.linux-container-contracts.result }}" == "success" ]]'
+      - name: Require deterministic captures to succeed
+        run: '[[ "${{ needs.deterministic-captures.result }}" == "success" ]]'

@@ -1,0 +1,22 @@
+name: conditional-command workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - run: |
+          if false; then
+            scripts/test-workflow-contract.sh
+          fi
+
+  cross-platform-correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: []
+    steps:
+      - run: true

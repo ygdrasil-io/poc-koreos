@@ -42,7 +42,7 @@ if [[ "$workflow_output" != *"success masking is forbidden"* ]]; then
   exit 1
 fi
 if [[ "$workflow_output" != *"workflow must trigger pull_request without a paths or paths-ignore filter"* ]] ||
-  [[ "$workflow_output" != *"missing executable script-owned command scripts/test-workflow-contract.sh"* ]]; then
+  [[ "$workflow_output" != *"missing canonical script-owned command scripts/test-workflow-contract.sh"* ]]; then
   echo "FAIL: workflow fixture did not prove the path-filter and missing-command checks" >&2
   printf '%s\n' "$workflow_output" >&2
   exit 1
@@ -61,7 +61,9 @@ for fixture in \
   workflow-contract-comment-only.yml \
   workflow-contract-needs-empty.yml \
   workflow-contract-missing-always.yml \
-  workflow-contract-command-true.yml
+  workflow-contract-command-true.yml \
+  workflow-contract-command-if-false.yml \
+  workflow-contract-assertion-if-false.yml
 do
   set +e
   fixture_output="$(python3 "$checker" "$repo_root/.github/fixtures/$fixture" 2>&1)"
@@ -72,14 +74,17 @@ do
     exit 1
   fi
   case "$fixture" in
-    workflow-contract-comment-only.yml | workflow-contract-command-true.yml)
-      expected="host-contracts: missing executable script-owned command scripts/test-workflow-contract.sh"
+    workflow-contract-comment-only.yml | workflow-contract-command-true.yml | workflow-contract-command-if-false.yml)
+      expected="host-contracts: missing canonical script-owned command scripts/test-workflow-contract.sh"
       ;;
     workflow-contract-needs-empty.yml)
       expected="cross-platform-correctness: needs must equal the required matrix jobs"
       ;;
     workflow-contract-missing-always.yml)
       expected="cross-platform-correctness: if must be always()"
+      ;;
+    workflow-contract-assertion-if-false.yml)
+      expected="cross-platform-correctness: missing canonical success assertion for host-contracts"
       ;;
   esac
   if [[ "$fixture_output" != *"$expected"* ]]; then
