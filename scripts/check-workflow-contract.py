@@ -135,6 +135,14 @@ def has_required_libc_matrix(job: dict[str, object]) -> bool:
     return matrix.get("libc") == ["glibc", "musl"]
 
 
+def has_libc_matrix_exclude(job: dict[str, object]) -> bool:
+    strategy = job.get("strategy")
+    if not is_mapping(strategy):
+        return False
+    matrix = strategy.get("matrix")
+    return is_mapping(matrix) and "exclude" in matrix
+
+
 def has_success_assertion(aggregate: dict[str, object], job_name: str) -> bool:
     expected = f'[[ "${{{{ needs.{job_name}.result }}}}" == "success" ]]'
     return expected in canonical_step_values(aggregate, "run")
@@ -176,8 +184,11 @@ def validate(path: pathlib.Path) -> list[str]:
         for command in REQUIRED_RUN_COMMANDS.get(name, ()):
             if not runs_required_commands(job, (command,)):
                 errors.append(f"{name}: missing canonical script-owned command {command}")
-        if name == "linux-container-contracts" and not has_required_libc_matrix(job):
-            errors.append(f"{name}: libc matrix must equal [glibc, musl]")
+        if name == "linux-container-contracts":
+            if not has_required_libc_matrix(job):
+                errors.append(f"{name}: libc matrix must equal [glibc, musl]")
+            if has_libc_matrix_exclude(job):
+                errors.append(f"{name}: libc matrix must not define exclude")
 
     aggregate = jobs.get(AGGREGATE_JOB)
     if not is_mapping(aggregate):

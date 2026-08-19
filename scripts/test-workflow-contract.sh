@@ -14,6 +14,7 @@ fixture_junit_nested="$script_dir/fixtures/junit-nested-valid.xml"
 fixture_junit_skipped="$script_dir/fixtures/junit-skipped-mismatch.xml"
 fixture_generator="$script_dir/fixtures/generate-validation-fixtures.py"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/kadre-validation-fixtures.XXXXXX")"
+excluded_musl_workflow="$fixture_dir/cross-platform-correctness-excluded-musl.yml"
 trap 'rm -rf "$fixture_dir"' EXIT
 
 missing=0
@@ -61,6 +62,32 @@ if [[ "$android_selection_status" -eq 0 ]] ||
   printf '%s\n' "$android_selection_output" >&2
   exit 1
 fi
+
+cp "$repo_root/.github/workflows/cross-platform-correctness.yml" "$excluded_musl_workflow"
+python3 - "$excluded_musl_workflow" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+workflow = path.read_text(encoding="utf-8")
+needle = "      matrix:\n        libc: [glibc, musl]\n"
+replacement = "      matrix:\n        libc: [glibc, musl]\n        exclude:\n          - libc: musl\n"
+if workflow.count(needle) != 1:
+    raise SystemExit("FAIL: could not inject the musl exclusion into the real workflow copy")
+path.write_text(workflow.replace(needle, replacement), encoding="utf-8")
+PY
+
+set +e
+excluded_musl_output="$(python3 "$checker" "$excluded_musl_workflow" 2>&1)"
+excluded_musl_status=$?
+set -e
+if [[ "$excluded_musl_status" -eq 0 ]] ||
+  [[ "$excluded_musl_output" != *"linux-container-contracts: libc matrix must not define exclude"* ]]; then
+  echo "FAIL: workflow copy excluding musl was accepted or reported the wrong violation" >&2
+  printf '%s\n' "$excluded_musl_output" >&2
+  exit 1
+fi
+
 if [[ "$report_status" -eq 0 ]]; then
   echo "FAIL: 18-row report fixture was accepted" >&2
   exit 1
