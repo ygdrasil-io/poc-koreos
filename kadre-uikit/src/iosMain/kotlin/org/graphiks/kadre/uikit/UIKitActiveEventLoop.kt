@@ -119,6 +119,8 @@ internal class UIKitActiveEventLoop(
     internal fun runLifecycleIteration(
         cause: StartCause,
         callbacks: UIKitActiveEventLoop.() -> Unit,
+        beforeEvents: () -> Unit = {},
+        shouldRunStage: () -> Boolean = { true },
         afterAboutToWait: () -> Unit = {},
     ) {
         var failure: Throwable? = null
@@ -136,12 +138,11 @@ internal class UIKitActiveEventLoop(
             }
         }
 
-        runStage { handler.newEvents(this, cause) }
-        if (failure == null) {
-            runStage { callbacks() }
-        }
-        runStage { handler.aboutToWait(this) }
-        runStage(afterAboutToWait)
+        if (shouldRunStage()) runStage(beforeEvents)
+        if (shouldRunStage()) runStage { handler.newEvents(this, cause) }
+        if (shouldRunStage()) runStage { callbacks() }
+        if (shouldRunStage()) runStage { handler.aboutToWait(this) }
+        if (shouldRunStage()) runStage(afterAboutToWait)
 
         failure?.let { throw it }
     }

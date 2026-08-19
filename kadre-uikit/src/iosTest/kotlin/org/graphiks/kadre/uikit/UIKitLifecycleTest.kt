@@ -237,6 +237,437 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun terminalIterationRunsEveryStageAndPreservesEveryFailureAfterNewEventsFails() {
+        val trace = mutableListOf<String>()
+        val newEventsFailure = IllegalStateException("newEvents")
+        val destroySurfacesFailure = IllegalArgumentException("destroySurfaces")
+        val destroyedFailure = AssertionError("destroyed")
+        val suspendedFailure = IllegalStateException("suspended")
+        val aboutToWaitFailure = IllegalArgumentException("aboutToWait")
+        var terminating = false
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes(visible = false))
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (terminating) {
+                    trace += "newEvents"
+                    throw newEventsFailure
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                if (terminating) {
+                    trace += "aboutToWait"
+                    throw aboutToWaitFailure
+                }
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+                throw destroySurfacesFailure
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+                throw suspendedFailure
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event == WindowEvent.Destroyed) {
+                    trace += "destroyed"
+                    throw destroyedFailure
+                }
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        lifecycle.didFinishLaunching()
+        terminating = true
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.willTerminate()
+        }
+
+        assertSame(newEventsFailure, thrown)
+        assertEquals(
+            listOf("newEvents", "destroySurfaces", "destroyed", "suspended", "aboutToWait"),
+            trace,
+        )
+        assertEquals(
+            listOf(destroySurfacesFailure, aboutToWaitFailure),
+            thrown.suppressedExceptions,
+        )
+        assertEquals(
+            listOf(destroyedFailure, suspendedFailure),
+            destroySurfacesFailure.suppressedExceptions,
+        )
+        assertTrue(loop.isExiting)
+    }
+
+    @Test
+    fun resignationRunsFocusedSuspendedAndAboutToWaitAfterEarlierFailures() {
+        val trace = mutableListOf<String>()
+        val newEventsFailure = IllegalStateException("newEvents")
+        val focusedFailure = IllegalArgumentException("focused")
+        val suspendedFailure = AssertionError("suspended")
+        val aboutToWaitFailure = IllegalStateException("aboutToWait")
+        var failResignation = false
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes(visible = false))
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (failResignation) {
+                    trace += "newEvents"
+                    throw newEventsFailure
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                if (failResignation) {
+                    trace += "aboutToWait"
+                    throw aboutToWaitFailure
+                }
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+                throw suspendedFailure
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Focused && !event.gained) {
+                    trace += "focused"
+                    throw focusedFailure
+                }
+            }
+        }
+        val lifecycle = UIKitLifecycleOrchestrator(UIKitActiveEventLoop(handler))
+
+        lifecycle.didFinishLaunching()
+        failResignation = true
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.willResignActive()
+        }
+
+        assertSame(newEventsFailure, thrown)
+        assertEquals(listOf("newEvents", "focused", "suspended", "aboutToWait"), trace)
+        assertEquals(listOf(focusedFailure, aboutToWaitFailure), thrown.suppressedExceptions)
+        assertEquals(listOf(suspendedFailure), focusedFailure.suppressedExceptions)
+    }
+
+    @Test
+    fun backgroundRunsOcclusionSurfaceDestructionAndAboutToWaitAfterEarlierFailures() {
+        val trace = mutableListOf<String>()
+        val newEventsFailure = IllegalStateException("newEvents")
+        val occludedFailure = IllegalArgumentException("occluded")
+        val destroySurfacesFailure = AssertionError("destroySurfaces")
+        val aboutToWaitFailure = IllegalStateException("aboutToWait")
+        var failBackground = false
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                eventLoop.createWindow(WindowAttributes(visible = false))
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (failBackground) {
+                    trace += "newEvents"
+                    throw newEventsFailure
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                if (failBackground) {
+                    trace += "aboutToWait"
+                    throw aboutToWaitFailure
+                }
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+                throw destroySurfacesFailure
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Occluded && event.occluded) {
+                    trace += "occluded"
+                    throw occludedFailure
+                }
+            }
+        }
+        val lifecycle = UIKitLifecycleOrchestrator(UIKitActiveEventLoop(handler))
+
+        lifecycle.didFinishLaunching()
+        lifecycle.willResignActive()
+        failBackground = true
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.didEnterBackground()
+        }
+
+        assertSame(newEventsFailure, thrown)
+        assertEquals(listOf("newEvents", "occluded", "destroySurfaces", "aboutToWait"), trace)
+        assertEquals(listOf(occludedFailure, aboutToWaitFailure), thrown.suppressedExceptions)
+        assertEquals(listOf(destroySurfacesFailure), occludedFailure.suppressedExceptions)
+    }
+
+    @Test
+    fun reentrantLifecycleNotificationWaitsForTheCurrentIterationToFinish() {
+        val trace = mutableListOf<String>()
+        val createdWindows = mutableListOf<Window>()
+        lateinit var lifecycle: UIKitLifecycleOrchestrator
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreate"
+                createdWindows += eventLoop.createWindow(WindowAttributes(visible = false))
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                trace += "resumed"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                when (startCause) {
+                    StartCause.Init -> {
+                        trace += "newEvents(Init)"
+                        lifecycle.willResignActive()
+                    }
+
+                    is StartCause.WaitCancelled -> trace += "newEvents(WaitCancelled)"
+                    else -> error("Unexpected lifecycle cause: $startCause")
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Focused && !event.gained) trace += "focused-"
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        try {
+            lifecycle.didFinishLaunching()
+
+            assertEquals(
+                listOf(
+                    "resumed",
+                    "newEvents(Init)",
+                    "canCreate",
+                    "aboutToWait",
+                    "newEvents(WaitCancelled)",
+                    "focused-",
+                    "suspended",
+                    "aboutToWait",
+                ),
+                trace,
+            )
+        } finally {
+            createdWindows.distinct().forEach(Window::close)
+        }
+    }
+
+    @Test
+    fun reentrantTerminationFromResumedPreventsEveryPostExitNonTerminalCallback() {
+        val trace = mutableListOf<String>()
+        val resumedFailure = IllegalStateException("resumed")
+        lateinit var lifecycle: UIKitLifecycleOrchestrator
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreate"
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                trace += "resumed"
+                lifecycle.willTerminate()
+                throw resumedFailure
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                trace += when (startCause) {
+                    StartCause.Init -> "newEvents(Init)"
+                    is StartCause.WaitCancelled -> "newEvents(WaitCancelled)"
+                    else -> error("Unexpected lifecycle cause: $startCause")
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.didFinishLaunching()
+        }
+        assertSame(resumedFailure, thrown)
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents(WaitCancelled)",
+                "suspended",
+                "aboutToWait",
+            ),
+            trace,
+        )
+        assertTrue(loop.isExiting)
+
+        lifecycle.didBecomeActive()
+        lifecycle.willResignActive()
+        lifecycle.didEnterBackground()
+        lifecycle.willEnterForeground()
+        lifecycle.willTerminate()
+
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents(WaitCancelled)",
+                "suspended",
+                "aboutToWait",
+            ),
+            trace,
+        )
+    }
+
+    @Test
+    fun reentrantTerminationEvictsQueuedNonTerminalLifecycleWork() {
+        val trace = mutableListOf<String>()
+        lateinit var lifecycle: UIKitLifecycleOrchestrator
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreate"
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                trace += "resumed"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                when (startCause) {
+                    StartCause.Init -> {
+                        trace += "newEvents(Init)"
+                        lifecycle.willResignActive()
+                        lifecycle.willTerminate()
+                    }
+
+                    is StartCause.WaitCancelled -> trace += "newEvents(WaitCancelled)"
+                    else -> error("Unexpected lifecycle cause: $startCause")
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event is WindowEvent.Focused) trace += "focused"
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        lifecycle.didFinishLaunching()
+
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents(Init)",
+                "newEvents(WaitCancelled)",
+                "suspended",
+                "aboutToWait",
+            ),
+            trace,
+        )
+        assertTrue(loop.isExiting)
+    }
+
+    @Test
+    fun resumedFailureDoesNotSkipTheRemainingStartupIteration() {
+        val trace = mutableListOf<String>()
+        val resumedFailure = IllegalStateException("resumed")
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreate"
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                trace += "resumed"
+                throw resumedFailure
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                assertEquals(StartCause.Init, startCause)
+                trace += "newEvents(Init)"
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) = Unit
+        }
+        val lifecycle = UIKitLifecycleOrchestrator(UIKitActiveEventLoop(handler))
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            lifecycle.didFinishLaunching()
+        }
+
+        assertSame(resumedFailure, thrown)
+        assertEquals(
+            listOf("resumed", "newEvents(Init)", "canCreate", "aboutToWait"),
+            trace,
+        )
+    }
+
+    @Test
     fun surfaceDestructionOccursOncePerBackgroundCycle() {
         var destroyCount = 0
         val handler = object : ApplicationHandler {
