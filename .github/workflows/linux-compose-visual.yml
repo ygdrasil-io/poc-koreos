@@ -52,9 +52,9 @@ jobs:
         run: |
           export XDG_RUNTIME_DIR=/tmp/wl-runtime
           mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-          weston \
+          LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe weston \
             --backend=headless-backend.so \
-            --renderer=pixman \
+            --renderer=gl \
             --width=800 --height=600 \
             --socket=wayland-ci \
             --idle-time=0 \
@@ -82,7 +82,7 @@ jobs:
       - name: Headless checks (--ci-headless)
         run: |
           ./gradlew :samples:compose:desktop:run \
-            --args="--ci-headless samples/compose/desktop/build/visual" \
+            --args="--ci-headless build/visual" \
             --no-daemon --stacktrace
 
       # 3: the real windowed GL path via EGL/Wayland + Skiko makeGL, under software Mesa GL.
@@ -98,7 +98,7 @@ jobs:
           # Hard cap: the app has its own 30s watchdog, this is a belt-and-braces backstop so a
           # stuck native call can never hang the job. SIGKILL 30s after SIGTERM if needed.
           timeout -k 30 180 ./gradlew :samples:compose:desktop:run \
-            --args="--window-capture samples/compose/desktop/build/visual/compose-desktop.window.png" \
+            --args="--window-capture build/visual/compose-desktop.window.png" \
             --no-daemon --stacktrace
 
       - name: Dump crash report (hs_err) if any

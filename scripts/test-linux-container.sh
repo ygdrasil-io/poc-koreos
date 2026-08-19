@@ -15,6 +15,15 @@ if [[ "${KADRE_CONTAINERIZED:-}" != "$libc" ]]; then
     glibc) image="gradle:9.2.1-jdk25" ;;
     musl) image="gradle:9.2.1-jdk25-alpine" ;;
   esac
+  if [[ "$libc" == musl ]]; then
+    exec docker run --rm \
+      -e "KADRE_CONTAINERIZED=$libc" \
+      -v "$repo_root:/work" \
+      -w /work \
+      --entrypoint /bin/sh \
+      "$image" \
+      -c 'apk add --no-cache bash && exec bash /work/scripts/test-linux-container.sh musl'
+  fi
   exec docker run --rm \
     -e "KADRE_CONTAINERIZED=$libc" \
     -v "$repo_root:/work" \
@@ -27,11 +36,12 @@ case "$libc" in
   glibc)
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-      xvfb xauth libx11-6 libxi6 libxkbcommon0 libwayland-client0 weston
+      xvfb xauth x11-utils libx11-6 libxi6 libxkbcommon0 libwayland-client0 weston
     ;;
   musl)
     apk add --no-cache \
-      xvfb xauth libx11 libxi libxkbcommon wayland weston
+      xvfb xdpyinfo xauth libx11 libxi libxkbcommon wayland weston \
+      weston-backend-headless weston-shell-desktop
     ;;
 esac
 
