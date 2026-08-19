@@ -14,6 +14,11 @@ import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout.ADDRESS
 import java.lang.foreign.ValueLayout.JAVA_INT
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
+import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.GLAssembledInterface
+import org.jetbrains.skia.makeGLWithInterface
 
 private const val EGL_OPENGL_API = 0x30A2
 private const val EGL_NONE = 0x3038
@@ -38,6 +43,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
     private var eglContext = MemorySegment.NULL
     private var eglSurface = MemorySegment.NULL
     private var eglWindow = MemorySegment.NULL
+    private var skiaGlInterface: GLAssembledInterface? = null
     private var created = false
     private var diagnosticsReported = false
 
@@ -110,6 +116,15 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         eglSwapBuffers.call(eglDisplay, eglSurface)
     }
 
+    override fun createDirectContext(): DirectContext {
+        check(created) { "Wayland EGL context has not been created" }
+        val glInterface = skiaGlInterface ?: GLAssembledInterface.createFromNativePointers(
+            MemorySegment.NULL.address(),
+            skiaGlProcResolver.address(),
+        ).also { skiaGlInterface = it }
+        return DirectContext.makeGLWithInterface(glInterface)
+    }
+
     override fun resize(widthPx: Int, heightPx: Int) {
         if (widthPx <= 0 || heightPx <= 0) return
         width = widthPx
@@ -122,6 +137,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
     override fun drawableSize(): GlContext.Size = GlContext.Size(width, height)
 
     override fun dispose() {
+        runCatching { skiaGlInterface?.close() }
         runCatching { eglMakeCurrent.call(eglDisplay, MemorySegment.NULL, MemorySegment.NULL, MemorySegment.NULL) }
         runCatching { if (eglSurface != MemorySegment.NULL) eglDestroySurface.call(eglDisplay, eglSurface) }
         runCatching { if (eglContext != MemorySegment.NULL) eglDestroyContext.call(eglDisplay, eglContext) }
@@ -156,6 +172,31 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
     private fun cString(pointer: MemorySegment): String =
         if (pointer == MemorySegment.NULL) "<null>" else pointer.reinterpret(1024).getString(0)
 
+    private val skiaGlProcResolver: MemorySegment by lazy {
+        val resolver = MethodHandles.lookup().findVirtual(
+            WaylandEglContext::class.java,
+            "resolveSkiaGlProc",
+            MethodType.methodType(
+                MemorySegment::class.java,
+                MemorySegment::class.java,
+                MemorySegment::class.java,
+            ),
+        ).bindTo(this)
+        NativeFfi.linker.upcallStub(
+            resolver,
+            FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS),
+            arena,
+        )
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private fun resolveSkiaGlProc(context: MemorySegment, name: MemorySegment): MemorySegment =
+        runCatching {
+            val eglProc = eglGetProcAddress.call(name) as MemorySegment
+            if (eglProc != MemorySegment.NULL) eglProc
+            else gl.find(cString(name)).orElse(MemorySegment.NULL)
+        }.getOrDefault(MemorySegment.NULL)
+
     private companion object {
         val egl = NativeFfi.lookup("EGL", "libEGL.so.1", "libEGL.so")
         val gl = NativeFfi.lookup("GL", "libGL.so.1", "libGL.so")
@@ -173,6 +214,7 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         val eglCreateContext = NativeFfi.handle(egl, "eglCreateContext", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglMakeCurrent = NativeFfi.handle(egl, "eglMakeCurrent", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS))
         val eglGetError = NativeFfi.handle(egl, "eglGetError", FunctionDescriptor.of(JAVA_INT))
+        val eglGetProcAddress = NativeFfi.handle(egl, "eglGetProcAddress", FunctionDescriptor.of(ADDRESS, ADDRESS))
         val eglQueryString = NativeFfi.handle(egl, "eglQueryString", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT))
         val eglSwapBuffers = NativeFfi.handle(egl, "eglSwapBuffers", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))
         val eglSwapInterval = NativeFfi.handle(egl, "eglSwapInterval", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT))
