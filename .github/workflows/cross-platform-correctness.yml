@@ -138,8 +138,11 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: gradle
-      - run: >-
-          sudo apt-get update && sudo apt-get install -y weston libwayland-client0
+      - name: Refresh APT package index
+        run: sudo apt-get update
+      - name: Install Wayland capture dependencies
+        run: >-
+          sudo apt-get install -y weston libwayland-client0
           libwayland-egl1 libxkbcommon0 libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Start deterministic headless Weston
         run: |
