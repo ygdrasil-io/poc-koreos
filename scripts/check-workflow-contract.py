@@ -10,11 +10,12 @@ import sys
 import yaml
 
 
+ANDROID_EMULATOR_RUNNER = "reactivecircus/android-emulator-runner@v2"
 REQUIRED_JOBS = {
     "host-contracts": ("run", "scripts/test-workflow-contract.sh"),
     "web-browser-contracts": ("run", "scripts/test-web-browsers.sh"),
     "ios-simulator-contracts": ("run", "scripts/test-uikit-simulator.sh"),
-    "android-emulator-contracts": ("script", "scripts/android-emulator-test.sh"),
+    "android-emulator-contracts": ("android-runner", "scripts/android-emulator-test.sh"),
     "linux-container-contracts": ("run", "scripts/test-linux-container.sh ${{ matrix.libc }}"),
     "deterministic-captures": (
         "run",
@@ -87,8 +88,26 @@ def canonical_step_values(job: dict[str, object], field: str) -> list[str]:
     return commands
 
 
+def has_canonical_android_runner_step(job: dict[str, object], expected_script: str) -> bool:
+    steps = job.get("steps")
+    if not is_sequence(steps):
+        return False
+    for step in steps:
+        if not is_mapping(step) or step.get("uses") != ANDROID_EMULATOR_RUNNER:
+            continue
+        with_values = step.get("with")
+        if not is_mapping(with_values):
+            continue
+        script = with_values.get("script")
+        if isinstance(script, str) and " ".join(script.split()) == expected_script:
+            return True
+    return False
+
+
 def runs_required_command(job: dict[str, object], form: tuple[str, str]) -> bool:
     field, expected = form
+    if field == "android-runner":
+        return has_canonical_android_runner_step(job, expected)
     return expected in canonical_step_values(job, field)
 
 
@@ -126,7 +145,10 @@ def validate(path: pathlib.Path) -> list[str]:
         if has_forbidden_masking(job):
             errors.append(f"{name}: success masking is forbidden")
         if not runs_required_command(job, required_form):
-            errors.append(f"{name}: missing canonical script-owned command {required_form[1]}")
+            if required_form[0] == "android-runner":
+                errors.append(f"{name}: missing canonical Android emulator runner step")
+            else:
+                errors.append(f"{name}: missing canonical script-owned command {required_form[1]}")
 
     aggregate = jobs.get(AGGREGATE_JOB)
     if not is_mapping(aggregate):

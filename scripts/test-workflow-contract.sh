@@ -63,7 +63,8 @@ for fixture in \
   workflow-contract-missing-always.yml \
   workflow-contract-command-true.yml \
   workflow-contract-command-if-false.yml \
-  workflow-contract-assertion-if-false.yml
+  workflow-contract-assertion-if-false.yml \
+  workflow-contract-android-noop-action.yml
 do
   set +e
   fixture_output="$(python3 "$checker" "$repo_root/.github/fixtures/$fixture" 2>&1)"
@@ -85,6 +86,9 @@ do
       ;;
     workflow-contract-assertion-if-false.yml)
       expected="cross-platform-correctness: missing canonical success assertion for host-contracts"
+      ;;
+    workflow-contract-android-noop-action.yml)
+      expected="android-emulator-contracts: missing canonical Android emulator runner step"
       ;;
   esac
   if [[ "$fixture_output" != *"$expected"* ]]; then
