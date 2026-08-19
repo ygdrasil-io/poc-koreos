@@ -2,6 +2,14 @@
 
 Commit under review: `6c6da47` (`fix: close cross-platform correctness review findings`).
 
+## Correction post-autorisation
+
+Commit: `c2b4f64` (`fix: reject excluded Linux libc matrix entries`).
+
+- **RED:** `scripts/test-workflow-contract.sh` copied the real workflow into its temporary directory, injected `strategy.matrix.exclude: [{ libc: musl }]` into `linux-container-contracts`, and observed that `check-workflow-contract.py` accepted the altered workflow.
+- **GREEN:** the checker now rejects any `exclude` key in that required job’s matrix. The same temporary scenario is rejected with `linux-container-contracts: libc matrix must not define exclude`, while the real workflow continues to pass.
+- **Post-fix validation:** `scripts/test-workflow-contract.sh`, `python3 -m py_compile scripts/check-workflow-contract.py scripts/verify-test-results.py`, `bash -n scripts/test-workflow-contract.sh`, PyYAML parsing of every workflow, and `git diff --check` all exited 0.
+
 ## RED → GREEN evidence
 
 - **RED:** `./gradlew :kadre:jvmTest --tests '*LinuxBackendDetectorTest*' --no-daemon --console=plain` exited 1: the new allowlist regression found `XDG_SESSION_TYPE` in the exhausted-selection error.
