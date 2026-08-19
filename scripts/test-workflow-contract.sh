@@ -64,7 +64,10 @@ for fixture in \
   workflow-contract-command-true.yml \
   workflow-contract-command-if-false.yml \
   workflow-contract-assertion-if-false.yml \
-  workflow-contract-android-noop-action.yml
+  workflow-contract-android-noop-action.yml \
+  workflow-contract-command-step-if.yml \
+  workflow-contract-assertion-step-if.yml \
+  workflow-contract-android-runner-step-if.yml
 do
   set +e
   fixture_output="$(python3 "$checker" "$repo_root/.github/fixtures/$fixture" 2>&1)"
@@ -75,7 +78,7 @@ do
     exit 1
   fi
   case "$fixture" in
-    workflow-contract-comment-only.yml | workflow-contract-command-true.yml | workflow-contract-command-if-false.yml)
+    workflow-contract-comment-only.yml | workflow-contract-command-true.yml | workflow-contract-command-if-false.yml | workflow-contract-command-step-if.yml)
       expected="host-contracts: missing canonical script-owned command scripts/test-workflow-contract.sh"
       ;;
     workflow-contract-needs-empty.yml)
@@ -84,10 +87,10 @@ do
     workflow-contract-missing-always.yml)
       expected="cross-platform-correctness: if must be always()"
       ;;
-    workflow-contract-assertion-if-false.yml)
+    workflow-contract-assertion-if-false.yml | workflow-contract-assertion-step-if.yml)
       expected="cross-platform-correctness: missing canonical success assertion for host-contracts"
       ;;
-    workflow-contract-android-noop-action.yml)
+    workflow-contract-android-noop-action.yml | workflow-contract-android-runner-step-if.yml)
       expected="android-emulator-contracts: missing canonical Android emulator runner step"
       ;;
   esac

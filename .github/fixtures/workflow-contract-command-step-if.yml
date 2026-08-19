@@ -1,0 +1,12 @@
+name: conditional host command workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - if: false
+        run: scripts/test-workflow-contract.sh

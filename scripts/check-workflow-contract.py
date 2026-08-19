@@ -70,13 +70,17 @@ def has_forbidden_masking(value: object) -> bool:
     return False
 
 
+def is_unconditional_step(step: object) -> bool:
+    return is_mapping(step) and "if" not in step
+
+
 def canonical_step_values(job: dict[str, object], field: str) -> list[str]:
     steps = job.get("steps")
     if not is_sequence(steps):
         return []
     commands: list[str] = []
     for step in steps:
-        if not is_mapping(step):
+        if not is_unconditional_step(step):
             continue
         if field == "run":
             value = step.get("run")
@@ -93,7 +97,7 @@ def has_canonical_android_runner_step(job: dict[str, object], expected_script: s
     if not is_sequence(steps):
         return False
     for step in steps:
-        if not is_mapping(step) or step.get("uses") != ANDROID_EMULATOR_RUNNER:
+        if not is_unconditional_step(step) or step.get("uses") != ANDROID_EMULATOR_RUNNER:
             continue
         with_values = step.get("with")
         if not is_mapping(with_values):
