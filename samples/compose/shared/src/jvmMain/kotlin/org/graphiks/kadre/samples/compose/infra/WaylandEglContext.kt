@@ -17,6 +17,10 @@ import java.lang.foreign.ValueLayout.JAVA_INT
 
 private const val EGL_OPENGL_API = 0x30A2
 private const val EGL_NONE = 0x3038
+private const val EGL_CONTEXT_MAJOR_VERSION_KHR = 0x3098
+private const val EGL_CONTEXT_MINOR_VERSION_KHR = 0x30FB
+private const val EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR = 0x30FD
+private const val EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR = 0x0001
 
 class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
 
@@ -77,7 +81,15 @@ class WaylandEglContext(displayAddr: Long, surfaceAddr: Long) : GlContext {
         eglSurface = eglCreateWindowSurface.call(eglDisplay, config, eglWindow, MemorySegment.NULL) as MemorySegment
         check(eglSurface != MemorySegment.NULL) { "eglCreateWindowSurface failed" }
 
-        val ctxAttrs = intSegment(intArrayOf(EGL_NONE))
+        // EGL's default OpenGL context can be the legacy 1.0 profile, which lacks the
+        // capabilities Skia needs for DirectContext.makeGL. Request the desktop core
+        // profile explicitly; Mesa llvmpipe provides it on the headless CI compositor.
+        val ctxAttrs = intSegment(intArrayOf(
+            EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
+            EGL_CONTEXT_MINOR_VERSION_KHR, 3,
+            EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,
+            EGL_NONE,
+        ))
         eglContext = eglCreateContext.call(eglDisplay, config, MemorySegment.NULL, ctxAttrs) as MemorySegment
         check(eglContext != MemorySegment.NULL) { "eglCreateContext failed" }
         created = true
