@@ -22,16 +22,16 @@ WESTON_STDOUT="${WESTON_STDOUT:-/tmp/kadre-weston.stdout}"
 
 cleanup_weston() {
   if [ -n "${WESTON_PID:-}" ] && kill -0 "$WESTON_PID" >/dev/null 2>&1; then
-    kill "$WESTON_PID" >/dev/null 2>&1 || true
-    wait "$WESTON_PID" >/dev/null 2>&1 || true
+    if ! kill "$WESTON_PID" >/dev/null 2>&1; then :; fi
+    if ! wait "$WESTON_PID" >/dev/null 2>&1; then :; fi
   fi
 }
 
 print_weston_logs() {
   echo "[ci-wayland-runtime] Weston log: $WESTON_LOG" >&2
-  cat "$WESTON_LOG" 2>/dev/null || true
+  if [ -f "$WESTON_LOG" ]; then cat "$WESTON_LOG"; fi
   echo "[ci-wayland-runtime] Weston stdout/stderr: $WESTON_STDOUT" >&2
-  cat "$WESTON_STDOUT" 2>/dev/null || true
+  if [ -f "$WESTON_STDOUT" ]; then cat "$WESTON_STDOUT"; fi
 }
 
 trap cleanup_weston EXIT INT TERM

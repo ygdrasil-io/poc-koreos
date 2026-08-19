@@ -155,6 +155,17 @@ sealed interface RawDisplayHandle {
 - Only sealed interface **variants** are added (safe extension for consumers doing exhaustive `when` → they will need to recompile but their code remains valid after adding the missing branches).
 - The only source-compat impact is for consumers doing an exhaustive `when` on `RawWindowHandle` (expected case: wgpu4k renderer).
 
+### 2.4 Cross-platform correctness compatibility closure
+
+The following six compatibility changes are approved as observable runtime contracts. They are additive or corrective; none changes a public method signature unless noted below.
+
+1. Web pointer events that previously lacked coordinates are replaced by events carrying physical position, source, and pointer identity. **Migration:** consumers that use `WebWindowEvent` directly must update exhaustive handling and read the supplied position.
+2. `Window.safeArea` is expressed in physical pixels; UIKit points and Web CSS pixels are converted by the active scale factor. **Migration:** remove any consumer-side DPR/scale multiplication previously applied to safe-area values.
+3. An unavailable X11 display or Wayland compositor is a descriptive runtime error rather than a successful no-op. **Migration:** start a reachable display/compositor before `runApp`, and handle startup failure where applications previously assumed silent success.
+4. Backends enforce the documented `ApplicationHandler` callback order. **Migration:** handlers that accidentally relied on backend-specific ordering must move their work to the documented callback.
+5. `iosX64` is removed from the Compose sample only; Kadre library targets retain `iosX64`. **Migration:** build the sample for `iosArm64` or `iosSimulatorArm64`; library consumers do not need to change their target declarations.
+6. After the final known Wayland output is removed, `availableMonitors()` returns an empty list instead of a synthetic monitor. **Migration:** applications must handle an empty monitor list after output removal; the initial pre-discovery fallback remains distinct.
+
 ---
 
 ## 3. Platform-specific considerations (Web, Windows, Linux)
@@ -226,6 +237,8 @@ sequenceDiagram
 | `resize` (window) | `WindowEvent.Resized` (via ResizeObserver on canvas) |
 | `visibilitychange` | `suspended` (hidden) / `resumed` (visible) |
 | `pagehide` | `suspended` |
+
+The current public names are intentional: DOM `pointermove` maps to `WindowEvent.PointerMoved`, while `pointerdown`/`pointerup` map to `WindowEvent.MouseInput` or `WindowEvent.Touch` according to `pointerType`. Kadre does not emit a legacy `MouseMoved` alias.
 
 #### 3.1.5 DPI (devicePixelRatio)
 

@@ -10,11 +10,17 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kadre.core.ActiveEventLoop
+import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 private fun isLinux(): Boolean =
     System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
@@ -29,6 +35,27 @@ private fun interfaceName(segment: MemorySegment): String {
 }
 
 class WaylandNativeIntegrationTest {
+
+    @Test
+    fun `missing Wayland display fails descriptively`() {
+        if (!nativeEnabled() || System.getenv("WAYLAND_DISPLAY") != "definitely-missing") return
+
+        val failure = assertFailsWith<IllegalStateException> {
+            runApp(object : ApplicationHandler {
+                override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+                override fun windowEvent(
+                    eventLoop: ActiveEventLoop,
+                    windowId: WindowId,
+                    event: WindowEvent,
+                ) = Unit
+            })
+        }
+
+        assertTrue(failure.message.orEmpty().contains("backend=Wayland"))
+        assertTrue(failure.message.orEmpty().contains("WAYLAND_DISPLAY=definitely-missing"))
+        assertTrue(failure.message.orEmpty().contains("operation=wl_display_connect"))
+        assertNotNull(failure.cause)
+    }
 
     // ── FFM library loading (Linux only) ──────────────────────────────────────
 

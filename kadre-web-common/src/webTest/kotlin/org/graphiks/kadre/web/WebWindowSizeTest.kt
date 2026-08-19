@@ -6,7 +6,12 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.ActiveEventLoop
+import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.PhysicalSize
+import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kadre.core.WindowId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -25,6 +30,19 @@ private class StubWebDomBridge(
     override fun readDevicePixelRatio(): Double = stubDpr
     override fun readCanvasPhysicalSize(canvasId: String): Pair<Int, Int> =
         Pair(stubWidth, stubHeight)
+}
+
+private class TestWindowEventLoop(
+    private val bridge: WebDomBridge,
+) : WebEventLoop() {
+    override fun createDomBridge(): WebDomBridge = bridge
+    fun pump() = tick(NoOpHandler)
+}
+
+private object NoOpHandler : ApplicationHandler {
+    override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+    override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) = Unit
+    override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) = Unit
 }
 
 // ---------------------------------------------------------------------------
@@ -111,13 +129,12 @@ class WebWindowSizeTest {
     @Test
     fun `WebEventLoop createWindow wires Resized event to window size`() {
         val bridge = StubWebDomBridge(stubDpr = 1.0, stubWidth = 0, stubHeight = 0)
-        val loop = object : WebEventLoop() {
-            override fun createDomBridge(): WebDomBridge = bridge
-        }
+        val loop = TestWindowEventLoop(bridge)
         val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
 
         // Simulate a ResizeObserver callback arriving via the bridge.
         bridge.onWindowEvent?.invoke(WebWindowEvent.Resized(1024, 768))
+        loop.pump()
 
         assertEquals(PhysicalSize(1024, 768), window.innerSize)
     }
@@ -125,13 +142,12 @@ class WebWindowSizeTest {
     @Test
     fun `WebEventLoop createWindow wires ScaleFactorChanged event to scaleFactor`() {
         val bridge = StubWebDomBridge(stubDpr = 1.0)
-        val loop = object : WebEventLoop() {
-            override fun createDomBridge(): WebDomBridge = bridge
-        }
+        val loop = TestWindowEventLoop(bridge)
         val window = loop.createWindow(WebWindowAttributes(canvasId = "canvas")) as WebWindow
 
         // Simulate a DPR-change callback arriving via the bridge.
         bridge.onWindowEvent?.invoke(WebWindowEvent.ScaleFactorChanged(2.0))
+        loop.pump()
 
         assertEquals(2.0, window.scaleFactor)
     }

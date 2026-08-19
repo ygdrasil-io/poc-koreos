@@ -16,11 +16,11 @@ plugins {
     id("ygdrasil.conventions.kmp-publish")
 }
 
-android {
-    namespace = "org.graphiks.kadre.core"
-}
-
 kotlin {
+    android {
+        namespace = "org.graphiks.kadre.core"
+    }
+
     // Web targets — in addition to the iOS/JVM/Android targets from the convention plugin
     js { browser() }
     @OptIn(ExperimentalWasmDsl::class)

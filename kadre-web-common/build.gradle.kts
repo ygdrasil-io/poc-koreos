@@ -47,5 +47,10 @@ kotlin {
                 implementation(kotlin("test-wasm-js"))
             }
         }
+        webTest {
+            dependencies {
+                implementation(project(":kadre-test"))
+            }
+        }
     }
 }

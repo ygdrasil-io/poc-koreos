@@ -216,19 +216,19 @@ java --enable-native-access=ALL-UNNAMED \
 
 ## X11 vs Wayland choice
 
-Kadre inspects environment variables in this priority order at Linux backend startup:
+Kadre uses the session environment only to order candidates, then probes a real native connection before launch. A stale `WAYLAND_DISPLAY` or `DISPLAY` therefore cannot select an unusable backend.
 
 | Priority | Condition | Backend selected |
 |----------|-----------|-----------------|
 | 1 | `KADRE_LINUX_BACKEND=wayland` | Wayland (forced) |
 | 2 | `KADRE_LINUX_BACKEND=x11` | X11 (forced) |
-| 3 | `WAYLAND_DISPLAY` set and non-empty | Wayland (auto-detection) |
-| 4 | `DISPLAY` set and non-empty | X11 (auto-detection) |
-| 5 | No variable found | Error at startup |
+| 3 | usable `WAYLAND_DISPLAY` connection | Wayland (automatic candidate, then X11 fallback) |
+| 4 | usable `DISPLAY` connection | X11 (automatic candidate) |
+| 5 | no usable candidate | Error preserving native probe causes |
 
 ### Auto-detection (default behavior)
 
-In a modern Wayland desktop environment (GNOME 45+, KDE Plasma 6, Sway), `WAYLAND_DISPLAY` is set by the compositor. Kadre selects Wayland automatically. In a pure X11 session or an XWayland terminal, only `DISPLAY` is present, and Kadre switches to X11.
+In a modern Wayland desktop environment (GNOME 45+, KDE Plasma 6, Sway), `WAYLAND_DISPLAY` normally places Wayland first. If its socket cannot be opened, Kadre tries the available X11 candidate before failing. In a pure X11 session or an XWayland terminal, `DISPLAY` selects the X11 candidate.
 
 ### Forcing a specific backend
 
@@ -239,6 +239,16 @@ KADRE_LINUX_BACKEND=wayland ./gradlew run
 # Force X11 (useful under Wayland via XWayland, for legacy compatibility)
 KADRE_LINUX_BACKEND=x11 ./gradlew run
 ```
+
+Forced override is deliberately strict: `KADRE_LINUX_BACKEND=wayland` never falls back to X11, and `=x11` never falls back to Wayland. This makes compatibility tests deterministic and leaves the native connection failure visible to the caller.
+
+### Startup-error migration
+
+An unavailable X11 display or Wayland compositor is a descriptive startup error, not a successful no-op. Applications that previously assumed `runApp` could return successfully without a reachable server must provision a display/compositor first and handle the startup error. The diagnostic may quote only `KADRE_LINUX_BACKEND`, `WAYLAND_DISPLAY`, and `DISPLAY`, together with the attempted backend and native cause.
+
+### Runtime dependencies
+
+At runtime Kadre needs the matching shared libraries, not only the development headers: `libwayland-client`, `libX11`, `libXi`, and `libxkbcommon`. A Wayland session also needs a working `XDG_RUNTIME_DIR` and compositor socket; an X11 session needs a reachable `DISPLAY`. The package commands above provide these on the documented distributions.
 
 !!! warning "XWayland is not native Wayland"
     If you force `KADRE_LINUX_BACKEND=x11` in a Wayland session, Kadre uses

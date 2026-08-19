@@ -13,7 +13,10 @@ import platform.UIKit.UIScreen
  * This implementation exposes the ActiveEventLoop contract to the
  * KadreAppDelegate callbacks without duplicating the loop.
  */
-internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : ActiveEventLoop {
+internal class UIKitActiveEventLoop(
+    internal val handler: ApplicationHandler,
+    schedulerOperations: UIKitSchedulerOperations = UIKitNativeSchedulerOperations(),
+) : ActiveEventLoop {
 
     private var _controlFlow: ControlFlow = ControlFlow.Wait
     private var _isExiting = false
@@ -21,11 +24,131 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
     /** Windows created by this loop, used to scope app-level lifecycle events. */
     private val windows = mutableListOf<UiKitWindow>()
 
+    /** Logical identity is loop-owned; native pointers remain handles only. */
+    private var nextWindowId = 1L
+
+    /** Single demand-driven scheduler shared by every window owned by this loop. */
+    internal val scheduler = UIKitScheduler(
+        operations = schedulerOperations,
+        controlFlow = { _controlFlow },
+        newEvents = { cause -> handler.newEvents(this, cause) },
+        redraw = { id ->
+            if (windows.any { it.id == id }) {
+                handler.windowEvent(this, id, WindowEvent.RedrawRequested)
+            }
+        },
+        aboutToWait = { handler.aboutToWait(this) },
+    )
+
+    /** Next live window to return while surfaces are being recreated. */
+    private var recreationCursor: Int? = null
+
+    /** Distinguishes an exhausted outer session from no recreation session. */
+    private var recreationInProgress = false
+
+    /** Whether the current surface generation still needs destruction. */
+    private var surfacesActive = false
+
+    /** Closed before terminal callbacks so they cannot admit replacement windows. */
+    private var terminalAdmissionClosed = false
+
+    /** Stops non-terminal per-window lifecycle dispatch as soon as teardown is requested. */
+    private var terminalTeardownRequested = false
+
     /** Last observed system theme, used to detect changes across app activation. */
     internal var lastTheme: Theme? = null
 
-    override fun createWindow(attributes: WindowAttributes): Window =
-        UiKitWindow(attributes, this).also { windows.add(it) }
+    override fun createWindow(attributes: WindowAttributes): Window {
+        check(!_isExiting && !terminalAdmissionClosed) {
+            "Cannot create a UIKit window during or after terminal teardown"
+        }
+        return reuseOrCreateUIKitWindow(
+            takeReusable = {
+                recreationCursor?.let { cursor ->
+                    windows.getOrNull(cursor)?.also {
+                        recreationCursor = cursor + 1
+                    } ?: run {
+                        // Newly created windows never become reusable in the same session.
+                        recreationCursor = null
+                        null
+                    }
+                }
+            },
+            isLive = windows::contains,
+            applyAttributes = { it.applyMutableAttributes(attributes) },
+            create = {
+                createRegisteredUIKitWindow(
+                    createStructure = {
+                        val (window, followingId) = createUIKitWindowWithLogicalId(nextWindowId) { id ->
+                            UiKitWindow(this, id)
+                        }
+                        nextWindowId = followingId
+                        window
+                    },
+                    register = ::registerWindow,
+                    applyInitialAttributes = { it.applyInitialAttributes(attributes) },
+                    isLive = windows::contains,
+                    rollback = UiKitWindow::close,
+                )
+            },
+        )
+    }
+
+    /**
+     * Reuses live windows, in creation order, for one surface-creation callback.
+     * Calls beyond the number of existing windows create and register new ones.
+     */
+    internal fun recreateSurfaces(block: UIKitActiveEventLoop.() -> Unit) {
+        check(!recreationInProgress) { "Surface recreation cannot be nested" }
+        recreationInProgress = true
+        recreationCursor = 0
+        try {
+            block()
+            surfacesActive = true
+        } finally {
+            recreationCursor = null
+            recreationInProgress = false
+        }
+    }
+
+    /** Destroys the current surface generation at most once. */
+    internal fun destroySurfaces() {
+        if (!surfacesActive) return
+        surfacesActive = false
+        handler.destroySurfaces(this)
+    }
+
+    /** Runs one lifecycle iteration with its required callback boundaries. */
+    internal fun runLifecycleIteration(
+        cause: StartCause,
+        callbacks: UIKitActiveEventLoop.() -> Unit,
+        beforeEvents: () -> Unit = {},
+        shouldRunStage: () -> Boolean = { true },
+        afterAboutToWait: () -> Unit = {},
+    ) {
+        var failure: Throwable? = null
+
+        fun runStage(stage: () -> Unit) {
+            try {
+                stage()
+            } catch (thrown: Throwable) {
+                val previous = failure
+                if (previous == null) {
+                    failure = thrown
+                } else if (previous !== thrown) {
+                    previous.addSuppressed(thrown)
+                }
+            }
+        }
+
+        if (shouldRunStage()) runStage(beforeEvents)
+        if (shouldRunStage()) runStage { handler.newEvents(this, cause) }
+        if (shouldRunStage()) runStage { callbacks() }
+        if (shouldRunStage()) runStage { handler.aboutToWait(this) }
+        if (shouldRunStage()) runStage(afterAboutToWait)
+
+        failure?.let { throw it }
+    }
 
     fun createWindow(attrs: UiKitWindowAttributes): Window {
         val window = createWindow(attrs.core) as UiKitWindow
@@ -53,7 +176,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * that switch on [WindowEvent] (desktop/winit parity) also receive focus.
      */
     internal fun dispatchWindowFocused(gained: Boolean) {
-        windows.forEach {
+        forEachLiveWindow {
             if (!gained) it.resetKeyboardModifiersIfNeeded()
             handler.windowEvent(this, it.id, WindowEvent.Focused(gained))
         }
@@ -68,7 +191,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     internal fun dispatchOccluded(occluded: Boolean) {
         val event = WindowEvent.Occluded(occluded)
-        windows.forEach { handler.windowEvent(this, it.id, event) }
+        forEachLiveWindow { handler.windowEvent(this, it.id, event) }
     }
 
     /**
@@ -78,16 +201,62 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      * the app-level [ApplicationHandler.destroySurfaces].
      */
     internal fun dispatchWindowsDestroyed() {
-        windows.forEach { handler.windowEvent(this, it.id, WindowEvent.Destroyed) }
-        windows.clear()
+        terminalAdmissionClosed = true
+        runAllUIKitCleanupStages(
+            *windows.toList().map { window ->
+                {
+                    closeWindow(window.id)
+                    Unit
+                }
+            }.toTypedArray(),
+        )
     }
 
-    override fun setControlFlow(controlFlow: ControlFlow) { _controlFlow = controlFlow }
+    /** Publishes terminal intent before a queued teardown can start dispatching callbacks. */
+    internal fun requestTerminalTeardown() {
+        terminalTeardownRequested = true
+        terminalAdmissionClosed = true
+    }
+
+    /** Removes a window from the live set before performing terminal cleanup. */
+    internal fun closeWindow(id: WindowId): Boolean {
+        val index = windows.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val window = windows.removeAt(index)
+        recreationCursor = recreationCursor?.let { cursor ->
+            if (index < cursor) cursor - 1 else cursor
+        }
+        runAllUIKitCleanupStages(
+            { scheduler.closeWindow(id) },
+            window::invalidateResources,
+            { handler.windowEvent(this, id, WindowEvent.Destroyed) },
+            window::hideAndResign,
+        )
+        return true
+    }
+
+    private inline fun forEachLiveWindow(block: (UiKitWindow) -> Unit) {
+        for (window in windows.toList()) {
+            if (terminalTeardownRequested) return
+            if (window in windows) block(window)
+        }
+    }
+
+    override fun setControlFlow(controlFlow: ControlFlow) {
+        if (_isExiting) return
+        _controlFlow = controlFlow
+        scheduler.controlFlowChanged()
+    }
     override val controlFlow: ControlFlow get() = _controlFlow
-    override fun exit() { _isExiting = true }
+    override fun exit() {
+        if (_isExiting) return
+        _isExiting = true
+        terminalTeardownRequested = true
+        scheduler.exit()
+    }
     override val isExiting: Boolean get() = _isExiting
 
-    override fun createProxy(): EventLoopProxy = UIKitEventLoopProxy(this)
+    override fun createProxy(): EventLoopProxy = UIKitEventLoopProxy(scheduler)
 
     override fun ownedDisplayHandle(): OwnedDisplayHandle? =
         OwnedDisplayHandle(RawDisplayHandle.UiKit)
@@ -134,7 +303,7 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
         val current = systemTheme()
         if (current != null && current != lastTheme) {
             lastTheme = current
-            windows.forEach {
+            forEachLiveWindow {
                 handler.windowEvent(this, it.id, WindowEvent.ThemeChanged(current))
             }
         }
@@ -147,6 +316,108 @@ internal class UIKitActiveEventLoop(internal val handler: ApplicationHandler) : 
      */
     override fun listenDeviceEvents(mode: DeviceEvents) {
         // no-op on UIKit
+    }
+
+    private fun registerWindow(window: UiKitWindow) {
+        windows.add(window)
+        scheduler.registerWindow(window.id)
+    }
+
+    internal fun requestRedraw(id: WindowId) {
+        scheduler.requestRedraw(id)
+    }
+}
+
+/** Guards logical-ID exhaustion before invoking native UIKit allocation. */
+internal inline fun <T : Any> createUIKitWindowWithLogicalId(
+    nextWindowId: Long,
+    createStructure: (WindowId) -> T,
+): Pair<T, Long> {
+    check(nextWindowId < Long.MAX_VALUE) { "UIKit WindowId space exhausted" }
+    return createStructure(WindowId(nextWindowId)) to (nextWindowId + 1L)
+}
+
+/** Runs every UIKit cleanup stage and propagates the first failure. */
+internal fun runAllUIKitCleanupStages(vararg stages: () -> Unit) {
+    var firstFailure: Throwable? = null
+    stages.forEach { stage ->
+        try {
+            stage()
+        } catch (failure: Throwable) {
+            val primary = firstFailure
+            if (primary == null) {
+                firstFailure = failure
+            } else if (primary !== failure) {
+                primary.addSuppressed(failure)
+            }
+        }
+    }
+    firstFailure?.let { throw it }
+}
+
+/** Runs every per-window close stage in nominal order without replacing failures. */
+internal fun runUIKitWindowCloseStages(
+    invalidateResources: () -> Unit,
+    dispatchDestroyed: () -> Unit,
+    hideAndResign: () -> Unit,
+) {
+    runAllUIKitCleanupStages(
+        invalidateResources,
+        dispatchDestroyed,
+        hideAndResign,
+    )
+}
+
+/** Creates native structure, admits it, applies initial attributes, and revalidates it. */
+internal inline fun <T : Any> createRegisteredUIKitWindow(
+    createStructure: () -> T,
+    register: (T) -> Unit,
+    applyInitialAttributes: (T) -> Unit,
+    isLive: (T) -> Boolean,
+    rollback: (T) -> Unit,
+): T {
+    val created = createStructure()
+    try {
+        register(created)
+    } catch (failure: Throwable) {
+        try {
+            rollback(created)
+        } catch (rollbackFailure: Throwable) {
+            if (rollbackFailure !== failure) failure.addSuppressed(rollbackFailure)
+        }
+        throw failure
+    }
+    try {
+        applyInitialAttributes(created)
+    } catch (failure: Throwable) {
+        if (isLive(created)) {
+            try {
+                rollback(created)
+            } catch (rollbackFailure: Throwable) {
+                if (rollbackFailure !== failure) failure.addSuppressed(rollbackFailure)
+            }
+        }
+        throw failure
+    }
+    check(isLive(created)) {
+        "A UIKit window closed during initial attribute application"
+    }
+    return created
+}
+
+/** Selects a live reusable window, applies attributes, or creates a new one. */
+internal inline fun <T : Any> reuseOrCreateUIKitWindow(
+    takeReusable: () -> T?,
+    isLive: (T) -> Boolean,
+    applyAttributes: (T) -> Unit,
+    create: () -> T,
+): T {
+    while (true) {
+        val candidate = takeReusable() ?: return create()
+        if (isLive(candidate)) {
+            applyAttributes(candidate)
+            if (isLive(candidate)) return candidate
+        }
     }
 }
 

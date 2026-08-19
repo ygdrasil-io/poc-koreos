@@ -1,0 +1,14 @@
+name: relocated Android runner workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  android-emulator-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: reactivecircus/android-emulator-runner@v2
+        working-directory: fixtures
+        with:
+          script: scripts/android-emulator-test.sh

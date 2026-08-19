@@ -190,25 +190,46 @@ class HelloTriangleWebApp : ApplicationHandler {
     /**
      * Adjusts the `<canvas>` drawing buffer to the current physical size (#21).
      *
-     * The `ResizeObserver` reports CSS pixels; the wgpu swap chain follows the
-     * canvas `width`/`height` attributes, which must be in physical pixels
-     * (`CSS size × devicePixelRatio`) for crisp rendering on high-density screens.
+     * With no arguments, the initial physical size is derived from the canvas
+     * CSS content size multiplied by `devicePixelRatio`. Resize events already
+     * carry physical pixels and are assigned directly to the backing attributes.
      *
-     * @param cssWidth  CSS width (or `null` to read `clientWidth`).
-     * @param cssHeight CSS height (or `null` to read `clientHeight`).
      * @return `true` if the buffer size changed (reconfiguration needed).
      */
-    private fun syncCanvasBackingStore(cssWidth: Int? = null, cssHeight: Int? = null): Boolean {
+    private fun syncCanvasBackingStore(): Boolean {
         val canvas = domCanvas ?: return false
         val dpr = jsDevicePixelRatio()
-        val cw = cssWidth ?: canvas.clientWidth
-        val ch = cssHeight ?: canvas.clientHeight
-        val physW = max(1, (cw * dpr).roundToInt())
-        val physH = max(1, (ch * dpr).roundToInt())
+        return updateCanvasBackingStore(
+            canvas = canvas,
+            physicalWidth = max(1, (canvas.clientWidth * dpr).roundToInt()),
+            physicalHeight = max(1, (canvas.clientHeight * dpr).roundToInt()),
+            source = "initial CSS × dpr=$dpr",
+        )
+    }
+
+    /** Assigns physical resize-event dimensions without another DPR conversion. */
+    private fun syncCanvasBackingStore(physicalWidth: Int, physicalHeight: Int): Boolean {
+        val canvas = domCanvas ?: return false
+        return updateCanvasBackingStore(
+            canvas = canvas,
+            physicalWidth = max(1, physicalWidth),
+            physicalHeight = max(1, physicalHeight),
+            source = "physical resize",
+        )
+    }
+
+    private fun updateCanvasBackingStore(
+        canvas: org.w3c.dom.HTMLCanvasElement,
+        physicalWidth: Int,
+        physicalHeight: Int,
+        source: String,
+    ): Boolean {
+        val physW = physicalWidth
+        val physH = physicalHeight
         if (canvas.width == physW && canvas.height == physH) return false
         canvas.width = physW
         canvas.height = physH
-        println("[hello-triangle-web] Canvas backing store → ${physW}×${physH} (dpr=$dpr)")
+        println("[hello-triangle-web] Canvas backing store → ${physW}×${physH} ($source)")
         return true
     }
 
@@ -247,9 +268,8 @@ class HelloTriangleWebApp : ApplicationHandler {
         when (event) {
             is WindowEvent.RedrawRequested -> renderFrame()
             is WindowEvent.Resized -> {
-                println("[hello-triangle-web] Resized → ${event.size.width}×${event.size.height} (CSS px)")
-                // Update the drawing buffer in physical pixels then reconfigure
-                // the swap chain to the new resolution (#21).
+                println("[hello-triangle-web] Resized → ${event.size.width}×${event.size.height} (physical px)")
+                // The event is already physical: assign it without applying DPR again.
                 syncCanvasBackingStore(event.size.width, event.size.height)
                 val s = surface
                 val d = device

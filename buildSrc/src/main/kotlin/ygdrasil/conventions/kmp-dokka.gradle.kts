@@ -10,6 +10,8 @@
  * GRA-157: initial documentation generation.
  * GRA-159: GFM/HTML separation to avoid mixing in docs/.
  */
+@file:Suppress("DEPRECATION")
+
 package ygdrasil.conventions
 
 import java.net.URI

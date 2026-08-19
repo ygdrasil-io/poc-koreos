@@ -1,7 +1,6 @@
 package org.graphiks.kadre.uikit
 
 import org.graphiks.kadre.core.EventLoopProxy
-import org.graphiks.kadre.core.StartCause
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
@@ -10,13 +9,13 @@ import kotlin.concurrent.AtomicInt
 /**
  * Thread-safe [EventLoopProxy] for the UIKit backend.
  *
- * [wakeUp] posts a block on the main queue via `dispatch_async` so that
- * [UIKitActiveEventLoop.handler.newEvents] is called on the main thread.
+ * [wakeUp] posts a block on the main queue via `dispatch_async` so the
+ * loop-level [UIKitScheduler] processes the wake on the main thread.
  *
  * ## Coalescing
- * A [AtomicInt] flag (`pending`) prevents redundant dispatches: if [wakeUp]
+ * An [AtomicInt] flag (`pending`) prevents redundant dispatches: if [wakeUp]
  * is called several times before the posted block executes, only one block
- * runs. The flag is reset inside the block, before calling the handler, so
+ * runs. The flag is reset inside the block, before calling the scheduler, so
  * a concurrent [wakeUp] issued *during* the callback correctly re-schedules
  * another tick.
  *
@@ -29,7 +28,10 @@ import kotlin.concurrent.AtomicInt
  */
 @OptIn(ExperimentalForeignApi::class)
 internal class UIKitEventLoopProxy(
-    private val loop: UIKitActiveEventLoop,
+    private val scheduler: UIKitScheduler,
+    private val dispatchMain: (() -> Unit) -> Unit = { block ->
+        dispatch_async(dispatch_get_main_queue()) { block() }
+    },
 ) : EventLoopProxy {
 
     /** 1 = a dispatch is already pending, 0 = idle. */
@@ -39,11 +41,16 @@ internal class UIKitEventLoopProxy(
         // CAS: only enqueue if no dispatch is already pending.
         if (!pending.compareAndSet(0, 1)) return
 
-        dispatch_async(dispatch_get_main_queue()) {
-            // Reset before invoking handler so a concurrent wakeUp() issued
-            // from within the callback re-schedules a new tick correctly.
+        try {
+            dispatchMain {
+                // Reset before the scheduler tick so a wakeUp() issued from one of
+                // its callbacks can enqueue the following tick independently.
+                pending.value = 0
+                scheduler.wakeExternal()
+            }
+        } catch (failure: Throwable) {
             pending.value = 0
-            loop.handler.newEvents(loop, StartCause.WaitCancelled())
+            throw failure
         }
     }
 }

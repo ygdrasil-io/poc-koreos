@@ -552,6 +552,34 @@ public final class org/graphiks/kadre/core/Icon {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/core/ImeCapabilities {
+	public fun <init> ()V
+	public fun <init> (ZLjava/util/List;Ljava/util/Set;)V
+	public synthetic fun <init> (ZLjava/util/List;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/util/Set;
+	public final fun copy (ZLjava/util/List;Ljava/util/Set;)Lorg/graphiks/kadre/core/ImeCapabilities;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/core/ImeCapabilities;ZLjava/util/List;Ljava/util/Set;ILjava/lang/Object;)Lorg/graphiks/kadre/core/ImeCapabilities;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCapabilities ()Ljava/util/Set;
+	public final fun getEnabled ()Z
+	public final fun getPurposes ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/core/ImeCapability : java/lang/Enum {
+	public static final field Composition Lorg/graphiks/kadre/core/ImeCapability;
+	public static final field Learning Lorg/graphiks/kadre/core/ImeCapability;
+	public static final field Password Lorg/graphiks/kadre/core/ImeCapability;
+	public static final field Provisional Lorg/graphiks/kadre/core/ImeCapability;
+	public static final field Terminal Lorg/graphiks/kadre/core/ImeCapability;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/core/ImeCapability;
+	public static fun values ()[Lorg/graphiks/kadre/core/ImeCapability;
+}
+
 public final class org/graphiks/kadre/core/ImePurpose : java/lang/Enum {
 	public static final field Normal Lorg/graphiks/kadre/core/ImePurpose;
 	public static final field Password Lorg/graphiks/kadre/core/ImePurpose;
@@ -821,6 +849,7 @@ public final class org/graphiks/kadre/core/KeyCode : java/lang/Enum {
 	public static final field NumpadMultiply Lorg/graphiks/kadre/core/KeyCode;
 	public static final field NumpadParenLeft Lorg/graphiks/kadre/core/KeyCode;
 	public static final field NumpadParenRight Lorg/graphiks/kadre/core/KeyCode;
+	public static final field NumpadSignChange Lorg/graphiks/kadre/core/KeyCode;
 	public static final field NumpadStar Lorg/graphiks/kadre/core/KeyCode;
 	public static final field NumpadSubtract Lorg/graphiks/kadre/core/KeyCode;
 	public static final field Open Lorg/graphiks/kadre/core/KeyCode;
@@ -2391,6 +2420,7 @@ public abstract interface class org/graphiks/kadre/core/Window {
 	public fun getSurfaceSize ()Lorg/graphiks/kadre/core/PhysicalSize;
 	public abstract fun getTheme ()Lorg/graphiks/kadre/core/Theme;
 	public abstract fun getTitle ()Ljava/lang/String;
+	public fun imeCapabilities ()Lorg/graphiks/kadre/core/ImeCapabilities;
 	public fun inputCapabilities ()Lorg/graphiks/kadre/core/InputCapabilities;
 	public abstract fun isDecorated ()Z
 	public abstract fun isMaximized ()Z
@@ -2448,6 +2478,7 @@ public final class org/graphiks/kadre/core/Window$DefaultImpls {
 	public static fun getSurfacePosition (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/PhysicalPosition;
 	public static fun getSurfaceResizeIncrements (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/PhysicalSize;
 	public static fun getSurfaceSize (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/PhysicalSize;
+	public static fun imeCapabilities (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/ImeCapabilities;
 	public static fun inputCapabilities (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/InputCapabilities;
 	public static fun primaryMonitor (Lorg/graphiks/kadre/core/Window;)Lorg/graphiks/kadre/core/MonitorHandle;
 	public static fun recognizeDoubleTapGesture (Lorg/graphiks/kadre/core/Window;Z)V

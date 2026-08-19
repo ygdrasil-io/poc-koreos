@@ -45,8 +45,12 @@ import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowLevel
 import org.graphiks.kadre.core.WindowRequestResult
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 /** wl_compositor.create_surface opcode in the core Wayland protocol. */
@@ -55,12 +59,208 @@ private const val WL_COMPOSITOR_CREATE_REGION_OPCODE: Int = 1
 
 /** wl_surface.commit opcode in the core Wayland protocol. */
 private const val WL_SURFACE_COMMIT_OPCODE: Int = 6
+private const val WL_SURFACE_DESTROY_OPCODE: Int = 0
 private const val WL_SURFACE_SET_OPAQUE_REGION_OPCODE: Int = 4
 private const val WL_SURFACE_SET_INPUT_REGION_OPCODE: Int = 5
 private const val WL_SURFACE_VERSION: Int = 1
 private const val WL_REGION_DESTROY_OPCODE: Int = 0
 private const val WL_REGION_ADD_OPCODE: Int = 1
 private const val WL_REGION_VERSION: Int = 1
+
+internal fun shouldCommitBareWaylandSurface(surfacePtr: Long, xdgWmBasePtr: Long): Boolean =
+    surfacePtr != 0L && xdgWmBasePtr == 0L
+
+private fun destroyWlSurfaceProxy(proxy: Long) {
+    if (proxy == 0L) return
+    val surface = MemorySegment.ofAddress(proxy)
+    val destroy = checkNotNull(wlProxyMarshalFlagsVoid) {
+        "wl_surface.destroy unavailable"
+    }
+    val version = wlProxyGetVersion
+        ?.let { getVersion -> getVersion.invokeExact(surface) as Int }
+        ?.coerceAtLeast(WL_SURFACE_VERSION)
+        ?: WL_SURFACE_VERSION
+    destroy.invokeExact(
+        surface,
+        WL_SURFACE_DESTROY_OPCODE,
+        MemorySegment.NULL,
+        version,
+        WL_MARSHAL_FLAG_DESTROY,
+    )
+}
+
+internal fun interface WaylandSurfaceOutputListenerInstaller {
+    fun install(
+        surfacePtr: Long,
+        onEnter: (Long) -> Unit,
+        onLeave: (Long) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ): AutoCloseable?
+}
+
+internal class WlSurfaceOutputListener(
+    private val onEnter: (Long) -> Unit,
+    private val onLeave: (Long) -> Unit,
+    private val onFailure: (Throwable) -> Unit,
+) {
+    @Suppress("UNUSED_PARAMETER")
+    fun enter(data: MemorySegment, surface: MemorySegment, output: MemorySegment) {
+        try {
+            onEnter(output.address())
+        } catch (failure: Throwable) {
+            try {
+                onFailure(failure)
+            } catch (_: Throwable) {
+                // Never let a Kotlin exception cross the native upcall boundary.
+            }
+        }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun leave(data: MemorySegment, surface: MemorySegment, output: MemorySegment) {
+        try {
+            onLeave(output.address())
+        } catch (failure: Throwable) {
+            try {
+                onFailure(failure)
+            } catch (_: Throwable) {
+                // Never let a Kotlin exception cross the native upcall boundary.
+            }
+        }
+    }
+}
+
+private class WaylandSurfaceOutputListenerBinding(
+    @Suppress("unused") private val listener: WlSurfaceOutputListener,
+    private val arena: Arena,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) arena.close()
+    }
+}
+
+internal object NativeWaylandSurfaceOutputListenerInstaller : WaylandSurfaceOutputListenerInstaller {
+    override fun install(
+        surfacePtr: Long,
+        onEnter: (Long) -> Unit,
+        onLeave: (Long) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ): AutoCloseable? {
+        if (surfacePtr == 0L) return null
+        val addListener = wlProxyAddListener ?: return null
+        val arena = Arena.ofShared()
+        val listener = WlSurfaceOutputListener(onEnter, onLeave, onFailure)
+        val binding = WaylandSurfaceOutputListenerBinding(listener, arena)
+        return finalizeWaylandListenerInstallation(binding) {
+            val lookup = MethodHandles.lookup()
+            val callbackDescriptor = FunctionDescriptor.ofVoid(
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS,
+            )
+            val enterStub = upcallStub(
+                lookup.findVirtual(
+                    WlSurfaceOutputListener::class.java,
+                    "enter",
+                    MethodType.methodType(
+                        Void.TYPE,
+                        MemorySegment::class.java,
+                        MemorySegment::class.java,
+                        MemorySegment::class.java,
+                    ),
+                ).bindTo(listener),
+                callbackDescriptor,
+                arena,
+            )
+            val leaveStub = upcallStub(
+                lookup.findVirtual(
+                    WlSurfaceOutputListener::class.java,
+                    "leave",
+                    MethodType.methodType(
+                        Void.TYPE,
+                        MemorySegment::class.java,
+                        MemorySegment::class.java,
+                        MemorySegment::class.java,
+                    ),
+                ).bindTo(listener),
+                callbackDescriptor,
+                arena,
+            )
+            val pointerSize = ValueLayout.ADDRESS.byteSize()
+            val vtable = arena.allocate(pointerSize * 2)
+            vtable.set(ValueLayout.ADDRESS, 0L, enterStub)
+            vtable.set(ValueLayout.ADDRESS, pointerSize, leaveStub)
+            val result = addListener.invokeExact(
+                MemorySegment.ofAddress(surfacePtr),
+                vtable,
+                MemorySegment.NULL,
+            ) as Int
+            check(result == 0) { "wl_surface listener installation failed: $result" }
+        }
+    }
+}
+
+internal fun <T> withWaylandSurfaceRollback(
+    surfacePtr: Long,
+    destroySurface: (Long) -> Unit,
+    createOwner: () -> T,
+): T = try {
+    createOwner()
+} catch (failure: Throwable) {
+    if (surfacePtr != 0L) {
+        try {
+            destroySurface(surfacePtr)
+        } catch (cleanupFailure: Throwable) {
+            if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+        }
+    }
+    throw failure
+}
+
+internal fun <T> withWaylandAcquiredSurfaceOwner(
+    surfacePtr: Long,
+    destroySurface: (Long) -> Unit,
+    createOwner: (destroyOnce: (Long) -> Unit) -> T,
+): T {
+    val destroyStarted = AtomicBoolean(false)
+    val destroyOnce: (Long) -> Unit = { proxy ->
+        if (destroyStarted.compareAndSet(false, true)) {
+            destroySurface(proxy)
+        }
+    }
+    return withWaylandSurfaceRollback(
+        surfacePtr = surfacePtr,
+        destroySurface = destroyOnce,
+    ) {
+        createOwner(destroyOnce)
+    }
+}
+
+/** Runs terminal window cleanup in protocol child-to-parent order. */
+internal fun closeWaylandWindowResources(
+    destroyFrameCallback: () -> Unit,
+    destroyCursor: () -> Unit,
+    destroyPointerConstraints: () -> Unit,
+    destroyBlur: () -> Unit,
+    destroyXdgToplevel: () -> Unit,
+    destroyXdgSurface: () -> Unit,
+    destroyWlSurface: () -> Unit,
+) {
+    runWaylandCleanup(
+        primary = null,
+        cleanupActions = listOf(
+            destroyFrameCallback,
+            destroyCursor,
+            destroyPointerConstraints,
+            destroyBlur,
+            destroyXdgToplevel,
+            destroyXdgSurface,
+            destroyWlSurface,
+        ),
+    )
+}
 
 
 /**
@@ -88,7 +288,16 @@ class WaylandWindow private constructor(
     seatPtr: Long = 0L,
     extBackgroundEffectManagerPtr: Long = 0L,
     kwinBlurManagerPtr: Long = 0L,
+    surfaceOutputListenerInstaller: WaylandSurfaceOutputListenerInstaller? = NativeWaylandSurfaceOutputListenerInstaller,
+    private val surfaceProxyDestroyer: ((Long) -> Unit)? = ::destroyWlSurfaceProxy,
+    private val surfaceFlusher: (() -> Int)? = wlDisplayFlush?.let { flush ->
+        { flush.invokeExact(MemorySegment.ofAddress(displayPtr)) as Int }
+    },
+    private val nativeListenerLifetime: WaylandNativeListenerLifetime,
+    private val ownsNativeListenerLifetime: Boolean,
 ) : Window {
+    private val closeStarted = AtomicBoolean(false)
+    @Volatile private var surfaceDestroyed: Boolean = surfacePtr == 0L
     @JvmField
     internal val pointerConstraints: WaylandPointerConstraints? =
         if (pointerConstraintsPtr != 0L) WaylandPointerConstraints(pointerConstraintsPtr) else null
@@ -116,15 +325,90 @@ class WaylandWindow private constructor(
      */
     @Volatile
     internal var onWindowEvent: ((WindowEvent) -> Unit)? = null
+    private val pendingWindowEventLock = Any()
+    private val pendingWindowEvents = ArrayDeque<WindowEvent>()
 
-    /**
-     * Reference to the event loop's output info map, set by [WaylandEventLoop.createWindow].
-     * Used by [currentMonitor] to return real monitor data instead of synthetic.
-     */
-    internal var outputInfos: MutableMap<Long, WaylandOutputInfo>? = null
+    /** Installed by the owning event loop; queues/coalesces redraw and wakes its POSIX poll. */
+    @Volatile
+    internal var onRedrawRequested: (() -> Boolean)? = null
+
+    /** Installed by the owning event loop so every close source uses one terminal path. */
+    @Volatile
+    internal var onCloseRequested: (() -> Unit)? = null
+
+    @Volatile
+    internal var onCompositorCloseRequested: (() -> Unit)? = null
+    private val pendingCompositorClose = AtomicBoolean(false)
+
+    /** Live output registry subscriptions, attached by [WaylandEventLoop.createWindow]. */
+    private var outputRemovalSubscription: AutoCloseable? = null
+    private var outputScaleSubscription: AutoCloseable? = null
+    private val pendingSurfaceCallbackFailures = ArrayDeque<Throwable>()
+
+    internal var registryOwner: WaylandRegistryOwner? = null
+        set(value) {
+            if (field === value) return
+            outputRemovalSubscription?.close()
+            outputScaleSubscription?.close()
+            field = value
+            outputRemovalSubscription = value?.addOutputRemovalListener(::onOutputRemoved)
+            outputScaleSubscription = value?.addOutputScaleListener { _, _ ->
+                refreshScaleFromSelectedOutput()
+            }
+            if (value != null) {
+                val pending = synchronized(pendingSurfaceCallbackFailures) {
+                    buildList {
+                        while (pendingSurfaceCallbackFailures.isNotEmpty()) {
+                            add(pendingSurfaceCallbackFailures.removeFirst())
+                        }
+                    }
+                }
+                pending.forEach(value::reportNativeFailure)
+            }
+            refreshScaleFromSelectedOutput()
+        }
+
+    internal val enteredOutputProxies = linkedSetOf<Long>()
+
+    private var surfaceOutputListenerLease: WaylandNativeListenerLease? =
+        surfaceOutputListenerInstaller
+            ?.install(
+                surfacePtr,
+                ::onOutputEntered,
+                ::onOutputLeft,
+                ::reportSurfaceCallbackFailure,
+            )
+            .also { binding ->
+                if (surfacePtr != 0L && surfaceOutputListenerInstaller != null) {
+                    checkNotNull(binding) { "failed to install wl_surface enter leave listener" }
+                }
+            }
+            ?.let { binding ->
+                nativeListenerLifetime.registerForProxyOrRollback(
+                    binding = binding,
+                    proxy = surfacePtr,
+                    destroyProxy = surfaceProxyDestroyer
+                        ?: { error("wl_proxy_destroy unavailable while adopting wl_surface listener") },
+                )
+            }
+
+    private fun reportSurfaceCallbackFailure(failure: Throwable) {
+        val owner = registryOwner
+        if (owner != null) {
+            owner.reportNativeFailure(failure)
+        } else {
+            synchronized(pendingSurfaceCallbackFailures) {
+                pendingSurfaceCallbackFailures.addLast(failure)
+            }
+        }
+    }
 
     /** The xdg_shell decoration (real toplevel), or null if xdg_shell is unavailable. */
     private var xdg: XdgToplevel? = null
+
+    /** Optional wl_callback used only for compositor pacing, never redraw ownership. */
+    private var frameCallbackPtr: Long = 0L
+    private var frameCallbackDestroyer: ((Long) -> Unit)? = null
 
     /** wl_surface* for the cursor (created once per window, reused). */
     private var cursorSurfacePtr: Long = 0L
@@ -182,7 +466,7 @@ class WaylandWindow private constructor(
     override fun requestSurfaceSize(size: PhysicalSize<Int>): SurfaceSizeRequestResult {
         if (lastConfigureStates?.isStateless() != false) {
             _innerSize = size
-            onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+            requestRedraw()
         }
         return SurfaceSizeRequestResult.Applied(_innerSize)
     }
@@ -222,14 +506,22 @@ class WaylandWindow private constructor(
     /**
      * Requests a redraw.
      *
-     * When the window is an xdg_toplevel, redraws are driven by frame callbacks (see
-     * [armFrameCallback]) and the actual surface commit is performed by the renderer's
-     * present (eglSwapBuffers). Committing here as well would flood the compositor with empty
-     * commits and consume frame callbacks on non-displaying frames, so this is a no-op in that
-     * case. Only the bare-surface fallback (no xdg_shell) commits directly.
+     * Loop-owned windows enqueue a coalesced [WindowEvent.RedrawRequested] and wake the
+     * portable POSIX poll. Standalone windows forward to [onWindowEvent] when configured.
+     * Only a standalone bare surface with no xdg_wm_base commits directly; an XDG surface never
+     * commits here, including while its initial xdg_surface.configure handshake is in progress.
+     * The renderer's present operation owns normal XDG commits.
      */
     override fun requestRedraw() {
-        if (surfacePtr == 0L || xdg != null) return
+        onRedrawRequested?.let {
+            it()
+            return
+        }
+        onWindowEvent?.let {
+            it(WindowEvent.RedrawRequested)
+            return
+        }
+        if (!shouldCommitBareWaylandSurface(surfacePtr, xdgWmBasePtr)) return
         val handle = wlProxyMarshalFlagsVoid ?: return
         try {
             val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
@@ -271,42 +563,185 @@ class WaylandWindow private constructor(
     }
 
     /**
-     * Closes the window by destroying the wl_surface via wl_proxy_destroy.
+     * Requests terminal closure through the owning event loop.
      *
-     * On Wayland, clean shutdown goes through xdg_toplevel.destroy →
-     * xdg_surface.destroy → wl_surface.destroy. This simplified implementation
-     * calls wl_proxy_destroy directly on the surface.
+     * The loop wakes its POSIX poll, removes this window before native cleanup, and destroys
+     * frame/cursor/blur/XDG/surface resources in child-to-parent order. A standalone test or
+     * bare window with no loop owner performs the same native cleanup synchronously.
      */
     override fun close() {
-        // Destroy blur proxies first (child objects), then surface (parent).
-        // The blur proxy objects are independent Wayland protocol objects; destroying
-        // them before the surface is safe and follows the documented order in the
-        // ext_background_effect / org_kde_kwin_blur_manager protocol specs.
-        blurManager?.destroy()
-        destroyWaylandCursorTheme()
-        destroyWlBuffer(currentCursorBuffer)
-        currentCursorBuffer = 0L
-        if (cursorSurfacePtr != 0L) {
-            val handle = wlProxyDestroy ?: return
-            try {
-                handle.invokeExact(MemorySegment.ofAddress(cursorSurfacePtr))
-            } catch (_: Throwable) {}
-            cursorSurfacePtr = 0L
+        onCloseRequested?.let {
+            it()
+            return
         }
-        xdg?.destroy()
-        xdg = null
-        if (surfacePtr == 0L) return
-        val handle = wlProxyDestroy ?: return
-        try {
-            val surfaceSeg = MemorySegment.ofAddress(surfacePtr)
-            handle.invokeExact(surfaceSeg)
-            wlDisplayFlush?.let { flush ->
-                val displaySeg = MemorySegment.ofAddress(displayPtr)
-                flush.invokeExact(displaySeg) as Int
+        closeNativeResources()
+    }
+
+    internal fun handleXdgToplevelClose() {
+        val enqueue = onCompositorCloseRequested
+        if (enqueue != null) enqueue() else pendingCompositorClose.set(true)
+    }
+
+    internal fun takePendingCompositorClose(): Boolean =
+        pendingCompositorClose.compareAndSet(true, false)
+
+    internal fun detachFromEventLoop() {
+        synchronized(pendingWindowEventLock) {
+            onWindowEvent = null
+            pendingWindowEvents.clear()
+        }
+        onRedrawRequested = null
+        onCloseRequested = null
+        onCompositorCloseRequested = null
+    }
+
+    internal fun attachWindowEventSink(sink: (WindowEvent) -> Unit) {
+        synchronized(pendingWindowEventLock) {
+            onWindowEvent = sink
+            while (pendingWindowEvents.isNotEmpty()) {
+                sink(pendingWindowEvents.removeFirst())
             }
-        } catch (_: Throwable) {
-            // Ignore — proxy already destroyed or library absent
         }
+    }
+
+    private fun emitWindowEvent(event: WindowEvent) {
+        val sink = synchronized(pendingWindowEventLock) {
+            onWindowEvent ?: run {
+                pendingWindowEvents.addLast(event)
+                null
+            }
+        }
+        sink?.invoke(event)
+    }
+
+    internal fun closeNativeResources() {
+        if (!closeStarted.compareAndSet(false, true)) return
+        var primary: Throwable? = null
+        try {
+            val closingXdg = xdg
+            closeWaylandWindowResources(
+                destroyFrameCallback = ::destroyFrameCallback,
+                destroyCursor = ::destroyCursorResourcesForClose,
+                destroyPointerConstraints = { pointerConstraints?.releaseStrict() },
+                destroyBlur = { blurManager?.destroyStrict() },
+                destroyXdgToplevel = { closingXdg?.destroyToplevel() },
+                destroyXdgSurface = {
+                    try {
+                        closingXdg?.destroySurface()
+                    } finally {
+                        xdg = null
+                    }
+                },
+                destroyWlSurface = {
+                    if (surfaceDestroyed) {
+                        surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
+                        surfaceOutputListenerLease = null
+                    } else {
+                        val destroySurface = surfaceProxyDestroyer
+                            ?: error("wl_proxy_destroy unavailable while closing wl_surface")
+                        // If this throws, retain the upcall arena until display disconnect.
+                        destroySurface(surfacePtr)
+                        surfaceDestroyed = true
+                        surfaceOutputListenerLease?.releaseAfterProxyDestroyed()
+                        surfaceOutputListenerLease = null
+                        surfaceFlusher?.let { flush ->
+                            val result = flush()
+                            check(result >= 0) { "wl_display_flush failed while closing wl_surface: $result" }
+                        }
+                    }
+                },
+            )
+        } catch (failure: Throwable) {
+            primary = failure
+        } finally {
+            runWaylandCleanup(
+                primary,
+                listOf(
+                    {
+                        outputRemovalSubscription?.close()
+                        outputRemovalSubscription = null
+                    },
+                    {
+                        outputScaleSubscription?.close()
+                        outputScaleSubscription = null
+                    },
+                ),
+            )
+        }
+        primary?.let { throw it }
+    }
+
+    internal fun replaceFrameCallback(
+        proxy: Long,
+        destroyer: (Long) -> Unit,
+    ) {
+        destroyFrameCallback()
+        frameCallbackPtr = proxy
+        frameCallbackDestroyer = destroyer
+    }
+
+    private fun destroyFrameCallback() {
+        val proxy = frameCallbackPtr
+        frameCallbackPtr = 0L
+        val destroy = frameCallbackDestroyer
+        frameCallbackDestroyer = null
+        if (proxy != 0L) {
+            checkNotNull(destroy) { "wl_callback destroyer unavailable" }(proxy)
+        }
+    }
+
+    private fun destroyCursorResourcesForClose() {
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = listOf(
+                {
+                    if (cursorTheme != 0L) {
+                        val proxy = cursorTheme
+                        cursorTheme = 0L
+                        cursorThemeSize = 0
+                        val destroy = checkNotNull(wlCursorThemeDestroy) {
+                            "wl_cursor_theme_destroy unavailable while closing cursor"
+                        }
+                        destroy.invokeExact(MemorySegment.ofAddress(proxy))
+                    }
+                },
+                {
+                    if (currentCursorBuffer != 0L) {
+                        val proxy = currentCursorBuffer
+                        currentCursorBuffer = 0L
+                        val destroy = checkNotNull(wlProxyMarshalFlagsVoid) {
+                            "wl_buffer.destroy unavailable while closing cursor"
+                        }
+                        destroy.invokeExact(
+                            MemorySegment.ofAddress(proxy),
+                            0,
+                            MemorySegment.NULL,
+                            1,
+                            WL_MARSHAL_FLAG_DESTROY,
+                        )
+                    }
+                },
+                {
+                    if (cursorSurfacePtr != 0L) {
+                        val proxy = cursorSurfacePtr
+                        cursorSurfacePtr = 0L
+                        destroyWlSurfaceProxy(proxy)
+                    }
+                },
+            ),
+        )
+    }
+
+    /**
+     * Releases listener upcall storage after the caller has disconnected this window's
+     * wl_display. This is the safe terminal path for standalone [create] users when a
+     * proxy destruction failed and the listener therefore had to remain alive.
+     */
+    fun releaseNativeListenersAfterDisplayDisconnect() {
+        check(ownsNativeListenerLifetime) {
+            "Only a standalone WaylandWindow may release its native listener lifetime"
+        }
+        nativeListenerLifetime.closeAfterDisplayDisconnect()
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -342,7 +777,7 @@ class WaylandWindow private constructor(
         _isResizable = resizable
         applyWaylandSurfaceConstraints()
         flushDisplay()
-        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+        requestRedraw()
     }
 
     override fun setMinimized(minimized: Boolean) {
@@ -369,14 +804,14 @@ class WaylandWindow private constructor(
         _minSurfaceSize = size
         applyWaylandSurfaceConstraints()
         flushDisplay()
-        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+        requestRedraw()
     }
 
     override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
         _maxSurfaceSize = size
         applyWaylandSurfaceConstraints()
         flushDisplay()
-        onWindowEvent?.invoke(WindowEvent.RedrawRequested)
+        requestRedraw()
     }
 
     override val surfaceResizeIncrements: PhysicalSize<Int>?
@@ -403,37 +838,48 @@ class WaylandWindow private constructor(
 
     // ── R2: monitor & fullscreen ──────────────────────────────────────────────
 
-    /**
-     * Returns the [MonitorHandle] for this window's output, or a synthetic fallback.
-     *
-     * Uses real [WaylandOutputInfo] data from the event loop when available. Falls back
-     * to a synthetic monitor based on the window's current size and scale factor.
-     */
-    override fun currentMonitor(): MonitorHandle? {
-        val infos = outputInfos
-        if (infos != null && infos.isNotEmpty()) {
-            // Return the first available output (best-effort — Wayland does not
-            // expose which output a surface is on without xdg-output protocol).
-            val info = infos.values.first()
-            return info.toMonitorHandle()
+    internal fun onOutputEntered(outputProxy: Long) {
+        if (outputProxy == 0L) return
+        synchronized(enteredOutputProxies) {
+            // Re-entering makes this output the most recently selected one.
+            enteredOutputProxies.remove(outputProxy)
+            enteredOutputProxies.add(outputProxy)
         }
-        return object : MonitorHandle {
-            override val id: Long = displayPtr
-            override val name: String? = null
-            override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
-            override val scaleFactor: Double = _scaleFactor
-            override val currentVideoMode: VideoMode = VideoMode(_innerSize, null, null)
-            override val videoModes: List<VideoMode> = listOf(currentVideoMode)
-        }
+        refreshScaleFromSelectedOutput()
     }
 
-    override fun availableMonitors(): List<MonitorHandle> {
-        val infos = outputInfos
-        if (infos != null && infos.isNotEmpty()) {
-            return infos.values.map { it.toMonitorHandle() }
-        }
-        return currentMonitor()?.let(::listOf) ?: emptyList()
+    internal fun onOutputLeft(outputProxy: Long) {
+        synchronized(enteredOutputProxies) { enteredOutputProxies.remove(outputProxy) }
+        refreshScaleFromSelectedOutput()
     }
+
+    internal fun onOutputRemoved(outputProxy: Long) {
+        synchronized(enteredOutputProxies) { enteredOutputProxies.remove(outputProxy) }
+        refreshScaleFromSelectedOutput()
+    }
+
+    private fun selectedOutput(): BoundOutput? {
+        val owner = registryOwner ?: return null
+        val entered = synchronized(enteredOutputProxies) { enteredOutputProxies.toList().asReversed() }
+        return entered.firstNotNullOfOrNull(owner::outputForProxy)
+    }
+
+    internal fun refreshScaleFromSelectedOutput() {
+        val newScale = selectedOutput()?.info?.scale?.coerceAtLeast(1)?.toDouble() ?: 1.0
+        if (_scaleFactor == newScale) return
+        _scaleFactor = newScale
+        emitWindowEvent(WindowEvent.ScaleFactorChanged(newScale))
+    }
+
+    /**
+     * Returns the monitor most recently entered by this surface.
+     * When the surface has not entered an output, Wayland provides no primary-output
+     * fallback, so this returns null explicitly.
+     */
+    override fun currentMonitor(): MonitorHandle? = selectedOutput()?.info?.toMonitorHandle()
+
+    override fun availableMonitors(): List<MonitorHandle> =
+        registryOwner?.outputs?.map { it.info.toMonitorHandle() }.orEmpty()
 
     override fun primaryMonitor(): MonitorHandle? =
         null
@@ -446,6 +892,15 @@ class WaylandWindow private constructor(
 
     override val hasFocus: Boolean
         get() = WaylandFocusState.hasFocus(surfacePtr)
+
+    internal fun resolveFullscreenOutputProxy(fullscreen: Fullscreen): Long {
+        val requestedMonitor = when (fullscreen) {
+            is Fullscreen.Borderless -> fullscreen.monitor
+            is Fullscreen.Exclusive -> fullscreen.monitor
+        }
+        if (requestedMonitor == null) return selectedOutput()?.proxy ?: 0L
+        return registryOwner?.outputForProxy(requestedMonitor.id)?.proxy ?: 0L
+    }
 
     /**
      * No-op on Wayland, matching winit.
@@ -477,13 +932,13 @@ class WaylandWindow private constructor(
                 flushDisplay()
             }
             is Fullscreen.Borderless -> {
-                xdg?.setFullscreen(true)
+                xdg?.setFullscreen(true, resolveFullscreenOutputProxy(fullscreen))
                 flushDisplay()
             }
             is Fullscreen.Exclusive -> {
                 // Exclusive fullscreen is not supported on Wayland (xdg-shell limitation).
                 // Fall back to borderless silently.
-                xdg?.setFullscreen(true)
+                xdg?.setFullscreen(true, resolveFullscreenOutputProxy(fullscreen))
                 flushDisplay()
             }
         }
@@ -547,6 +1002,12 @@ class WaylandWindow private constructor(
                 size
             }
         }
+    }
+
+    internal fun handleXdgResize(width: Int, height: Int, applyResizeIncrements: Boolean) {
+        onConfigure(width, height, applyResizeIncrements)
+        emitWindowEvent(WindowEvent.Resized(innerSize))
+        requestRedraw()
     }
 
     internal fun onToplevelStateConfigured(states: WaylandToplevelConfigureStates) {
@@ -1045,6 +1506,9 @@ class WaylandWindow private constructor(
          * @param attrs       Window attributes (title, size, visibility, etc.).
          * @return The created window, or null if the libwayland-client bindings are not
          *         available (macOS/Windows) or if surface creation fails.
+         * @throws IllegalStateException if a mandatory listener cannot be installed after
+         *         surface creation. The acquired wl_surface proxy is destroyed before the
+         *         failure is propagated.
          */
         fun create(
             display: Long,
@@ -1059,6 +1523,38 @@ class WaylandWindow private constructor(
             seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
+        ): WaylandWindow? = createOwned(
+            display = display,
+            compositor = compositor,
+            xdgWmBase = xdgWmBase,
+            shmPtr = shmPtr,
+            attrs = attrs,
+            decorationManager = decorationManager,
+            pointerConstraintsPtr = pointerConstraintsPtr,
+            iconManagerPtr = iconManagerPtr,
+            activationManagerPtr = activationManagerPtr,
+            seatPtr = seatPtr,
+            extBackgroundEffectManagerPtr = extBackgroundEffectManagerPtr,
+            kwinBlurManagerPtr = kwinBlurManagerPtr,
+            nativeListenerLifetime = WaylandNativeListenerLifetime(),
+            ownsNativeListenerLifetime = true,
+        )
+
+        internal fun createOwned(
+            display: Long,
+            compositor: Long,
+            xdgWmBase: Long,
+            shmPtr: Long,
+            attrs: WindowAttributes,
+            decorationManager: Long = 0L,
+            pointerConstraintsPtr: Long = 0L,
+            iconManagerPtr: Long = 0L,
+            activationManagerPtr: Long = 0L,
+            seatPtr: Long = 0L,
+            extBackgroundEffectManagerPtr: Long = 0L,
+            kwinBlurManagerPtr: Long = 0L,
+            nativeListenerLifetime: WaylandNativeListenerLifetime,
+            ownsNativeListenerLifetime: Boolean,
         ): WaylandWindow? {
             // The bindings are null on non-Wayland platforms — return null.
             val createSurface = wlCompositorCreateSurface ?: return null
@@ -1088,40 +1584,66 @@ class WaylandWindow private constructor(
                 return null
             }
 
-            val window = WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, activationManagerPtr, seatPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr)
-            window.setTransparent(attrs.transparent)
-
-            // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
-            if (surface != 0L && xdgWmBase != 0L) {
-                window.xdg = XdgToplevel.create(
-                    displayPtr = display,
-                    wmBasePtr = xdgWmBase,
-                    surfacePtr = surface,
-                    decorationManagerPtr = decorationManager,
-                    decorated = attrs.decorations,
-                    onResized = { w, h, applyResizeIncrements ->
-                        window.onConfigure(w, h, applyResizeIncrements)
-                        val size = window.innerSize
-                        window.onWindowEvent?.invoke(WindowEvent.Resized(size))
-                        // Repaint once at the new size (on-demand rendering).
-                        window.onWindowEvent?.invoke(WindowEvent.RedrawRequested)
-                    },
-                    onStateConfigured = { states -> window.onToplevelStateConfigured(states) },
-                    onClose = { window.onWindowEvent?.invoke(WindowEvent.CloseRequested) },
+            val nativeSurfaceDestroyer: (Long) -> Unit = ::destroyWlSurfaceProxy
+            return withWaylandAcquiredSurfaceOwner(
+                surfacePtr = surface,
+                destroySurface = nativeSurfaceDestroyer,
+            ) { destroyOnce ->
+                val window = WaylandWindow(
+                    display,
+                    compositor,
+                    xdgWmBase,
+                    surface,
+                    shmPtr,
+                    attrs,
+                    pointerConstraintsPtr,
+                    iconManagerPtr,
+                    activationManagerPtr,
+                    seatPtr,
+                    extBackgroundEffectManagerPtr,
+                    kwinBlurManagerPtr,
+                    surfaceProxyDestroyer = destroyOnce,
+                    nativeListenerLifetime = nativeListenerLifetime,
+                    ownsNativeListenerLifetime = ownsNativeListenerLifetime,
                 )
-                window.xdg?.setTitle(attrs.title)
-                // Apply R1 attrs
-                if (attrs.maximized) window.xdg?.setMaximized(true)
-                window.applyWaylandSurfaceConstraints()
-                if (attrs.fullscreen != null) window.xdg?.setFullscreen(true)
-            }
+                try {
+                    window.setTransparent(attrs.transparent)
 
-            // ── 3. Fallback for a bare surface (no xdg_shell): legacy initial commit ──
-            if (window.xdg == null && attrs.visible && surface != 0L) {
-                window.requestRedraw()
-            }
+                    // ── 2. xdg_shell handshake → real mapped toplevel + configure/close events ──
+                    if (surface != 0L && xdgWmBase != 0L) {
+                        window.xdg = XdgToplevel.create(
+                            displayPtr = display,
+                            wmBasePtr = xdgWmBase,
+                            surfacePtr = surface,
+                            decorationManagerPtr = decorationManager,
+                            decorated = attrs.decorations,
+                            onResized = { w, h, applyResizeIncrements ->
+                                window.handleXdgResize(w, h, applyResizeIncrements)
+                            },
+                            onStateConfigured = { states -> window.onToplevelStateConfigured(states) },
+                            onClose = window::handleXdgToplevelClose,
+                            onFailure = window::reportSurfaceCallbackFailure,
+                            nativeListenerLifetime = nativeListenerLifetime,
+                        )
+                        checkNotNull(window.xdg) {
+                            "Wayland xdg-shell setup is unavailable for a live xdg_wm_base"
+                        }
+                        window.xdg?.setTitle(attrs.title)
+                        if (attrs.maximized) window.xdg?.setMaximized(true)
+                        window.applyWaylandSurfaceConstraints()
+                        if (attrs.fullscreen != null) window.xdg?.setFullscreen(true)
+                    }
 
-            return window
+                    // ── 3. Fallback for an explicitly bare standalone surface ──
+                    if (window.xdg == null && attrs.visible && surface != 0L) {
+                        window.requestRedraw()
+                    }
+                    window
+                } catch (failure: Throwable) {
+                    runWaylandCleanup(failure, listOf(window::closeNativeResources))
+                    throw failure
+                }
+            }
         }
 
         /**
@@ -1149,8 +1671,31 @@ class WaylandWindow private constructor(
             seatPtr: Long = 0L,
             extBackgroundEffectManagerPtr: Long = 0L,
             kwinBlurManagerPtr: Long = 0L,
+            surfaceOutputListenerInstaller: WaylandSurfaceOutputListenerInstaller? = null,
+            surfaceProxyDestroyer: ((Long) -> Unit)? = null,
+            surfaceFlusher: (() -> Int)? = null,
+            nativeListenerLifetime: WaylandNativeListenerLifetime = WaylandNativeListenerLifetime(),
+            ownsNativeListenerLifetime: Boolean = true,
         ): WaylandWindow =
-            WaylandWindow(display, compositor, xdgWmBase, surface, shmPtr, attrs, pointerConstraintsPtr, iconManagerPtr, activationManagerPtr, seatPtr, extBackgroundEffectManagerPtr, kwinBlurManagerPtr).also {
+            WaylandWindow(
+                display,
+                compositor,
+                xdgWmBase,
+                surface,
+                shmPtr,
+                attrs,
+                pointerConstraintsPtr,
+                iconManagerPtr,
+                activationManagerPtr,
+                seatPtr,
+                extBackgroundEffectManagerPtr,
+                kwinBlurManagerPtr,
+                surfaceOutputListenerInstaller,
+                surfaceProxyDestroyer,
+                surfaceFlusher,
+                nativeListenerLifetime,
+                ownsNativeListenerLifetime,
+            ).also {
                 it.setTransparent(attrs.transparent)
             }
     }

@@ -35,6 +35,20 @@ import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+internal interface AppKitWindowDelegateCallbacks {
+    fun onWindowShouldClose(): Byte = 1
+    fun onWindowWillClose() = Unit
+    fun onWindowDidMove() = Unit
+    fun onWindowDidBecomeKey() = Unit
+    fun onWindowDidResignKey() = Unit
+    fun onWindowDidMiniaturize() = Unit
+    fun onWindowDidDeminiaturize() = Unit
+    fun onWindowDidResize() = Unit
+    fun onWindowDidChangeBackingProperties() = Unit
+    fun captureCallbackFailure(context: String, failure: Throwable) = Unit
+}
 
 /**
  * macOS window delegate implementing `NSWindowDelegate` via FFM.
@@ -59,6 +73,10 @@ class KadreWindowDelegate(
     private val metalLayerPtr: MemorySegment,
     private val windows: ConcurrentHashMap<Long, AppKitWindow>,
 ) {
+    private val released = AtomicBoolean(false)
+    private val routeCallbacks: AppKitWindowDelegateCallbacks
+    private val routeToken: AppKitNativeCallbackToken
+
     /** Pointer to the Objective-C object wrapped by this delegate. */
     val ptr: MemorySegment
 
@@ -66,18 +84,45 @@ class KadreWindowDelegate(
         ensureClassRegistered()
 
         val cls = ObjCRuntime.getClass("KadreWindowDelegateNative")
-        val allocated = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            cls,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-        ptr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            allocated,
-            ObjCRuntime.sel("init"),
-        ) as MemorySegment
+        ptr = appKitInitializeOwnedNativeObject(
+            allocate = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    cls,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initialize = { allocated ->
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("init"),
+                ) as MemorySegment
+            },
+            releaseAllocated = { allocated ->
+                ObjCRuntime.msgSend(null, allocated, ObjCRuntime.sel("release"))
+            },
+        )
 
-        delegateTable[ptr.address()] = this
+        routeCallbacks = object : AppKitWindowDelegateCallbacks {
+            override fun onWindowShouldClose(): Byte = this@KadreWindowDelegate.onWindowShouldClose()
+            override fun onWindowWillClose() = this@KadreWindowDelegate.onWindowWillClose()
+            override fun onWindowDidMove() = this@KadreWindowDelegate.onWindowDidMove()
+            override fun onWindowDidBecomeKey() = this@KadreWindowDelegate.onWindowDidBecomeKey()
+            override fun onWindowDidResignKey() = this@KadreWindowDelegate.onWindowDidResignKey()
+            override fun onWindowDidMiniaturize() = this@KadreWindowDelegate.onWindowDidMiniaturize()
+            override fun onWindowDidDeminiaturize() = this@KadreWindowDelegate.onWindowDidDeminiaturize()
+            override fun onWindowDidResize() = this@KadreWindowDelegate.onWindowDidResize()
+            override fun onWindowDidChangeBackingProperties() =
+                this@KadreWindowDelegate.onWindowDidChangeBackingProperties()
+            override fun captureCallbackFailure(context: String, failure: Throwable) {
+                (eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
+            }
+        }
+        routeToken = appKitAcquireOwnedRegistration(
+            register = { registerDelegateRoute(ptr, routeCallbacks) },
+            rollback = { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) },
+        )
     }
 
     /**
@@ -90,15 +135,6 @@ class KadreWindowDelegate(
      */
     fun onWindowShouldClose(): Byte {
         handler.windowEvent(eventLoop, windowId, WindowEvent.CloseRequested)
-        if (eventLoop.isExiting) {
-            val nsAppClass = ObjCRuntime.getClass("NSApplication")
-            val nsApp = ObjCRuntime.msgSend(
-                ValueLayout.ADDRESS,
-                nsAppClass,
-                ObjCRuntime.sel("sharedApplication"),
-            ) as MemorySegment
-            ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("terminate:"), MemorySegment.NULL)
-        }
         return 0 // NO — the application controls closing via exit()
     }
 
@@ -110,8 +146,27 @@ class KadreWindowDelegate(
      * aboutToWait) targets an already-destroyed window.
      */
     fun onWindowWillClose() {
-        handler.windowEvent(eventLoop, windowId, WindowEvent.Destroyed)
-        windows.remove(windowId.value)
+        val appKitEventLoop = eventLoop as? AppKitEventLoop
+        if (appKitEventLoop == null) {
+            handler.windowEvent(eventLoop, windowId, WindowEvent.Destroyed)
+            windows.remove(windowId.value)
+        } else {
+            appKitEventLoop.confirmWindowClosed(windowId)
+        }
+    }
+
+    internal fun releaseNative() {
+        appKitReleaseWindowDelegateNative(
+            released = released,
+            token = routeToken,
+            callbacks = routeCallbacks,
+            releaseNative = { ObjCRuntime.msgSend(null, ptr, ObjCRuntime.sel("release")) },
+        )
+    }
+
+    internal fun unregisterRoute() {
+        unregisterDelegate(routeToken, routeCallbacks)
+        AppKitNativeCallbackTokens.detach(ptr, routeToken)
     }
 
     /** Kotlin callback for `windowDidMove:` — dispatches [WindowEvent.Moved]. */
@@ -258,8 +313,53 @@ class KadreWindowDelegate(
     }
 
     companion object {
-        /** Global table: ObjC memory address → associated Kotlin delegate. */
-        private val delegateTable = ConcurrentHashMap<Long, KadreWindowDelegate>()
+        /** Global table: native generation token → associated Kotlin delegate. */
+        private val delegateTable = ConcurrentHashMap<AppKitNativeCallbackToken, AppKitWindowDelegateCallbacks>()
+
+        private fun registerDelegateRoute(
+            receiver: MemorySegment,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ): AppKitNativeCallbackToken {
+            val token = AppKitNativeCallbackTokens.attach(receiver)
+            return appKitAcquireOwnedRegistration(
+                register = {
+                    delegateTable[token] = callbacks
+                    token
+                },
+                rollback = {
+                    delegateTable.remove(token, callbacks)
+                    AppKitNativeCallbackTokens.detach(receiver, token)
+                },
+            )
+        }
+
+        internal fun registerDelegateRoute(
+            address: Long,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ): AppKitNativeCallbackToken = AppKitNativeCallbackTokens.attachTestAddress(address).also { token ->
+            delegateTable[token] = callbacks
+        }
+
+        internal fun unregisterDelegate(address: Long) {
+            val token = AppKitNativeCallbackTokens.readTestAddress(address) ?: return
+            delegateTable.remove(token)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
+        }
+
+        internal fun unregisterDelegate(address: Long, callbacks: AppKitWindowDelegateCallbacks) {
+            val token = delegateTable.entries.firstOrNull { it.value === callbacks }?.key ?: return
+            delegateTable.remove(token, callbacks)
+            AppKitNativeCallbackTokens.detachTestAddress(address, token)
+        }
+
+        internal fun unregisterDelegate(
+            token: AppKitNativeCallbackToken,
+            callbacks: AppKitWindowDelegateCallbacks,
+        ) {
+            delegateTable.remove(token, callbacks)
+        }
+
+        internal fun registeredDelegateCount(): Int = delegateTable.size
 
         @Volatile
         private var classRegistered: Boolean = false
@@ -433,10 +533,16 @@ class KadreWindowDelegate(
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
-        ): Byte {
-            // If no Kotlin delegate is registered for this self, return YES (1)
-            // to allow the default close behavior.
-            return delegateTable[self.address()]?.onWindowShouldClose() ?: 1
+        ): Byte = AppKitNativeCallbackBoundary.invokeOrDefault(1) {
+            var callbacks: AppKitWindowDelegateCallbacks? = null
+            try {
+                callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                    ?: return@invokeOrDefault 1
+                callbacks.onWindowShouldClose()
+            } catch (failure: Throwable) {
+                callbacks?.let { captureSafely(it, "windowShouldClose", failure) }
+                1
+            }
         }
 
         @JvmStatic
@@ -445,7 +551,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidResize()
+            invokeSafely(self, "windowDidResize") { it.onWindowDidResize() }
         }
 
         @JvmStatic
@@ -454,7 +560,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidMove()
+            invokeSafely(self, "windowDidMove") { it.onWindowDidMove() }
         }
 
         @JvmStatic
@@ -463,7 +569,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidBecomeKey()
+            invokeSafely(self, "windowDidBecomeKey") { it.onWindowDidBecomeKey() }
         }
 
         @JvmStatic
@@ -472,7 +578,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidResignKey()
+            invokeSafely(self, "windowDidResignKey") { it.onWindowDidResignKey() }
         }
 
         @JvmStatic
@@ -481,7 +587,9 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidChangeBackingProperties()
+            invokeSafely(self, "windowDidChangeBackingProperties") {
+                it.onWindowDidChangeBackingProperties()
+            }
         }
 
         @JvmStatic
@@ -490,7 +598,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowWillClose()
+            invokeSafely(self, "windowWillClose") { it.onWindowWillClose() }
         }
 
         @JvmStatic
@@ -499,7 +607,7 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidMiniaturize()
+            invokeSafely(self, "windowDidMiniaturize") { it.onWindowDidMiniaturize() }
         }
 
         @JvmStatic
@@ -508,7 +616,88 @@ class KadreWindowDelegate(
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") notification: MemorySegment,
         ) {
-            delegateTable[self.address()]?.onWindowDidDeminiaturize()
+            invokeSafely(self, "windowDidDeminiaturize") { it.onWindowDidDeminiaturize() }
+        }
+
+        private inline fun invokeSafely(
+            self: MemorySegment,
+            context: String,
+            crossinline callback: (AppKitWindowDelegateCallbacks) -> Unit,
+        ) {
+            AppKitNativeCallbackBoundary.invoke {
+                try {
+                    val callbacks = AppKitNativeCallbackTokens.read(self)?.let(delegateTable::get)
+                        ?: return@invoke
+                    invokeTokenSafely(callbacks, context, callback)
+                } catch (_: Throwable) {
+                    // A native token lookup failure has no safe Kotlin route to capture it on.
+                }
+            }
+        }
+
+        private inline fun invokeTokenSafely(
+            callbacks: AppKitWindowDelegateCallbacks,
+            context: String,
+            callback: (AppKitWindowDelegateCallbacks) -> Unit,
+        ) {
+            try {
+                callback(callbacks)
+            } catch (failure: Throwable) {
+                captureSafely(callbacks, context, failure)
+            }
+        }
+
+        private fun captureSafely(
+            callbacks: AppKitWindowDelegateCallbacks,
+            context: String,
+            failure: Throwable,
+        ) {
+            try {
+                callbacks.captureCallbackFailure(context, failure)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+        }
+
+        internal fun windowWillCloseForToken(token: AppKitNativeCallbackToken) {
+            AppKitNativeCallbackBoundary.invoke {
+                val callbacks = delegateTable[token] ?: return@invoke
+                invokeTokenSafely(callbacks, "windowWillClose") { it.onWindowWillClose() }
+            }
         }
     }
+}
+
+internal fun appKitReleaseWindowDelegateNative(
+    released: AtomicBoolean,
+    token: AppKitNativeCallbackToken,
+    callbacks: AppKitWindowDelegateCallbacks,
+    releaseNative: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    KadreWindowDelegate.unregisterDelegate(token, callbacks)
+    releaseNative()
+}
+
+internal fun appKitReleaseWindowDelegateNative(
+    released: AtomicBoolean,
+    address: Long,
+    callbacks: AppKitWindowDelegateCallbacks,
+    releaseNative: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    KadreWindowDelegate.unregisterDelegate(address, callbacks)
+    releaseNative()
+}
+
+internal fun appKitReleaseFailedWindowDelegate(
+    setDelegateFailure: Throwable,
+    releaseDelegate: () -> Unit,
+): Nothing {
+    try {
+        releaseDelegate()
+    } catch (releaseFailure: Throwable) {
+        if (releaseFailure !== setDelegateFailure) setDelegateFailure.addSuppressed(releaseFailure)
+    }
+    throw setDelegateFailure
 }

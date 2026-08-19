@@ -17,6 +17,7 @@ import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
 import org.graphiks.kadre.core.KeyState
 import org.graphiks.kadre.core.ButtonSource
+import org.graphiks.kadre.core.DeviceId
 import org.graphiks.kadre.core.FingerId
 import org.graphiks.kadre.core.KeyboardModifierState
 import org.graphiks.kadre.core.KeyboardModifiers
@@ -30,6 +31,7 @@ import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.PointerSource
+import org.graphiks.kadre.core.TabletToolButton
 import org.graphiks.kadre.core.TouchPhase
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
@@ -286,6 +288,24 @@ internal fun domButtonToMouseButton(button: Short): WebMouseButton = when (butto
     else -> WebMouseButton.Other(button.toInt())
 }
 
+/** Maps the DOM button code through the tracked pointer source without losing identity. */
+internal fun domPointerButtonSource(button: Short, pointer: WebPointerSnapshot): ButtonSource =
+    when (val source = pointer.source) {
+        PointerSource.Mouse -> ButtonSource.Mouse(domButtonToMouseButton(button).toMouseButton())
+        is PointerSource.Touch -> ButtonSource.Touch(source.fingerId, source.force)
+        is PointerSource.TabletTool -> ButtonSource.TabletTool(
+            kind = source.kind,
+            button = when (button.toInt()) {
+                0 -> TabletToolButton.Tip
+                2 -> TabletToolButton.Barrel
+                5 -> TabletToolButton.Eraser
+                else -> TabletToolButton.Unknown
+            },
+            data = source.data,
+        )
+        PointerSource.Unknown -> ButtonSource.Unknown(button.toInt())
+    }
+
 /**
  * Derives the [WebKeyState] from the DOM event type (`"keydown"` or `"keyup"`).
  *
@@ -388,19 +408,29 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
     is WebWindowEvent.Resized -> WindowEvent.Resized(PhysicalSize(width, height))
     is WebWindowEvent.KeyInput -> WindowEvent.KeyInput(event, deviceId = null)
     is WebWindowEvent.PointerMoved -> WindowEvent.PointerMoved(
-        deviceId = null,
+        deviceId = DeviceId(pointerId),
         position = PhysicalPosition(x, y),
-        primary = true,
-        source = PointerSource.Mouse,
+        primary = primary,
+        source = source,
     )
-    WebWindowEvent.PointerEntered -> WindowEvent.PointerEntered(null, PhysicalPosition(0.0, 0.0), primary = true, kind = PointerKind.Mouse)
-    WebWindowEvent.PointerLeft -> WindowEvent.PointerLeft(null, position = null, primary = true, kind = PointerKind.Mouse)
-    is WebWindowEvent.MouseInput -> WindowEvent.PointerButton(
-        deviceId = null,
+    is WebWindowEvent.PointerEntered -> WindowEvent.PointerEntered(
+        deviceId = DeviceId(pointerId),
+        position = PhysicalPosition(x, y),
+        primary = primary,
+        kind = kind,
+    )
+    is WebWindowEvent.PointerLeft -> WindowEvent.PointerLeft(
+        deviceId = DeviceId(pointerId),
+        position = PhysicalPosition(x, y),
+        primary = primary,
+        kind = kind,
+    )
+    is WebWindowEvent.PointerButton -> WindowEvent.PointerButton(
+        deviceId = DeviceId(pointerId),
         state = state.toKeyState(),
-        position = PhysicalPosition(0.0, 0.0),
-        primary = true,
-        button = ButtonSource.Mouse(button.toMouseButton()),
+        position = PhysicalPosition(x, y),
+        primary = primary,
+        button = button,
     )
     is WebWindowEvent.MouseWheel -> WindowEvent.MouseWheel(null, deltaX, deltaY, TouchPhase.Moved)
     is WebWindowEvent.Focused -> WindowEvent.Focused(gained)
@@ -409,10 +439,10 @@ internal fun WebWindowEvent.toWindowEvent(): WindowEvent = when (this) {
         val location = PhysicalPosition(x, y)
         val fingerId = FingerId(id)
         when (phase.toTouchPhase()) {
-            TouchPhase.Started -> WindowEvent.PointerButton(null, KeyState.Pressed, location, primary = id == 0L, button = ButtonSource.Touch(fingerId))
-            TouchPhase.Moved -> WindowEvent.PointerMoved(null, location, primary = id == 0L, source = PointerSource.Touch(fingerId))
-            TouchPhase.Ended -> WindowEvent.PointerButton(null, KeyState.Released, location, primary = id == 0L, button = ButtonSource.Touch(fingerId))
-            TouchPhase.Cancelled -> WindowEvent.PointerLeft(null, location, primary = id == 0L, kind = PointerKind.Touch)
+            TouchPhase.Started -> WindowEvent.PointerButton(DeviceId(id), KeyState.Pressed, location, primary, ButtonSource.Touch(fingerId))
+            TouchPhase.Moved -> WindowEvent.PointerMoved(DeviceId(id), location, primary, PointerSource.Touch(fingerId))
+            TouchPhase.Ended -> WindowEvent.PointerButton(DeviceId(id), KeyState.Released, location, primary, ButtonSource.Touch(fingerId))
+            TouchPhase.Cancelled -> WindowEvent.PointerLeft(DeviceId(id), location, primary, PointerKind.Touch)
         }
     }
     is WebWindowEvent.ScaleFactorChanged -> WindowEvent.ScaleFactorChanged(factor)
@@ -472,8 +502,8 @@ private fun WebKeyState.toKeyState(): KeyState = when (this) {
 private fun WebModifiers.toKeyboardModifiers(): KeyboardModifiers = KeyboardModifiers(bits)
 
 private fun WebMouseButton.toMouseButton(): MouseButton = when (this) {
-    WebMouseButton.Left   -> MouseButton.Left
-    WebMouseButton.Right  -> MouseButton.Right
+    WebMouseButton.Left -> MouseButton.Left
+    WebMouseButton.Right -> MouseButton.Right
     WebMouseButton.Middle -> MouseButton.Middle
     is WebMouseButton.Other -> MouseButton.Other(button)
 }

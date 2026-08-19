@@ -1,116 +1,42 @@
-/**
- * wasmJs implementation of [WebEventLoop] via `requestAnimationFrame` Wasm interop.
- *
- * This file resides in `wasmJsMain` — it can use `external` declarations
- * and Wasm JS interop (JsAny, JsReference, etc.).
- *
- * ## requestAnimationFrame via Wasm interop
- * The `window.requestAnimationFrame` API is exposed via an `external` declaration
- * since automatic DOM bindings are not available in wasmJs like in JS.
- *
- * ## setTimeout (WaitUntil mode)
- * In [ControlFlow.WaitUntil] mode, a `setTimeout` is scheduled for the target instant.
- *
- * @since 1.0.0
- */
+/** wasmJs browser adapters for the target-neutral web event loop. */
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package org.graphiks.kadre.web
 
-import org.graphiks.kadre.core.ApplicationHandler
-import org.graphiks.kadre.core.ControlFlow
+@JsFun("() => Date.now()")
+private external fun jsEpochNowMillis(): Double
 
-// ---------------------------------------------------------------------------
-// Wasm JS interop — requestAnimationFrame and setTimeout
-// ---------------------------------------------------------------------------
+@JsFun("(fn) => requestAnimationFrame(fn)")
+private external fun jsRequestAnimationFrame(callback: () -> Unit): Int
 
-/** Callback passed to requestAnimationFrame: receives the timestamp in ms. */
-private external fun requestAnimationFrame(callback: (Double) -> Unit): Int
+@JsFun("(id) => cancelAnimationFrame(id)")
+private external fun jsCancelAnimationFrame(id: Int)
 
-/**
- * Schedules the execution of a callback after [delayMs] milliseconds.
- *
- * @param callback Callback to execute.
- * @param delayMs  Delay in milliseconds (0 = as soon as possible).
- * @return Timer identifier (not used here).
- */
-private external fun setTimeout(callback: () -> Unit, delayMs: Int): Int
+@JsFun("(delay, fn) => setTimeout(fn, delay)")
+private external fun jsSetTimeout(delayMillis: Int, callback: () -> Unit): Int
 
-/** Returns the current timestamp in milliseconds since the Unix epoch. */
-private external fun dateNow(): Double
+@JsFun("(id) => clearTimeout(id)")
+private external fun jsClearTimeout(id: Int)
 
-// ---------------------------------------------------------------------------
-// WasmJsWebEventLoop
-// ---------------------------------------------------------------------------
+private object WasmBrowserSchedulingApi : BrowserSchedulingApi {
+    override fun epochNowMillis(): Long = jsEpochNowMillis().toLong()
 
-/**
- * wasmJs event loop — orchestrates frames via `requestAnimationFrame` Wasm interop.
- */
-class WasmJsWebEventLoop : WebEventLoop() {
+    override fun requestAnimationFrame(callback: () -> Unit): Int =
+        jsRequestAnimationFrame(callback)
 
-    /** true if a RAF is already queued, to avoid duplicates in Wait mode. */
-    private var rafPending = false
-
-    /**
-     * Schedules the next frame according to the current [controlFlow].
-     *
-     * - [ControlFlow.Poll]      → immediate RAF
-     * - [ControlFlow.Wait]      → no RAF (will be triggered by [scheduleWakeUp])
-     * - [ControlFlow.WaitUntil] → setTimeout until [ControlFlow.WaitUntil.instant], then RAF
-     */
-    override fun scheduleNextFrame(handler: ApplicationHandler) {
-        when (val cf = controlFlow) {
-            is ControlFlow.Poll -> {
-                rafPending = true
-                requestAnimationFrame { timestamp ->
-                    rafPending = false
-                    tick(handler, timestamp)
-                }
-            }
-            is ControlFlow.Wait -> {
-                // In Wait mode, we wait for a DOM event.
-                // scheduleWakeUp() will be called by the DOM bridge when an event arrives.
-            }
-            is ControlFlow.WaitUntil -> {
-                val delayMs = maxOf(0L, cf.instant - dateNow().toLong()).toInt()
-                setTimeout({
-                    if (!rafPending) {
-                        rafPending = true
-                        requestAnimationFrame { timestamp ->
-                            rafPending = false
-                            tick(handler, timestamp)
-                        }
-                    }
-                }, delayMs)
-            }
-        }
+    override fun cancelAnimationFrame(id: Int) {
+        jsCancelAnimationFrame(id)
     }
 
-    /**
-     * Wakes up the loop via a single RAF.
-     *
-     * Called in [ControlFlow.Wait] mode when a DOM event arrives,
-     * or from [createProxy] to notify from another context.
-     * Guarded by [rafPending] to avoid duplicate RAFs.
-     */
-    override fun scheduleWakeUp() {
-        if (!rafPending) {
-            rafPending = true
-            requestAnimationFrame { timestamp ->
-                rafPending = false
-                _pendingWakeUpHandler?.let { tick(it, timestamp) }
-            }
-        }
+    override fun setTimeout(delayMillis: Int, callback: () -> Unit): Int =
+        jsSetTimeout(delayMillis, callback)
+
+    override fun clearTimeout(id: Int) {
+        jsClearTimeout(id)
     }
+}
 
-    /** Handler memoized for [scheduleWakeUp] outside the [scheduleNextFrame] context. */
-    private var _pendingWakeUpHandler: ApplicationHandler? = null
-
-    override fun runApp(handler: ApplicationHandler) {
-        _pendingWakeUpHandler = handler
-        super.runApp(handler)
-    }
-
-    /**
-     * Creates a [WasmJsWebDomBridge] — wasmJs DOM bridge to the Kadre engine.
-     */
+/** wasmJs event loop backed by the browser's five scheduling operations. */
+class WasmJsWebEventLoop : WebEventLoop(WasmBrowserSchedulingApi) {
     override fun createDomBridge(): WebDomBridge = WasmJsWebDomBridge()
 }

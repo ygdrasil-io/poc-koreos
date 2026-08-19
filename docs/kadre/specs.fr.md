@@ -156,6 +156,17 @@ sealed interface RawDisplayHandle {
 - Seules des sealed interface **variants** sont ajoutés (extension safe pour les consommateurs qui font `when` exhaustif → ils devront recompiler mais leur code restera valide après ajout des branches manquantes).
 - Le seul impact de compatibilité source concerne les consommateurs qui font un `when` exhaustif sur `RawWindowHandle` (cas attendu : renderer wgpu4k).
 
+### 2.4 Clôture de compatibilité cross-platform
+
+Les six changements de compatibilité suivants sont approuvés comme contrats runtime observables. Ils sont additifs ou correctifs ; aucun ne modifie une signature de méthode publique, sauf indication contraire.
+
+1. Les événements pointeur Web qui ne portaient pas de coordonnées sont remplacés par des événements contenant position physique, source et identité du pointeur. **Migration :** les consommateurs de `WebWindowEvent` doivent mettre à jour leur gestion exhaustive et lire la position fournie.
+2. `Window.safeArea` est exprimé en pixels physiques ; les points UIKit et pixels CSS Web sont convertis par le facteur d’échelle actif. **Migration :** retirez toute multiplication DPR/échelle appliquée côté consommateur aux valeurs de zone sûre.
+3. Un affichage X11 ou compositeur Wayland indisponible devient une erreur runtime descriptive au lieu d’un no-op réussi. **Migration :** démarrez un affichage/compositeur joignable avant `runApp` et gérez l’échec de démarrage si l’application supposait auparavant une réussite silencieuse.
+4. Les backends imposent l’ordre documenté des callbacks `ApplicationHandler`. **Migration :** les handlers qui dépendaient accidentellement d’un ordre spécifique à un backend doivent déplacer leur travail vers le callback documenté.
+5. `iosX64` est retiré du sample Compose uniquement ; les cibles de bibliothèque Kadre conservent `iosX64`. **Migration :** construisez le sample pour `iosArm64` ou `iosSimulatorArm64` ; les consommateurs de bibliothèques ne changent pas leurs déclarations de cibles.
+6. Après le retrait du dernier output Wayland connu, `availableMonitors()` renvoie une liste vide au lieu d’un moniteur synthétique. **Migration :** les applications doivent gérer une liste de moniteurs vide après retrait d’output ; le fallback initial avant découverte reste distinct.
+
 ---
 
 ## 3. Considérations spécifiques par plateforme (Web, Windows, Linux)
@@ -227,6 +238,8 @@ sequenceDiagram
 | `resize` (window) | `WindowEvent.Resized` (via ResizeObserver sur canvas) |
 | `visibilitychange` | `suspended` (hidden) / `resumed` (visible) |
 | `pagehide` | `suspended` |
+
+Les noms publics actuels sont intentionnels : le DOM `pointermove` est mappé vers `WindowEvent.PointerMoved`, tandis que `pointerdown`/`pointerup` deviennent `WindowEvent.MouseInput` ou `WindowEvent.Touch` selon `pointerType`. Kadre n'émet pas d'alias historique `MouseMoved`.
 
 #### 3.1.5 DPI (devicePixelRatio)
 

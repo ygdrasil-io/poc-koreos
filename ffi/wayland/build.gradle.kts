@@ -12,6 +12,10 @@ kotlin {
     jvm()
 
     sourceSets {
-        jvmMain { dependencies { } }
+        jvmMain {
+            dependencies {
+                api(project(":ffi:posix"))
+            }
+        }
     }
 }

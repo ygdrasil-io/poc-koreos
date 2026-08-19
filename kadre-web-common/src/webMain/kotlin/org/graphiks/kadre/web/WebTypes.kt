@@ -17,7 +17,10 @@
  */
 package org.graphiks.kadre.web
 
+import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.KeyEvent
+import org.graphiks.kadre.core.PointerKind
+import org.graphiks.kadre.core.PointerSource
 
 // ---------------------------------------------------------------------------
 // Logical keys
@@ -260,24 +263,56 @@ sealed interface WebWindowEvent {
     /**
      * The pointer has moved.
      *
-     * @property x X position in physical pixels.
-     * @property y Y position in physical pixels.
+     * @property x         Canvas-relative X in physical pixels.
+     * @property y         Canvas-relative Y in physical pixels.
+     * @property pointerId DOM pointer identity for this contact.
+     * @property primary   Whether this is the primary pointer for its kind.
+     * @property source    Pointer source, including touch or tablet identity.
      */
-    data class PointerMoved(val x: Double, val y: Double) : WebWindowEvent
+    data class PointerMoved(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val source: PointerSource,
+    ) : WebWindowEvent
 
-    /** The pointer entered the canvas. */
-    data object PointerEntered : WebWindowEvent
+    /** The pointer entered the canvas at the supplied canvas-relative physical position. */
+    data class PointerEntered(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WebWindowEvent
 
-    /** The pointer left the canvas. */
-    data object PointerLeft : WebWindowEvent
+    /** The pointer left the canvas at the supplied canvas-relative physical position. */
+    data class PointerLeft(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val kind: PointerKind,
+    ) : WebWindowEvent
 
     /**
-     * A mouse button changed state.
+     * A pointer button changed state.
      *
-     * @property button Button concerned.
-     * @property state  Button state.
+     * @property x         Canvas-relative X in physical pixels.
+     * @property y         Canvas-relative Y in physical pixels.
+     * @property pointerId DOM pointer identity for this contact.
+     * @property primary   Whether this is the primary pointer for its kind.
+     * @property button    Button source, including mouse/touch/tablet identity.
+     * @property state     Button state.
      */
-    data class MouseInput(val button: WebMouseButton, val state: WebKeyState) : WebWindowEvent
+    data class PointerButton(
+        val x: Double,
+        val y: Double,
+        val pointerId: Long,
+        val primary: Boolean,
+        val button: ButtonSource,
+        val state: WebKeyState,
+    ) : WebWindowEvent
 
     /**
      * The wheel produced a scroll.
@@ -297,16 +332,18 @@ sealed interface WebWindowEvent {
      * A touch contact changed state.
      *
      * @property phase Contact phase.
-     * @property x     X position in physical pixels (client coordinates).
-     * @property y     Y position in physical pixels (client coordinates).
+     * @property x     Canvas-relative X in physical pixels.
+     * @property y     Canvas-relative Y in physical pixels.
      * @property id    Contact identifier (DOM `Touch.identifier`), stable between
      *   [WebTouchPhase.Started] and [WebTouchPhase.Ended] / [WebTouchPhase.Cancelled].
+     * @property primary Whether this is the oldest active touch contact.
      */
     data class Touch(
         val phase: WebTouchPhase,
         val x: Double,
         val y: Double,
         val id: Long,
+        val primary: Boolean,
     ) : WebWindowEvent
 
     /**
@@ -351,8 +388,8 @@ sealed interface WebWindowEvent {
      *
      * Emitted from the DOM `dragenter` event on the canvas element.
      *
-     * @property x     Pointer X position in CSS pixels.
-     * @property y     Pointer Y position in CSS pixels.
+     * @property x     Canvas-relative pointer X in physical pixels.
+     * @property y     Canvas-relative pointer Y in physical pixels.
      * @property files List of file MIME types (available during drag) or empty.
      */
     data class DragEntered(val x: Double, val y: Double, val files: List<String>) : WebWindowEvent
@@ -362,8 +399,8 @@ sealed interface WebWindowEvent {
      *
      * Emitted from the DOM `dragover` event.
      *
-     * @property x Pointer X position in CSS pixels.
-     * @property y Pointer Y position in CSS pixels.
+     * @property x Canvas-relative pointer X in physical pixels.
+     * @property y Canvas-relative pointer Y in physical pixels.
      */
     data class DragMoved(val x: Double, val y: Double) : WebWindowEvent
 
@@ -372,8 +409,8 @@ sealed interface WebWindowEvent {
      *
      * Emitted from the DOM `drop` event.
      *
-     * @property x     Pointer X position in CSS pixels.
-     * @property y     Pointer Y position in CSS pixels.
+     * @property x     Canvas-relative pointer X in physical pixels.
+     * @property y     Canvas-relative pointer Y in physical pixels.
      * @property files List of dropped file names.
      */
     data class DragDropped(val x: Double, val y: Double, val files: List<String>) : WebWindowEvent
@@ -415,8 +452,8 @@ sealed interface WebWindowEvent {
      * Pinch zoom via Ctrl+Wheel (works across all browsers).
      *
      * @property delta   Normalised zoom delta (positive = zoom in).
-     * @property centerX Pointer X position in CSS pixels.
-     * @property centerY Pointer Y position in CSS pixels.
+     * @property centerX Canvas-relative pointer X in physical pixels.
+     * @property centerY Canvas-relative pointer Y in physical pixels.
      */
     data class WebPinchZoom(val delta: Float, val centerX: Double, val centerY: Double) : WebWindowEvent
 }

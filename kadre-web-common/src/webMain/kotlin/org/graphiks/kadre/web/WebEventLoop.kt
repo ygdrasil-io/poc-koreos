@@ -18,13 +18,14 @@
  * runApp(handler)
  *   └─► handler.resumed(this)
  *   └─► handler.newEvents(this, StartCause.Init)
+ *   └─► handler.canCreateSurfaces(this)
  *   └─► handler.aboutToWait(this)
- *   └─► scheduleNextFrame(handler)    ← RAF scheduled
- *         └─► tick(handler)           ← called back by the browser
- *               ├─ handler.newEvents(...)
+ *   └─► BrowserScheduler.arm(controlFlow)
+ *         └─► scheduled iteration
+ *               ├─ handler.newEvents(exact stored cause)
  *               ├─ dispatch of the accumulated DOM events
  *               ├─ handler.aboutToWait(this)
- *               └─ scheduleNextFrame(handler)  ← next RAF (if !isExiting)
+ *               └─ BrowserScheduler.arm(controlFlow)  ← if !isExiting
  * ```
  *
  * @since 1.0.0
@@ -54,14 +55,33 @@ import org.graphiks.kadre.core.WindowId
 /**
  * Web event loop shared between the JS and wasmJs targets.
  *
- * This class is abstract: the concrete subclasses ([JsWebEventLoop] and
- * [WasmJsWebEventLoop]) provide access to `window.requestAnimationFrame`
- * via their target-specific APIs.
+ * [JsWebEventLoop] and [WasmJsWebEventLoop] inject five target-specific browser
+ * operations. Scheduling policy, deadline epoch sampling and cancellation live
+ * entirely in the shared [BrowserScheduler]. RAF-relative timestamps never
+ * enter this common event loop.
  *
  * ## Thread safety
  * JavaScript is single-threaded; the calls from `wakeUp()` are synchronous.
  */
-open class WebEventLoop : ActiveEventLoop {
+open class WebEventLoop internal constructor(
+    private val schedulingApi: BrowserSchedulingApi?,
+) : ActiveEventLoop {
+
+    /** Public compatibility constructor retained for source and binary callers. */
+    constructor() : this(null)
+
+    private sealed interface PendingWebEvent {
+        data class Window(
+            val window: WebWindow,
+            val event: WindowEvent,
+            val terminal: Boolean = false,
+        ) : PendingWebEvent
+
+        data class Metrics(
+            val window: WebWindow,
+            val transaction: WebMetricsTransaction,
+        ) : PendingWebEvent
+    }
 
     // -------------------------------------------------------------------------
     // Internal state
@@ -69,6 +89,12 @@ open class WebEventLoop : ActiveEventLoop {
 
     private var _controlFlow: ControlFlow = ControlFlow.Wait
     private var _isExiting = false
+    private var handler: ApplicationHandler? = null
+    private var suspendedDelivered = false
+    private var schedulerPausedAfterLastWindowClose = false
+    private val scheduler = schedulingApi?.let { api ->
+        BrowserScheduler(api, ::runScheduledIteration)
+    }
 
     /** Current polling strategy (defaults to [PollStrategy.IdleCallback]). */
     internal var pollStrategy: PollStrategy = PollStrategy.IdleCallback
@@ -86,7 +112,10 @@ open class WebEventLoop : ActiveEventLoop {
     private var nextWindowId: Long = 1L
 
     /** Queue of DOM events received between two frames. */
-    private val pendingEvents = mutableListOf<Pair<WindowId, WindowEvent>>()
+    private val pendingEvents = mutableListOf<PendingWebEvent>()
+
+    /** Windows whose redraw request is queued or awaiting snapshot consumption. */
+    private val queuedRedrawWindows = mutableSetOf<WebWindow>()
 
     // -------------------------------------------------------------------------
     // ActiveEventLoop
@@ -101,7 +130,9 @@ open class WebEventLoop : ActiveEventLoop {
     override val isExiting: Boolean get() = _isExiting
 
     override fun exit() {
+        if (_isExiting) return
         _isExiting = true
+        scheduler?.cancel()
     }
 
     /**
@@ -140,20 +171,7 @@ open class WebEventLoop : ActiveEventLoop {
     fun createWindow(attrs: WebWindowAttributes): Window {
         val bridge = createDomBridge()
         if (primaryBridge == null) {
-            primaryBridge = bridge
-            // Wire the theme change listener on the primary bridge.
-            // Each window receives ThemeChanged whenever prefers-color-scheme toggles.
-            bridge.onThemeChange = { dark ->
-                val theme = if (dark) Theme.Dark else Theme.Light
-                // Dispatch ThemeChanged for every window attached to this event loop.
-                for (win in windows) {
-                    pendingEvents.add(Pair(win.id, WindowEvent.ThemeChanged(theme)))
-                }
-                // In Wait mode, wake the loop immediately
-                if (_controlFlow is ControlFlow.Wait) {
-                    scheduleWakeUp()
-                }
-            }
+            installPrimaryBridge(bridge)
         }
         val canvasId = bridge.ensureCanvas(attrs)
         val window = WebWindow(
@@ -161,30 +179,21 @@ open class WebEventLoop : ActiveEventLoop {
             canvasElementId = canvasId,
             bridge = bridge,
         )
+        window.closeHandler = ::closeWindow
 
         // Initialise synchronously from the current DOM state (before any event fires).
         val (initW, initH) = bridge.readCanvasPhysicalSize(canvasId)
         window.updatePhysicalSize(initW, initH)
         window.updateScaleFactor(bridge.readDevicePixelRatio())
 
-        bridge.onWindowEvent = { event ->
-            // Keep WebWindow's cached state in sync with DOM events.
-            when (event) {
-                is WebWindowEvent.Resized ->
-                    window.updatePhysicalSize(event.width, event.height)
-                is WebWindowEvent.ScaleFactorChanged ->
-                    window.updateScaleFactor(event.factor)
-                else -> Unit
-            }
-            // Queue the event for the window owned by this DOM bridge.
-            pendingEvents.add(Pair(window.id, event.toWindowEvent()))
-            // In Wait mode, wake the loop immediately
-            if (_controlFlow is ControlFlow.Wait) {
-                scheduleWakeUp()
-            }
-        }
+        val wasPausedAfterLastClose = schedulerPausedAfterLastWindowClose
+        schedulerPausedAfterLastWindowClose = false
         windows.add(window)
+        installWindowBridge(window)
         bridge.attach(canvasId)
+        if (wasPausedAfterLastClose) {
+            signalScheduling()
+        }
         return window
     }
 
@@ -194,7 +203,7 @@ open class WebEventLoop : ActiveEventLoop {
      * In JavaScript (single-threaded), the proxy simply calls [scheduleWakeUp].
      */
     override fun createProxy(): EventLoopProxy = object : EventLoopProxy {
-        override fun wakeUp() = scheduleWakeUp()
+        override fun wakeUp() = signalScheduling()
     }
 
     // ── Task 14: ownedDisplayHandle ──────────────────────────────────────────
@@ -279,23 +288,31 @@ open class WebEventLoop : ActiveEventLoop {
     /**
      * Starts the event loop and notifies the handler.
      *
-     * Calls [ApplicationHandler.resumed], then [ApplicationHandler.canCreateSurfaces]
+     * Calls [ApplicationHandler.resumed], then [ApplicationHandler.newEvents]
+     * with [StartCause.Init], then [ApplicationHandler.canCreateSurfaces]
      * (the browser allows surface creation right from startup), then
-     * [ApplicationHandler.newEvents] with [StartCause.Init], then
-     * [ApplicationHandler.aboutToWait], and finally schedules the first frame via
-     * [scheduleNextFrame].
+     * [ApplicationHandler.aboutToWait], and finally arms the shared browser
+     * scheduler.
      *
      * @param handler Handler for the application's lifecycle.
      */
     open fun runApp(handler: ApplicationHandler) {
+        this.handler = handler
         handler.resumed(this)
+        handler.newEvents(this, StartCause.Init)
         // On the web, the canvas is available immediately: we allow surface
         // creation right away (parity with the AppKit/Win32 desktop loops).
         handler.canCreateSurfaces(this)
-        handler.newEvents(this, StartCause.Init)
         handler.aboutToWait(this)
-        if (!_isExiting) {
-            scheduleNextFrame(handler)
+        if (
+            !_isExiting &&
+            (!schedulerPausedAfterLastWindowClose || pendingEvents.isNotEmpty())
+        ) {
+            if (scheduler != null) {
+                scheduler.arm(_controlFlow, pendingEvents.isNotEmpty())
+            } else {
+                scheduleNextFrame(handler)
+            }
         }
     }
 
@@ -306,43 +323,196 @@ open class WebEventLoop : ActiveEventLoop {
     /**
      * Runs one iteration of the event loop.
      *
-     * Called by `requestAnimationFrame` in the concrete subclasses.
-     * Dispatches the accumulated DOM events, then schedules the next frame
-     * if the loop is not shutting down.
+     * Compatibility hook for subclasses without an injected browser API.
+     * Target loops use [BrowserScheduler], whose RAF callback carries no timestamp.
      *
      * @param handler Lifecycle handler.
-     * @param now     Timestamp provided by requestAnimationFrame (in ms, ignored here).
+     * @param now Deprecated RAF-relative timestamp retained only for compatibility;
+     *            it is deliberately ignored.
      */
-    protected fun tick(handler: ApplicationHandler, now: Double = 0.0) {
-        if (_isExiting) return
-
-        // Determines the start cause of this iteration
-        val cause: StartCause = when (val cf = _controlFlow) {
-            is ControlFlow.Poll        -> StartCause.Poll
-            is ControlFlow.Wait        -> StartCause.WaitCancelled()
-            is ControlFlow.WaitUntil   -> StartCause.ResumeTimeReached(
-                requestedResume = cf.instant,
-                start = now.toLong()
+    protected fun tick(
+        handler: ApplicationHandler,
+        @Suppress("UNUSED_PARAMETER") now: Double = 0.0,
+    ) {
+        this.handler = handler
+        val cause = when (val controlFlow = _controlFlow) {
+            ControlFlow.Poll -> StartCause.Poll
+            ControlFlow.Wait -> StartCause.WaitCancelled()
+            is ControlFlow.WaitUntil -> StartCause.ResumeTimeReached(
+                requestedResume = controlFlow.instant,
+                start = schedulingApi?.epochNowMillis() ?: controlFlow.instant,
             )
         }
+        runScheduledIteration(cause)
+    }
 
-        handler.newEvents(this, cause)
+    private fun runScheduledIteration(cause: StartCause) {
+        if (_isExiting) return
+        val currentHandler = handler ?: return
+        currentHandler.newEvents(this, cause)
 
         // Dispatch the accumulated DOM events
         val snapshot = pendingEvents.toList()
         pendingEvents.clear()
-        for ((windowId, event) in snapshot) {
-            handler.windowEvent(this, windowId, event)
+        for (pending in snapshot) {
+            when (pending) {
+                is PendingWebEvent.Window -> {
+                    if (pending.window.isClosed && !pending.terminal) continue
+                    if (pending.event == WindowEvent.RedrawRequested) {
+                        queuedRedrawWindows.remove(pending.window)
+                    }
+                    when (val event = pending.event) {
+                        is WindowEvent.Resized ->
+                            pending.window.updatePhysicalSize(event.size.width, event.size.height)
+                        is WindowEvent.ScaleFactorChanged ->
+                            pending.window.updateScaleFactor(event.factor)
+                        else -> Unit
+                    }
+                    currentHandler.windowEvent(this, pending.window.id, pending.event)
+                }
+                is PendingWebEvent.Metrics -> {
+                    val window = pending.window
+                    if (window.isClosed) continue
+                    val metrics = pending.transaction
+                    window.updateScaleFactor(metrics.scaleFactor)
+                    window.updatePhysicalSize(metrics.physicalSize.width, metrics.physicalSize.height)
+                    currentHandler.windowEvent(
+                        this,
+                        window.id,
+                        WebWindowEvent.ScaleFactorChanged(metrics.scaleFactor).toWindowEvent(),
+                    )
+                    if (!window.isClosed) {
+                        currentHandler.windowEvent(
+                            this,
+                            window.id,
+                            WebWindowEvent.Resized(
+                                metrics.physicalSize.width,
+                                metrics.physicalSize.height,
+                            ).toWindowEvent(),
+                        )
+                    }
+                }
+            }
         }
 
-        handler.aboutToWait(this)
-
+        currentHandler.aboutToWait(this)
         // Schedule the next frame according to the current mode
-        if (!_isExiting) {
-            scheduleNextFrame(handler)
-        } else {
+        if (
+            !_isExiting &&
+            (!schedulerPausedAfterLastWindowClose || pendingEvents.isNotEmpty())
+        ) {
+            if (scheduler != null) {
+                scheduler.arm(_controlFlow, pendingEvents.isNotEmpty())
+            } else {
+                scheduleNextFrame(currentHandler)
+            }
+        } else if (_isExiting && !suspendedDelivered) {
             // Notify the handler of the imminent end
-            handler.suspended(this)
+            suspendedDelivered = true
+            currentHandler.suspended(this)
+        }
+    }
+
+    private fun enqueueWindowEvent(window: WebWindow, event: WindowEvent) {
+        if (window.isClosed || window !in windows) return
+        if (event == WindowEvent.RedrawRequested) {
+            if (!queuedRedrawWindows.add(window)) return
+        }
+
+        pendingEvents.add(PendingWebEvent.Window(window, event))
+        signalScheduling()
+    }
+
+    private fun closeWindow(window: WebWindow) {
+        if (!window.markClosed()) return
+        if (!windows.remove(window)) return
+
+        window.closeHandler = null
+        val bridge = window.bridge
+        val bridgeStillOwned = windows.any { it.bridge === bridge }
+        if (!bridgeStillOwned) {
+            bridge.onWindowEvent = null
+        }
+        val connection = window.metricsConnection
+        window.metricsConnection = null
+        val ownsDetachment = connection == null || WebMetricsTransactions.disconnect(connection)
+
+        pendingEvents.removeAll { pending ->
+            when (pending) {
+                is PendingWebEvent.Window -> pending.window === window
+                is PendingWebEvent.Metrics -> pending.window === window
+            }
+        }
+        queuedRedrawWindows.remove(window)
+
+        val wasPrimary = primaryBridge === bridge && !bridgeStillOwned
+        if (wasPrimary) {
+            bridge.onThemeChange = null
+            primaryBridge = null
+        }
+        if (!bridgeStillOwned && ownsDetachment) {
+            bridge.detach()
+        } else if (bridgeStillOwned && ownsDetachment) {
+            windows.lastOrNull { it.bridge === bridge }?.let(::installWindowBridge)
+        }
+        if (wasPrimary) {
+            windows.firstOrNull()?.bridge?.let(::installPrimaryBridge)
+        }
+
+        try {
+            val currentHandler = handler
+            if (currentHandler != null) {
+                currentHandler.windowEvent(this, window.id, WindowEvent.Destroyed)
+            } else {
+                pendingEvents.add(
+                    PendingWebEvent.Window(
+                        window = window,
+                        event = WindowEvent.Destroyed,
+                        terminal = true,
+                    ),
+                )
+            }
+        } finally {
+            if (windows.isEmpty()) {
+                schedulerPausedAfterLastWindowClose = true
+                scheduler?.cancelPending()
+            }
+        }
+    }
+
+    private fun installPrimaryBridge(bridge: WebDomBridge) {
+        primaryBridge = bridge
+        bridge.onThemeChange = { dark ->
+            val theme = if (dark) Theme.Dark else Theme.Light
+            for (window in windows.toList()) {
+                enqueueWindowEvent(window, WindowEvent.ThemeChanged(theme))
+            }
+        }
+    }
+
+    private fun installWindowBridge(window: WebWindow) {
+        val bridge = window.bridge
+        bridge.onWindowEvent = callback@{ event ->
+            if (window.isClosed || window !in windows) return@callback
+            if (event == WebWindowEvent.Destroyed) {
+                closeWindow(window)
+                return@callback
+            }
+            enqueueWindowEvent(window, event.toWindowEvent())
+        }
+        window.metricsConnection = WebMetricsTransactions.connect(bridge) { transaction ->
+            if (window.isClosed || window !in windows) return@connect
+            pendingEvents.add(PendingWebEvent.Metrics(window, transaction))
+            signalScheduling()
+        }
+    }
+
+    private fun signalScheduling() {
+        if (_isExiting || handler == null) return
+        if (scheduler != null) {
+            scheduler.signalEvent(_controlFlow)
+        } else {
+            scheduleWakeUp()
         }
     }
 
@@ -357,8 +527,9 @@ open class WebEventLoop : ActiveEventLoop {
      * - [ControlFlow.Wait]      → waits for a DOM event ([scheduleWakeUp] will schedule the RAF)
      * - [ControlFlow.WaitUntil] → `setTimeout` until the target instant, then RAF
      *
-     * The concrete subclasses must provide `requestAnimationFrame`
-     * and `setTimeout` via the mechanisms specific to their target (JS or wasmJs).
+     * New target loops inject [BrowserSchedulingApi] instead. This method remains
+     * as a source-compatible hook for existing subclasses built around the public
+     * zero-argument constructor.
      *
      * This method is `open` to allow overriding in tests.
      */
@@ -373,7 +544,8 @@ open class WebEventLoop : ActiveEventLoop {
      * Used in [ControlFlow.Wait] mode when a DOM event arrives,
      * and by [createProxy] to wake the loop from another context.
      *
-     * Stub — overridden in the subclasses to call `requestAnimationFrame`.
+     * New target loops inject [BrowserSchedulingApi] instead. This compatibility
+     * hook is used only by subclasses built around the zero-argument constructor.
      */
     protected open fun scheduleWakeUp() {
         // Stub: overridden in JsWebEventLoop / WasmJsWebEventLoop

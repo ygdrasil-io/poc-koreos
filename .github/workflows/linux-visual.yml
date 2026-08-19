@@ -2,7 +2,8 @@ name: linux-visual
 
 # Linux visual regression via GPU readback.
 # The capture reuses the kadre EventLoop to obtain a Wayland window, hence the
-# wgpu surface, then renders offscreen + readback. NON-BLOCKING.
+# wgpu surface, then renders offscreen + readback. OPTIONAL HARDWARE DIAGNOSTIC:
+# it is never a dependency of cross-platform-correctness.
 #
 # Headless: Weston Wayland compositor (headless backend) + software Vulkan (Mesa
 # lavapipe), since the runners have no GPU.
@@ -23,8 +24,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  linux-visual:
-    name: linux-visual
+  linux-hardware-diagnostic:
+    name: optional Linux Wayland hardware diagnostic
     runs-on: ubuntu-latest
     permissions:
       contents: write        # push captures to the orphan branch ci-visual-reports
@@ -46,9 +47,24 @@ jobs:
           node-version: 'lts/*'
 
       - name: Install Wayland compositor + software Vulkan
+        # The runner mirror list can put an unavailable regional mirror first.
+        # Bound provisioning and use the reachable Ubuntu mirror observed in CI.
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | \
+              sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo apt-get \
+            -o Acquire::Retries=2 \
+            -o Acquire::http::Timeout=30 \
+            -o Acquire::https::Timeout=30 \
+            update
+          sudo apt-get \
+            -o Acquire::Retries=2 \
+            -o Acquire::http::Timeout=30 \
+            -o Acquire::https::Timeout=30 \
+            install -y \
             weston \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             mesa-vulkan-drivers vulkan-tools

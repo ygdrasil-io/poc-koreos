@@ -1,4 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# The mandatory PR correctness matrix is intentionally defined in the separate
+# cross-platform-correctness workflow. Its aggregate job is the branch-protection
+# status; this legacy workflow remains a broader build and packaging signal.
 # Kadre CI — Multi-Platform
 #
 # Two-tier strategy (GRA-160 + GRA-39):
@@ -47,6 +51,7 @@ jobs:
   build-and-test:
     name: build-and-test
     runs-on: macos-15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -131,6 +136,7 @@ jobs:
   macos-build:
     name: macos-build
     runs-on: macos-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -146,13 +152,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run AppKit runtime gate
+        run: scripts/test-appkit-runtime.sh
+
       # Compile the macOS-only modules + JVM samples
       # hello-triangle requires wgpu4k — compiled but not run in CI.
       - name: Build macOS modules + JVM samples
         run: |
           ./gradlew \
             :kadre-core:jvmTest \
-            :kadre-appkit:build \
+            :kadre-appkit:assemble \
             :kadre:jvmTest \
             :samples:hello-metal:build \
             :samples:hello-triangle:build \
@@ -172,6 +181,7 @@ jobs:
   ios-build:
     name: ios-build
     runs-on: macos-15
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -231,6 +241,7 @@ jobs:
   android-build:
     name: android-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -266,7 +277,7 @@ jobs:
         run: |
           ./gradlew \
             :kadre-android:build \
-            :kadre:compileDebugKotlinAndroid \
+            :kadre:compileAndroidMain \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
             --no-daemon \
@@ -279,6 +290,7 @@ jobs:
   web-build:
     name: web-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -331,6 +343,7 @@ jobs:
   windows-build:
     name: windows-build
     runs-on: windows-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -379,6 +392,7 @@ jobs:
   linux-x11-build:
     name: linux-x11-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -430,6 +444,7 @@ jobs:
   linux-wayland-build:
     name: linux-wayland-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||

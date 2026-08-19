@@ -19,6 +19,26 @@
 package org.graphiks.kadre.web
 
 import org.graphiks.kadre.core.Insets
+import kotlin.math.roundToInt
+
+internal fun physicalSafeAreaInsets(
+    topCss: Double,
+    bottomCss: Double,
+    leftCss: Double,
+    rightCss: Double,
+    devicePixelRatio: Double,
+): Insets<Int> {
+    val scale = normalizedDevicePixelRatio(devicePixelRatio)
+    fun physical(cssPixels: Double): Int =
+        ((cssPixels.takeIf(Double::isFinite) ?: 0.0) * scale).roundToInt()
+
+    return Insets(
+        top = physical(topCss),
+        bottom = physical(bottomCss),
+        left = physical(leftCss),
+        right = physical(rightCss),
+    )
+}
 
 /**
  * Binding interface between the browser DOM and the Kadre engine.
@@ -69,8 +89,9 @@ interface WebDomBridge {
     fun readDevicePixelRatio(): Double = 1.0
 
     /**
-     * Returns the current CSS dimensions of the canvas identified by [canvasId]
-     * in physical pixels (CSS pixels × devicePixelRatio, rounded to nearest Int).
+     * Returns the current client/rendering dimensions of the canvas identified
+     * by [canvasId] in physical pixels (client CSS pixels × devicePixelRatio,
+     * rounded to nearest Int). CSS borders are excluded.
      *
      * Used by [WebWindow] to initialize [WebWindow.innerSize] synchronously at
      * window-creation time (before the first [WebWindowEvent.Resized]).
@@ -169,7 +190,10 @@ interface WebDomBridge {
      * the canvas (`"none"`) or restore normal hit-testing (`"auto"`).
      * Default: no-op (test / non-browser bridge).
      */
-    fun setPointerEvents(canvasId: String, pointerEventsValue: String) { /* no-op by default */ }
+    @Suppress("DEPRECATION")
+    fun setPointerEvents(canvasId: String, pointerEventsValue: String) {
+        setCursorHittest(canvasId, pointerEventsValue != "none")
+    }
 
     /**
      * Requests Pointer Lock on the canvas element (for [CursorGrabMode.Locked]).
@@ -205,7 +229,8 @@ interface WebDomBridge {
      *
      * Default: no-op (test / non-browser bridge).
      */
-    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* no-op by default */ }
+    @Deprecated("Use setPointerEvents")
+    fun setCursorHittest(canvasId: String, hittest: Boolean) { /* compatibility no-op by default */ }
 
     /**
      * Returns true if `window.matchMedia('(prefers-color-scheme: dark)')` matches.
@@ -259,7 +284,8 @@ interface WebDomBridge {
     // ── Task 14: safeArea insets ─────────────────────────────────────────────
 
     /**
-     * Returns the CSS `env(safe-area-inset-*)` values for the current viewport.
+     * Returns the CSS `env(safe-area-inset-*)` values for the current viewport
+     * converted to physical pixels with the active device pixel ratio.
      *
      * On devices with a notch (iPhone X+) these values are non-zero. Default
      * implementation returns zero insets (test / desktop browser bridge).

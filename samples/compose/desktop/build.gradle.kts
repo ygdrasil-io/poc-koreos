@@ -33,4 +33,5 @@ dependencies {
     implementation(project(":kadre-x11"))
     implementation(project(":kadre-wayland"))
     implementation(compose.desktop.currentOs)
+    testImplementation(kotlin("test"))
 }

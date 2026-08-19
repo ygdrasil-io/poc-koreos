@@ -1,0 +1,13 @@
+name: empty-needs workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  cross-platform-correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [] # host-contracts web-browser-contracts ios-simulator-contracts android-emulator-contracts linux-container-contracts deterministic-captures
+    steps:
+      - run: true

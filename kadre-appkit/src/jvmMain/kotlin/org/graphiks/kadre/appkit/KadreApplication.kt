@@ -178,6 +178,15 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
     private object Callbacks {
         @JvmStatic
         fun sendEvent(self: MemorySegment, sel: MemorySegment, event: MemorySegment) {
+            AppKitNativeCallbackBoundary.invoke {
+                appKitDispatchSendEventSafely(
+                    resolveEventLoop = { sharedApp?.eventLoop },
+                    callback = { sendEventUnchecked(self, sel, event) },
+                )
+            }
+        }
+
+        private fun sendEventUnchecked(self: MemorySegment, sel: MemorySegment, event: MemorySegment) {
             // 1. FIRST call super (objc_msgSendSuper) so AppKit processes normally
             callSuperSendEvent(self, sel, event)
 
@@ -587,6 +596,36 @@ class KadreApplication private constructor(ptr: MemorySegment) : NSApplication(p
                 // return; we must cast to Unit so the void descriptor matches.
                 handle.invokeExact(superStruct, sel, event) as Unit
             }
+        }
+    }
+}
+
+internal fun appKitInvokeSendEventSafely(eventLoop: AppKitEventLoop?, callback: () -> Unit) {
+    appKitInvokeSendEventSafely(resolveEventLoop = { eventLoop }, callback = callback)
+}
+
+internal fun appKitInvokeSendEventSafely(
+    resolveEventLoop: () -> AppKitEventLoop?,
+    callback: () -> Unit,
+) {
+    AppKitNativeCallbackBoundary.invoke {
+        appKitDispatchSendEventSafely(resolveEventLoop, callback)
+    }
+}
+
+private fun appKitDispatchSendEventSafely(
+    resolveEventLoop: () -> AppKitEventLoop?,
+    callback: () -> Unit,
+) {
+    var eventLoop: AppKitEventLoop? = null
+    try {
+        eventLoop = resolveEventLoop()
+        callback()
+    } catch (failure: Throwable) {
+        try {
+            eventLoop?.recordCallbackFailure("sendEvent", failure)
+        } catch (_: Throwable) {
+            // No Kotlin exception may cross an Objective-C upcall.
         }
     }
 }
