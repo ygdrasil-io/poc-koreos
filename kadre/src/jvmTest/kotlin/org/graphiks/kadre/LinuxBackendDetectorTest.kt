@@ -13,11 +13,82 @@
 package org.graphiks.kadre
 
 import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class LinuxBackendDetectorTest {
+
+    @Test
+    fun `auto selection falls back from an unusable Wayland session to X11`() {
+        val probed = mutableListOf<String>()
+
+        val selection = LinuxBackendDetector.detectBackend(
+            environment = mapOf("WAYLAND_DISPLAY" to "stale", "DISPLAY" to ":0")::get,
+            loadClass = {},
+            probe = { backend ->
+                probed += backend
+                if (backend == LinuxBackendDetector.WAYLAND_CLASS) {
+                    throw IllegalStateException("stale Wayland socket")
+                }
+            },
+        )
+
+        assertEquals(LinuxBackendDetector.X11_CLASS, selection.backendClass)
+        assertEquals(LinuxBackendStage.PROBE, selection.stage)
+        assertEquals(null, selection.failure)
+        assertEquals(
+            listOf(LinuxBackendDetector.WAYLAND_CLASS, LinuxBackendDetector.X11_CLASS),
+            probed,
+        )
+    }
+
+    @Test
+    fun `forced Wayland selection exposes its probe failure without trying X11`() {
+        val probed = mutableListOf<String>()
+
+        val failure = assertFailsWith<IllegalStateException> {
+            LinuxBackendDetector.detectBackend(
+                environment = mapOf("KADRE_LINUX_BACKEND" to "wayland", "DISPLAY" to ":0")::get,
+                loadClass = {},
+                probe = { backend ->
+                    probed += backend
+                    throw IllegalStateException("stale Wayland socket")
+                },
+            )
+        }
+
+        assertContains(failure.message.orEmpty(), LinuxBackendDetector.WAYLAND_CLASS)
+        assertContains(failure.message.orEmpty(), "probe")
+        assertEquals(listOf(LinuxBackendDetector.WAYLAND_CLASS), probed)
+        assertEquals("stale Wayland socket", failure.cause?.message)
+    }
+
+    @Test
+    fun `selection failure retains the primary and suppressed native causes`() {
+        val waylandFailure = IllegalStateException("stale Wayland socket")
+        val x11Failure = UnsatisfiedLinkError("XOpenDisplay unavailable")
+
+        val failure = assertFailsWith<IllegalStateException> {
+            LinuxBackendDetector.detectBackend(
+                environment = mapOf("WAYLAND_DISPLAY" to "stale", "DISPLAY" to ":0")::get,
+                loadClass = {},
+                probe = { backend ->
+                    throw if (backend == LinuxBackendDetector.WAYLAND_CLASS) {
+                        waylandFailure
+                    } else {
+                        x11Failure
+                    }
+                },
+            )
+        }
+
+        assertSame(waylandFailure, failure.cause)
+        assertEquals(listOf(x11Failure), failure.suppressed.toList())
+    }
 
     // -------------------------------------------------------------------------
     // canLoad — main logic, OS-independent

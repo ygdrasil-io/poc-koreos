@@ -20,6 +20,8 @@
  */
 package org.graphiks.kadre
 
+import java.lang.reflect.InvocationTargetException
+
 /**
  * JVM implementation of [EventLoop].
  *
@@ -44,32 +46,46 @@ actual class EventLoop actual constructor() {
      */
     actual fun runApp(handler: ApplicationHandler) {
         val os = System.getProperty("os.name", "").lowercase()
+        if (os.contains("linux")) {
+            LinuxBackendDetector.detectBackend(
+                probe = { backendClass -> invokeBackendRunApp(backendClass, handler) },
+                probeStage = LinuxBackendStage.LAUNCH,
+            )
+            return
+        }
+
         val backendClass = when {
-            os.contains("mac")   -> "org.graphiks.kadre.appkit.AppKitEventLoopKt"
-            os.contains("win")   -> "org.graphiks.kadre.win32.Win32EventLoopKt"
-            os.contains("linux") -> LinuxBackendDetector.detectBackendClass()
+            os.contains("mac") -> "org.graphiks.kadre.appkit.AppKitEventLoopKt"
+            os.contains("win") -> "org.graphiks.kadre.win32.Win32EventLoopKt"
             else -> throw UnsupportedOperationException(
                 "Operating system not supported by kadre-jvm: '$os'. " +
                 "Supported platforms: macOS, Windows, Linux."
             )
         }
 
-        val klass = try {
-            Class.forName(backendClass)
-        } catch (e: ClassNotFoundException) {
-            val module = when {
-                os.contains("win")   -> "kadre-win32"
-                os.contains("linux") -> "kadre-x11 ou kadre-wayland"
-                else                 -> "kadre-appkit"
-            }
-            throw UnsupportedOperationException(
-                "$backendClass not found on classpath. " +
-                "Add the dependency implementation(project(\":$module\")).",
-                e,
-            )
-        }
+        invokeBackendRunApp(backendClass, handler)
+    }
+}
 
-        val method = klass.getMethod("runApp", ApplicationHandler::class.java)
+/** Invokes a backend entry point while preserving its native failure as the primary cause. */
+internal fun invokeBackendRunApp(backendClass: String, handler: ApplicationHandler) {
+    val klass = try {
+        Class.forName(backendClass)
+    } catch (failure: ClassNotFoundException) {
+        throw UnsupportedOperationException(
+            "$backendClass not found on classpath. Add the corresponding kadre backend dependency.",
+            failure,
+        )
+    }
+
+    val method = klass.getMethod("runApp", ApplicationHandler::class.java)
+    try {
         method.invoke(null, handler)
+    } catch (failure: InvocationTargetException) {
+        val target = failure.targetException
+        target.addSuppressed(
+            IllegalStateException("Failed to launch Linux backend $backendClass through reflection"),
+        )
+        throw target
     }
 }

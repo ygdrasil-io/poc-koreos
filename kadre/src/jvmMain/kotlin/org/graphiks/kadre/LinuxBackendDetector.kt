@@ -22,49 +22,106 @@ internal object LinuxBackendDetector {
     internal const val X11_CLASS = "org.graphiks.kadre.x11.X11EventLoopKt"
     internal const val WAYLAND_CLASS = "org.graphiks.kadre.wayland.WaylandEventLoopKt"
 
-    /**
-     * Resolves the class name of the Linux backend to use.
-     *
-     * @return Fully qualified name of the backend class to instantiate via reflection.
-     * @throws IllegalStateException if no backend is available.
-     * @throws IllegalArgumentException if KADRE_LINUX_BACKEND contains an invalid value.
-     */
-    fun detectBackendClass(): String {
-        val debug = System.getenv("KADRE_DEBUG") == "1"
+    /** Resolves the backend class after confirming that it is loadable. */
+    fun detectBackendClass(): String = detectBackend().backendClass
 
-        // Priority 1: explicit override via environment variable
-        val override = System.getenv("KADRE_LINUX_BACKEND")?.lowercase()
-        if (override != null) {
-            return when (override) {
-                "wayland" -> WAYLAND_CLASS
-                "x11" -> X11_CLASS
-                else -> error(
-                    "Invalid KADRE_LINUX_BACKEND: '$override'. " +
-                    "Accepted values: 'x11', 'wayland'."
+    /**
+     * Selects a usable backend. In automatic mode each candidate may fall back;
+     * an explicit [KADRE_LINUX_BACKEND][KADRE_LINUX_BACKEND] override is strict.
+     *
+     * [loadClass] and [probe] are seams for isolated tests and for the JVM facade,
+     * which invokes the backend as its native availability probe.
+     */
+    internal fun detectBackend(
+        environment: (String) -> String? = System::getenv,
+        loadClass: (String) -> Unit = { className ->
+            Class.forName(className)
+            Unit
+        },
+        probe: (String) -> Unit = {},
+        probeStage: LinuxBackendStage = LinuxBackendStage.PROBE,
+    ): LinuxBackendCandidate {
+        val override = environment("KADRE_LINUX_BACKEND")?.lowercase()
+        val candidates = override?.let { listOf(overrideBackendClass(it)) }
+            ?: candidateClasses(environment)
+        val failures = mutableListOf<LinuxBackendCandidate>()
+
+        for (backendClass in candidates) {
+            try {
+                loadClass(backendClass)
+            } catch (failure: Throwable) {
+                failures += LinuxBackendCandidate(
+                    backendClass = backendClass,
+                    stage = LinuxBackendStage.CLASSPATH,
+                    failure = failure,
+                )
+                continue
+            }
+
+            try {
+                probe(backendClass)
+                return LinuxBackendCandidate(
+                    backendClass = backendClass,
+                    stage = probeStage,
+                    failure = null,
+                )
+            } catch (failure: Throwable) {
+                failures += LinuxBackendCandidate(
+                    backendClass = backendClass,
+                    stage = probeStage,
+                    failure = failure,
                 )
             }
         }
 
-        // Priority 2: session hints (environment variables, no FFM)
-        val xdgSession = System.getenv("XDG_SESSION_TYPE")?.lowercase()
-        val waylandDisplay = System.getenv("WAYLAND_DISPLAY")
-        val display = System.getenv("DISPLAY")
-        val preferWayland = xdgSession == "wayland" || waylandDisplay != null
-
-        // Try the preferred backend first, then the other as fallback
-        val candidates = if (preferWayland) listOf(WAYLAND_CLASS, X11_CLASS)
-                         else listOf(X11_CLASS, WAYLAND_CLASS)
-
-        for (cls in candidates) {
-            if (canLoad(cls, debug)) return cls
-        }
-
-        error(
-            "No Linux backend available. " +
-            "Install libX11-dev OR libwayland-dev and add kadre-x11 or " +
-            "kadre-wayland to the classpath. " +
-            "[WAYLAND_DISPLAY=$waylandDisplay, DISPLAY=$display, XDG_SESSION_TYPE=$xdgSession]"
+        throw unavailableBackendFailure(
+            forcedOverride = override,
+            failures = failures,
+            environment = environment,
         )
+    }
+
+    private fun overrideBackendClass(override: String): String = when (override) {
+        "wayland" -> WAYLAND_CLASS
+        "x11" -> X11_CLASS
+        else -> throw IllegalArgumentException(
+            "Invalid KADRE_LINUX_BACKEND: '$override'. Accepted values: 'x11', 'wayland'.",
+        )
+    }
+
+    private fun candidateClasses(environment: (String) -> String?): List<String> {
+        val xdgSession = environment("XDG_SESSION_TYPE")?.lowercase()
+        val waylandDisplay = environment("WAYLAND_DISPLAY")
+        return if (xdgSession == "wayland" || waylandDisplay != null) {
+            listOf(WAYLAND_CLASS, X11_CLASS)
+        } else {
+            listOf(X11_CLASS, WAYLAND_CLASS)
+        }
+    }
+
+    private fun unavailableBackendFailure(
+        forcedOverride: String?,
+        failures: List<LinuxBackendCandidate>,
+        environment: (String) -> String?,
+    ): IllegalStateException {
+        val primary = failures.firstOrNull()?.failure
+        val attempts = failures.joinToString(separator = "; ") { candidate ->
+            "backend=${candidate.backendClass} stage=${candidate.stage.name.lowercase()} " +
+                "cause=${candidate.failure?.javaClass?.simpleName}: ${candidate.failure?.message}"
+        }
+        val context = "[WAYLAND_DISPLAY=${environment("WAYLAND_DISPLAY")}, " +
+            "DISPLAY=${environment("DISPLAY")}, " +
+            "XDG_SESSION_TYPE=${environment("XDG_SESSION_TYPE")}]"
+        val policy = if (forcedOverride == null) {
+            "No usable Linux backend was found"
+        } else {
+            "Forced Linux backend '$forcedOverride' failed"
+        }
+        return IllegalStateException("$policy. $attempts $context", primary).also { aggregate ->
+            failures.drop(1).forEach { candidate ->
+                candidate.failure?.let(aggregate::addSuppressed)
+            }
+        }
     }
 
     /**
@@ -88,3 +145,17 @@ internal object LinuxBackendDetector {
         }
     }
 }
+
+/** The lifecycle point at which a Linux backend candidate was evaluated. */
+internal enum class LinuxBackendStage {
+    CLASSPATH,
+    PROBE,
+    LAUNCH,
+}
+
+/** Outcome of one Linux backend candidate evaluation. */
+internal data class LinuxBackendCandidate(
+    val backendClass: String,
+    val stage: LinuxBackendStage,
+    val failure: Throwable?,
+)
