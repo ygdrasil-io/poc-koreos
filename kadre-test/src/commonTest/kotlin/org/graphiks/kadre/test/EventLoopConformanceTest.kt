@@ -115,6 +115,33 @@ class EventLoopConformanceTest {
     }
 
     @Test
+    fun dispatchAfterAboutToWaitIsRejectedWhenEarlierDispatchIsValid() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(
+                listOf(
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.WindowEvent,
+                    ObservedCallback.AboutToWait,
+                    ObservedCallback.DeviceEvent,
+                )
+            )
+        }
+    }
+
+    @Test
+    fun secondAboutToWaitIsRejected() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(
+                listOf(
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.AboutToWait,
+                    ObservedCallback.AboutToWait,
+                )
+            )
+        }
+    }
+
+    @Test
     fun callbackAfterClosedMarkerIsRejected() {
         assertFailsWith<AssertionError> {
             assertNoCallbacksAfter(
