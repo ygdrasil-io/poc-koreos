@@ -90,6 +90,28 @@ class LinuxBackendDetectorTest {
         assertEquals(listOf(x11Failure), failure.suppressed.toList())
     }
 
+    @Test
+    fun `selection failure quotes only allowlisted Linux environment values`() {
+        val failure = assertFailsWith<IllegalStateException> {
+            LinuxBackendDetector.detectBackend(
+                environment = mapOf(
+                    "KADRE_LINUX_BACKEND" to "wayland",
+                    "WAYLAND_DISPLAY" to "wayland-1",
+                    "DISPLAY" to ":1",
+                    "XDG_SESSION_TYPE" to "wayland",
+                )::get,
+                loadClass = {},
+                probe = { throw IllegalStateException("unavailable") },
+            )
+        }
+
+        val message = failure.message.orEmpty()
+        assertContains(message, "KADRE_LINUX_BACKEND=wayland")
+        assertContains(message, "WAYLAND_DISPLAY=wayland-1")
+        assertContains(message, "DISPLAY=:1")
+        assertFalse("XDG_SESSION_TYPE" in message)
+    }
+
     // -------------------------------------------------------------------------
     // canLoad — main logic, OS-independent
     // -------------------------------------------------------------------------

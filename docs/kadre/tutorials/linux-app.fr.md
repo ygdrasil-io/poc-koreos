@@ -242,6 +242,10 @@ KADRE_LINUX_BACKEND=x11 ./gradlew run
 
 L'override forcé est volontairement strict : `KADRE_LINUX_BACKEND=wayland` ne repasse jamais sur X11, et `=x11` ne repasse jamais sur Wayland. Cela rend les tests de compatibilité déterministes et laisse l'échec de connexion native visible pour l'appelant.
 
+### Migration des erreurs de démarrage
+
+Un affichage X11 ou compositeur Wayland indisponible produit une erreur de démarrage descriptive, et non plus un no-op réussi. Les applications qui supposaient que `runApp` pouvait réussir sans serveur joignable doivent provisionner un affichage/compositeur et gérer cette erreur. Le diagnostic ne peut citer que `KADRE_LINUX_BACKEND`, `WAYLAND_DISPLAY` et `DISPLAY`, avec le backend tenté et la cause native.
+
 ### Dépendances runtime
 
 À l'exécution, Kadre requiert les bibliothèques partagées correspondantes, et pas seulement les headers de développement : `libwayland-client`, `libX11`, `libXi` et `libxkbcommon`. Une session Wayland nécessite aussi un `XDG_RUNTIME_DIR` fonctionnel et un socket de compositeur ; une session X11 nécessite un `DISPLAY` joignable. Les commandes de paquets ci-dessus les fournissent sur les distributions documentées.

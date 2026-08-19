@@ -109,9 +109,9 @@ internal object LinuxBackendDetector {
             "backend=${candidate.backendClass} stage=${candidate.stage.name.lowercase()} " +
                 "cause=${candidate.failure?.javaClass?.simpleName}: ${candidate.failure?.message}"
         }
-        val context = "[WAYLAND_DISPLAY=${environment("WAYLAND_DISPLAY")}, " +
-            "DISPLAY=${environment("DISPLAY")}, " +
-            "XDG_SESSION_TYPE=${environment("XDG_SESSION_TYPE")}]"
+        val context = "[KADRE_LINUX_BACKEND=${environment("KADRE_LINUX_BACKEND")}, " +
+            "WAYLAND_DISPLAY=${environment("WAYLAND_DISPLAY")}, " +
+            "DISPLAY=${environment("DISPLAY")}]"
         val policy = if (forcedOverride == null) {
             "No usable Linux backend was found"
         } else {

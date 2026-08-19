@@ -6,7 +6,9 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 checker="$script_dir/check-workflow-contract.py"
 validator="$script_dir/verify-test-results.py"
 fixture_workflow="$repo_root/.github/fixtures/workflow-contract-invalid.yml"
+fixture_android_selection="$repo_root/.github/fixtures/workflow-contract-android-device-selection-missing.yml"
 fixture_report="$script_dir/fixtures/cross-platform-correctness-report-18.md"
+fixture_empty_report="$script_dir/fixtures/cross-platform-correctness-report-empty-fields.md"
 fixture_junit="$script_dir/fixtures/junit-declared-without-testcase.xml"
 fixture_junit_nested="$script_dir/fixtures/junit-nested-valid.xml"
 fixture_junit_skipped="$script_dir/fixtures/junit-skipped-mismatch.xml"
@@ -42,9 +44,21 @@ if [[ "$workflow_output" != *"success masking is forbidden"* ]]; then
   exit 1
 fi
 if [[ "$workflow_output" != *"workflow must trigger pull_request without a paths or paths-ignore filter"* ]] ||
-  [[ "$workflow_output" != *"missing canonical script-owned command scripts/test-workflow-contract.sh"* ]]; then
-  echo "FAIL: workflow fixture did not prove the path-filter and missing-command checks" >&2
+  [[ "$workflow_output" != *"missing canonical script-owned command scripts/test-workflow-contract.sh"* ]] ||
+  [[ "$workflow_output" != *"linux-container-contracts: libc matrix must equal [glibc, musl]"* ]]; then
+  echo "FAIL: workflow fixture did not prove the path-filter, missing-command, and libc-matrix checks" >&2
   printf '%s\n' "$workflow_output" >&2
+  exit 1
+fi
+
+set +e
+android_selection_output="$(python3 "$checker" "$fixture_android_selection" 2>&1)"
+android_selection_status=$?
+set -e
+if [[ "$android_selection_status" -eq 0 ]] ||
+  [[ "$android_selection_output" != *"android-emulator-contracts: missing canonical script-owned command scripts/test-android-device-selection.sh"* ]]; then
+  echo "FAIL: Android fixture did not require the device-selection regression" >&2
+  printf '%s\n' "$android_selection_output" >&2
   exit 1
 fi
 if [[ "$report_status" -eq 0 ]]; then
@@ -54,6 +68,17 @@ fi
 if [[ "$report_output" != *"expected exactly 19 numbered traceability rows, found 18"* ]]; then
   echo "FAIL: report fixture did not fail for its missing nineteenth row" >&2
   printf '%s\n' "$report_output" >&2
+  exit 1
+fi
+
+set +e
+empty_report_output="$(python3 "$validator" --report "$fixture_empty_report" 2>&1)"
+empty_report_status=$?
+set -e
+if [[ "$empty_report_status" -eq 0 ]] ||
+  [[ "$empty_report_output" != *"row 1 has empty required fields"* ]]; then
+  echo "FAIL: empty report fixture was accepted or reported the wrong violation" >&2
+  printf '%s\n' "$empty_report_output" >&2
   exit 1
 fi
 

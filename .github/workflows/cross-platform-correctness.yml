@@ -67,6 +67,7 @@ jobs:
           java-version: '25'
           cache: gradle
       - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-android-device-selection.sh
       - name: Run deterministic Android emulator contract
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -116,6 +117,64 @@ jobs:
           path: samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png
           if-no-files-found: error
 
+  linux-compose-windowed-capture:
+    name: Linux Compose windowed capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y weston libwayland-client0
+          libwayland-egl1 libxkbcommon0 libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
+      - name: Start deterministic headless Weston
+        run: |
+          export XDG_RUNTIME_DIR=/tmp/kadre-wl-runtime
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless-backend.so --renderer=pixman --width=800 --height=600 \
+            --socket=wayland-ci --idle-time=0 --log=/tmp/weston.log > /tmp/weston.stdout 2>&1 &
+          for _ in $(seq 1 60); do
+            [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break
+            sleep 0.5
+          done
+          test -S "$XDG_RUNTIME_DIR/wayland-ci"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          echo "WAYLAND_DISPLAY=wayland-ci" >> "$GITHUB_ENV"
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-linux-compose-windowed-capture.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-compose-windowed
+          path: samples/compose/desktop/build/cross-platform-correctness/compose-desktop.window.png
+          if-no-files-found: error
+
+  macos-offscreen-capture:
+    name: macOS offscreen capture
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '25'
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-macos-offscreen-capture.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-macos-offscreen
+          path: samples/hello-triangle/build/visual/hello-triangle.actual.png
+          if-no-files-found: error
+
   cross-platform-correctness:
     name: cross-platform-correctness
     runs-on: ubuntu-latest
@@ -128,6 +187,8 @@ jobs:
       - android-emulator-contracts
       - linux-container-contracts
       - deterministic-captures
+      - linux-compose-windowed-capture
+      - macos-offscreen-capture
     steps:
       - name: Require host contracts to succeed
         run: '[[ "${{ needs.host-contracts.result }}" == "success" ]]'
@@ -141,3 +202,7 @@ jobs:
         run: '[[ "${{ needs.linux-container-contracts.result }}" == "success" ]]'
       - name: Require deterministic captures to succeed
         run: '[[ "${{ needs.deterministic-captures.result }}" == "success" ]]'
+      - name: Require Linux Compose windowed capture to succeed
+        run: '[[ "${{ needs.linux-compose-windowed-capture.result }}" == "success" ]]'
+      - name: Require macOS offscreen capture to succeed
+        run: '[[ "${{ needs.macos-offscreen-capture.result }}" == "success" ]]'

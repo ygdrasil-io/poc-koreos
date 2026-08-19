@@ -23,9 +23,14 @@ REQUIRED_JOBS = {
         "--png samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png "
         "--png-target compose-raster",
     ),
+    "linux-compose-windowed-capture": ("run", "scripts/test-linux-compose-windowed-capture.sh"),
+    "macos-offscreen-capture": ("run", "scripts/test-macos-offscreen-capture.sh"),
 }
 AGGREGATE_JOB = "cross-platform-correctness"
 REQUIRED_JOB_NAMES = list(REQUIRED_JOBS)
+REQUIRED_RUN_COMMANDS = {
+    "android-emulator-contracts": ("scripts/test-android-device-selection.sh",),
+}
 
 
 def load_workflow(path: pathlib.Path) -> object:
@@ -115,6 +120,21 @@ def runs_required_command(job: dict[str, object], form: tuple[str, str]) -> bool
     return expected in canonical_step_values(job, field)
 
 
+def runs_required_commands(job: dict[str, object], commands: tuple[str, ...]) -> bool:
+    actual = canonical_step_values(job, "run")
+    return all(command in actual for command in commands)
+
+
+def has_required_libc_matrix(job: dict[str, object]) -> bool:
+    strategy = job.get("strategy")
+    if not is_mapping(strategy):
+        return False
+    matrix = strategy.get("matrix")
+    if not is_mapping(matrix):
+        return False
+    return matrix.get("libc") == ["glibc", "musl"]
+
+
 def has_success_assertion(aggregate: dict[str, object], job_name: str) -> bool:
     expected = f'[[ "${{{{ needs.{job_name}.result }}}}" == "success" ]]'
     return expected in canonical_step_values(aggregate, "run")
@@ -153,6 +173,11 @@ def validate(path: pathlib.Path) -> list[str]:
                 errors.append(f"{name}: missing canonical Android emulator runner step")
             else:
                 errors.append(f"{name}: missing canonical script-owned command {required_form[1]}")
+        for command in REQUIRED_RUN_COMMANDS.get(name, ()):
+            if not runs_required_commands(job, (command,)):
+                errors.append(f"{name}: missing canonical script-owned command {command}")
+        if name == "linux-container-contracts" and not has_required_libc_matrix(job):
+            errors.append(f"{name}: libc matrix must equal [glibc, musl]")
 
     aggregate = jobs.get(AGGREGATE_JOB)
     if not is_mapping(aggregate):

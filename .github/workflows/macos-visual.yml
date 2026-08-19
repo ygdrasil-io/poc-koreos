@@ -2,9 +2,9 @@ name: macos-visual
 
 # macOS visual regression via GPU readback.
 # hello-triangle renders an offscreen frame (no window), writes a PNG via wgpu
-# readback, then we compare it against a committed baseline. NON-BLOCKING: GPU
-# rendering is not pixel-perfect deterministic across machines → we archive the diff and
-# publish the verdict in the Job Summary and fail on a regression.
+# readback, then we compare it against a committed baseline. This path-filtered
+# workflow archives diagnostics; the matching deterministic PR gate is the
+# `macos-offscreen-capture` job in cross-platform-correctness.yml.
 
 on:
   push:

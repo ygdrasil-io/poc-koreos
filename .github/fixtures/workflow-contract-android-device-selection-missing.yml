@@ -1,0 +1,13 @@
+name: Android device-selection regression is missing
+
+on:
+  pull_request:
+
+jobs:
+  android-emulator-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          script: scripts/android-emulator-test.sh

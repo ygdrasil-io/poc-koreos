@@ -157,14 +157,14 @@ sealed interface RawDisplayHandle {
 
 ### 2.4 Cross-platform correctness compatibility closure
 
-The following six compatibility changes are approved as observable runtime contracts. They are additive or corrective; none changes a public method signature.
+The following six compatibility changes are approved as observable runtime contracts. They are additive or corrective; none changes a public method signature unless noted below.
 
-1. Every backend iteration has one `NewEvents` boundary and one final `AboutToWait` boundary around dispatch callbacks.
-2. X11 and Wayland publish terminal window ownership synchronously: no non-terminal callback may begin after `close()` returns, and `Destroyed` is emitted at most once.
-3. Wayland returns the discovered output snapshot after initial discovery, including a deliberately empty list after the final output is removed.
-4. `ControlFlow.WaitUntil` retains its original deadline on Web, X11, and Wayland; an early timer/poll re-arms or polls without delivering `ResumeTimeReached` early.
-5. UIKit lifecycle notifications use canonical, idempotent iterations and execute the terminal cleanup stages even when an earlier callback fails.
-6. Linux automatic backend choice probes usable Wayland/X11 connections in session order; a forced `KADRE_LINUX_BACKEND` value tests only that backend, and an exhausted probe preserves native failure causes.
+1. Web pointer events that previously lacked coordinates are replaced by events carrying physical position, source, and pointer identity. **Migration:** consumers that use `WebWindowEvent` directly must update exhaustive handling and read the supplied position.
+2. `Window.safeArea` is expressed in physical pixels; UIKit points and Web CSS pixels are converted by the active scale factor. **Migration:** remove any consumer-side DPR/scale multiplication previously applied to safe-area values.
+3. An unavailable X11 display or Wayland compositor is a descriptive runtime error rather than a successful no-op. **Migration:** start a reachable display/compositor before `runApp`, and handle startup failure where applications previously assumed silent success.
+4. Backends enforce the documented `ApplicationHandler` callback order. **Migration:** handlers that accidentally relied on backend-specific ordering must move their work to the documented callback.
+5. `iosX64` is removed from the Compose sample only; Kadre library targets retain `iosX64`. **Migration:** build the sample for `iosArm64` or `iosSimulatorArm64`; library consumers do not need to change their target declarations.
+6. After the final known Wayland output is removed, `availableMonitors()` returns an empty list instead of a synthetic monitor. **Migration:** applications must handle an empty monitor list after output removal; the initial pre-discovery fallback remains distinct.
 
 ---
 

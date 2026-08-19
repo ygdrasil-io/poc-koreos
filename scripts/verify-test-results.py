@@ -242,6 +242,14 @@ def validate_report(entry: str) -> None:
         missing = [field for field in REPORT_FIELDS if field not in line]
         if missing:
             fail(f"{path}: row {number} is missing required fields: {', '.join(missing)}")
+        matches = list(re.finditer(r"Finding:|Test/command:|Environment:|Result:|Proof path:", line))
+        values = {
+            match.group(0): line[match.end() : matches[index + 1].start() if index + 1 < len(matches) else None].strip(" |")
+            for index, match in enumerate(matches)
+        }
+        empty = [field for field in REPORT_FIELDS if not values.get(field)]
+        if empty:
+            fail(f"{path}: row {number} has empty required fields: {', '.join(empty)}")
     print(f"Report evidence: {path} contains 19 complete traceability rows")
 
 

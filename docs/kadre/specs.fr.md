@@ -158,14 +158,14 @@ sealed interface RawDisplayHandle {
 
 ### 2.4 Clôture de compatibilité cross-platform
 
-Les six changements de compatibilité suivants sont approuvés comme contrats runtime observables. Ils sont additifs ou correctifs ; aucun ne modifie une signature de méthode publique.
+Les six changements de compatibilité suivants sont approuvés comme contrats runtime observables. Ils sont additifs ou correctifs ; aucun ne modifie une signature de méthode publique, sauf indication contraire.
 
-1. Chaque itération backend possède une frontière `NewEvents` unique et une frontière finale `AboutToWait` autour des callbacks de dispatch.
-2. X11 et Wayland publient l'ownership terminal de fenêtre de façon synchrone : aucun callback non terminal ne peut commencer après le retour de `close()`, et `Destroyed` est émis au plus une fois.
-3. Wayland retourne le snapshot des outputs découverts après la découverte initiale, y compris une liste volontairement vide après le retrait du dernier output.
-4. `ControlFlow.WaitUntil` conserve son échéance originale sur Web, X11 et Wayland ; un timer/poll précoce réarme ou repoll sans livrer `ResumeTimeReached` trop tôt.
-5. Les notifications de cycle de vie UIKit utilisent des itérations canoniques idempotentes et exécutent les étapes de nettoyage terminal même si un callback antérieur échoue.
-6. Le choix automatique Linux sonde les connexions Wayland/X11 utilisables dans l'ordre de session ; une valeur forcée de `KADRE_LINUX_BACKEND` ne teste que ce backend, et l'épuisement des probes conserve les causes d'erreur natives.
+1. Les événements pointeur Web qui ne portaient pas de coordonnées sont remplacés par des événements contenant position physique, source et identité du pointeur. **Migration :** les consommateurs de `WebWindowEvent` doivent mettre à jour leur gestion exhaustive et lire la position fournie.
+2. `Window.safeArea` est exprimé en pixels physiques ; les points UIKit et pixels CSS Web sont convertis par le facteur d’échelle actif. **Migration :** retirez toute multiplication DPR/échelle appliquée côté consommateur aux valeurs de zone sûre.
+3. Un affichage X11 ou compositeur Wayland indisponible devient une erreur runtime descriptive au lieu d’un no-op réussi. **Migration :** démarrez un affichage/compositeur joignable avant `runApp` et gérez l’échec de démarrage si l’application supposait auparavant une réussite silencieuse.
+4. Les backends imposent l’ordre documenté des callbacks `ApplicationHandler`. **Migration :** les handlers qui dépendaient accidentellement d’un ordre spécifique à un backend doivent déplacer leur travail vers le callback documenté.
+5. `iosX64` est retiré du sample Compose uniquement ; les cibles de bibliothèque Kadre conservent `iosX64`. **Migration :** construisez le sample pour `iosArm64` ou `iosSimulatorArm64` ; les consommateurs de bibliothèques ne changent pas leurs déclarations de cibles.
+6. Après le retrait du dernier output Wayland connu, `availableMonitors()` renvoie une liste vide au lieu d’un moniteur synthétique. **Migration :** les applications doivent gérer une liste de moniteurs vide après retrait d’output ; le fallback initial avant découverte reste distinct.
 
 ---
 
