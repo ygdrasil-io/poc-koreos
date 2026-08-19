@@ -11,9 +11,9 @@ Base ref after fetch: `origin/codex/cross-platform-correctness-design` = `9bdc7f
 | `./gradlew :kadre-core:jvmTest :kadre-test:allTests :kadre-appkit:jvmTest :kadre-x11:jvmTest :kadre-wayland:jvmTest :kadre-android:testAndroidHostTest :kadre-web-common:allTests :kadre:build --no-daemon --stacktrace --console=plain` | PASS (exit 0) | `BUILD SUCCESSFUL in 29s`; 316 actionable tasks. |
 | `scripts/test-web-browsers.sh` | PASS (exit 0) | Chrome selected at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`; JS: 141 tests, 0 skipped/failures/errors; Wasm: 141 tests, 0 skipped/failures/errors. |
 | `scripts/test-workflow-contract.sh` | PASS (exit 0) | JUnit: 2 tests, 0 skipped/failures/errors; workflow and report contracts enforced. |
-| `git diff --check origin/codex/cross-platform-correctness-design...HEAD` | FAIL (exit 2) | Four trailing-whitespace diagnostics in `docs/superpowers/specs/2026-08-19-cross-platform-correctness-closure-design.md` (lines 3–6) and `new blank line at EOF` in `docs/superpowers/plans/2026-08-19-cross-platform-correctness-closure.md:425`. |
+| `git diff --check origin/codex/cross-platform-correctness-design...HEAD` | PASS (exit 0) | Fresh rerun after the closure-markdown normalization produced no diagnostics. |
 
-The diff-check failure is a release-gate failure. It is not a host limitation. It predates this verification report and lies in the closure plan/spec documentation; no out-of-scope cleanup was applied by this integration task.
+The former diff-check blocker was resolved by the closure-markdown normalization and reverified before this follow-up evidence update.
 
 ## Native integrations
 
@@ -24,9 +24,9 @@ The diff-check failure is a release-gate failure. It is not a host limitation. I
 | `scripts/test-x11-xvfb.sh` | HOST LIMITATION — not a pass | Exit 1 before test execution: `[test-x11-xvfb] ERROR: Xvfb is not installed`. The macOS host does not provide the required Xvfb runner; the corresponding Linux CI job remains required. |
 | `scripts/test-linux-container.sh glibc` | HOST LIMITATION — not a pass | Exit 1 before container execution: `Cannot connect to the Docker daemon at unix:///Users/chaos/.docker/run/docker.sock. Is the docker daemon running?` The Docker daemon is unavailable; the glibc CI job remains required. |
 | `scripts/test-linux-container.sh musl` | HOST LIMITATION — not a pass | Exit 1 before container execution: `Cannot connect to the Docker daemon at unix:///Users/chaos/.docker/run/docker.sock. Is the docker daemon running?` The Docker daemon is unavailable; the musl CI job remains required. |
-| `scripts/android-emulator-test.sh` | FAIL — real test failure | Exit 1. The runnable `Kadre_API_29(AVD) - 10` executed `capturesTriangle` and failed with `java.lang.IllegalStateException: Failed to acquire Adapter` at `HelloTriangleCapture.kt:81`. `Medium_Phone(AVD) - 16` passed the same test, so this is not an unavailable-emulator limitation. The aggregate report is 2 tests / 1 failure / 0 errors (50%). |
+| `scripts/android-emulator-test.sh` | PASS (exit 0) — automatic Vulkan selection | With API 29 and API 36 both online and `ANDROID_SERIAL` unset, the preflight rejected API 29’s `devices: [{}]`, selected API 36’s named `llvmpipe` physical device, then ran exactly one `Medium_Phone(AVD) - 16` test: JUnit 1/1, 0 failures/errors; PNG 800×600, 47,436 colors and 60,000 non-background pixels. |
 
-Android evidence: `samples/hello-triangle-android-capture/build/outputs/androidTest-results/connected/debug/TEST-Kadre_API_29(AVD) - 10-_samples_hello-triangle-android-capture-.xml` records one failure; the corresponding `Medium_Phone(AVD) - 16` XML records one pass. This requires investigation by the Android/runtime task owner before publication; no speculative integration-layer fix was made.
+Android resolution evidence: `scripts/test-android-device-selection.sh` exercises the real script with fake `adb`/Gradle and covers unique, zero, ambiguous, explicit-compatible, and explicit-incompatible selection. It passed after the preflight implementation. The real full-script run with both AVDs online produced only `TEST-Medium_Phone(AVD) - 16-_samples_hello-triangle-android-capture-.xml` and `.../Medium_Phone(AVD) - 16/hello-triangle-android.png`; API 29 was excluded before Gradle. An explicit `ANDROID_SERIAL` is honored only after the same physical-device precondition, with no fallback.
 
 ## Traceability audit (findings 1–19)
 
@@ -63,4 +63,4 @@ Each numbered row below has a unique ordinal, non-empty Finding, Test/command, E
 
 The worktree was clean before verification. It now has the Gradle-generated untracked file `kotlin-js-store/wasm/yarn.lock` from the browser/build matrix. It was not removed by this task. No branch change, rebase, force operation, or push was performed.
 
-Publication is blocked pending: (1) correction of the `git diff --check` diagnostics, (2) a passing Android emulator integration on every targeted runnable emulator, (3) the unavailable Xvfb/Docker CI integrations, and (4) the independent read-only review required by the closure brief.
+Publication remains blocked pending: (1) the unavailable Xvfb/Docker CI integrations and (2) the independent read-only review required by the closure brief. The fresh diff check and the Android gate are no longer local blockers.
