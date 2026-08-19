@@ -52,6 +52,9 @@ internal class UIKitActiveEventLoop(
     /** Closed before terminal callbacks so they cannot admit replacement windows. */
     private var terminalAdmissionClosed = false
 
+    /** Stops non-terminal per-window lifecycle dispatch as soon as teardown is requested. */
+    private var terminalTeardownRequested = false
+
     /** Last observed system theme, used to detect changes across app activation. */
     internal var lastTheme: Theme? = null
 
@@ -209,6 +212,12 @@ internal class UIKitActiveEventLoop(
         )
     }
 
+    /** Publishes terminal intent before a queued teardown can start dispatching callbacks. */
+    internal fun requestTerminalTeardown() {
+        terminalTeardownRequested = true
+        terminalAdmissionClosed = true
+    }
+
     /** Removes a window from the live set before performing terminal cleanup. */
     internal fun closeWindow(id: WindowId): Boolean {
         val index = windows.indexOfFirst { it.id == id }
@@ -227,7 +236,8 @@ internal class UIKitActiveEventLoop(
     }
 
     private inline fun forEachLiveWindow(block: (UiKitWindow) -> Unit) {
-        windows.toList().forEach { window ->
+        for (window in windows.toList()) {
+            if (terminalTeardownRequested) return
             if (window in windows) block(window)
         }
     }
@@ -241,6 +251,7 @@ internal class UIKitActiveEventLoop(
     override fun exit() {
         if (_isExiting) return
         _isExiting = true
+        terminalTeardownRequested = true
         scheduler.exit()
     }
     override val isExiting: Boolean get() = _isExiting

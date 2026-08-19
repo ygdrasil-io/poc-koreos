@@ -100,6 +100,7 @@ internal class UIKitLifecycleOrchestrator(
         terminating = true
         active = false
         foreground = false
+        eventLoop.requestTerminalTeardown()
         submitTransition(terminal = true) {
             eventLoop.runLifecycleIteration(
                 cause = StartCause.WaitCancelled(),

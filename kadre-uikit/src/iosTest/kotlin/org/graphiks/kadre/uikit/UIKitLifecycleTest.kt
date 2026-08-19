@@ -626,6 +626,165 @@ class UIKitLifecycleTest {
     }
 
     @Test
+    fun reentrantTerminationDuringFocusedStopsDispatchBeforeTheSecondWindow() {
+        val trace = mutableListOf<String>()
+        val createdIds = mutableListOf<WindowId>()
+        val focusedIds = mutableListOf<WindowId>()
+        val destroyedIds = mutableListOf<WindowId>()
+        var terminateOnFocus = false
+        lateinit var lifecycle: UIKitLifecycleOrchestrator
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                repeat(2) {
+                    createdIds += eventLoop.createWindow(WindowAttributes(visible = false)).id
+                }
+            }
+
+            override fun resumed(eventLoop: ActiveEventLoop) {
+                if (terminateOnFocus) trace += "resumed"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (terminateOnFocus) trace += "newEvents"
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                if (terminateOnFocus) trace += "aboutToWait"
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                when {
+                    event is WindowEvent.Focused && event.gained -> {
+                        focusedIds += windowId
+                        trace += "focused:${windowId.value}"
+                        if (terminateOnFocus && focusedIds.size == 1) lifecycle.willTerminate()
+                    }
+
+                    event == WindowEvent.Destroyed -> {
+                        destroyedIds += windowId
+                        trace += "destroyed:${windowId.value}"
+                    }
+                }
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        lifecycle.didFinishLaunching()
+        lifecycle.willResignActive()
+        trace.clear()
+        terminateOnFocus = true
+        lifecycle.didBecomeActive()
+
+        assertEquals(listOf(createdIds.first()), focusedIds)
+        assertEquals(createdIds, destroyedIds)
+        assertEquals(
+            listOf(
+                "resumed",
+                "newEvents",
+                "focused:${createdIds.first().value}",
+                "newEvents",
+                "destroySurfaces",
+                "destroyed:${createdIds[0].value}",
+                "destroyed:${createdIds[1].value}",
+                "suspended",
+                "aboutToWait",
+            ),
+            trace,
+        )
+        assertTrue(loop.isExiting)
+    }
+
+    @Test
+    fun reentrantTerminationDuringOccludedStopsDispatchBeforeTheSecondWindow() {
+        val trace = mutableListOf<String>()
+        val createdIds = mutableListOf<WindowId>()
+        val occludedIds = mutableListOf<WindowId>()
+        val destroyedIds = mutableListOf<WindowId>()
+        var terminateOnOcclusion = false
+        lateinit var lifecycle: UIKitLifecycleOrchestrator
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                repeat(2) {
+                    createdIds += eventLoop.createWindow(WindowAttributes(visible = false)).id
+                }
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                if (terminateOnOcclusion) trace += "newEvents"
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                if (terminateOnOcclusion) trace += "aboutToWait"
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                when {
+                    event is WindowEvent.Occluded && event.occluded -> {
+                        occludedIds += windowId
+                        trace += "occluded:${windowId.value}"
+                        if (terminateOnOcclusion && occludedIds.size == 1) lifecycle.willTerminate()
+                    }
+
+                    event == WindowEvent.Destroyed -> {
+                        destroyedIds += windowId
+                        trace += "destroyed:${windowId.value}"
+                    }
+                }
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        lifecycle.didFinishLaunching()
+        lifecycle.willResignActive()
+        trace.clear()
+        terminateOnOcclusion = true
+        lifecycle.didEnterBackground()
+
+        assertEquals(listOf(createdIds.first()), occludedIds)
+        assertEquals(createdIds, destroyedIds)
+        assertEquals(
+            listOf(
+                "newEvents",
+                "occluded:${createdIds.first().value}",
+                "newEvents",
+                "destroySurfaces",
+                "destroyed:${createdIds[0].value}",
+                "destroyed:${createdIds[1].value}",
+                "suspended",
+                "aboutToWait",
+            ),
+            trace,
+        )
+        assertTrue(loop.isExiting)
+    }
+
+    @Test
     fun resumedFailureDoesNotSkipTheRemainingStartupIteration() {
         val trace = mutableListOf<String>()
         val resumedFailure = IllegalStateException("resumed")
