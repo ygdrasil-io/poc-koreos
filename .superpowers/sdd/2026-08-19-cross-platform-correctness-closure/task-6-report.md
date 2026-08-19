@@ -63,3 +63,27 @@
 
 - The iOS simulator, Android emulator, browser, Docker glibc/musl, and GitHub Actions artifact paths remain external CI executions and were not claimed as local runs.
 - The host contract now downloads a pinned PyYAML wheel/package through pip; availability of the package index is an external CI dependency.
+
+## Fix round 2 — canonical shell-step enforcement
+
+### Commit
+
+- `ab6fa25c4409bdee0b9624df804276db8733502d` — `ci: require canonical correctness steps`
+
+### Corrections
+
+- The structured YAML checker no longer treats a shell fragment as evidence that it was executed. For every required job it accepts only a complete, whitespace-normalized canonical `run` string (or the Android action's exact `with.script` input); it accepts each aggregate result assertion only as its own complete canonical `run` string.
+- The aggregate workflow was rewritten into six one-command assertion steps. Because matching is full-string equality after whitespace normalization, a command/assertion placed in `if false`, a comment, `true`, a pipeline, a sub-shell, or any other control block cannot satisfy the contract.
+- Added negative fixtures for the required host command hidden in `if false` and the host aggregate success assertion hidden in `if false`; `scripts/test-workflow-contract.sh` proves both are rejected. This is a local checker proof, not a claim that the hosted CI ran.
+
+### Validation
+
+- RED evidence produced before the checker change: `rtk bash scripts/test-workflow-contract.sh` rejected neither new `if false` fixture, demonstrating the original regex false positive.
+- GREEN local evidence: `rtk scripts/test-workflow-contract.sh` exited 0, rejected all negative workflow/JUnit/PNG/report fixtures including both `if false` cases, and accepted the real workflow and 19-row evidence report.
+- `rtk python3 scripts/verify-test-results.py --junit kadre-web-common/build/test-results/jsBrowserTest --junit kadre-web-common/build/test-results/wasmJsBrowserTest --png tests/visual/baselines/linux/hello-triangle.png --png-target hello-triangle-baseline --report docs/kadre/cross-platform-correctness-report.md` exited 0: 282 tests, zero skips/failures/errors; PNG 800×600, 47,436 colors, 60,000 non-background pixels; 19 rows.
+- `rtk python3 scripts/verify-test-results.py --junit kadre-uikit/build/test-results/iosSimulatorArm64Test` exited 0: 60 tests, zero skips/failures/errors. Python compilation, Bash syntax, Ruby YAML parsing of the real six relevant workflows, and `rtk git diff --check` also passed.
+
+### Remaining risks
+
+- Hosted iOS, Android, browser, Docker glibc/musl, and artifact checks remain expected CI executions rather than local evidence. The canonical checker validates workflow structure only; it does not execute GitHub Actions or parse arbitrary shell.
+- The checker deliberately permits only the documented canonical command forms, so a legitimate future command change must update the workflow contract and its fixtures together. PyYAML package-index availability remains an external CI dependency.
