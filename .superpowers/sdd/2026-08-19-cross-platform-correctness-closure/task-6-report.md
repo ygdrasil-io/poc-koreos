@@ -108,3 +108,24 @@
 ### Remaining risks
 
 - Android emulator execution itself remains an expected GitHub Actions run, not local evidence. The contract deliberately pins the accepted action reference to `reactivecircus/android-emulator-runner@v2`; a future SHA pin must be explicitly designed, documented, and covered by fixtures before it is admitted.
+
+## Fix round 4 — unconditional proof steps
+
+### Commit
+
+- `ffb6f7733131578c7e2acec705cf6223f30e502f` — `ci: reject conditional proof steps`
+
+### Corrections
+
+- A required `run`, an aggregate success assertion, and the Android `uses` + `with.script` proof now count only when their step has no GitHub Actions `if` key. The checker rejects the key regardless of its value, covering `if: false`, `if: ${{ false }}`, and any other step-level condition.
+- Added three negative fixtures: a host canonical `run` with `if: false`, an aggregate host-success assertion with `if: ${{ false }}`, and the canonical Android runner step with `if: false`. The real workflow retains no `if` on proof steps and remains accepted.
+
+### Validation
+
+- RED evidence produced before this correction: `rtk bash scripts/test-workflow-contract.sh` failed at `workflow-contract-command-step-if.yml`, because the conditional host step was still accepted as required-command evidence.
+- GREEN local evidence: `rtk scripts/test-workflow-contract.sh` exited 0 and rejected all three conditional-step fixtures with their targeted errors, together with every earlier negative fixture; it accepted the real workflow and the 19-row evidence report.
+- `rtk python3 scripts/check-workflow-contract.py .github/workflows/cross-platform-correctness.yml`, `rtk python3 -m py_compile scripts/check-workflow-contract.py`, `rtk bash -n scripts/test-workflow-contract.sh`, and `rtk git diff --check` all exited 0.
+
+### Remaining risks
+
+- The checker validates GitHub Actions YAML structure and intentionally cannot establish that hosted actions execute correctly. iOS, Android, browser, Docker glibc/musl, and artifact paths remain expected CI executions, not local evidence.
