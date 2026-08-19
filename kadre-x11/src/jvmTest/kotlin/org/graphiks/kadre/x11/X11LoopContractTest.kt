@@ -289,12 +289,12 @@ class X11LoopContractTest {
         val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
         val window = loop.createWindow(WindowAttributes(title = "claimed-callback"))
         val callbackClaimed = CountDownLatch(1)
-        val closeAttempted = CountDownLatch(1)
+        val closeBlockedAtAdmission = CountDownLatch(1)
         val closeReturned = CountDownLatch(1)
         val events = mutableListOf<WindowEvent>()
+        loop.onCloseAdmissionBlockedForTest = closeBlockedAtAdmission::countDown
         val closer = Thread({
             assertTrue(callbackClaimed.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
-            closeAttempted.countDown()
             window.close()
             closeReturned.countDown()
         }, "x11-close-after-claim")
@@ -309,7 +309,7 @@ class X11LoopContractTest {
                 events += event
                 if (event == WindowEvent.Focused(true)) {
                     callbackClaimed.countDown()
-                    assertTrue(closeAttempted.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+                    assertTrue(closeBlockedAtAdmission.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
                     assertEquals(1L, closeReturned.count)
                 }
             }

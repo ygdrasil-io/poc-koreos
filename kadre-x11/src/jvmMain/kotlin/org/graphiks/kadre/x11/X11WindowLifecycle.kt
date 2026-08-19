@@ -7,6 +7,8 @@ import org.graphiks.kadre.ffi.posix.PosixWakeup
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /** Owns the registry, publication queues, and terminal state for one X11 display loop. */
 internal class X11WindowLifecycle(
@@ -19,13 +21,16 @@ internal class X11WindowLifecycle(
 ) {
     internal val windows = ConcurrentHashMap<Long, X11Window>()
 
-    private val stateLock = Any()
+    private val stateLock = ReentrantLock()
+
+    @Volatile
+    internal var onCloseAdmissionBlockedForTest: (() -> Unit)? = null
     private val owners = HashMap<Long, X11WindowOwner>()
     private val eventQueue = ConcurrentLinkedQueue<X11QueueItem>()
     private val pendingCloseCommands = HashMap<X11WindowOwner, X11QueuedCloseCommand>()
     private val pendingRedrawItems = HashMap<X11WindowOwner, X11QueuedWindowEvent>()
 
-    fun register(window: X11Window): X11Window = synchronized(stateLock) {
+    fun register(window: X11Window): X11Window = stateLock.withLock {
         val owner = X11WindowOwner(window)
         owners[window.id.value] = owner
         windows[window.id.value] = window
@@ -33,7 +38,7 @@ internal class X11WindowLifecycle(
     }
 
     /** Publishes one owner-scoped redraw and wakes only a newly queued synthetic request. */
-    fun requestRedraw(window: X11Window): Boolean = synchronized(stateLock) {
+    fun requestRedraw(window: X11Window): Boolean = stateLock.withLock {
         val owner = currentOwnerLocked(window) ?: return false
         if (pendingRedrawItems.containsKey(owner)) return true
 
@@ -54,7 +59,7 @@ internal class X11WindowLifecycle(
     }
 
     /** Native Expose and synthetic redraw share the same pending owner slot. */
-    fun enqueueExpose(windowId: WindowId): Boolean = synchronized(stateLock) {
+    fun enqueueExpose(windowId: WindowId): Boolean = stateLock.withLock {
         val owner = currentOwnerLocked(windowId) ?: return false
         if (pendingRedrawItems.containsKey(owner)) return true
         val queued = X11QueuedWindowEvent(owner, WindowEvent.RedrawRequested, isRedraw = true)
@@ -63,7 +68,7 @@ internal class X11WindowLifecycle(
         true
     }
 
-    fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean = synchronized(stateLock) {
+    fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent): Boolean = stateLock.withLock {
         val owner = currentOwnerLocked(windowId) ?: return false
         eventQueue.add(X11QueuedWindowEvent(owner, event))
         true
@@ -73,7 +78,7 @@ internal class X11WindowLifecycle(
      * Tombstones ownership before publishing native destruction. A failed wake is attached to
      * the terminal command and reported by [drain]; it never makes the window live again.
      */
-    fun closeWindow(window: X11Window): Boolean = synchronized(stateLock) {
+    fun closeWindow(window: X11Window): Boolean = withCloseStateLock {
         val owner = currentOwnerLocked(window) ?: return false
         if (!tombstoneLocked(owner)) return false
 
@@ -95,7 +100,7 @@ internal class X11WindowLifecycle(
     fun nativeWindowDestroyed(windowId: WindowId): Boolean {
         checkLoopThread()
         var queuedWakeFailure: Throwable? = null
-        val owner = synchronized(stateLock) {
+        val owner = stateLock.withLock {
             val liveOwner = currentOwnerLocked(windowId)
             val pendingOwner = pendingCloseCommands.keys.firstOrNull { it.window.id == windowId }
             val owner = liveOwner ?: pendingOwner ?: return false
@@ -117,7 +122,7 @@ internal class X11WindowLifecycle(
         } catch (thrown: Throwable) {
             failure = appendLifecycleFailure(failure, thrown)
         } finally {
-            synchronized(stateLock) {
+            stateLock.withLock {
                 eventQueue.add(
                     X11QueuedWindowEvent(
                         owner = owner,
@@ -136,7 +141,7 @@ internal class X11WindowLifecycle(
         var terminalFailure: Throwable? = null
 
         for (command in batch.filterIsInstance<X11QueuedCloseCommand>()) {
-            val claimed = synchronized(stateLock) {
+            val claimed = stateLock.withLock {
                 if (pendingCloseCommands[command.owner] !== command) {
                     false
                 } else {
@@ -175,7 +180,7 @@ internal class X11WindowLifecycle(
             val queued = item as X11QueuedWindowEvent
             if (queued.event == WindowEvent.Destroyed) continue
 
-            synchronized(stateLock) {
+            stateLock.withLock {
                 val deliver = if (queued.isRedraw) {
                     if (pendingRedrawItems[queued.owner] !== queued) {
                         false
@@ -198,17 +203,17 @@ internal class X11WindowLifecycle(
 
     fun closeAllWindowsDirect() {
         checkLoopThread()
-        val snapshot = synchronized(stateLock) {
+        val snapshot = stateLock.withLock {
             (owners.values + pendingCloseCommands.keys)
                 .distinct()
                 .sortedBy { it.window.id.value }
         }
         var failure: Throwable? = null
         for (owner in snapshot) {
-            synchronized(stateLock) { tombstoneLocked(owner) }
+            stateLock.withLock { tombstoneLocked(owner) }
             failure = closeNative(owner, failure)
         }
-        synchronized(stateLock) {
+        stateLock.withLock {
             eventQueue.clear()
             pendingCloseCommands.clear()
             pendingRedrawItems.clear()
@@ -216,7 +221,7 @@ internal class X11WindowLifecycle(
         failure?.let { throw it }
     }
 
-    private fun takeBoundaryBatch(): List<X11QueueItem> = synchronized(stateLock) {
+    private fun takeBoundaryBatch(): List<X11QueueItem> = stateLock.withLock {
         val boundary = X11DispatchBoundary()
         eventQueue.add(boundary)
         buildList {
@@ -244,6 +249,18 @@ internal class X11WindowLifecycle(
             }
         }
         return failure
+    }
+
+    private inline fun <T> withCloseStateLock(action: () -> T): T {
+        if (!stateLock.tryLock()) {
+            onCloseAdmissionBlockedForTest?.invoke()
+            stateLock.lock()
+        }
+        return try {
+            action()
+        } finally {
+            stateLock.unlock()
+        }
     }
 
     private fun tombstoneLocked(owner: X11WindowOwner): Boolean {

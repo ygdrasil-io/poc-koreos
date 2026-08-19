@@ -500,12 +500,12 @@ class WaylandLoopContractTest {
         )
         loop.registerWindow(window)
         val callbackClaimed = CountDownLatch(1)
-        val closeAttempted = CountDownLatch(1)
+        val closeBlockedAtAdmission = CountDownLatch(1)
         val closeReturned = CountDownLatch(1)
         val events = mutableListOf<WindowEvent>()
+        loop.onCloseAdmissionBlockedForTest = closeBlockedAtAdmission::countDown
         val closer = Thread({
             assertTrue(callbackClaimed.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
-            closeAttempted.countDown()
             window.close()
             closeReturned.countDown()
         }, "wayland-close-after-claim")
@@ -520,7 +520,7 @@ class WaylandLoopContractTest {
                 events += event
                 if (event == WindowEvent.Focused(true)) {
                     callbackClaimed.countDown()
-                    assertTrue(closeAttempted.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+                    assertTrue(closeBlockedAtAdmission.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
                     assertEquals(1L, closeReturned.count)
                 }
             }
@@ -535,6 +535,47 @@ class WaylandLoopContractTest {
         dispatchWaylandIteration(loop, handler, StartCause.Poll)
 
         assertEquals(listOf(WindowEvent.Focused(true), WindowEvent.Destroyed), events)
+    }
+
+    @Test
+    fun `shutdown closes an owner claimed by dispatch before native close`() {
+        val loop = testLoop(RecordingWakeup())
+        var nativeDestroyCalls = 0
+        val window = WaylandWindow.createForTest(
+            surface = 69L,
+            surfaceProxyDestroyer = { nativeDestroyCalls += 1 },
+            surfaceFlusher = { 0 },
+        )
+        loop.registerWindow(window)
+        val commandConsumed = CountDownLatch(1)
+        val releaseDispatch = CountDownLatch(1)
+        loop.onCloseCommandConsumedForTest = {
+            commandConsumed.countDown()
+            assertTrue(releaseDispatch.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+        }
+        val dispatch = Thread({
+            dispatchWaylandIteration(loop, recordingHandler(), StartCause.Poll)
+        }, "wayland-dispatch-claimed-close")
+        val shutdownReturned = CountDownLatch(1)
+        val shutdown = Thread({
+            loop.closeAllWindowsDirect()
+            shutdownReturned.countDown()
+        }, "wayland-shutdown-claimed-close")
+
+        window.close()
+        dispatch.start()
+        assertTrue(commandConsumed.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+        shutdown.start()
+        shutdown.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+
+        assertFalse(shutdown.isAlive)
+        assertEquals(0L, shutdownReturned.count)
+        assertEquals(1, nativeDestroyCalls)
+
+        releaseDispatch.countDown()
+        dispatch.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+        assertFalse(dispatch.isAlive)
+        assertEquals(1, nativeDestroyCalls)
     }
 
     @Test

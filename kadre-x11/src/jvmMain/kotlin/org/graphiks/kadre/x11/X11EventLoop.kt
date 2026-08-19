@@ -252,6 +252,12 @@ class X11EventLoop internal constructor(
     internal val windows: ConcurrentHashMap<Long, X11Window>
         get() = windowLifecycle.windows
 
+    internal var onCloseAdmissionBlockedForTest: (() -> Unit)?
+        get() = windowLifecycle.onCloseAdmissionBlockedForTest
+        set(value) {
+            windowLifecycle.onCloseAdmissionBlockedForTest = value
+        }
+
     @Volatile
     private var _isExiting = false
 
