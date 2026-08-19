@@ -94,14 +94,24 @@ internal class X11WindowLifecycle(
     /** Handles DestroyNotify without issuing a second XDestroyWindow. */
     fun nativeWindowDestroyed(windowId: WindowId): Boolean {
         checkLoopThread()
+        var queuedWakeFailure: Throwable? = null
         val owner = synchronized(stateLock) {
-            val current = currentOwnerLocked(windowId) ?: return false
-            if (!tombstoneLocked(current)) return false
-            current.nativeClosed.compareAndSet(false, true)
-            current
+            val liveOwner = currentOwnerLocked(windowId)
+            val pendingOwner = pendingCloseCommands.keys.firstOrNull { it.window.id == windowId }
+            val owner = liveOwner ?: pendingOwner ?: return false
+            if (liveOwner != null && !tombstoneLocked(liveOwner)) return false
+            pendingCloseCommands.remove(owner)?.let { command ->
+                eventQueue.remove(command)
+                while (true) {
+                    val wakeFailure = command.wakeFailures.poll() ?: break
+                    queuedWakeFailure = appendLifecycleFailure(queuedWakeFailure, wakeFailure)
+                }
+            }
+            if (!owner.nativeClosed.compareAndSet(false, true)) return false
+            owner
         }
 
-        var failure: Throwable? = null
+        var failure: Throwable? = queuedWakeFailure
         try {
             owner.window.releaseLoopOwnedResources()
         } catch (thrown: Throwable) {
@@ -165,8 +175,8 @@ internal class X11WindowLifecycle(
             val queued = item as X11QueuedWindowEvent
             if (queued.event == WindowEvent.Destroyed) continue
 
-            val deliver = synchronized(stateLock) {
-                if (queued.isRedraw) {
+            synchronized(stateLock) {
+                val deliver = if (queued.isRedraw) {
                     if (pendingRedrawItems[queued.owner] !== queued) {
                         false
                     } else {
@@ -177,9 +187,9 @@ internal class X11WindowLifecycle(
                 } else {
                     isCurrentOwnerLocked(queued.owner)
                 }
-            }
-            if (deliver) {
-                handler.windowEvent(loop, queued.owner.window.id, queued.event)
+                if (deliver) {
+                    handler.windowEvent(loop, queued.owner.window.id, queued.event)
+                }
             }
         }
     }

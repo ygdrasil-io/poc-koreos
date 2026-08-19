@@ -133,6 +133,7 @@ class WaylandEventLoop internal constructor(
     /** Active windows indexed by the address of their wl_surface*. */
     internal val windows = ConcurrentHashMap<Long, WaylandWindow>()
     private val windowOwners = ConcurrentHashMap<Long, WaylandWindowOwner>()
+    private val lifecycleLock = Any()
 
     /**
      * Window events produced by native upcalls (xdg configure/close), queued here and drained
@@ -144,7 +145,7 @@ class WaylandEventLoop internal constructor(
     private val pendingRedraws = ConcurrentHashMap<WaylandWindowOwner, Any>()
     private val pendingCloseCommands = ConcurrentHashMap<WaylandWindowOwner, WaylandQueuedCloseCommand>()
 
-    internal fun registerWindow(window: WaylandWindow): WaylandWindowOwner {
+    internal fun registerWindow(window: WaylandWindow): WaylandWindowOwner = synchronized(lifecycleLock) {
         val owner = WaylandWindowOwner(window)
         windowOwners[window.id.value] = owner
         windows[window.id.value] = window
@@ -156,7 +157,7 @@ class WaylandEventLoop internal constructor(
         if (window.takePendingCompositorClose()) {
             enqueueCloseWindow(owner)
         }
-        return owner
+        owner
     }
 
     internal fun adoptCreatedWindow(
@@ -197,25 +198,27 @@ class WaylandEventLoop internal constructor(
      * insertion always signals the portable POSIX wake owner so an idle poll returns.
      */
     internal fun requestRedraw(windowId: WindowId): Boolean {
-        val owner = windowOwners[windowId.value] ?: return false
+        val owner = synchronized(lifecycleLock) { windowOwners[windowId.value] } ?: return false
         return requestRedraw(owner)
     }
 
     private fun requestRedraw(owner: WaylandWindowOwner): Boolean {
         synchronized(owner.redrawTransactionLock) {
-            if (!isCurrentOwner(owner)) return false
-            val token = Any()
-            if (pendingRedraws.putIfAbsent(owner, token) != null) return true
-            val queued = WaylandQueuedWindowEvent(owner, WindowEvent.RedrawRequested, token)
-            eventQueue.add(queued)
-            val wakeFailure = try {
-                if (wakeup.signal()) return true
-                IllegalStateException("portable POSIX wake owner is closed")
-            } catch (failure: Throwable) {
-                failure
+            synchronized(lifecycleLock) {
+                if (!isCurrentOwnerLocked(owner)) return false
+                val token = Any()
+                if (pendingRedraws.putIfAbsent(owner, token) != null) return true
+                val queued = WaylandQueuedWindowEvent(owner, WindowEvent.RedrawRequested, token)
+                eventQueue.add(queued)
+                val wakeFailure = try {
+                    if (wakeup.signal()) return true
+                    IllegalStateException("portable POSIX wake owner is closed")
+                } catch (failure: Throwable) {
+                    failure
+                }
+                rollbackRedraw(owner, token, queued)
+                throw IllegalStateException("Wayland redraw wake failed", wakeFailure)
             }
-            rollbackRedraw(owner, token, queued)
-            throw IllegalStateException("Wayland redraw wake failed", wakeFailure)
         }
     }
 
@@ -225,17 +228,18 @@ class WaylandEventLoop internal constructor(
         }
     }
 
-    internal fun consumeRedraw(owner: WaylandWindowOwner, token: Any?): Boolean {
-        if (token == null) return false
-        return pendingRedraws.remove(owner, token)
-    }
-
     internal fun enqueueWindowEvent(windowId: WindowId, event: WindowEvent) {
-        val owner = windowOwners[windowId.value] ?: return
-        enqueueWindowEvent(owner, event)
+        synchronized(lifecycleLock) {
+            val owner = windowOwners[windowId.value] ?: return
+            enqueueWindowEventLocked(owner, event)
+        }
     }
 
     private fun enqueueWindowEvent(owner: WaylandWindowOwner, event: WindowEvent) {
+        synchronized(lifecycleLock) { enqueueWindowEventLocked(owner, event) }
+    }
+
+    private fun enqueueWindowEventLocked(owner: WaylandWindowOwner, event: WindowEvent) {
         eventQueue.add(WaylandQueuedWindowEvent(owner, event))
     }
 
@@ -244,8 +248,8 @@ class WaylandEventLoop internal constructor(
     }
 
     /** Tombstones ownership before publishing the loop-thread native close command. */
-    private fun enqueueCloseWindow(owner: WaylandWindowOwner) {
-        if (!tombstoneWindow(owner)) return
+    private fun enqueueCloseWindow(owner: WaylandWindowOwner) = synchronized(lifecycleLock) {
+        if (!tombstoneWindowLocked(owner)) return@synchronized
         val command = WaylandQueuedCloseCommand(owner, Any())
         pendingCloseCommands[owner] = command
         eventQueue.add(command)
@@ -265,11 +269,11 @@ class WaylandEventLoop internal constructor(
     }
 
     internal fun consumeCloseCommand(command: WaylandQueuedCloseCommand): Boolean =
-        pendingCloseCommands.remove(command.owner, command)
+        synchronized(lifecycleLock) { pendingCloseCommands.remove(command.owner, command) }
 
     /** Test seam that closes the current owner and queues its terminal notification. */
     internal fun closeWindow(windowId: WindowId): Boolean {
-        val owner = windowOwners[windowId.value] ?: return false
+        val owner = synchronized(lifecycleLock) { windowOwners[windowId.value] } ?: return false
         val result = closeWindow(owner)
         if (result.closed) eventQueue.add(WaylandQueuedWindowEvent(owner, WindowEvent.Destroyed))
         result.failure?.let { throw it }
@@ -278,8 +282,11 @@ class WaylandEventLoop internal constructor(
 
     /** Removes loop ownership before releasing any child or surface proxy. */
     internal fun closeWindow(owner: WaylandWindowOwner): WaylandCloseResult {
-        tombstoneWindow(owner)
-        if (!owner.nativeClosed.compareAndSet(false, true)) {
+        val nativeClaimed = synchronized(lifecycleLock) {
+            tombstoneWindowLocked(owner)
+            owner.nativeClosed.compareAndSet(false, true)
+        }
+        if (!nativeClaimed) {
             return WaylandCloseResult(owner, closed = false, failure = null)
         }
 
@@ -294,7 +301,7 @@ class WaylandEventLoop internal constructor(
     }
 
     /** Removes logical ownership and all non-terminal work without touching native resources. */
-    private fun tombstoneWindow(owner: WaylandWindowOwner): Boolean {
+    private fun tombstoneWindowLocked(owner: WaylandWindowOwner): Boolean {
         if (!owner.tombstoned.compareAndSet(false, true)) return false
         windowOwners.remove(owner.window.id.value, owner)
         windows.remove(owner.window.id.value, owner.window)
@@ -312,20 +319,39 @@ class WaylandEventLoop internal constructor(
         handler: ApplicationHandler,
     ) {
         if (!owner.destroyedDelivered.compareAndSet(false, true)) return
-        val current = windowOwners[owner.window.id.value]
-        if (current != null && current !== owner) return
+        val canDeliver = synchronized(lifecycleLock) {
+            val current = windowOwners[owner.window.id.value]
+            current == null || current === owner
+        }
+        if (!canDeliver) return
         handler.windowEvent(this, owner.window.id, WindowEvent.Destroyed)
     }
 
-    internal fun isCurrentOwner(owner: WaylandWindowOwner): Boolean =
+    private fun isCurrentOwnerLocked(owner: WaylandWindowOwner): Boolean =
         windowOwners[owner.window.id.value] === owner && windows[owner.window.id.value] === owner.window
+
+    /** Claims a non-terminal event and invokes its callback in the same lifecycle transaction. */
+    internal fun deliverWindowEvent(
+        queued: WaylandQueuedWindowEvent,
+        handler: ApplicationHandler,
+    ) = synchronized(lifecycleLock) {
+        if (queued.event == WindowEvent.RedrawRequested &&
+            !pendingRedraws.remove(queued.owner, queued.redrawToken)
+        ) {
+            return@synchronized
+        }
+        if (!isCurrentOwnerLocked(queued.owner)) return@synchronized
+        handler.windowEvent(this, queued.windowId, queued.event)
+    }
 
     /** Closes every remaining native window synchronously while the display is still valid. */
     internal fun closeAllWindowsDirect() {
-        val commandsByOwner = pendingCloseCommands.values.associateBy { it.owner }
-        val owners = (windowOwners.values + commandsByOwner.keys)
-            .distinct()
-            .sortedBy { it.window.id.value }
+        val (commandsByOwner, owners) = synchronized(lifecycleLock) {
+            val commands = pendingCloseCommands.values.associateBy { it.owner }
+            commands to (windowOwners.values + commands.keys)
+                .distinct()
+                .sortedBy { it.window.id.value }
+        }
         var failure: Throwable? = null
         for (owner in owners) {
             val result = closeWindow(owner)
@@ -338,8 +364,10 @@ class WaylandEventLoop internal constructor(
                 }
             }
         }
-        eventQueue.removeIf {
-            it is WaylandQueuedWindowEvent || it is WaylandQueuedCloseCommand
+        synchronized(lifecycleLock) {
+            eventQueue.removeIf {
+                it is WaylandQueuedWindowEvent || it is WaylandQueuedCloseCommand
+            }
         }
         failure?.let { throw it }
     }
@@ -635,17 +663,12 @@ internal fun dispatchWaylandIteration(
                 continue
             }
             val queued = item as WaylandQueuedWindowEvent
-            val windowId = queued.windowId
             val event = queued.event
             if (event == WindowEvent.Destroyed) {
                 eventLoop.deliverDestroyed(queued.owner, handler)
                 continue
             }
-            if (event == WindowEvent.RedrawRequested) {
-                if (!eventLoop.consumeRedraw(queued.owner, queued.redrawToken)) continue
-            }
-            if (!eventLoop.isCurrentOwner(queued.owner)) continue
-            handler.windowEvent(eventLoop, windowId, event)
+            eventLoop.deliverWindowEvent(queued, handler)
         }
         handler.aboutToWait(eventLoop)
     } finally {

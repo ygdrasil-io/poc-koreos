@@ -285,6 +285,64 @@ class X11LoopContractTest {
     }
 
     @Test
+    fun `close waits for an already claimed non terminal callback`() {
+        val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
+        val window = loop.createWindow(WindowAttributes(title = "claimed-callback"))
+        val callbackClaimed = CountDownLatch(1)
+        val closeAttempted = CountDownLatch(1)
+        val closeReturned = CountDownLatch(1)
+        val events = mutableListOf<WindowEvent>()
+        val closer = Thread({
+            assertTrue(callbackClaimed.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+            closeAttempted.countDown()
+            window.close()
+            closeReturned.countDown()
+        }, "x11-close-after-claim")
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                events += event
+                if (event == WindowEvent.Focused(true)) {
+                    callbackClaimed.countDown()
+                    assertTrue(closeAttempted.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+                    assertEquals(1L, closeReturned.count)
+                }
+            }
+        }
+
+        loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true))
+        closer.start()
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+        closer.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+        assertFalse(closer.isAlive)
+        assertEquals(0L, closeReturned.count)
+        dispatchX11Iteration(loop, handler, StartCause.Poll)
+
+        assertEquals(listOf(WindowEvent.Focused(true), WindowEvent.Destroyed), events)
+    }
+
+    @Test
+    fun `destroy notify after public tombstone cancels native close and delivers destroyed once`() {
+        val native = FakeX11NativeAdapter()
+        val loop = testLoop(RecordingX11Wakeup(), native)
+        val window = loop.createWindow(WindowAttributes(title = "destroy-notify"))
+        val events = mutableListOf<WindowEvent>()
+
+        window.close()
+        assertTrue(loop.nativeWindowDestroyed(window.id))
+        dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.Poll)
+        dispatchX11Iteration(loop, recordingHandler(events = events), StartCause.Poll)
+
+        assertTrue(native.trace.isEmpty())
+        assertEquals(listOf<WindowEvent>(WindowEvent.Destroyed), events)
+    }
+
+    @Test
     fun `failed close wake retains the tombstone and reports it at the loop boundary`() {
         val wakeup = ScriptedX11Wakeup(results = ArrayDeque(listOf(false, true)))
         val native = FakeX11NativeAdapter()

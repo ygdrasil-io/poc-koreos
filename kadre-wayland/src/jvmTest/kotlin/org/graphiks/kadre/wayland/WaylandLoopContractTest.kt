@@ -13,6 +13,7 @@ import org.graphiks.kadre.test.assertIterationOrder
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -490,6 +491,94 @@ class WaylandLoopContractTest {
     }
 
     @Test
+    fun `close waits for an already claimed non terminal callback`() {
+        val loop = testLoop(RecordingWakeup())
+        val window = WaylandWindow.createForTest(
+            surface = 67L,
+            surfaceProxyDestroyer = {},
+            surfaceFlusher = { 0 },
+        )
+        loop.registerWindow(window)
+        val callbackClaimed = CountDownLatch(1)
+        val closeAttempted = CountDownLatch(1)
+        val closeReturned = CountDownLatch(1)
+        val events = mutableListOf<WindowEvent>()
+        val closer = Thread({
+            assertTrue(callbackClaimed.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+            closeAttempted.countDown()
+            window.close()
+            closeReturned.countDown()
+        }, "wayland-close-after-claim")
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) = Unit
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                events += event
+                if (event == WindowEvent.Focused(true)) {
+                    callbackClaimed.countDown()
+                    assertTrue(closeAttempted.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+                    assertEquals(1L, closeReturned.count)
+                }
+            }
+        }
+
+        loop.enqueueWindowEvent(window.id, WindowEvent.Focused(true))
+        closer.start()
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+        closer.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+        assertFalse(closer.isAlive)
+        assertEquals(0L, closeReturned.count)
+        dispatchWaylandIteration(loop, handler, StartCause.Poll)
+
+        assertEquals(listOf(WindowEvent.Focused(true), WindowEvent.Destroyed), events)
+    }
+
+    @Test
+    fun `shutdown waits for the close transaction and closes its tombstoned owner`() {
+        val wakeup = BlockingCloseWakeup()
+        val loop = testLoop(wakeup)
+        var nativeDestroyCalls = 0
+        val window = WaylandWindow.createForTest(
+            surface = 68L,
+            surfaceProxyDestroyer = { nativeDestroyCalls += 1 },
+            surfaceFlusher = { 0 },
+        )
+        loop.registerWindow(window)
+        val closeReturned = CountDownLatch(1)
+        val shutdownStarted = CountDownLatch(1)
+        val shutdownReturned = CountDownLatch(1)
+        val closer = Thread({
+            window.close()
+            closeReturned.countDown()
+        }, "wayland-close-transaction")
+        val shutdown = Thread({
+            shutdownStarted.countDown()
+            loop.closeAllWindowsDirect()
+            shutdownReturned.countDown()
+        }, "wayland-shutdown-race")
+
+        closer.start()
+        assertTrue(wakeup.signalEntered.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+        shutdown.start()
+        assertTrue(shutdownStarted.await(CONCURRENCY_GUARD_SECONDS, TimeUnit.SECONDS))
+        assertEquals(1L, shutdownReturned.count)
+
+        wakeup.releaseSignal.countDown()
+        closer.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+        shutdown.join(TimeUnit.SECONDS.toMillis(CONCURRENCY_GUARD_SECONDS))
+
+        assertFalse(closer.isAlive)
+        assertFalse(shutdown.isAlive)
+        assertEquals(0L, closeReturned.count)
+        assertEquals(0L, shutdownReturned.count)
+        assertEquals(1, nativeDestroyCalls)
+    }
+
+    @Test
     fun `removing the final discovered output leaves no available monitor`() {
         val loop = testLoop(RecordingWakeup())
         Arena.ofShared().use { arena ->
@@ -914,6 +1003,8 @@ class WaylandLoopContractTest {
     )
 }
 
+private const val CONCURRENCY_GUARD_SECONDS = 10L
+
 private class RecordingWakeup(
     private val onSignal: () -> Unit = {},
     var signalResult: Boolean = true,
@@ -948,6 +1039,21 @@ private class BlockingFirstWakeup : PosixWakeup {
             releaseFirstSignal.await()
             return false
         }
+        return true
+    }
+
+    override fun drain(): Boolean = true
+    override fun close() = Unit
+}
+
+private class BlockingCloseWakeup : PosixWakeup {
+    override val readFd: Int = 9
+    val signalEntered = CountDownLatch(1)
+    val releaseSignal = CountDownLatch(1)
+
+    override fun signal(): Boolean {
+        signalEntered.countDown()
+        releaseSignal.await()
         return true
     }
 
