@@ -138,8 +138,6 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: gradle
-      - name: Refresh APT package index
-        run: sudo apt-get update
       - name: Install Wayland capture dependencies
         run: >-
           sudo apt-get install -y weston libwayland-client0
