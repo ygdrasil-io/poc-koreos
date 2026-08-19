@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import pathlib
 import re
 import struct
@@ -48,10 +49,19 @@ def validate_junit(entries: list[str]) -> None:
             root = element_tree.parse(path).getroot()
         except element_tree.ParseError as error:
             fail(f"{path}: invalid JUnit XML: {error}")
-        if root.tag != "testsuite":
-            fail(f"{path}: expected a testsuite root, got {root.tag!r}")
-        for field in totals:
-            totals[field] += non_negative_integer(root.get(field), field, path)
+        if root.tag == "testsuite":
+            top_level_suites = [root]
+        elif root.tag == "testsuites":
+            top_level_suites = [suite for suite in root if suite.tag == "testsuite"]
+            if not top_level_suites:
+                fail(f"{path}: testsuites root contains no testsuite")
+            validate_declared_counts(root, path)
+        else:
+            fail(f"{path}: expected a testsuite or testsuites root, got {root.tag!r}")
+        for suite in top_level_suites:
+            validate_suite_counts(suite, path)
+            for field in totals:
+                totals[field] += non_negative_integer(suite.get(field), field, path)
 
     if totals["tests"] == 0:
         fail("JUnit evidence reported zero tests")
@@ -59,6 +69,27 @@ def validate_junit(entries: list[str]) -> None:
         if totals[field] != 0:
             fail(f"JUnit evidence reported {totals[field]} {field}")
     print("JUnit evidence: " + " ".join(f"{key}={value}" for key, value in totals.items()))
+
+
+def validate_declared_counts(suite: element_tree.Element, path: pathlib.Path) -> None:
+    observed = {
+        "tests": sum(1 for _ in suite.iter("testcase")),
+        "skipped": sum(1 for _ in suite.iter("skipped")),
+        "failures": sum(1 for _ in suite.iter("failure")),
+        "errors": sum(1 for _ in suite.iter("error")),
+    }
+    for field, count in observed.items():
+        declared = non_negative_integer(suite.get(field), field, path)
+        noun = "testcase" if field == "tests" else field[:-1] if field.endswith("s") else field
+        if declared != count:
+            fail(f"{path}: declared {field}={declared} does not match {noun} count={count}")
+
+
+def validate_suite_counts(suite: element_tree.Element, path: pathlib.Path) -> None:
+    validate_declared_counts(suite, path)
+    for child in suite:
+        if child.tag == "testsuite":
+            validate_suite_counts(child, path)
 
 
 def png_rows(path: pathlib.Path) -> tuple[int, int, list[bytes], int, int]:
@@ -142,26 +173,55 @@ def png_rows(path: pathlib.Path) -> tuple[int, int, list[bytes], int, int]:
     return width, height, rows, channels, color_type
 
 
-def validate_png(entries: list[str]) -> None:
+PNG_TARGETS = {
+    "android-triangle": {"width": 800, "height": 600, "min_distinct_colors": 8, "min_non_background_pixels": 24_000},
+    "compose-raster": {"width": 800, "height": 600, "min_distinct_colors": 8, "min_non_background_pixels": 4_800},
+    "hello-triangle-baseline": {"width": 800, "height": 600, "min_distinct_colors": 4, "min_non_background_pixels": 4_800},
+}
+
+
+def visible_rgba_pixels(rows: list[bytes], channels: int, color_type: int):
+    for row in rows:
+        for pixel_start in range(0, len(row), channels):
+            pixel = row[pixel_start : pixel_start + channels]
+            if color_type == 0:
+                red = green = blue = pixel[0]
+                alpha = 255
+            elif color_type == 2:
+                red, green, blue = pixel
+                alpha = 255
+            elif color_type == 4:
+                red = green = blue = pixel[0]
+                alpha = pixel[1]
+            else:
+                red, green, blue, alpha = pixel
+            yield (red, green, blue, alpha) if alpha else (0, 0, 0, 0)
+
+
+def validate_png(entries: list[str], target_name: str) -> None:
     if not entries:
         fail("at least one PNG path is required")
+    target = PNG_TARGETS[target_name]
     for entry in entries:
         path = pathlib.Path(entry)
         width, height, rows, channels, color_type = png_rows(path)
-        has_foreground = False
-        for row in rows:
-            for pixel_start in range(0, len(row), channels):
-                pixel = row[pixel_start : pixel_start + channels]
-                alpha = pixel[-1] if color_type in {4, 6} else 255
-                color = pixel[:1] if color_type in {0, 4} else pixel[:3]
-                if alpha != 0 and any(component != 0 for component in color):
-                    has_foreground = True
-                    break
-            if has_foreground:
-                break
-        if not has_foreground:
-            fail(f"{path}: PNG contains no non-background pixels")
-        print(f"PNG evidence: {path} {width}x{height} decoded with foreground pixels")
+        if (width, height) != (target["width"], target["height"]):
+            fail(f"{path}: dimensions must equal {target['width']}x{target['height']} for {target_name}")
+        pixels = Counter(visible_rgba_pixels(rows, channels, color_type))
+        visible_colors = {pixel for pixel in pixels if pixel[3] != 0}
+        if len(visible_colors) < target["min_distinct_colors"]:
+            fail(f"{path}: must contain at least {target['min_distinct_colors']} distinct visible colors for {target_name}")
+        background, background_count = pixels.most_common(1)[0]
+        non_background_pixels = sum(count for pixel, count in pixels.items() if pixel != background and pixel[3] != 0)
+        if non_background_pixels < target["min_non_background_pixels"]:
+            fail(
+                f"{path}: non-background visible pixels={non_background_pixels} is below "
+                f"{target['min_non_background_pixels']} for {target_name} (background={background_count})"
+            )
+        print(
+            f"PNG evidence: {path} {width}x{height} target={target_name} "
+            f"colors={len(visible_colors)} non-background={non_background_pixels}"
+        )
 
 
 REPORT_FIELDS = ("Finding:", "Test/command:", "Environment:", "Result:", "Proof path:")
@@ -189,15 +249,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--junit", action="append", default=[], metavar="PATH", help="JUnit XML file or directory")
     parser.add_argument("--png", action="append", default=[], metavar="PATH", help="PNG capture to decode and inspect")
+    parser.add_argument("--png-target", choices=sorted(PNG_TARGETS), help="required capture contract for every --png")
     parser.add_argument("--report", metavar="PATH", help="19-row cross-platform correctness report")
     args = parser.parse_args()
     if not args.junit and not args.png and not args.report:
         parser.error("provide --junit, --png, or --report")
+    if args.png and not args.png_target:
+        parser.error("--png-target is required with --png")
     try:
         if args.junit:
             validate_junit(args.junit)
         if args.png:
-            validate_png(args.png)
+            validate_png(args.png, args.png_target)
         if args.report:
             validate_report(args.report)
     except ValidationError as error:

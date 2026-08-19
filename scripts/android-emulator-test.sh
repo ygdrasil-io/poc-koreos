@@ -17,4 +17,4 @@ if [[ -z "$capture" ]]; then
   exit 1
 fi
 
-python3 "$script_dir/verify-test-results.py" --junit "$result_dir" --png "$capture"
+python3 "$script_dir/verify-test-results.py" --junit "$result_dir" --png "$capture" --png-target android-triangle

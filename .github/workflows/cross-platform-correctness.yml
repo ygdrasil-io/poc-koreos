@@ -107,6 +107,7 @@ jobs:
       - run: >-
           python3 scripts/verify-test-results.py
           --png samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png
+          --png-target compose-raster
       - uses: actions/upload-artifact@v4
         with:
           name: deterministic-compose-raster
@@ -128,9 +129,9 @@ jobs:
     steps:
       - name: Require every correctness job to succeed
         run: |
-          test "${{ needs.host-contracts.result }}" = success
-          test "${{ needs.web-browser-contracts.result }}" = success
-          test "${{ needs.ios-simulator-contracts.result }}" = success
-          test "${{ needs.android-emulator-contracts.result }}" = success
-          test "${{ needs.linux-container-contracts.result }}" = success
-          test "${{ needs.deterministic-captures.result }}" = success
+          [[ "${{ needs.host-contracts.result }}" == "success" ]]
+          [[ "${{ needs.web-browser-contracts.result }}" == "success" ]]
+          [[ "${{ needs.ios-simulator-contracts.result }}" == "success" ]]
+          [[ "${{ needs.android-emulator-contracts.result }}" == "success" ]]
+          [[ "${{ needs.linux-container-contracts.result }}" == "success" ]]
+          [[ "${{ needs.deterministic-captures.result }}" == "success" ]]
