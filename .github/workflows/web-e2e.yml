@@ -78,7 +78,12 @@ jobs:
       - name: Use system Chrome (macOS runners have it pre-installed)
         run: |
           echo "CHROME_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
-          echo "Using system Chrome at $(ls -d /Applications/Google\ Chrome.app 2>/dev/null || echo 'not found')"
+          if [ -d /Applications/Google\ Chrome.app ]; then
+            echo "Using system Chrome at /Applications/Google Chrome.app"
+          else
+            echo "System Chrome application is not present" >&2
+            exit 1
+          fi
 
       - name: Run Playwright smoke + visual tests
         working-directory: samples/hello-triangle-web/e2e

@@ -173,6 +173,7 @@ run_browser_target() {
     fi
     [[ "$status" -eq 0 ]] || fail "$label command exited with status $status"
 
+    python3 "$SCRIPT_DIR/verify-test-results.py" --junit "$result_dir"
     verify_target_xml "$label" "$result_dir"
 }
 

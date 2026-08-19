@@ -3,7 +3,8 @@ name: linux-x11-visual
 # Linux X11 visual regression via GPU readback.
 # X11 variant of linux-visual: the capture reuses the kadre EventLoop forced to X11
 # (KADRE_LINUX_BACKEND=x11) to create an X11 window (kadre-x11), hence the wgpu
-# surface, then renders offscreen + readback. NON-BLOCKING.
+# surface, then renders offscreen + readback. OPTIONAL HARDWARE DIAGNOSTIC:
+# it is never a dependency of cross-platform-correctness.
 #
 # Headless: virtual X server Xvfb + software Vulkan (Mesa lavapipe, auto-discovered).
 
@@ -23,8 +24,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  linux-x11-visual:
-    name: linux-x11-visual
+  linux-x11-hardware-diagnostic:
+    name: optional Linux X11 hardware diagnostic
     runs-on: ubuntu-latest
     permissions:
       contents: write        # push captures to the orphan branch ci-visual-reports

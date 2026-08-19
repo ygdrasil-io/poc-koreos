@@ -1,4 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# The mandatory PR correctness matrix is intentionally defined in the separate
+# cross-platform-correctness workflow. Its aggregate job is the branch-protection
+# status; this legacy workflow remains a broader build and packaging signal.
 # Kadre CI — Multi-Platform
 #
 # Two-tier strategy (GRA-160 + GRA-39):
@@ -47,6 +51,7 @@ jobs:
   build-and-test:
     name: build-and-test
     runs-on: macos-15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -176,6 +181,7 @@ jobs:
   ios-build:
     name: ios-build
     runs-on: macos-15
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -235,6 +241,7 @@ jobs:
   android-build:
     name: android-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -283,6 +290,7 @@ jobs:
   web-build:
     name: web-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -335,6 +343,7 @@ jobs:
   windows-build:
     name: windows-build
     runs-on: windows-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -383,6 +392,7 @@ jobs:
   linux-x11-build:
     name: linux-x11-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -434,6 +444,7 @@ jobs:
   linux-wayland-build:
     name: linux-wayland-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||

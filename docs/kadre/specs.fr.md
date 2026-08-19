@@ -156,6 +156,17 @@ sealed interface RawDisplayHandle {
 - Seules des sealed interface **variants** sont ajoutés (extension safe pour les consommateurs qui font `when` exhaustif → ils devront recompiler mais leur code restera valide après ajout des branches manquantes).
 - Le seul impact de compatibilité source concerne les consommateurs qui font un `when` exhaustif sur `RawWindowHandle` (cas attendu : renderer wgpu4k).
 
+### 2.4 Clôture de compatibilité cross-platform
+
+Les six changements de compatibilité suivants sont approuvés comme contrats runtime observables. Ils sont additifs ou correctifs ; aucun ne modifie une signature de méthode publique.
+
+1. Chaque itération backend possède une frontière `NewEvents` unique et une frontière finale `AboutToWait` autour des callbacks de dispatch.
+2. X11 et Wayland publient l'ownership terminal de fenêtre de façon synchrone : aucun callback non terminal ne peut commencer après le retour de `close()`, et `Destroyed` est émis au plus une fois.
+3. Wayland retourne le snapshot des outputs découverts après la découverte initiale, y compris une liste volontairement vide après le retrait du dernier output.
+4. `ControlFlow.WaitUntil` conserve son échéance originale sur Web, X11 et Wayland ; un timer/poll précoce réarme ou repoll sans livrer `ResumeTimeReached` trop tôt.
+5. Les notifications de cycle de vie UIKit utilisent des itérations canoniques idempotentes et exécutent les étapes de nettoyage terminal même si un callback antérieur échoue.
+6. Le choix automatique Linux sonde les connexions Wayland/X11 utilisables dans l'ordre de session ; une valeur forcée de `KADRE_LINUX_BACKEND` ne teste que ce backend, et l'épuisement des probes conserve les causes d'erreur natives.
+
 ---
 
 ## 3. Considérations spécifiques par plateforme (Web, Windows, Linux)
@@ -227,6 +238,8 @@ sequenceDiagram
 | `resize` (window) | `WindowEvent.Resized` (via ResizeObserver sur canvas) |
 | `visibilitychange` | `suspended` (hidden) / `resumed` (visible) |
 | `pagehide` | `suspended` |
+
+Les noms publics actuels sont intentionnels : le DOM `pointermove` est mappé vers `WindowEvent.PointerMoved`, tandis que `pointerdown`/`pointerup` deviennent `WindowEvent.MouseInput` ou `WindowEvent.Touch` selon `pointerType`. Kadre n'émet pas d'alias historique `MouseMoved`.
 
 #### 3.1.5 DPI (devicePixelRatio)
 

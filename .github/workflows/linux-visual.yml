@@ -2,7 +2,8 @@ name: linux-visual
 
 # Linux visual regression via GPU readback.
 # The capture reuses the kadre EventLoop to obtain a Wayland window, hence the
-# wgpu surface, then renders offscreen + readback. NON-BLOCKING.
+# wgpu surface, then renders offscreen + readback. OPTIONAL HARDWARE DIAGNOSTIC:
+# it is never a dependency of cross-platform-correctness.
 #
 # Headless: Weston Wayland compositor (headless backend) + software Vulkan (Mesa
 # lavapipe), since the runners have no GPU.
@@ -23,8 +24,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  linux-visual:
-    name: linux-visual
+  linux-hardware-diagnostic:
+    name: optional Linux Wayland hardware diagnostic
     runs-on: ubuntu-latest
     permissions:
       contents: write        # push captures to the orphan branch ci-visual-reports

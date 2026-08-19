@@ -155,6 +155,17 @@ sealed interface RawDisplayHandle {
 - Only sealed interface **variants** are added (safe extension for consumers doing exhaustive `when` → they will need to recompile but their code remains valid after adding the missing branches).
 - The only source-compat impact is for consumers doing an exhaustive `when` on `RawWindowHandle` (expected case: wgpu4k renderer).
 
+### 2.4 Cross-platform correctness compatibility closure
+
+The following six compatibility changes are approved as observable runtime contracts. They are additive or corrective; none changes a public method signature.
+
+1. Every backend iteration has one `NewEvents` boundary and one final `AboutToWait` boundary around dispatch callbacks.
+2. X11 and Wayland publish terminal window ownership synchronously: no non-terminal callback may begin after `close()` returns, and `Destroyed` is emitted at most once.
+3. Wayland returns the discovered output snapshot after initial discovery, including a deliberately empty list after the final output is removed.
+4. `ControlFlow.WaitUntil` retains its original deadline on Web, X11, and Wayland; an early timer/poll re-arms or polls without delivering `ResumeTimeReached` early.
+5. UIKit lifecycle notifications use canonical, idempotent iterations and execute the terminal cleanup stages even when an earlier callback fails.
+6. Linux automatic backend choice probes usable Wayland/X11 connections in session order; a forced `KADRE_LINUX_BACKEND` value tests only that backend, and an exhausted probe preserves native failure causes.
+
 ---
 
 ## 3. Platform-specific considerations (Web, Windows, Linux)
@@ -226,6 +237,8 @@ sequenceDiagram
 | `resize` (window) | `WindowEvent.Resized` (via ResizeObserver on canvas) |
 | `visibilitychange` | `suspended` (hidden) / `resumed` (visible) |
 | `pagehide` | `suspended` |
+
+The current public names are intentional: DOM `pointermove` maps to `WindowEvent.PointerMoved`, while `pointerdown`/`pointerup` map to `WindowEvent.MouseInput` or `WindowEvent.Touch` according to `pointerType`. Kadre does not emit a legacy `MouseMoved` alias.
 
 #### 3.1.5 DPI (devicePixelRatio)
 

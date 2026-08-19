@@ -109,8 +109,8 @@ while (( SECONDS < readiness_deadline )); do
   probe_status=0
   wait "$readiness_pid" || probe_status=$?
   readiness_pid=""
-  kill "$readiness_watchdog_pid" >/dev/null 2>&1 || true
-  wait "$readiness_watchdog_pid" >/dev/null 2>&1 || true
+  if ! kill "$readiness_watchdog_pid" >/dev/null 2>&1; then :; fi
+  if ! wait "$readiness_watchdog_pid" >/dev/null 2>&1; then :; fi
   readiness_watchdog_pid=""
 
   if (( probe_status == 0 )); then

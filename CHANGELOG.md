@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Cross-platform correctness gate** — pull requests now publish the blocking `cross-platform-correctness` aggregate after host, JS/Wasm browser, UIKit simulator, Android emulator, glibc/musl Linux X11/Wayland, and deterministic raster-capture contracts. Result validation is script-owned: JUnit evidence must contain tests with zero skips/failures/errors, and PNG evidence is decoded before dimensions and foreground pixels are accepted.
+- **Linux backend selection** — automatic Linux startup now selects only a backend with a usable native connection and falls back in session order; a forced `KADRE_LINUX_BACKEND` override remains strict and preserves native failure context.
+- **Web event naming** — browser `pointermove` is documented as `WindowEvent.PointerMoved`; `pointerdown`/`pointerup` retain `MouseInput` or `Touch` naming according to `pointerType`.
+
+---
+
 ## [1.2.0] — 2026-06-26
 
 **100% winit API parity** achieved across all 7 Kadre backends.

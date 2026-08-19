@@ -216,19 +216,19 @@ java --enable-native-access=ALL-UNNAMED \
 
 ## Choix X11 vs Wayland
 
-Kadre inspecte les variables d'environnement dans cet ordre de priorité au démarrage du backend Linux :
+Kadre utilise l'environnement de session uniquement pour ordonner les candidats, puis sonde une vraie connexion native avant le lancement. Un `WAYLAND_DISPLAY` ou `DISPLAY` obsolète ne peut donc pas sélectionner un backend inutilisable.
 
 | Priorité | Condition | Backend sélectionné |
 |----------|-----------|---------------------|
 | 1 | `KADRE_LINUX_BACKEND=wayland` | Wayland (forcé) |
 | 2 | `KADRE_LINUX_BACKEND=x11` | X11 (forcé) |
-| 3 | `WAYLAND_DISPLAY` définie et non vide | Wayland (auto-détection) |
-| 4 | `DISPLAY` définie et non vide | X11 (auto-détection) |
-| 5 | Aucune variable trouvée | Erreur au démarrage |
+| 3 | connexion `WAYLAND_DISPLAY` utilisable | Wayland (candidat automatique, puis fallback X11) |
+| 4 | connexion `DISPLAY` utilisable | X11 (candidat automatique) |
+| 5 | aucun candidat utilisable | Erreur conservant les causes natives des probes |
 
 ### Auto-détection (comportement par défaut)
 
-Dans un environnement de bureau Wayland moderne (GNOME 45+, KDE Plasma 6, Sway), `WAYLAND_DISPLAY` est définie par le compositeur. Kadre sélectionne alors Wayland automatiquement. Dans une session X11 pure ou dans un terminal XWayland, seule `DISPLAY` est présente, et Kadre bascule sur X11.
+Dans un environnement de bureau Wayland moderne (GNOME 45+, KDE Plasma 6, Sway), `WAYLAND_DISPLAY` place normalement Wayland en premier. Si son socket ne peut pas être ouvert, Kadre essaie le candidat X11 disponible avant d'échouer. Dans une session X11 pure ou dans un terminal XWayland, `DISPLAY` sélectionne le candidat X11.
 
 ### Forcer un backend spécifique
 
@@ -239,6 +239,12 @@ KADRE_LINUX_BACKEND=wayland ./gradlew run
 # Forcer X11 (utile sous Wayland via XWayland, pour la compatibilité legacy)
 KADRE_LINUX_BACKEND=x11 ./gradlew run
 ```
+
+L'override forcé est volontairement strict : `KADRE_LINUX_BACKEND=wayland` ne repasse jamais sur X11, et `=x11` ne repasse jamais sur Wayland. Cela rend les tests de compatibilité déterministes et laisse l'échec de connexion native visible pour l'appelant.
+
+### Dépendances runtime
+
+À l'exécution, Kadre requiert les bibliothèques partagées correspondantes, et pas seulement les headers de développement : `libwayland-client`, `libX11`, `libXi` et `libxkbcommon`. Une session Wayland nécessite aussi un `XDG_RUNTIME_DIR` fonctionnel et un socket de compositeur ; une session X11 nécessite un `DISPLAY` joignable. Les commandes de paquets ci-dessus les fournissent sur les distributions documentées.
 
 !!! warning "XWayland n'est pas Wayland natif"
     Si vous forcez `KADRE_LINUX_BACKEND=x11` dans une session Wayland, Kadre utilise

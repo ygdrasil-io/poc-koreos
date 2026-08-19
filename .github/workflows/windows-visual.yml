@@ -3,7 +3,8 @@ name: windows-visual
 # Windows visual regression via GPU readback.
 # hello-triangle renders an offscreen frame (hidden Win32 window → surface → offscreen
 # texture), writes a PNG via wgpu readback, compared against a committed baseline.
-# NON-BLOCKING (non-deterministic GPU rendering / uncertain runner GPU availability).
+# OPTIONAL HARDWARE DIAGNOSTIC: non-deterministic GPU rendering / uncertain runner
+# availability. This workflow is never a dependency of cross-platform-correctness.
 
 on:
   push:
@@ -21,8 +22,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  windows-visual:
-    name: windows-visual
+  windows-hardware-diagnostic:
+    name: optional Windows hardware diagnostic
     runs-on: windows-latest
     permissions:
       contents: write        # push captures to the orphan branch ci-visual-reports

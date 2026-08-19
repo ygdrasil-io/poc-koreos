@@ -1,0 +1,136 @@
+name: cross-platform-correctness
+
+on:
+  pull_request:
+
+jobs:
+  host-contracts:
+    name: host contracts
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-workflow-contract.sh
+      - run: >-
+          ./gradlew :kadre-test:allTests :kadre:jvmTest :kadre-x11:jvmTest
+          :kadre-wayland:jvmTest :kadre-appkit:jvmTest --no-daemon --console=plain
+
+  web-browser-contracts:
+    name: web browser JS/Wasm contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - uses: browser-actions/setup-chrome@v1
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-web-browsers.sh
+
+  ios-simulator-contracts:
+    name: iOS simulator UIKit contracts
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-uikit-simulator.sh
+
+  android-emulator-contracts:
+    name: Android emulator contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: chmod +x gradlew scripts/*.sh
+      - name: Run deterministic Android emulator contract
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -no-boot-anim
+          disable-animations: true
+          script: scripts/android-emulator-test.sh
+
+  linux-container-contracts:
+    name: Linux ${{ matrix.libc }} X11/Wayland contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        libc: [glibc, musl]
+    steps:
+      - uses: actions/checkout@v4
+      - run: chmod +x gradlew scripts/*.sh
+      - run: scripts/test-linux-container.sh ${{ matrix.libc }}
+
+  deterministic-captures:
+    name: deterministic raster capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: chmod +x gradlew scripts/*.sh
+      - run: >-
+          ./gradlew :samples:compose:desktop:run
+          --args="--ci-headless samples/compose/desktop/build/cross-platform-correctness"
+          --no-daemon --console=plain
+      - run: >-
+          python3 scripts/verify-test-results.py
+          --png samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-compose-raster
+          path: samples/compose/desktop/build/cross-platform-correctness/compose-showcase.raster.png
+          if-no-files-found: error
+
+  cross-platform-correctness:
+    name: cross-platform-correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - host-contracts
+      - web-browser-contracts
+      - ios-simulator-contracts
+      - android-emulator-contracts
+      - linux-container-contracts
+      - deterministic-captures
+    steps:
+      - name: Require every correctness job to succeed
+        run: |
+          test "${{ needs.host-contracts.result }}" = success
+          test "${{ needs.web-browser-contracts.result }}" = success
+          test "${{ needs.ios-simulator-contracts.result }}" = success
+          test "${{ needs.android-emulator-contracts.result }}" = success
+          test "${{ needs.linux-container-contracts.result }}" = success
+          test "${{ needs.deterministic-captures.result }}" = success

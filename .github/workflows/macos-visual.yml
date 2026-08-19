@@ -4,7 +4,7 @@ name: macos-visual
 # hello-triangle renders an offscreen frame (no window), writes a PNG via wgpu
 # readback, then we compare it against a committed baseline. NON-BLOCKING: GPU
 # rendering is not pixel-perfect deterministic across machines → we archive the diff and
-# publish the verdict in the Job Summary, without failing the build.
+# publish the verdict in the Job Summary and fail on a regression.
 
 on:
   push:
@@ -25,6 +25,7 @@ jobs:
   macos-visual:
     name: macos-visual
     runs-on: macos-15
+    timeout-minutes: 25
     permissions:
       contents: write        # push captures to the orphan branch ci-visual-reports
       pull-requests: write   # PR comment with the inline gallery
@@ -51,14 +52,12 @@ jobs:
       # is written under samples/hello-triangle/build/visual/.
       - name: Capture GPU offscreen (hello-triangle)
         id: capture
-        continue-on-error: true
         run: |
           ./gradlew :samples:hello-triangle:run \
             --args="--capture build/visual/hello-triangle.actual.png" \
             --no-daemon --stacktrace
 
-      - name: Diff visuel vs baseline (non bloquant)
-        if: always()
+      - name: Diff visuel vs baseline
         run: |
           cd tests/visual && npm install && cd -
           DIR=samples/hello-triangle/build/visual
@@ -68,7 +67,7 @@ jobs:
             "$DIR/hello-triangle.diff.png" \
             0.02 \
             "$DIR/report.json" \
-            macOS || true
+            macOS
 
       - name: Publier le rapport visuel (inline)
         if: always()

@@ -269,7 +269,7 @@ scan_gradle_files() {
 
 legacy="$({
   scan_gradle_files || exit 1
-  rg -n '^android\.(builtInKotlin|newDsl)=false|^systemProp\..*android\.(builtInKotlin|newDsl)=false' "$root/gradle.properties" || true
+  if rg -n '^android\.(builtInKotlin|newDsl)=false|^systemProp\..*android\.(builtInKotlin|newDsl)=false' "$root/gradle.properties"; then :; fi
 })"
 
 if [[ -n "$legacy" ]]; then
