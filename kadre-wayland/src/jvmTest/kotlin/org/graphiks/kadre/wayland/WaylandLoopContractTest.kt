@@ -8,6 +8,8 @@ import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kadre.test.RecordingApplicationHandler
+import org.graphiks.kadre.test.assertIterationOrder
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,6 +21,15 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandLoopContractTest {
+    @Test
+    fun `normal dispatch satisfies the shared iteration contract`() {
+        val handler = RecordingApplicationHandler()
+
+        dispatchWaylandIteration(testLoop(RecordingWakeup()), handler, StartCause.Poll)
+
+        assertIterationOrder(handler.trace)
+    }
+
     @Test
     fun `device event is queued until after new events and handler failure stays on Kotlin loop`() {
         val loop = testLoop(RecordingWakeup())

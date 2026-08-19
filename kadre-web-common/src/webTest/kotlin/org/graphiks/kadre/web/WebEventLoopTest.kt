@@ -6,10 +6,22 @@ import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.test.RecordingApplicationHandler
+import org.graphiks.kadre.test.assertIterationOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class WebEventLoopTest {
+
+    @Test
+    fun `startup records a complete shared iteration`() {
+        val loop = TestWebEventLoop(FakeSchedulingApi())
+        val handler = RecordingApplicationHandler()
+
+        loop.runApp(handler)
+
+        assertIterationOrder(handler.trace)
+    }
 
     @Test
     fun `startup follows the exact lifecycle order and Wait remains idle`() {

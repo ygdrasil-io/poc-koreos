@@ -64,6 +64,7 @@ kotlin {
         val androidHostTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(project(":kadre-test"))
             }
         }
         val androidDeviceTest by getting {

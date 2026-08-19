@@ -57,19 +57,27 @@ class RecordingApplicationHandler(
 }
 
 fun assertIterationOrder(trace: List<ObservedCallback>) {
-    val newEvents = trace.indexOf(ObservedCallback.NewEvents)
-    val aboutToWait = trace.lastIndexOf(ObservedCallback.AboutToWait)
-    if (newEvents < 0 || aboutToWait < 0 || newEvents >= aboutToWait) {
+    val start = trace.indexOf(ObservedCallback.NewEvents)
+    val end = trace.indexOf(ObservedCallback.AboutToWait)
+    if (
+        trace.count { it == ObservedCallback.NewEvents } != 1 ||
+        trace.count { it == ObservedCallback.AboutToWait } != 1 ||
+        end != trace.lastIndex ||
+        start !in 0 until end
+    ) {
         throw AssertionError("Expected NewEvents before AboutToWait, got $trace")
     }
-    val dispatch = trace.indexOfFirst {
-        it == ObservedCallback.WindowEvent ||
-            it == ObservedCallback.RedrawRequested ||
-            it == ObservedCallback.Destroyed ||
-            it == ObservedCallback.DeviceEvent
-    }
-    if (dispatch >= 0 && dispatch !in (newEvents + 1) until aboutToWait) {
-        throw AssertionError("Expected dispatch between NewEvents and AboutToWait, got $trace")
+    trace.forEachIndexed { index, callback ->
+        if (
+            callback == ObservedCallback.WindowEvent ||
+            callback == ObservedCallback.RedrawRequested ||
+            callback == ObservedCallback.Destroyed ||
+            callback == ObservedCallback.DeviceEvent
+        ) {
+            if (index !in (start + 1) until end) {
+                throw AssertionError("Expected dispatch between NewEvents and AboutToWait, got $trace")
+            }
+        }
     }
 }
 

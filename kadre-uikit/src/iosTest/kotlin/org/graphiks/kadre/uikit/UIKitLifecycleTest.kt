@@ -15,8 +15,28 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.test.ObservedCallback
+import org.graphiks.kadre.test.assertIterationOrder
 
 class UIKitLifecycleTest {
+
+    @Test
+    fun `scheduler records a complete shared iteration`() {
+        val trace = mutableListOf<ObservedCallback>()
+        val operations = LifecycleSchedulerOperations()
+        val scheduler = UIKitScheduler(
+            operations = operations,
+            controlFlow = { org.graphiks.kadre.core.ControlFlow.Poll },
+            newEvents = { trace += ObservedCallback.NewEvents },
+            redraw = { trace += ObservedCallback.RedrawRequested },
+            aboutToWait = { trace += ObservedCallback.AboutToWait },
+        )
+        scheduler.registerWindow(WindowId(1L))
+
+        operations.fireDisplayLink()
+
+        assertIterationOrder(trace)
+    }
 
     @Test
     fun initialCreationAppliesSupportedAttributes() {
@@ -793,12 +813,16 @@ private class LifecycleSchedulerOperations : UIKitSchedulerOperations {
     var displayLinkDisposals = 0
     var startDisplayLinkFailure: Throwable? = null
     var stopDisplayLinkFailure: Throwable? = null
+    private var onDisplayLink: (() -> Unit)? = null
 
     override fun nowMillis(): Long = 1_000L
 
     override fun startDisplayLink(onFrame: () -> Unit) {
         startDisplayLinkFailure?.let { throw it }
+        onDisplayLink = onFrame
     }
+
+    fun fireDisplayLink() = checkNotNull(onDisplayLink).invoke()
 
     override fun stopDisplayLink() {
         stopDisplayLinkFailure?.let { throw it }

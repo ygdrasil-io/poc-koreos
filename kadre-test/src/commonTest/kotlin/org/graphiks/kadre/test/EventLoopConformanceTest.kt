@@ -69,6 +69,52 @@ class EventLoopConformanceTest {
     }
 
     @Test
+    fun secondNewEventsIsRejected() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(
+                listOf(
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.AboutToWait,
+                )
+            )
+        }
+    }
+
+    @Test
+    fun missingAboutToWaitIsRejected() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(listOf(ObservedCallback.NewEvents))
+        }
+    }
+
+    @Test
+    fun dispatchBeforeNewEventsIsRejected() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(
+                listOf(
+                    ObservedCallback.WindowEvent,
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.AboutToWait,
+                )
+            )
+        }
+    }
+
+    @Test
+    fun callbackAfterAboutToWaitIsRejected() {
+        assertFailsWith<AssertionError> {
+            assertIterationOrder(
+                listOf(
+                    ObservedCallback.NewEvents,
+                    ObservedCallback.AboutToWait,
+                    ObservedCallback.WindowEvent,
+                )
+            )
+        }
+    }
+
+    @Test
     fun callbackAfterClosedMarkerIsRejected() {
         assertFailsWith<AssertionError> {
             assertNoCallbacksAfter(

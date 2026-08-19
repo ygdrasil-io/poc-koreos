@@ -9,6 +9,8 @@ import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kadre.test.RecordingApplicationHandler
+import org.graphiks.kadre.test.assertIterationOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -20,6 +22,16 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class X11LoopContractTest {
+    @Test
+    fun `startup lifecycle satisfies the shared iteration contract`() {
+        val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())
+        val handler = RecordingApplicationHandler()
+
+        startX11Lifecycle(loop, handler)
+
+        assertIterationOrder(handler.trace)
+    }
+
     @Test
     fun `startup lifecycle reaches about to wait before the first native pump`() {
         val loop = testLoop(RecordingX11Wakeup(), FakeX11NativeAdapter())

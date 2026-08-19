@@ -2,7 +2,11 @@ package org.graphiks.kadre.android
 
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
+import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.test.RecordingApplicationHandler
+import org.graphiks.kadre.test.ScriptedEventLoop
+import org.graphiks.kadre.test.assertIterationOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,6 +16,21 @@ import kotlin.test.assertTrue
 
 class AndroidLoopStateTest {
     private val windowId = WindowId(1L)
+
+    @Test
+    fun `state adapter records a complete shared iteration`() {
+        val state = AndroidLoopState(nowMillis = { 0L })
+        val eventLoop = ScriptedEventLoop(emptyList())
+        val handler = RecordingApplicationHandler()
+        state.register(windowId)
+        state.requestRedraw(windowId)
+
+        handler.newEvents(eventLoop, checkNotNull(state.takeStartCause(ControlFlow.Poll)))
+        state.takeRedraws().forEach { handler.windowEvent(eventLoop, it, WindowEvent.RedrawRequested) }
+        handler.aboutToWait(eventLoop)
+
+        assertIterationOrder(handler.trace)
+    }
 
     @Test
     fun `register rejects an already open window id`() {

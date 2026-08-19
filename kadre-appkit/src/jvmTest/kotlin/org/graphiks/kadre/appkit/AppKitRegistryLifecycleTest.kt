@@ -2,9 +2,13 @@ package org.graphiks.kadre.appkit
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.ControlFlow
+import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowId
+import org.graphiks.kadre.test.RecordingApplicationHandler
+import org.graphiks.kadre.test.assertIterationOrder
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -20,6 +24,30 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitRegistryLifecycleTest {
+
+    @Test
+    fun `run loop owner dispatch satisfies the shared iteration contract`() {
+        val handler = RecordingApplicationHandler()
+        val eventLoop = AppKitEventLoop(handler)
+        val owner = CFRunLoopOwner.install(
+            api = WakeRecordingCFRunLoopApi(),
+            state = AppKitLoopState { 0L },
+            onAfterWaiting = { cause -> handler.newEvents(eventLoop, cause) },
+            onBeforeWaiting = {
+                handler.aboutToWait(eventLoop)
+                ControlFlow.Wait
+            },
+        )
+
+        try {
+            CFRunLoopOwner.dispatchObserverCallback(1L, CFRunLoopOwner.AFTER_WAITING)
+            CFRunLoopOwner.dispatchObserverCallback(1L, CFRunLoopOwner.BEFORE_WAITING)
+
+            assertIterationOrder(handler.trace)
+        } finally {
+            owner.close()
+        }
+    }
 
     @Test
     fun `public exit requests termination before ordered best-effort lifecycle cleanup`() {
