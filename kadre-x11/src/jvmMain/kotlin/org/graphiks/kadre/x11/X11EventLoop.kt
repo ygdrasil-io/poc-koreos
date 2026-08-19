@@ -1480,6 +1480,31 @@ private fun x11OpenDisplayFailure(cause: Throwable? = null): IllegalStateExcepti
 }
 
 /**
+ * Opens and immediately closes an X11 connection without constructing an event
+ * loop or invoking application callbacks.
+ */
+fun probeConnection() {
+    val openHandle = xOpenDisplay ?: throw x11OpenDisplayFailure()
+    val displaySeg = try {
+        openHandle.invokeExact(MemorySegment.NULL) as? MemorySegment
+    } catch (cause: Throwable) {
+        throw x11OpenDisplayFailure(cause)
+    } ?: throw x11OpenDisplayFailure()
+    if (displaySeg == MemorySegment.NULL || displaySeg.address() == 0L) {
+        throw x11OpenDisplayFailure()
+    }
+
+    try {
+        val connectionHandle = xConnectionNumber
+            ?: error("XConnectionNumber is unavailable")
+        val connectionFd = connectionHandle.invokeExact(displaySeg) as Int
+        check(connectionFd >= 0) { "XConnectionNumber returned an invalid fd: $connectionFd" }
+    } finally {
+        NativeX11Adapter.closeDisplay(displaySeg.address())
+    }
+}
+
+/**
  * Entry point of the kadre event loop on Linux (X11).
  *
  * Opens the connection to the X server (XOpenDisplay), creates an [X11EventLoop],

@@ -808,6 +808,60 @@ internal fun waylandStartupFailure(
     )
 }
 
+/**
+ * Opens and immediately disconnects a Wayland connection without constructing
+ * an event loop or invoking application callbacks.
+ */
+fun probeConnection() {
+    val waylandDisplay = System.getenv("WAYLAND_DISPLAY")
+    if (waylandNativeDisabled()) {
+        throw waylandStartupFailure(
+            operation = "enable native access",
+            display = waylandDisplay,
+            cause = IllegalStateException("Wayland native access is disabled"),
+        )
+    }
+    val connectHandle = wlDisplayConnect ?: throw waylandStartupFailure(
+        operation = "resolve wl_display_connect",
+        display = waylandDisplay,
+        cause = IllegalStateException("libwayland-client.so.0 does not export wl_display_connect"),
+    )
+    val displaySeg = try {
+        connectHandle.invokeExact(MemorySegment.NULL) as MemorySegment
+    } catch (failure: Throwable) {
+        throw waylandStartupFailure("wl_display_connect", waylandDisplay, failure)
+    }
+    if (displaySeg == MemorySegment.NULL || displaySeg.address() == 0L) {
+        throw waylandStartupFailure(
+            operation = "wl_display_connect",
+            display = waylandDisplay,
+            cause = IllegalStateException("wl_display_connect returned NULL"),
+        )
+    }
+
+    var primaryFailure: Throwable? = null
+    try {
+        val fdHandle = wlDisplayGetFd
+            ?: error("wl_display_get_fd not available")
+        val displayFd = fdHandle.invokeExact(displaySeg) as Int
+        check(displayFd >= 0) { "wl_display_get_fd returned an invalid fd: $displayFd" }
+    } catch (failure: Throwable) {
+        primaryFailure = waylandStartupFailure("wl_display_get_fd", waylandDisplay, failure)
+        throw primaryFailure
+    } finally {
+        try {
+            disconnectWaylandDisplay(displaySeg)
+        } catch (cleanupFailure: Throwable) {
+            val failure = primaryFailure
+            if (failure != null) {
+                failure.addSuppressed(cleanupFailure)
+            } else {
+                throw waylandStartupFailure("wl_display_disconnect", waylandDisplay, cleanupFailure)
+            }
+        }
+    }
+}
+
 internal inline fun <T> runWaylandStartupOperation(
     operation: String,
     display: String?,

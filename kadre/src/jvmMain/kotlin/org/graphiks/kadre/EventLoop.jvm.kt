@@ -47,28 +47,70 @@ actual class EventLoop actual constructor() {
     actual fun runApp(handler: ApplicationHandler) {
         val os = System.getProperty("os.name", "").lowercase()
         if (os.contains("linux")) {
-            LinuxBackendDetector.detectBackend(
-                probe = { backendClass -> invokeBackendRunApp(backendClass, handler) },
-                probeStage = LinuxBackendStage.LAUNCH,
-            )
+            runLinuxBackend(handler)
             return
         }
 
-        val backendClass = when {
-            os.contains("mac") -> "org.graphiks.kadre.appkit.AppKitEventLoopKt"
-            os.contains("win") -> "org.graphiks.kadre.win32.Win32EventLoopKt"
+        val (backendClass, platform) = when {
+            os.contains("mac") -> "org.graphiks.kadre.appkit.AppKitEventLoopKt" to "macOS"
+            os.contains("win") -> "org.graphiks.kadre.win32.Win32EventLoopKt" to "Windows"
             else -> throw UnsupportedOperationException(
                 "Operating system not supported by kadre-jvm: '$os'. " +
                 "Supported platforms: macOS, Windows, Linux."
             )
         }
 
-        invokeBackendRunApp(backendClass, handler)
+        invokeBackendRunApp(backendClass, handler, platform)
+    }
+}
+
+/**
+ * Probes Linux backends before application startup, then launches exactly the
+ * selected backend. Launch failures are intentionally not candidates for fallback.
+ */
+internal fun runLinuxBackend(
+    handler: ApplicationHandler,
+    environment: (String) -> String? = System::getenv,
+    loadClass: (String) -> Unit = { backendClass ->
+        Class.forName(backendClass)
+        Unit
+    },
+    probe: (String) -> Unit = ::invokeLinuxBackendProbe,
+    launch: (String, ApplicationHandler) -> Unit = { backendClass, applicationHandler ->
+        invokeBackendRunApp(backendClass, applicationHandler, linuxBackendPlatform(backendClass))
+    },
+) {
+    val selection = LinuxBackendDetector.detectBackend(
+        environment = environment,
+        loadClass = loadClass,
+        probe = probe,
+        probeStage = LinuxBackendStage.PROBE,
+    )
+    launch(selection.backendClass, handler)
+}
+
+/** Invokes the native connection probe exported by a Linux backend. */
+internal fun invokeLinuxBackendProbe(backendClass: String) {
+    val klass = Class.forName(backendClass)
+    val method = klass.getMethod("probeConnection")
+    try {
+        method.invoke(null)
+    } catch (failure: InvocationTargetException) {
+        rethrowInvocationTarget(
+            failure = failure,
+            operation = "probe",
+            platform = linuxBackendPlatform(backendClass),
+            backendClass = backendClass,
+        )
     }
 }
 
 /** Invokes a backend entry point while preserving its native failure as the primary cause. */
-internal fun invokeBackendRunApp(backendClass: String, handler: ApplicationHandler) {
+internal fun invokeBackendRunApp(
+    backendClass: String,
+    handler: ApplicationHandler,
+    platform: String,
+) {
     val klass = try {
         Class.forName(backendClass)
     } catch (failure: ClassNotFoundException) {
@@ -82,10 +124,30 @@ internal fun invokeBackendRunApp(backendClass: String, handler: ApplicationHandl
     try {
         method.invoke(null, handler)
     } catch (failure: InvocationTargetException) {
-        val target = failure.targetException
-        target.addSuppressed(
-            IllegalStateException("Failed to launch Linux backend $backendClass through reflection"),
+        rethrowInvocationTarget(
+            failure = failure,
+            operation = "launch",
+            platform = platform,
+            backendClass = backendClass,
         )
-        throw target
     }
+}
+
+private fun linuxBackendPlatform(backendClass: String): String = when (backendClass) {
+    LinuxBackendDetector.X11_CLASS -> "X11"
+    LinuxBackendDetector.WAYLAND_CLASS -> "Wayland"
+    else -> "Linux"
+}
+
+private fun rethrowInvocationTarget(
+    failure: InvocationTargetException,
+    operation: String,
+    platform: String,
+    backendClass: String,
+): Nothing {
+    val target = failure.targetException
+    target.addSuppressed(
+        IllegalStateException("Failed to $operation $platform backend $backendClass through reflection"),
+    )
+    throw target
 }
