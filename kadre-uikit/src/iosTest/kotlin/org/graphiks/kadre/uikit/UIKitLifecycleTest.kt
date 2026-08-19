@@ -8,9 +8,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.Fullscreen
+import org.graphiks.kadre.core.StartCause
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
@@ -68,7 +70,7 @@ class UIKitLifecycleTest {
     }
 
     @Test
-    fun foregroundSurfaceRecreationReusesTheWindowInLifecycleOrder() {
+    fun startupAndBackgroundForegroundCallbacksFollowCanonicalTracesAndIgnoreDuplicates() {
         val trace = mutableListOf<String>()
         val createdWindows = mutableListOf<Window>()
         val handler = object : ApplicationHandler {
@@ -84,6 +86,18 @@ class UIKitLifecycleTest {
 
             override fun resumed(eventLoop: ActiveEventLoop) {
                 trace += "resumed"
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                trace += when (startCause) {
+                    StartCause.Init -> "newEvents(Init)"
+                    is StartCause.WaitCancelled -> "newEvents(WaitCancelled)"
+                    else -> error("Unexpected lifecycle cause: $startCause")
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
             }
 
             override fun suspended(eventLoop: ActiveEventLoop) {
@@ -111,10 +125,18 @@ class UIKitLifecycleTest {
 
         try {
             lifecycle.didFinishLaunching()
+            lifecycle.didFinishLaunching()
+            lifecycle.willEnterForeground()
+            lifecycle.didEnterBackground()
             lifecycle.didBecomeActive()
             lifecycle.willResignActive()
+            lifecycle.willResignActive()
             lifecycle.didEnterBackground()
+            lifecycle.didEnterBackground()
+            lifecycle.didBecomeActive()
             lifecycle.willEnterForeground()
+            lifecycle.willEnterForeground()
+            lifecycle.didBecomeActive()
             lifecycle.didBecomeActive()
 
             assertSame(createdWindows[0], createdWindows[1])
@@ -122,20 +144,93 @@ class UIKitLifecycleTest {
             assertEquals("window-2", createdWindows[1].title)
             assertEquals(
                 listOf(
-                    "canCreate",
                     "resumed",
-                    "focused+",
+                    "newEvents(Init)",
+                    "canCreate",
+                    "aboutToWait",
+                    "newEvents(WaitCancelled)",
                     "focused-",
                     "suspended",
+                    "aboutToWait",
+                    "newEvents(WaitCancelled)",
                     "occluded+",
                     "destroySurfaces",
+                    "aboutToWait",
+                    "newEvents(WaitCancelled)",
                     "occluded-",
                     "canCreate",
+                    "aboutToWait",
                     "resumed",
+                    "newEvents(WaitCancelled)",
                     "focused+",
+                    "aboutToWait",
                 ),
                 trace,
             )
+        } finally {
+            createdWindows.distinct().forEach(Window::close)
+        }
+    }
+
+    @Test
+    fun terminationFollowsCanonicalTraceAndIgnoresDuplicates() {
+        val trace = mutableListOf<String>()
+        val createdWindows = mutableListOf<Window>()
+        val handler = object : ApplicationHandler {
+            override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
+                trace += "canCreate"
+                createdWindows += eventLoop.createWindow(WindowAttributes(visible = false))
+            }
+
+            override fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause) {
+                trace += when (startCause) {
+                    StartCause.Init -> "newEvents(Init)"
+                    is StartCause.WaitCancelled -> "newEvents(WaitCancelled)"
+                    else -> error("Unexpected lifecycle cause: $startCause")
+                }
+            }
+
+            override fun aboutToWait(eventLoop: ActiveEventLoop) {
+                trace += "aboutToWait"
+            }
+
+            override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+                trace += "destroySurfaces"
+            }
+
+            override fun suspended(eventLoop: ActiveEventLoop) {
+                trace += "suspended"
+            }
+
+            override fun windowEvent(
+                eventLoop: ActiveEventLoop,
+                windowId: WindowId,
+                event: WindowEvent,
+            ) {
+                if (event == WindowEvent.Destroyed) trace += "destroyed"
+            }
+        }
+        val loop = UIKitActiveEventLoop(handler)
+        val lifecycle = UIKitLifecycleOrchestrator(loop)
+
+        try {
+            lifecycle.didFinishLaunching()
+            trace.clear()
+
+            lifecycle.willTerminate()
+            lifecycle.willTerminate()
+
+            assertEquals(
+                listOf(
+                    "newEvents(WaitCancelled)",
+                    "destroySurfaces",
+                    "destroyed",
+                    "suspended",
+                    "aboutToWait",
+                ),
+                trace,
+            )
+            assertTrue(loop.isExiting)
         } finally {
             createdWindows.distinct().forEach(Window::close)
         }
@@ -161,8 +256,10 @@ class UIKitLifecycleTest {
         val lifecycle = UIKitLifecycleOrchestrator(loop)
 
         lifecycle.didFinishLaunching()
+        lifecycle.willResignActive()
         lifecycle.didEnterBackground()
         lifecycle.willEnterForeground()
+        lifecycle.willResignActive()
         lifecycle.didEnterBackground()
         lifecycle.willTerminate() // No duplicate destruction after background.
 
@@ -211,17 +308,18 @@ class UIKitLifecycleTest {
         firstId = first.id
         lifecycle.didFinishLaunching()
 
-        val thrown = assertFailsWith<IllegalStateException> {
+        val thrown = assertFailsWith<AssertionError> {
             lifecycle.willTerminate()
         }
 
-        assertSame(firstDestroyedFailure, thrown)
+        assertSame(destroySurfacesFailure, thrown)
         assertEquals(
-            listOf(secondDestroyedFailure, destroySurfacesFailure),
+            listOf(firstDestroyedFailure),
             thrown.suppressedExceptions,
         )
+        assertEquals(listOf(secondDestroyedFailure), firstDestroyedFailure.suppressedExceptions)
         assertEquals(
-            listOf("destroyed-first", "destroyed-second", "destroySurfaces"),
+            listOf("destroySurfaces", "destroyed-first", "destroyed-second"),
             trace,
         )
         assertEquals(1, destroySurfacesCount)
@@ -253,6 +351,7 @@ class UIKitLifecycleTest {
         val loop = UIKitActiveEventLoop(handler, schedulerOperations = operations)
         val lifecycle = UIKitLifecycleOrchestrator(loop)
         loop.createWindow(WindowAttributes(visible = false))
+        lifecycle.didFinishLaunching()
         loop.setControlFlow(org.graphiks.kadre.core.ControlFlow.Poll)
 
         val thrown = assertFailsWith<IllegalStateException> {
@@ -586,6 +685,7 @@ class UIKitLifecycleTest {
             assertNotEquals(original.id, ordinaryReplacement.id)
 
             terminalTeardown = true
+            lifecycle.didFinishLaunching()
             lifecycle.willTerminate()
             val afterTermination = runCatching {
                 loop.createWindow(WindowAttributes(visible = false))

@@ -1,6 +1,7 @@
 package org.graphiks.kadre.uikit
 
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.StartCause
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExportObjCClass
 import platform.UIKit.UIApplication
@@ -11,40 +12,78 @@ import platform.UIKit.UIResponder
 internal class UIKitLifecycleOrchestrator(
     private val eventLoop: UIKitActiveEventLoop,
 ) {
+    private var launched = false
+    private var active = false
+    private var foreground = false
+    private var terminating = false
+
     internal fun didFinishLaunching() {
-        eventLoop.recreateSurfaces {
-            handler.canCreateSurfaces(this)
-        }
+        if (launched || terminating) return
+        launched = true
+        active = true
+        foreground = true
+        eventLoop.handler.resumed(eventLoop)
+        eventLoop.runLifecycleIteration(cause = StartCause.Init, callbacks = {
+            recreateSurfaces {
+                handler.canCreateSurfaces(this)
+            }
+        })
     }
 
     internal fun didBecomeActive() {
+        if (!launched || terminating || active || !foreground) return
+        active = true
         eventLoop.handler.resumed(eventLoop)
-        eventLoop.dispatchWindowFocused(gained = true)
-        eventLoop.dispatchThemeChangedIfNeeded()
+        eventLoop.runLifecycleIteration(cause = StartCause.WaitCancelled(), callbacks = {
+            dispatchWindowFocused(gained = true)
+            dispatchThemeChangedIfNeeded()
+        })
     }
 
     internal fun willResignActive() {
-        eventLoop.dispatchWindowFocused(gained = false)
-        eventLoop.handler.suspended(eventLoop)
+        if (!launched || terminating || !active) return
+        active = false
+        eventLoop.runLifecycleIteration(cause = StartCause.WaitCancelled(), callbacks = {
+            dispatchWindowFocused(gained = false)
+            handler.suspended(this)
+        })
     }
 
     internal fun didEnterBackground() {
-        eventLoop.dispatchOccluded(occluded = true)
-        eventLoop.destroySurfaces()
+        if (!launched || terminating || active || !foreground) return
+        foreground = false
+        eventLoop.runLifecycleIteration(cause = StartCause.WaitCancelled(), callbacks = {
+            dispatchOccluded(occluded = true)
+            destroySurfaces()
+        })
     }
 
     internal fun willEnterForeground() {
-        eventLoop.dispatchOccluded(occluded = false)
-        eventLoop.recreateSurfaces {
-            handler.canCreateSurfaces(this)
-        }
+        if (!launched || terminating || active || foreground) return
+        foreground = true
+        eventLoop.runLifecycleIteration(cause = StartCause.WaitCancelled(), callbacks = {
+            dispatchOccluded(occluded = false)
+            recreateSurfaces {
+                handler.canCreateSurfaces(this)
+            }
+        })
     }
 
     internal fun willTerminate() {
-        runAllUIKitCleanupStages(
-            eventLoop::dispatchWindowsDestroyed,
-            eventLoop::destroySurfaces,
-            eventLoop::exit,
+        if (!launched || terminating) return
+        terminating = true
+        active = false
+        foreground = false
+        eventLoop.runLifecycleIteration(
+            cause = StartCause.WaitCancelled(),
+            callbacks = {
+                runAllUIKitCleanupStages(
+                    this::destroySurfaces,
+                    this::dispatchWindowsDestroyed,
+                    { handler.suspended(this) },
+                )
+            },
+            afterAboutToWait = eventLoop::exit,
         )
     }
 }
@@ -73,27 +112,28 @@ internal fun runUIKitDelegateTermination(
  *
  * ### Startup
  * ```
- * application(_:didFinishLaunchingWithOptions:) → canCreateSurfaces
- * applicationDidBecomeActive                   → resumed
+ * application(_:didFinishLaunchingWithOptions:) → resumed → newEvents(Init)
+ *                                               → canCreateSurfaces → aboutToWait
  * ```
  *
  * ### Screen lock / short interruption (call, Control Center)
  * ```
- * applicationWillResignActive  → suspended
- * applicationDidBecomeActive   → resumed       (unlock / return)
+ * applicationWillResignActive  → newEvents(WaitCancelled) → Focused(false) → suspended → aboutToWait
+ * applicationDidBecomeActive   → resumed → newEvents(WaitCancelled) → Focused(true) → aboutToWait
  * ```
  *
  * ### Full backgrounding (Home button, App Switcher)
  * ```
- * applicationWillResignActive  → suspended + Focused(false)
- * applicationDidEnterBackground → Occluded(true) + destroySurfaces
- * applicationWillEnterForeground → Occluded(false) + canCreateSurfaces
- * applicationDidBecomeActive   → resumed + Focused(true)
+ * applicationWillResignActive    → newEvents(WaitCancelled) → Focused(false) → suspended → aboutToWait
+ * applicationDidEnterBackground  → newEvents(WaitCancelled) → Occluded(true) → destroySurfaces → aboutToWait
+ * applicationWillEnterForeground → newEvents(WaitCancelled) → Occluded(false) → canCreateSurfaces → aboutToWait
+ * applicationDidBecomeActive     → resumed → newEvents(WaitCancelled) → Focused(true) → aboutToWait
  * ```
  *
  * ### Termination
  * ```
- * applicationWillTerminate     → destroySurfaces (if not already called)
+ * applicationWillTerminate → newEvents(WaitCancelled) → destroySurfaces → Destroyed
+ *                          → suspended → aboutToWait → exit()
  * ```
  *
  * ## Two parallel signalling channels

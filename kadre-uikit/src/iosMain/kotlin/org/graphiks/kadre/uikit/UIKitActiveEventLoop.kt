@@ -115,6 +115,37 @@ internal class UIKitActiveEventLoop(
         handler.destroySurfaces(this)
     }
 
+    /** Runs one lifecycle iteration with its required callback boundaries. */
+    internal fun runLifecycleIteration(
+        cause: StartCause,
+        callbacks: UIKitActiveEventLoop.() -> Unit,
+        afterAboutToWait: () -> Unit = {},
+    ) {
+        var failure: Throwable? = null
+
+        fun runStage(stage: () -> Unit) {
+            try {
+                stage()
+            } catch (thrown: Throwable) {
+                val previous = failure
+                if (previous == null) {
+                    failure = thrown
+                } else if (previous !== thrown) {
+                    previous.addSuppressed(thrown)
+                }
+            }
+        }
+
+        runStage { handler.newEvents(this, cause) }
+        if (failure == null) {
+            runStage { callbacks() }
+        }
+        runStage { handler.aboutToWait(this) }
+        runStage(afterAboutToWait)
+
+        failure?.let { throw it }
+    }
+
     fun createWindow(attrs: UiKitWindowAttributes): Window {
         val window = createWindow(attrs.core) as UiKitWindow
         attrs.scaleFactor?.let { /* scale override would be applied here */ }
