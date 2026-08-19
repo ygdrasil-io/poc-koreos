@@ -13,6 +13,7 @@ import org.graphiks.kadre.samples.compose.showcase.ShowcaseApp
 internal class WindowCaptureController(
     private val capturePath: String,
     private val captureFrameToPng: (String) -> Boolean,
+    private val captureReady: () -> Boolean,
     private val pngValidator: (String, Int, Int) -> Unit = ::validatePng,
     private val disposeRenderer: () -> Unit,
     private val requestExit: () -> Unit,
@@ -24,6 +25,7 @@ internal class WindowCaptureController(
 
     fun onRedrawRequested() {
         if (attempted) return
+        if (!captureReady()) return
         attempted = true
         var validated = false
         try {
@@ -47,8 +49,13 @@ private fun runShowcase(capturePath: String? = null) {
     var captureCompleted = false
     kadreApplication {
         val keys = KeyForwarder()
+        val initialSize = if (capturePath != null) {
+            PhysicalSize(WINDOW_CAPTURE_WIDTH, WINDOW_CAPTURE_HEIGHT)
+        } else {
+            PhysicalSize(900, 700)
+        }
         val win = createWindow(
-            WindowAttributes("Compose Showcase", PhysicalSize(900, 700), visible = true, resizable = true),
+            WindowAttributes("Compose Showcase", initialSize, visible = true, resizable = true),
         )
         val handle = win.window.rawWindowHandle
         val renderer = ComposeWindowRenderer.create(handle, win.window.scaleFactor, dispatcher).getOrElse {
@@ -71,6 +78,11 @@ private fun runShowcase(capturePath: String? = null) {
                 WindowCaptureController(
                     capturePath = requestedPath,
                     captureFrameToPng = renderer::captureFrameToPng,
+                    captureReady = {
+                        win.window.innerSize.let { size ->
+                            size.width >= CAPTURE_MIN_WIDTH && size.height >= CAPTURE_MIN_HEIGHT
+                        }
+                    },
                     disposeRenderer = ::disposeRenderer,
                     requestExit = { exit() },
                 )
@@ -97,6 +109,10 @@ private fun runShowcase(capturePath: String? = null) {
                                 renderer.applyWindowEvent(event, win.window, keys)
                             }
                         }
+                    }
+                    is WindowEvent.Resized -> {
+                        renderer.applyWindowEvent(event, win.window, keys)
+                        if (captureController != null) win.window.requestRedraw()
                     }
                     else -> renderer.applyWindowEvent(event, win.window, keys)
                 }
@@ -167,3 +183,5 @@ fun main(args: Array<String>) {
 
 private const val CAPTURE_MIN_WIDTH = 640
 private const val CAPTURE_MIN_HEIGHT = 480
+private const val WINDOW_CAPTURE_WIDTH = 800
+private const val WINDOW_CAPTURE_HEIGHT = 600
