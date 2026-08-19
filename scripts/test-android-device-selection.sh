@@ -28,6 +28,12 @@ if [[ "$#" -eq 1 && "$1" == "devices" ]]; then
       printf '%s\n' 'emulator-29 device product:fake model:api29 device:fake29'
       printf '%s\n' 'emulator-36 device product:fake model:api36 device:fake36'
       ;;
+    mixed)
+      printf '%s\n' 'emulator-mixed device product:fake model:mixed device:mixed'
+      ;;
+    multi)
+      printf '%s\n' 'emulator-multi device product:fake model:multi device:multi'
+      ;;
     zero)
       printf '%s\n' 'emulator-29 device product:fake model:api29 device:fake29'
       ;;
@@ -50,6 +56,12 @@ if [[ "$1" == "-s" && "$3" == "shell" && "$4" == "cmd" && "$5" == "gpu" && "$6" 
       ;;
     emulator-36 | emulator-36a | emulator-36b)
       printf '%s\n' '{"devices":[{"properties":{"deviceName":"Fake Vulkan device"}}]}'
+      ;;
+    emulator-mixed)
+      printf '%s\n' '{"devices":[{"properties":{"deviceName":"Fake Vulkan device"}},{}]}'
+      ;;
+    emulator-multi)
+      printf '%s\n' '{"devices":[{"properties":{"deviceName":"Fake Vulkan device A"}},{"properties":{"deviceName":"Fake Vulkan device B"}}]}'
       ;;
     *)
       printf '%s\n' '{"devices":[]}'
@@ -153,6 +165,8 @@ fi
 
 expect_failure_before_gradle zero '' 'expected exactly one Vulkan-capable online Android device, found 0'
 expect_failure_before_gradle ambiguous '' 'expected exactly one Vulkan-capable online Android device, found 2'
+expect_failure_before_gradle mixed '' 'expected exactly one Vulkan-capable online Android device, found 0'
+expect_failure_before_gradle multi '' 'expected exactly one Vulkan-capable online Android device, found 0'
 
 explicit_output="$fixture_dir/explicit.out"
 explicit_gradle_log="$fixture_dir/explicit.gradle"

@@ -24,15 +24,16 @@ except json.JSONDecodeError:
     raise SystemExit(1)
 
 devices = document.get("devices")
-if not isinstance(devices, list):
+if not isinstance(devices, list) or len(devices) != 1:
     raise SystemExit(1)
 
-for device in devices:
-    if not isinstance(device, dict):
-        continue
-    properties = device.get("properties")
-    if isinstance(properties, dict) and isinstance(properties.get("deviceName"), str) and properties["deviceName"].strip():
-        raise SystemExit(0)
+device = devices[0]
+if not isinstance(device, dict):
+    raise SystemExit(1)
+
+properties = device.get("properties")
+if isinstance(properties, dict) and isinstance(properties.get("deviceName"), str) and properties["deviceName"].strip():
+    raise SystemExit(0)
 
 raise SystemExit(1)
 ' <<<"$vkjson"

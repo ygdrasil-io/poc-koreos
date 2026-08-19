@@ -186,3 +186,32 @@ rtk env -u ANDROID_SERIAL scripts/android-emulator-test.sh
 ```
 
 Résultat : exit 0. Gradle a exécuté seulement `Medium_Phone(AVD) - 16`; le validateur a confirmé un JUnit 1/1 sans erreur ni échec et le PNG `android-triangle` 800×600 (47,436 couleurs, 60,000 pixels non-background). L’API 29 n’a pas atteint Gradle. Les échecs de Gradle/rendu restent propagés par le script : le préflight ne possède aucun chemin de fallback après le lancement du test.
+
+## TDD — findings importants de la revue, cycle rouge
+
+Deux fixtures supplémentaires ont été ajoutées au test d’intégration shell avant toute modification du script réel : un serial dont `vkjson.devices` contient un adapter nommé suivi de `{}`, puis un serial dont l’array contient deux adapters nommés. Dans les deux cas, le contrat impose un refus avant Gradle, car la sortie ne décrit pas exactement un physical device utilisable.
+
+Commande rouge :
+
+```text
+rtk bash scripts/test-android-device-selection.sh
+```
+
+Résultat (exit 1) :
+
+```text
+FAIL: mixed unexpectedly reached a successful Gradle invocation
+```
+
+Cause : `has_physical_vulkan_device` acceptait dès qu’un élément quelconque de `devices` avait un `properties.deviceName` non vide. Il classait donc une liste mixte ou multi-adapter comme compatible, et permettait à Gradle de démarrer. Le correctif minimal devra exiger un array d’exactement un objet, dont le `deviceName` est une chaîne non vide.
+
+### Cycle vert
+
+Le prédicat exige désormais que `devices` soit un array de longueur exactement égale à un, dont l’unique élément est un objet avec `properties.deviceName` de type chaîne non vide. Les arrays mixtes, multi-adapters, vides et les objets incomplets sont rejetés.
+
+```text
+rtk bash scripts/test-android-device-selection.sh
+rtk bash -n scripts/android-emulator-test.sh scripts/test-android-device-selection.sh
+```
+
+Résultat : exit 0 — `PASS: Android device selection is explicit, unique, and preconditioned`; la vérification de syntaxe ne produit aucun diagnostic. Les cas existants unique, zéro, ambiguous et `ANDROID_SERIAL` explicite restent couverts, en plus des nouveaux cas mixed et multi qui ne peuvent plus atteindre Gradle.
