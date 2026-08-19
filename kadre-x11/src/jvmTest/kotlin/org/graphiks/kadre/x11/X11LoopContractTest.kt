@@ -137,6 +137,32 @@ class X11LoopContractTest {
     }
 
     @Test
+    fun `WaitUntil at Long MIN_VALUE polls immediately and reaches its deadline`() {
+        val deadline = Long.MIN_VALUE
+        val observedNow = 1L
+        val pollTimeouts = mutableListOf<Int>()
+        val operations = object : X11PumpOperations {
+            override fun pendingCount(): Int = 0
+            override fun dispatchNext() = Unit
+            override fun flush() = Unit
+        }
+        val cause = dispatchX11Once(
+            controlFlow = ControlFlow.WaitUntil(deadline),
+            operations = operations,
+            poller = X11Poller { _, _, timeoutMillis ->
+                pollTimeouts += timeoutMillis
+                X11PollResult(xReadable = false, wakeReadable = false)
+            },
+            wakeup = RecordingX11Wakeup(),
+            xConnectionFd = 41,
+            nowMillis = { observedNow },
+        )
+
+        assertEquals(listOf(0), pollTimeouts)
+        assertEquals(StartCause.ResumeTimeReached(deadline, observedNow), cause)
+    }
+
+    @Test
     fun `ten redraw requests coalesce to one event and one idle wake`() {
         val wakeup = RecordingX11Wakeup()
         val loop = testLoop(wakeup, FakeX11NativeAdapter())

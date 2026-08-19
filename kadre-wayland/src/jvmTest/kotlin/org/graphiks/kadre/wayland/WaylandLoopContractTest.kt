@@ -75,6 +75,34 @@ class WaylandLoopContractTest {
     }
 
     @Test
+    fun `WaitUntil at Long MIN_VALUE polls immediately and reaches its deadline`() {
+        val deadline = Long.MIN_VALUE
+        val observedNow = 1L
+        val pollTimeouts = mutableListOf<Int>()
+        val operations = object : WaylandPumpOperations {
+            override fun prepareRead(): Int = 0
+            override fun dispatchPending() = Unit
+            override fun flush() = Unit
+            override fun readEvents() = Unit
+            override fun cancelRead() = Unit
+        }
+        val cause = dispatchWaylandOnce(
+            controlFlow = ControlFlow.WaitUntil(deadline),
+            operations = operations,
+            poller = WaylandPoller { _, _, timeoutMillis ->
+                pollTimeouts += timeoutMillis
+                WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
+            },
+            wakeup = RecordingWakeup(),
+            displayFd = 41,
+            nowMillis = { observedNow },
+        )
+
+        assertEquals(listOf(0), pollTimeouts)
+        assertEquals(StartCause.ResumeTimeReached(deadline, observedNow), cause)
+    }
+
+    @Test
     fun `device event is queued until after new events and handler failure stays on Kotlin loop`() {
         val loop = testLoop(RecordingWakeup())
         val trace = mutableListOf<String>()

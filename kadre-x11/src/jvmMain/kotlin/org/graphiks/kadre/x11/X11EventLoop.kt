@@ -1394,8 +1394,9 @@ internal fun dispatchX11Once(
         is ControlFlow.Poll -> 0
         is ControlFlow.Wait -> -1
         is ControlFlow.WaitUntil -> {
-            val remaining = controlFlow.instant - nowMillis()
-            if (remaining <= 0L) 0 else remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            val now = nowMillis()
+            if (controlFlow.instant <= now) 0
+            else (controlFlow.instant - now).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         }
     }
     val result = pumpX11Once(
