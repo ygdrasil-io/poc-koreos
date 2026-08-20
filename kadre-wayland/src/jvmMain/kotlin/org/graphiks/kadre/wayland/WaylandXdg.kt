@@ -2,9 +2,8 @@
  * xdg_shell decoration of a wl_surface: turns a bare surface into a real mapped toplevel and
  * routes the compositor's configure/close events back to Kadre.
  *
- * xdg_shell is a protocol extension: its request opcodes are known ([XdgShellConstants]) but the
- * `xdg_*_interface` tables needed by `wl_proxy_marshal_flags` are not exported by
- * libwayland-client. They come from the kextract-generated bindings ([generated] package).
+ * xdg_shell is a protocol extension: its request opcodes and `xdg_*_interface` tables needed by
+ * `wl_proxy_marshal_flags` are provided by the published `org.graphiks:kffi-wayland` binding.
  *
  * Handshake (xdg-shell protocol):
  *   xdg_wm_base.get_xdg_surface(surface)  → xdg_surface

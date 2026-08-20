@@ -186,7 +186,7 @@ Sprint 3–5 — backend Win32, Web (JS + Wasm), Linux (X11 + Wayland) et sample
   - `WaylandEventLoop` — `prepare_read` + poll fd + `eventfd` wakeUp — contraintes §1A
   - `WaylandKeyMapper` — Linux evdev keycodes → `Key`
   - `WaylandMouseMapper` — `BTN_LEFT/RIGHT/MIDDLE` + `wl_pointer.axis` → `MouseWheel`
-  - Bindings xdg_shell : `wl_proxy_marshal_flags` + `XdgShellConstants` + `WaylandInterfaces`
+  - Intégration xdg_shell via le binding externe `org.graphiks:kffi-wayland`
 - **`kadre`** — Façade jvmMain : `LinuxBackendDetector` — détection auto X11/Wayland via `XDG_SESSION_TYPE` + `WAYLAND_DISPLAY` + override `KADRE_LINUX_BACKEND` — contraintes §1B (lazy Throwable)
 - **CI** — Jobs `linux-x11-build` (Xvfb) + `linux-wayland-build`
 
