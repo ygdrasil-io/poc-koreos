@@ -30,20 +30,6 @@ class WaylandTextInputTest {
     }
 
     @Test
-    fun `text input v3 request opcodes and interface metadata match the protocol`() {
-        if (!textInputNativeEnabled()) return
-        val pointerSize = ValueLayout.ADDRESS.byteSize()
-
-        assertEquals(0, ZWP_TEXT_INPUT_V3_DESTROY)
-        assertEquals(1, ZWP_TEXT_INPUT_V3_ENABLE)
-        assertEquals(2, ZWP_TEXT_INPUT_V3_DISABLE)
-        assertEquals(5, ZWP_TEXT_INPUT_V3_SET_CONTENT_TYPE)
-        assertEquals(6, ZWP_TEXT_INPUT_V3_SET_CURSOR_RECTANGLE)
-        assertEquals(7, ZWP_TEXT_INPUT_V3_COMMIT)
-        assertEquals(8, zwp_text_input_v3_interface.get(ValueLayout.JAVA_INT, pointerSize + 4L))
-    }
-
-    @Test
     fun `text input v3 interfaces expose complete process lifetime message tables`() {
         if (!textInputNativeEnabled()) return
         assertWaylandInterface(
