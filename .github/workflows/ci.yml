@@ -101,6 +101,7 @@ jobs:
             # :kadre:checkKotlinAbi
           )
           ./gradlew "${tasks[@]}" \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -125,6 +126,7 @@ jobs:
             # :kadre:checkKotlinAbi
           )
           ./gradlew "${tasks[@]}" \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -166,6 +168,7 @@ jobs:
             :samples:hello-metal:build \
             :samples:hello-triangle:build \
             :samples:hello-window:compileKotlinJvm \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -214,6 +217,7 @@ jobs:
             :kadre:compileKotlinIosSimulatorArm64 \
             :samples:hello-touch:compileKotlinIosSimulatorArm64 \
             :samples:hello-window:compileKotlinIosSimulatorArm64 \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -223,6 +227,7 @@ jobs:
           ./gradlew \
             :kadre-core:iosSimulatorArm64Test \
             :kadre:iosSimulatorArm64Test \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -280,6 +285,7 @@ jobs:
             :kadre:compileAndroidMain \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -326,6 +332,7 @@ jobs:
             :kadre-js:compileKotlinJs \
             :kadre-wasm:compileKotlinWasmJs \
             :kadre-web-common:allTests \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -373,6 +380,7 @@ jobs:
             :kadre-win32:build \
             :kadre-win32:jvmTest \
             :samples:hello-triangle:build \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -426,6 +434,7 @@ jobs:
           xvfb-run -a ./gradlew \
             :kadre-core:jvmTest \
             :kadre-x11:jvmTest \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -478,6 +487,7 @@ jobs:
           scripts/ci-wayland-runtime.sh ./gradlew \
             :kadre-core:jvmTest \
             :kadre-wayland:jvmTest \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
