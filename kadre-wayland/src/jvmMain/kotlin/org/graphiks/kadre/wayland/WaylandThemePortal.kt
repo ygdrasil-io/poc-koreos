@@ -1,6 +1,6 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.Theme
 import java.util.concurrent.TimeUnit
 

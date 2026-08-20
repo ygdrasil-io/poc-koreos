@@ -23,7 +23,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api(project(":ffi:wayland"))
+                api(libs.kffi.wayland)
             }
         }
         jvmTest {

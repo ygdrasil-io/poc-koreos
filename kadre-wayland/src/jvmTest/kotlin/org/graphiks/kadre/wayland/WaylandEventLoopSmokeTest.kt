@@ -9,7 +9,8 @@
  */
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.posix.PosixSymbols
+import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
@@ -72,23 +73,13 @@ class WaylandEventLoopSmokeTest {
         }
     }
 
-    /**
-     * Verifies that libC loads without exception (or is null cleanly).
-     *
-     * On Linux: libC is non-null.
-     * On macOS/Windows: libC is null (libc.so.6 absent).
-     */
+    /** Verifies that the published POSIX symbol resolver is safe on any platform. */
     @Test
-    fun `libC loads safely on any platform`() {
-        // No assertion on the value — we just verify that the access does not crash
-        val lib = libC  // may be null
-        // On Linux, we can verify the derived handles
-        if (lib != null) {
-            assertNotNull(nativePoll, "nativePoll must be non-null if libC is available")
-            assertNotNull(nativeEventfd, "nativeEventfd must be non-null if libC is available")
-            assertNotNull(nativeRead, "nativeRead must be non-null if libC is available")
-            assertNotNull(nativeWrite, "nativeWrite must be non-null if libC is available")
-            assertNotNull(nativeClose, "nativeClose must be non-null if libC is available")
+    fun `POSIX symbol lookup is safe on any platform`() {
+        try {
+            PosixSymbols.find("poll")
+        } catch (error: Throwable) {
+            throw AssertionError("POSIX symbol lookup must not throw", error)
         }
     }
 

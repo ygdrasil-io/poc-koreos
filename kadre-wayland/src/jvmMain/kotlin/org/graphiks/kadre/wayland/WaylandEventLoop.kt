@@ -15,7 +15,7 @@
  * WaylandEventLoop.
  */
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
@@ -570,7 +570,7 @@ private fun pumpOnce(
         setPollFd(fds, 1, eventFd, POLLIN)
 
         val pollRc = try {
-            nativePoll?.invokeExact(fds, 2, timeoutMs) as? Int ?: 0
+            invokeNativePoll(fds, 2L, timeoutMs).value
         } catch (_: Throwable) { 0 }
 
         if (pollRc > 0) {
