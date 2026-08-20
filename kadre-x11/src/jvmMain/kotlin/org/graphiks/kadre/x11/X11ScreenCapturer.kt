@@ -3,8 +3,8 @@ package org.graphiks.kadre.x11.capture
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.*
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kadre.x11.binding.capture.*
 import org.graphiks.kadre.x11.enumerateX11Monitors
 
 import java.lang.foreign.Arena

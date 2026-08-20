@@ -16,7 +16,7 @@
  */
 package org.graphiks.kadre.x11
 
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
@@ -952,7 +952,7 @@ class X11Window internal constructor(
                     X11_WM_HINTS_FLAGS_OFFSET,
                     x11WmHintsUrgencyFlags(flags, requestType != null),
                 )
-                setHints.invokeExact(display, xWindowId, view)
+                setHints.invokeExact(display, xWindowId, view) as Int
                 val flush = xFlush
                 if (flush != null) flush.invokeExact(display) as Int
                 WindowRequestResult.Success

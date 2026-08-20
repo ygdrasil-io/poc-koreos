@@ -6,8 +6,8 @@ import org.graphiks.kadre.core.PhysicalSize
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.libX11
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.libX11
+import org.graphiks.kadre.x11.binding.capture.*
 import org.graphiks.kadre.x11.capture.X11CaptureSession
 import org.graphiks.kadre.x11.capture.X11ScreenCapturer
 import kotlin.test.Test

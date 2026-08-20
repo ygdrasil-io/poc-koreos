@@ -7,7 +7,7 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.test.EventLoopConformanceDriver
 import org.graphiks.kadre.test.ObservedCallback
 import org.graphiks.kadre.test.assertCloseIsTerminal

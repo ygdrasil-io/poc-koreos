@@ -2,9 +2,10 @@ package org.graphiks.kadre.x11.capture
 
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.xFreePixmap
-import org.graphiks.kadre.ffi.x11.xGetGeometry
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.xFreePixmap
+import org.graphiks.kadre.x11.binding.xDefaultRootWindow
+import org.graphiks.kadre.x11.binding.xGetGeometry
+import org.graphiks.kadre.x11.binding.capture.*
 import kotlinx.coroutines.*
 import org.graphiks.kadre.core.capture.CaptureConfig
 import org.graphiks.kadre.core.capture.CaptureError

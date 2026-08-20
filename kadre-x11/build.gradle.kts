@@ -21,7 +21,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api(project(":ffi:x11"))
+                api(libs.kffi.x11)
                 implementation(project(":ffi:posix"))
             }
         }
