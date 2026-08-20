@@ -4,21 +4,27 @@
  * Verifies:
  * - x11Running starts at false.
  * - runApp enables/disables the x11Running flag (handler that quits immediately).
- * - X11EventLoopProxy.wakeUp() is safe on non-Linux (no-op).
+ * - X11EventLoopProxy.wakeUp() delegates exclusively to the shared POSIX fd.
  *
  * X11EventLoop smoke tests.
  */
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.ffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
+import java.io.DataInputStream
 import java.lang.foreign.Arena
 import java.lang.foreign.ValueLayout
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -33,8 +39,7 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `runApp stays a no-op on non-Linux`() {
-        // On macOS/Windows, libX11 is null → runApp returns immediately
+    fun `runApp fails explicitly without libX11`() {
         if (libX11 != null) return // Skip on Linux (requires an X server)
 
         var canCreateSurfacesCalled = false
@@ -46,10 +51,10 @@ class X11EventLoopSmokeTest {
             override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: WindowEvent) {}
         }
 
-        // runApp must not throw an exception
-        runApp(handler)
+        val failure = assertFailsWith<IllegalStateException> { runApp(handler) }
 
-        // On non-Linux: libX11 null → we do not enter the loop
+        assertContains(failure.message.orEmpty(), "backend=X11")
+        assertContains(failure.message.orEmpty(), "operation=XOpenDisplay")
         assertFalse(canCreateSurfacesCalled,
             "canCreateSurfaces must not be called if libX11 is absent")
         assertFalse(x11Running.get(),
@@ -57,7 +62,7 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `x11Running is reset to false after runApp on non-Linux`() {
+    fun `x11Running is reset to false after missing libX11 failure`() {
         if (libX11 != null) return // Skip on Linux
 
         val handler = object : ApplicationHandler {
@@ -66,9 +71,12 @@ class X11EventLoopSmokeTest {
         }
 
         assertFalse(x11Running.get())
-        runApp(handler)
+        assertFailsWith<IllegalStateException> { runApp(handler) }
         assertFalse(x11Running.get(),
-            "x11Running must be false after runApp() on non-Linux")
+            "x11Running must be false after a failed runApp()")
+        assertFailsWith<IllegalStateException> { runApp(handler) }
+        assertFalse(x11Running.get(),
+            "x11Running must remain false after a second failed runApp()")
     }
 
     @Test
@@ -94,16 +102,52 @@ class X11EventLoopSmokeTest {
     }
 
     @Test
-    fun `X11EventLoopProxy wakeUp is a no-op if xSendEvent is absent`() {
-        // On macOS/Windows, xSendEvent is null → wakeUp must not throw an exception
-        if (libX11 != null) return // Skip on Linux
+    fun `X11EventLoopProxy wakeUp works with zero windows`() {
+        val wakeup = RecordingWakeup()
+        val proxy = X11EventLoopProxy(wakeup)
 
-        // Create a proxy with a fictitious displayPtr and an empty loop
-        val fakeLoop = X11EventLoop(displayPtr = 0L, screen = 0)
-        val proxy = X11EventLoopProxy(fakeLoop, displayPtr = 0L)
-
-        // Must not throw an exception
         proxy.wakeUp()
+
+        assertEquals(1, wakeup.signalCount)
+    }
+
+    @Test
+    fun `background X11EventLoopProxy wakeUp records no Xlib operation`() {
+        val trace = ConcurrentLinkedQueue<String>()
+        val wakeup = RecordingWakeup(trace)
+        val proxy = X11EventLoopProxy(wakeup)
+
+        val executor = Executors.newSingleThreadExecutor { task ->
+            Thread(task, "x11-proxy-caller")
+        }
+        try {
+            executor.submit { proxy.wakeUp() }.get()
+        } finally {
+            executor.shutdownNow()
+        }
+
+        assertEquals(listOf("wake:x11-proxy-caller"), trace.toList())
+    }
+
+    @Test
+    fun `compiled X11EventLoopProxy depends on PosixWakeup and contains no Xlib or FFM reference`() {
+        val constants = classUtf8Constants(X11EventLoopProxy::class.java)
+        val required = "org/graphiks/kadre/ffi/posix/PosixWakeup"
+        val forbidden = listOf(
+            "org/graphiks/kadre/ffi/x11",
+            "java/lang/foreign/MemorySegment",
+            "java/lang/invoke/MethodHandle",
+            "XSendEvent",
+            "xSendEvent",
+        )
+
+        assertTrue(constants.any { required in it }, "compiled proxy must depend on PosixWakeup")
+        for (reference in forbidden) {
+            assertFalse(
+                constants.any { reference in it },
+                "compiled proxy contains forbidden reference: $reference",
+            )
+        }
     }
 
     @Test
@@ -140,5 +184,54 @@ class X11EventLoopSmokeTest {
             assertEquals(32, event.get(ValueLayout.JAVA_INT, 48L))
             assertEquals(30L, event.get(ValueLayout.JAVA_LONG, 56L))
         }
+    }
+}
+
+private class RecordingWakeup(
+    private val trace: ConcurrentLinkedQueue<String>? = null,
+) : PosixWakeup {
+    override val readFd: Int = 73
+    var signalCount: Int = 0
+        private set
+
+    override fun signal(): Boolean {
+        signalCount += 1
+        trace?.add("wake:${Thread.currentThread().name}")
+        return true
+    }
+
+    override fun drain(): Boolean = true
+
+    override fun close() = Unit
+}
+
+private fun classUtf8Constants(type: Class<*>): Set<String> {
+    val resource = "/${type.name.replace('.', '/')}.class"
+    val stream = checkNotNull(type.getResourceAsStream(resource)) {
+        "compiled class resource is unavailable: $resource"
+    }
+    return DataInputStream(stream.buffered()).use { input ->
+        check(input.readInt() == 0xCAFEBABE.toInt()) { "invalid class-file magic: $resource" }
+        input.readUnsignedShort() // minor version
+        input.readUnsignedShort() // major version
+        val constantPoolCount = input.readUnsignedShort()
+        val utf8Constants = linkedSetOf<String>()
+        var index = 1
+        while (index < constantPoolCount) {
+            when (val tag = input.readUnsignedByte()) {
+                1 -> utf8Constants += input.readUTF()
+                3, 4 -> input.skipNBytes(4)
+                5, 6 -> {
+                    input.skipNBytes(8)
+                    index += 1 // Long and Double consume two constant-pool slots.
+                }
+                7, 8, 16, 19, 20 -> input.skipNBytes(2)
+                9, 10, 11, 12, 17, 18 -> input.skipNBytes(4)
+                15 -> input.skipNBytes(3)
+                else -> error("unsupported class-file constant-pool tag $tag at index $index")
+            }
+            index += 1
+        }
+        utf8Constants
     }
 }

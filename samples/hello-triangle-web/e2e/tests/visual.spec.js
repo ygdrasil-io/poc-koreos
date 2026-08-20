@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 const { assertScreenshotMatches } = require('../visual/assert-screenshot');
+const { expectStablePhysicalCanvas } = require('./canvas-sizing');
 
 const RESULTS = path.join(__dirname, '..', 'test-results');
 const BASELINE = path.join(__dirname, '..', 'baselines', 'hello-triangle-web.png');
@@ -25,7 +26,7 @@ test('visual regression hello-triangle-web (informational)', async ({ page }) =>
   await expect(page.locator('#kadre-canvas')).toBeVisible();
   // Wait for full initialization + a few stable frames.
   await expect.poll(() => logs.some((l) => l.includes('Pipeline ready')), { timeout: 60_000 }).toBe(true);
-  await page.waitForTimeout(1_500);
+  await expectStablePhysicalCanvas(page, logs);
 
   const shot = await page.locator('#kadre-canvas').screenshot();
   fs.mkdirSync(RESULTS, { recursive: true });

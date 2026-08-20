@@ -3,9 +3,13 @@ package org.graphiks.kadre.wayland.portal
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.PixelFormat
+import org.graphiks.kffi.posix.PosixSymbols
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 
 /**
  * PipeWire helper for xdg-desktop-portal screen capture.
@@ -17,6 +21,11 @@ import java.lang.foreign.ValueLayout
  * The portal provides a stream node ID which we use to create a PipeWire stream.
  */
 internal object XdpPipeWire {
+
+    private val linker: Linker = Linker.nativeLinker()
+
+    private fun posixDowncall(name: String, descriptor: FunctionDescriptor): MethodHandle? =
+        PosixSymbols.find(name)?.let { linker.downcallHandle(it, descriptor) }
     
     // PipeWire library bindings (lazy loaded)
     private val libPipeWire: MemorySegment? by lazy {
@@ -340,20 +349,18 @@ internal object XdpPipeWire {
     
     private fun nativeMmap(fd: Int, size: Int): MemorySegment? {
         return try {
-            val mmap = java.lang.foreign.Linker.nativeLinker()
-                .downcallHandle(
-                    java.lang.foreign.SymbolLookup.libraryLookup("libc.so.6", Arena.global())
-                        .find("mmap").orElseThrow { RuntimeException("mmap not found") },
-                    java.lang.foreign.FunctionDescriptor.of(
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.JAVA_LONG,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_LONG
-                    )
+            val mmap = posixDowncall(
+                "mmap",
+                java.lang.foreign.FunctionDescriptor.of(
+                    java.lang.foreign.ValueLayout.ADDRESS,
+                    java.lang.foreign.ValueLayout.ADDRESS,
+                    java.lang.foreign.ValueLayout.JAVA_LONG,
+                    java.lang.foreign.ValueLayout.JAVA_INT,
+                    java.lang.foreign.ValueLayout.JAVA_INT,
+                    java.lang.foreign.ValueLayout.JAVA_INT,
+                    java.lang.foreign.ValueLayout.JAVA_LONG,
                 )
+            ) ?: error("required POSIX symbol 'mmap' is unavailable")
             
             val result = mmap.invokeExact(
                 MemorySegment.NULL,
@@ -373,17 +380,17 @@ internal object XdpPipeWire {
     
     private fun nativeMunmap(addr: MemorySegment, size: Int) {
         try {
-            val munmap = java.lang.foreign.Linker.nativeLinker()
-                .downcallHandle(
-                    java.lang.foreign.SymbolLookup.libraryLookup("libc.so.6", Arena.global())
-                        .find("munmap").orElseThrow { RuntimeException("munmap not found") },
-                    java.lang.foreign.FunctionDescriptor.ofVoid(
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.JAVA_LONG
-                    )
+            val munmap = posixDowncall(
+                "munmap",
+                java.lang.foreign.FunctionDescriptor.of(
+                    java.lang.foreign.ValueLayout.JAVA_INT,
+                    java.lang.foreign.ValueLayout.ADDRESS,
+                    java.lang.foreign.ValueLayout.JAVA_LONG,
                 )
-            
-            munmap.invokeExact(addr, size.toLong())
+            ) ?: error("required POSIX symbol 'munmap' is unavailable")
+
+            val result = munmap.invokeExact(addr, size.toLong()) as Int
+            check(result == 0) { "munmap returned $result" }
         } catch (e: Exception) {
             System.err.println("[XdpPipeWire] munmap failed: ${e.message}")
         }

@@ -93,9 +93,9 @@ interface ActiveEventLoop {
     /**
      * Returns all monitors currently connected to the system.
      *
-     * The list contains at least one entry on all backends when a display is
-     * available. On mobile / web backends, a single synthetic monitor
-     * representing the screen is returned.
+     * The list contains at least one entry on backends that expose a synthetic
+     * screen. Wayland returns a synthetic monitor only before initial output
+     * discovery completes; after that it returns its live outputs, which may be empty.
      *
      * @return Immutable list of [MonitorHandle] objects.
      */

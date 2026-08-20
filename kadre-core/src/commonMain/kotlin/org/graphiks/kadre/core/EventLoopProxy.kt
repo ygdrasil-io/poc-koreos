@@ -14,9 +14,8 @@ package org.graphiks.kadre.core
 interface EventLoopProxy {
 
     /**
-     * Wakes up the event loop if it is waiting.
-     *
-     * This method is safe to call from any thread.
+     * Wakes a waiting loop. Calls are coalesced only until the loop consumes the wake-up;
+     * subsequent calls must wake subsequent waits. Safe from any thread.
      */
     fun wakeUp()
 }

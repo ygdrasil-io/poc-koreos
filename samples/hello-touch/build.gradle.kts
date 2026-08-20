@@ -9,11 +9,11 @@ plugins {
     id("ygdrasil.conventions.kmp-library")
 }
 
-android {
-    namespace = "org.graphiks.kadre.samples.hellotouch"
-}
-
 kotlin {
+    android {
+        namespace = "org.graphiks.kadre.samples.hellotouch"
+    }
+
     sourceSets {
         commonMain {
             dependencies {

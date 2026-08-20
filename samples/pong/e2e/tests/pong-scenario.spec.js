@@ -1,30 +1,20 @@
-// Scripted Pong E2E test (Web), follow-up #88.
+// Deterministic scripted Pong E2E test (Web).
 //
-// ADDED VALUE vs `hello-triangle-web`:
-//   - Scripts a sequence of keyboard inputs (ArrowDown / ArrowUp / release)
-//   - Captures several frames at distinct moments
-//   - Verifies that consecutive frames **differ** (effective animation)
-//   - Verifies that keyboard events reach the Kadre handler
-//     (log `[pong-web] key X Pressed/Released` emitted by PongAppWeb)
-//   - .webm video + Playwright trace systematically archived
-//
-// Target: JS production bundle served by http-server (cf. playwright.config.js).
-// The wasmJs target is added in a separate follow-up (depends on the Binaryen fix #137).
+// The blocking contract observes the state published by the renderer only
+// after CanvasSurface.present(). Canvas screenshots, video, trace, and pixel
+// diffs remain useful diagnostics, but a screenshot can sample a partial WebGPU
+// frame and is therefore not an animation oracle.
 const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 const { PNG } = require('pngjs');
 const pixelmatch = require('pixelmatch').default || require('pixelmatch');
 
-const RESULTS = path.join(__dirname, '..', 'test-results');
+const PRESENTED_FRAME_ATTRIBUTE = 'data-kadre-pong-presented-frame';
+const MIN_FRAME_ADVANCE = 5;
+const WEB_TARGET = process.env.PONG_WEB_TARGET || 'js';
+const RESULTS = path.join(__dirname, '..', 'test-results', WEB_TARGET);
 
-/**
- * Compares two PNGs (Buffers) and returns the fraction of pixels that differ.
- *
- * Used to prove that a frame changes between two moments (= effective
- * animation). The threshold is deliberately low (1%) — the goal is to detect
- * "it moves" and not pixel-perfect equality.
- */
 function pixelDiffRatio(pngBuf1, pngBuf2) {
   const a = PNG.sync.read(pngBuf1);
   const b = PNG.sync.read(pngBuf2);
@@ -36,131 +26,134 @@ function pixelDiffRatio(pngBuf1, pngBuf2) {
 
 function hasKeyLog(logs, keyCode, state) {
   return logs.some(
-    (l) =>
-      l.includes(`key ${keyCode} ${state}`) ||
-      l.includes(`key Code(code=${keyCode}) ${state}`),
+    (line) =>
+      line.includes(`key ${keyCode} ${state}`) ||
+      line.includes(`key Code(code=${keyCode}) ${state}`),
   );
 }
 
-test('Pong Web — scripted scenario: animation + keyboard + video', async ({ page }, testInfo) => {
+async function readPresentedFrame(canvas) {
+  const raw = await canvas.getAttribute(PRESENTED_FRAME_ATTRIBUTE);
+  return raw === null ? null : JSON.parse(raw);
+}
+
+test(`Pong Web (${WEB_TARGET}) — presented animation + keyboard + visual diagnostics`, async ({ page }) => {
   fs.mkdirSync(RESULTS, { recursive: true });
 
   const logs = [];
   const errors = [];
-  page.on('console', (m) => logs.push(m.text()));
-  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (message) => logs.push(message.text()));
+  page.on('pageerror', (error) => errors.push(error.message));
 
-  // -------------------------------------------------------------------------
-  // 1. Boot — page load + wgpu4k Web initialization
-  // -------------------------------------------------------------------------
   await page.goto('/');
-  await expect(page.locator('#kadre-canvas')).toBeVisible();
+  const canvas = page.locator('#kadre-canvas');
+  await expect(canvas).toBeVisible();
   await expect
-    .poll(() => logs.some((l) => l.includes('Pipeline ready')), { timeout: 60_000 })
+    .poll(() => logs.some((line) => line.includes('Pipeline ready')), { timeout: 60_000 })
     .toBe(true);
 
-  // WebGPU acquisition must not have failed.
-  const acquisitionFailure = logs.find((l) => l.includes('Acquisition failed'));
+  const acquisitionFailure = logs.find((line) => line.includes('Acquisition failed'));
   expect(acquisitionFailure, `WebGPU acquisition failure: ${acquisitionFailure}`).toBeUndefined();
 
-  // PongAppWeb forces `setControlFlow(ControlFlow.Poll)` in canCreateSurfaces
-  // → the aboutToWait loop runs continuously and animates the game (ball + AI)
-  // without requiring user input. We let the init stabilize then
-  // observe the animation over a 2.5s window.
-  await page.waitForTimeout(3_000);
+  // A valid snapshot proves that at least one complete renderer submission was
+  // presented. The baseline bundle intentionally fails here during the TDD RED.
+  await expect
+    .poll(() => readPresentedFrame(canvas), {
+      message: `Expected #kadre-canvas to expose ${PRESENTED_FRAME_ATTRIBUTE} after present()`,
+    })
+    .not.toBeNull();
 
-  const frame1 = await page.locator('#kadre-canvas').screenshot();
+  const animationStart = await readPresentedFrame(canvas);
+  expect(animationStart).toMatchObject({
+    frame: expect.any(Number),
+    ballX: expect.any(Number),
+    ballY: expect.any(Number),
+    playerY: expect.any(Number),
+    aiY: expect.any(Number),
+  });
+  const frame1 = await canvas.screenshot();
   fs.writeFileSync(path.join(RESULTS, 'frame1-animation-start.png'), frame1);
 
-  await page.waitForTimeout(3_000);
-  const frame2 = await page.locator('#kadre-canvas').screenshot();
-  fs.writeFileSync(path.join(RESULTS, 'frame2-animation-2.5s.png'), frame2);
+  await expect
+    .poll(async () => {
+      const current = await readPresentedFrame(canvas);
+      return current !== null &&
+        current.frame >= animationStart.frame + MIN_FRAME_ADVANCE &&
+        current.ballX !== animationStart.ballX &&
+        current.ballY !== animationStart.ballY;
+    }, { message: `Expected ${MIN_FRAME_ADVANCE} newer presented frames with a moving ball` })
+    .toBe(true);
 
-  // -------------------------------------------------------------------------
-  // 2. Assertion: effective animation (consecutive frames must differ)
-  // -------------------------------------------------------------------------
-  // The 0.3% threshold is calibrated for real Pong rendering: ball 1.8% of the screen
-  // + slowly moving AI paddle → typical footprint 0.5–1.5% over 2.5s.
-  // We keep a safety margin above the noise (~0% between stable frames).
+  const animationEnd = await readPresentedFrame(canvas);
+  const frame2 = await canvas.screenshot();
+  fs.writeFileSync(path.join(RESULTS, 'frame2-animation-end.png'), frame2);
   const animationDiff = pixelDiffRatio(frame1, frame2);
-  console.log(`[scenario] diff animation (2.5s) = ${(animationDiff * 100).toFixed(2)}%`);
-  expect(
-    animationDiff,
-    `No animation detected: frame1 and frame2 (2.5s apart) are nearly identical (diff ${(animationDiff * 100).toFixed(2)}%). ` +
-      `Expected: > 0.3% (ball + AI moving).`,
-  ).toBeGreaterThan(0.003);
+  console.log(`[scenario] diagnostic animation pixel diff = ${(animationDiff * 100).toFixed(2)}%`);
 
-  // -------------------------------------------------------------------------
-  // 3. Scripted inputs — focus canvas then ArrowDown / ArrowUp
-  // -------------------------------------------------------------------------
-  // The sample's index.html does a .focus() on load + on click. We click to
-  // guarantee focus before sending keyboard events (the initial auto-focus
-  // may be lost during the `waitForTimeout` depending on the headless env).
-  await page.locator('#kadre-canvas').click();
+  await canvas.click();
 
-  // ArrowDown held ~1s
+  const downStart = await readPresentedFrame(canvas);
   await page.keyboard.down('ArrowDown');
-  await page.waitForTimeout(1_000);
+  await expect
+    .poll(async () => {
+      const current = await readPresentedFrame(canvas);
+      return current !== null &&
+        current.frame > downStart.frame &&
+        current.playerY > downStart.playerY;
+    }, { message: 'Expected ArrowDown to increase playerY in a presented frame' })
+    .toBe(true);
   await page.keyboard.up('ArrowDown');
-  await page.waitForTimeout(300);
 
-  // Verify that the keyboard event indeed reached the PongAppWeb handler.
-  // The log is emitted by `PongAppWeb.onKey()`. Depending on the Kotlin
-  // PhysicalKey toString, it can be `ArrowDown` or `Code(code=ArrowDown)`.
-  const downPressed = hasKeyLog(logs, 'ArrowDown', 'Pressed');
-  const downReleased = hasKeyLog(logs, 'ArrowDown', 'Released');
-  expect(
-    downPressed,
-    `Event ArrowDown Pressed never received by PongAppWeb. Logs: ${logs.filter((l) => l.includes('key')).join(' | ')}`,
-  ).toBe(true);
-  expect(downReleased, 'Event ArrowDown Released never received').toBe(true);
+  await expect
+    .poll(() => hasKeyLog(logs, 'ArrowDown', 'Pressed'))
+    .toBe(true);
+  await expect
+    .poll(() => hasKeyLog(logs, 'ArrowDown', 'Released'))
+    .toBe(true);
 
-  const frame3 = await page.locator('#kadre-canvas').screenshot();
+  const downEnd = await readPresentedFrame(canvas);
+  const frame3 = await canvas.screenshot();
   fs.writeFileSync(path.join(RESULTS, 'frame3-after-arrowdown.png'), frame3);
 
-  // ArrowUp held ~1s — should move the right paddle up
   await page.keyboard.down('ArrowUp');
-  await page.waitForTimeout(1_000);
+  await expect
+    .poll(async () => {
+      const current = await readPresentedFrame(canvas);
+      return current !== null &&
+        current.frame > downEnd.frame &&
+        current.playerY < downEnd.playerY;
+    }, { message: 'Expected ArrowUp to decrease playerY in a presented frame' })
+    .toBe(true);
   await page.keyboard.up('ArrowUp');
-  await page.waitForTimeout(300);
 
-  const upPressed = hasKeyLog(logs, 'ArrowUp', 'Pressed');
-  expect(upPressed, 'Event ArrowUp Pressed never received').toBe(true);
+  await expect
+    .poll(() => hasKeyLog(logs, 'ArrowUp', 'Pressed'))
+    .toBe(true);
+  await expect
+    .poll(() => hasKeyLog(logs, 'ArrowUp', 'Released'))
+    .toBe(true);
 
-  const frame4 = await page.locator('#kadre-canvas').screenshot();
+  const upEnd = await readPresentedFrame(canvas);
+  const frame4 = await canvas.screenshot();
   fs.writeFileSync(path.join(RESULTS, 'frame4-after-arrowup.png'), frame4);
-
-  // -------------------------------------------------------------------------
-  // 4. Assertion: the keyboard movement has a visible effect
-  // -------------------------------------------------------------------------
-  // Between frame3 (just after ArrowDown) and frame4 (just after ArrowUp),
-  // the right paddle necessarily changed position → different pixels.
   const inputDiff = pixelDiffRatio(frame3, frame4);
-  console.log(`[scenario] diff après inputs clavier = ${(inputDiff * 100).toFixed(2)}%`);
-  // Low threshold (0.15%) — the typical effect of paddle movement + continuous
-  // animation gives 0.3–1.0% over this window, we keep a safety margin.
-  expect(
-    inputDiff,
-    `Keyboard inputs had no visible effect: frame3 (post-ArrowDown) ≈ frame4 (post-ArrowUp), diff ${(inputDiff * 100).toFixed(2)}%`,
-  ).toBeGreaterThan(0.0015);
+  console.log(`[scenario] diagnostic keyboard pixel diff = ${(inputDiff * 100).toFixed(2)}%`);
 
-  // -------------------------------------------------------------------------
-  // 5. No JS error during the entire scenario
-  // -------------------------------------------------------------------------
   expect(errors, `JS errors during scenario: ${errors.join(' | ')}`).toEqual([]);
 
-  // -------------------------------------------------------------------------
-  // 6. Markdown summary for the GitHub Actions Job Summary
-  // -------------------------------------------------------------------------
-  const keyLogs = logs.filter((l) => l.includes('[pong-web] key')).length;
+  const keyLogs = logs.filter((line) => line.includes('[pong-web] key')).length;
   const summary = [
-    '### Pong E2E — scripted scenario',
+    `### Pong E2E (${WEB_TARGET}) — deterministic presented-frame scenario`,
     '',
-    `- ✅ wgpu4k Web pipeline initialized`,
-    `- ✅ Effective animation (diff t=0 vs t=2.5s: **${(animationDiff * 100).toFixed(2)}%**)`,
+    '- ✅ wgpu4k Web pipeline initialized',
+    `- ✅ Presented frame counter advanced from ${animationStart.frame} to ${animationEnd.frame}`,
+    `- ✅ Presented ball state changed (${animationStart.ballX}, ${animationStart.ballY}) → (${animationEnd.ballX}, ${animationEnd.ballY})`,
+    `- ✅ ArrowDown increased presented playerY: ${downStart.playerY} → ${downEnd.playerY}`,
+    `- ✅ ArrowUp decreased presented playerY: ${downEnd.playerY} → ${upEnd.playerY}`,
     `- ✅ Keyboard inputs routed to handler (${keyLogs} \`[pong-web] key …\` events received)`,
-    `- ✅ Visible effect (diff frame3 vs frame4: **${(inputDiff * 100).toFixed(2)}%**)`,
-    `- ✅ No JS errors`,
+    '- ✅ No JS errors',
+    '',
+    `Diagnostics only: animation pixel diff **${(animationDiff * 100).toFixed(2)}%**; keyboard pixel diff **${(inputDiff * 100).toFixed(2)}%**.`,
     '',
     '_Frames + .webm video + Playwright trace in run artifacts._',
     '',

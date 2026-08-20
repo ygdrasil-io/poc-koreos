@@ -15,11 +15,11 @@ plugins {
     id("ygdrasil.conventions.kmp-library")
 }
 
-android {
-    namespace = "org.graphiks.kadre.samples.pong"
-}
-
 kotlin {
+    android {
+        namespace = "org.graphiks.kadre.samples.pong"
+    }
+
     // Web targets — in addition to the iOS/JVM/Android targets from the convention plugin.
     // binaries.executable(): generates an executable bundle (webpack) to serve
     // the sample in a browser via jsBrowserDevelopmentRun / wasmJsBrowserDevelopmentRun.

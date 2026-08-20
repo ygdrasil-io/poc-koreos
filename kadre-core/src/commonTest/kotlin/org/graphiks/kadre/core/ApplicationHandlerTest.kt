@@ -252,6 +252,16 @@ class ApplicationHandlerTest {
         assertEquals(1_000L, cf.instant)
     }
 
+    @Test
+    fun controlFlowWaitUntilUsesUnixEpochMilliseconds() {
+        val target = 1_700_000_000_000L
+        val flow = ControlFlow.WaitUntil(target)
+        assertEquals(target, flow.instant)
+        val cause = StartCause.ResumeTimeReached(target, target + 5)
+        assertEquals(target, cause.requestedResume)
+        assertEquals(target + 5, cause.start)
+    }
+
     // -------------------------------------------------------------------------
     // Verifying the StartCause values
     // -------------------------------------------------------------------------

@@ -32,6 +32,14 @@ interface GlContext {
     /** Make this GL context current on the calling thread (creates it lazily on first call). */
     fun makeCurrent()
 
+    /**
+     * Creates Skia's rendering context for the current native GL context.
+     *
+     * The default factory covers WGL and GLX. EGL implementations override it to provide
+     * Skia with EGL's function resolver.
+     */
+    fun createDirectContext(): DirectContext = DirectContext.makeGL()
+
     /** Present the back buffer to the window. */
     fun swapBuffers()
 
@@ -89,7 +97,7 @@ class GlComposeRenderer(
             host.setDensityAndSize(width, height, scale)
         }
 
-        val ctx = context ?: DirectContext.makeGL().also { context = it }
+        val ctx = context ?: gl.createDirectContext().also { context = it }
 
         // The window's default framebuffer is fbo 0. GL framebuffers are bottom-left origin.
         val renderTarget = BackendRenderTarget.makeGL(

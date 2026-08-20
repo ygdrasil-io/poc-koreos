@@ -125,6 +125,21 @@ internal class WaylandBlur(
         }
     }
 
+    /** Strict terminal variant: attempts both proxies and preserves native failures. */
+    fun destroyStrict() {
+        val effect = effectSurfacePtr
+        val kwin = kwinBlurPtr
+        effectSurfacePtr = 0L
+        kwinBlurPtr = 0L
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = listOf(
+                { if (effect != 0L) destroyProxyStrict(effect) },
+                { if (kwin != 0L) destroyProxyStrict(kwin) },
+            ),
+        )
+    }
+
     private fun setBlurExtBackgroundEffect(blur: Boolean) {
         val create = extBackgroundEffectV1Create ?: return
 
@@ -221,5 +236,18 @@ internal class WaylandBlur(
             )
         } catch (_: Throwable) { }
         return 0L
+    }
+
+    private fun destroyProxyStrict(proxyPtr: Long) {
+        val destroy = checkNotNull(wlProxyMarshalFlagsVoid) {
+            "Wayland blur destroy unavailable"
+        }
+        destroy.invokeExact(
+            MemorySegment.ofAddress(proxyPtr),
+            0,
+            MemorySegment.NULL,
+            1,
+            WL_MARSHAL_FLAG_DESTROY,
+        )
     }
 }

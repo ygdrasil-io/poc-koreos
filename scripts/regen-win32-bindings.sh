@@ -55,7 +55,7 @@ for dll in "${DLLS[@]}"; do
         ALL_FUNCTIONS+=("$line")
     done < <(sed -n '/^    functions:/,/^    structs:/{
         /^    functions:/d; /^    structs:/d; /^      - /{s/^      - //; p}
-    }' "$yaml") || true
+    }' "$yaml")
 done
 echo "  Total functions: ${#ALL_FUNCTIONS[@]}"
 

@@ -34,6 +34,7 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(project(":kadre-test"))
             }
         }
         // iosMain is auto-created by the KMP hierarchy — no need to declare it

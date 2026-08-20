@@ -1,0 +1,12 @@
+name: relocated host command workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - run: scripts/test-workflow-contract.sh
+        working-directory: fixtures

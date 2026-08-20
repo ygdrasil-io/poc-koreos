@@ -14,11 +14,11 @@ plugins {
     id("ygdrasil.conventions.kmp-library")
 }
 
-android {
-    namespace = "org.graphiks.kadre.test"
-}
-
 kotlin {
+    android {
+        namespace = "org.graphiks.kadre.test"
+    }
+
     js { browser() }
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs { browser() }

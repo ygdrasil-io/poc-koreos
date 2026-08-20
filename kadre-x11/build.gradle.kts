@@ -22,11 +22,13 @@ kotlin {
             dependencies {
                 api(project(":kadre-core"))
                 api(project(":ffi:x11"))
+                implementation(project(":ffi:posix"))
             }
         }
         jvmTest {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(project(":kadre-test"))
             }
         }
     }
