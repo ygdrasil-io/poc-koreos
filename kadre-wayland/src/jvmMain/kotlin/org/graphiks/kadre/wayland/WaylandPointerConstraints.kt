@@ -3,7 +3,6 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kffi.wayland.*
 import org.graphiks.kffi.wayland.generated.zwp_confined_pointer_v1_interface
 import org.graphiks.kffi.wayland.generated.zwp_locked_pointer_v1_interface
-import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_lifetime
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.WindowRequestResult
@@ -88,7 +87,7 @@ internal class WaylandPointerConstraints(
                 0,
                 MemorySegment.NULL,
                 1,
-                1, // flags: destroy proxy
+                WL_MARSHAL_FLAG_DESTROY,
             )
         }
         runWaylandCleanup(
@@ -115,7 +114,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT.value.toInt(),
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeLockedPtr = result.address()
@@ -144,7 +143,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT.value.toInt(),
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeConfinedPtr = result.address()

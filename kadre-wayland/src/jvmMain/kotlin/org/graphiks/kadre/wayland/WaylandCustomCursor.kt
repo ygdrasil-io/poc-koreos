@@ -125,11 +125,11 @@ internal fun applyCursorSurface(
 
     // ── 5. Create wl_buffer from pool ──────────────────────────────────────
     val bufMarshal = wlShmPoolCreateBuffer ?: run {
-        wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+        wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
         return 0L
     }
     val bufIface = wlBufferInterface ?: run {
-        wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+        wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
         return 0L
     }
     val bufPtr: Long = try {
@@ -151,7 +151,7 @@ internal fun applyCursorSurface(
     }
 
     // Destroy the pool (the buffer holds its own reference)
-    wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+    wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
 
     if (bufPtr == 0L) return 0L
 

@@ -267,7 +267,7 @@ internal class WaylandTextInputBinding(
             proxyPtr,
             ZWP_TEXT_INPUT_V3_DESTROY,
             proxyVersion,
-            1, // flags: destroy proxy
+            WL_MARSHAL_FLAG_DESTROY,
         )
         listenerLease.releaseAfterProxyDestroyed()
     }
@@ -330,7 +330,7 @@ internal fun createTextInput(
                     proxyPtr,
                     ZWP_TEXT_INPUT_V3_DESTROY,
                     proxyVersion,
-                    1, // flags: destroy proxy
+                    WL_MARSHAL_FLAG_DESTROY,
                 )
                 proxyDestroyed = true
             } catch (destroyFailure: Throwable) {

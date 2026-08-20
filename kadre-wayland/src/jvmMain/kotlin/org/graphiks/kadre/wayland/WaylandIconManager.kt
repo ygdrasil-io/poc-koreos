@@ -149,7 +149,7 @@ internal class WaylandIconManager(
                 0,                          // opcode: destroy
                 MemorySegment.NULL,          // wl_interface* (NULL)
                 1,                           // version
-                1,                           // flags: destroy proxy
+                WL_MARSHAL_FLAG_DESTROY,     // flags
             )
         } catch (_: Throwable) {}
     }
@@ -164,7 +164,7 @@ internal class WaylandIconManager(
                 0,                          // opcode: wl_buffer.destroy
                 MemorySegment.NULL,
                 1,                           // version
-                1,                           // flags: destroy proxy
+                WL_MARSHAL_FLAG_DESTROY,     // flags
             )
         } catch (_: Throwable) {}
     }
@@ -245,11 +245,11 @@ internal class WaylandIconManager(
             nativeClose?.invokeExact(fd)
 
             val bufMarshal = wlShmPoolCreateBuffer ?: run {
-                wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+                wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
                 return 0L
             }
             val bufIface = wlBufferInterface ?: run {
-                wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+                wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
                 return 0L
             }
             val bufPtr = try {
@@ -259,7 +259,7 @@ internal class WaylandIconManager(
                 ) as MemorySegment).address()
             } catch (_: Throwable) { 0L }
 
-            wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, 1) // destroy flag
+            wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)
 
             return bufPtr
         }

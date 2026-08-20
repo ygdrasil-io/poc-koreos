@@ -13,7 +13,6 @@ import org.graphiks.kffi.wayland.*
 import org.graphiks.kffi.wayland.generated.xdg_activation_v1_interface
 import org.graphiks.kffi.wayland.generated.xdg_toplevel_icon_manager_v1_interface
 import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_interface
-import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_lifetime
 import org.graphiks.kffi.wayland.generated.zwp_text_input_manager_v3_interface
 import org.graphiks.kffi.wayland.generated.zwp_text_input_v3_interface
 import org.graphiks.kadre.core.ActiveEventLoop
@@ -87,6 +86,13 @@ class WaylandNativeIntegrationTest {
         assertNotNull(wlPointerConstraintsConfinePointer)
     }
 
+    // ── Binding constants (cross-platform) ────────────────────────────────────
+
+    @Test
+    fun `kffi provides the Wayland marshal destroy flag`() {
+        assertEquals(1, WL_MARSHAL_FLAG_DESTROY)
+    }
+
     // ── Protocol interface names (Linux with libwayland) ───────────────────────
 
     @Test
@@ -157,7 +163,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `zwp pointer constraints v1 lifetime constants are defined`() {
-        assertEquals(1, zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT.value.toInt())
-        assertEquals(2, zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT.value.toInt())
+        assertEquals(1, POINTER_CONSTRAINTS_LIFETIME_ONESHOT)
+        assertEquals(2, POINTER_CONSTRAINTS_LIFETIME_PERSISTENT)
     }
 }

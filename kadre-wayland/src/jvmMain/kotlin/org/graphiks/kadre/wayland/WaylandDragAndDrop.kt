@@ -315,7 +315,7 @@ internal class WaylandDragAndDrop(
                         WL_DATA_OFFER_DESTROY_OPCODE,
                         MemorySegment.NULL,
                         WL_DATA_DEVICE_MANAGER_VERSION,
-                        1, // flags: destroy proxy
+                        WL_MARSHAL_FLAG_DESTROY, // flags
                     )
                 } catch (_: Throwable) { }
             }

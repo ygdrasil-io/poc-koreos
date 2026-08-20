@@ -206,7 +206,7 @@ internal class WaylandActivationToken(
                 4, // opcode: destroy
                 MemorySegment.NULL,
                 1, // version
-                1, // flags: destroy proxy
+                WL_MARSHAL_FLAG_DESTROY, // flags
             )
         } catch (_: Throwable) {}
     }

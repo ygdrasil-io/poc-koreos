@@ -247,7 +247,7 @@ internal class WaylandBlur(
             0,
             MemorySegment.NULL,
             1,
-            1, // flags: destroy proxy
+            WL_MARSHAL_FLAG_DESTROY,
         )
     }
 }
