@@ -113,6 +113,7 @@ run_with_timeout 600 \
     ./gradlew \
     :kadre-uikit:iosSimulatorArm64Test \
     :samples:hello-triangle-ios:iosSimulatorArm64Test \
+    --refresh-dependencies \
     --no-daemon --stacktrace --console=plain
 gradle_status=$?
 set -e

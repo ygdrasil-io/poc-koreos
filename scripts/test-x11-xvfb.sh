@@ -134,6 +134,7 @@ set +e
   --tests '*X11NativeIntegrationTest*' \
   --tests '*X11CommonConformanceTest*' \
   --tests '*X11LoopContractTest*' \
+  --refresh-dependencies \
   --no-daemon
 gradle_status=$?
 set -e

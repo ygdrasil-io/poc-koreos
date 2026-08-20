@@ -7,6 +7,7 @@ cd "$repo_root"
 
 ./gradlew :samples:hello-triangle:run \
   --args="--capture build/visual/hello-triangle.actual.png" \
+  --refresh-dependencies \
   --no-daemon --console=plain
 
 (cd tests/visual && npm install)

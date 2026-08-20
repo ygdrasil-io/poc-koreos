@@ -93,6 +93,7 @@ select_android_serial
 ./gradlew \
   :kadre-android:testAndroidHostTest \
   :samples:hello-triangle-android-capture:connectedDebugAndroidTest \
+  --refresh-dependencies \
   --no-daemon --stacktrace --console=plain
 
 result_dir="samples/hello-triangle-android-capture/build/outputs/androidTest-results/connected"
