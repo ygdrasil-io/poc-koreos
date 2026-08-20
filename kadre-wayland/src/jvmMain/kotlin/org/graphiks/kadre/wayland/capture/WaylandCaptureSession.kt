@@ -3,9 +3,9 @@ package org.graphiks.kadre.wayland.capture
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
 import kotlinx.coroutines.*
-import org.graphiks.kadre.wayland.zwlrScreencopyFrameV1Interface
-import org.graphiks.kadre.wayland.zwlrScreencopyManagerV1Interface
 import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.zwlr_screencopy_frame_v1_interface
+import org.graphiks.kffi.wayland.generated.zwlr_screencopy_manager_v1_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -86,7 +86,7 @@ class WaylandCaptureSession(
         if (shmPtr == 0L) throw CaptureError.Internal(RuntimeException("wl_shm bind returned null"))
 
         // Bind zwlr_screencopy_manager_v1 (version 3)
-        val scIface = zwlrScreencopyManagerV1Interface
+        val scIface = zwlr_screencopy_manager_v1_interface
         val scNamePtr = scIface.reinterpret(ValueLayout.ADDRESS.byteSize()).get(ValueLayout.ADDRESS, 0L)
         screencopyManagerPtr = try {
             (bind.invokeExact(
@@ -199,7 +199,7 @@ class WaylandCaptureSession(
             (captureFn.invokeExact(
                 MemorySegment.ofAddress(screencopyManagerPtr),
                 SCREENCOPY_MANAGER_CAPTURE_OUTPUT,
-                zwlrScreencopyFrameV1Interface,
+                zwlr_screencopy_frame_v1_interface,
                 3,
                 0,
                 overlayCursor,

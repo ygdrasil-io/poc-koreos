@@ -10,6 +10,12 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.xdg_activation_v1_interface
+import org.graphiks.kffi.wayland.generated.xdg_toplevel_icon_manager_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_lifetime
+import org.graphiks.kffi.wayland.generated.zwp_text_input_manager_v3_interface
+import org.graphiks.kffi.wayland.generated.zwp_text_input_v3_interface
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
@@ -81,13 +87,6 @@ class WaylandNativeIntegrationTest {
         assertNotNull(wlPointerConstraintsConfinePointer)
     }
 
-    // ── Constants (cross-platform) ─────────────────────────────────────────────
-
-    @Test
-    fun `WL_MARSHAL_FLAG_DESTROY has the correct value`() {
-        assertEquals(1, WL_MARSHAL_FLAG_DESTROY)
-    }
-
     // ── Protocol interface names (Linux with libwayland) ───────────────────────
 
     @Test
@@ -100,13 +99,13 @@ class WaylandNativeIntegrationTest {
     @Test
     fun `zwp_pointer_constraints_v1 interface symbol name is correct`() {
         if (!nativeEnabled()) return
-        assertEquals("zwp_pointer_constraints_v1", interfaceName(zwpPointerConstraintsV1Interface))
+        assertEquals("zwp_pointer_constraints_v1", interfaceName(zwp_pointer_constraints_v1_interface))
     }
 
     @Test
     fun `xdg_toplevel_icon_manager_v1 interface symbol name is correct`() {
         if (!nativeEnabled()) return
-        assertEquals("xdg_toplevel_icon_manager_v1", interfaceName(xdgToplevelIconManagerV1Interface))
+        assertEquals("xdg_toplevel_icon_manager_v1", interfaceName(xdg_toplevel_icon_manager_v1_interface))
     }
 
     @Test
@@ -122,19 +121,19 @@ class WaylandNativeIntegrationTest {
     @Test
     fun `xdg_activation_v1 interface symbol name is correct`() {
         if (!nativeEnabled()) return
-        assertEquals("xdg_activation_v1", interfaceName(xdgActivationV1Interface))
+        assertEquals("xdg_activation_v1", interfaceName(xdg_activation_v1_interface))
     }
 
     @Test
     fun `zwp_text_input_manager_v3 interface symbol name is correct`() {
         if (!nativeEnabled()) return
-        assertEquals("zwp_text_input_manager_v3", interfaceName(zwpTextInputManagerV3Interface))
+        assertEquals("zwp_text_input_manager_v3", interfaceName(zwp_text_input_manager_v3_interface))
     }
 
     @Test
     fun `zwp_text_input_v3 interface symbol name is correct`() {
         if (!nativeEnabled()) return
-        assertEquals("zwp_text_input_v3", interfaceName(zwpTextInputV3Interface))
+        assertEquals("zwp_text_input_v3", interfaceName(zwp_text_input_v3_interface))
     }
 
     // ── WaylandRegistry.discoverGlobals (non-Linux only — no compositor) ────────
@@ -158,7 +157,7 @@ class WaylandNativeIntegrationTest {
 
     @Test
     fun `zwp pointer constraints v1 lifetime constants are defined`() {
-        assertEquals(1, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT)
-        assertEquals(2, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT)
+        assertEquals(1, zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT.value.toInt())
+        assertEquals(2, zwp_pointer_constraints_v1_lifetime.ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT.value.toInt())
     }
 }

@@ -445,7 +445,7 @@ private object NativeXdgCreateOperations : XdgCreateOperations {
             opcode,
             MemorySegment.NULL,
             version,
-            WL_MARSHAL_FLAG_DESTROY,
+            1, // flags: destroy proxy
         )
     }
 }

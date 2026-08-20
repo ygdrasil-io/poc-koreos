@@ -15,6 +15,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.zwp_text_input_v3_interface
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
@@ -152,7 +153,7 @@ private object NativeWaylandTextInputCreationOperations : WaylandTextInputCreati
         val proxy = handle.invokeExact(
             MemorySegment.ofAddress(managerPtr),
             ZWP_TEXT_INPUT_MANAGER_V3_CREATE_TEXT_INPUT,
-            zwpTextInputV3Interface,
+            zwp_text_input_v3_interface,
             1,
             0,
             MemorySegment.NULL,
@@ -266,7 +267,7 @@ internal class WaylandTextInputBinding(
             proxyPtr,
             ZWP_TEXT_INPUT_V3_DESTROY,
             proxyVersion,
-            WL_MARSHAL_FLAG_DESTROY,
+            1, // flags: destroy proxy
         )
         listenerLease.releaseAfterProxyDestroyed()
     }
@@ -329,7 +330,7 @@ internal fun createTextInput(
                     proxyPtr,
                     ZWP_TEXT_INPUT_V3_DESTROY,
                     proxyVersion,
-                    WL_MARSHAL_FLAG_DESTROY,
+                    1, // flags: destroy proxy
                 )
                 proxyDestroyed = true
             } catch (destroyFailure: Throwable) {

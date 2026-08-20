@@ -1,6 +1,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.xdg_activation_token_v1_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
@@ -126,7 +127,7 @@ internal class WaylandActivationToken(
      */
     private fun createToken(): MemorySegment? {
         val marshal = wlProxyMarshalNewId ?: return null
-        val iface = xdgActivationTokenV1Interface
+        val iface = xdg_activation_token_v1_interface
         return try {
             marshal.invokeExact(
                 MemorySegment.ofAddress(activationManagerPtr),
@@ -205,7 +206,7 @@ internal class WaylandActivationToken(
                 4, // opcode: destroy
                 MemorySegment.NULL,
                 1, // version
-                WL_MARSHAL_FLAG_DESTROY, // flags
+                1, // flags: destroy proxy
             )
         } catch (_: Throwable) {}
     }

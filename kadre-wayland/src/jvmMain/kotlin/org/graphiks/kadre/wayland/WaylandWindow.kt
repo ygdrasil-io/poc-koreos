@@ -85,7 +85,7 @@ private fun destroyWlSurfaceProxy(proxy: Long) {
         WL_SURFACE_DESTROY_OPCODE,
         MemorySegment.NULL,
         version,
-        WL_MARSHAL_FLAG_DESTROY,
+        1, // flags: destroy proxy
     )
 }
 
@@ -717,7 +717,7 @@ class WaylandWindow private constructor(
                             0,
                             MemorySegment.NULL,
                             1,
-                            WL_MARSHAL_FLAG_DESTROY,
+                            1, // flags: destroy proxy
                         )
                     }
                 },
@@ -1122,7 +1122,7 @@ class WaylandWindow private constructor(
                 0,                       // opcode: wl_buffer.destroy
                 MemorySegment.NULL,
                 1,                       // version
-                WL_MARSHAL_FLAG_DESTROY, // flags
+                1, // flags: destroy proxy
             )
         } catch (_: Throwable) {}
     }
@@ -1896,7 +1896,7 @@ class WaylandWindow private constructor(
                 WL_REGION_DESTROY_OPCODE,
                 MemorySegment.NULL,
                 WL_REGION_VERSION,
-                WL_MARSHAL_FLAG_DESTROY,
+                1, // flags: destroy proxy
             )
         } catch (_: Throwable) {}
     }

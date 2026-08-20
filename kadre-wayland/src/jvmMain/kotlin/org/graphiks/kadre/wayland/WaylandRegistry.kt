@@ -17,6 +17,10 @@ import org.graphiks.kffi.wayland.*
 
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kffi.wayland.generated.xdg_wm_base_interface
+import org.graphiks.kffi.wayland.generated.xdg_activation_v1_interface
+import org.graphiks.kffi.wayland.generated.xdg_toplevel_icon_manager_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_pointer_constraints_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_text_input_manager_v3_interface
 import org.graphiks.kffi.wayland.generated.zxdg_decoration_manager_v1_interface
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
@@ -729,7 +733,7 @@ internal fun discoverGlobals(
         // 9. wl_registry.bind(zwp_text_input_manager_v3) for IME.
         var textInputManagerPtr = 0L
         if (collector.textInputManagerName >= 0) {
-            val iface = zwpTextInputManagerV3Interface
+            val iface = zwp_text_input_manager_v3_interface
             textInputManagerPtr = bindOwnedGlobal(
                 iface, collector.textInputManagerName, collector.textInputManagerVersion, 1,
             ).first
@@ -750,7 +754,7 @@ internal fun discoverGlobals(
         // 11. wl_registry.bind(zwp_pointer_constraints_v1) for pointer confinement/locking.
         var pointerConstraintsPtr = 0L
         if (collector.pointerConstraintsName >= 0 && "zwp_pointer_constraints_v1" in protocolExtensions) {
-            val iface = zwpPointerConstraintsV1Interface
+            val iface = zwp_pointer_constraints_v1_interface
             pointerConstraintsPtr = bindOwnedGlobal(
                 iface, collector.pointerConstraintsName, collector.pointerConstraintsVersion,
             ).first
@@ -759,7 +763,7 @@ internal fun discoverGlobals(
         // 12. wl_registry.bind(xdg_toplevel_icon_manager_v1) for window icons.
         var iconManagerPtr = 0L
         if (collector.iconManagerName >= 0 && "xdg_toplevel_icon_manager_v1" in protocolExtensions) {
-            val iface = xdgToplevelIconManagerV1Interface
+            val iface = xdg_toplevel_icon_manager_v1_interface
             iconManagerPtr = bindOwnedGlobal(
                 iface, collector.iconManagerName, collector.iconManagerVersion,
             ).first
@@ -768,7 +772,7 @@ internal fun discoverGlobals(
         // 13. wl_registry.bind(xdg_activation_v1) for activation tokens.
         var activationManagerPtr = 0L
         if (collector.activationManagerName >= 0 && "xdg_activation_v1" in protocolExtensions) {
-            val iface = xdgActivationV1Interface
+            val iface = xdg_activation_v1_interface
             activationManagerPtr = bindOwnedGlobal(
                 iface, collector.activationManagerName, collector.activationManagerVersion,
             ).first
