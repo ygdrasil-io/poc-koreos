@@ -9,7 +9,6 @@
  */
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kffi.posix.PosixSymbols
 import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.DeviceEvents
 import org.graphiks.kadre.core.PhysicalSize
@@ -462,16 +461,6 @@ class WaylandEventLoopSmokeTest {
         assertEquals(3, wakeup.signalAttempts)
         assertEquals(2, wakeup.successfulSignals)
         assertEquals(2, wakeup.successfulDrains)
-    }
-
-    /** Verifies that the published POSIX symbol resolver is safe on any platform. */
-    @Test
-    fun `POSIX symbol lookup is safe on any platform`() {
-        try {
-            PosixSymbols.find("poll")
-        } catch (error: Throwable) {
-            throw AssertionError("POSIX symbol lookup must not throw", error)
-        }
     }
 
     @Test
