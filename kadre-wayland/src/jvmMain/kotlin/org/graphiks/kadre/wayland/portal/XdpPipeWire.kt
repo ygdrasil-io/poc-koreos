@@ -3,10 +3,13 @@ package org.graphiks.kadre.wayland.portal
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.PixelFormat
-import org.graphiks.kadre.ffi.wayland.posixDowncall
+import org.graphiks.kffi.posix.PosixSymbols
 import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
 
 /**
  * PipeWire helper for xdg-desktop-portal screen capture.
@@ -18,6 +21,11 @@ import java.lang.foreign.ValueLayout
  * The portal provides a stream node ID which we use to create a PipeWire stream.
  */
 internal object XdpPipeWire {
+
+    private val linker: Linker = Linker.nativeLinker()
+
+    private fun posixDowncall(name: String, descriptor: FunctionDescriptor): MethodHandle? =
+        PosixSymbols.find(name)?.let { linker.downcallHandle(it, descriptor) }
     
     // PipeWire library bindings (lazy loaded)
     private val libPipeWire: MemorySegment? by lazy {

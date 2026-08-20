@@ -164,7 +164,7 @@ run_browser_target() {
 
     set +e
     run_with_timeout "$TARGET_TIMEOUT_SECONDS" \
-        ./gradlew "$task" --no-daemon --stacktrace --console=plain
+        ./gradlew "$task" --refresh-dependencies --no-daemon --stacktrace --console=plain
     status=$?
     set -e
 

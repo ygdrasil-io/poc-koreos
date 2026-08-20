@@ -23,6 +23,10 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
+        maven("https://central.sonatype.com/repository/maven-snapshots/") {
+            name = "Central Portal Snapshots"
+            mavenContent { snapshotsOnly() }
+        }
         mavenCentral()
 
         // Kotlin/JS toolchain: the KGP plugin downloads Node.js and Yarn from ivy
@@ -100,4 +104,3 @@ include(":ffi:objc")
 include(":ffi:posix")
 include(":ffi:win32")
 include(":ffi:x11")
-include(":ffi:wayland")

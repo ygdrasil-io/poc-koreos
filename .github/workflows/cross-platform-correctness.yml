@@ -24,7 +24,8 @@ jobs:
       - run: scripts/test-workflow-contract.sh
       - run: >-
           ./gradlew :kadre-test:allTests :kadre:jvmTest :kadre-x11:jvmTest
-          :kadre-wayland:jvmTest :kadre-appkit:jvmTest --no-daemon --console=plain
+          :kadre-wayland:jvmTest :kadre-appkit:jvmTest
+          --refresh-dependencies --no-daemon --console=plain
 
   web-browser-contracts:
     name: web browser JS/Wasm contracts
@@ -116,6 +117,7 @@ jobs:
       - run: >-
           ./gradlew :samples:compose:desktop:run
           --args="--ci-headless build/cross-platform-correctness"
+          --refresh-dependencies
           --no-daemon --console=plain
       - run: >-
           python3 scripts/verify-test-results.py

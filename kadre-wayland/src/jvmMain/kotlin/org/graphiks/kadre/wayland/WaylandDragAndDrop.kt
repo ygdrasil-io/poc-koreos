@@ -1,6 +1,6 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowEvent
 import java.lang.foreign.Arena
@@ -315,7 +315,7 @@ internal class WaylandDragAndDrop(
                         WL_DATA_OFFER_DESTROY_OPCODE,
                         MemorySegment.NULL,
                         WL_DATA_DEVICE_MANAGER_VERSION,
-                        WL_MARSHAL_FLAG_DESTROY,
+                        WL_MARSHAL_FLAG_DESTROY, // flags
                     )
                 } catch (_: Throwable) { }
             }

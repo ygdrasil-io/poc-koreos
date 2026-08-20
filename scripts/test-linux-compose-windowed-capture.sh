@@ -13,6 +13,7 @@ LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KADRE_LINUX_BACKEND=wayland \
   KADRE_DIAGNOSE_WAYLAND_EGL=1 EGL_LOG_LEVEL=debug LIBGL_DEBUG=verbose MESA_DEBUG=context \
   timeout -k 30 600 ./gradlew :samples:compose:desktop:run \
   --args="--window-capture build/cross-platform-correctness/compose-desktop.window.png" \
+  --refresh-dependencies \
   --no-daemon --console=plain
 
 python3 "$script_dir/verify-test-results.py" \

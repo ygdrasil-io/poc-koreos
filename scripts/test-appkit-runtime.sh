@@ -32,8 +32,10 @@ run_appkit_phase() {
 
 run_appkit_phase preparation \
     ./gradlew :kadre-appkit:jvmTestClasses \
+    --refresh-dependencies \
     --no-daemon --stacktrace --console=plain
 
 run_appkit_phase runtime \
     ./gradlew :kadre-appkit:jvmTest \
+    --refresh-dependencies \
     --no-daemon --stacktrace --console=plain

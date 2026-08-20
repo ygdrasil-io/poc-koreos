@@ -2,7 +2,7 @@ package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.WindowAttributes
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 import java.lang.foreign.MemorySegment
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -32,7 +32,7 @@
  * disconnected, so no compositor can call a freed stub.
  */
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 
 import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.PhysicalPosition

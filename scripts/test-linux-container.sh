@@ -46,9 +46,10 @@ case "$libc" in
 esac
 
 chmod +x gradlew scripts/test-x11-xvfb.sh scripts/ci-wayland-runtime.sh
-./gradlew :kadre:jvmTest --tests '*LinuxBackendDetectorTest*' --tests '*LinuxBackendLaunchTest*' --no-daemon --console=plain
+./gradlew :kadre:jvmTest --tests '*LinuxBackendDetectorTest*' --tests '*LinuxBackendLaunchTest*' --refresh-dependencies --no-daemon --console=plain
 scripts/test-x11-xvfb.sh
 scripts/ci-wayland-runtime.sh ./gradlew \
   :kadre-wayland:jvmTest \
   --tests '*WaylandLoopContractTest*' \
+  --refresh-dependencies \
   --no-daemon --console=plain

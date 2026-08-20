@@ -1,6 +1,8 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.zwp_confined_pointer_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_locked_pointer_v1_interface
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.WindowRequestResult
@@ -101,7 +103,7 @@ internal class WaylandPointerConstraints(
         val marshal = wlPointerConstraintsLockPointer ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("wl_proxy_marshal_flags not available"),
         )
-        val lockedIface = zwpLockedPointerV1Interface
+        val lockedIface = zwp_locked_pointer_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(constraintsPtr),
@@ -112,7 +114,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT,
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeLockedPtr = result.address()
@@ -130,7 +132,7 @@ internal class WaylandPointerConstraints(
         val marshal = wlPointerConstraintsConfinePointer ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("wl_proxy_marshal_flags not available"),
         )
-        val confinedIface = zwpConfinedPointerV1Interface
+        val confinedIface = zwp_confined_pointer_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(constraintsPtr),
@@ -141,7 +143,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT,
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeConfinedPtr = result.address()

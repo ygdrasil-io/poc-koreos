@@ -1,8 +1,9 @@
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.xdg_toplevel_icon_v1_interface
 
 import org.graphiks.kadre.core.Icon
-import org.graphiks.kadre.ffi.wayland.generated.wl_shm_format
+import org.graphiks.kffi.wayland.generated.wl_shm_format
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -79,7 +80,7 @@ internal class WaylandIconManager(
     /** Creates a new xdg_toplevel_icon_v1 object. */
     private fun createIcon(): Long? {
         val marshal = wlProxyMarshalNewId ?: return null
-        val iface = xdgToplevelIconV1Interface
+        val iface = xdg_toplevel_icon_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(iconManagerPtr),

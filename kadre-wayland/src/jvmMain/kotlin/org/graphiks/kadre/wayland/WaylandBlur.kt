@@ -16,7 +16,7 @@
  *   may disconnect the client on invalid protocol usage.
  */
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 
 import java.lang.foreign.MemorySegment
 

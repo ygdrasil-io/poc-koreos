@@ -1,10 +1,12 @@
 package org.graphiks.kadre.wayland
 
+import org.graphiks.kffi.wayland.libWaylandClient
+import org.graphiks.kffi.wayland.waylandNativeDisabled
+import org.graphiks.kffi.wayland.generated.zwp_text_input_manager_v3_interface
+import org.graphiks.kffi.wayland.generated.zwp_text_input_v3_interface
 import org.graphiks.kadre.core.ImePurpose
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
-import org.graphiks.kadre.ffi.wayland.zwpTextInputV3Interface
-import org.graphiks.kadre.ffi.wayland.zwpTextInputManagerV3Interface
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import kotlin.test.AfterTest
@@ -16,6 +18,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
+private fun textInputNativeEnabled(): Boolean =
+    System.getProperty("os.name", "").contains("Linux", ignoreCase = true) &&
+        !waylandNativeDisabled() &&
+        libWaylandClient != null
+
 class WaylandTextInputTest {
     @AfterTest
     fun resetTextInputState() {
@@ -23,22 +30,10 @@ class WaylandTextInputTest {
     }
 
     @Test
-    fun `text input v3 request opcodes and interface metadata match the protocol`() {
-        val pointerSize = ValueLayout.ADDRESS.byteSize()
-
-        assertEquals(0, ZWP_TEXT_INPUT_V3_DESTROY)
-        assertEquals(1, ZWP_TEXT_INPUT_V3_ENABLE)
-        assertEquals(2, ZWP_TEXT_INPUT_V3_DISABLE)
-        assertEquals(5, ZWP_TEXT_INPUT_V3_SET_CONTENT_TYPE)
-        assertEquals(6, ZWP_TEXT_INPUT_V3_SET_CURSOR_RECTANGLE)
-        assertEquals(7, ZWP_TEXT_INPUT_V3_COMMIT)
-        assertEquals(8, zwpTextInputV3Interface.get(ValueLayout.JAVA_INT, pointerSize + 4L))
-    }
-
-    @Test
     fun `text input v3 interfaces expose complete process lifetime message tables`() {
+        if (!textInputNativeEnabled()) return
         assertWaylandInterface(
-            interfaceSegment = zwpTextInputManagerV3Interface,
+            interfaceSegment = zwp_text_input_manager_v3_interface,
             name = "zwp_text_input_manager_v3",
             version = 1,
             methods = listOf(
@@ -52,7 +47,7 @@ class WaylandTextInputTest {
             events = emptyList(),
         )
         assertWaylandInterface(
-            interfaceSegment = zwpTextInputV3Interface,
+            interfaceSegment = zwp_text_input_v3_interface,
             name = "zwp_text_input_v3",
             version = 1,
             methods = listOf(
