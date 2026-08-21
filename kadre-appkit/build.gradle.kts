@@ -22,7 +22,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api(project(":ffi:objc"))
+                api(libs.kffi.objc)
             }
         }
         jvmTest {
