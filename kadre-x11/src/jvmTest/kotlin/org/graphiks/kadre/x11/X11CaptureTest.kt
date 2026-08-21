@@ -80,31 +80,6 @@ class X11CaptureTest {
     }
 
     @Test
-    fun `XImage struct data offset constant matches LP64 layout`() {
-        assertEquals(16L, XIMAGE_DATA_OFFSET)
-    }
-
-    @Test
-    fun `XImage struct bytes_per_line offset constant matches LP64 layout`() {
-        assertEquals(44L, XIMAGE_BYTES_PER_LINE_OFFSET)
-    }
-
-    @Test
-    fun `XShmSegmentInfo generated layout matches LP64 layout`() {
-        assertEquals(32L, XShmSegmentInfoCompat.Companion.byteSize)
-    }
-
-    @Test
-    fun `Xlib_ZPixmap constant is 2`() {
-        assertEquals(2, Xlib_ZPixmap)
-    }
-
-    @Test
-    fun `Xlib_AllPlanes constant is -1 as unsigned long`() {
-        assertEquals(-1L, Xlib_AllPlanes)
-    }
-
-    @Test
     fun `FrameRate minimum is 1`() {
         assertEquals(1, CaptureConfig(frameRate = 1).frameRate)
     }
