@@ -36,11 +36,12 @@ case "$libc" in
   glibc)
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-      xvfb xauth x11-utils libx11-6 libxi6 libxkbcommon0 libwayland-client0 weston
+      xvfb xauth x11-utils libx11-6 libxi6 libxkbcommon0 libwayland-client0 \
+      libxcomposite1 weston
     ;;
   musl)
     apk add --no-cache \
-      xvfb xdpyinfo xauth libx11 libxi libxkbcommon wayland weston \
+      xvfb xdpyinfo xauth libx11 libxi libxkbcommon libxcomposite wayland weston \
       weston-backend-headless weston-shell-desktop
     ;;
 esac
