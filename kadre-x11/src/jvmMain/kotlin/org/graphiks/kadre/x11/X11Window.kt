@@ -17,6 +17,8 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.XPoint
+import org.graphiks.kffi.x11.generated.XRectangle
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
@@ -1235,15 +1237,17 @@ class X11Window internal constructor(
         val setHandle = xSetICValues ?: return
         try {
             Arena.ofConfined().use { arena ->
-                val rect = arena.allocate(XRECTANGLE_SIZE, XRECTANGLE_ALIGN)
-                rect.set(ValueLayout.JAVA_SHORT, 0L, position.x.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 2L, position.y.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 4L, size.width.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 6L, size.height.toShort())
+                val rectangle = XRectangle()
+                val rect = XRectangle.Companion.allocate(arena)
+                rectangle.x(rect, position.x.toShort())
+                rectangle.y(rect, position.y.toShort())
+                rectangle.width(rect, size.width.toShort())
+                rectangle.height(rect, size.height.toShort())
 
-                val point = arena.allocate(XPOINT_SIZE, XPOINT_ALIGN)
-                point.set(ValueLayout.JAVA_SHORT, 0L, position.x.toShort())
-                point.set(ValueLayout.JAVA_SHORT, 2L, position.y.toShort())
+                val pointBinding = XPoint()
+                val point = XPoint.Companion.allocate(arena)
+                pointBinding.x(point, position.x.toShort())
+                pointBinding.y(point, position.y.toShort())
 
                 val areaName = arena.allocateFrom(XNArea)
                 val spotName = arena.allocateFrom(XNSpotLocation)

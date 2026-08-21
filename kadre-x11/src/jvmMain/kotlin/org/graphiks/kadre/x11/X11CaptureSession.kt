@@ -2,10 +2,9 @@ package org.graphiks.kadre.x11.capture
 
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.x11.binding.xFreePixmap
-import org.graphiks.kadre.x11.binding.xDefaultRootWindow
-import org.graphiks.kadre.x11.binding.xGetGeometry
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.x11.binding.capture.*
+import org.graphiks.kffi.x11.generated.XShmSegmentInfoCompat
 import kotlinx.coroutines.*
 import org.graphiks.kadre.core.capture.CaptureConfig
 import org.graphiks.kadre.core.capture.CaptureError
@@ -301,11 +300,12 @@ internal fun createShmResources(
         }
 
         Arena.ofConfined().use { arena ->
-            val shminfo = arena.allocate(XSHM_SEGINFO_SIZE, 8L)
-            shminfo.set(ValueLayout.JAVA_LONG, XSHM_SHMPIX_OFFSET, 0L) // shmseg = 0 (server assigns)
-            shminfo.set(ValueLayout.JAVA_INT, XSHM_SHMD_OFFSET, shmid)
-            shminfo.set(ValueLayout.JAVA_INT, XSHM_READONLY_OFFSET, 0)  // readOnly = False
-            shminfo.set(ValueLayout.ADDRESS, XSHM_ADDR_OFFSET, shmaddr)
+            val shminfoBinding = XShmSegmentInfoCompat()
+            val shminfo = XShmSegmentInfoCompat.Companion.allocate(arena)
+            shminfoBinding.shmseg(shminfo, 0L) // server assigns the segment id
+            shminfoBinding.shmid(shminfo, shmid)
+            shminfoBinding.readOnly(shminfo, 0)
+            shminfoBinding.shmaddr(shminfo, shmaddr)
 
             val image = createImage.invokeExact(
                 display, visual, depth, XSHM_ZPIXMAP,
@@ -327,7 +327,7 @@ internal fun createShmResources(
             }
 
             // Copy shminfo data since the arena will close
-            val persistentInfo = Arena.global().allocate(XSHM_SEGINFO_SIZE, 8L)
+            val persistentInfo = XShmSegmentInfoCompat.Companion.allocate(Arena.global())
             persistentInfo.copyFrom(shminfo)
 
             ShmResources(

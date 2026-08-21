@@ -308,7 +308,7 @@ internal fun readWindowPropertyUtf8(
             display, window, atom,
             0L, 0x7FFFFFFFL,
             0L,
-            0L,  // AnyPropertyType
+            AnyPropertyType,
             actualType, actualFormat, nitems, bytesAfter, propPtr,
         ) as Int
 

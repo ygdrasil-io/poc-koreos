@@ -122,6 +122,23 @@ val xConvertSelection: MethodHandle? by lazy { generatedFunction("XConvertSelect
 val xSetICFocus: MethodHandle? by lazy { generatedFunction("XSetICFocus") }
 val xUnsetICFocus: MethodHandle? by lazy { generatedFunction("XUnsetICFocus") }
 val xFilterEvent: MethodHandle? by lazy { generatedFunction("XFilterEvent") }
+val xShmQueryExtension: MethodHandle? by lazy { generatedFunction("XShmQueryExtension") }
+val xShmCreateImage: MethodHandle? by lazy { generatedFunction("XShmCreateImage") }
+val xShmAttach: MethodHandle? by lazy { generatedFunction("XShmAttach") }
+val xShmDetach: MethodHandle? by lazy { generatedFunction("XShmDetach") }
+val xShmGetImage: MethodHandle? by lazy { generatedFunction("XShmGetImage") }
+val xGetImage: MethodHandle? by lazy { generatedFunction("XGetImage") }
+val xDestroyImage: MethodHandle? by lazy { generatedFunction("XDestroyImage") }
+val xDefaultScreen: MethodHandle? by lazy { generatedFunction("XDefaultScreen") }
+val xDefaultVisual: MethodHandle? by lazy { generatedFunction("XDefaultVisual") }
+val xDefaultDepth: MethodHandle? by lazy { generatedFunction("XDefaultDepth") }
+val xQueryTree: MethodHandle? by lazy { generatedFunction("XQueryTree") }
+val xGetWindowAttributes: MethodHandle? by lazy { generatedFunction("XGetWindowAttributes") }
+val xSync: MethodHandle? by lazy { generatedFunction("XSync") }
+val xCompositeNameWindowPixmap: MethodHandle? by lazy {
+    generatedFunction("XCompositeNameWindowPixmap")
+}
+val xLookupString: MethodHandle? by lazy { generatedFunction("XLookupString") }
 
 // XCreateIC and XSetICValues are variadic and remain Kadre-specific calls.
 val xCreateIC: MethodHandle? by lazy {
@@ -290,6 +307,7 @@ val XIMPreeditCallbacks: Long = generatedLong("XIMPreeditCallbacks", 0x0004)
 val XIMPreeditPosition: Long = generatedLong("XIMPreeditPosition", 0x0008)
 val XIMPreeditNothing: Long = generatedLong("XIMPreeditNothing", 0x0010)
 val XIMStatusNothing: Long = generatedLong("XIMStatusNothing", 0x0100)
+val AnyPropertyType: Long = generatedLong("AnyPropertyType", 0L)
 
 val XNInputStyle = "inputStyle"
 val XNClientWindow = "clientWindow"
@@ -303,10 +321,6 @@ val XNPreeditDrawCallback = "preeditDrawCallback"
 val XNPreeditDoneCallback = "preeditDoneCallback"
 val XNCommitStringCallback = "commitStringCallback"
 
-const val XRECTANGLE_SIZE: Long = 8L
-const val XRECTANGLE_ALIGN: Long = 2L
-const val XPOINT_SIZE: Long = 4L
-const val XPOINT_ALIGN: Long = 2L
 const val XIM_CALLBACK_CLIENT_DATA_OFFSET: Long = 0L
 const val XIM_CALLBACK_PROC_OFFSET: Long = 8L
 const val XIM_CALLBACK_SIZE: Long = 16L
