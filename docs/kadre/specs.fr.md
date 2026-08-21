@@ -80,7 +80,7 @@ graph TD
 | `kadre-wasm` | wasmJsMain (browser) | JS interop Wasm vers DOM | non |
 | `kadre-win32` | jvm (Windows-specific) | kextract FFM Win32 (User32, Gdi32, Kernel32) | non |
 | `kadre-x11` | jvm (Linux-specific) | kextract FFM Xlib + XInput2 | non |
-| `kadre-wayland` | jvm (Linux-specific) | kextract FFM libwayland-client + xdg_shell | non |
+| `kadre-wayland` | jvm (Linux-specific) | Binding FFM `org.graphiks:kffi-wayland` | non |
 | `kadre` (facade) | toutes (6 plateformes) | expect/actual | non |
 
 **Découplage Linux** : `kadre-x11` et `kadre-wayland` sont deux **modules séparés**, comme `kadre-appkit` et `kadre-uikit`. La facade contient une **logique de sélection runtime** dans le sourceSet `linuxMain` qui choisit le backend au démarrage.
@@ -456,9 +456,9 @@ X11 ne gère pas le DPI scaling au niveau protocole. Lecture du DPI :
 
 #### 3.4.1 Stack
 
-- kextract FFM `libwayland-client`
+- Binding FFM externe `org.graphiks:kffi-wayland` pour `libwayland-client`
 - Protocoles : `wl_display`, `wl_registry`, `wl_compositor`, `wl_surface`, `xdg_shell` (xdg_wm_base + xdg_surface + xdg_toplevel), `xdg_decoration_unstable_v1`
-- Bindings xdg via wayland-scanner (.xml → C → kextract → Kotlin)
+- Interfaces de protocole et constantes fournies par le binding publié
 
 #### 3.4.2 Boucle d'événements
 
