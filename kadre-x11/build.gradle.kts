@@ -12,6 +12,10 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
 }
 
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
 kotlin {
     jvmToolchain(25)
 
@@ -21,7 +25,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api(project(":ffi:x11"))
+                api(libs.kffi.x11)
                 implementation(project(":ffi:posix"))
             }
         }

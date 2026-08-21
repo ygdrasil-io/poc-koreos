@@ -6,8 +6,10 @@ import org.graphiks.kadre.core.PhysicalSize
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.libX11
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kadre.x11.binding.libX11
+import org.graphiks.kadre.x11.binding.capture.*
+import org.graphiks.kffi.x11.generated.XShmSegmentInfoCompat
 import org.graphiks.kadre.x11.capture.X11CaptureSession
 import org.graphiks.kadre.x11.capture.X11ScreenCapturer
 import kotlin.test.Test
@@ -75,39 +77,6 @@ class X11CaptureTest {
         val capturer = X11ScreenCapturer()
         val windows = runBlocking { capturer.enumerateWindows() }
         assertTrue(windows.isEmpty())
-    }
-
-    @Test
-    fun `XImage struct data offset constant matches LP64 layout`() {
-        assertEquals(16L, XIMAGE_DATA_OFFSET)
-    }
-
-    @Test
-    fun `XImage struct bytes_per_line offset constant matches LP64 layout`() {
-        assertEquals(44L, XIMAGE_BYTES_PER_LINE_OFFSET)
-    }
-
-    @Test
-    fun `XShmSegmentInfo struct size constant matches LP64 layout`() {
-        assertEquals(24L, XSHM_SEGINFO_SIZE)
-    }
-
-    @Test
-    fun `XShmSegmentInfo fields offsets match LP64 layout`() {
-        assertEquals(0L, XSHM_SHMPIX_OFFSET)
-        assertEquals(8L, XSHM_SHMD_OFFSET)
-        assertEquals(12L, XSHM_READONLY_OFFSET)
-        assertEquals(16L, XSHM_ADDR_OFFSET)
-    }
-
-    @Test
-    fun `Xlib_ZPixmap constant is 2`() {
-        assertEquals(2, Xlib_ZPixmap)
-    }
-
-    @Test
-    fun `Xlib_AllPlanes constant is -1 as unsigned long`() {
-        assertEquals(-1L, Xlib_AllPlanes)
     }
 
     @Test

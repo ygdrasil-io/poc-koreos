@@ -6,7 +6,7 @@
  */
 package org.graphiks.kadre.x11
 
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyEvent
 import org.graphiks.kadre.core.KeyPlatform
@@ -24,12 +24,8 @@ import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.defaultLogicalKey
 import org.graphiks.kadre.core.defaultText
 import java.lang.foreign.Arena
-import java.lang.foreign.FunctionDescriptor
-import java.lang.foreign.Linker
 import java.lang.foreign.MemorySegment
-import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
-import java.lang.invoke.MethodHandle
 
 private const val OFFSET_STATE: Long = 64L
 private const val OFFSET_KEYCODE: Long = 68L
@@ -102,16 +98,6 @@ internal fun stateToModifiers(state: Int): KeyboardModifiers {
     if (state and MOD1_MASK != 0) bits = bits or KeyboardModifiers.ALT
     if (state and MOD4_MASK != 0) bits = bits or KeyboardModifiers.META
     return KeyboardModifiers(bits)
-}
-
-private val linker: Linker = Linker.nativeLinker()
-
-private val xLookupString: MethodHandle? by lazy {
-    try {
-        SymbolLookup.libraryLookup("libX11.so.6", Arena.global()).find("XLookupString")
-            .map { linker.downcallHandle(it, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)) }
-            .orElse(null)
-    } catch (_: Throwable) { null }
 }
 
 /**

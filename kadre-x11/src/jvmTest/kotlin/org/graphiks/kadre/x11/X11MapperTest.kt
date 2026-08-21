@@ -3,7 +3,7 @@
  */
 package org.graphiks.kadre.x11
 
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
