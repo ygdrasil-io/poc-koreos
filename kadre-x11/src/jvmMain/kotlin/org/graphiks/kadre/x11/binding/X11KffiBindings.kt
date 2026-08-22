@@ -138,7 +138,8 @@ val xCompositeNameWindowPixmap: MethodHandle? by lazy {
 }
 val xLookupString: MethodHandle? by lazy { generatedFunction("XLookupString") }
 
-// XCreateIC and XSetICValues are variadic and remain Kadre-specific calls.
+// XCreateIC still needs the full attribute list used by Kadre and is kept as a
+// local variadic downcall until the published kffi wrapper exposes that arity.
 val xCreateIC: MethodHandle? by lazy {
     libX11.downcallVariadic(
         "XCreateIC",
@@ -170,18 +171,9 @@ val xCreateIC: MethodHandle? by lazy {
     )
 }
 
-val xSetICValues: MethodHandle? by lazy {
-    libX11.downcallVariadic(
-        "XSetICValues",
-        FunctionDescriptor.of(
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS, ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS, ValueLayout.ADDRESS,
-            ValueLayout.ADDRESS,
-        ),
-    )
-}
+// kffi exposes one attribute pair plus the terminating NULL in the published
+// snapshot. Callers update multiple attributes with multiple invocations.
+val xSetICValues: MethodHandle? by lazy { generatedFunction("XSetICValues") }
 
 // XQueryBestCursor is not present in the current generated snapshot.
 val xQueryBestCursor: MethodHandle? by lazy {

@@ -1255,6 +1255,10 @@ class X11Window internal constructor(
                 setHandle.invokeExact(
                     ic,
                     areaName, rect,
+                    MemorySegment.NULL,
+                )
+                setHandle.invokeExact(
+                    ic,
                     spotName, point,
                     MemorySegment.NULL,
                 )
