@@ -7,7 +7,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.EventLoopProxy
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 
 /** Thread-safe proxy sharing the event loop's owned wake descriptor. */
 class WaylandEventLoopProxy(

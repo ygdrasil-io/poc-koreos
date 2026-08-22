@@ -2,7 +2,7 @@ package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.StartCause
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

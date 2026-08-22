@@ -11,7 +11,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
@@ -132,7 +132,7 @@ class X11EventLoopSmokeTest {
     @Test
     fun `compiled X11EventLoopProxy depends on PosixWakeup and contains no Xlib or FFM reference`() {
         val constants = classUtf8Constants(X11EventLoopProxy::class.java)
-        val required = "org/graphiks/kadre/ffi/posix/PosixWakeup"
+        val required = "org/graphiks/kffi/posix/PosixWakeup"
         val forbidden = listOf(
             "org/graphiks/kadre/ffi/x11",
             "java/lang/foreign/MemorySegment",

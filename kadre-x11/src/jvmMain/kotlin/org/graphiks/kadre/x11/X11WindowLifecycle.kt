@@ -3,7 +3,7 @@ package org.graphiks.kadre.x11
 import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean

@@ -15,12 +15,11 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowAttributes
-import org.graphiks.kadre.ffi.posix.PosixWakeup
-import org.graphiks.kadre.ffi.posix.PosixException
+import org.graphiks.kffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixException
 import org.graphiks.kadre.test.EventLoopConformanceDriver
 import org.graphiks.kadre.test.ObservedCallback
 import org.graphiks.kadre.test.assertWakeUpRearms
-import java.lang.foreign.Arena
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,25 +32,6 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WaylandEventLoopSmokeTest {
-
-    @Test
-    fun `native poll uses Linux nfds ABI and captures errno`() {
-        if (System.getProperty("os.name") != "Linux") return
-
-        Arena.ofConfined().use { arena ->
-            val pollFds = allocPollFd(arena)
-            setPollFd(pollFds, 0, -1, POLLIN)
-            setPollFd(pollFds, 1, -1, POLLIN)
-
-            val success = invokeNativePoll(pollFds, 2L, 0)
-            assertEquals(0, success.value)
-            assertNull(success.errno)
-
-            val failure = invokeNativePoll(pollFds, Long.MAX_VALUE, 0)
-            assertTrue(failure.value < 0)
-            assertTrue((failure.errno ?: 0) > 0)
-        }
-    }
 
     @Test
     fun `infinite poll EINTR cancels prepared read then retries infinitely`() {

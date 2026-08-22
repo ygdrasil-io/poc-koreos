@@ -8,7 +8,7 @@ import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import org.graphiks.kadre.test.RecordingApplicationHandler
 import org.graphiks.kadre.test.assertIterationOrder
 import java.util.concurrent.CountDownLatch
