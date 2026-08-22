@@ -19,6 +19,10 @@
 - Aucun buffer non borné.
 - Aucun faux succès pour une fonctionnalité non disponible.
 - Temps et délais monotones.
+- Chaque événement public est estampillé et chaque snapshot est mis à jour avant sa transition observable.
+- Les flux d’événements sont hot, multicast et sans replay ; la capture closeable utilise un collector unique encadré.
+- Une erreur de session ne cancelle pas le scope de son host ; l’annulation du host ferme sa session.
+- Une nouvelle scène utilise une nouvelle application fournie par `KadreApplicationFactory`.
 - `explicitApi()` sur chaque module publié.
 - Chaque chantier laisse le dépôt compilable et vérifiable.
 - Chaque nouvelle abstraction est introduite par tests avant migration des backends.
@@ -77,13 +81,14 @@ Créer la nouvelle surface publique sans encore migrer les backends natifs.
 
 1. Activer `explicitApiWarning()` sur les modules publiés, corriger les déclarations accidentelles, puis passer à `explicitApi()` avant la fin du chantier.
 2. Créer les annotations `ExperimentalKadreApi`, `KadrePlatformApi` et `DelicateKadreApi`.
-3. Créer `KadreResult`, `KadreFailure`, `FeatureSupport`, les IDs opaques et les primitives de temps monotone.
-4. Créer `KadrePolicy`, les trois profils et les policies métier de delivery.
-5. Déplacer les contrats publics vers les packages cibles sous `org.graphiks.kadre`.
-6. Rendre internes les bridges `PlatformGamepad*`, `FrameTimingTracer` et autres détails présents dans les dumps ABI.
-7. Préparer la fusion de `kadre-coroutines` en déplaçant sa dépendance coroutine et ses contrats généraux vers `kadre`.
-8. Ajouter des tests d’API qui interdisent les imports consommateurs depuis `org.graphiks.kadre.core`.
-9. Créer une tâche racine `checkPublicApi` qui agrège la validation ABI de tous les modules encore publiés.
+3. Créer `KadreResult`, la taxonomie stable de `KadreFailure`, `Capability`, `FeatureAvailability`, les IDs opaques, `EventStamp` et les primitives de temps monotone.
+4. Ajouter les combinators idiomatiques de `KadreResult` et `KadreException` pour l’interop avec le style exception.
+5. Créer `KadrePolicy`, les trois profils, les files bornées distinctes ingress/collector et les compteurs de diagnostics non perdables.
+6. Déplacer les contrats publics vers les packages cibles sous `org.graphiks.kadre`.
+7. Rendre internes les bridges `PlatformGamepad*`, `FrameTimingTracer` et autres détails présents dans les dumps ABI.
+8. Préparer la fusion de `kadre-coroutines` en déplaçant sa dépendance coroutine et ses contrats généraux vers `kadre`.
+9. Ajouter des tests d’API qui interdisent les imports consommateurs depuis `org.graphiks.kadre.core`.
+10. Créer une tâche racine `checkPublicApi` qui agrège la validation ABI de tous les modules encore publiés.
 
 ### Critères de sortie
 
@@ -120,18 +125,21 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 ### Livrables
 
 1. Job racine de session et arbre d’ownership.
-2. États `Starting`, `Running`, `Stopping`, `Stopped` et `Failed`.
-3. `close()`, `stop()` et `join()` idempotents.
-4. Lifecycle avec `StateFlow` courant et `Flow` de transitions.
-5. Normalisation et déduplication des transitions hôtes.
-6. Host SPI public et implémentation fake.
-7. Diagnostics de session et propagation correcte des exceptions/cancellations.
-8. Tests prouvant qu’aucun enfant ne survit au teardown.
+2. `SupervisorJob` isolant le host et sous-arbre applicatif à échec ordinaire.
+3. `KadreApplicationFactory`, contexte de lancement et création indépendante par session.
+4. États `Starting`, `Running`, `Stopping` et `Terminated(SessionOutcome)`.
+5. `close()`, `requestStop()` et `awaitTermination()` idempotents, avec protection contre l’attente depuis un enfant.
+6. Lifecycle orthogonal attachment/visibility/activation et mapping normatif de chaque host.
+7. Contrats hot/cold, replay, cardinalité, ordre state/event et files par collector.
+8. Host SPI expérimental retournant `KadreResult<KadreSession>` et implémentation fake.
+9. Diagnostics de session et propagation correcte des exceptions/cancellations.
+10. Teardown ordonné et tests prouvant qu’aucun enfant ne survit.
 
 ### Critères de sortie
 
 - Une `KadreApplication` complète s’exécute avec `FakeKadreHost`.
-- Une erreur applicative termine la session et conserve sa cause.
+- Une erreur applicative termine la session avec un `ApplicationFailure` stable et transmet sa cause originale au reporter du host.
+- Une erreur de session n’annule pas le scope du host, tandis qu’une annulation du host ferme la session.
 - Une fermeture hôte annule fenêtres, devices et captures factices.
 - Aucun `GlobalScope`, singleton de handler ou job détaché n’est utilisé.
 
@@ -169,11 +177,11 @@ Remplacer `WindowAttributes` et les setters winit-like par un modèle suspendu, 
 ### Livrables
 
 1. `WindowManager.primary`, `windows` et `capabilities` en `StateFlow`.
-2. `requestWindow` avec résultats `Opened` et `AcceptedByHost`.
+2. `WindowRequest` observable avec états `Pending`, `OpenedHere`, `OpenedInNewSession`, `Rejected` et `Cancelled`.
 3. DSL `WindowSpec` et snapshot immuable.
 4. Snapshot atomique `WindowState`.
-5. `Window.apply` et opérations contextuelles suspendues.
-6. Capabilities dynamiques et résultats autoritaires.
+5. `Window.apply` non transactionnel avec résultats `Applied`, `PartiallyApplied` et `Accepted`.
+6. Capabilities séparant support structurel, disponibilité dynamique et contraintes typées.
 7. Handles sous `@KadrePlatformApi`, constructeurs internes et lifetime documenté.
 8. Fake windows dans `kadre-test`.
 9. Contract tests de fermeture, focus, resize, fullscreen et absence de faux succès.
@@ -184,6 +192,7 @@ Remplacer `WindowAttributes` et les setters winit-like par un modèle suspendu, 
 - Un backend fake peut changer dynamiquement ses capabilities.
 - Un handle ne peut pas être construit par un consumer.
 - `WindowState` ne présente jamais un mélange de deux transitions natives différentes.
+- Une requête de nouvelle scène reste corrélée jusqu’à la nouvelle session ou son rejet terminal.
 
 ### Vérification
 
@@ -211,12 +220,12 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 
 1. `DeviceManager`, inventaire et lifecycle des devices.
 2. `WindowInput` avec ordre total des événements par fenêtre.
-3. Événements clavier, pointeur, tactile et gestes avec timestamp monotone.
+3. Événements clavier, pointeur, tactile et gestes avec `EventStamp` monotone et séquence de session.
 4. États clavier, modifiers et pointeurs en `StateFlow`.
 5. `Gamepad` avec snapshot d’état, événements, capabilities et effets.
 6. Collections spécialisées `ButtonValues` et `AxisValues`.
 7. Suppression des fallbacks d’ordinal silencieux.
-8. `TextInputSession` avec cursor rect et surrounding text.
+8. `TextInputSession` unique par fenêtre, cursor rect logique et surrounding text indexé en UTF-16.
 9. `RawInputAccess` sous policy et opt-in appropriés.
 10. Tests de saturation pour événements discrets et continus.
 
@@ -227,6 +236,7 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 - Un snapshot gamepad est lisible sans créer de mapping mutable public.
 - Fermer une fenêtre ferme sa session IME.
 - Aucun type natif clavier n’est requis dans le chemin portable.
+- Les coordonnées logiques/physiques et l’ordre snapshot/événement sont identiques sur tous les backends.
 
 ### Vérification
 
@@ -250,20 +260,21 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 ### Livrables
 
 1. `CaptureManager` attaché à `KadreScope`.
-2. Permissions et sources en `StateFlow`.
+2. Permissions et sources en `StateFlow`, avec `HostPickerOnly` pour les sources non énumérables.
 3. IDs de source typés.
 4. `CaptureRequest` avec rate, région, format, cursor et delivery policy.
 5. `CaptureSession` enfant de la session applicative.
-6. `CaptureFrame` closeable et `PixelPlane` read-only.
-7. Fermeture automatique des frames droppées.
-8. Chemin sûr `copyPixels()` et zero-copy sous opt-in.
-9. Fake capture avec révocation et perte de source.
-10. Contract tests de teardown, buffer pool et overflow.
+6. `collectFrames` suspendu à collector unique et fermeture encadrée par Kadre.
+7. `CaptureFrame` closeable, `PixelPlane` read-only et métadonnées de format/colorimétrie/orientation.
+8. Fermeture automatique des frames consommées, droppées, remplacées ou interrompues.
+9. Chemin sûr `copyPlanes()` et zero-copy retenable sous opt-in.
+10. Fake capture avec révocation et perte de source.
+11. Contract tests de collector unique, teardown, buffer pool et overflow.
 
 ### Critères de sortie
 
-- Aucun `ByteArray` mutable n’est exposé comme valeur structurelle publique.
-- Chaque frame native a exactement un chemin de libération.
+- Aucun `ByteArray` adossé à un buffer natif n’est exposé ; seules des copies détenues par l’application quittent la lease.
+- Chaque frame native est libérée exactement une fois, quel que soit le chemin de terminaison.
 - Une permission révoquée termine la capture sans terminer arbitrairement l’application.
 - `ScreenCapturer.resolve()` n’est plus nécessaire.
 
@@ -291,13 +302,14 @@ Remplacer le handler global Android par des sessions attachées aux hôtes.
 
 1. `ComponentActivity.attachKadre`.
 2. `View.attachKadre`.
-3. Liaison `LifecycleOwner` et teardown `onDestroy`.
+3. Liaison `LifecycleOwner`, refus des doubles attachments et teardown `onDestroy`.
 4. Surface/window principale alimentée par l’hôte.
 5. Input, IME, gamepad et capture migrés vers les nouveaux contrats.
 6. Capabilities Android honnêtes pour resize, multi-window, cursor et capture.
 7. Suppression de `AndroidKadreRuntime.currentHandler`.
 8. Intégration Compose sans renderer ni widget Kadre.
 9. Migration de tous les samples Android.
+10. Contrat de recréation : nouvelle session après changement de configuration, sans rétention implicite des jobs.
 
 ### Critères de sortie
 
@@ -329,16 +341,17 @@ Aligner Kadre sur le lifecycle multi-scène UIKit.
 
 ### Livrables
 
-1. `KadreIos.attach(windowScene, application)`.
+1. `KadreIos.attach(windowScene, applicationFactory, policy)`.
 2. Une session et un scope par `UIWindowScene`.
 3. Bridge `UISceneDelegate` complet.
 4. Fermeture sur `sceneDidDisconnect`.
 5. Propagation des événements globaux réellement applicables.
 6. Fenêtre principale fournie par la scène.
-7. Requête de scène supplémentaire avec `AcceptedByHost`.
+7. Requête de scène supplémentaire corrélée jusqu’à `OpenedInNewSession` ou `Rejected`.
 8. Host `UIViewController` pour SwiftUI et `UIViewControllerRepresentable`.
 9. Input, IME, gestes, gamepad et capture migrés.
 10. Suppression des registries globaux de session.
+11. Factory conservée par le host et contexte `AdditionalHostRequested` transmis à la nouvelle application.
 
 ### Critères de sortie
 
@@ -379,6 +392,7 @@ Attacher Kadre à des éléments DOM existants avec un contrat identique en JS e
 7. Traitement local et explicite des opt-ins Wasm interop.
 8. Suppression du faux contrat `runApp`.
 9. Migration des samples Web.
+10. `WebAttachmentPolicy` avec `StopWhenDetached` par défaut et arrêt manuel explicite.
 
 ### Critères de sortie
 
@@ -414,7 +428,7 @@ Unifier AppKit, Win32, X11 et Wayland derrière le host desktop et conserver une
 
 1. `DesktopHostOptions` et sélection typée du backend.
 2. `CoroutineScope.attachKadreDesktop`.
-3. `runKadreApplication` construit au-dessus du host.
+3. `runKadreApplication` Desktop-only, bloquant et construit au-dessus du host embarquable.
 4. Marshalling sûr vers le thread propriétaire.
 5. Migration de WindowManager, input, gamepad et capture pour chaque backend.
 6. Diagnostic `BackendFallback` uniquement pendant la sélection initiale.
@@ -422,6 +436,7 @@ Unifier AppKit, Win32, X11 et Wayland derrière le host desktop et conserver une
 8. Handles natifs sous `@KadrePlatformApi`.
 9. Suppression des event loops publiques de backend.
 10. Migration des samples desktop.
+11. Sémantique explicite de la dernière fenêtre : session conservée en embedded, arrêt demandé en standalone.
 
 ### Critères de sortie
 
@@ -452,13 +467,15 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 1. Finaliser `runKadreTest` et tous les contrôleurs virtuels.
 2. Extraire une contract suite commune consommée par chaque backend.
 3. Ajouter des tests de lifecycle, threading, capabilities, overflow, handles et permissions.
-4. Mesurer la baseline avant suppression de l’ancien chemin.
-5. Ajouter les benchmarks input, state, gamepad et capture.
-6. Créer trois samples de référence : utilitaire, jeu, site Web.
-7. Écrire les guides Android, UIKit, SwiftUI, Web et Desktop.
-8. Écrire les guides policies, structured concurrency, interop renderer et migration.
-9. Générer la matrice de capabilities à partir des résultats de contrats.
-10. Vérifier que la documentation ne promet ni rendu ni widgets.
+4. Ajouter les contract tests de température/replay/cardinalité des flux, ordre state/event et collectors lents.
+5. Ajouter des consumer compile tests Java, Swift, JS et Wasm, y compris les artefacts exportés.
+6. Mesurer la baseline avant suppression de l’ancien chemin.
+7. Ajouter les benchmarks input, state, gamepad et capture.
+8. Créer trois samples de référence : utilitaire, jeu, site Web.
+9. Écrire les guides Android, UIKit, SwiftUI, Web et Desktop.
+10. Écrire les guides policies, structured concurrency, interop renderer et migration.
+11. Générer la matrice de capabilities à partir des résultats de contrats.
+12. Vérifier que la documentation ne promet ni rendu ni widgets.
 
 ### Critères de sortie
 
@@ -541,7 +558,7 @@ rtk ./gradlew checkPublicApi
 
 **Risque :** faux support et no-op silencieux.
 
-**Réponse :** capabilities dynamiques, `KadreResult`, résultats spécifiques comme `AcceptedByHost`, extensions sous opt-in.
+**Réponse :** capabilities dynamiques et contraintes typées, `KadreResult`, `WindowRequest` suivi jusqu’à son état terminal, extensions sous opt-in.
 
 ### Coût de Flow pour le temps réel
 
