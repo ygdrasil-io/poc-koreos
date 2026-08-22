@@ -51,8 +51,7 @@ import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import org.graphiks.kadre.ffi.win32.*
-import org.graphiks.kadre.ffi.win32.generated.*
+import org.graphiks.kffi.win32.generated.*
 
 private fun lookupDowncall(libName: String, symbol: String, desc: FunctionDescriptor): MethodHandle? {
     return try {
@@ -618,7 +617,7 @@ class Win32Window private constructor(
         try {
             val devMode = Arena.global().allocate(DEVMODE_MODE_SIZE, DEVMODE_MODE_ALIGN)
             devMode.set(ValueLayout.JAVA_SHORT, DEVMODE_DM_SIZE_OFFSET, DEVMODE_MODE_SIZE.toShort())
-            enumHandle.invokeExact(MemorySegment.NULL, ENUM_CURRENT_SETTINGS, devMode) as Int
+            enumHandle.invokeExact(MemorySegment.NULL, -1, devMode) as Int
             _savedDevMode = devMode
         } catch (_: Throwable) {}
     }
@@ -833,7 +832,7 @@ class Win32Window private constructor(
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
         try {
-            SetLastError(0L)
+            SetLastError(0)
             val exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
             if (exStyle == 0L) {
                 val error = GetLastError().toInt()
@@ -844,7 +843,7 @@ class Win32Window private constructor(
             val transparentFlag = 0x00000020L
             val newStyle = if (!hittest) exStyle or transparentFlag
                            else exStyle and transparentFlag.inv()
-            SetLastError(0L)
+            SetLastError(0)
             val previous = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, newStyle)
             if (previous == 0L) {
                 val error = GetLastError().toInt()
@@ -1331,10 +1330,10 @@ class Win32Window private constructor(
             val hwnd: MemorySegment = Arena.ofConfined().use { arena ->
                 val titlePtr = arena.allocateWString(attrs.title)
                 CreateWindowExW(
-                    win32InitialExtendedStyle(attrs.transparent).toLong(),
+                    win32InitialExtendedStyle(attrs.transparent),
                     classNamePtr,
                     titlePtr,
-                    buttonStyle.toLong(),
+                    buttonStyle,
                     posX,
                     posY,
                     width,
@@ -1359,7 +1358,7 @@ class Win32Window private constructor(
                 enableWin32TransparentBlurBehind(hwnd)
             }
 
-            RegisterTouchWindow(hwnd, 0L)
+            RegisterTouchWindow(hwnd, 0)
 
             dragAcceptFiles?.invoke(hwnd, 1)
 

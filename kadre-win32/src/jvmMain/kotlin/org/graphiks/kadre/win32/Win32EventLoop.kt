@@ -37,8 +37,7 @@ import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import org.graphiks.kadre.ffi.win32.*
-import org.graphiks.kadre.ffi.win32.generated.*
+import org.graphiks.kffi.win32.generated.*
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
 
@@ -342,15 +341,15 @@ internal class Win32EventLoop : ActiveEventLoop {
         val timeoutMs = (targetInstant - now).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
 
         val result = MsgWaitForMultipleObjectsEx(
-            0L,                   // nCount: no kernel object to wait on
+            0,                    // nCount: no kernel object to wait on
             MemorySegment.NULL,  // pHandles: NULL because nCount = 0
-            timeoutMs.toLong(),  // dwMilliseconds: computed timeout
-            QS_ALLINPUT.toLong(), // dwWakeMask: all input messages
-            MWMO_INPUTAVAILABLE.toLong(), // dwFlags: wake up if messages already available
+            timeoutMs,             // dwMilliseconds: computed timeout
+            QS_ALLINPUT,           // dwWakeMask: all input messages
+            MWMO_INPUTAVAILABLE,   // dwFlags: wake up if messages already available
         )
 
         when (result) {
-            WAIT_OBJECT_0.toLong() -> {
+            WAIT_OBJECT_0 -> {
                 // Messages available → pump with PeekMessageW
                 while (!_isExiting) {
                     val hasMsg = PeekMessageW(
@@ -365,7 +364,7 @@ internal class Win32EventLoop : ActiveEventLoop {
                 }
                 return StartCause.WaitCancelled(targetInstant)
             }
-            WAIT_TIMEOUT.toLong() -> {
+            WAIT_TIMEOUT -> {
                 // Timeout expired → target instant reached
                 return StartCause.ResumeTimeReached(
                     requestedResume = targetInstant,

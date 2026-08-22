@@ -8,9 +8,9 @@
  *    (minimal: getCurrentThreadIdHandle, setProcessDpiAwarenessContext)
  *
  * The bulk of the Win32 function bindings live in:
- *   org.graphiks.kadre.ffi.win32.generated.win32_all_h
+ *   org.graphiks.kffi.win32.generated.win32_all_h
  */
-package org.graphiks.kadre.ffi.win32
+package org.graphiks.kadre.win32
 
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
@@ -125,7 +125,6 @@ const val SWP_NOMOVE: Int       = 0x0002
 const val SWP_NOZORDER: Int     = 0x0004
 const val SWP_NOACTIVATE: Int   = 0x0010
 const val SWP_FRAMECHANGED: Int = 0x0020
-const val WIN32_STYLE_UPDATE_FLAGS: Int = SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE
 
 // ── GetWindowLong / SetWindowLong indices ──────────────────────────────────────
 
@@ -344,7 +343,6 @@ const val TRACKMOUSEEVENT_SIZE: Int = 24
 
 // ── GestureInfo layout ────────────────────────────────────────────────────────
 
-const val GESTUREINFO_SIZE: Int = 48
 
 // ── ChangeDisplaySettings flags ────────────────────────────────────────────────
 
@@ -369,24 +367,22 @@ const val DM_DISPLAYFREQUENCY: Int = 0x00400000
 
 // ── EnumDisplaySettings mode indices ───────────────────────────────────────────
 
-const val ENUM_CURRENT_SETTINGS: Int = -1
-const val ENUM_REGISTRY_SETTINGS: Int = -2
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Re-exported typealiases from the generated bindings
 // ═══════════════════════════════════════════════════════════════════════════════
 
-typealias ATOM = org.graphiks.kadre.ffi.win32.generated.ATOM
-typealias BOOL = org.graphiks.kadre.ffi.win32.generated.BOOL
-typealias DWORD = org.graphiks.kadre.ffi.win32.generated.DWORD
-typealias LONG = org.graphiks.kadre.ffi.win32.generated.LONG
-typealias LONG_PTR = org.graphiks.kadre.ffi.win32.generated.LONG_PTR
-typealias LPARAM = org.graphiks.kadre.ffi.win32.generated.LPARAM
-typealias LRESULT = org.graphiks.kadre.ffi.win32.generated.LRESULT
-typealias UINT = org.graphiks.kadre.ffi.win32.generated.UINT
-typealias ULONG_PTR = org.graphiks.kadre.ffi.win32.generated.ULONG_PTR
-typealias WORD = org.graphiks.kadre.ffi.win32.generated.WORD
-typealias WPARAM = org.graphiks.kadre.ffi.win32.generated.WPARAM
+typealias ATOM = org.graphiks.kffi.win32.generated.ATOM
+typealias BOOL = org.graphiks.kffi.win32.generated.BOOL
+typealias DWORD = org.graphiks.kffi.win32.generated.DWORD
+typealias LONG = org.graphiks.kffi.win32.generated.LONG
+typealias LONG_PTR = org.graphiks.kffi.win32.generated.LONG_PTR
+typealias LPARAM = org.graphiks.kffi.win32.generated.LPARAM
+typealias LRESULT = org.graphiks.kffi.win32.generated.LRESULT
+typealias UINT = org.graphiks.kffi.win32.generated.UINT
+typealias ULONG_PTR = org.graphiks.kffi.win32.generated.ULONG_PTR
+typealias WORD = org.graphiks.kffi.win32.generated.WORD
+typealias WPARAM = org.graphiks.kffi.win32.generated.WPARAM
 
 // ── Handle typealiases (originally from Win32Types.kt) ────────────────────────
 // These are plain Long in the old convention, matching win32_all_h's use of
@@ -400,3 +396,4 @@ typealias HMENU = Long
 typealias HICON = Long
 typealias HCURSOR = Long
 typealias HBRUSH = Long
+

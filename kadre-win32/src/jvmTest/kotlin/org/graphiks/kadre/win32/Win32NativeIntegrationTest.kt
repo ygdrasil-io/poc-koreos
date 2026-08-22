@@ -1,6 +1,5 @@
 package org.graphiks.kadre.win32
 
-import org.graphiks.kadre.ffi.win32.GESTUREINFO_SIZE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

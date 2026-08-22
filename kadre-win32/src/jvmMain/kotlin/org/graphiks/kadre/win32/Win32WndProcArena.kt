@@ -8,7 +8,7 @@
  * GRA-141: this object exposes the shared arena used by [Win32Window] to
  * register its WNDPROC stub via [Linker.upcallStub].
  */
-package org.graphiks.kadre.ffi.win32
+package org.graphiks.kadre.win32
 
 import java.lang.foreign.Arena
 
@@ -31,3 +31,5 @@ object Win32WndProcArena {
         Arena.ofShared()
     }
 }
+
+

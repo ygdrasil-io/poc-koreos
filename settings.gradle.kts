@@ -99,5 +99,3 @@ include(":samples:hello-triangle-android-capture")
 include(":samples:simulation-demo")
 include(":samples:screen-capture-demo")
 
-// FFI subprojects — Panama bindings per native technology
-include(":ffi:win32")

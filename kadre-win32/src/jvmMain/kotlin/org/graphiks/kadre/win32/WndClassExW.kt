@@ -19,7 +19,7 @@
  *
  * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexw
  */
-package org.graphiks.kadre.ffi.win32
+package org.graphiks.kadre.win32
 
 import java.lang.foreign.Arena
 import java.lang.foreign.MemoryLayout
@@ -169,3 +169,5 @@ class WndClassExW(arena: Arena) {
         ).withName("WNDCLASSEXW")
     }
 }
+
+

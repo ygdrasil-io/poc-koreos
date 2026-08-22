@@ -24,7 +24,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api(project(":ffi:win32"))
+                api(libs.kffi.win32)
             }
         }
         jvmTest {
@@ -33,4 +33,8 @@ kotlin {
             }
         }
     }
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
