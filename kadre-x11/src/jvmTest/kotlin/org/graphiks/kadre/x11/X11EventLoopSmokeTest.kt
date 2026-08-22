@@ -11,6 +11,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
 import org.graphiks.kffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ApplicationHandler
@@ -170,12 +171,14 @@ class X11EventLoopSmokeTest {
         Arena.ofConfined().use { arena ->
             val display = arena.allocate(8L, 8L)
             val event = arena.allocate(96L, 8L)
-            event.set(ValueLayout.JAVA_INT, XCLIENT_SEND_EVENT_OFFSET, 1)
-            event.set(ValueLayout.ADDRESS, XCLIENT_DISPLAY_OFFSET, display)
-            event.set(ValueLayout.JAVA_LONG, XCLIENT_WINDOW_OFFSET, 10L)
-            event.set(ValueLayout.JAVA_LONG, XCLIENT_MESSAGE_TYPE_OFFSET, 20L)
-            event.set(ValueLayout.JAVA_INT, XCLIENT_FORMAT_OFFSET, 32)
-            event.set(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET, 30L)
+            val clientMessage = KffiXClientMessageEventStorage()
+            val clientEvent = KffiXClientMessageEventStorage.Companion.reinterpret(event)
+            clientMessage.send_event(clientEvent, 1)
+            clientMessage.display(clientEvent, display)
+            clientMessage.window(clientEvent, 10L)
+            clientMessage.message_type(clientEvent, 20L)
+            clientMessage.format(clientEvent, 32)
+            clientMessage.data_l0(clientEvent, 30L)
 
             assertEquals(1, event.get(ValueLayout.JAVA_INT, 16L))
             assertEquals(display.address(), event.get(ValueLayout.ADDRESS, 24L).address())

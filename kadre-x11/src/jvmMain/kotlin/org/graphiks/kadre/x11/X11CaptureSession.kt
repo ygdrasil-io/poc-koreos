@@ -4,6 +4,7 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
 import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.x11.binding.capture.*
+import org.graphiks.kffi.x11.generated.KffiXImageStorage
 import org.graphiks.kffi.x11.generated.XShmSegmentInfoCompat
 import org.graphiks.kffi.posix.LinuxPosix
 import kotlinx.coroutines.*
@@ -227,9 +228,10 @@ class X11CaptureSession(
     }
 
     private fun readXImage(imagePtr: MemorySegment, width: Int, height: Int): CaptureFrame? {
-        val image = imagePtr.reinterpret(64L)
-        val dataPtr = image.get(ValueLayout.ADDRESS, XIMAGE_DATA_OFFSET)
-        val bytesPerLine = image.get(ValueLayout.JAVA_INT, XIMAGE_BYTES_PER_LINE_OFFSET)
+        val image = KffiXImageStorage.Companion.reinterpret(imagePtr)
+        val imageStorage = KffiXImageStorage()
+        val dataPtr = imageStorage.data(image)
+        val bytesPerLine = imageStorage.bytes_per_line(image)
         if (dataPtr == MemorySegment.NULL || dataPtr.address() == 0L) return null
 
         val stride = if (bytesPerLine > 0) bytesPerLine else width * 4
