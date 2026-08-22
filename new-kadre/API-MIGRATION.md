@@ -4,7 +4,7 @@
 
 **Portée :** tous les dumps sous `kadre*/api/`, toutes les déclarations publiques des source sets publiés et leurs membres publics
 
-Ce registre rend explicite le devenir de l’API actuelle. Il ne constitue pas une promesse de compatibilité : une décision `replace` autorise un changement total de nom, de package, de forme et de sémantique. Les contrats cibles restent normatifs dans `DESIGN.md`.
+Ce registre rend explicite le devenir de l’API actuelle. Il ne constitue pas une promesse de compatibilité : une décision `replace` autorise un changement total de nom, de package, de forme et de sémantique. Les contrats cibles restent normatifs dans `DESIGN.md`. Ce registre couvre l’ABI source ; le catalogue documentaire fermé exigé par `DESIGN.md` couvre séparément et exhaustivement l’API cible avant toute génération de code.
 
 ## Règles de couverture
 
@@ -14,6 +14,8 @@ Les règles sont évaluées dans l’ordre, de la plus spécifique à la plus g�
 2. correspond à plusieurs règles incompatibles ;
 3. reste exposé depuis un package déclaré interne ;
 4. est supprimé avant que ses consumers internes aient migré.
+
+Le rapport conserve la liste nominative des symboles classés par une règle résiduelle. Une couverture algorithmique par le catch-all ne vaut pas approbation humaine : avant le chantier 11, chaque match résiduel reçoit une règle spécifique ou une validation explicite enregistrée dans le rapport.
 
 Décisions :
 
@@ -42,7 +44,7 @@ Décisions :
 | `PhysicalPosition`, `PhysicalSize`, `LogicalPosition`, `LogicalSize`, `Insets` et helpers DPI | keep/move | value types publics dans `surface`/`display`, unités jamais implicites |
 | `WindowId`, `DeviceId`, `FingerId`, `GamepadId` | replace | IDs opaques, constructeurs internes, validité limitée à la session |
 | timestamps ou IDs natifs nus | replace | `EventStamp`, `SessionInstant`, `SessionSequence` et IDs opaques |
-| listes, maps et `ByteArray` intégrées à des snapshots | replace | valeurs profondément immuables ou copies détenues par le consumer |
+| listes, maps et `ByteArray` intégrées à des snapshots | replace | value objects et collections immuables, copies détenues par le consumer ; une collection de handles conserve explicitement des ressources vivantes |
 
 ## Surface, fenêtre, display et apparence
 
@@ -50,7 +52,7 @@ Décisions :
 |---|---|---|
 | `Window` et tous ses getters/setters | replace | `HostSurface`, `Window`, `StateFlow`, `Window.apply` et opérations dédiées |
 | `WindowAttributes`, `AppKitWindowAttributes`, `AndroidWindowAttributes`, `UiKitWindowAttributes` | replace | `WindowSpec` immuable, DSL et options plateforme typées |
-| `WindowRequestResult`, `SurfaceSizeRequestResult`, `RequestError` | replace | `KadreResult`, `WindowRequestOutcome`, `WindowUpdateOutcome` |
+| `WindowRequestResult`, `SurfaceSizeRequestResult`, `RequestError` | replace | `KadreResult`, `WindowRequestOutcome`, `WindowUpdateOutcome`, `WindowCloseOutcome` et réponses close typées |
 | `MonitorHandle`, `VideoMode` | replace | `DisplayManager`, `DisplayInventory`, `DisplayState` |
 | `Fullscreen` | replace | modes et contraintes dans `WindowSpec`/`WindowUpdate` et `WindowCapabilities` |
 | `Theme`, `WindowLevel`, `WindowButtons` | keep/move | valeurs de `WindowState`, `WindowSpec` ou `WindowUpdate` avec capability typée |
@@ -58,12 +60,12 @@ Décisions :
 | `CursorIcon`, `CursorGrabMode`, `CursorImage`, `CustomCursor` | replace | état/capabilities de surface, ressource custom cursor owned et actions d’interaction lorsque requises |
 | `Icon` | replace | valeur immuable avec copie défensive dans `WindowSpec`/`WindowUpdate` |
 | `UserAttentionType`, `ResizeDirection` | keep/move | opérations dédiées de fenêtre ; token d’interaction lorsque le host l’exige |
-| redraw, resize, move, scale, focus, theme et occlusion de `WindowEvent` | replace | `SurfaceState`/`SurfaceEvent` ou `WindowState`/`WindowEvent`, avec révision et stamp |
+| redraw, resize, move, scale, focus, theme, occlusion et close requested de `WindowEvent` | replace | `SurfaceState`/`SurfaceEvent` ou `WindowState`/`WindowEvent`, avec révision, stamp et protocole close accept/reject/forced |
 | drag-and-drop de `WindowEvent` à base de chemins `String` | replace | offre de drop attachée à la surface ; aucun faux chemin portable ou accès implicite au filesystem |
 | transparent, blur, decorations, hit-test, content protection, system menu, drag window/resize | replace | champs ou verbes dédiés avec capabilities et résultats typés ; aucun no-op silencieux |
 | `RawWindowHandle`, `RawDisplayHandle`, `OwnedDisplayHandle` | replace | handles owner-scoped sous `@KadrePlatformApi` dans les source sets concernés |
 
-Un `HTMLElement`, une `View` ou une vue UIKit matche toujours la ligne `HostSurface`, jamais la ligne `Window`. Les implementations concrètes `AndroidWindow`, AppKit/Win32/X11/Wayland windows et UIKit views deviennent internes.
+Un `HTMLElement`, une `View` ou une vue UIKit matche toujours la ligne `HostSurface`, jamais la ligne `Window`. Les implémentations concrètes `AndroidWindow`, AppKit/Win32/X11/Wayland windows et UIKit views deviennent internes.
 
 ## Clavier, pointeur, tactile, gestes, raw input et IME
 
@@ -75,10 +77,10 @@ Un `HTMLElement`, une `View` ou une vue UIKit matche toujours la ligne `HostSurf
 | `NativeKeyCode`, `NativeLogicalKey`, `NativeKeyInfo`, `KeyPlatform`, `PlatformEvent*` | internalize | détails backend ; vue optionnelle strictement sous `@KadrePlatformApi` si nécessaire |
 | `PointerKind`, `PointerSource`, `TouchPhase`, `TouchForce`, `FingerId`, tablet tool types | keep/move | événements et snapshots de `SurfaceInput` |
 | pinch, pan, rotation, double tap et touchpad pressure | keep/move | input de surface, activation explicite lorsqu’un recognizer doit être installé |
-| `ImePurpose`, `ImeCapability`, `ImeCapabilities`, anciens `WindowEvent.Ime*` | replace | `TextInputSession`, `TextInputState`, `TextInputEvent` et offsets UTF-16 |
+| `ImePurpose`, `ImeCapability`, `ImeCapabilities`, anciens `WindowEvent.Ime*` | replace | `TextInputSession`, `TextInputState`, `TextInputEvent`, offsets UTF-16 et `TextDocumentRevision` anti-stale |
 | `DeviceEvents` et `listenDeviceEvents` | replace | `RawInputAccess`, `DevicePolicy`, permissions et routing de session |
 
-La perte de focus, la déconnexion ou l’overflow remplace les releases synthétiques par `InputEvent.StateReset`. Les APIs nécessitant un serial ou une user activation utilisent `InteractionContext`, pas un événement `Flow` livré trop tard.
+La perte de focus, la déconnexion ou la révocation remplace les releases synthétiques par un `SurfaceInputState` neutre suivi de `InputEvent.StateReset`. Un overflow publie directement le snapshot composé terminal et termine le flow avec une failure hors de la lane saturée, sans promettre un dernier événement impossible à admettre. Les APIs nécessitant un serial ou une user activation utilisent `InteractionContext`, pas un événement `Flow` livré trop tard.
 
 ## Gamepads
 
@@ -94,12 +96,12 @@ La perte de focus, la déconnexion ou l’overflow remplace les releases synthé
 | Surface actuelle | Décision | Cible ou justification |
 |---|---|---|
 | `ScreenCapturer` | replace | `CaptureManager` attaché à la session |
-| `CapturePermission` | replace | `PermissionState` observable et révocable |
+| `CapturePermission` | replace | `CaptureManagerState` atomique regroupant permission observable, capabilities, sources et révision |
 | `CaptureSource`, `DisplayInfo`, `WindowInfo`, `CaptureRegion`, `CaptureConfig` | replace | sources/requests typées, host picker et IDs opaques |
 | `CaptureSession` | replace | owner structuré, démarrage au premier `collectFrames`, `CaptureOutcome` |
-| `CaptureFrame`, `PixelFormat` | replace | lease closeable, planes décrites, configuration revision et color encoding complet |
+| `CaptureFrame`, `PixelFormat` | replace | lease closeable, planes décrites, configuration revision, color encoding complet, horloge média distincte et budget buffer en octets |
 | `CaptureError` | replace | `KadreFailure` et outcomes stables |
-| `UIKitScreenCapturer`, `UIKitCaptureSession`, `AndroidScreenCapturer`, `AndroidCaptureSession` et équivalents backend | internalize | implementations derrière `CaptureManager` |
+| `UIKitScreenCapturer`, `UIKitCaptureSession`, `AndroidScreenCapturer`, `AndroidCaptureSession` et équivalents backend | internalize | implémentations derrière `CaptureManager` |
 
 ## Adaptateurs et déclarations de plateforme
 
@@ -123,4 +125,4 @@ La perte de focus, la déconnexion ou l’overflow remplace les releases synthé
 | toute déclaration actuelle `org.graphiks.kadre.core.**` non citée plus haut | internalize par défaut | elle ne reste publique que si une règle `keep/move` ou `replace` et un contrat cible explicite sont ajoutés avant migration |
 | toute déclaration publique de backend non citée plus haut | internalize par défaut | une exception exige une entrée dans ce registre, un package cible et un consumer compile test |
 
-Les deux règles résiduelles ferment la couverture de la baseline sans transformer les accidents ABI en fonctionnalités à préserver. Toute nouvelle déclaration publique ajoutée après la baseline doit être enregistrée directement dans sa forme cible ; elle ne peut s’abriter derrière ces règles de cleanup.
+Les deux règles résiduelles ferment la couverture mécanique de la baseline sans transformer les accidents ABI en fonctionnalités à préserver. Elles ne ferment pas la revue humaine : leur rapport nominatif doit être vide ou explicitement approuvé avant la suppression finale. Toute nouvelle déclaration publique ajoutée après la baseline doit être enregistrée directement dans sa forme cible ; elle ne peut s’abriter derrière ces règles de cleanup.
