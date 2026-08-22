@@ -28,11 +28,6 @@ dependencyResolutionManagement {
             mavenContent { snapshotsOnly() }
         }
         mavenCentral()
-        maven {
-            name = "CentralPortalSnapshots"
-            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
-            content { includeGroup("org.graphiks") }
-        }
 
         // Kotlin/JS toolchain: the KGP plugin downloads Node.js and Yarn from ivy
         // repos that it normally adds at the project level — which
