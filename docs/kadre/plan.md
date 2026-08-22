@@ -57,7 +57,7 @@ A KMP lib that:
 |------|---------------|
 | PM / Tech Lead | Project management, spec validation |
 | Kadre team | Foundation + 3 new backends + Pong implementation |
-| kextract team | Win32 bindings (already supported), X11 (to confirm), Wayland (to confirm) |
+| kextract team | Win32 bindings (already supported), X11 (to confirm) |
 | wgpu4k team | Web targets already available; consumers on the Pong side |
 | Reviewers | Plan/spec validation in PR |
 
@@ -169,7 +169,7 @@ A KMP lib that:
 
 **Deliverables**:
 - `kadre-x11` (jvm + kextract FFM Xlib): XOpenDisplay, XCreateWindow, XSelectInput, event loop XNextEvent
-- `kadre-wayland` (jvm + kextract FFM libwayland-client): wl_display_connect, wl_registry, wl_compositor, xdg_shell for top-level windows
+- `kadre-wayland` (jvm + published `org.graphiks:kffi-wayland` FFM binding): wl_display_connect, wl_registry, wl_compositor, xdg_shell for top-level windows
 - `RawWindowHandle.Xlib(window: Long, display: Long)` and `Wayland(surface: Long, display: Long)` variants
 - `RawDisplayHandle.Xlib` and `Wayland` variants
 - Runtime detection at startup: try Wayland, fall back to X11 (via `XDG_SESSION_TYPE` or connection attempt)
@@ -230,7 +230,7 @@ A KMP lib that:
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
 | **Kotlin/Wasm still in alpha** | Medium | Unanticipated runtime bugs | Target the most stable Kotlin version when the Web backend starts. JS first as MVP, WASM next. |
-| **kextract X11/Wayland untested** | High | Linux backend delayed | Smoke test kextract on Xlib early. Upstream coordination with kextract team. |
+| **Wayland binding integration untested** | High | Linux backend delayed | Smoke test the published `org.graphiks:kffi-wayland` binding early. |
 | **Wayland protocol versions** (xdg_shell, xdg_decoration) | Medium | Compositor compat | Target xdg_shell v3 + zxdg_decoration_v1 (minimum Mutter 3.32+, KWin 5.20+). Fallback: no custom decorations. |
 | **Auto X11/Wayland detection** unreliable | Low | Degraded Linux UX | `KADRE_LINUX_BACKEND` environment variable for manual override. |
 | **wgpu4k Web doesn't support all formats** (compute shaders, etc.) | Low | Sample web limitations | Pong = render-only, not affected. Monitor for future uses. |
@@ -247,7 +247,7 @@ A KMP lib that:
 |------------|----------------|--------|
 | kextract Win32 | To confirm | Probably supported (FFM Win32 = standard path) |
 | kextract X11 | To confirm | To investigate early |
-| kextract Wayland | To confirm | To investigate early |
+| `org.graphiks:kffi-wayland` | 1.0.0-SNAPSHOT | Integrated |
 | **wgpu4k Web JS** | To align | **Available** (confirmed) |
 | **wgpu4k Web WASM** | To align | **Available** (confirmed) |
 | Kotlin | 2.3.21+ (aligned with stable Kotlin/Wasm) | Configured |
