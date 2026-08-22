@@ -18,11 +18,6 @@ private val constantsClass = Class.forName(
     false,
     Thread.currentThread().contextClassLoader,
 )
-private val ximConstantsClass = Class.forName(
-    "org.graphiks.kffi.x11.generated.X11_xim_constantsKt",
-    false,
-    Thread.currentThread().contextClassLoader,
-)
 
 /**
  * Resolves a function from the generated kffi-x11 facade.
@@ -142,12 +137,6 @@ private fun generatedInt(name: String, fallback: Int): Int =
 private fun generatedLong(name: String, fallback: Long): Long =
     (generatedConstant(name) as? Long) ?: fallback
 
-private fun generatedString(name: String, fallback: String): String = try {
-    (ximConstantsClass.getField(name).get(null) as? String) ?: fallback
-} catch (_: Throwable) {
-    fallback
-}
-
 val KeyPress: Int = generatedInt("KeyPress", 2)
 val KeyRelease: Int = generatedInt("KeyRelease", 3)
 val ButtonPress: Int = generatedInt("ButtonPress", 4)
@@ -206,18 +195,6 @@ val XIMPreeditPosition: Long = generatedLong("XIMPreeditPosition", 0x0004)
 val XIMPreeditNothing: Long = generatedLong("XIMPreeditNothing", 0x0008)
 val XIMStatusNothing: Long = generatedLong("XIMStatusNothing", 0x0400)
 val AnyPropertyType: Long = generatedLong("AnyPropertyType", 0L)
-
-val XNInputStyle: String = generatedString("XNInputStyle", "inputStyle")
-val XNClientWindow: String = generatedString("XNClientWindow", "clientWindow")
-val XNFocusWindow: String = generatedString("XNFocusWindow", "focusWindow")
-val XNPreeditAttributes: String = generatedString("XNPreeditAttributes", "preeditAttributes")
-val XNArea: String = generatedString("XNArea", "area")
-val XNAreaNeeded: String = generatedString("XNAreaNeeded", "areaNeeded")
-val XNSpotLocation: String = generatedString("XNSpotLocation", "spotLocation")
-val XNPreeditStartCallback: String = generatedString("XNPreeditStartCallback", "preeditStartCallback")
-val XNPreeditDrawCallback: String = generatedString("XNPreeditDrawCallback", "preeditDrawCallback")
-val XNPreeditDoneCallback: String = generatedString("XNPreeditDoneCallback", "preeditDoneCallback")
-val XNCommitStringCallback: String = generatedString("XNCommitStringCallback", "commitStringCallback")
 
 val XIM_PROC_DESCRIPTOR: FunctionDescriptor = FunctionDescriptor.ofVoid(
     ValueLayout.ADDRESS,

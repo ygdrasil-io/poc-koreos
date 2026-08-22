@@ -23,6 +23,15 @@ import org.graphiks.kffi.x11.generated.KffiXIMPreeditDrawCallbackStructStorage
 import org.graphiks.kffi.x11.generated.KffiXIMPreeditStateNotifyCallbackStructStorage
 import org.graphiks.kffi.x11.generated.KffiXIMTextStorage
 import org.graphiks.kffi.x11.generated.KffiXSetWindowAttributesStorage
+import org.graphiks.kffi.x11.generated.XNArea
+import org.graphiks.kffi.x11.generated.XNClientWindow
+import org.graphiks.kffi.x11.generated.XNCommitStringCallback
+import org.graphiks.kffi.x11.generated.XNFocusWindow
+import org.graphiks.kffi.x11.generated.XNInputStyle
+import org.graphiks.kffi.x11.generated.XNPreeditDoneCallback
+import org.graphiks.kffi.x11.generated.XNPreeditDrawCallback
+import org.graphiks.kffi.x11.generated.XNPreeditStartCallback
+import org.graphiks.kffi.x11.generated.XNSpotLocation
 import org.graphiks.kffi.x11.generated.XPoint
 import org.graphiks.kffi.x11.generated.XRectangle
 import org.graphiks.kadre.core.CursorGrabMode
