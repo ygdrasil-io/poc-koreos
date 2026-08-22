@@ -25,7 +25,7 @@
  *
  * Reference: https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-msg
  */
-package org.graphiks.kadre.ffi.win32
+package org.graphiks.kadre.win32
 
 import java.lang.foreign.Arena
 import java.lang.foreign.MemoryLayout
@@ -105,3 +105,5 @@ fun Arena.allocateMsg(): MemorySegment =
  */
 fun MemorySegment.msgMessage(): Int =
     this.get(ValueLayout.JAVA_INT, MsgLayout.OFFSET_MESSAGE.toLong())
+
+

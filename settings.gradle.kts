@@ -24,6 +24,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            name = "CentralPortalSnapshots"
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+            content { includeGroup("org.graphiks") }
+        }
 
         // Kotlin/JS toolchain: the KGP plugin downloads Node.js and Yarn from ivy
         // repos that it normally adds at the project level — which
@@ -97,6 +102,5 @@ include(":samples:screen-capture-demo")
 
 // FFI subprojects — Panama bindings per native technology
 include(":ffi:objc")
-include(":ffi:win32")
 include(":ffi:x11")
 include(":ffi:wayland")

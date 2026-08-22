@@ -12,7 +12,7 @@ package org.graphiks.kadre.win32
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.NativeKeyCode
 import org.graphiks.kadre.core.PhysicalKey
-import org.graphiks.kadre.ffi.win32.generated.MapVirtualKeyW
+import org.graphiks.kffi.win32.generated.MapVirtualKeyW
 
 /**
  * `MapVirtualKeyW` translation type: scan code → virtual key, distinguishing
