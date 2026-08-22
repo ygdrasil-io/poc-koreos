@@ -1956,9 +1956,8 @@ private val NS_SIZE_LAYOUT: java.lang.foreign.GroupLayout = java.lang.foreign.Me
 /**
  * GroupLayout for NSRect / CGRect — nested struct {origin: CGPoint, size: CGSize}.
  *
- * Used manually for ObjC classes NOT included in `--include-objc-class`
- * (e.g. NSTrackingArea). Included classes benefit from the layouts inlined by
- * kextract v0.0.2 in their wrappers.
+ * Used manually for ObjC classes not covered by the generated kffi-objc
+ * wrappers (e.g. NSTrackingArea).
  */
 private val NS_RECT_LAYOUT: java.lang.foreign.GroupLayout = java.lang.foreign.MemoryLayout.structLayout(
     java.lang.foreign.MemoryLayout.structLayout(

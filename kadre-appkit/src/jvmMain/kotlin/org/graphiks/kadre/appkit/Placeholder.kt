@@ -10,6 +10,6 @@
  */
 package org.graphiks.kadre.appkit
 
-// TODO M1: EventLoop (actual jvmMain) via kextract + AppKit FFM
+// TODO M1: EventLoop (actual jvmMain) via AppKit FFM bindings from kffi-objc
 // TODO M1: KadreApplication, KadreAppDelegate, KadreWindowDelegate (Obj-C subclasses)
 // TODO M1: NSWindow wrapped in a kadre-core Window implementation

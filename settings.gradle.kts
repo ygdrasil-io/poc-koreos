@@ -100,6 +100,5 @@ include(":samples:simulation-demo")
 include(":samples:screen-capture-demo")
 
 // FFI subprojects — Panama bindings per native technology
-include(":ffi:objc")
 include(":ffi:posix")
 include(":ffi:win32")
