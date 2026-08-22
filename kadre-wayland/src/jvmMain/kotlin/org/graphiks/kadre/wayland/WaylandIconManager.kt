@@ -1,8 +1,10 @@
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.xdg_toplevel_icon_v1_interface
 
 import org.graphiks.kadre.core.Icon
-import org.graphiks.kadre.ffi.wayland.generated.wl_shm_format
+import org.graphiks.kffi.posix.LinuxPosix
+import org.graphiks.kffi.wayland.generated.wl_shm_format
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -79,7 +81,7 @@ internal class WaylandIconManager(
     /** Creates a new xdg_toplevel_icon_v1 object. */
     private fun createIcon(): Long? {
         val marshal = wlProxyMarshalNewId ?: return null
-        val iface = xdgToplevelIconV1Interface
+        val iface = xdg_toplevel_icon_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(iconManagerPtr),
@@ -195,14 +197,21 @@ internal class WaylandIconManager(
 
             val fd = createShmFd("kadre-icon", size) ?: return 0L
 
-            val mapped = nativeMmap?.let { mmap ->
-                try {
-                    mmap.invokeExact(MemorySegment.NULL, size.toLong(), PROT_READ or PROT_WRITE, MAP_SHARED, fd, 0L) as MemorySegment
-                } catch (_: Throwable) { MemorySegment.NULL }
-            } ?: MemorySegment.NULL
+            val mapped = try {
+                LinuxPosix.mmap(
+                    MemorySegment.NULL,
+                    size.toLong(),
+                    LinuxPosix.PROT_READ or LinuxPosix.PROT_WRITE,
+                    LinuxPosix.MAP_SHARED,
+                    fd,
+                    0L,
+                )
+            } catch (_: Throwable) {
+                MemorySegment.NULL
+            }
 
-            if (mapped == MemorySegment.NULL || mapped.address() == MAP_FAILED_PTR) {
-                nativeClose?.invokeExact(fd)
+            if (mapped == MemorySegment.NULL || mapped.address() == LinuxPosix.MAP_FAILED_ADDRESS) {
+                runCatching { LinuxPosix.close(fd) }
                 return 0L
             }
 
@@ -221,15 +230,15 @@ internal class WaylandIconManager(
                     mapped.set(ValueLayout.JAVA_INT, i * 4L, argb)
                 }
             } catch (_: Throwable) {
-                nativeMunmap?.invokeExact(mapped, size.toLong())
-                nativeClose?.invokeExact(fd)
+                runCatching { LinuxPosix.munmap(mapped, size.toLong()) }
+                runCatching { LinuxPosix.close(fd) }
                 return 0L
             }
 
-            nativeMunmap?.invokeExact(mapped, size.toLong())
+            runCatching { LinuxPosix.munmap(mapped, size.toLong()) }
 
-            val poolMarshal = wlShmCreatePool ?: run { nativeClose?.invokeExact(fd); return 0L }
-            val poolIface = wlShmPoolInterface ?: run { nativeClose?.invokeExact(fd); return 0L }
+            val poolMarshal = wlShmCreatePool ?: run { runCatching { LinuxPosix.close(fd) }; return 0L }
+            val poolIface = wlShmPoolInterface ?: run { runCatching { LinuxPosix.close(fd) }; return 0L }
             val poolPtr = try {
                 poolMarshal.invokeExact(
                     MemorySegment.ofAddress(shmPtr), 0, poolIface, 1, 0, fd, size, MemorySegment.NULL,
@@ -237,11 +246,11 @@ internal class WaylandIconManager(
             } catch (_: Throwable) { MemorySegment.NULL }
 
             if (poolPtr == MemorySegment.NULL || poolPtr.address() == 0L) {
-                nativeClose?.invokeExact(fd)
+                runCatching { LinuxPosix.close(fd) }
                 return 0L
             }
 
-            nativeClose?.invokeExact(fd)
+            runCatching { LinuxPosix.close(fd) }
 
             val bufMarshal = wlShmPoolCreateBuffer ?: run {
                 wlProxyMarshalFlagsVoid?.invokeExact(poolPtr, 1, MemorySegment.NULL, 1, WL_MARSHAL_FLAG_DESTROY)

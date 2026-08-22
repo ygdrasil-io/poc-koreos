@@ -1,4 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# The mandatory PR correctness matrix is intentionally defined in the separate
+# cross-platform-correctness workflow. Its aggregate job is the branch-protection
+# status; this legacy workflow remains a broader build and packaging signal.
 # Kadre CI — Multi-Platform
 #
 # Two-tier strategy (GRA-160 + GRA-39):
@@ -47,6 +51,7 @@ jobs:
   build-and-test:
     name: build-and-test
     runs-on: macos-15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -96,6 +101,7 @@ jobs:
             # :kadre:checkKotlinAbi
           )
           ./gradlew "${tasks[@]}" \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -120,6 +126,7 @@ jobs:
             # :kadre:checkKotlinAbi
           )
           ./gradlew "${tasks[@]}" \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -131,6 +138,7 @@ jobs:
   macos-build:
     name: macos-build
     runs-on: macos-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -146,17 +154,21 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run AppKit runtime gate
+        run: scripts/test-appkit-runtime.sh
+
       # Compile the macOS-only modules + JVM samples
       # hello-triangle requires wgpu4k — compiled but not run in CI.
       - name: Build macOS modules + JVM samples
         run: |
           ./gradlew \
             :kadre-core:jvmTest \
-            :kadre-appkit:build \
+            :kadre-appkit:assemble \
             :kadre:jvmTest \
             :samples:hello-metal:build \
             :samples:hello-triangle:build \
             :samples:hello-window:compileKotlinJvm \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -172,6 +184,7 @@ jobs:
   ios-build:
     name: ios-build
     runs-on: macos-15
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -204,6 +217,7 @@ jobs:
             :kadre:compileKotlinIosSimulatorArm64 \
             :samples:hello-touch:compileKotlinIosSimulatorArm64 \
             :samples:hello-window:compileKotlinIosSimulatorArm64 \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -213,6 +227,7 @@ jobs:
           ./gradlew \
             :kadre-core:iosSimulatorArm64Test \
             :kadre:iosSimulatorArm64Test \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -231,6 +246,7 @@ jobs:
   android-build:
     name: android-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -266,9 +282,10 @@ jobs:
         run: |
           ./gradlew \
             :kadre-android:build \
-            :kadre:compileDebugKotlinAndroid \
+            :kadre:compileAndroidMain \
             :samples:hello-touch-android:assembleDebug \
             :samples:hello-window-android:assembleDebug \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -279,6 +296,7 @@ jobs:
   web-build:
     name: web-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -314,6 +332,7 @@ jobs:
             :kadre-js:compileKotlinJs \
             :kadre-wasm:compileKotlinWasmJs \
             :kadre-web-common:allTests \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -331,6 +350,7 @@ jobs:
   windows-build:
     name: windows-build
     runs-on: windows-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -360,6 +380,7 @@ jobs:
             :kadre-win32:build \
             :kadre-win32:jvmTest \
             :samples:hello-triangle:build \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -379,6 +400,7 @@ jobs:
   linux-x11-build:
     name: linux-x11-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -412,6 +434,7 @@ jobs:
           xvfb-run -a ./gradlew \
             :kadre-core:jvmTest \
             :kadre-x11:jvmTest \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 
@@ -430,6 +453,7 @@ jobs:
   linux-wayland-build:
     name: linux-wayland-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     if: |
       github.base_ref == 'master' ||
       github.ref == 'refs/heads/master' ||
@@ -463,6 +487,7 @@ jobs:
           scripts/ci-wayland-runtime.sh ./gradlew \
             :kadre-core:jvmTest \
             :kadre-wayland:jvmTest \
+            --refresh-dependencies \
             --no-daemon \
             --stacktrace
 

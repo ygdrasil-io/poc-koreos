@@ -46,7 +46,8 @@ import kotlin.math.max
  *
  * | Event | Surface state | [rawWindowHandle] |
  * |-----------|--------------|-------------------|
- * | After [AndroidEventLoop.createWindow] | Unavailable | Throws [IllegalStateException] |
+ * | After [AndroidEventLoop.createWindow] before `surfaceCreated` | Unavailable | Throws [IllegalStateException] |
+ * | After [AndroidEventLoop.createWindow] during `canCreateSurfaces` | Available | Returns valid [RawWindowHandle.Android] |
  * | After [onSurfaceAvailable] | Available | Returns valid [RawWindowHandle.Android] |
  * | After [onSurfaceReleased] | Unavailable | Throws [IllegalStateException] |
  *
@@ -55,12 +56,11 @@ import kotlin.math.max
  * and must release the handle before [org.graphiks.kadre.core.ApplicationHandler.destroySurfaces].
  */
 class AndroidWindow internal constructor(
+    override val id: WindowId,
     internal val surfaceView: KadreImeSurfaceView,
     private val eventLoop: AndroidEventLoop,
     private val activity: KadreActivity,
 ) : Window {
-
-    override val id: WindowId = WindowId(surfaceView.hashCode().toLong())
 
     @Volatile
     private var _surface: android.view.Surface? = null
@@ -143,13 +143,10 @@ class AndroidWindow internal constructor(
         )
 
     @Volatile
-    internal var needsRedraw: Boolean = false
-
-    @Volatile
     internal var handleVolumeKeys: Boolean = false
 
     override fun requestRedraw() {
-        needsRedraw = true
+        eventLoop.requestRedraw(id)
     }
 
     override val innerSize: PhysicalSize<Int>
@@ -192,7 +189,7 @@ class AndroidWindow internal constructor(
     }
 
     override fun close() {
-        // No-op at the library level; closing is up to the app
+        eventLoop.closeWindow(this)
     }
 
     // ── R5-IME: Input Method Editor ────────────────────────────────────────────
@@ -213,7 +210,7 @@ class AndroidWindow internal constructor(
                 applyImePurposeToEditorInfo(currentImePurpose, editorInfo)
                 KadreInputConnection(
                     dispatchEvent = { event ->
-                        activity.handler.windowEvent(eventLoop, id, event)
+                        eventLoop.queueWindowEvent(id, event)
                     },
                     targetView = surfaceView,
                     editorInfo = editorInfo,
@@ -366,7 +363,12 @@ class AndroidWindow internal constructor(
                 override val position: PhysicalPosition<Int> = PhysicalPosition(0, 0)
                 override val scaleFactor: Double = dm.density.toDouble()
                 override val currentVideoMode: VideoMode = VideoMode(
-                    PhysicalSize(dm.widthPixels, dm.heightPixels), null, null)
+                    size = PhysicalSize(dm.widthPixels, dm.heightPixels),
+                    bitDepth = null,
+                    refreshRateMilliHz = refreshRateMillihertz(
+                        surfaceView.display?.refreshRate ?: 0f,
+                    ),
+                )
                 override val videoModes: List<VideoMode> = listOf(currentVideoMode)
             }
         } catch (_: Throwable) { null }

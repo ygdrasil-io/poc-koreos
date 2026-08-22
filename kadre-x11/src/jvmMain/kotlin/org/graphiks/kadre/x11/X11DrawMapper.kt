@@ -42,10 +42,11 @@
  */
 package org.graphiks.kadre.x11
 
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
@@ -157,7 +158,9 @@ object X11DrawMapper {
         eventSegment: MemorySegment,
         wmDeleteWindow: Long,
     ): WindowEvent? {
-        val atom = eventSegment.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
+        val clientMessage = KffiXClientMessageEventStorage()
+        val event = KffiXClientMessageEventStorage.Companion.reinterpret(eventSegment)
+        val atom = clientMessage.data_l0(event)
         return if (atom == wmDeleteWindow) WindowEvent.CloseRequested else null
     }
 }

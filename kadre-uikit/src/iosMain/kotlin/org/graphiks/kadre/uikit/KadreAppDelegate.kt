@@ -1,11 +1,192 @@
 package org.graphiks.kadre.uikit
 
 import org.graphiks.kadre.core.ApplicationHandler
+import org.graphiks.kadre.core.StartCause
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExportObjCClass
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationDelegateProtocol
 import platform.UIKit.UIResponder
+
+/** Owns the production ordering shared by delegate callbacks and lifecycle tests. */
+internal class UIKitLifecycleOrchestrator(
+    private val eventLoop: UIKitActiveEventLoop,
+) {
+    private var launched = false
+    private var active = false
+    private var foreground = false
+    private var terminating = false
+    private var deliveringTransitions = false
+    private val pendingTransitions = mutableListOf<() -> Unit>()
+
+    internal fun didFinishLaunching() {
+        if (launched || terminating) return
+        launched = true
+        active = true
+        foreground = true
+        submitTransition {
+            runNonTerminalIteration(
+                cause = StartCause.Init,
+                beforeEvents = { eventLoop.handler.resumed(eventLoop) },
+            ) {
+                recreateSurfaces {
+                    handler.canCreateSurfaces(this)
+                }
+            }
+        }
+    }
+
+    internal fun didBecomeActive() {
+        if (!launched || terminating || active || !foreground) return
+        active = true
+        submitTransition {
+            runNonTerminalIteration(
+                cause = StartCause.WaitCancelled(),
+                beforeEvents = { eventLoop.handler.resumed(eventLoop) },
+            ) {
+                runNonTerminalStages(
+                    { dispatchWindowFocused(gained = true) },
+                    this::dispatchThemeChangedIfNeeded,
+                )
+            }
+        }
+    }
+
+    internal fun willResignActive() {
+        if (!launched || terminating || !active) return
+        active = false
+        submitTransition {
+            runNonTerminalIteration(cause = StartCause.WaitCancelled()) {
+                runNonTerminalStages(
+                    { dispatchWindowFocused(gained = false) },
+                    { handler.suspended(this) },
+                )
+            }
+        }
+    }
+
+    internal fun didEnterBackground() {
+        if (!launched || terminating || active || !foreground) return
+        foreground = false
+        submitTransition {
+            runNonTerminalIteration(cause = StartCause.WaitCancelled()) {
+                runNonTerminalStages(
+                    { dispatchOccluded(occluded = true) },
+                    this::destroySurfaces,
+                )
+            }
+        }
+    }
+
+    internal fun willEnterForeground() {
+        if (!launched || terminating || active || foreground) return
+        foreground = true
+        submitTransition {
+            runNonTerminalIteration(cause = StartCause.WaitCancelled()) {
+                runNonTerminalStages(
+                    { dispatchOccluded(occluded = false) },
+                    {
+                        recreateSurfaces {
+                            handler.canCreateSurfaces(this)
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    internal fun willTerminate() {
+        if (!launched || terminating) return
+        terminating = true
+        active = false
+        foreground = false
+        eventLoop.requestTerminalTeardown()
+        submitTransition(terminal = true) {
+            eventLoop.runLifecycleIteration(
+                cause = StartCause.WaitCancelled(),
+                callbacks = {
+                    runAllUIKitCleanupStages(
+                        this::destroySurfaces,
+                        this::dispatchWindowsDestroyed,
+                        { handler.suspended(this) },
+                    )
+                },
+                afterAboutToWait = eventLoop::exit,
+            )
+        }
+    }
+
+    private fun runNonTerminalIteration(
+        cause: StartCause,
+        beforeEvents: () -> Unit = {},
+        callbacks: UIKitActiveEventLoop.() -> Unit,
+    ) {
+        eventLoop.runLifecycleIteration(
+            cause = cause,
+            callbacks = callbacks,
+            beforeEvents = beforeEvents,
+            shouldRunStage = { !terminating },
+        )
+    }
+
+    private fun runNonTerminalStages(vararg stages: () -> Unit) {
+        var firstFailure: Throwable? = null
+        stages.forEach { stage ->
+            if (terminating) return@forEach
+            try {
+                stage()
+            } catch (failure: Throwable) {
+                val primary = firstFailure
+                if (primary == null) {
+                    firstFailure = failure
+                } else if (primary !== failure) {
+                    primary.addSuppressed(failure)
+                }
+            }
+        }
+        firstFailure?.let { throw it }
+    }
+
+    private fun submitTransition(terminal: Boolean = false, transition: () -> Unit) {
+        if (terminal) pendingTransitions.clear()
+        pendingTransitions += transition
+        if (deliveringTransitions) return
+
+        deliveringTransitions = true
+        var firstFailure: Throwable? = null
+        try {
+            while (pendingTransitions.isNotEmpty()) {
+                val next = pendingTransitions.removeAt(0)
+                try {
+                    next()
+                } catch (failure: Throwable) {
+                    val primary = firstFailure
+                    if (primary == null) {
+                        firstFailure = failure
+                    } else if (primary !== failure) {
+                        primary.addSuppressed(failure)
+                    }
+                }
+            }
+        } finally {
+            deliveringTransitions = false
+        }
+        firstFailure?.let { throw it }
+    }
+}
+
+/** Completes delegate-owned terminal cleanup before propagating any failure. */
+internal fun runUIKitDelegateTermination(
+    terminateLifecycle: () -> Unit,
+    clearLifecycle: () -> Unit,
+    clearRegistry: () -> Unit,
+) {
+    runAllUIKitCleanupStages(
+        terminateLifecycle,
+        clearLifecycle,
+        clearRegistry,
+    )
+}
 
 /**
  * Kadre AppDelegate for iOS.
@@ -18,27 +199,28 @@ import platform.UIKit.UIResponder
  *
  * ### Startup
  * ```
- * application(_:didFinishLaunchingWithOptions:) → canCreateSurfaces
- * applicationDidBecomeActive                   → resumed
+ * application(_:didFinishLaunchingWithOptions:) → resumed → newEvents(Init)
+ *                                               → canCreateSurfaces → aboutToWait
  * ```
  *
  * ### Screen lock / short interruption (call, Control Center)
  * ```
- * applicationWillResignActive  → suspended
- * applicationDidBecomeActive   → resumed       (unlock / return)
+ * applicationWillResignActive  → newEvents(WaitCancelled) → Focused(false) → suspended → aboutToWait
+ * applicationDidBecomeActive   → resumed → newEvents(WaitCancelled) → Focused(true) → aboutToWait
  * ```
  *
  * ### Full backgrounding (Home button, App Switcher)
  * ```
- * applicationWillResignActive  → suspended + Focused(false)
- * applicationDidEnterBackground → Occluded(true) + destroySurfaces
- * applicationWillEnterForeground → Occluded(false) + canCreateSurfaces
- * applicationDidBecomeActive   → resumed + Focused(true)
+ * applicationWillResignActive    → newEvents(WaitCancelled) → Focused(false) → suspended → aboutToWait
+ * applicationDidEnterBackground  → newEvents(WaitCancelled) → Occluded(true) → destroySurfaces → aboutToWait
+ * applicationWillEnterForeground → newEvents(WaitCancelled) → Occluded(false) → canCreateSurfaces → aboutToWait
+ * applicationDidBecomeActive     → resumed → newEvents(WaitCancelled) → Focused(true) → aboutToWait
  * ```
  *
  * ### Termination
  * ```
- * applicationWillTerminate     → destroySurfaces (if not already called)
+ * applicationWillTerminate → newEvents(WaitCancelled) → destroySurfaces → Destroyed
+ *                          → suspended → aboutToWait → exit()
  * ```
  *
  * ## Two parallel signalling channels
@@ -61,7 +243,7 @@ import platform.UIKit.UIResponder
 @ExportObjCClass
 class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
 
-    private var eventLoop: UIKitActiveEventLoop? = null
+    private var lifecycle: UIKitLifecycleOrchestrator? = null
 
     // ── Startup ─────────────────────────────────────────────────────────────
 
@@ -75,12 +257,12 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
         application: UIApplication,
         didFinishLaunchingWithOptions: Map<Any?, *>?,
     ): Boolean {
-        println("[KadreAppDelegate] applicationDidFinishLaunching → canCreateSurfaces")
+        println("[KadreAppDelegate] applicationDidFinishLaunching → resumed + newEvents(Init) + canCreateSurfaces + aboutToWait")
         val handler = KadreRegistry.handler
             ?: error("[KadreAppDelegate] No handler registered — call startKadreApplication before UIApplicationMain")
-        val loop = UIKitActiveEventLoop(handler)
-        eventLoop = loop
-        handler.canCreateSurfaces(loop)
+        val orchestrator = UIKitLifecycleOrchestrator(UIKitActiveEventLoop(handler))
+        lifecycle = orchestrator
+        orchestrator.didFinishLaunching()
         return true
     }
 
@@ -92,12 +274,8 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      * Triggers [ApplicationHandler.resumed].
      */
     override fun applicationDidBecomeActive(application: UIApplication) {
-        println("[KadreAppDelegate] applicationDidBecomeActive → resumed + Focused(true)")
-        eventLoop?.let {
-            it.handler.resumed(it)
-            it.dispatchWindowFocused(gained = true)
-            it.dispatchThemeChangedIfNeeded()
-        }
+        println("[KadreAppDelegate] applicationDidBecomeActive → resumed + newEvents(WaitCancelled) + Focused(true) + aboutToWait")
+        lifecycle?.didBecomeActive()
     }
 
     /**
@@ -106,12 +284,8 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      * Triggers [ApplicationHandler.suspended].
      */
     override fun applicationWillResignActive(application: UIApplication) {
-        println("[KadreAppDelegate] applicationWillResignActive → Focused(false) + suspended")
-        eventLoop?.let {
-            // Lose window focus before the app-level suspend.
-            it.dispatchWindowFocused(gained = false)
-            it.handler.suspended(it)
-        }
+        println("[KadreAppDelegate] applicationWillResignActive → newEvents(WaitCancelled) + Focused(false) + suspended + aboutToWait")
+        lifecycle?.willResignActive()
     }
 
     // ── Background / Foreground ───────────────────────────────────────────
@@ -126,11 +300,8 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      * Note: called AFTER [applicationWillResignActive] → [ApplicationHandler.suspended].
      */
     override fun applicationDidEnterBackground(application: UIApplication) {
-        println("[KadreAppDelegate] applicationDidEnterBackground → Occluded(true) + destroySurfaces")
-        eventLoop?.let {
-            it.dispatchOccluded(true)
-            it.handler.destroySurfaces(it)
-        }
+        println("[KadreAppDelegate] applicationDidEnterBackground → newEvents(WaitCancelled) + Occluded(true) + destroySurfaces + aboutToWait")
+        lifecycle?.didEnterBackground()
     }
 
     /**
@@ -143,11 +314,8 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      * Note: called BEFORE [applicationDidBecomeActive] → [ApplicationHandler.resumed].
      */
     override fun applicationWillEnterForeground(application: UIApplication) {
-        println("[KadreAppDelegate] applicationWillEnterForeground → Occluded(false) + canCreateSurfaces")
-        eventLoop?.let {
-            it.dispatchOccluded(false)
-            it.handler.canCreateSurfaces(it)
-        }
+        println("[KadreAppDelegate] applicationWillEnterForeground → newEvents(WaitCancelled) + Occluded(false) + canCreateSurfaces + aboutToWait")
+        lifecycle?.willEnterForeground()
     }
 
     // ── Termination ───────────────────────────────────────────────────────────
@@ -159,13 +327,11 @@ class KadreAppDelegate : UIResponder(), UIApplicationDelegateProtocol {
      * [applicationDidEnterBackground]) then cleans up the registry.
      */
     override fun applicationWillTerminate(application: UIApplication) {
-        println("[KadreAppDelegate] applicationWillTerminate → Destroyed + destroySurfaces")
-        eventLoop?.let {
-            // Per-window terminal event before the app-level surface teardown.
-            it.dispatchWindowsDestroyed()
-            it.handler.destroySurfaces(it)
-        }
-        eventLoop = null
-        KadreRegistry.handler = null
+        println("[KadreAppDelegate] applicationWillTerminate → newEvents(WaitCancelled) + destroySurfaces + Destroyed + suspended + aboutToWait + exit")
+        runUIKitDelegateTermination(
+            terminateLifecycle = { lifecycle?.willTerminate() },
+            clearLifecycle = { lifecycle = null },
+            clearRegistry = { KadreRegistry.handler = null },
+        )
     }
 }

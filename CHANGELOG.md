@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Web pointer events** — coordinate-less Web pointer events are replaced with position-, source-, and identity-carrying events. Consumers using `WebWindowEvent` directly must update exhaustive handling and use the supplied physical position; `pointermove` remains `WindowEvent.PointerMoved`, while `pointerdown`/`pointerup` remain `MouseInput` or `Touch` according to `pointerType`.
+- **Physical-pixel safe area** — `Window.safeArea` is now physical pixels on UIKit and Web. Remove consumer-side scale/DPR multiplication of safe-area values.
+- **Unavailable Linux display/compositor** — X11 and Wayland startup now fails descriptively instead of succeeding as a no-op. Start a reachable display/compositor before `runApp` and handle startup errors.
+- **Canonical callback order** — all backends enforce the documented `ApplicationHandler` ordering. Move code that relied on a previous backend-specific order to the documented callback.
+- **Compose sample iOS targets** — only the Compose sample drops `iosX64`; build it for `iosArm64` or `iosSimulatorArm64`. Kadre library targets retain `iosX64`.
+- **Wayland monitor removal** — after the final known output is removed, `availableMonitors()` returns an empty list rather than a synthetic monitor. Applications must handle that empty post-removal snapshot.
+- **Cross-platform correctness gate** — pull requests now publish the blocking `cross-platform-correctness` aggregate after host, browser, iOS simulator, Android emulator, glibc/musl Linux, deterministic raster, Linux Compose windowed, and macOS offscreen capture evidence complete.
+
+---
+
 ## [1.2.0] — 2026-06-26
 
 **100% winit API parity** achieved across all 7 Kadre backends.
@@ -172,7 +186,7 @@ Sprint 3–5 — backend Win32, Web (JS + Wasm), Linux (X11 + Wayland) et sample
   - `WaylandEventLoop` — `prepare_read` + poll fd + `eventfd` wakeUp — contraintes §1A
   - `WaylandKeyMapper` — Linux evdev keycodes → `Key`
   - `WaylandMouseMapper` — `BTN_LEFT/RIGHT/MIDDLE` + `wl_pointer.axis` → `MouseWheel`
-  - Bindings xdg_shell : `wl_proxy_marshal_flags` + `XdgShellConstants` + `WaylandInterfaces`
+  - Intégration xdg_shell via le binding externe `org.graphiks:kffi-wayland`
 - **`kadre`** — Façade jvmMain : `LinuxBackendDetector` — détection auto X11/Wayland via `XDG_SESSION_TYPE` + `WAYLAND_DISPLAY` + override `KADRE_LINUX_BACKEND` — contraintes §1B (lazy Throwable)
 - **CI** — Jobs `linux-x11-build` (Xvfb) + `linux-wayland-build`
 

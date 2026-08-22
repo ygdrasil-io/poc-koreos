@@ -31,6 +31,16 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 
+internal inline fun <T : Any> appKitCreateOwnedNativeView(
+    allocate: () -> T,
+    initialize: (T) -> T,
+    release: (T) -> Unit,
+): T = appKitInitializeOwnedNativeObject(
+    allocate = allocate,
+    initialize = initialize,
+    releaseAllocated = release,
+)
+
 /**
  * Per-view record stored in the IME callbacks table.
  * Holds the handler, event loop, window id, and the IME cursor rect
@@ -51,8 +61,8 @@ internal class ImeViewRecord(
  */
 internal object AppKitImeTextInputClient {
 
-    /** Global table: ObjC NSView address -> ImeViewRecord. */
-    private val imeViewTable = ConcurrentHashMap<Long, ImeViewRecord>()
+    /** Global table: native generation token -> ImeViewRecord. */
+    private val imeViewTable = ConcurrentHashMap<AppKitNativeCallbackToken, ImeViewRecord>()
 
     /** NSNotFound constant for range location. */
     private const val NS_NOT_FOUND = Long.MAX_VALUE
@@ -62,6 +72,11 @@ internal object AppKitImeTextInputClient {
         ValueLayout.JAVA_LONG.withName("location"),
         ValueLayout.JAVA_LONG.withName("length"),
     ).withName("_NSRange")
+
+    private val NOT_FOUND_RANGE: MemorySegment = Arena.global().allocate(NS_RANGE_LAYOUT).also { range ->
+        range.setAtIndex(ValueLayout.JAVA_LONG, 0, NS_NOT_FOUND)
+        range.setAtIndex(ValueLayout.JAVA_LONG, 1, 0L)
+    }
 
     private val NS_RECT_LAYOUT_SRET: java.lang.foreign.GroupLayout = MemoryLayout.structLayout(
         MemoryLayout.structLayout(
@@ -84,22 +99,60 @@ internal object AppKitImeTextInputClient {
      * Registers a view in the IME table.
      * The ObjC class must be registered before creating instances.
      */
-    fun registerView(viewPtr: MemorySegment, record: ImeViewRecord) {
-        imeViewTable[viewPtr.address()] = record
+    fun registerView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken =
+        AppKitNativeCallbackTokens.attachTestAddress(viewPtr.address()).also { token ->
+            imeViewTable[token] = record
+        }
+
+    fun registerNativeView(viewPtr: MemorySegment, record: ImeViewRecord): AppKitNativeCallbackToken {
+        val token = AppKitNativeCallbackTokens.attach(viewPtr)
+        return appKitAcquireOwnedRegistration(
+            register = {
+                imeViewTable[token] = record
+                token
+            },
+            rollback = {
+                imeViewTable.remove(token, record)
+                AppKitNativeCallbackTokens.detach(viewPtr, token)
+            },
+        )
     }
 
     /**
      * Removes a view from the IME table.
      */
     fun unregisterView(viewPtr: MemorySegment) {
-        imeViewTable.remove(viewPtr.address())
+        val token = AppKitNativeCallbackTokens.readTestAddress(viewPtr.address()) ?: return
+        imeViewTable.remove(token)
+        AppKitNativeCallbackTokens.detachTestAddress(viewPtr.address(), token)
     }
+
+    fun unregisterView(viewPtr: MemorySegment, record: ImeViewRecord) {
+        val token = imeViewTable.entries.firstOrNull { it.value === record }?.key ?: return
+        imeViewTable.remove(token, record)
+        AppKitNativeCallbackTokens.detachTestAddress(viewPtr.address(), token)
+    }
+
+    fun unregisterView(token: AppKitNativeCallbackToken, record: ImeViewRecord) {
+        imeViewTable.remove(token, record)
+    }
+
+    fun unregisterNativeView(
+        viewPtr: MemorySegment,
+        token: AppKitNativeCallbackToken,
+        record: ImeViewRecord,
+    ) {
+        imeViewTable.remove(token, record)
+        AppKitNativeCallbackTokens.detach(viewPtr, token)
+    }
+
+    internal fun registeredViewCount(): Int = imeViewTable.size
 
     /**
      * Updates the cursor screen rect for a given view.
      */
     fun updateCursorRect(viewPtr: MemorySegment, screenRect: MemorySegment) {
-        imeViewTable[viewPtr.address()]?.imeCursorScreenRect = screenRect
+        AppKitNativeCallbackTokens.read(viewPtr)?.let(imeViewTable::get)?.imeCursorScreenRect = screenRect
     }
 
     /**
@@ -503,17 +556,26 @@ internal object AppKitImeTextInputClient {
     fun createInstance(frame: MemorySegment): MemorySegment {
         ensureClassRegistered()
         val viewClass = ObjCRuntime.getClass("KadreTextInputView")
-        val alloced = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            viewClass,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-        return ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            alloced,
-            ObjCRuntime.sel("initWithFrame:"),
-            ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT_SRET),
-        ) as MemorySegment
+        return appKitCreateOwnedNativeView(
+            allocate = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    viewClass,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initialize = { allocated ->
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("initWithFrame:"),
+                    ObjCRuntime.ObjCStructArg(frame, NS_RECT_LAYOUT_SRET),
+                ) as MemorySegment
+            },
+            release = { allocated ->
+                ObjCRuntime.msgSend(null, allocated, ObjCRuntime.sel("release"))
+            },
+        )
     }
 
     /**
@@ -609,9 +671,9 @@ internal object AppKitImeTextInputClient {
     object Callbacks {
         @JvmStatic
         fun acceptsFirstResponder(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
-        ): Byte = 1 // YES
+        ): Byte = querySafely(self, "acceptsFirstResponder", 0) { 1 } // YES
 
         /**
          * insertText:replacementRange: — the IME committed text.
@@ -623,13 +685,14 @@ internal object AppKitImeTextInputClient {
             textObj: MemorySegment,
             @Suppress("UNUSED_PARAMETER") replacementRange: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            val text = idToNSString(textObj) ?: return
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Commit(text)),
-            )
+            invokeSafely(self, "insertText_replacementRange") { record ->
+                val text = idToNSString(textObj) ?: return@invokeSafely
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Commit(text)),
+                )
+            }
         }
 
         /**
@@ -643,18 +706,19 @@ internal object AppKitImeTextInputClient {
             selectedRange: MemorySegment,
             @Suppress("UNUSED_PARAMETER") replacementRange: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            val text = idToNSString(textObj) ?: return
-            val selStart = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 0)
-            val selLen = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 1)
-            val cursorRange: Pair<Int, Int>? = if (selStart != NS_NOT_FOUND) {
-                Pair(selStart.toInt(), (selStart + selLen).toInt())
-            } else null
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Preedit(text, cursorRange)),
-            )
+            invokeSafely(self, "setMarkedText_selectedRange_replacementRange") { record ->
+                val text = idToNSString(textObj) ?: return@invokeSafely
+                val selStart = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 0)
+                val selLen = selectedRange.getAtIndex(ValueLayout.JAVA_LONG, 1)
+                val cursorRange: Pair<Int, Int>? = if (selStart != NS_NOT_FOUND) {
+                    Pair(selStart.toInt(), (selStart + selLen).toInt())
+                } else null
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Preedit(text, cursorRange)),
+                )
+            }
         }
 
         /**
@@ -666,12 +730,13 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            record.handler.windowEvent(
-                record.eventLoop,
-                record.windowId,
-                WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
-            )
+            invokeSafely(self, "unmarkText") { record ->
+                record.handler.windowEvent(
+                    record.eventLoop,
+                    record.windowId,
+                    WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
+                )
+            }
         }
 
         /**
@@ -679,39 +744,27 @@ internal object AppKitImeTextInputClient {
          */
         @JvmStatic
         fun hasMarkedText(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
-        ): Byte = 0 // NO
+        ): Byte = querySafely(self, "hasMarkedText", 0) { 0 } // NO
 
         /**
          * markedRange - returns {NSNotFound, 0}.
          */
         @JvmStatic
         fun markedRange(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
-        ): MemorySegment {
-            val arena = Arena.ofAuto()
-            val range = arena.allocate(NS_RANGE_LAYOUT)
-            range.setAtIndex(ValueLayout.JAVA_LONG, 0, NS_NOT_FOUND)
-            range.setAtIndex(ValueLayout.JAVA_LONG, 1, 0L)
-            return range
-        }
+        ): MemorySegment = querySafely(self, "markedRange", NOT_FOUND_RANGE) { NOT_FOUND_RANGE }
 
         /**
          * selectedRange - returns {NSNotFound, 0}.
          */
         @JvmStatic
         fun selectedRange(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
-        ): MemorySegment {
-            val arena = Arena.ofAuto()
-            val range = arena.allocate(NS_RANGE_LAYOUT)
-            range.setAtIndex(ValueLayout.JAVA_LONG, 0, NS_NOT_FOUND)
-            range.setAtIndex(ValueLayout.JAVA_LONG, 1, 0L)
-            return range
-        }
+        ): MemorySegment = querySafely(self, "selectedRange", NOT_FOUND_RANGE) { NOT_FOUND_RANGE }
 
         /**
          * firstRectForCharacterRange:actualRange: — returns the IME cursor rect
@@ -727,24 +780,29 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") characterRange: MemorySegment,
             actualRange: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()]
-            val screenRect = record?.imeCursorScreenRect
-            if (screenRect != null && screenRect != MemorySegment.NULL) {
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
-            } else {
-                // Fallback: return zero rect at origin
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, 0.0)
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 0.0)
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, 0.0)
-                returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, 0.0)
-            }
-            if (actualRange != MemorySegment.NULL) {
-                actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
-                actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
-            }
+            AppKitNativeCallbackBoundary.invoke(
+                callback = {
+                    try {
+                        writeZeroRect(returnRect)
+                        writeNotFoundRange(actualRange)
+                        val screenRect = recordFor(self)?.imeCursorScreenRect
+                        if (screenRect != null && screenRect != MemorySegment.NULL) {
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 0))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 1))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 2))
+                            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, screenRect.getAtIndex(ValueLayout.JAVA_DOUBLE, 3))
+                        }
+                        if (actualRange != MemorySegment.NULL) {
+                            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 0))
+                            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, characterRange.getAtIndex(ValueLayout.JAVA_LONG, 1))
+                        }
+                    } catch (failure: Throwable) {
+                        captureSafely(self, "firstRectForCharacterRange_actualRange", failure)
+                        writeSafeDefaultsSafely(returnRect, actualRange)
+                    }
+                },
+                onRejected = { writeSafeDefaultsSafely(returnRect, actualRange) },
+            )
         }
 
         /**
@@ -752,21 +810,21 @@ internal object AppKitImeTextInputClient {
          */
         @JvmStatic
         fun characterIndexForPoint(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") point: MemorySegment,
-        ): Long = 0L
+        ): Long = querySafely(self, "characterIndexForPoint", 0L) { 0L }
 
         /**
          * validAttributesForMarkedText — returns an empty NSArray (no attributes).
          */
         @JvmStatic
         fun validAttributesForMarkedText(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
-        ): MemorySegment {
+        ): MemorySegment = querySafely(self, "validAttributesForMarkedText", MemorySegment.NULL) {
             val nsArrayClass = ObjCRuntime.getClass("NSArray")
-            return ObjCRuntime.msgSend(
+            ObjCRuntime.msgSend(
                 ValueLayout.ADDRESS,
                 nsArrayClass,
                 ObjCRuntime.sel("array"),
@@ -778,11 +836,15 @@ internal object AppKitImeTextInputClient {
          */
         @JvmStatic
         fun attributedSubstringForProposedRange_actualRange(
-            @Suppress("UNUSED_PARAMETER") self: MemorySegment,
+            self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") proposedRange: MemorySegment,
             @Suppress("UNUSED_PARAMETER") actualRange: MemorySegment,
-        ): MemorySegment = MemorySegment.NULL
+        ): MemorySegment = querySafely(
+            self,
+            "attributedSubstringForProposedRange_actualRange",
+            MemorySegment.NULL,
+        ) { MemorySegment.NULL }
 
         // ── NSDraggingDestination callbacks ──────────────────────────────────
 
@@ -798,9 +860,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Long {
-            val record = imeViewTable[self.address()] ?: return 0L
-            try {
+        ): Long = draggingEnteredSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -829,8 +889,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragEntered(pos, paths),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
-            return 4L // NSDragOperationGeneric
+                4L // NSDragOperationGeneric
         }
 
         /**
@@ -843,9 +902,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Long {
-            val record = imeViewTable[self.address()] ?: return 0L
-            try {
+        ): Long = draggingUpdatedSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -867,8 +924,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragMoved(pos),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
-            return 4L // NSDragOperationGeneric
+                4L // NSDragOperationGeneric
         }
 
         /**
@@ -882,14 +938,13 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
         ) {
-            val record = imeViewTable[self.address()] ?: return
-            try {
+            dragSafely("draggingExited", Unit, recordLookup = { recordFor(self) }) { record ->
                 record.handler.windowEvent(
                     record.eventLoop,
                     record.windowId,
                     WindowEvent.DragLeft,
                 )
-            } catch (_: Throwable) { /* best-effort */ }
+            }
         }
 
         /**
@@ -903,9 +958,7 @@ internal object AppKitImeTextInputClient {
             self: MemorySegment,
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             sender: MemorySegment,
-        ): Byte {
-            val record = imeViewTable[self.address()] ?: return 0
-            try {
+        ): Byte = performDragOperationSafely(recordLookup = { recordFor(self) }) { record ->
                 val point = ObjCRuntime.msgSendStret(
                     CG_POINT_LAYOUT,
                     sender,
@@ -934,8 +987,7 @@ internal object AppKitImeTextInputClient {
                     record.windowId,
                     WindowEvent.DragDropped(pos, paths),
                 )
-            } catch (_: Throwable) { /* best-effort */ }
-            return 1 // YES
+                1 // YES
         }
 
         /**
@@ -950,7 +1002,133 @@ internal object AppKitImeTextInputClient {
             @Suppress("UNUSED_PARAMETER") cmd: MemorySegment,
             @Suppress("UNUSED_PARAMETER") sender: MemorySegment,
         ) {
-            // No event — session end notification only
+            draggingEndedSafely {
+                // No event — session end notification only
+            }
+        }
+
+        internal fun draggingEndedSafely(callback: () -> Unit) {
+            AppKitNativeCallbackBoundary.invoke(callback)
+        }
+
+        private inline fun invokeSafely(
+            self: MemorySegment,
+            context: String,
+            crossinline callback: (ImeViewRecord) -> Unit,
+        ) {
+            AppKitNativeCallbackBoundary.invoke {
+                try {
+                    val record = recordFor(self) ?: return@invoke
+                    callback(record)
+                } catch (failure: Throwable) {
+                    captureSafely(self, context, failure)
+                }
+            }
+        }
+
+        internal fun <T> querySafely(
+            self: MemorySegment,
+            context: String,
+            defaultValue: T,
+            query: () -> T,
+        ): T = AppKitNativeCallbackBoundary.invokeOrDefault(defaultValue) {
+            try {
+                query()
+            } catch (failure: Throwable) {
+                captureSafely(self, context, failure)
+                defaultValue
+            }
+        }
+
+        private fun writeZeroRect(returnRect: MemorySegment) {
+            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 0, 0.0)
+            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 1, 0.0)
+            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 2, 0.0)
+            returnRect.setAtIndex(ValueLayout.JAVA_DOUBLE, 3, 0.0)
+        }
+
+        private fun writeNotFoundRange(actualRange: MemorySegment) {
+            if (actualRange == MemorySegment.NULL) return
+            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 0, NS_NOT_FOUND)
+            actualRange.setAtIndex(ValueLayout.JAVA_LONG, 1, 0L)
+        }
+
+        private fun writeSafeDefaultsSafely(returnRect: MemorySegment, actualRange: MemorySegment) {
+            try {
+                writeZeroRect(returnRect)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+            try {
+                writeNotFoundRange(actualRange)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+        }
+
+        private fun captureSafely(self: MemorySegment, context: String, failure: Throwable) {
+            try {
+                recordFor(self)?.let { captureSafely(it, context, failure) }
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+        }
+
+        private fun captureSafely(record: ImeViewRecord, context: String, failure: Throwable) {
+            try {
+                (record.eventLoop as? AppKitEventLoop)?.recordCallbackFailure(context, failure)
+            } catch (_: Throwable) {
+                // No Kotlin exception may cross an Objective-C upcall.
+            }
+        }
+
+        private fun recordFor(self: MemorySegment): ImeViewRecord? =
+            AppKitNativeCallbackTokens.read(self)?.let(imeViewTable::get)
+
+        internal fun draggingEnteredSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Long,
+        ): Long = dragSafely("draggingEntered", 0L, recordLookup, operation)
+
+        internal fun draggingUpdatedSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Long,
+        ): Long = dragSafely("draggingUpdated", 0L, recordLookup, operation)
+
+        internal fun performDragOperationSafely(
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> Byte,
+        ): Byte = dragSafely("performDragOperation", 0, recordLookup, operation)
+
+        private fun <T> dragSafely(
+            context: String,
+            defaultValue: T,
+            recordLookup: () -> ImeViewRecord?,
+            operation: (ImeViewRecord) -> T,
+        ): T = AppKitNativeCallbackBoundary.invokeOrDefault(defaultValue) {
+            var record: ImeViewRecord? = null
+            try {
+                record = recordLookup() ?: return@invokeOrDefault defaultValue
+                operation(record)
+            } catch (failure: Throwable) {
+                record?.let { captureSafely(it, context, failure) }
+                defaultValue
+            }
+        }
+
+        internal fun unmarkTextForToken(token: AppKitNativeCallbackToken) {
+            AppKitNativeCallbackBoundary.invoke {
+                val record = imeViewTable[token] ?: return@invoke
+                try {
+                    record.handler.windowEvent(
+                        record.eventLoop,
+                        record.windowId,
+                        WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Disabled),
+                    )
+                } catch (failure: Throwable) {
+                    captureSafely(record, "unmarkText", failure)
+                }
+            }
         }
     }
 }

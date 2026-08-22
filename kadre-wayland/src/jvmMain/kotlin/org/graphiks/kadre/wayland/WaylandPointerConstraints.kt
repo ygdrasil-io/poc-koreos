@@ -1,6 +1,8 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
+import org.graphiks.kffi.wayland.generated.zwp_confined_pointer_v1_interface
+import org.graphiks.kffi.wayland.generated.zwp_locked_pointer_v1_interface
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.RequestError
 import org.graphiks.kadre.core.WindowRequestResult
@@ -61,47 +63,47 @@ internal class WaylandPointerConstraints(
      * Safe to call even when no constraint is active.
      */
     fun release() {
-        releaseInternal()
+        try {
+            releaseStrict()
+        } catch (_: Throwable) {
+        }
     }
 
     private fun releaseInternal() {
-        val voidMarshal = wlProxyMarshalFlagsVoid
-        if (voidMarshal == null) {
-            activeLockedPtr = 0L
-            activeConfinedPtr = 0L
-            return
+        release()
+    }
+
+    internal fun releaseStrict() {
+        val locked = activeLockedPtr
+        val confined = activeConfinedPtr
+        activeLockedPtr = 0L
+        activeConfinedPtr = 0L
+        val destroy: (Long) -> Unit = { proxy ->
+            val voidMarshal = checkNotNull(wlProxyMarshalFlagsVoid) {
+                "pointer constraint destroy unavailable"
+            }
+            voidMarshal.invokeExact(
+                MemorySegment.ofAddress(proxy),
+                0,
+                MemorySegment.NULL,
+                1,
+                WL_MARSHAL_FLAG_DESTROY,
+            )
         }
-        if (activeLockedPtr != 0L) {
-            try {
-                voidMarshal.invokeExact(
-                    MemorySegment.ofAddress(activeLockedPtr),
-                    0,                          // opcode: destroy
-                    MemorySegment.NULL,          // wl_interface* (NULL)
-                    1,                          // version
-                    WL_MARSHAL_FLAG_DESTROY,    // flags
-                )
-            } catch (_: Throwable) { }
-            activeLockedPtr = 0L
-        }
-        if (activeConfinedPtr != 0L) {
-            try {
-                voidMarshal.invokeExact(
-                    MemorySegment.ofAddress(activeConfinedPtr),
-                    0,                          // opcode: destroy
-                    MemorySegment.NULL,          // wl_interface* (NULL)
-                    1,                          // version
-                    WL_MARSHAL_FLAG_DESTROY,    // flags
-                )
-            } catch (_: Throwable) { }
-            activeConfinedPtr = 0L
-        }
+        runWaylandCleanup(
+            primary = null,
+            cleanupActions = buildList {
+                if (locked != 0L) add { destroy(locked) }
+                if (confined != 0L) add { destroy(confined) }
+            },
+        )
     }
 
     private fun doLock(surfacePtr: Long, pointerPtr: Long): WindowRequestResult {
         val marshal = wlPointerConstraintsLockPointer ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("wl_proxy_marshal_flags not available"),
         )
-        val lockedIface = zwpLockedPointerV1Interface
+        val lockedIface = zwp_locked_pointer_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(constraintsPtr),
@@ -112,7 +114,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT,
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeLockedPtr = result.address()
@@ -130,7 +132,7 @@ internal class WaylandPointerConstraints(
         val marshal = wlPointerConstraintsConfinePointer ?: return WindowRequestResult.Failure(
             RequestError.Unsupported("wl_proxy_marshal_flags not available"),
         )
-        val confinedIface = zwpConfinedPointerV1Interface
+        val confinedIface = zwp_confined_pointer_v1_interface
         return try {
             val result = marshal.invokeExact(
                 MemorySegment.ofAddress(constraintsPtr),
@@ -141,7 +143,7 @@ internal class WaylandPointerConstraints(
                 MemorySegment.ofAddress(surfacePtr),
                 MemorySegment.ofAddress(pointerPtr),
                 MemorySegment.NULL,                 // region = NULL
-                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT,
+                POINTER_CONSTRAINTS_LIFETIME_PERSISTENT,
                 MemorySegment.NULL,                 // new_id = NULL
             ) as MemorySegment
             activeConfinedPtr = result.address()

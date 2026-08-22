@@ -1,0 +1,19 @@
+name: comment-only workflow fixture
+
+on:
+  pull_request:
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - run: true # scripts/test-workflow-contract.sh
+
+  cross-platform-correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [host-contracts]
+    steps:
+      - run: test "${{ needs.host-contracts.result }}" = success

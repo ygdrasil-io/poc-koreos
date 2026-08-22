@@ -3,6 +3,7 @@ package org.graphiks.kadre.wayland.portal
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.CaptureFrame
 import org.graphiks.kadre.core.capture.PixelFormat
+import org.graphiks.kffi.posix.LinuxPosix
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -335,37 +336,18 @@ internal object XdpPipeWire {
         // Placeholder for actual implementation
     }
     
-    // Native methods for mmap operations
-    // These would be implemented via FFM in a real implementation
-    
     private fun nativeMmap(fd: Int, size: Int): MemorySegment? {
         return try {
-            val mmap = java.lang.foreign.Linker.nativeLinker()
-                .downcallHandle(
-                    java.lang.foreign.SymbolLookup.libraryLookup("libc.so.6", Arena.global())
-                        .find("mmap").orElseThrow { RuntimeException("mmap not found") },
-                    java.lang.foreign.FunctionDescriptor.of(
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.JAVA_LONG,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_INT,
-                        java.lang.foreign.ValueLayout.JAVA_LONG
-                    )
-                )
-            
-            val result = mmap.invokeExact(
+            val result = LinuxPosix.mmap(
                 MemorySegment.NULL,
                 size.toLong(),
-                3,  // PROT_READ | PROT_WRITE
-                1,  // MAP_SHARED
+                LinuxPosix.PROT_READ or LinuxPosix.PROT_WRITE,
+                LinuxPosix.MAP_SHARED,
                 fd,
-                0L
-            ) as MemorySegment
-            
-            if (result.address() == -1L) null else result
-        } catch (e: Exception) {
+                0L,
+            )
+            result.takeUnless { it.address() == LinuxPosix.MAP_FAILED_ADDRESS }
+        } catch (e: Throwable) {
             System.err.println("[XdpPipeWire] mmap failed: ${e.message}")
             null
         }
@@ -373,18 +355,8 @@ internal object XdpPipeWire {
     
     private fun nativeMunmap(addr: MemorySegment, size: Int) {
         try {
-            val munmap = java.lang.foreign.Linker.nativeLinker()
-                .downcallHandle(
-                    java.lang.foreign.SymbolLookup.libraryLookup("libc.so.6", Arena.global())
-                        .find("munmap").orElseThrow { RuntimeException("munmap not found") },
-                    java.lang.foreign.FunctionDescriptor.ofVoid(
-                        java.lang.foreign.ValueLayout.ADDRESS,
-                        java.lang.foreign.ValueLayout.JAVA_LONG
-                    )
-                )
-            
-            munmap.invokeExact(addr, size.toLong())
-        } catch (e: Exception) {
+            LinuxPosix.munmap(addr, size.toLong())
+        } catch (e: Throwable) {
             System.err.println("[XdpPipeWire] munmap failed: ${e.message}")
         }
     }

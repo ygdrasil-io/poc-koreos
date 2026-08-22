@@ -54,11 +54,8 @@ import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSClassFromString
 import platform.Foundation.NSNotFound
-import platform.Foundation.NSRunLoop
-import platform.Foundation.NSRunLoopCommonModes
 import platform.Foundation.NSSelectorFromString
 import platform.Foundation._NSRange
-import platform.QuartzCore.CADisplayLink
 import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.UIEvent
 import platform.UIKit.UIGestureRecognizer
@@ -99,6 +96,7 @@ import platform.UIKit.UIViewController
 import platform.UIKit.UIViewMeta
 import platform.UIKit.UIWindow
 import platform.darwin.NSObject
+import kotlin.math.roundToInt
 
 /**
  * KadreMetalView : UIView backed by CAMetalLayer.
@@ -367,6 +365,18 @@ class KadreMetalView(
 
     override fun endOfDocument(): UITextPosition = imeEndOfDocument
 
+    /** Releases gesture and IME state before the owning window becomes terminal. */
+    internal fun invalidateInputResources() {
+        recognizePinchGesture(false)
+        recognizePanGesture(false, 1, 1)
+        recognizeRotationGesture(false)
+        recognizeDoubleTapGesture(false)
+        imeInputDelegate = null
+        imeMarkedTextRange = null
+        imeSelectedTextRange = null
+        resignFirstResponder()
+    }
+
     // ── Hardware keyboard / game controller keys (iOS 13.4+) ──────────────────
 
     /** The view must be first responder to receive key presses. */
@@ -537,19 +547,6 @@ class KadreMetalView(
     }
 }
 
-/**
- * Objective-C target for a [CADisplayLink].
- *
- * `CADisplayLink` requires a target/selector pair; this NSObject subclass
- * exposes [onFrame] (an `@ObjCAction`) as that selector and forwards each
- * vsync tick to the Kotlin lambda.
- */
-@OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-private class DisplayLinkProxy(private val onFrame: () -> Unit) : NSObject() {
-    @ObjCAction
-    fun handleDisplayLink() = onFrame()
-}
-
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 private class UIKitGestureRecognizerProxy(
     private val view: UIView,
@@ -679,42 +676,135 @@ private class UiKitRootViewController(
     override fun preferredStatusBarStyle(): Long = statusBarStyle
 }
 
+/** Applies ordered window mutations only while their target remains live. */
+internal inline fun applyUIKitWindowMutationsWhileLive(
+    isLive: () -> Boolean,
+    mutations: Array<out () -> Unit>,
+) {
+    mutations.forEach { mutation ->
+        if (!isLive()) return
+        mutation()
+    }
+}
+
+/** Converts a logical UIKit inset to the nearest non-negative physical pixel. */
+internal fun physicalInset(points: Double, scale: Double): Int {
+    if (!points.isFinite() || points < 0.0 || !scale.isFinite() || scale < 0.0) return 0
+    val physical = points * scale
+    return if (physical.isFinite()) physical.roundToInt() else Int.MAX_VALUE
+}
+
+/** Applies the physical-pixel conversion consistently to all safe-area edges. */
+internal fun physicalSafeArea(
+    topPoints: Double,
+    bottomPoints: Double,
+    leftPoints: Double,
+    rightPoints: Double,
+    scale: Double,
+): Insets<Int> = Insets(
+    top = physicalInset(topPoints, scale),
+    bottom = physicalInset(bottomPoints, scale),
+    left = physicalInset(leftPoints, scale),
+    right = physicalInset(rightPoints, scale),
+)
+
+/** Pure UIKit policy for requests that never require a native window. */
+@Suppress("UNUSED_PARAMETER")
+internal object UIKitWindowCapabilities {
+    val isVisible: Boolean? = null
+    val isResizable: Boolean = false
+    val isMinimized: Boolean? = null
+    val isMaximized: Boolean = false
+    val isDecorated: Boolean = false
+    val outerPosition: PhysicalPosition<Int> = PhysicalPosition(0, 0)
+
+    fun setResizable(resizable: Boolean) = Unit
+    fun setMinimized(minimized: Boolean) = Unit
+    fun setMaximized(maximized: Boolean) = Unit
+    fun setDecorations(decorated: Boolean) = Unit
+    fun setMinSurfaceSize(size: PhysicalSize<Int>?) = Unit
+    fun setMaxSurfaceSize(size: PhysicalSize<Int>?) = Unit
+    fun setOuterPosition(position: PhysicalPosition<Int>) = Unit
+    fun prePresentNotify() = Unit
+    fun setCursor(cursor: CursorIcon) = Unit
+    fun setCursorVisible(visible: Boolean) = Unit
+    fun setWindowLevel(level: WindowLevel) = Unit
+    fun setTransparent(transparent: Boolean) = Unit
+    fun setBlur(blur: Boolean) = Unit
+    fun setWindowIcon(icon: Icon?) = Unit
+    fun setCustomCursor(cursor: CustomCursor) = Unit
+    fun setImePurpose(purpose: ImePurpose) = Unit
+    fun resetDeadKeys() = Unit
+
+    fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
+        unsupported("iOS has no system cursor")
+
+    fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
+        unsupported("iOS has no cursor to warp")
+
+    fun setCursorHittest(hittest: Boolean): WindowRequestResult =
+        unsupported("iOS has no system cursor")
+
+    fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
+        WindowRequestResult.Success
+
+    fun setContentProtected(protected: Boolean): WindowRequestResult =
+        unsupported("Content protection is unsupported on iOS")
+
+    fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
+        unsupported("Window menu is unsupported on iOS")
+
+    fun dragWindow(): WindowRequestResult =
+        unsupported("Window dragging is unsupported on iOS")
+
+    fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
+        unsupported("Window resizing is unsupported on iOS")
+
+    private fun unsupported(message: String): WindowRequestResult =
+        WindowRequestResult.Failure(RequestError.Unsupported(message))
+}
+
 /**
  * UiKitWindow — implements Window for iOS.
  *
  * Creates UIWindow → UIViewController → KadreMetalView (full screen).
  * CAMetalLayer is the view's backing layer (via +layerClass).
- * Touch and resize events are dispatched to [eventLoop].handler, and a
- * [CADisplayLink] paces [WindowEvent.RedrawRequested] on every screen refresh.
+ * Touch and resize events are dispatched to [eventLoop].handler. Redraw requests
+ * are coalesced by the loop-level [UIKitScheduler].
  */
 @OptIn(ExperimentalForeignApi::class)
-internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKitActiveEventLoop) : Window {
+internal class UiKitWindow(
+    private val eventLoop: UIKitActiveEventLoop,
+    override val id: WindowId,
+) : Window {
 
     private val uiWindow: UIWindow
     private val viewController: UIViewController
     private val metalView: KadreMetalView
 
-    /** Per-frame redraw driver (vsync-paced). Invalidated on [close]. */
-    private var displayLink: CADisplayLink? = null
-    private val displayLinkProxy = DisplayLinkProxy { emitRedraw() }
+    /** Terminal state; set before any callback-producing cleanup. */
+    private var closed = false
 
-    override val id: WindowId
+    /** Drag-and-drop objects retained until [close]. */
+    private var dropDelegate: KadreDropDelegate? = null
+    private var dropInteraction: UIDropInteraction? = null
+
+    private var _title: String = ""
+    private var _fullscreen: Fullscreen? = null
 
     init {
         val screen = UIScreen.mainScreen
         val screenBounds = screen.bounds
 
-        // 4. UIWindow first — needed to derive the WindowId
+        // 4. UIWindow is a native handle; logical identity is owned by the loop.
         uiWindow = UIWindow(frame = screenBounds)
-        id = WindowId(uiWindow.objcPtr().toLong())
 
-        // Capture id in a local val so the lambda does not close over a val
-        // that the compiler might consider uninitialized at lambda-definition time.
+        // Capture id in a local val for all native callback bridges.
         val windowId = id
 
         // 1. Full-screen KadreMetalView (dispatch lambda uses windowId)
         metalView = KadreMetalView(frame = screenBounds) { event ->
-            eventLoop.handler.windowEvent(eventLoop, windowId, event)
+            emitWindowEvent(windowId, event)
         }
 
         // 2. contentsScale for HiDPI / Retina
@@ -725,20 +815,12 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
             vc.setView(metalView)
         }
 
-        // 5. Wire root VC and show
+        // 5. Wire root VC. Initial attributes are applied after registry admission.
         uiWindow.rootViewController = viewController
-        if (attrs.visible) {
-            uiWindow.makeKeyAndVisible()
-            // Become first responder so hardware-keyboard / controller key
-            // presses reach pressesBegan/Ended.
-            metalView.becomeFirstResponder()
-        }
 
         // 6. Enable drag-and-drop via UIDropInteraction (iOS 11+).
         setupDropInteraction(windowId)
 
-        // 7. Start the vsync-paced redraw loop.
-        startDisplayLink()
     }
 
     internal fun resetKeyboardModifiersIfNeeded() {
@@ -776,33 +858,49 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
         viewController.setNeedsStatusBarAppearanceUpdate()
     }
 
-    /**
-     * Creates and schedules the [CADisplayLink] on the main run loop so
-     * [emitRedraw] fires once per screen refresh.
-     */
-    private fun startDisplayLink() {
-        if (displayLink != null) return
-        val link = CADisplayLink.displayLinkWithTarget(
-            target = displayLinkProxy,
-            selector = NSSelectorFromString("handleDisplayLink"),
+    /** Reapplies attributes whose [Window] API exposes a mutable counterpart. */
+    internal fun applyMutableAttributes(attrs: WindowAttributes) {
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { !closed },
+            mutations = arrayOf(
+                { setTitle(attrs.title) },
+                { setVisible(attrs.visible) },
+                { setResizable(attrs.resizable) },
+                { setMinSurfaceSize(attrs.minSize) },
+                { setMaxSurfaceSize(attrs.maxSize) },
+                { setSurfaceResizeIncrements(attrs.resizeIncrements) },
+                { attrs.position?.let(::setOuterPosition) },
+                { setEnabledButtons(attrs.enabledButtons) },
+                { setMaximized(attrs.maximized) },
+                { setDecorations(attrs.decorations) },
+                { setFullscreen(attrs.fullscreen) },
+                { setCursor(attrs.cursor) },
+                { setTheme(attrs.preferredTheme) },
+                { setTransparent(attrs.transparent) },
+                { setBlur(attrs.blur) },
+                { setWindowLevel(attrs.windowLevel) },
+                { setWindowIcon(attrs.windowIcon) },
+                { setContentProtected(attrs.contentProtected) },
+                { if (attrs.active) focusWindow() },
+            ),
         )
-        link.addToRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
-        displayLink = link
     }
 
-    /**
-     * Dispatches [WindowEvent.RedrawRequested] for this window each frame.
-     *
-     * Stops and releases the display link once the loop is exiting so no
-     * further frame is emitted after shutdown.
-     */
-    private fun emitRedraw() {
-        if (eventLoop.isExiting) {
-            displayLink?.invalidate()
-            displayLink = null
-            return
-        }
-        eventLoop.handler.windowEvent(eventLoop, id, WindowEvent.RedrawRequested)
+    /** Applies initial attributes once, after this window is admitted to the live registry. */
+    internal fun applyInitialAttributes(attrs: WindowAttributes) {
+        applyUIKitWindowMutationsWhileLive(
+            isLive = { !closed },
+            mutations = arrayOf(
+                { applyMutableAttributes(attrs) },
+                {
+                    if (attrs.visible) {
+                        // Become first responder so hardware-keyboard / controller key
+                        // presses reach pressesBegan/Ended.
+                        metalView.becomeFirstResponder()
+                    }
+                },
+            ),
+        )
     }
 
     /**
@@ -813,13 +911,19 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     @OptIn(kotlinx.cinterop.BetaInteropApi::class)
     private fun setupDropInteraction(windowId: WindowId) {
         if (NSClassFromString("UIDropInteraction") != null) {
-            val dropDelegate = KadreDropDelegate { event ->
-                eventLoop.handler.windowEvent(eventLoop, windowId, event)
+            val delegate = KadreDropDelegate { event ->
+                emitWindowEvent(windowId, event)
             }
-            val interaction = UIDropInteraction(delegate = dropDelegate)
+            val interaction = UIDropInteraction(delegate = delegate)
             val selector = NSSelectorFromString("addInteraction:")
             metalView.performSelector(selector, withObject = interaction)
+            dropDelegate = delegate
+            dropInteraction = interaction
         }
+    }
+
+    private fun emitWindowEvent(windowId: WindowId, event: WindowEvent) {
+        if (!closed) eventLoop.handler.windowEvent(eventLoop, windowId, event)
     }
 
     override val rawWindowHandle: RawWindowHandle
@@ -872,8 +976,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     }
 
     override fun requestRedraw() {
-        // No-op: the CADisplayLink paces RedrawRequested on every screen refresh.
-        // Kept for API parity with the desktop backends.
+        eventLoop.requestRedraw(id)
     }
 
     override val innerSize: PhysicalSize<Int>
@@ -903,11 +1006,12 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
 
     override val safeArea: Insets<Int>
         get() = metalView.safeAreaInsets.useContents {
-            Insets(
-                top = top.toInt(),
-                bottom = bottom.toInt(),
-                left = left.toInt(),
-                right = right.toInt(),
+            physicalSafeArea(
+                topPoints = top,
+                bottomPoints = bottom,
+                leftPoints = left,
+                rightPoints = right,
+                scale = uiWindow.screen.scale,
             )
         }
 
@@ -917,8 +1021,26 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     }
 
     override fun close() {
-        displayLink?.invalidate()
-        displayLink = null
+        eventLoop.closeWindow(id)
+    }
+
+    /** Invalidates this window's gesture, IME, and drop resources exactly once. */
+    internal fun invalidateResources() {
+        if (closed) return
+        closed = true
+        dropInteraction?.let { interaction ->
+            metalView.performSelector(
+                NSSelectorFromString("removeInteraction:"),
+                withObject = interaction,
+            )
+        }
+        dropInteraction = null
+        dropDelegate = null
+        metalView.invalidateInputResources()
+    }
+
+    /** Hides and resigns the native window after [WindowEvent.Destroyed]. */
+    internal fun hideAndResign() {
         uiWindow.setHidden(true)
         uiWindow.resignKeyWindow()
     }
@@ -928,8 +1050,6 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     // iOS does not support programmatic window resizing, minimization,
     // maximization, or decoration changes. UIKit manages the full-screen
     // window lifecycle. All members below are documented no-ops.
-
-    private var _title: String = ""
 
     /**
      * Sets the view controller title. On iOS the window has no decoration title bar;
@@ -943,72 +1063,88 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     override val title: String get() = _title
 
     /** UIKit does not expose a reliable winit-style window visibility state. */
-    override val isVisible: Boolean? get() = null
+    override val isVisible: Boolean? get() = UIKitWindowCapabilities.isVisible
 
     /**
      * iOS does not support programmatic window resizing.
      * This is a no-op — the system controls the window geometry.
      */
-    override fun setResizable(resizable: Boolean) { /* no-op: iOS does not support programmatic resizing */ }
+    override fun setResizable(resizable: Boolean) {
+        UIKitWindowCapabilities.setResizable(resizable)
+    }
 
     /** iOS windows are not user-resizable. Always returns false. */
-    override val isResizable: Boolean get() = false
+    override val isResizable: Boolean get() = UIKitWindowCapabilities.isResizable
 
     /**
      * iOS does not support programmatic minimization.
      * This is a no-op.
      */
-    override fun setMinimized(minimized: Boolean) { /* no-op: iOS does not support programmatic minimization */ }
+    override fun setMinimized(minimized: Boolean) {
+        UIKitWindowCapabilities.setMinimized(minimized)
+    }
 
     /** iOS does not expose a reliable minimized state. */
-    override val isMinimized: Boolean? get() = null
+    override val isMinimized: Boolean? get() = UIKitWindowCapabilities.isMinimized
 
     /**
      * iOS does not support programmatic maximization.
      * This is a no-op — windows always fill the available screen area.
      */
-    override fun setMaximized(maximized: Boolean) { /* no-op: iOS windows always fill the screen */ }
+    override fun setMaximized(maximized: Boolean) {
+        UIKitWindowCapabilities.setMaximized(maximized)
+    }
 
     /** iOS windows always fill the screen. Always returns false. */
-    override val isMaximized: Boolean get() = false
+    override val isMaximized: Boolean get() = UIKitWindowCapabilities.isMaximized
 
     /**
      * iOS does not have platform window decorations (title bar, resize borders).
      * This is a no-op.
      */
-    override fun setDecorations(decorated: Boolean) { /* no-op: iOS has no platform window decorations */ }
+    override fun setDecorations(decorated: Boolean) {
+        UIKitWindowCapabilities.setDecorations(decorated)
+    }
 
     /** iOS windows have no platform decorations. Always returns false. */
-    override val isDecorated: Boolean get() = false
+    override val isDecorated: Boolean get() = UIKitWindowCapabilities.isDecorated
 
     /**
      * iOS does not support surface size constraints.
      * This is a no-op.
      */
-    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+    override fun setMinSurfaceSize(size: PhysicalSize<Int>?) {
+        UIKitWindowCapabilities.setMinSurfaceSize(size)
+    }
 
     /**
      * iOS does not support surface size constraints.
      * This is a no-op.
      */
-    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) { /* no-op: iOS does not support surface size constraints */ }
+    override fun setMaxSurfaceSize(size: PhysicalSize<Int>?) {
+        UIKitWindowCapabilities.setMaxSurfaceSize(size)
+    }
 
     /**
      * iOS does not expose a global window position.
      * Returns PhysicalPosition(0, 0) as the window always fills the screen.
      */
-    override val outerPosition: PhysicalPosition<Int> get() = PhysicalPosition(0, 0)
+    override val outerPosition: PhysicalPosition<Int> get() = UIKitWindowCapabilities.outerPosition
 
     /**
      * iOS does not support programmatic window positioning.
      * This is a no-op.
      */
-    override fun setOuterPosition(position: PhysicalPosition<Int>) { /* no-op: iOS does not support programmatic window positioning */ }
+    override fun setOuterPosition(position: PhysicalPosition<Int>) {
+        UIKitWindowCapabilities.setOuterPosition(position)
+    }
 
     /**
      * No-op on iOS: there is no Wayland-style pre-commit concept on this platform.
      */
-    override fun prePresentNotify() { /* no-op on iOS */ }
+    override fun prePresentNotify() {
+        UIKitWindowCapabilities.prePresentNotify()
+    }
 
     // ── R2: monitor & fullscreen ──────────────────────────────────────────────
 
@@ -1023,18 +1159,19 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     override fun primaryMonitor(): MonitorHandle? =
         currentMonitor()
 
-    /** In-memory fullscreen state (R2). */
-    private var _fullscreen: Fullscreen? = null
-
     override val fullscreen: Fullscreen? get() = _fullscreen
 
     // ── R3: cursor, theme & appearance ───────────────────────────────────────
 
     /** No-op on iOS: there is no visible cursor on touchscreen devices. */
-    override fun setCursor(cursor: CursorIcon) { /* no-op: iOS has no cursor */ }
+    override fun setCursor(cursor: CursorIcon) {
+        UIKitWindowCapabilities.setCursor(cursor)
+    }
 
     /** No-op on iOS. */
-    override fun setCursorVisible(visible: Boolean) { /* no-op: iOS has no cursor */ }
+    override fun setCursorVisible(visible: Boolean) {
+        UIKitWindowCapabilities.setCursorVisible(visible)
+    }
 
     /**
      * Sets the cursor grab mode for this window.
@@ -1043,7 +1180,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorGrab(mode: CursorGrabMode): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
+        UIKitWindowCapabilities.setCursorGrab(mode)
 
     /**
      * Warps the cursor to the given position.
@@ -1052,7 +1189,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * Cursor warping is unsupported; returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorPosition(position: PhysicalPosition<Int>): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no cursor to warp"))
+        UIKitWindowCapabilities.setCursorPosition(position)
 
     /**
      * Enables or disables cursor hit-testing for this window.
@@ -1061,7 +1198,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * Returns [WindowRequestResult.Failure] with [RequestError.Unsupported].
      */
     override fun setCursorHittest(hittest: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("iOS has no system cursor"))
+        UIKitWindowCapabilities.setCursorHittest(hittest)
 
     /**
      * Returns the current theme via the view controller's traitCollection.
@@ -1093,16 +1230,24 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
     }
 
     /** No-op on iOS: Z-ordering is managed by UIKit. */
-    override fun setWindowLevel(level: WindowLevel) { /* no-op: UIKit manages Z-ordering */ }
+    override fun setWindowLevel(level: WindowLevel) {
+        UIKitWindowCapabilities.setWindowLevel(level)
+    }
 
     /** No-op on iOS: transparency is a renderer concern. */
-    override fun setTransparent(transparent: Boolean) { /* no-op: iOS transparency is renderer-side */ }
+    override fun setTransparent(transparent: Boolean) {
+        UIKitWindowCapabilities.setTransparent(transparent)
+    }
 
     /** No-op on iOS. */
-    override fun setBlur(blur: Boolean) { /* no-op: iOS has no standard window blur API */ }
+    override fun setBlur(blur: Boolean) {
+        UIKitWindowCapabilities.setBlur(blur)
+    }
 
     /** No-op on iOS: application icon is set via the Info.plist. */
-    override fun setWindowIcon(icon: Icon?) { /* no-op: iOS icon is set via the app bundle */ }
+    override fun setWindowIcon(icon: Icon?) {
+        UIKitWindowCapabilities.setWindowIcon(icon)
+    }
 
     /**
      * Enters or exits fullscreen on iOS.
@@ -1164,9 +1309,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * for application use and future ObjC runtime wiring.
      */
     override fun setImePurpose(purpose: ImePurpose) {
-        // no-op: UITextInputTraits properties are final in Kotlin/Native.
-        // To set them, ObjC runtime method implementations would need to be
-        // added via class_addMethod / objc_msgSend.
+        UIKitWindowCapabilities.setImePurpose(purpose)
     }
 
     // ── R4: keyboard ──────────────────────────────────────────────────────────
@@ -1177,7 +1320,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * TODO(R4-uikit-dead-keys): call UITextInputDelegate.textDidChange to reset.
      */
     override fun resetDeadKeys() {
-        // no-op: UIKit manages dead-key state internally
+        UIKitWindowCapabilities.resetDeadKeys()
     }
 
     // ── R5-CustomCursor ───────────────────────────────────────────────────────
@@ -1187,7 +1330,9 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      *
      * **Platform note (iOS):** No-op — touch-first platform with no system cursor.
      */
-    override fun setCustomCursor(cursor: CustomCursor) { /* no-op on iOS */ }
+    override fun setCustomCursor(cursor: CustomCursor) {
+        UIKitWindowCapabilities.setCustomCursor(cursor)
+    }
 
     // ── R5-MiscWindow ─────────────────────────────────────────────────────────
 
@@ -1199,7 +1344,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * Returns [WindowRequestResult.Success] to match local winit semantics.
      */
     override fun requestUserAttention(requestType: UserAttentionType?): WindowRequestResult =
-        WindowRequestResult.Success
+        UIKitWindowCapabilities.requestUserAttention(requestType)
 
     /**
      * Enables or disables screen-capture protection for this window.
@@ -1208,7 +1353,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * capture-protection mechanism at the UIWindow level.
      */
     override fun setContentProtected(protected: Boolean): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Content protection is unsupported on iOS"))
+        UIKitWindowCapabilities.setContentProtected(protected)
 
     /**
      * Shows the platform window menu (system / title-bar context menu) at the given position.
@@ -1216,7 +1361,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * **Platform note (iOS):** Unsupported — UIKit has no system window menu concept.
      */
     override fun showWindowMenu(position: PhysicalPosition<Int>): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window menu is unsupported on iOS"))
+        UIKitWindowCapabilities.showWindowMenu(position)
 
     /**
      * Initiates a user-driven window drag from the current cursor position.
@@ -1225,7 +1370,7 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * with user-draggable windows.
      */
     override fun dragWindow(): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window dragging is unsupported on iOS"))
+        UIKitWindowCapabilities.dragWindow()
 
     /**
      * Initiates a user-driven window resize from the current cursor position.
@@ -1233,5 +1378,5 @@ internal class UiKitWindow(attrs: WindowAttributes, private val eventLoop: UIKit
      * **Platform note (iOS):** Unsupported — UIKit windows are not user-resizable.
      */
     override fun dragResizeWindow(direction: ResizeDirection): WindowRequestResult =
-        WindowRequestResult.Failure(RequestError.Unsupported("Window resizing is unsupported on iOS"))
+        UIKitWindowCapabilities.dragResizeWindow(direction)
 }

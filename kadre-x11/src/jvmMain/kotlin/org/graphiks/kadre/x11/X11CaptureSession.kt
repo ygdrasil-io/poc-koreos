@@ -2,9 +2,11 @@ package org.graphiks.kadre.x11.capture
 
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.xFreePixmap
-import org.graphiks.kadre.ffi.x11.xGetGeometry
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kadre.x11.binding.capture.*
+import org.graphiks.kffi.x11.generated.KffiXImageStorage
+import org.graphiks.kffi.x11.generated.XShmSegmentInfoCompat
+import org.graphiks.kffi.posix.LinuxPosix
 import kotlinx.coroutines.*
 import org.graphiks.kadre.core.capture.CaptureConfig
 import org.graphiks.kadre.core.capture.CaptureError
@@ -226,9 +228,10 @@ class X11CaptureSession(
     }
 
     private fun readXImage(imagePtr: MemorySegment, width: Int, height: Int): CaptureFrame? {
-        val image = imagePtr.reinterpret(64L)
-        val dataPtr = image.get(ValueLayout.ADDRESS, XIMAGE_DATA_OFFSET)
-        val bytesPerLine = image.get(ValueLayout.JAVA_INT, XIMAGE_BYTES_PER_LINE_OFFSET)
+        val image = KffiXImageStorage.Companion.reinterpret(imagePtr)
+        val imageStorage = KffiXImageStorage()
+        val dataPtr = imageStorage.data(image)
+        val bytesPerLine = imageStorage.bytes_per_line(image)
         if (dataPtr == MemorySegment.NULL || dataPtr.address() == 0L) return null
 
         val stride = if (bytesPerLine > 0) bytesPerLine else width * 4
@@ -276,9 +279,6 @@ internal fun createShmResources(
     val defVisual = xDefaultVisual ?: return null
     val defDepth = xDefaultDepth ?: return null
     val defScreen = xDefaultScreen ?: return null
-    val shmGet = shmget ?: return null
-    val shmAt = shmat ?: return null
-
     return try {
         val width = size.width
         val height = size.height
@@ -290,21 +290,25 @@ internal fun createShmResources(
         val depth = defDepth.invokeExact(display, screen) as Int
 
         // Create shared memory segment
-        val shmid = shmGet.invokeExact(IPC_PRIVATE, shmSize.toLong(), IPC_CREAT or 384) as Int  // IPC_CREAT | 0600
-        if (shmid < 0) return null
+        val shmid = LinuxPosix.shmget(
+            LinuxPosix.IPC_PRIVATE,
+            shmSize.toLong(),
+            LinuxPosix.IPC_CREAT or 384,
+        )
 
-        val shmaddr = shmAt.invokeExact(shmid, MemorySegment.NULL, 0) as MemorySegment
+        val shmaddr = LinuxPosix.shmat(shmid, MemorySegment.NULL, 0)
         if (shmaddr == MemorySegment.NULL || shmaddr.address() == 0L) {
-            try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+            runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
             return null
         }
 
         Arena.ofConfined().use { arena ->
-            val shminfo = arena.allocate(XSHM_SEGINFO_SIZE, 8L)
-            shminfo.set(ValueLayout.JAVA_LONG, XSHM_SHMPIX_OFFSET, 0L) // shmseg = 0 (server assigns)
-            shminfo.set(ValueLayout.JAVA_INT, XSHM_SHMD_OFFSET, shmid)
-            shminfo.set(ValueLayout.JAVA_INT, XSHM_READONLY_OFFSET, 0)  // readOnly = False
-            shminfo.set(ValueLayout.ADDRESS, XSHM_ADDR_OFFSET, shmaddr)
+            val shminfoBinding = XShmSegmentInfoCompat()
+            val shminfo = XShmSegmentInfoCompat.Companion.allocate(arena)
+            shminfoBinding.shmseg(shminfo, 0L) // server assigns the segment id
+            shminfoBinding.shmid(shminfo, shmid)
+            shminfoBinding.readOnly(shminfo, 0)
+            shminfoBinding.shmaddr(shminfo, shmaddr)
 
             val image = createImage.invokeExact(
                 display, visual, depth, XSHM_ZPIXMAP,
@@ -312,21 +316,21 @@ internal fun createShmResources(
             ) as MemorySegment
 
             if (image == MemorySegment.NULL || image.address() == 0L) {
-                try { shmdt?.invokeExact(shmaddr) } catch (_: Throwable) {}
-                try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+                runCatching { LinuxPosix.shmdt(shmaddr) }
+                runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
                 return null
             }
 
             val attachStatus = attach.invokeExact(display, shminfo) as Int
             if (attachStatus == 0) {
                 try { xDestroyImage?.invokeExact(image) } catch (_: Throwable) {}
-                try { shmdt?.invokeExact(shmaddr) } catch (_: Throwable) {}
-                try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+                runCatching { LinuxPosix.shmdt(shmaddr) }
+                runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
                 return null
             }
 
             // Copy shminfo data since the arena will close
-            val persistentInfo = Arena.global().allocate(XSHM_SEGINFO_SIZE, 8L)
+            val persistentInfo = XShmSegmentInfoCompat.Companion.allocate(Arena.global())
             persistentInfo.copyFrom(shminfo)
 
             ShmResources(
@@ -344,6 +348,6 @@ internal fun createShmResources(
 internal fun destroyShmResources(display: MemorySegment, resources: ShmResources) {
     try { xShmDetach?.invokeExact(display, resources.shminfo) } catch (_: Throwable) {}
     try { xDestroyImage?.invokeExact(resources.image) } catch (_: Throwable) {}
-    try { shmdt?.invokeExact(resources.shmAddr) } catch (_: Throwable) {}
-    try { shmctl?.invokeExact(resources.shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+    runCatching { LinuxPosix.shmdt(resources.shmAddr) }
+    runCatching { LinuxPosix.shmctl(resources.shmid, LinuxPosix.IPC_RMID) }
 }

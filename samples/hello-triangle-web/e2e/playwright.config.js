@@ -24,6 +24,8 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8080',
     headless: true,
+    // Make HiDPI behavior deterministic instead of depending on the host display.
+    deviceScaleFactor: 2,
     // Stable Chrome (release channel) installed by Playwright via `npx playwright
     // install chrome`. The macOS runner's Metal GPU is used for real WebGPU.
     channel: 'chrome',

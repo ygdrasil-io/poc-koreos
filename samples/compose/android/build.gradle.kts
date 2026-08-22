@@ -1,6 +1,7 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
-    kotlin("android")
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
 }
@@ -19,10 +20,16 @@ android {
         release { isMinifyEnabled = false }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_25
-        targetCompatibility = JavaVersion.VERSION_25
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlin { jvmToolchain(25) }
+}
+
+kotlin {
+    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

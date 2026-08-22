@@ -51,11 +51,8 @@ interface ApplicationHandler {
     fun deviceEvent(eventLoop: ActiveEventLoop, deviceId: DeviceId, event: DeviceEvent): Unit = Unit
 
     /**
-     * Called at the start of each event loop iteration,
-     * before the accumulated events are dispatched.
-     *
-     * @param eventLoop  Active event loop.
-     * @param startCause Cause that triggered this new iteration.
+     * Called once at the start of an iteration, before any window or device event.
+     * [ApplicationHandler.aboutToWait] is the final callback of that iteration.
      */
     fun newEvents(eventLoop: ActiveEventLoop, startCause: StartCause): Unit = Unit
 

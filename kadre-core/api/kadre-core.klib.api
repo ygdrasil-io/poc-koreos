@@ -143,6 +143,20 @@ final enum class org.graphiks.kadre.core/DeviceEvents : kotlin/Enum<org.graphiks
     final fun values(): kotlin/Array<org.graphiks.kadre.core/DeviceEvents> // org.graphiks.kadre.core/DeviceEvents.values|values#static(){}[0]
 }
 
+final enum class org.graphiks.kadre.core/ImeCapability : kotlin/Enum<org.graphiks.kadre.core/ImeCapability> { // org.graphiks.kadre.core/ImeCapability|null[0]
+    enum entry Composition // org.graphiks.kadre.core/ImeCapability.Composition|null[0]
+    enum entry Learning // org.graphiks.kadre.core/ImeCapability.Learning|null[0]
+    enum entry Password // org.graphiks.kadre.core/ImeCapability.Password|null[0]
+    enum entry Provisional // org.graphiks.kadre.core/ImeCapability.Provisional|null[0]
+    enum entry Terminal // org.graphiks.kadre.core/ImeCapability.Terminal|null[0]
+
+    final val entries // org.graphiks.kadre.core/ImeCapability.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<org.graphiks.kadre.core/ImeCapability> // org.graphiks.kadre.core/ImeCapability.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): org.graphiks.kadre.core/ImeCapability // org.graphiks.kadre.core/ImeCapability.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<org.graphiks.kadre.core/ImeCapability> // org.graphiks.kadre.core/ImeCapability.values|values#static(){}[0]
+}
+
 final enum class org.graphiks.kadre.core/ImePurpose : kotlin/Enum<org.graphiks.kadre.core/ImePurpose> { // org.graphiks.kadre.core/ImePurpose|null[0]
     enum entry Normal // org.graphiks.kadre.core/ImePurpose.Normal|null[0]
     enum entry Password // org.graphiks.kadre.core/ImePurpose.Password|null[0]
@@ -351,6 +365,7 @@ final enum class org.graphiks.kadre.core/KeyCode : kotlin/Enum<org.graphiks.kadr
     enum entry NumpadMultiply // org.graphiks.kadre.core/KeyCode.NumpadMultiply|null[0]
     enum entry NumpadParenLeft // org.graphiks.kadre.core/KeyCode.NumpadParenLeft|null[0]
     enum entry NumpadParenRight // org.graphiks.kadre.core/KeyCode.NumpadParenRight|null[0]
+    enum entry NumpadSignChange // org.graphiks.kadre.core/KeyCode.NumpadSignChange|null[0]
     enum entry NumpadStar // org.graphiks.kadre.core/KeyCode.NumpadStar|null[0]
     enum entry NumpadSubtract // org.graphiks.kadre.core/KeyCode.NumpadSubtract|null[0]
     enum entry Open // org.graphiks.kadre.core/KeyCode.Open|null[0]
@@ -998,6 +1013,7 @@ abstract interface org.graphiks.kadre.core/Window { // org.graphiks.kadre.core/W
     open fun dragResizeWindow(org.graphiks.kadre.core/ResizeDirection): org.graphiks.kadre.core/WindowRequestResult // org.graphiks.kadre.core/Window.dragResizeWindow|dragResizeWindow(org.graphiks.kadre.core.ResizeDirection){}[0]
     open fun dragWindow(): org.graphiks.kadre.core/WindowRequestResult // org.graphiks.kadre.core/Window.dragWindow|dragWindow(){}[0]
     open fun focusWindow() // org.graphiks.kadre.core/Window.focusWindow|focusWindow(){}[0]
+    open fun imeCapabilities(): org.graphiks.kadre.core/ImeCapabilities // org.graphiks.kadre.core/Window.imeCapabilities|imeCapabilities(){}[0]
     open fun inputCapabilities(): org.graphiks.kadre.core/InputCapabilities // org.graphiks.kadre.core/Window.inputCapabilities|inputCapabilities(){}[0]
     open fun primaryMonitor(): org.graphiks.kadre.core/MonitorHandle? // org.graphiks.kadre.core/Window.primaryMonitor|primaryMonitor(){}[0]
     open fun recognizeDoubleTapGesture(kotlin/Boolean) // org.graphiks.kadre.core/Window.recognizeDoubleTapGesture|recognizeDoubleTapGesture(kotlin.Boolean){}[0]
@@ -2977,6 +2993,25 @@ final class org.graphiks.kadre.core/Icon { // org.graphiks.kadre.core/Icon|null[
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/Icon.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/Icon.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // org.graphiks.kadre.core/Icon.toString|toString(){}[0]
+}
+
+final class org.graphiks.kadre.core/ImeCapabilities { // org.graphiks.kadre.core/ImeCapabilities|null[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin.collections/List<org.graphiks.kadre.core/ImePurpose> = ..., kotlin.collections/Set<org.graphiks.kadre.core/ImeCapability> = ...) // org.graphiks.kadre.core/ImeCapabilities.<init>|<init>(kotlin.Boolean;kotlin.collections.List<org.graphiks.kadre.core.ImePurpose>;kotlin.collections.Set<org.graphiks.kadre.core.ImeCapability>){}[0]
+
+    final val capabilities // org.graphiks.kadre.core/ImeCapabilities.capabilities|{}capabilities[0]
+        final fun <get-capabilities>(): kotlin.collections/Set<org.graphiks.kadre.core/ImeCapability> // org.graphiks.kadre.core/ImeCapabilities.capabilities.<get-capabilities>|<get-capabilities>(){}[0]
+    final val enabled // org.graphiks.kadre.core/ImeCapabilities.enabled|{}enabled[0]
+        final fun <get-enabled>(): kotlin/Boolean // org.graphiks.kadre.core/ImeCapabilities.enabled.<get-enabled>|<get-enabled>(){}[0]
+    final val purposes // org.graphiks.kadre.core/ImeCapabilities.purposes|{}purposes[0]
+        final fun <get-purposes>(): kotlin.collections/List<org.graphiks.kadre.core/ImePurpose> // org.graphiks.kadre.core/ImeCapabilities.purposes.<get-purposes>|<get-purposes>(){}[0]
+
+    final fun component1(): kotlin/Boolean // org.graphiks.kadre.core/ImeCapabilities.component1|component1(){}[0]
+    final fun component2(): kotlin.collections/List<org.graphiks.kadre.core/ImePurpose> // org.graphiks.kadre.core/ImeCapabilities.component2|component2(){}[0]
+    final fun component3(): kotlin.collections/Set<org.graphiks.kadre.core/ImeCapability> // org.graphiks.kadre.core/ImeCapabilities.component3|component3(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin.collections/List<org.graphiks.kadre.core/ImePurpose> = ..., kotlin.collections/Set<org.graphiks.kadre.core/ImeCapability> = ...): org.graphiks.kadre.core/ImeCapabilities // org.graphiks.kadre.core/ImeCapabilities.copy|copy(kotlin.Boolean;kotlin.collections.List<org.graphiks.kadre.core.ImePurpose>;kotlin.collections.Set<org.graphiks.kadre.core.ImeCapability>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.core/ImeCapabilities.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // org.graphiks.kadre.core/ImeCapabilities.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // org.graphiks.kadre.core/ImeCapabilities.toString|toString(){}[0]
 }
 
 final class org.graphiks.kadre.core/InputCapabilities { // org.graphiks.kadre.core/InputCapabilities|null[0]

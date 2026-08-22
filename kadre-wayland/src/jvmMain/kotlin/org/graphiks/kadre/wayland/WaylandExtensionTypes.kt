@@ -6,7 +6,7 @@
  */
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
@@ -95,11 +95,11 @@ fun ActiveEventLoop.setActivationToken(token: String?) {
 
 /**
  * Returns the set of Wayland protocol interface names announced by the compositor
- * during the initial wl_registry negotiation.
+ * by the live wl_registry.
  *
- * Protocols detected at startup remain constant for the session lifetime
- * (the compositor does not hotplug protocols). For hot-pluggable resources
- * like wl_output, use [availableMonitors].
+ * The returned snapshot reflects globals added or removed since startup. For
+ * hot-pluggable resources such as wl_output, [availableMonitors] exposes the
+ * corresponding live monitor handles.
  *
  * ### Usage
  * ```kotlin

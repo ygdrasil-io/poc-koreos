@@ -1,9 +1,9 @@
 package org.graphiks.kadre.wayland
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 
 import org.graphiks.kadre.core.CursorImage
-import org.graphiks.kadre.ffi.wayland.generated.wl_shm_format
-import java.lang.foreign.Arena
+import org.graphiks.kffi.posix.LinuxPosix
+import org.graphiks.kffi.wayland.generated.wl_shm_format
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
@@ -57,14 +57,21 @@ internal fun applyCursorSurface(
     val fd: Int = createShmFd("kadre-cursor", size) ?: return 0L
 
     // ── 2. Map the fd ──────────────────────────────────────────────────────
-    val mapped = nativeMmap?.let { mmap ->
-        try {
-            mmap.invokeExact(MemorySegment.NULL, size.toLong(), PROT_READ or PROT_WRITE, MAP_SHARED, fd, 0L) as MemorySegment
-        } catch (_: Throwable) { MemorySegment.NULL }
-    } ?: MemorySegment.NULL
+    val mapped = try {
+        LinuxPosix.mmap(
+            MemorySegment.NULL,
+            size.toLong(),
+            LinuxPosix.PROT_READ or LinuxPosix.PROT_WRITE,
+            LinuxPosix.MAP_SHARED,
+            fd,
+            0L,
+        )
+    } catch (_: Throwable) {
+        MemorySegment.NULL
+    }
 
-    if (mapped == MemorySegment.NULL || mapped.address() == MAP_FAILED_PTR) {
-        nativeClose?.invokeExact(fd)
+    if (mapped == MemorySegment.NULL || mapped.address() == LinuxPosix.MAP_FAILED_ADDRESS) {
+        runCatching { LinuxPosix.close(fd) }
         return 0L
     }
 
@@ -84,21 +91,21 @@ internal fun applyCursorSurface(
             mapped.set(ValueLayout.JAVA_INT, i * 4L, argb)
         }
     } catch (_: Throwable) {
-        nativeMunmap?.invokeExact(mapped, size.toLong())
-        nativeClose?.invokeExact(fd)
+        runCatching { LinuxPosix.munmap(mapped, size.toLong()) }
+        runCatching { LinuxPosix.close(fd) }
         return 0L
     }
 
     // Unmap — the kernel keeps the pages alive while the fd is open (MAP_SHARED).
-    nativeMunmap?.invokeExact(mapped, size.toLong())
+    runCatching { LinuxPosix.munmap(mapped, size.toLong()) }
 
     // ── 4. Create wl_shm_pool ──────────────────────────────────────────────
     val poolMarshal = wlShmCreatePool ?: run {
-        nativeClose?.invokeExact(fd)
+        runCatching { LinuxPosix.close(fd) }
         return 0L
     }
     val poolIface = wlShmPoolInterface ?: run {
-        nativeClose?.invokeExact(fd)
+        runCatching { LinuxPosix.close(fd) }
         return 0L
     }
     val poolPtr: MemorySegment = try {
@@ -116,12 +123,12 @@ internal fun applyCursorSurface(
         MemorySegment.NULL
     }
     if (poolPtr == MemorySegment.NULL || poolPtr.address() == 0L) {
-        nativeClose?.invokeExact(fd)
+        runCatching { LinuxPosix.close(fd) }
         return 0L
     }
 
     // Close our fd — the pool holds its own reference
-    nativeClose?.invokeExact(fd)
+    runCatching { LinuxPosix.close(fd) }
 
     // ── 5. Create wl_buffer from pool ──────────────────────────────────────
     val bufMarshal = wlShmPoolCreateBuffer ?: run {
@@ -182,44 +189,30 @@ internal fun applyCursorSurface(
  */
 internal fun createShmFd(name: String, size: Int): Int? {
     // Try memfd_create first
-    if (nativeMemfdCreate != null) {
-        val arena = Arena.ofConfined()
-        try {
-            val nameSeg = arena.allocateFrom(name)
-            val fd = nativeMemfdCreate!!.invokeExact(nameSeg, 0) as Int
-            if (fd >= 0) {
-                val rc = nativeFtruncate?.let { ftrunc ->
-                    try { ftrunc.invokeExact(fd, size.toLong()) as Int } catch (_: Throwable) { -1 }
-                } ?: -1
-                if (rc == 0) return fd
-                nativeClose?.invokeExact(fd)
-            }
-        } catch (_: Throwable) {
-        } finally {
-            arena.close()
-        }
+    var fd = -1
+    try {
+        fd = LinuxPosix.memfdCreate(name, LinuxPosix.MFD_CLOEXEC)
+        LinuxPosix.ftruncate(fd, size.toLong())
+        return fd
+    } catch (_: Throwable) {
+        if (fd >= 0) runCatching { LinuxPosix.close(fd) }
     }
 
     // Fallback: shm_open
-    if (nativeShmOpen != null && nativeShmUnlink != null) {
-        val arena = Arena.ofConfined()
-        try {
-            val shmName = "/kadre-cursor-" + java.util.UUID.randomUUID()
-            val nameSeg = arena.allocateFrom(shmName)
-            val fd = nativeShmOpen!!.invokeExact(nameSeg, O_RDWR or O_CREAT or O_EXCL, 384) as Int
-            if (fd >= 0) {
-                // Unlink immediately so the name goes away
-                nativeShmUnlink!!.invokeExact(nameSeg)
-                val rc = nativeFtruncate?.let { ftrunc ->
-                    try { ftrunc.invokeExact(fd, size.toLong()) as Int } catch (_: Throwable) { -1 }
-                } ?: -1
-                if (rc == 0) return fd
-                nativeClose?.invokeExact(fd)
-            }
-        } catch (_: Throwable) {
-        } finally {
-            arena.close()
-        }
+    fd = -1
+    try {
+        val shmName = "/kadre-cursor-" + java.util.UUID.randomUUID()
+        fd = LinuxPosix.shmOpen(
+            shmName,
+            LinuxPosix.O_RDWR or LinuxPosix.O_CREAT or LinuxPosix.O_EXCL,
+            384,
+        )
+        // Unlink immediately so the name goes away.
+        LinuxPosix.shmUnlink(shmName)
+        LinuxPosix.ftruncate(fd, size.toLong())
+        return fd
+    } catch (_: Throwable) {
+        if (fd >= 0) runCatching { LinuxPosix.close(fd) }
     }
 
     return null

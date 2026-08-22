@@ -40,10 +40,9 @@ sealed class ControlFlow {
     object Poll : ControlFlow()
 
     /**
-     * Waits until a specific instant (in milliseconds since the Unix epoch)
-     * or until the next event.
+     * Waits until a specific instant or until the next event.
      *
-     * @param instant Target instant expressed in milliseconds since the Unix epoch.
+     * @param instant Target instant expressed as Unix epoch milliseconds.
      */
     data class WaitUntil(val instant: Long) : ControlFlow()
 }
@@ -68,8 +67,8 @@ sealed class StartCause {
     /**
      * The target wait instant has been reached.
      *
-     * @param requestedResume Original target instant.
-     * @param start Instant at which the resumption actually occurred.
+     * @param requestedResume Original target instant as Unix epoch milliseconds.
+     * @param start Instant at which the resumption actually occurred, as Unix epoch milliseconds.
      */
     data class ResumeTimeReached(val requestedResume: Long, val start: Long) : StartCause()
 }

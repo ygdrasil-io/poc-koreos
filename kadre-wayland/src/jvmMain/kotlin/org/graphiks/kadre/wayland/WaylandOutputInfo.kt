@@ -15,11 +15,9 @@
  * - scale: integer scale factor (v2+).
  *
  * ### Hotplug support
- * The compositor emits new global/global_remove events for output hotplug.
- * A complete implementation would listen for these via wl_registry, but the
- * current architecture binds outputs once at startup. Output geometry changes
- * within the lifetime of an output are communicated via new geometry+mode+done
- * sequences, which are handled by this listener.
+ * [WaylandRegistryOwner] binds every new wl_output global and destroys the matching
+ * proxy on global_remove. Output geometry changes within an output lifetime are
+ * communicated through geometry+mode+done sequences handled by this listener.
  */
 package org.graphiks.kadre.wayland
 
@@ -92,7 +90,11 @@ internal class WaylandOutputInfo(
      */
     fun updateMode(flags: Int, width: Int, height: Int, refresh: Int) {
         modeFlags = flags
-        val mode = VideoMode(PhysicalSize(width, height), null, if (refresh > 0) refresh else null)
+        val mode = VideoMode(
+            size = PhysicalSize(width, height),
+            bitDepth = null,
+            refreshRateMilliHz = if (refresh > 0) refresh else null,
+        )
         if (!allModes.any { it.size.width == width && it.size.height == height && it.refreshRateMilliHz == mode.refreshRateMilliHz }) {
             allModes.add(mode)
         }
@@ -119,12 +121,12 @@ internal class WaylandOutputInfo(
         override val position: PhysicalPosition<Int> get() = PhysicalPosition(positionX, positionY)
         override val scaleFactor: Double get() = scale.toDouble()
         override val currentVideoMode: VideoMode get() = VideoMode(
-            PhysicalSize(
+            size = PhysicalSize(
                 if (modeWidth > 0) modeWidth else 1920,
                 if (modeHeight > 0) modeHeight else 1080,
             ),
-            if (modeRefresh > 0) modeRefresh else null,
-            null,
+            bitDepth = null,
+            refreshRateMilliHz = if (modeRefresh > 0) modeRefresh else null,
         )
         override val videoModes: List<VideoMode> get() = if (allModes.isNotEmpty()) allModes.toList() else listOf(currentVideoMode)
     }

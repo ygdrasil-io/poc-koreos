@@ -4,7 +4,7 @@ name: android-visual
 # hello-triangle-android-capture renders the wgpu4k Vulkan triangle into an offscreen
 # texture (a Surface backed by a SurfaceTexture → ANativeWindow via android-native-helper),
 # reads the framebuffer back and checks the RGB triangle. The emulator provides a software
-# Vulkan (SwiftShader). NON-BLOCKING.
+# Vulkan (SwiftShader), making this a deterministic emulator gate.
 
 on:
   push:
@@ -23,6 +23,7 @@ jobs:
   android-visual:
     name: android-visual
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,9 +46,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Offscreen GPU capture on an emulator (software SwiftShader Vulkan). Non-blocking.
-      - name: Capture GPU Android (émulateur, best-effort)
-        continue-on-error: true
+      - name: Capture GPU Android (software emulator)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -56,7 +55,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -no-boot-anim
           disable-animations: true
-          script: ./gradlew :samples:hello-triangle-android-capture:connectedDebugAndroidTest --no-daemon --stacktrace
+          script: scripts/android-emulator-test.sh
 
       # The PNG capture, written via TestStorage, is pulled back by the runner under
       # build/outputs/.../additional_output. We upload it as an artifact.

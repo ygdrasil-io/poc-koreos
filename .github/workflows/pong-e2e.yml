@@ -34,7 +34,7 @@ jobs:
   pong-e2e:
     name: pong-e2e
     # macOS runner with stable Chrome (release channel): accelerated GPU + mature
-    # WebGPU. The Pong scenario (multi-second animation + pixel-diff assertions)
+    # WebGPU. The Pong scenario (continuous animation + scripted input)
     # is more demanding than the single-frame smoke of hello-triangle;
     # SwiftShader on Linux gives slower and less deterministic frames.
     # Same choice as `web-e2e` (see branch `feat/web-e2e-chrome-mac-win`).
@@ -58,8 +58,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build samples/pong (production JS bundle)
-        run: ./gradlew :samples:pong:jsBrowserDistribution --no-daemon --stacktrace
+      - name: Build samples/pong production bundles (JS + Wasm)
+        run: |
+          ./gradlew \
+            :samples:pong:jsBrowserDistribution \
+            :samples:pong:wasmJsBrowserDistribution \
+            --no-daemon \
+            --stacktrace
 
       - name: Install E2E deps + ffmpeg (video recording)
         working-directory: samples/pong/e2e
@@ -69,18 +74,23 @@ jobs:
           # Chrome itself is the system Chrome at the default path.
           npx playwright install ffmpeg
 
-      - name: Run Playwright scenario
+      - name: Run Playwright scenarios (JS + Wasm)
         working-directory: samples/pong/e2e
-        run: npx playwright test
+        run: |
+          set -euo pipefail
+          PONG_WEB_TARGET=js npx playwright test
+          PONG_WEB_TARGET=wasm npx playwright test
 
       # Scenario summary in the Job Summary (visible directly on the run page).
       - name: Publier le résumé du scénario
         if: always()
         run: |
-          SUMMARY=samples/pong/e2e/test-results/scenario-summary.md
-          if [ -f "$SUMMARY" ]; then
-            cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          for TARGET in js wasm; do
+            SUMMARY="samples/pong/e2e/test-results/$TARGET/scenario-summary.md"
+            if [ -f "$SUMMARY" ]; then
+              cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
       # Video, trace, key frames — all retrievable from the run's artifacts tab.
       - name: Upload artefacts (vidéo, trace, frames)
@@ -91,6 +101,6 @@ jobs:
           path: |
             samples/pong/e2e/test-results/**/*.webm
             samples/pong/e2e/test-results/**/trace.zip
-            samples/pong/e2e/test-results/frame*.png
-            samples/pong/e2e/test-results/scenario-summary.md
+            samples/pong/e2e/test-results/**/frame*.png
+            samples/pong/e2e/test-results/**/scenario-summary.md
           if-no-files-found: warn

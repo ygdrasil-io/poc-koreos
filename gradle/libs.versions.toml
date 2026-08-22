@@ -19,6 +19,10 @@ wgpu4k = "0.1.1"
 webgpu-ktypes = "0.0.7"
 
 # Libraries
+kffi-x11 = "1.0.0-SNAPSHOT"
+kffi-wayland = "1.0.0-SNAPSHOT"
+kffi-objc = "1.0.0-SNAPSHOT"
+kffi-posix = "1.0.0-SNAPSHOT"
 coroutines = "1.10.1"
 koin = "4.0.0"
 ktor = "3.0.3"
@@ -26,6 +30,17 @@ kotlinx-serialization = "1.8.0"
 androidx-activity-compose = "1.10.1"
 
 [libraries]
+# kffi X11 FFI snapshot
+kffi-x11 = { module = "org.graphiks:kffi-x11", version.ref = "kffi-x11" }
+
+# kffi Wayland FFI snapshot
+kffi-wayland = { module = "org.graphiks:kffi-wayland", version.ref = "kffi-wayland" }
+# kffi Objective-C FFI snapshot
+kffi-objc = { module = "org.graphiks:kffi-objc", version.ref = "kffi-objc" }
+
+# kffi Linux POSIX FFI snapshot
+kffi-posix = { module = "org.graphiks:kffi-posix-jvm", version.ref = "kffi-posix" }
+
 # Coroutines
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
@@ -56,6 +71,7 @@ kotlin-cocoapods = { id = "org.jetbrains.kotlin.native.cocoapods", version.ref =
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }

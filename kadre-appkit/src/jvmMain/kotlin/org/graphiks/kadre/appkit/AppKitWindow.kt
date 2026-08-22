@@ -50,6 +50,7 @@ import org.graphiks.kadre.core.WindowRequestResult
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native macOS window implementing [Window].
@@ -61,11 +62,13 @@ import java.lang.foreign.ValueLayout
 class AppKitWindow(attrs: WindowAttributes) : Window {
 
     private val arena = Arena.global()
-    private val nsWindowPtr: MemorySegment
-    private val contentViewPtr: MemorySegment
-    private val metalLayerPtr: MemorySegment
+    private var nsWindowPtr: MemorySegment = MemorySegment.NULL
+    private var contentViewPtr: MemorySegment = MemorySegment.NULL
+    private var metalLayerPtr: MemorySegment = MemorySegment.NULL
+    private val nativeResourcesReleased = AtomicBoolean(false)
 
-    override val id: WindowId
+    override var id: WindowId = WindowId(0L)
+        private set
 
     /** In-memory fullscreen state (R2). */
     @Volatile
@@ -136,151 +139,150 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
         val height = attrs.size?.height?.toDouble() ?: 600.0
         val contentRect: NSRect = allocNSRect(arena, 100.0, 100.0, width, height)
 
-        // 3. Allocate + initialize NSWindow via alloc/init
+        // 3. Acquire NSWindow, content view, drag source, and layer as one owned transaction.
         val nsWindowClass = ObjCRuntime.getClass("NSWindow")
-        val allocated = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            nsWindowClass,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-
         val backing = NSBackingStoreType.NSBackingStoreBuffered
+        appKitAcquireNativeWindowTransaction(
+            allocateWindow = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    nsWindowClass,
+                    ObjCRuntime.sel("alloc"),
+                ) as MemorySegment
+            },
+            initializeWindow = { allocated ->
+                // initWithContentRect:styleMask:backing:defer: is not generated.
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    allocated,
+                    ObjCRuntime.sel("initWithContentRect:styleMask:backing:defer:"),
+                    ObjCRuntime.ObjCStructArg(contentRect, NS_RECT_LAYOUT),
+                    styleMask.rawValue,
+                    backing.value,
+                    0L,
+                ) as MemorySegment
+            },
+            createView = { window ->
+                val nsWindow = NSWindow(window)
+                appKitOwnNativeWindow(nsWindow::setReleasedWhenClosed)
+                val defaultContentFrame = NSView(nsWindow.contentView()).frame()
+                AppKitImeTextInputClient.createInstance(defaultContentFrame)
+            },
+            attachView = { window, view ->
+                ObjCRuntime.msgSend(null, window, ObjCRuntime.sel("setContentView:"), view)
+            },
+            registerDrag = { view ->
+                val filenamesType = ObjCRuntime.newNSString(arena, "NSFilenamesPboardType")
+                val array = ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    ObjCRuntime.getClass("NSArray"),
+                    ObjCRuntime.sel("arrayWithObject:"),
+                    filenamesType,
+                ) as MemorySegment
+                ObjCRuntime.msgSend(null, view, ObjCRuntime.sel("registerForDraggedTypes:"), array)
+            },
+            createLayer = {
+                ObjCRuntime.msgSend(
+                    ValueLayout.ADDRESS,
+                    ObjCRuntime.getClass("CAMetalLayer"),
+                    ObjCRuntime.sel("new"),
+                ) as MemorySegment
+            },
+            attachLayer = { view, layer -> NSView(view).setLayer(layer) },
+            configureLayer = { window, view, layer ->
+                NSView(view).setWantsLayer(true)
+                val scale = NSWindow(window).backingScaleFactor()
+                ObjCRuntime.msgSend(null, layer, ObjCRuntime.sel("setContentsScale:"), scale)
+            },
+            detachLayer = { view ->
+                ObjCRuntime.msgSend(null, view, ObjCRuntime.sel("setLayer:"), MemorySegment.NULL)
+            },
+            releaseLayer = { layer ->
+                ObjCRuntime.msgSend(null, layer, ObjCRuntime.sel("release"))
+            },
+            unregisterDrag = { view ->
+                ObjCRuntime.msgSend(null, view, ObjCRuntime.sel("unregisterDraggedTypes"))
+            },
+            detachView = { window ->
+                ObjCRuntime.msgSend(null, window, ObjCRuntime.sel("setContentView:"), MemorySegment.NULL)
+            },
+            releaseView = { view ->
+                ObjCRuntime.msgSend(null, view, ObjCRuntime.sel("release"))
+            },
+            releaseWindow = { window ->
+                ObjCRuntime.msgSend(null, window, ObjCRuntime.sel("release"))
+            },
+            completeAcquisition = { window, view, layer ->
+                nsWindowPtr = window
+                contentViewPtr = view
+                textInputViewPtr = view
+                metalLayerPtr = layer
+                id = WindowId(window.address())
+                val nsWindow = NSWindow(window)
 
-        // initWithContentRect:styleMask:backing:defer: is not generated (init methods
-        // are filtered by the include filter), so use raw msgSend.
-        val initializedPtr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            allocated,
-            ObjCRuntime.sel("initWithContentRect:styleMask:backing:defer:"),
-            ObjCRuntime.ObjCStructArg(contentRect, NS_RECT_LAYOUT),
-            styleMask.rawValue,
-            backing.value,
-            (if (false) 1L else 0L), // BOOL = Byte → Long
-        ) as MemorySegment
-        nsWindowPtr = initializedPtr
-        id = WindowId(nsWindowPtr.address())
+                // 7. Initial title and appearance.
+                nsWindow.setTitle(attrs.title)
+                applyEnabledButtons(attrs.enabledButtons)
+                setWindowLevel(attrs.windowLevel)
+                applyInitialAppearance(attrs)
 
-        // 4. Create a KadreTextInputView (NSTextInputClient-adopting NSView) as contentView
-        val nsWindow = NSWindow(nsWindowPtr)
-        val defaultContentFrame = NSView(nsWindow.contentView()).frame()
-        val imeViewPtr = AppKitImeTextInputClient.createInstance(defaultContentFrame)
-        textInputViewPtr = imeViewPtr
-        contentViewPtr = imeViewPtr
-        ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setContentView:"), imeViewPtr)
+                attrs.minSize?.let { min ->
+                    Arena.ofConfined().use { a ->
+                        nsWindow.setContentMinSize(allocNSSize(a, min.width.toDouble(), min.height.toDouble()))
+                    }
+                }
+                attrs.maxSize?.let { max ->
+                    Arena.ofConfined().use { a ->
+                        nsWindow.setContentMaxSize(allocNSSize(a, max.width.toDouble(), max.height.toDouble()))
+                    }
+                }
+                attrs.resizeIncrements?.let(::setSurfaceResizeIncrements)
+                attrs.position?.let { pos ->
+                    Arena.ofConfined().use { a ->
+                        nsWindow.setFrameOrigin(allocNSPoint(a, pos.x.toDouble(), pos.y.toDouble()))
+                    }
+                }
+                if (attrs.maximized) nsWindow.zoom(MemorySegment.NULL)
+                if (attrs.contentProtected) setContentProtected(true)
+                if (attrs.visible) nsWindow.makeKeyAndOrderFront(MemorySegment.NULL)
+                if (attrs.fullscreen != null) nsWindow.toggleFullScreen(MemorySegment.NULL)
 
-        // 4b. Register for dragged types so NSDraggingDestination callbacks fire.
-        //     Without this, AppKit skips the view for drag operations entirely.
-        val filenamesType = ObjCRuntime.newNSString(arena, "NSFilenamesPboardType")
-        val array = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            ObjCRuntime.getClass("NSArray"),
-            ObjCRuntime.sel("arrayWithObject:"),
-            filenamesType,
-        ) as MemorySegment
-        ObjCRuntime.msgSend(null, imeViewPtr, ObjCRuntime.sel("registerForDraggedTypes:"), array)
-
-        // 5. Correct AppKit Metal pattern: layer = CAMetalLayer() THEN wantsLayer = YES
-        //    Apple docs: "If you want to use a custom layer, you must call setLayer: BEFORE
-        //    calling setWantsLayer:YES". The reverse order makes AppKit first create a
-        //    generic CALayer, making [nsView layer] unreliable and nextDrawable impossible.
-        val contentView = NSView(contentViewPtr)
-
-        val metalLayerClass = ObjCRuntime.getClass("CAMetalLayer")
-        metalLayerPtr = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            metalLayerClass,
-            ObjCRuntime.sel("new"),
-        ) as MemorySegment
-        contentView.setLayer(metalLayerPtr) // ← setLayer BEFORE setWantsLayer
-        contentView.setWantsLayer(true)     // ← setWantsLayer LAST
-
-        // 6. contentsScale = backingScaleFactor for HiDPI / Retina support
-        val scale = NSWindow(nsWindowPtr).backingScaleFactor()
-        ObjCRuntime.msgSend(
-            null,
-            metalLayerPtr,
-            ObjCRuntime.sel("setContentsScale:"),
-            scale,
-        )
-
-        // 7. Initial title
-        nsWindow.setTitle(attrs.title)
-        applyEnabledButtons(attrs.enabledButtons)
-        setWindowLevel(attrs.windowLevel)
-        applyInitialAppearance(attrs)
-
-        // 7b. Apply R1 attrs: minSize / maxSize / position / maximized
-        attrs.minSize?.let { min ->
-            Arena.ofConfined().use { a ->
-                nsWindow.setContentMinSize(allocNSSize(a, min.width.toDouble(), min.height.toDouble()))
+                val trackingAreaClass = ObjCRuntime.getClass("NSTrackingArea")
+                val zeroRect = allocNSRect(arena, 0.0, 0.0, 0.0, 0.0)
+                val trackingOptions = 0x123L
+                val trackingArea = appKitInitializeOwnedNativeObject(
+                    allocate = {
+                        ObjCRuntime.msgSend(
+                            ValueLayout.ADDRESS,
+                            trackingAreaClass,
+                            ObjCRuntime.sel("alloc"),
+                        ) as MemorySegment
+                    },
+                    initialize = { allocated ->
+                        ObjCRuntime.msgSend(
+                            ValueLayout.ADDRESS,
+                            allocated,
+                            ObjCRuntime.sel("initWithRect:options:owner:userInfo:"),
+                            ObjCRuntime.ObjCStructArg(zeroRect, NS_RECT_LAYOUT),
+                            trackingOptions,
+                            view,
+                            MemorySegment.NULL,
+                        ) as MemorySegment
+                    },
+                    releaseAllocated = { allocated ->
+                        ObjCRuntime.msgSend(null, allocated, ObjCRuntime.sel("release"))
+                    },
+                )
+                appKitAcquireOwnedRegistration(
+                    register = {
+                        ObjCRuntime.msgSend(null, view, ObjCRuntime.sel("addTrackingArea:"), trackingArea)
+                    },
+                    rollback = {
+                        ObjCRuntime.msgSend(null, trackingArea, ObjCRuntime.sel("release"))
+                    },
+                )
+                ObjCRuntime.msgSend(null, trackingArea, ObjCRuntime.sel("release"))
             }
-        }
-        attrs.maxSize?.let { max ->
-            Arena.ofConfined().use { a ->
-                nsWindow.setContentMaxSize(allocNSSize(a, max.width.toDouble(), max.height.toDouble()))
-            }
-        }
-        attrs.resizeIncrements?.let { increments ->
-            setSurfaceResizeIncrements(increments)
-        }
-        attrs.position?.let { pos ->
-            Arena.ofConfined().use { a ->
-                nsWindow.setFrameOrigin(allocNSPoint(a, pos.x.toDouble(), pos.y.toDouble()))
-            }
-        }
-        if (attrs.maximized) {
-            nsWindow.zoom(MemorySegment.NULL)
-        }
-        if (attrs.contentProtected) {
-            setContentProtected(true)
-        }
-
-        // 8. Display if requested
-        if (attrs.visible) {
-            nsWindow.makeKeyAndOrderFront(MemorySegment.NULL)
-        }
-
-        // 8b. Apply initial fullscreen from attrs (toggleFullScreen is called; _fullscreen already set above)
-        if (attrs.fullscreen != null) {
-            nsWindow.toggleFullScreen(MemorySegment.NULL)
-        }
-
-        // 9. Install NSTrackingArea for mouseEntered/mouseExited/mouseMoved events
-        val trackingAreaClass = ObjCRuntime.getClass("NSTrackingArea")
-        val trackingAreaAlloc = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            trackingAreaClass,
-            ObjCRuntime.sel("alloc"),
-        ) as MemorySegment
-
-        // NSZeroRect (all zeros) since NSTrackingInVisibleRect handles the rect automatically
-        val zeroRect = allocNSRect(arena, 0.0, 0.0, 0.0, 0.0)
-
-        // Options bitmask:
-        // NSTrackingMouseEnteredAndExited = 0x01
-        // NSTrackingMouseMoved            = 0x02
-        // NSTrackingActiveInKeyWindow     = 0x20
-        // NSTrackingInVisibleRect         = 0x100
-        // Combined = 0x123
-        val trackingOptions = 0x123L
-
-        // NSTrackingArea isn't in --include-objc-class, so we hand-roll the init call.
-        // CGRect layout for the by-value NSRect argument.
-        val trackingArea = ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            trackingAreaAlloc,
-            ObjCRuntime.sel("initWithRect:options:owner:userInfo:"),
-            ObjCRuntime.ObjCStructArg(zeroRect, NS_RECT_LAYOUT),  // NSRect by value
-            trackingOptions,           // NSTrackingAreaOptions (Long)
-            contentViewPtr,            // owner = contentView
-            MemorySegment.NULL,        // userInfo = nil
-        ) as MemorySegment
-
-        ObjCRuntime.msgSend(
-            null,
-            contentViewPtr,
-            ObjCRuntime.sel("addTrackingArea:"),
-            trackingArea,
         )
     }
 
@@ -326,11 +328,15 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     internal var needsRedraw: Boolean = false
 
     /**
-     * Requests a redraw: sets the [needsRedraw] flag, which will be consumed
-     * by the CFRunLoop observer before the next sleep (native coalescing).
+     * Requests a redraw and persistently wakes the owning run loop when this
+     * starts a new pending batch. Requests made before owner attachment retain
+     * the fallback flag consumed by the observer.
      */
     override fun requestRedraw() {
-        needsRedraw = true
+        val appKitEventLoop = _eventLoop as? AppKitEventLoop
+        if (appKitEventLoop == null || !appKitEventLoop.requestRedraw(id)) {
+            needsRedraw = true
+        }
     }
 
     override fun setTitle(title: String) {
@@ -413,7 +419,9 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     }
 
     override fun close() {
-        NSWindow(nsWindowPtr).close()
+        appKitCloseWindow(_eventLoop, id) {
+            closeAndReleaseNativeWindow()
+        }
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -1065,28 +1073,124 @@ class AppKitWindow(attrs: WindowAttributes) : Window {
     fun setWindowDelegate(handler: ApplicationHandler, eventLoop: ActiveEventLoop) {
         MainThreadCheck.require()
         val appKitEventLoop = eventLoop as AppKitEventLoop
-        val del = KadreWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr, appKitEventLoop.windows)
-        NSWindow(nsWindowPtr).setDelegate(del.ptr)
-        delegate = del
-
-        // Store handler/eventLoop for IME event dispatch
+        val setup = appKitInstallWindowCallbacksTransaction(
+            resourcesReleased = nativeResourcesReleased,
+            createDelegate = {
+                KadreWindowDelegate(handler, eventLoop, id, nsWindowPtr, metalLayerPtr, appKitEventLoop.windows)
+            },
+            setDelegate = { NSWindow(nsWindowPtr).setDelegate(it.ptr) },
+            registerIme = {
+                if (textInputViewPtr == MemorySegment.NULL) null else {
+                    val record = ImeViewRecord(
+                        handler = handler,
+                        eventLoop = eventLoop,
+                        windowId = id,
+                        imeCursorScreenRect = imeCursorScreenRect,
+                    )
+                    record to AppKitImeTextInputClient.registerNativeView(textInputViewPtr, record)
+                }
+            },
+            registerCloseAction = { del, imeRegistration ->
+                appKitEventLoop.registerWindowCloseActions(
+                    windowId = id,
+                    unregisterCallbacks = {
+                        appKitClearWindowCallbackReferences(
+                            cleanupCallbacks = {
+                                appKitUnregisterWindowCallbacks(
+                                    detachNativeDelegate = {
+                                        NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL)
+                                    },
+                                    detachNativeViewCallbacks = {
+                                        ObjCRuntime.msgSend(
+                                            null,
+                                            textInputViewPtr,
+                                            ObjCRuntime.sel("unregisterDraggedTypes"),
+                                        )
+                                    },
+                                    unregisterDelegate = del::unregisterRoute,
+                                    unregisterImeView = {
+                                        imeRegistration?.let { (record, token) ->
+                                            AppKitImeTextInputClient.unregisterNativeView(
+                                                textInputViewPtr,
+                                                token,
+                                                record,
+                                            )
+                                        }
+                                    },
+                                    releaseDelegate = {},
+                                )
+                            },
+                            clearReferences = {
+                                delegate = null
+                                _handler = null
+                                _eventLoop = null
+                            },
+                        )
+                    },
+                    sendNativeClose = { NSWindow(nsWindowPtr).close() },
+                    releaseNativeResources = ::releaseNativeWindowResources,
+                    releaseDelegate = del::releaseNative,
+                )
+            },
+            unregisterCloseAction = { appKitEventLoop.unregisterWindowCloseActions(id) },
+            detachDelegate = { NSWindow(nsWindowPtr).setDelegate(MemorySegment.NULL) },
+            unregisterIme = { (record, token) ->
+                AppKitImeTextInputClient.unregisterNativeView(textInputViewPtr, token, record)
+            },
+            releaseDelegate = KadreWindowDelegate::releaseNative,
+            detachLayer = {
+                ObjCRuntime.msgSend(null, contentViewPtr, ObjCRuntime.sel("setLayer:"), MemorySegment.NULL)
+            },
+            unregisterDrag = {
+                ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("unregisterDraggedTypes"))
+            },
+            detachView = {
+                ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("setContentView:"), MemorySegment.NULL)
+            },
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                }
+            },
+        )
+        delegate = setup.delegate
         _handler = handler
         _eventLoop = eventLoop
-
-        // Register the IME text input view in the callbacks table
-        // The imeCursorScreenRect segment is shared: setImeCursorArea writes to it,
-        // and the NSTextInputClient callback reads from the same segment.
-        if (textInputViewPtr != MemorySegment.NULL) {
-            AppKitImeTextInputClient.registerView(
-                textInputViewPtr,
-                ImeViewRecord(
-                    handler = handler,
-                    eventLoop = eventLoop,
-                    windowId = id,
-                    imeCursorScreenRect = imeCursorScreenRect,
-                ),
-            )
+        if (needsRedraw && appKitEventLoop.requestRedraw(id)) {
+            needsRedraw = false
         }
+    }
+
+    private fun releaseNativeWindowResources() {
+        appKitReleaseNativeWindowResources(
+            released = nativeResourcesReleased,
+            sendNativeClose = false,
+            closeWindow = {},
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                }
+            },
+        )
+    }
+
+    private fun closeAndReleaseNativeWindow() {
+        appKitReleaseNativeWindowResources(
+            released = nativeResourcesReleased,
+            sendNativeClose = true,
+            closeWindow = { NSWindow(nsWindowPtr).close() },
+            releaseWindow = { ObjCRuntime.msgSend(null, nsWindowPtr, ObjCRuntime.sel("release")) },
+            releaseLayer = { ObjCRuntime.msgSend(null, metalLayerPtr, ObjCRuntime.sel("release")) },
+            releaseView = {
+                if (textInputViewPtr != MemorySegment.NULL) {
+                    ObjCRuntime.msgSend(null, textInputViewPtr, ObjCRuntime.sel("release"))
+                }
+            },
+        )
     }
 
     // ── R4: keyboard ─────────────────────────────────────────────────────────
@@ -1482,6 +1586,291 @@ private fun activateApplicationForWindowFocus() {
     ObjCRuntime.msgSend(null, nsApp, ObjCRuntime.sel("activateIgnoringOtherApps:"), true)
 }
 
+internal fun appKitCloseWindow(
+    eventLoop: ActiveEventLoop?,
+    windowId: WindowId,
+    closeNative: () -> Unit,
+) {
+    val appKitEventLoop = eventLoop as? AppKitEventLoop
+    if (appKitEventLoop == null) {
+        closeNative()
+    } else {
+        appKitEventLoop.closeWindow(windowId)
+    }
+}
+
+internal fun appKitOwnNativeWindow(setReleasedWhenClosed: (Boolean) -> Unit) {
+    setReleasedWhenClosed(false)
+}
+
+internal fun appKitReleaseNativeWindowResources(
+    released: AtomicBoolean,
+    sendNativeClose: Boolean,
+    closeWindow: () -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+) {
+    if (!released.compareAndSet(false, true)) return
+    var failure: Throwable? = null
+    fun cleanup(step: () -> Unit) {
+        try {
+            step()
+        } catch (caught: Throwable) {
+            val primary = failure
+            if (primary == null) {
+                failure = caught
+            } else if (caught !== primary) {
+                primary.addSuppressed(caught)
+            }
+        }
+    }
+    if (sendNativeClose) cleanup(closeWindow)
+    cleanup(releaseWindow)
+    cleanup(releaseLayer)
+    cleanup(releaseView)
+    failure?.let { throw it }
+}
+
+internal data class AppKitWindowCallbacksSetup<D : Any, I : Any>(
+    val delegate: D,
+    val imeRegistration: I?,
+)
+
+internal data class AppKitNativeWindowAcquisition<W : Any, V : Any, L : Any>(
+    val window: W,
+    val view: V,
+    val layer: L,
+)
+
+internal fun <W : Any, V : Any, L : Any> appKitAcquireNativeWindowTransaction(
+    allocateWindow: () -> W,
+    initializeWindow: (W) -> W,
+    createView: (W) -> V,
+    attachView: (W, V) -> Unit,
+    registerDrag: (V) -> Unit,
+    createLayer: () -> L,
+    attachLayer: (V, L) -> Unit,
+    configureLayer: (W, V, L) -> Unit,
+    detachLayer: (V) -> Unit,
+    releaseLayer: (L) -> Unit,
+    unregisterDrag: (V) -> Unit,
+    detachView: (W) -> Unit,
+    releaseView: (V) -> Unit,
+    releaseWindow: (W) -> Unit,
+    completeAcquisition: (W, V, L) -> Unit = { _, _, _ -> },
+): AppKitNativeWindowAcquisition<W, V, L> {
+    val allocatedWindow = allocateWindow()
+    var window: W? = null
+    var view: V? = null
+    var viewAttachAttempted = false
+    var dragRegistrationAttempted = false
+    var layer: L? = null
+    var layerAttachAttempted = false
+    try {
+        val initializedWindow = initializeWindow(allocatedWindow)
+        window = initializedWindow
+        val initializedView = createView(initializedWindow)
+        view = initializedView
+        viewAttachAttempted = true
+        attachView(initializedWindow, initializedView)
+        dragRegistrationAttempted = true
+        registerDrag(initializedView)
+        val initializedLayer = createLayer()
+        layer = initializedLayer
+        layerAttachAttempted = true
+        attachLayer(initializedView, initializedLayer)
+        configureLayer(initializedWindow, initializedView, initializedLayer)
+        completeAcquisition(initializedWindow, initializedView, initializedLayer)
+        return AppKitNativeWindowAcquisition(initializedWindow, initializedView, initializedLayer)
+    } catch (primary: Throwable) {
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== primary) primary.addSuppressed(cleanupFailure)
+            }
+        }
+        if (layerAttachAttempted) view?.let { cleanup { detachLayer(it) } }
+        layer?.let { cleanup { releaseLayer(it) } }
+        if (dragRegistrationAttempted) view?.let { cleanup { unregisterDrag(it) } }
+        if (viewAttachAttempted) window?.let { cleanup { detachView(it) } }
+        view?.let { cleanup { releaseView(it) } }
+        cleanup { releaseWindow(window ?: allocatedWindow) }
+        throw primary
+    }
+}
+
+internal inline fun <T> appKitAcquireOwnedRegistration(
+    register: () -> T,
+    rollback: () -> Unit,
+): T = try {
+    register()
+} catch (primary: Throwable) {
+    try {
+        rollback()
+    } catch (rollbackFailure: Throwable) {
+        if (rollbackFailure !== primary) primary.addSuppressed(rollbackFailure)
+    }
+    throw primary
+}
+
+internal inline fun <T : Any> appKitInitializeOwnedNativeObject(
+    allocate: () -> T,
+    initialize: (T) -> T,
+    releaseAllocated: (T) -> Unit,
+): T {
+    val allocated = allocate()
+    return appKitAcquireOwnedRegistration(
+        register = { initialize(allocated) },
+        rollback = { releaseAllocated(allocated) },
+    )
+}
+
+internal fun <D : Any, I : Any> appKitInstallWindowCallbacksTransaction(
+    resourcesReleased: AtomicBoolean,
+    createDelegate: () -> D,
+    setDelegate: (D) -> Unit,
+    registerIme: () -> I?,
+    registerCloseAction: (D, I?) -> Unit,
+    unregisterCloseAction: () -> Unit,
+    detachDelegate: () -> Unit,
+    unregisterIme: (I) -> Unit,
+    releaseDelegate: (D) -> Unit,
+    detachLayer: () -> Unit,
+    unregisterDrag: () -> Unit,
+    detachView: () -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+): AppKitWindowCallbacksSetup<D, I> {
+    var delegate: D? = null
+    var setDelegateAttempted = false
+    var imeRegistration: I? = null
+    var closeActionAttempted = false
+    try {
+        val createdDelegate = createDelegate()
+        delegate = createdDelegate
+        setDelegateAttempted = true
+        setDelegate(createdDelegate)
+        imeRegistration = registerIme()
+        closeActionAttempted = true
+        registerCloseAction(createdDelegate, imeRegistration)
+        return AppKitWindowCallbacksSetup(createdDelegate, imeRegistration)
+    } catch (primary: Throwable) {
+        fun cleanup(step: () -> Unit) {
+            try {
+                step()
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== primary) primary.addSuppressed(cleanupFailure)
+            }
+        }
+        if (closeActionAttempted) cleanup(unregisterCloseAction)
+        imeRegistration?.let { cleanup { unregisterIme(it) } }
+        if (setDelegateAttempted) cleanup(detachDelegate)
+        delegate?.let { cleanup { releaseDelegate(it) } }
+        if (resourcesReleased.compareAndSet(false, true)) {
+            cleanup(detachLayer)
+            cleanup(releaseLayer)
+            cleanup(unregisterDrag)
+            cleanup(detachView)
+            cleanup(releaseView)
+            cleanup(releaseWindow)
+        }
+        throw primary
+    }
+}
+
+internal fun appKitRollbackFailedWindowCreation(
+    setDelegateFailure: Throwable,
+    resourcesReleased: AtomicBoolean,
+    releaseDelegate: () -> Unit,
+    releaseWindow: () -> Unit,
+    releaseLayer: () -> Unit,
+    releaseView: () -> Unit,
+): Nothing {
+    fun suppressReleaseFailure(step: () -> Unit) {
+        try {
+            step()
+        } catch (releaseFailure: Throwable) {
+            if (releaseFailure !== setDelegateFailure) setDelegateFailure.addSuppressed(releaseFailure)
+        }
+    }
+
+    suppressReleaseFailure(releaseDelegate)
+    if (resourcesReleased.compareAndSet(false, true)) {
+        suppressReleaseFailure(releaseWindow)
+        suppressReleaseFailure(releaseLayer)
+        suppressReleaseFailure(releaseView)
+    }
+    throw setDelegateFailure
+}
+
+internal fun appKitUnregisterWindowCallbacks(
+    delegateAddress: Long,
+    textInputView: MemorySegment,
+    detachNativeDelegate: () -> Unit,
+    detachNativeViewCallbacks: () -> Unit = {},
+    releaseDelegate: () -> Unit,
+) = appKitUnregisterWindowCallbacks(
+    detachNativeDelegate = detachNativeDelegate,
+    detachNativeViewCallbacks = detachNativeViewCallbacks,
+    unregisterDelegate = { KadreWindowDelegate.unregisterDelegate(delegateAddress) },
+    unregisterImeView = { AppKitImeTextInputClient.unregisterView(textInputView) },
+    releaseDelegate = releaseDelegate,
+)
+
+internal fun appKitUnregisterWindowCallbacks(
+    detachNativeDelegate: () -> Unit,
+    detachNativeViewCallbacks: () -> Unit = {},
+    unregisterDelegate: () -> Unit,
+    unregisterImeView: () -> Unit,
+    releaseDelegate: () -> Unit,
+) {
+    var failure: Throwable? = null
+    fun cleanup(step: () -> Unit) {
+        try {
+            step()
+        } catch (caught: Throwable) {
+            val primary = failure
+            if (primary == null) {
+                failure = caught
+            } else if (caught !== primary) {
+                primary.addSuppressed(caught)
+            }
+        }
+    }
+    cleanup(detachNativeDelegate)
+    cleanup(detachNativeViewCallbacks)
+    cleanup(unregisterDelegate)
+    cleanup(unregisterImeView)
+    cleanup(releaseDelegate)
+    failure?.let { throw it }
+}
+
+internal fun appKitClearWindowCallbackReferences(
+    cleanupCallbacks: () -> Unit,
+    clearReferences: () -> Unit,
+) {
+    var failure: Throwable? = null
+    try {
+        cleanupCallbacks()
+    } catch (caught: Throwable) {
+        failure = caught
+    }
+    try {
+        clearReferences()
+    } catch (caught: Throwable) {
+        val primary = failure
+        if (primary == null) {
+            failure = caught
+        } else if (caught !== primary) {
+            primary.addSuppressed(caught)
+        }
+    }
+    failure?.let { throw it }
+}
+
 /**
  * Allocates an NSPoint (struct {CGFloat x, CGFloat y}) in the provided arena.
  */
@@ -1567,9 +1956,8 @@ private val NS_SIZE_LAYOUT: java.lang.foreign.GroupLayout = java.lang.foreign.Me
 /**
  * GroupLayout for NSRect / CGRect — nested struct {origin: CGPoint, size: CGSize}.
  *
- * Used manually for ObjC classes NOT included in `--include-objc-class`
- * (e.g. NSTrackingArea). Included classes benefit from the layouts inlined by
- * kextract v0.0.2 in their wrappers.
+ * Used manually for ObjC classes not covered by the generated kffi-objc
+ * wrappers (e.g. NSTrackingArea).
  */
 private val NS_RECT_LAYOUT: java.lang.foreign.GroupLayout = java.lang.foreign.MemoryLayout.structLayout(
     java.lang.foreign.MemoryLayout.structLayout(

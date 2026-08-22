@@ -1,8 +1,9 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.wayland.*
+import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kffi.posix.LinuxPosix
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
@@ -25,12 +26,15 @@ private const val WL_DATA_OFFER_FINISH_OPCODE: Int = 3
  *   4: drop(data, device)
  *   5: selection(data, device, id)
  */
-private class WlDataDeviceListener(
+internal class WlDataDeviceListener(
     private val dnd: WaylandDragAndDrop,
+    private val onNativeFailure: (Throwable) -> Unit,
 ) {
     @Suppress("UNUSED_PARAMETER")
     fun onDataOffer(data: MemorySegment, device: MemorySegment, offer: MemorySegment) {
-        dnd.onDataOffer(offer.address())
+        guardWaylandNativeUpcall(onNativeFailure) {
+            dnd.onDataOffer(offer.address())
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -38,26 +42,29 @@ private class WlDataDeviceListener(
         data: MemorySegment, device: MemorySegment,
         serial: Int, surface: MemorySegment, xFixed: Int, yFixed: Int, offer: MemorySegment,
     ) {
-        dnd.onEnter(serial, surface.address(), xFixed, yFixed, offer.address())
+        guardWaylandNativeUpcall(onNativeFailure) {
+            dnd.onEnter(serial, surface.address(), xFixed, yFixed, offer.address())
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onLeave(data: MemorySegment, device: MemorySegment) {
-        dnd.onLeave()
+        guardWaylandNativeUpcall(onNativeFailure) { dnd.onLeave() }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onMotion(data: MemorySegment, device: MemorySegment, time: Int, xFixed: Int, yFixed: Int) {
-        dnd.onMotion(xFixed, yFixed)
+        guardWaylandNativeUpcall(onNativeFailure) { dnd.onMotion(xFixed, yFixed) }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onDrop(data: MemorySegment, device: MemorySegment) {
-        dnd.onDrop()
+        guardWaylandNativeUpcall(onNativeFailure) { dnd.onDrop() }
     }
 
     @Suppress("UNUSED_PARAMETER")
-    fun onSelection(data: MemorySegment, device: MemorySegment, offer: MemorySegment) { /* no-op */ }
+    fun onSelection(data: MemorySegment, device: MemorySegment, offer: MemorySegment) =
+        guardWaylandNativeUpcall(onNativeFailure) {}
 }
 
 /**
@@ -74,6 +81,7 @@ internal class WaylandDragAndDrop(
     private val dataDevicePtr: Long,
     private val displayPtr: Long,
     private val onEvent: (surfacePtr: Long, event: WindowEvent) -> Unit,
+    private val onNativeFailure: (Throwable) -> Unit = {},
 ) {
     private var currentOffer: Long = 0L
     private var currentSerial: Int = 0
@@ -84,8 +92,11 @@ internal class WaylandDragAndDrop(
     /**
      * Installs the wl_data_device listener. Called once after construction.
      */
-    fun installListener(arena: Arena, addListener: java.lang.invoke.MethodHandle) {
-        val listener = WlDataDeviceListener(this)
+    fun installListener(
+        arena: Arena,
+        addListener: java.lang.invoke.MethodHandle,
+    ) {
+        val listener = WlDataDeviceListener(this, onNativeFailure)
         val lookup = MethodHandles.lookup()
         val ptr = ValueLayout.ADDRESS.byteSize()
 
@@ -151,7 +162,12 @@ internal class WaylandDragAndDrop(
         vtable.set(ValueLayout.ADDRESS, ptr * 3, motionStub)
         vtable.set(ValueLayout.ADDRESS, ptr * 4, dropStub)
         vtable.set(ValueLayout.ADDRESS, ptr * 5, selectionStub)
-        runCatching { addListener.invokeExact(MemorySegment.ofAddress(dataDevicePtr), vtable, MemorySegment.NULL) as Int }
+        val result = addListener.invokeExact(
+            MemorySegment.ofAddress(dataDevicePtr),
+            vtable,
+            MemorySegment.NULL,
+        ) as Int
+        check(result == 0) { "wl_data_device listener installation failed: $result" }
     }
 
     // ── wl_data_device event handlers ─────────────────────────────────────────
@@ -240,14 +256,12 @@ internal class WaylandDragAndDrop(
 
     private fun receivePaths(): List<String> {
         val receive = wlDataOfferReceive ?: return emptyList()
-        val pipe2 = nativePipe2 ?: return emptyList()
         if (currentOffer == 0L) return emptyList()
 
-        val pipeFds = Arena.ofConfined().use { arena ->
-            val seg = arena.allocate(8)
-            val rc = try { pipe2.invokeExact(seg, O_CLOEXEC) as Int } catch (_: Throwable) { -1 }
-            if (rc != 0) return emptyList()
-            seg.get(ValueLayout.JAVA_INT, 0L) to seg.get(ValueLayout.JAVA_INT, 4L)
+        val pipeFds = try {
+            LinuxPosix.pipe2(LinuxPosix.O_CLOEXEC)
+        } catch (_: Throwable) {
+            return emptyList()
         }
         val (readFd, writeFd) = pipeFds
 
@@ -300,7 +314,7 @@ internal class WaylandDragAndDrop(
                         WL_DATA_OFFER_DESTROY_OPCODE,
                         MemorySegment.NULL,
                         WL_DATA_DEVICE_MANAGER_VERSION,
-                        WL_MARSHAL_FLAG_DESTROY,
+                        WL_MARSHAL_FLAG_DESTROY, // flags
                     )
                 } catch (_: Throwable) { }
             }
@@ -316,7 +330,6 @@ internal class WaylandDragAndDrop(
 
     companion object {
         private fun readFdContents(fd: Int): ByteArray {
-            val read = nativeRead ?: return ByteArray(0)
             val out = mutableListOf<ByteArray>()
             var total = 0
             try {
@@ -324,7 +337,7 @@ internal class WaylandDragAndDrop(
                     val chunk = Arena.ofConfined().use { arena ->
                         val bufSeg = arena.allocate(4096)
                         val bytesRead = try {
-                            read.invokeExact(fd, bufSeg, 4096L) as Long
+                            LinuxPosix.read(fd, bufSeg, 4096L)
                         } catch (_: Throwable) { -1L }
                         if (bytesRead <= 0) return@use null
                         val result = ByteArray(bytesRead.toInt())
@@ -379,8 +392,7 @@ internal class WaylandDragAndDrop(
         }
 
         private fun closeFd(fd: Int) {
-            val close = nativeClose ?: return
-            try { close.invokeExact(fd) as Int } catch (_: Throwable) { }
+            runCatching { LinuxPosix.close(fd) }
         }
     }
 }

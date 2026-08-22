@@ -16,7 +16,24 @@
  */
 package org.graphiks.kadre.x11
 
-import org.graphiks.kadre.ffi.x11.*
+import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
+import org.graphiks.kffi.x11.generated.KffiXIMCallbackStorage
+import org.graphiks.kffi.x11.generated.KffiXIMPreeditDrawCallbackStructStorage
+import org.graphiks.kffi.x11.generated.KffiXIMPreeditStateNotifyCallbackStructStorage
+import org.graphiks.kffi.x11.generated.KffiXIMTextStorage
+import org.graphiks.kffi.x11.generated.KffiXSetWindowAttributesStorage
+import org.graphiks.kffi.x11.generated.XNArea
+import org.graphiks.kffi.x11.generated.XNClientWindow
+import org.graphiks.kffi.x11.generated.XNCommitStringCallback
+import org.graphiks.kffi.x11.generated.XNFocusWindow
+import org.graphiks.kffi.x11.generated.XNInputStyle
+import org.graphiks.kffi.x11.generated.XNPreeditDoneCallback
+import org.graphiks.kffi.x11.generated.XNPreeditDrawCallback
+import org.graphiks.kffi.x11.generated.XNPreeditStartCallback
+import org.graphiks.kffi.x11.generated.XNSpotLocation
+import org.graphiks.kffi.x11.generated.XPoint
+import org.graphiks.kffi.x11.generated.XRectangle
 import org.graphiks.kadre.core.CursorGrabMode
 import org.graphiks.kadre.core.CursorIcon
 import org.graphiks.kadre.core.CustomCursor
@@ -34,8 +51,6 @@ import org.graphiks.kadre.core.ResizeDirection
 import org.graphiks.kadre.core.SurfaceSizeRequestResult
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.UserAttentionType
-import org.graphiks.kadre.core.ActiveEventLoop
-import org.graphiks.kadre.core.ApplicationHandler
 import org.graphiks.kadre.core.ImeCapabilities
 import org.graphiks.kadre.core.ImeCapability
 import org.graphiks.kadre.core.ImePurpose
@@ -57,6 +72,7 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 
 /**
@@ -94,20 +110,42 @@ private const val X11_RECTANGLE_SIZE_BYTES: Long = 8L
 private const val X11_WM_HINTS_FLAGS_OFFSET: Long = 0L
 internal const val X11_WM_HINTS_URGENCY_FLAG: Long = 1L shl 8
 
+/** Per-window ownership token for one successful global XIM reference acquisition. */
+internal class X11ImeLease(private val release: () -> Unit) {
+    private val acquired = AtomicBoolean(false)
+
+    internal fun markAcquired(): Boolean = acquired.compareAndSet(false, true)
+
+    internal fun releaseIfAcquired() {
+        if (acquired.compareAndSet(true, false)) release()
+    }
+}
+
+private fun appendX11WindowFailure(primary: Throwable?, additional: Throwable): Throwable {
+    if (primary == null) return additional
+    if (additional !== primary) primary.addSuppressed(additional)
+    return primary
+}
+
 /**
  * Native X11 window implementing [Window].
  *
- * The constructor is internal: use [X11Window.create] to instantiate.
+ * Instances are created and owned by [X11EventLoop]. Window lifecycle operations are therefore
+ * always serialized through that loop.
  *
  * @param displayPtr Pointer to the X11 Display structure (Long value of MemorySegment.address()).
  * @param xWindowId  XID identifier of the created window (unsigned long → Long).
  * @param attrs      Window creation attributes.
+ * @param owner      Event loop that owns this window for its complete lifecycle.
  */
-class X11Window private constructor(
+class X11Window internal constructor(
     private val displayPtr: Long,
     private val screen: Int,
     private val xWindowId: Long,
     private val attrs: WindowAttributes,
+    private val owner: X11EventLoop,
+    initialScaleFactor: Double = readXftDpi(displayPtr),
+    private val imeLease: X11ImeLease = X11ImeLease(X11Window::releaseXIM),
 ) : Window {
 
     override val id: WindowId = WindowId(xWindowId)
@@ -187,7 +225,7 @@ class X11Window private constructor(
      *
      * ScaleFactorChanged is not emitted dynamically (no RRNotify subscription yet).
      */
-    override val scaleFactor: Double = readXftDpi(displayPtr)
+    override val scaleFactor: Double = initialScaleFactor
 
     /**
      * X11 has no platform safe-area concept — window managers handle decorations.
@@ -195,8 +233,7 @@ class X11Window private constructor(
     override val safeArea: Insets<Int> get() = Insets(0, 0, 0, 0)
 
     override fun requestRedraw() {
-        // No direct action needed: the event loop picks up the Expose events.
-        // Optionally, we could send an XSendEvent Expose — deferred to later.
+        owner.requestRedraw(this)
     }
 
     override fun setVisible(visible: Boolean) {
@@ -223,13 +260,24 @@ class X11Window private constructor(
     }
 
     override fun close() {
+        owner.closeWindow(this)
+    }
+
+    /** Releases per-window resources before the owning loop destroys or forgets the XID. */
+    internal fun releaseLoopOwnedResources() {
         val display = MemorySegment.ofAddress(displayPtr)
-        disableIme()
-        val handle = xDestroyWindow ?: return
-        handle.invokeExact(display, xWindowId) as Int
-        freeCachedCursors(display)
-        val flush = xFlush
-        if (flush != null) flush.invokeExact(display) as Int
+        var failure: Throwable? = null
+        try {
+            disableIme()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        try {
+            freeCachedCursors(display)
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        failure?.let { throw it }
     }
 
     // ── R1: window state & geometry ───────────────────────────────────────────
@@ -853,9 +901,10 @@ class X11Window private constructor(
         )
         val display = MemorySegment.ofAddress(displayPtr)
         Arena.ofConfined().use { arena ->
-            val attrs = arena.allocate(XSETWINDOWATTRIBUTES_SIZE, XSETWINDOWATTRIBUTES_ALIGN)
+            val attrsStorage = KffiXSetWindowAttributesStorage()
+            val attrs = KffiXSetWindowAttributesStorage.Companion.allocate(arena)
             attrs.fill(0)
-            attrs.set(ValueLayout.JAVA_INT, XSETWINDOWATTR_OVERRIDE_REDIRECT_OFFSET, if (redirect) 1 else 0)
+            attrsStorage.override_redirect(attrs, if (redirect) 1 else 0)
             handle.invokeExact(display, xWindowId, CWOverrideRedirect, attrs) as Int
         }
         xFlush?.invokeExact(display) as? Int
@@ -921,7 +970,7 @@ class X11Window private constructor(
                     X11_WM_HINTS_FLAGS_OFFSET,
                     x11WmHintsUrgencyFlags(flags, requestType != null),
                 )
-                setHints.invokeExact(display, xWindowId, view)
+                setHints.invokeExact(display, xWindowId, view) as Int
                 val flush = xFlush
                 if (flush != null) flush.invokeExact(display) as Int
                 WindowRequestResult.Success
@@ -1088,8 +1137,19 @@ class X11Window private constructor(
     private fun enableIme() {
         val im = X11Window.acquireXIM(displayPtr)
         if (im == MemorySegment.NULL || im.address() == 0L) return
+        if (!imeLease.markAcquired()) {
+            X11Window.releaseXIM()
+            return
+        }
 
-        val arena = Arena.ofShared()
+        val arena = try {
+            Arena.ofShared()
+        } catch (_: Throwable) {
+            imeLease.releaseIfAcquired()
+            return
+        }
+        var enabled = false
+        var createdIc = MemorySegment.NULL
         try {
             val clientData = arena.allocate(ValueLayout.JAVA_LONG)
             clientData.set(ValueLayout.JAVA_LONG, 0L, xWindowId)
@@ -1122,10 +1182,9 @@ class X11Window private constructor(
                 cmName, cmCb,
                 MemorySegment.NULL,
             ) as MemorySegment
+            createdIc = ic
 
             if (ic == MemorySegment.NULL || ic.address() == 0L) {
-                X11Window.releaseXIM()
-                arena.close()
                 return
             }
 
@@ -1133,15 +1192,32 @@ class X11Window private constructor(
             this.ximArena = arena
             this.clientDataSegment = clientData
             X11Window.activeWindows[xWindowId] = this
+            enabled = true
 
             if (_hasFocus) {
                 try {
                     xSetICFocus?.invokeExact(ic)
                 } catch (_: Throwable) {}
             }
-        } catch (t: Throwable) {
-            X11Window.releaseXIM()
-            arena.close()
+        } catch (_: Throwable) {
+            // The finally block balances the XIM acquisition on every failed path.
+        } finally {
+            if (!enabled) {
+                if (createdIc.address() != 0L) {
+                    try {
+                        xDestroyIC?.invokeExact(createdIc)
+                    } catch (_: Throwable) {}
+                }
+                xic = MemorySegment.NULL
+                ximArena = null
+                clientDataSegment = MemorySegment.NULL
+                X11Window.activeWindows.remove(xWindowId)
+                try {
+                    arena.close()
+                } finally {
+                    imeLease.releaseIfAcquired()
+                }
+            }
         }
     }
 
@@ -1153,11 +1229,22 @@ class X11Window private constructor(
             } catch (_: Throwable) {}
             xic = MemorySegment.NULL
         }
-        ximArena?.close()
+        val arena = ximArena
         ximArena = null
         clientDataSegment = MemorySegment.NULL
         X11Window.activeWindows.remove(xWindowId)
-        X11Window.releaseXIM()
+        var failure: Throwable? = null
+        try {
+            arena?.close()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        try {
+            imeLease.releaseIfAcquired()
+        } catch (thrown: Throwable) {
+            failure = appendX11WindowFailure(failure, thrown)
+        }
+        failure?.let { throw it }
     }
 
     override fun setImeCursorArea(position: PhysicalPosition<Int>, size: PhysicalSize<Int>) {
@@ -1166,15 +1253,17 @@ class X11Window private constructor(
         val setHandle = xSetICValues ?: return
         try {
             Arena.ofConfined().use { arena ->
-                val rect = arena.allocate(XRECTANGLE_SIZE, XRECTANGLE_ALIGN)
-                rect.set(ValueLayout.JAVA_SHORT, 0L, position.x.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 2L, position.y.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 4L, size.width.toShort())
-                rect.set(ValueLayout.JAVA_SHORT, 6L, size.height.toShort())
+                val rectangle = XRectangle()
+                val rect = XRectangle.Companion.allocate(arena)
+                rectangle.x(rect, position.x.toShort())
+                rectangle.y(rect, position.y.toShort())
+                rectangle.width(rect, size.width.toShort())
+                rectangle.height(rect, size.height.toShort())
 
-                val point = arena.allocate(XPOINT_SIZE, XPOINT_ALIGN)
-                point.set(ValueLayout.JAVA_SHORT, 0L, position.x.toShort())
-                point.set(ValueLayout.JAVA_SHORT, 2L, position.y.toShort())
+                val pointBinding = XPoint()
+                val point = XPoint.Companion.allocate(arena)
+                pointBinding.x(point, position.x.toShort())
+                pointBinding.y(point, position.y.toShort())
 
                 val areaName = arena.allocateFrom(XNArea)
                 val spotName = arena.allocateFrom(XNSpotLocation)
@@ -1193,17 +1282,18 @@ class X11Window private constructor(
         // No-op on X11: XIM has no concept of IME purpose hints.
     }
 
-    internal fun drainImeEvents(handler: ApplicationHandler, loop: ActiveEventLoop, windowId: WindowId) {
+    internal fun drainImeEvents(emit: (WindowEvent) -> Unit) {
         while (true) {
             val event = pendingImeEvents.poll() ?: break
-            handler.windowEvent(loop, windowId, event)
+            emit(event)
         }
     }
 
     private fun allocateXIMCallback(arena: Arena, clientData: MemorySegment, callbackProc: MemorySegment): MemorySegment {
-        val cb = arena.allocate(XIM_CALLBACK_SIZE, 8L)
-        cb.set(ValueLayout.ADDRESS, XIM_CALLBACK_CLIENT_DATA_OFFSET, clientData)
-        cb.set(ValueLayout.ADDRESS, XIM_CALLBACK_PROC_OFFSET, callbackProc)
+        val callbackStorage = KffiXIMCallbackStorage()
+        val cb = KffiXIMCallbackStorage.Companion.allocate(arena)
+        callbackStorage.client_data(cb, clientData)
+        callbackStorage.callback(cb, callbackProc)
         return cb
     }
 
@@ -1239,23 +1329,15 @@ class X11Window private constructor(
         if (wmStateAtom == 0L) return
         try {
             Arena.ofConfined().use { arena ->
-                // XClientMessageEvent canonical LP64 layout (96 bytes):
-                //   0 type, 8 serial, 16 send_event, 24 display, 32 window,
-                //   40 message_type, 48 format, 56 data.l[0], 64 l[1], 72 l[2].
-                // These are the offsets a real X server / WM reads, so they must be
-                // canonical regardless of how X11DrawMapper reads incoming events
-                // (its documented 56/64 offsets are inconsistent with this and are
-                // flagged for separate investigation).
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)  // type = ClientMessage (33)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)    // window
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, wmStateAtom)  // message_type
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)            // format = 32
-                // data.l[0] = action (_NET_WM_STATE_ADD=1 / _REMOVE=0)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, if (add) 1L else 0L)
-                // data.l[1] = atom1, data.l[2] = atom2
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, atom1)
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, atom2)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, wmStateAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, if (add) 1L else 0L)
+                eventStorage.data_l1(eventBuf, atom1)
+                eventStorage.data_l2(eventBuf, atom2)
 
                 // Obtain the root window XID
                 val rootHandle = xRootWindow ?: return@use
@@ -1279,16 +1361,13 @@ class X11Window private constructor(
             Arena.ofConfined().use { arena ->
                 val root = rootHandle.invokeExact(display, screen) as Long
                 if (root == 0L) return@use
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, activeWindowAtom)
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, 1L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 0L)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, activeWindowAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, 1L)
 
                 val mask = SubstructureRedirectMask or SubstructureNotifyMask
                 sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
@@ -1363,16 +1442,17 @@ class X11Window private constructor(
                     return WindowRequestResult.Failure(RequestError.OsError("XRootWindow returned 0"))
                 }
 
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, wmMoveResizeAtom)
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, rootXOut.get(ValueLayout.JAVA_INT, 0L).toLong())
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, rootYOut.get(ValueLayout.JAVA_INT, 0L).toLong())
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, action)
-                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 1L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 1L)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, wmMoveResizeAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, rootXOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventStorage.data_l1(eventBuf, rootYOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventStorage.data_l2(eventBuf, action)
+                eventStorage.data_l3(eventBuf, 1L)
+                eventStorage.data_l4(eventBuf, 1L)
 
                 val mask = SubstructureRedirectMask or SubstructureNotifyMask
                 val status = sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
@@ -1774,7 +1854,9 @@ class X11Window private constructor(
             val xid = clientData.get(ValueLayout.JAVA_LONG, 0L)
             val window = activeWindows[xid] ?: return
             if (callData != MemorySegment.NULL) {
-                callData.set(ValueLayout.JAVA_SHORT, PRESTATE_COUNT_OFFSET, 100)
+                val stateStorage = KffiXIMPreeditStateNotifyCallbackStructStorage()
+                val state = KffiXIMPreeditStateNotifyCallbackStructStorage.Companion.reinterpret(callData)
+                stateStorage.state(state, 100L)
             }
             window.pendingImeEvents.add(WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Enabled))
         }
@@ -1785,8 +1867,10 @@ class X11Window private constructor(
             val window = activeWindows[xid] ?: return
             if (callData == MemorySegment.NULL) return
 
-            val caret = callData.get(ValueLayout.JAVA_INT, PREDRAW_CARET_OFFSET)
-            val textPtr = callData.get(ValueLayout.ADDRESS, PREDRAW_TEXT_PTR_OFFSET)
+            val drawStorage = KffiXIMPreeditDrawCallbackStructStorage()
+            val draw = KffiXIMPreeditDrawCallbackStructStorage.Companion.reinterpret(callData)
+            val caret = drawStorage.caret(draw)
+            val textPtr = drawStorage.text(draw)
             val text = readXIMTextContent(textPtr)
 
             window.pendingImeEvents.add(WindowEvent.Ime(
@@ -1810,9 +1894,11 @@ class X11Window private constructor(
 
         private fun readXIMTextContent(text: MemorySegment): String {
             if (text == MemorySegment.NULL) return ""
-            val length = text.get(ValueLayout.JAVA_SHORT, XIMTEXT_LENGTH_OFFSET).toInt() and 0xFFFF
-            val isWchar = text.get(ValueLayout.JAVA_INT, XIMTEXT_ENCODING_IS_WCHAR_OFFSET) != 0
-            val stringPtr = text.get(ValueLayout.ADDRESS, XIMTEXT_STRING_PTR_OFFSET)
+            val textStorage = KffiXIMTextStorage()
+            val ximText = KffiXIMTextStorage.Companion.reinterpret(text)
+            val length = textStorage.length(ximText).toInt() and 0xFFFF
+            val isWchar = textStorage.encoding_is_wchar(ximText) != 0
+            val stringPtr = textStorage.string_ptr(ximText)
             if (stringPtr == MemorySegment.NULL || length == 0) return ""
             return if (isWchar) {
                 val codePoints = IntArray(length) { i ->
@@ -1827,19 +1913,13 @@ class X11Window private constructor(
             }
         }
 
-        /**
-         * Creates a native X11 window.
-         *
-         * Performs all the necessary initialization:
-         * XCreateSimpleWindow → XSelectInput → WM_DELETE_WINDOW → XStoreName → XMapWindow.
-         *
-         * @param display Long representing the Display* pointer (address of the MemorySegment).
-         * @param screen  X11 screen number (DefaultScreen).
-         * @param attrs   Window attributes (title, size, visibility, etc.).
-         * @return The created window, or null if the libX11 bindings are not available
-         *         (macOS/Windows) or if creation fails.
-         */
-        fun create(display: Long, screen: Int, attrs: WindowAttributes): X11Window? {
+        /** Creates a native X11 window owned by [owner] for its complete lifecycle. */
+        internal fun create(
+            display: Long,
+            screen: Int,
+            attrs: WindowAttributes,
+            owner: X11EventLoop,
+        ): X11Window? {
             // The bindings are null on non-Linux — return null gracefully.
             val createHandle = xCreateSimpleWindow ?: return null
 
@@ -1897,7 +1977,7 @@ class X11Window private constructor(
                 }
             }
 
-            val window = X11Window(display, screen, xWindowId, attrs)
+            val window = X11Window(display, screen, xWindowId, attrs, owner)
             window.writeX11Title(attrs.title)
             attrs.preferredTheme?.let(window::setTheme)
             window.applyNormalHints()

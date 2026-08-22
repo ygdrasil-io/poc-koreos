@@ -3,9 +3,10 @@ package org.graphiks.kadre.x11.capture
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.capture.*
-import org.graphiks.kadre.ffi.x11.*
-import org.graphiks.kadre.ffi.x11.capture.*
+import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kadre.x11.binding.capture.*
 import org.graphiks.kadre.x11.enumerateX11Monitors
+import org.graphiks.kffi.x11.generated.KffiXWindowAttributesStorage
 
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
@@ -200,10 +201,10 @@ internal fun windowInfoFromId(
             // Check if window is viewable
             val attrFn = xGetWindowAttributes
             if (attrFn != null) {
-                val attrBuf = arena.allocate(128L, 8L)
+                val attrBuf = KffiXWindowAttributesStorage.Companion.allocate(arena)
                 val attrStatus = attrFn.invokeExact(display, windowId, attrBuf) as Int
                 if (attrStatus == 0) return@use null
-                val mapState = attrBuf.get(ValueLayout.JAVA_INT, XWINDOWATTR_MAP_STATE_OFFSET)
+                val mapState = KffiXWindowAttributesStorage().map_state(attrBuf)
                 if (mapState != IsViewable) return@use null
             }
 
@@ -308,7 +309,7 @@ internal fun readWindowPropertyUtf8(
             display, window, atom,
             0L, 0x7FFFFFFFL,
             0L,
-            0L,  // AnyPropertyType
+            AnyPropertyType,
             actualType, actualFormat, nitems, bytesAfter, propPtr,
         ) as Int
 

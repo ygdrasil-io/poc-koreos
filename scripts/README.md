@@ -115,7 +115,9 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add SPRINT_TRACKING.md
-          git commit -m "chore: update sprint tracking [skip ci]" || echo "No changes to commit"
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update sprint tracking [skip ci]"
+          fi
           git push
 ```
 
