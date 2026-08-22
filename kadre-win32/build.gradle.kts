@@ -24,7 +24,7 @@ kotlin {
         jvmMain {
             dependencies {
                 api(project(":kadre-core"))
-                api("org.graphiks:kffi-win32:1.0.0-SNAPSHOT")
+                api(libs.kffi.win32)
             }
         }
         jvmTest {
