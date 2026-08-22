@@ -17,6 +17,8 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
+import org.graphiks.kffi.x11.generated.KffiXSelectionEventStorage
 import org.graphiks.kffi.posix.PollFd
 import org.graphiks.kffi.posix.PosixException
 import org.graphiks.kffi.posix.PosixWakeup
@@ -970,8 +972,10 @@ private fun dispatchEvent(
 
         // ── ClientMessage (WM close + wakeUp + Xdnd) ─────────────────────────
         ClientMessage -> {
-            val messageType = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_MESSAGE_TYPE_OFFSET)
-            val data0 = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
+            val clientMessage = KffiXClientMessageEventStorage()
+            val clientEvent = KffiXClientMessageEventStorage.Companion.reinterpret(eventBuf)
+            val messageType = clientMessage.message_type(clientEvent)
+            val data0 = clientMessage.data_l0(clientEvent)
             if (messageType == wmDeleteWindow || data0 == wmDeleteWindow) {
                 loop.enqueueWindowEvent(windowId, WindowEvent.CloseRequested)
             } else if (xdnd != null) {
@@ -995,22 +999,24 @@ private fun handleXdndClientMessage(
     windowId: WindowId,
     xdnd: XdndAtoms,
 ) {
-    val messageType = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_MESSAGE_TYPE_OFFSET)
+    val clientMessage = KffiXClientMessageEventStorage()
+    val clientEvent = KffiXClientMessageEventStorage.Companion.reinterpret(eventBuf)
+    val messageType = clientMessage.message_type(clientEvent)
     val display = MemorySegment.ofAddress(loop.displayPtr)
 
     when (messageType) {
         xdnd.xdndEnter -> {
-            val sourceWindow = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
-            val flags = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L1_OFFSET)
+            val sourceWindow = clientMessage.data_l0(clientEvent)
+            val flags = clientMessage.data_l1(clientEvent)
             loop.dragSourceWindows[windowXid] = sourceWindow
             val types = mutableListOf<Long>()
             val hasMoreTypes = (flags and 1L) != 0L
             if (hasMoreTypes) {
                 readXdndTypeList(display, sourceWindow, types)
             } else {
-                val t0 = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L2_OFFSET)
-                val t1 = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L3_OFFSET)
-                val t2 = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L4_OFFSET)
+                val t0 = clientMessage.data_l2(clientEvent)
+                val t1 = clientMessage.data_l3(clientEvent)
+                val t2 = clientMessage.data_l4(clientEvent)
                 if (t0 != 0L) types.add(t0)
                 if (t1 != 0L) types.add(t1)
                 if (t2 != 0L) types.add(t2)
@@ -1023,8 +1029,8 @@ private fun handleXdndClientMessage(
         }
 
         xdnd.xdndPosition -> {
-            val sourceWindow = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
-            val packedPos = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L2_OFFSET)
+            val sourceWindow = clientMessage.data_l0(clientEvent)
+            val packedPos = clientMessage.data_l2(clientEvent)
             val rootX = (packedPos shr 16).toInt()
             val rootY = (packedPos and 0xFFFFL).toInt()
             val localPos = rootToWindowPosition(display, windowXid, rootX, rootY, loop.screen)
@@ -1035,15 +1041,14 @@ private fun handleXdndClientMessage(
         }
 
         xdnd.xdndLeave -> {
-            val sourceWindow = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
             loop.dragSourceWindows.remove(windowXid)
             loop.pendingDropRequests.remove(windowXid)
             loop.enqueueWindowEvent(windowId, WindowEvent.DragLeft)
         }
 
         xdnd.xdndDrop -> {
-            val sourceWindow = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L0_OFFSET)
-            val packedPos = eventBuf.get(ValueLayout.JAVA_LONG, XCLIENT_DATA_L2_OFFSET)
+            val sourceWindow = clientMessage.data_l0(clientEvent)
+            val packedPos = clientMessage.data_l2(clientEvent)
             val rootX = (packedPos shr 16).toInt()
             val rootY = (packedPos and 0xFFFFL).toInt()
             val localPos = rootToWindowPosition(display, windowXid, rootX, rootY, loop.screen)
@@ -1076,11 +1081,13 @@ private fun handleSelectionNotify(
     windowId: WindowId,
     xdnd: XdndAtoms,
 ) {
-    val selection = eventBuf.get(ValueLayout.JAVA_LONG, XSELECTION_SELECTION_OFFSET)
-    if (selection != xdnd.xdndSelection) return
+    val selectionEvent = KffiXSelectionEventStorage()
+    val selection = KffiXSelectionEventStorage.Companion.reinterpret(eventBuf)
+    val selectionAtom = selectionEvent.selection(selection)
+    if (selectionAtom != xdnd.xdndSelection) return
     val drop = loop.pendingXdndDrops.poll() ?: return
     val display = MemorySegment.ofAddress(loop.displayPtr)
-    val property = eventBuf.get(ValueLayout.JAVA_LONG, XSELECTION_PROPERTY_OFFSET)
+    val property = selectionEvent.property_(selection)
     val paths: List<String>
     if (property != 0L) {
         val data = X11DragAndDrop.readSelectionProperty(

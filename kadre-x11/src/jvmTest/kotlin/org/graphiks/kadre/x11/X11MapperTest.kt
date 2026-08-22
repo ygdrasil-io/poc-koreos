@@ -4,6 +4,7 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.KeyCode
 import org.graphiks.kadre.core.KeyState
@@ -38,6 +39,13 @@ private fun MemorySegment.setInt(offset: Long, value: Int): MemorySegment {
 
 private fun MemorySegment.setLong(offset: Long, value: Long): MemorySegment {
     set(ValueLayout.JAVA_LONG, offset, value)
+    return this
+}
+
+private fun MemorySegment.setClientMessageData0(value: Long): MemorySegment {
+    val clientMessage = KffiXClientMessageEventStorage()
+    val clientEvent = KffiXClientMessageEventStorage.Companion.reinterpret(this)
+    clientMessage.data_l0(clientEvent, value)
     return this
 }
 
@@ -416,7 +424,7 @@ class X11DrawMapperTest {
             val wmDelete = 0x1234_5678L
             val seg = xEventSegment(arena)
                 .setType(ClientMessage)
-                .setLong(XCLIENT_DATA_L0_OFFSET, wmDelete)   // data.l[0] = wmDeleteWindow
+                .setClientMessageData0(wmDelete)   // data.l[0] = wmDeleteWindow
 
             val event = X11DrawMapper.fromXEvent(seg, ClientMessage, null, wmDelete)
             assertEquals(WindowEvent.CloseRequested, event)
@@ -442,7 +450,7 @@ class X11DrawMapperTest {
             val wmDelete = 0x1234_5678L
             val seg = xEventSegment(arena)
                 .setType(ClientMessage)
-                .setLong(XCLIENT_DATA_L0_OFFSET, 0x9999L)   // different from wmDeleteWindow
+                .setClientMessageData0(0x9999L)   // different from wmDeleteWindow
 
             val event = X11DrawMapper.fromXEvent(seg, ClientMessage, null, wmDelete)
             assertNull(event)

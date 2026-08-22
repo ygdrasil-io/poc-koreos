@@ -17,6 +17,12 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
+import org.graphiks.kffi.x11.generated.KffiXClientMessageEventStorage
+import org.graphiks.kffi.x11.generated.KffiXIMCallbackStorage
+import org.graphiks.kffi.x11.generated.KffiXIMPreeditDrawCallbackStructStorage
+import org.graphiks.kffi.x11.generated.KffiXIMPreeditStateNotifyCallbackStructStorage
+import org.graphiks.kffi.x11.generated.KffiXIMTextStorage
+import org.graphiks.kffi.x11.generated.KffiXSetWindowAttributesStorage
 import org.graphiks.kffi.x11.generated.XPoint
 import org.graphiks.kffi.x11.generated.XRectangle
 import org.graphiks.kadre.core.CursorGrabMode
@@ -886,9 +892,10 @@ class X11Window internal constructor(
         )
         val display = MemorySegment.ofAddress(displayPtr)
         Arena.ofConfined().use { arena ->
-            val attrs = arena.allocate(XSETWINDOWATTRIBUTES_SIZE, XSETWINDOWATTRIBUTES_ALIGN)
+            val attrsStorage = KffiXSetWindowAttributesStorage()
+            val attrs = KffiXSetWindowAttributesStorage.Companion.allocate(arena)
             attrs.fill(0)
-            attrs.set(ValueLayout.JAVA_INT, XSETWINDOWATTR_OVERRIDE_REDIRECT_OFFSET, if (redirect) 1 else 0)
+            attrsStorage.override_redirect(attrs, if (redirect) 1 else 0)
             handle.invokeExact(display, xWindowId, CWOverrideRedirect, attrs) as Int
         }
         xFlush?.invokeExact(display) as? Int
@@ -1255,10 +1262,6 @@ class X11Window internal constructor(
                 setHandle.invokeExact(
                     ic,
                     areaName, rect,
-                    MemorySegment.NULL,
-                )
-                setHandle.invokeExact(
-                    ic,
                     spotName, point,
                     MemorySegment.NULL,
                 )
@@ -1278,9 +1281,10 @@ class X11Window internal constructor(
     }
 
     private fun allocateXIMCallback(arena: Arena, clientData: MemorySegment, callbackProc: MemorySegment): MemorySegment {
-        val cb = arena.allocate(XIM_CALLBACK_SIZE, 8L)
-        cb.set(ValueLayout.ADDRESS, XIM_CALLBACK_CLIENT_DATA_OFFSET, clientData)
-        cb.set(ValueLayout.ADDRESS, XIM_CALLBACK_PROC_OFFSET, callbackProc)
+        val callbackStorage = KffiXIMCallbackStorage()
+        val cb = KffiXIMCallbackStorage.Companion.allocate(arena)
+        callbackStorage.client_data(cb, clientData)
+        callbackStorage.callback(cb, callbackProc)
         return cb
     }
 
@@ -1316,23 +1320,15 @@ class X11Window internal constructor(
         if (wmStateAtom == 0L) return
         try {
             Arena.ofConfined().use { arena ->
-                // XClientMessageEvent canonical LP64 layout (96 bytes):
-                //   0 type, 8 serial, 16 send_event, 24 display, 32 window,
-                //   40 message_type, 48 format, 56 data.l[0], 64 l[1], 72 l[2].
-                // These are the offsets a real X server / WM reads, so they must be
-                // canonical regardless of how X11DrawMapper reads incoming events
-                // (its documented 56/64 offsets are inconsistent with this and are
-                // flagged for separate investigation).
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)  // type = ClientMessage (33)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)    // window
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, wmStateAtom)  // message_type
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)            // format = 32
-                // data.l[0] = action (_NET_WM_STATE_ADD=1 / _REMOVE=0)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, if (add) 1L else 0L)
-                // data.l[1] = atom1, data.l[2] = atom2
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, atom1)
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, atom2)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, wmStateAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, if (add) 1L else 0L)
+                eventStorage.data_l1(eventBuf, atom1)
+                eventStorage.data_l2(eventBuf, atom2)
 
                 // Obtain the root window XID
                 val rootHandle = xRootWindow ?: return@use
@@ -1356,16 +1352,13 @@ class X11Window internal constructor(
             Arena.ofConfined().use { arena ->
                 val root = rootHandle.invokeExact(display, screen) as Long
                 if (root == 0L) return@use
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, activeWindowAtom)
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, 1L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 0L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 0L)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, activeWindowAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, 1L)
 
                 val mask = SubstructureRedirectMask or SubstructureNotifyMask
                 sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
@@ -1440,16 +1433,17 @@ class X11Window internal constructor(
                     return WindowRequestResult.Failure(RequestError.OsError("XRootWindow returned 0"))
                 }
 
-                val eventBuf = arena.allocate(96L, 8L)
-                eventBuf.set(ValueLayout.JAVA_INT, 0L, ClientMessage)
-                eventBuf.set(ValueLayout.JAVA_LONG, 32L, xWindowId)
-                eventBuf.set(ValueLayout.JAVA_LONG, 40L, wmMoveResizeAtom)
-                eventBuf.set(ValueLayout.JAVA_INT, 48L, 32)
-                eventBuf.set(ValueLayout.JAVA_LONG, 56L, rootXOut.get(ValueLayout.JAVA_INT, 0L).toLong())
-                eventBuf.set(ValueLayout.JAVA_LONG, 64L, rootYOut.get(ValueLayout.JAVA_INT, 0L).toLong())
-                eventBuf.set(ValueLayout.JAVA_LONG, 72L, action)
-                eventBuf.set(ValueLayout.JAVA_LONG, 80L, 1L)
-                eventBuf.set(ValueLayout.JAVA_LONG, 88L, 1L)
+                val eventStorage = KffiXClientMessageEventStorage()
+                val eventBuf = KffiXClientMessageEventStorage.Companion.allocate(arena)
+                eventStorage.type(eventBuf, ClientMessage)
+                eventStorage.window(eventBuf, xWindowId)
+                eventStorage.message_type(eventBuf, wmMoveResizeAtom)
+                eventStorage.format(eventBuf, 32)
+                eventStorage.data_l0(eventBuf, rootXOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventStorage.data_l1(eventBuf, rootYOut.get(ValueLayout.JAVA_INT, 0L).toLong())
+                eventStorage.data_l2(eventBuf, action)
+                eventStorage.data_l3(eventBuf, 1L)
+                eventStorage.data_l4(eventBuf, 1L)
 
                 val mask = SubstructureRedirectMask or SubstructureNotifyMask
                 val status = sendEvent.invokeExact(display, root, 0, mask, eventBuf) as Int
@@ -1851,7 +1845,9 @@ class X11Window internal constructor(
             val xid = clientData.get(ValueLayout.JAVA_LONG, 0L)
             val window = activeWindows[xid] ?: return
             if (callData != MemorySegment.NULL) {
-                callData.set(ValueLayout.JAVA_SHORT, PRESTATE_COUNT_OFFSET, 100)
+                val stateStorage = KffiXIMPreeditStateNotifyCallbackStructStorage()
+                val state = KffiXIMPreeditStateNotifyCallbackStructStorage.Companion.reinterpret(callData)
+                stateStorage.state(state, 100L)
             }
             window.pendingImeEvents.add(WindowEvent.Ime(WindowEvent.Ime.ImeEvent.Enabled))
         }
@@ -1862,8 +1858,10 @@ class X11Window internal constructor(
             val window = activeWindows[xid] ?: return
             if (callData == MemorySegment.NULL) return
 
-            val caret = callData.get(ValueLayout.JAVA_INT, PREDRAW_CARET_OFFSET)
-            val textPtr = callData.get(ValueLayout.ADDRESS, PREDRAW_TEXT_PTR_OFFSET)
+            val drawStorage = KffiXIMPreeditDrawCallbackStructStorage()
+            val draw = KffiXIMPreeditDrawCallbackStructStorage.Companion.reinterpret(callData)
+            val caret = drawStorage.caret(draw)
+            val textPtr = drawStorage.text(draw)
             val text = readXIMTextContent(textPtr)
 
             window.pendingImeEvents.add(WindowEvent.Ime(
@@ -1887,9 +1885,11 @@ class X11Window internal constructor(
 
         private fun readXIMTextContent(text: MemorySegment): String {
             if (text == MemorySegment.NULL) return ""
-            val length = text.get(ValueLayout.JAVA_SHORT, XIMTEXT_LENGTH_OFFSET).toInt() and 0xFFFF
-            val isWchar = text.get(ValueLayout.JAVA_INT, XIMTEXT_ENCODING_IS_WCHAR_OFFSET) != 0
-            val stringPtr = text.get(ValueLayout.ADDRESS, XIMTEXT_STRING_PTR_OFFSET)
+            val textStorage = KffiXIMTextStorage()
+            val ximText = KffiXIMTextStorage.Companion.reinterpret(text)
+            val length = textStorage.length(ximText).toInt() and 0xFFFF
+            val isWchar = textStorage.encoding_is_wchar(ximText) != 0
+            val stringPtr = textStorage.string_ptr(ximText)
             if (stringPtr == MemorySegment.NULL || length == 0) return ""
             return if (isWchar) {
                 val codePoints = IntArray(length) { i ->
