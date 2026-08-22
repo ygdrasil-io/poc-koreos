@@ -1,7 +1,7 @@
 package org.graphiks.kadre.wayland
 
 import org.graphiks.kadre.core.WindowEvent
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import java.lang.foreign.MemorySegment
 import kotlin.test.AfterTest
 import kotlin.test.Test

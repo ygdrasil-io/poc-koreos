@@ -22,6 +22,8 @@ webgpu-ktypes = "0.0.7"
 kffi-x11 = "1.0.0-SNAPSHOT"
 kffi-wayland = "1.0.0-SNAPSHOT"
 kffi-objc = "1.0.0-SNAPSHOT"
+# Pin the published snapshot build until the next snapshot supersedes it.
+kffi-posix = "1.0.0-20260822.134018-10"
 coroutines = "1.10.1"
 koin = "4.0.0"
 ktor = "3.0.3"
@@ -36,6 +38,9 @@ kffi-x11 = { module = "org.graphiks:kffi-x11", version.ref = "kffi-x11" }
 kffi-wayland = { module = "org.graphiks:kffi-wayland", version.ref = "kffi-wayland" }
 # kffi Objective-C FFI snapshot
 kffi-objc = { module = "org.graphiks:kffi-objc", version.ref = "kffi-objc" }
+
+# kffi Linux POSIX FFI snapshot
+kffi-posix = { module = "org.graphiks:kffi-posix-jvm", version.ref = "kffi-posix" }
 
 # Coroutines
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

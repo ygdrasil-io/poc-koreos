@@ -5,6 +5,7 @@ import org.graphiks.kadre.core.capture.*
 import org.graphiks.kadre.x11.binding.*
 import org.graphiks.kadre.x11.binding.capture.*
 import org.graphiks.kffi.x11.generated.XShmSegmentInfoCompat
+import org.graphiks.kffi.posix.LinuxPosix
 import kotlinx.coroutines.*
 import org.graphiks.kadre.core.capture.CaptureConfig
 import org.graphiks.kadre.core.capture.CaptureError
@@ -276,9 +277,6 @@ internal fun createShmResources(
     val defVisual = xDefaultVisual ?: return null
     val defDepth = xDefaultDepth ?: return null
     val defScreen = xDefaultScreen ?: return null
-    val shmGet = shmget ?: return null
-    val shmAt = shmat ?: return null
-
     return try {
         val width = size.width
         val height = size.height
@@ -290,12 +288,15 @@ internal fun createShmResources(
         val depth = defDepth.invokeExact(display, screen) as Int
 
         // Create shared memory segment
-        val shmid = shmGet.invokeExact(IPC_PRIVATE, shmSize.toLong(), IPC_CREAT or 384) as Int  // IPC_CREAT | 0600
-        if (shmid < 0) return null
+        val shmid = LinuxPosix.shmget(
+            LinuxPosix.IPC_PRIVATE,
+            shmSize.toLong(),
+            LinuxPosix.IPC_CREAT or 384,
+        )
 
-        val shmaddr = shmAt.invokeExact(shmid, MemorySegment.NULL, 0) as MemorySegment
+        val shmaddr = LinuxPosix.shmat(shmid, MemorySegment.NULL, 0)
         if (shmaddr == MemorySegment.NULL || shmaddr.address() == 0L) {
-            try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+            runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
             return null
         }
 
@@ -313,16 +314,16 @@ internal fun createShmResources(
             ) as MemorySegment
 
             if (image == MemorySegment.NULL || image.address() == 0L) {
-                try { shmdt?.invokeExact(shmaddr) } catch (_: Throwable) {}
-                try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+                runCatching { LinuxPosix.shmdt(shmaddr) }
+                runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
                 return null
             }
 
             val attachStatus = attach.invokeExact(display, shminfo) as Int
             if (attachStatus == 0) {
                 try { xDestroyImage?.invokeExact(image) } catch (_: Throwable) {}
-                try { shmdt?.invokeExact(shmaddr) } catch (_: Throwable) {}
-                try { shmctl?.invokeExact(shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+                runCatching { LinuxPosix.shmdt(shmaddr) }
+                runCatching { LinuxPosix.shmctl(shmid, LinuxPosix.IPC_RMID) }
                 return null
             }
 
@@ -345,6 +346,6 @@ internal fun createShmResources(
 internal fun destroyShmResources(display: MemorySegment, resources: ShmResources) {
     try { xShmDetach?.invokeExact(display, resources.shminfo) } catch (_: Throwable) {}
     try { xDestroyImage?.invokeExact(resources.image) } catch (_: Throwable) {}
-    try { shmdt?.invokeExact(resources.shmAddr) } catch (_: Throwable) {}
-    try { shmctl?.invokeExact(resources.shmid, IPC_RMID, MemorySegment.NULL) } catch (_: Throwable) {}
+    runCatching { LinuxPosix.shmdt(resources.shmAddr) }
+    runCatching { LinuxPosix.shmctl(resources.shmid, LinuxPosix.IPC_RMID) }
 }

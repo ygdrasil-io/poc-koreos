@@ -15,8 +15,9 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
 import org.graphiks.kadre.core.WindowAttributes
-import org.graphiks.kadre.ffi.posix.PosixWakeup
-import org.graphiks.kadre.ffi.posix.PosixException
+import org.graphiks.kffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixException
+import org.graphiks.kffi.posix.PollFd
 import org.graphiks.kadre.test.EventLoopConformanceDriver
 import org.graphiks.kadre.test.ObservedCallback
 import org.graphiks.kadre.test.assertWakeUpRearms
@@ -35,21 +36,21 @@ import kotlin.test.assertTrue
 class WaylandEventLoopSmokeTest {
 
     @Test
-    fun `native poll uses Linux nfds ABI and captures errno`() {
+    fun `kffi posix poll uses Linux nfds ABI and reports errno`() {
         if (System.getProperty("os.name") != "Linux") return
 
         Arena.ofConfined().use { arena ->
-            val pollFds = allocPollFd(arena)
-            setPollFd(pollFds, 0, -1, POLLIN)
-            setPollFd(pollFds, 1, -1, POLLIN)
+            val pollFds = PollFd.allocate(arena, 2)
+            PollFd.set(pollFds, 0, -1, PollFd.POLLIN)
+            PollFd.set(pollFds, 1, -1, PollFd.POLLIN)
 
-            val success = invokeNativePoll(pollFds, 2L, 0)
-            assertEquals(0, success.value)
-            assertNull(success.errno)
+            val success = PollFd.poll(pollFds, 2L, 0)
+            assertEquals(0, success)
 
-            val failure = invokeNativePoll(pollFds, Long.MAX_VALUE, 0)
-            assertTrue(failure.value < 0)
-            assertTrue((failure.errno ?: 0) > 0)
+            val failure = assertFailsWith<PosixException> {
+                PollFd.poll(pollFds, Long.MAX_VALUE, 0)
+            }
+            assertTrue(failure.errno > 0)
         }
     }
 

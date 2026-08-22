@@ -38,8 +38,10 @@ import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowAttributes
 import org.graphiks.kadre.core.WindowEvent
 import org.graphiks.kadre.core.WindowId
-import org.graphiks.kadre.ffi.posix.PosixWakeup
-import org.graphiks.kadre.ffi.posix.PosixException
+import org.graphiks.kffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixException
+import org.graphiks.kffi.posix.PollFd
+import org.graphiks.kffi.posix.LinuxErrno
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -1150,10 +1152,24 @@ internal fun interface WaylandMonotonicClock {
     fun nowNanos(): Long
 }
 
-private const val POSIX_EINTR = 4
+private const val POSIX_EINTR_FALLBACK = 4
+private const val POSIX_POLLIN_FALLBACK = 1
+private const val POSIX_POLLERR_FALLBACK = 8
+private const val POSIX_POLLHUP_FALLBACK = 16
+private const val POSIX_POLLNVAL_FALLBACK = 32
+private val isLinuxRuntime: Boolean
+    get() = System.getProperty("os.name").equals("Linux", ignoreCase = true)
+private val POSIX_EINTR: Int
+    get() = if (isLinuxRuntime) LinuxErrno.EINTR else POSIX_EINTR_FALLBACK
 private const val NANOS_PER_MILLISECOND = 1_000_000L
-private const val POLL_ERROR_MASK =
-    POLLERR.toInt() or POLLHUP.toInt() or POLLNVAL.toInt()
+private val POSIX_POLLIN: Int
+    get() = if (isLinuxRuntime) PollFd.POLLIN.toInt() else POSIX_POLLIN_FALLBACK
+private val POLL_ERROR_MASK: Int
+    get() = if (isLinuxRuntime) {
+        PollFd.POLLERR.toInt() or PollFd.POLLHUP.toInt() or PollFd.POLLNVAL.toInt()
+    } else {
+        POSIX_POLLERR_FALLBACK or POSIX_POLLHUP_FALLBACK or POSIX_POLLNVAL_FALLBACK
+    }
 
 private val systemWaylandMonotonicClock = WaylandMonotonicClock(System::nanoTime)
 
@@ -1191,22 +1207,22 @@ private object NativeWaylandPoller : WaylandPoller {
         wakeFd: Int,
         timeoutMs: Int,
     ): WaylandPollResult = Arena.ofConfined().use { arena ->
-        val fds = allocPollFd(arena)
-        setPollFd(fds, 0, displayFd, POLLIN)
-        setPollFd(fds, 1, wakeFd, POLLIN)
+        val fds = PollFd.allocate(arena, 2)
+        PollFd.set(fds, 0, displayFd, PollFd.POLLIN)
+        PollFd.set(fds, 1, wakeFd, PollFd.POLLIN)
 
-        val result = invokeNativePoll(fds, 2L, timeoutMs)
-        if (result.value < 0) {
-            WaylandPollResult.Failure(
-                result.errno ?: error("poll failed without a captured errno"),
-            )
-        } else if (result.value == 0) {
+        val result = try {
+            PollFd.poll(fds, 2L, timeoutMs)
+        } catch (failure: PosixException) {
+            return@use WaylandPollResult.Failure(failure.errno)
+        }
+        if (result == 0) {
             WaylandPollResult.Ready(displayReadable = false, wakeReadable = false)
         } else {
             decodeWaylandPollResult(
-                pollCount = result.value,
-                displayRevents = getPollRevents(fds, 0),
-                wakeRevents = getPollRevents(fds, 1),
+                pollCount = result,
+                displayRevents = PollFd.revents(fds, 0),
+                wakeRevents = PollFd.revents(fds, 1),
             )
         }
     }
@@ -1225,8 +1241,8 @@ internal fun decodeWaylandPollResult(
     val wakeFlags = wakeRevents.toInt() and 0xffff
     val hasDescriptorError =
         (displayFlags and POLL_ERROR_MASK) != 0 || (wakeFlags and POLL_ERROR_MASK) != 0
-    val displayReadable = (displayFlags and POLLIN.toInt()) != 0
-    val wakeReadable = (wakeFlags and POLLIN.toInt()) != 0
+    val displayReadable = (displayFlags and POSIX_POLLIN) != 0
+    val wakeReadable = (wakeFlags and POSIX_POLLIN) != 0
 
     return if (hasDescriptorError || (!displayReadable && !wakeReadable)) {
         WaylandPollResult.DescriptorFailure(displayRevents, wakeRevents)
@@ -1332,11 +1348,11 @@ private fun formatPollRevents(revents: Short): String {
     if (flags == 0) return "none"
 
     val names = buildList {
-        if ((flags and POLLIN.toInt()) != 0) add("POLLIN")
-        if ((flags and POLLERR.toInt()) != 0) add("POLLERR")
-        if ((flags and POLLHUP.toInt()) != 0) add("POLLHUP")
-        if ((flags and POLLNVAL.toInt()) != 0) add("POLLNVAL")
-        val known = POLLIN.toInt() or POLL_ERROR_MASK
+        if ((flags and POSIX_POLLIN) != 0) add("POLLIN")
+        if ((flags and (if (isLinuxRuntime) PollFd.POLLERR.toInt() else POSIX_POLLERR_FALLBACK)) != 0) add("POLLERR")
+        if ((flags and (if (isLinuxRuntime) PollFd.POLLHUP.toInt() else POSIX_POLLHUP_FALLBACK)) != 0) add("POLLHUP")
+        if ((flags and (if (isLinuxRuntime) PollFd.POLLNVAL.toInt() else POSIX_POLLNVAL_FALLBACK)) != 0) add("POLLNVAL")
+        val known = POSIX_POLLIN or POLL_ERROR_MASK
         val unknown = flags and known.inv()
         if (unknown != 0) add("0x${unknown.toString(16)}")
     }

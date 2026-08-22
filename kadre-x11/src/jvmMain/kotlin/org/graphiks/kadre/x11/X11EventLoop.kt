@@ -17,9 +17,9 @@
 package org.graphiks.kadre.x11
 
 import org.graphiks.kadre.x11.binding.*
-import org.graphiks.kadre.ffi.posix.PollFd
-import org.graphiks.kadre.ffi.posix.PosixException
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PollFd
+import org.graphiks.kffi.posix.PosixException
+import org.graphiks.kffi.posix.PosixWakeup
 import org.graphiks.kadre.core.ActiveEventLoop
 import org.graphiks.kadre.core.ButtonSource
 import org.graphiks.kadre.core.ApplicationHandler
@@ -1270,12 +1270,12 @@ private object NativeX11Poller : X11Poller {
         PollFd.set(pollFds, 1, wakeFd, PollFd.POLLIN)
 
         retryX11Poll(timeoutMillis) { currentTimeoutMillis ->
-            val result = invokeX11NativePoll(pollFds, 2L, currentTimeoutMillis)
-            if (result.value < 0) {
-                val errno = result.errno ?: error("poll failed without a captured errno")
-                return@retryX11Poll X11PollAttempt.Failure(errno)
+            val result = try {
+                PollFd.poll(pollFds, 2L, currentTimeoutMillis)
+            } catch (failure: PosixException) {
+                return@retryX11Poll X11PollAttempt.Failure(failure.errno)
             }
-            if (result.value == 0) {
+            if (result == 0) {
                 return@retryX11Poll X11PollAttempt.Ready(
                     X11PollResult(xReadable = false, wakeReadable = false)
                 )
@@ -1296,7 +1296,7 @@ private object NativeX11Poller : X11Poller {
             val wakeReadable = (wakeFlags and PollFd.POLLIN.toInt()) != 0
             if (!xReadable && !wakeReadable) {
                 error(
-                    "X11 poll returned ${result.value} without a readable descriptor: " +
+                    "X11 poll returned $result without a readable descriptor: " +
                         "x=0x${xFlags.toString(16)}, wake=0x${wakeFlags.toString(16)}"
                 )
             }

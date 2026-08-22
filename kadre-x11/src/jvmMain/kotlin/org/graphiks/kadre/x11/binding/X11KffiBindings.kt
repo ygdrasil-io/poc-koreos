@@ -3,13 +3,11 @@ package org.graphiks.kadre.x11.binding
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
-import java.lang.foreign.MemoryLayout.PathElement.groupElement
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
-import org.graphiks.kadre.ffi.posix.PosixSymbols
 
 private val generatedLookup = MethodHandles.lookup()
 private val generatedClass = Class.forName(
@@ -198,41 +196,6 @@ val xQueryBestCursor: MethodHandle? by lazy {
             ValueLayout.ADDRESS,
             ValueLayout.ADDRESS,
         ),
-    )
-}
-
-// POSIX poll remains a Kadre helper because it belongs to ffi:posix, not X11.
-private val pollCaptureErrno = Linker.Option.captureCallState("errno")
-private val pollCaptureLayout = Linker.Option.captureStateLayout()
-private val pollErrnoOffset = pollCaptureLayout.byteOffset(groupElement("errno"))
-private val nativePoll: MethodHandle? by lazy {
-    PosixSymbols.find("poll")?.let { symbol ->
-        linker.downcallHandle(
-            symbol,
-            FunctionDescriptor.of(
-                ValueLayout.JAVA_INT,
-                ValueLayout.ADDRESS,
-                ValueLayout.JAVA_LONG,
-                ValueLayout.JAVA_INT,
-            ),
-            pollCaptureErrno,
-        )
-    }
-}
-
-data class X11NativePollResult(val value: Int, val errno: Int?)
-
-fun invokeX11NativePoll(
-    pollFds: MemorySegment,
-    count: Long,
-    timeoutMillis: Int,
-): X11NativePollResult = Arena.ofConfined().use { arena ->
-    val poll = nativePoll ?: error("required POSIX symbol 'poll' is unavailable")
-    val callState = arena.allocate(pollCaptureLayout)
-    val result = poll.invokeExact(callState, pollFds, count, timeoutMillis) as Int
-    X11NativePollResult(
-        value = result,
-        errno = if (result < 0) callState.get(ValueLayout.JAVA_INT, pollErrnoOffset) else null,
     )
 }
 

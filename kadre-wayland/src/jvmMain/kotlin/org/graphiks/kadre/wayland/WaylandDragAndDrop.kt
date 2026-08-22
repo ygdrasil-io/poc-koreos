@@ -3,6 +3,7 @@ package org.graphiks.kadre.wayland
 import org.graphiks.kffi.wayland.*
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kffi.posix.LinuxPosix
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.MemorySegment
@@ -255,14 +256,12 @@ internal class WaylandDragAndDrop(
 
     private fun receivePaths(): List<String> {
         val receive = wlDataOfferReceive ?: return emptyList()
-        val pipe2 = nativePipe2 ?: return emptyList()
         if (currentOffer == 0L) return emptyList()
 
-        val pipeFds = Arena.ofConfined().use { arena ->
-            val seg = arena.allocate(8)
-            val rc = try { pipe2.invokeExact(seg, O_CLOEXEC) as Int } catch (_: Throwable) { -1 }
-            if (rc != 0) return emptyList()
-            seg.get(ValueLayout.JAVA_INT, 0L) to seg.get(ValueLayout.JAVA_INT, 4L)
+        val pipeFds = try {
+            LinuxPosix.pipe2(LinuxPosix.O_CLOEXEC)
+        } catch (_: Throwable) {
+            return emptyList()
         }
         val (readFd, writeFd) = pipeFds
 
@@ -331,7 +330,6 @@ internal class WaylandDragAndDrop(
 
     companion object {
         private fun readFdContents(fd: Int): ByteArray {
-            val read = nativeRead ?: return ByteArray(0)
             val out = mutableListOf<ByteArray>()
             var total = 0
             try {
@@ -339,7 +337,7 @@ internal class WaylandDragAndDrop(
                     val chunk = Arena.ofConfined().use { arena ->
                         val bufSeg = arena.allocate(4096)
                         val bytesRead = try {
-                            read.invokeExact(fd, bufSeg, 4096L) as Long
+                            LinuxPosix.read(fd, bufSeg, 4096L)
                         } catch (_: Throwable) { -1L }
                         if (bytesRead <= 0) return@use null
                         val result = ByteArray(bytesRead.toInt())
@@ -394,8 +392,7 @@ internal class WaylandDragAndDrop(
         }
 
         private fun closeFd(fd: Int) {
-            val close = nativeClose ?: return
-            try { close.invokeExact(fd) as Int } catch (_: Throwable) { }
+            runCatching { LinuxPosix.close(fd) }
         }
     }
 }

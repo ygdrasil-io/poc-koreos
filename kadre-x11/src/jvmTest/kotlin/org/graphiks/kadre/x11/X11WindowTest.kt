@@ -15,7 +15,7 @@ import org.graphiks.kadre.core.PhysicalSize
 import org.graphiks.kadre.core.Theme
 import org.graphiks.kadre.core.WindowButtons
 import org.graphiks.kadre.core.WindowRequestResult
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.Executors
 import kotlin.test.Test

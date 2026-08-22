@@ -38,6 +38,7 @@ import org.graphiks.kadre.core.DeviceEvent
 import org.graphiks.kadre.core.PhysicalPosition
 import org.graphiks.kadre.core.PointerKind
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kffi.posix.LinuxPosix
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -68,6 +69,13 @@ internal typealias RoutedDeviceEventSink = (event: DeviceEvent) -> Unit
 internal var waylandComposeState: Long = 0L
 
 internal const val WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1: Int = 1
+private const val MAP_FAILED_ADDRESS_FALLBACK: Long = -1L
+private val mapFailedAddress: Long
+    get() = if (System.getProperty("os.name").equals("Linux", ignoreCase = true)) {
+        LinuxPosix.MAP_FAILED_ADDRESS
+    } else {
+        MAP_FAILED_ADDRESS_FALLBACK
+    }
 
 /** Native operations injected into [WaylandKeymapLoader] for deterministic ownership tests. */
 internal interface WaylandKeymapOperations {
@@ -87,24 +95,31 @@ internal interface WaylandKeymapOperations {
 }
 
 private object NativeWaylandKeymapOperations : WaylandKeymapOperations {
-    override fun mmap(fd: Int, size: Int): MemorySegment? =
-        nativeMmap?.invokeExact(
+    override fun mmap(fd: Int, size: Int): MemorySegment? = try {
+        LinuxPosix.mmap(
             MemorySegment.NULL,
             size.toLong(),
-            PROT_READ,
-            MAP_SHARED,
+            LinuxPosix.PROT_READ,
+            LinuxPosix.MAP_SHARED,
             fd,
             0L,
-        ) as? MemorySegment
-
-    override fun munmap(mapping: MemorySegment, size: Int): Int {
-        val munmap = checkNotNull(nativeMunmap) { "munmap is unavailable" }
-        return munmap.invokeExact(mapping, size.toLong()) as Int
+        )
+    } catch (_: Throwable) {
+        null
     }
 
-    override fun close(fd: Int): Int {
-        val close = checkNotNull(nativeClose) { "close is unavailable" }
-        return close.invokeExact(fd) as Int
+    override fun munmap(mapping: MemorySegment, size: Int): Int = try {
+        LinuxPosix.munmap(mapping, size.toLong())
+        0
+    } catch (_: Throwable) {
+        -1
+    }
+
+    override fun close(fd: Int): Int = try {
+        LinuxPosix.close(fd)
+        0
+    } catch (_: Throwable) {
+        -1
     }
 
     override fun contextNew(): MemorySegment? =
@@ -200,7 +215,7 @@ internal class WaylandKeymapLoader(
 
     private fun loadMappedKeymap(fd: Int, size: Int, target: WaylandXkbResources) {
         val mapping = operations.mmap(fd, size)
-            ?.takeUnless { it.address() == 0L || it.address() == MAP_FAILED_PTR }
+            ?.takeUnless { it.address() == 0L || it.address() == mapFailedAddress }
             ?: error("mmap failed for Wayland keymap")
         var failure: Throwable? = null
 

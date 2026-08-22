@@ -1,6 +1,6 @@
 package org.graphiks.kadre.wayland
 
-import org.graphiks.kadre.ffi.posix.PosixWakeup
+import org.graphiks.kffi.posix.PosixWakeup
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import kotlin.test.Test
