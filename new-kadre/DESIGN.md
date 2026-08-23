@@ -20,7 +20,9 @@
 
 **Interop :** `new-kadre/INTEROP-EXPORTS.md` distingue l’API Kotlin complète, les façades host étrangères et les escape hatches target-specific.
 
-**Niveau de fermeture :** les contrats d’architecture et la forme documentaire de l’API sont fermés. Les dumps ABI, headers, déclarations TypeScript et consumer compile tests restent des preuves d’implémentation à produire plus tard ; leur absence ne rouvre pas le design.
+**Preuves :** `new-kadre/TEST-STRATEGY.md` définit les oracles indépendants, la contract suite, la traçabilité et les gates PR/nightly/release.
+
+**Niveau de fermeture :** les contrats d’architecture, la forme documentaire de l’API et la stratégie de preuve sont fermés. Les dumps ABI, headers, déclarations TypeScript et consumer compile tests restent des preuves d’implémentation à produire plus tard ; leur absence ne rouvre pas le design.
 
 ## 1. Vision
 

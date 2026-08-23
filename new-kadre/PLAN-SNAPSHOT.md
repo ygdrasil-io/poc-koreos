@@ -26,6 +26,8 @@
 
 **Audit de baseline :** `new-kadre/MIGRATION-AUDIT.md`
 
+**Stratégie de test et CI :** `new-kadre/TEST-STRATEGY.md`
+
 ## Contraintes globales
 
 - Breaking changes autorisés ; aucun maintien permanent de l’API actuelle.
@@ -46,8 +48,8 @@
 - Une nouvelle scène utilise une nouvelle application fournie par `KadreApplicationFactory`.
 - `explicitApi()` sur chaque module publié.
 - Chaque chantier laisse le dépôt compilable et vérifiable.
-- Chaque nouvelle abstraction est introduite par tests avant migration des backends.
-- Chaque backend doit passer la même suite de contract tests.
+- Chaque nouvelle abstraction est introduite par une preuve admissible selon `TEST-STRATEGY.md` avant migration des backends ; un test miroir ou sans mutation détectable ne satisfait pas cette contrainte.
+- Chaque backend doit passer le noyau portable de la même contract suite et les scénarios conditionnels de ses capabilities, avec un driver réel opposé à la frontière Kadre.
 - `KadrePolicies.Default` est accepté par tout host adapter déclaré supporté ; seuls un profil avancé ou custom peuvent échouer avec `UnsupportedPolicy`.
 - Un invariant réparti entre plusieurs champs utilise un snapshot composé révisionné ; plusieurs `StateFlow` indépendants ne promettent pas une transaction implicite.
 - Les valeurs numériques publiques excluent `NaN`, les infinis et les durées infinies ; les chaînes sémantiques ne sont ni normalisées ni tronquées silencieusement.
@@ -75,13 +77,13 @@ Les chantiers 3, 4 et 5 peuvent avancer en parallèle uniquement après stabilis
 
 ## Gate documentaire avant implémentation
 
-Le catalogue Markdown exhaustif `PUBLIC-API-CATALOG.md` ferme les packages, signatures, sealed variants, unités, nullabilité et ownership. Les matrices normatives ferment séparément failures, profiles, backends et exports interop. Toute formulation ouverte bloque ce gate. La revue de ces documents précède les tests et le code ; le dump ABI cible n’est généré qu’après approbation documentaire.
+Le catalogue Markdown exhaustif `PUBLIC-API-CATALOG.md` ferme les packages, signatures, sealed variants, unités, nullabilité et ownership. Les matrices normatives ferment séparément failures, profiles, backends, exports interop et stratégie de preuve. Toute formulation ouverte bloque ce gate. La revue de ces documents précède les tests et le code ; le dump ABI cible n’est généré qu’après approbation documentaire.
 
 ## Stratégie de commits
 
 Chaque lot suit ce cycle :
 
-1. ajouter un test de contrat qui échoue ;
+1. ajouter un scénario de contrat admissible qui échoue et nomme sa mutation détectable ;
 2. introduire le contrat ou l’adaptateur minimal ;
 3. exécuter les tests ciblés ;
 4. exécuter la validation ABI concernée ;
@@ -526,7 +528,7 @@ Unifier AppKit, Win32, X11 et Wayland derrière le host desktop et conserver une
 9. Suppression des event loops publiques de backend.
 10. Migration des samples desktop.
 11. Sémantique explicite de la dernière fenêtre : session conservée en embedded, arrêt demandé en standalone.
-12. Intégrations de boucle embedded typées pour AppKit, AWT/Compose, JavaFX ou pump fourni ; refus des doubles boucles cachées.
+12. Intégrations de boucle embedded typées pour AppKit, AWT/Compose ou JavaFX ; aucun custom pump public et refus des doubles boucles cachées.
 
 ### Critères de sortie
 
@@ -554,36 +556,40 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 
 ### Livrables
 
-1. Finaliser `runKadreTest` et tous les contrôleurs virtuels.
-2. Extraire une contract suite commune consommée par chaque backend.
-3. Ajouter des tests de lifecycle, threading, surfaces/windows, close requests, displays, interactions, capabilities, overflow, handles et permissions.
-4. Ajouter les contract tests de température/replay/cardinalité/terminaison des flux, ordre intra-flow, absence de garantie inter-flows, ordre state/event, delivery spans, limites de collectors par flow/session, budgets agrégés et collectors d’événements lents.
-5. Ajouter des consumer compile tests Java, Swift, JS et Wasm, y compris les artefacts exportés.
-6. Mesurer la baseline avant suppression de l’ancien chemin.
-7. Ajouter les benchmarks input, state, gamepad et capture.
-8. Créer trois samples de référence : utilitaire, jeu, site Web.
-9. Écrire les guides Android, UIKit, SwiftUI, Web et Desktop.
-10. Écrire les guides policies, structured concurrency, host surfaces, interactions transitoires, interop renderer et migration.
-11. Générer la matrice de capabilities à partir des résultats de contrats.
-12. Vérifier que la documentation ne promet ni rendu ni widgets.
-13. Générer le rapport de couverture du registre `API-MIGRATION.md` depuis tous les dumps ABI publiés.
-14. Vérifier que chaque catalogue public documentaire approuvé correspond exactement aux dumps ABI et exports générés.
-15. Tester qu’un nombre élevé de collectors `StateFlow` ne reçoit jamais `ResourceLimitExceeded` de Kadre.
-16. Tester séparément un consumer non coopératif avec scheduler disponible et la monopolisation de l’unique dispatcher, afin de prouver la borne schedulable sans inventer une garantie hard real-time.
-17. Tester les handoffs single-winner, claims expirés, mutations annulées avant/après commit, inventaires devenus `Unavailable` et limites de payload sans troncature sémantique.
-18. Tester l’aplatissement exact des spans lors d’un coalescing ingress puis collector, les enveloppes et spans distincts de collectors de vitesses différentes, la saturation signalée des compteurs et l’absence de diagnostic récursif lorsque le flow de diagnostics déborde.
+1. Matérialiser le registre lisible par machine de `contractId`, scénarios, targets, oracles et sentinelles défini par `TEST-STRATEGY.md`.
+2. Finaliser `FakeKadreHost`, l’horloge virtuelle, les contrôleurs et des modèles de référence indépendants ; aucun helper `runKadreTest` additionnel n’entre dans l’API publique fermée.
+3. Extraire une contract suite black-box et un `ContractDriver` test-only consommé par chaque backend.
+4. Couvrir session/lifecycle, surfaces/windows/displays/interactions, input/IME/drop/raw input, gamepad, capture, policies, diagnostics, ownership et domaines fermés de failure.
+5. Explorer déterministement les races d’admission/commit/handoff/cleanup et les propriétés bornées du common code.
+6. Ajouter les douze sentinelles architecturales et faire échouer le gate si l’une d’elles survit.
+7. Ajouter un driver `O3` pour Web JS/Wasm, Android, UIKit, AppKit, Win32, X11 et Wayland, puis comparer les traces portables normalisées.
+8. Ajouter les consumer compile tests Kotlin KMP, Java, Swift et TypeScript, positifs et négatifs, y compris les artefacts exportés.
+9. Produire et valider `contract-evidence.json` avec zéro skip, scénario requis absent, preuve dupliquée ou résultat masqué.
+10. Consolider la CI autour de l’unique aggregate bloquant `kadre-pr-contracts`, avec jobs parallèles, SLO p95 initial de 10 minutes et timeout hard de 15 minutes.
+11. Ajouter la cadence nightly pour properties élargies, stress threads réels, matrices de runtimes, leaks, mutation informative et matériel disponible.
+12. Ajouter le gate release : nightly récent, devices physiques requis par les promises, ABI/interop et absence de quarantaine.
+13. Comparer le registre versionné de capabilities aux observations des contract suites sans générer une promesse de support depuis un seul runner.
+14. Générer le rapport de couverture du registre `API-MIGRATION.md` depuis tous les dumps ABI publiés et comparer le catalogue documentaire aux ABI/exports.
+15. Ajouter les benchmarks input, state, gamepad et capture comme signaux de performance séparés du verdict fonctionnel.
+16. Compiler trois samples consommateurs de référence — utilitaire, jeu et site Web — sans traiter leur rendu comme oracle de Kadre.
+17. Écrire les guides Android, UIKit, SwiftUI, Web, Desktop, policies, structured concurrency, host surfaces, interactions, interop renderer et migration.
+18. Vérifier que documentation, samples et tests ne promettent ni rendu, widgets, custom pump public ni état global.
 
 ### Critères de sortie
 
-- Chaque exemple public est couvert par un test ou sample compilé.
-- La matrice de capabilities correspond aux résultats des backends.
-- Les benchmarks enregistrent une baseline versionnée.
-- Un consumer peut tester son application sans backend natif.
+- Chaque `contractId/scenarioId/target` obligatoire possède une preuve exécutée et chaque sentinelle est tuée.
+- Chaque exemple public est couvert par un consumer compile test ou un sample compilé ; aucun screenshot ne remplace une preuve de contrat.
+- La matrice de capabilities correspond aux résultats des backends sans réduire la promesse au seul environnement CI.
+- Le gate PR n’emploie ni skip, retry, `continue-on-error`, masquage shell ni régénération automatique de baseline.
+- Le p95 mural sur 20 gates PR vise 10 minutes et chaque job possède un timeout hard de 15 minutes ; tout ajustement est revu dans `TEST-STRATEGY.md`.
+- Les benchmarks enregistrent une baseline versionnée hors verdict fonctionnel.
+- Un consumer peut tester son application avec le fake sans backend natif.
 
 ### Vérification
 
 ```bash
-rtk ./gradlew check
+rtk ./gradlew checkPublicApi checkContracts
+rtk scripts/test-kadre-pr-contracts.sh
 rtk ./gradlew :benchmarks:jmh-core:jmh
 ```
 

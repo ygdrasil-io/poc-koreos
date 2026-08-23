@@ -272,3 +272,4 @@ public enum class KadreOperation {
 - [x] Chaque outcome contenant une failure possède un set fermé distinct des failures directes.
 - [x] Les refus de permission stateful et les annulations de picker ne sont plus confondus.
 - [x] Aucune opération unsupported ne peut réussir par no-op.
+- [x] `TEST-STRATEGY.md` impose une preuve indépendante et traçable pour chaque ligne de cette matrice.

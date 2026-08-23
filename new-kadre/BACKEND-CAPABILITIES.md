@@ -255,3 +255,5 @@ Un adapter ne peut être marqué « supported » que si :
 - lifecycle et teardown passent les races attach/detach/cancellation ;
 - le registre versionné est complet ;
 - le consumer compile test de son interop cible passe.
+
+La preuve de ces points suit `TEST-STRATEGY.md` : driver opposé à la frontière Kadre, oracle `O3` minimum, aucun skip transformant une absence d’infrastructure en succès et preuve d’exécution de chaque `contractId/scenarioId/target` obligatoire.
