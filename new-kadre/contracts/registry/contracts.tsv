@@ -1,1 +1,7 @@
 contractId	status	source	subject	risk	oracle	scenarios	requiredTargets	conditionalCapabilities	sentinels	retirementRef
+API-001	active	PUBLIC-API-CATALOG.md#2	foundation ABI	public surface drift	O1	foundation-abi	jvm	-	public-api-leak	-
+API-002	active	PUBLIC-API-CATALOG.md#3	common values	invalid scalar publication	O2	value-invariants	jvm	-	non-finite-value	-
+API-003	active	POLICY-PROFILES.md#8	policy profiles	invalid or drifting policy	O2	policy-profiles,policy-validation	jvm	-	invalid-policy-accepted	-
+API-004	active	DESIGN.md#12	KadreResult	failure identity loss	O2	result-combinators	jvm	-	transform-exception-captured	-
+API-005	active	INTEROP-EXPORTS.md#1	Kotlin consumer	unusable published Kotlin API	O1	kotlin-consumer	jvm	-	internal-type-leak	-
+API-006	active	INTEROP-EXPORTS.md#4	Java consumer	unusable JVM value model	O1	java-consumer	jvm	-	continuation-leak	-
