@@ -28,7 +28,7 @@ Les applications métier restent écrites en Kotlin partagé. Une façade host r
 | `KadreFailure` | complet | value model lisible | enum Swift fermée | discriminated union fermée |
 | suspend functions | complet | aucune signature `Continuation` promise | wrappers `async` listés seulement | `Promise` listées seulement |
 | callbacks de streaming | complet | non promis | non promis | non promis |
-| `kadre-test` | complet Kotlin | non promis | non promis | non promis |
+| artifact `test` | complet Kotlin | non promis | non promis | non promis |
 | native handles | target Kotlin | non promis par la façade | non promis par la façade | non promis par la façade |
 
 Les symboles non promis peuvent physiquement apparaître dans un bytecode/header généré tant que le toolchain ne permet pas de les cacher. Les tests interop doivent les ignorer et aucun sample/document ne les utilise. Dès qu’un mécanisme stable existe, les actuals appliquent `@JvmSynthetic`, `@HiddenFromObjC` ou l’absence de `@JsExport` sans ajouter ces annotations à l’API commune.

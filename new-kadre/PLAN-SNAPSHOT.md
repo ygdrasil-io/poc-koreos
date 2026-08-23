@@ -6,7 +6,7 @@
 
 **Objectif :** remplacer l’API winit-like par une API Kotlin Multiplatform coroutine, embeddable-first, capability-driven et sans état global.
 
-**Architecture :** `kadre` devient l’unique API principale. Une `KadreSession` attachée à un host possède sa hiérarchie coroutine, sa surface hôte, ses fenêtres top-level, sa vue des displays, ses périphériques et ses captures. Les backends traduisent les contrats communs vers leurs threads et lifecycles natifs.
+**Architecture :** `kadre-new` est l’umbrella KMP principal. Une `KadreSession` attachée à un host possède sa hiérarchie coroutine, sa surface hôte, ses fenêtres top-level, sa vue des displays, ses périphériques et ses captures. Les backends traduisent les contrats communs vers leurs threads et lifecycles natifs.
 
 **Stack :** Kotlin Multiplatform, kotlinx.coroutines, Flow/StateFlow, Kotlin Time, Gradle KMP, Kotlin ABI validation, Kotlin/Native, Kotlin/JS et Kotlin/Wasm.
 
@@ -28,6 +28,8 @@
 
 **Stratégie de test et CI :** `new-kadre/TEST-STRATEGY.md`
 
+**Architecture des projets :** `new-kadre/PROJECT-ARCHITECTURE.md`
+
 ## Contraintes globales
 
 - Breaking changes autorisés ; aucun maintien permanent de l’API actuelle.
@@ -47,6 +49,9 @@
 - Une erreur de session ne cancelle pas le scope de son host ; l’annulation du host ferme sa session.
 - Une nouvelle scène utilise une nouvelle application fournie par `KadreApplicationFactory`.
 - `explicitApi()` sur chaque module publié.
+- `kadre-new` est l’umbrella KMP principal ; aucun enfant ne reprend `kadre` dans son nom.
+- `foundation`, `runtime`, `platform:*`, `backend:*`, `test` et `integration:*` suivent exclusivement les responsabilités et dépendances de `PROJECT-ARCHITECTURE.md`.
+- Aucun projet FFI ni binding généré n’entre dans `kadre-new` ; les backends desktop consomment KFFI directement.
 - Chaque chantier laisse le dépôt compilable et vérifiable.
 - Chaque nouvelle abstraction est introduite par une preuve admissible selon `TEST-STRATEGY.md` avant migration des backends ; un test miroir ou sans mutation détectable ne satisfait pas cette contrainte.
 - Chaque backend doit passer le noyau portable de la même contract suite et les scénarios conditionnels de ses capabilities, avec un driver réel opposé à la frontière Kadre.
@@ -99,14 +104,12 @@ Les suppressions massives n’ont lieu qu’au chantier 11, après migration de 
 
 Créer la nouvelle surface publique sans encore migrer les backends natifs.
 
-### Portée actuelle
+### Projets cibles
 
-- `kadre/build.gradle.kts`
-- `kadre-core/build.gradle.kts`
-- `kadre-coroutines/build.gradle.kts`
-- `kadre/src/commonMain/kotlin/org/graphiks/kadre/`
-- `kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/`
-- `kadre-test/`
+- `kadre-new/build.gradle.kts`
+- `kadre-new/foundation/`
+- `kadre-new/runtime/`
+- `kadre-new/test/`
 
 ### Livrables
 
@@ -117,7 +120,7 @@ Créer la nouvelle surface publique sans encore migrer les backends natifs.
 5. Créer `KadrePolicy`, les trois profils, les files bornées distinctes ingress/collector, les limites de fan-out/ressources et les compteurs de diagnostics monotones, non perdables et explicitement saturables.
 6. Déplacer les contrats publics vers les packages cibles sous `org.graphiks.kadre`.
 7. Rendre internes les bridges `PlatformGamepad*`, `FrameTimingTracer` et chaque owner classé `internalize` par `API-MIGRATION.md`/`MIGRATION-AUDIT.md`.
-8. Préparer la fusion de `kadre-coroutines` en déplaçant sa dépendance coroutine et ses contrats généraux vers `kadre`.
+8. Placer la dépendance coroutine et ses contrats généraux dans `foundation`/`runtime` sans créer d’enfant `coroutines`.
 9. Ajouter des tests d’API qui interdisent les imports consommateurs depuis `org.graphiks.kadre.core`.
 10. Matérialiser `new-kadre/API-MIGRATION.md` dans une tâche qui classe chaque symbole ABI comme `keep/move`, `replace`, `internalize` ou `remove`, et échoue sur tout symbole non couvert.
 11. Créer une tâche racine `checkPublicApi` qui agrège cette couverture et la validation ABI de tous les modules encore publiés.
@@ -133,13 +136,13 @@ Créer la nouvelle surface publique sans encore migrer les backends natifs.
 - Chaque symbole de la baseline ABI possède exactement une décision de migration.
 - Le rapport liste séparément chaque symbole absorbé par une règle résiduelle ; aucun match résiduel non approuvé ne subsiste.
 - Une collection de `StateFlow` ne peut pas être refusée par un budget Kadre.
-- L’ancienne API compile encore temporairement, mais tous les nouveaux travaux ciblent la nouvelle surface.
+- Tous les nouveaux travaux ciblent exclusivement la nouvelle surface et la topologie de `PROJECT-ARCHITECTURE.md`.
 
 ### Vérification
 
 ```bash
-rtk ./gradlew :kadre:check :kadre-core:check :kadre-test:check
-rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
+rtk ./gradlew :kadre-new:foundation:check :kadre-new:runtime:check :kadre-new:test:check
+rtk ./gradlew :kadre-new:foundation:checkKotlinAbi
 ```
 
 ---
@@ -152,13 +155,9 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 
 ### Fichiers cibles
 
-- créer `kadre/src/commonMain/kotlin/org/graphiks/kadre/application/KadreApplication.kt`
-- créer `kadre/src/commonMain/kotlin/org/graphiks/kadre/application/KadreScope.kt`
-- créer `kadre/src/commonMain/kotlin/org/graphiks/kadre/application/KadreSession.kt`
-- créer `kadre/src/commonMain/kotlin/org/graphiks/kadre/application/KadreLifecycle.kt`
-- créer `kadre/src/commonMain/kotlin/org/graphiks/kadre/application/KadreHost.kt`
-- créer les implémentations internes correspondantes dans `kadre-core`
-- étendre `kadre-test` avec `FakeKadreHost`, `VirtualKadreClock` et `VirtualLifecycleController`
+- créer les contrats application dans `kadre-new/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/`
+- créer les implémentations correspondantes dans `kadre-new/runtime`
+- étendre `kadre-new/test` avec `FakeKadreHost`, `VirtualKadreClock` et `VirtualLifecycleController`
 
 ### Livrables
 
@@ -196,7 +195,7 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 ### Vérification
 
 ```bash
-rtk ./gradlew :kadre:check :kadre-test:check
+rtk ./gradlew :kadre-new:foundation:check :kadre-new:runtime:check :kadre-new:test:check
 ```
 
 ---
@@ -239,7 +238,7 @@ Séparer les surfaces fournies par l’hôte des fenêtres top-level, puis rempl
 8. `InteractionContext` synchrone, sérialisé et non réentrant pour user activation/serial, plus une action pré-armable par surface avec trigger, expiration et budget.
 9. Capabilities séparant support structurel, disponibilité dynamique, interaction requise et contraintes typées.
 10. Quatre callbacks renderer exacts sous `@KadrePlatformApi`/`@DelicateKadreApi`, avec validité native bornée au callback.
-11. Fake surfaces, displays, interactions et windows dans `kadre-test`.
+11. Fake surfaces, displays, interactions et windows dans `kadre-new:test`.
 12. Contract tests de fermeture, focus, resize, fullscreen, expiration d’interaction et absence de faux succès.
 13. Protocole de fermeture fenêtre distinguant requête différable, rejet, fermeture forcée, commit asynchrone et snapshot terminal.
 14. Ordre de détachement surface → input/events → retrait de `primarySurface`, avec handles terminaux encore lisibles.
@@ -260,7 +259,7 @@ Séparer les surfaces fournies par l’hôte des fenêtres top-level, puis rempl
 ### Vérification
 
 ```bash
-rtk ./gradlew :kadre:check :kadre-test:check
+rtk ./gradlew :kadre-new:foundation:check :kadre-new:runtime:check :kadre-new:test:check
 ```
 
 ---
@@ -318,7 +317,7 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 ### Vérification
 
 ```bash
-rtk ./gradlew :kadre:check :kadre-test:check :benchmarks:jmh-core:check
+rtk ./gradlew :kadre-new:foundation:check :kadre-new:runtime:check :kadre-new:test:check
 ```
 
 ---
@@ -368,7 +367,7 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 ### Vérification
 
 ```bash
-rtk ./gradlew :kadre:check :kadre-test:check
+rtk ./gradlew :kadre-new:foundation:check :kadre-new:runtime:check :kadre-new:test:check
 ```
 
 ---
@@ -590,7 +589,6 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 ```bash
 rtk ./gradlew checkPublicApi checkContracts
 rtk scripts/test-kadre-pr-contracts.sh
-rtk ./gradlew :benchmarks:jmh-core:jmh
 ```
 
 ---

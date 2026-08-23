@@ -201,7 +201,7 @@ Les payloads suivants possèdent un domaine fermé indépendamment de l’opéra
 | callback de frame ou de bytes lève une autre exception | la même exception | frame/chunk libéré ; outcome owner défini par sa ligne |
 | `InteractionHandler` lève | aucune exception ne traverse le SDK | diagnostic fatal puis `SessionOutcome.Failed(ApplicationFailure)` |
 
-## 9.1 Contrôleurs de `kadre-test`
+## 9.1 Contrôleurs de l’artifact `test`
 
 Les méthodes `Virtual*Controller`, `VirtualKadreClock.advanceBy` et constructeurs `Fake*` configurent un backend de test ; elles ne sont pas des opérations fonctionnelles de l’application et ne retournent pas `KadreResult`. Elles réussissent avec la valeur indiquée ou lèvent `IllegalArgumentException` pour owner/ID étranger, ordre de transition impossible, capability incohérente, payload hors budget ou valeur numérique invalide. Toute failure injectée par `fail*`, `reject` ou `enqueueOpenFailure` doit appartenir au domaine fermé de l’opération/outcome ciblé, y compris les registres de field et permission des sections 1.1/1.2 ; sinon la méthode lève `IllegalArgumentException` sans transition. Elles ne lèvent aucune `KadreException` et n’utilisent aucune failure native. Les opérations déclenchées ensuite sur les vrais handles fake suivent toutes les lignes ordinaires de ce document.
 

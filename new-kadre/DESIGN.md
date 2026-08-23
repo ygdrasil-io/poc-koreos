@@ -22,6 +22,8 @@
 
 **Preuves :** `new-kadre/TEST-STRATEGY.md` définit les oracles indépendants, la contract suite, la traçabilité et les gates PR/nightly/release.
 
+**Architecture des projets :** `new-kadre/PROJECT-ARCHITECTURE.md` ferme la topologie Gradle/KMP, les responsabilités, dépendances, publications et frontières KFFI.
+
 **Niveau de fermeture :** les contrats d’architecture, la forme documentaire de l’API et la stratégie de preuve sont fermés. Les dumps ABI, headers, déclarations TypeScript et consumer compile tests restent des preuves d’implémentation à produire plus tard ; leur absence ne rouvre pas le design.
 
 ## 1. Vision
@@ -71,27 +73,32 @@ Les handles natifs nécessaires à un renderer externe restent accessibles derri
 11. **Surface et fenêtre distinctes.** Un élément DOM, une `View` ou une vue UIKit n’est jamais présenté comme une fenêtre top-level fictive.
 12. **Valeurs immuables, ressources vivantes.** Les value objects, événements, outcomes, collections et buffers publiés restent immuables après publication. Une collection peut contenir des handles de ressource vivants comme `Window` ou `Display` : son appartenance est un snapshot immuable, mais l’état futur de chaque handle reste observable par ses propres flows.
 
-## 4. Frontière des modules
+## 4. Frontière des projets
 
-### 4.1 Modules publics
+`PROJECT-ARCHITECTURE.md` est l’autorité normative de cette section. Le projet principal porte actuellement le nom `kadre-new` ; aucun de ses enfants ne reprend `kadre` dans son nom.
 
-- `kadre` : API KMP principale et contracts coroutine.
-- `kadre-test` : fake host, horloge virtuelle, périphériques virtuels et contract-test fixtures.
-- modules de plateforme : points d’attachement, options et quatre callbacks d’interop renderer exactement documentés par le catalogue.
+### 4.1 Composants publics
 
-### 4.2 Modules internes
+- `kadre-new` : umbrella KMP et dépendance principale standard.
+- `foundation` : contrats communs et surface lexicale définie par le catalogue.
+- `platform:android`, `platform:uikit`, `platform:web` et `platform:desktop` : points d’attachement et APIs target-specific transitives.
+- `test` : fake host, horloge virtuelle et périphériques virtuels destinés aux tests consommateurs.
+- `integration:compose`, `integration:swiftui`, `integration:awt` et `integration:javafx` : intégrations tierces optionnelles, matérialisées uniquement lorsqu’elles contiennent une implémentation réelle.
 
-- `kadre-core` devient un moteur interne non consommable directement. Il peut rester un module Gradle, mais ne constitue plus une seconde API.
-- les modules FFI restent internes aux backends.
-- les event loops, schedulers, registries, mappers et callbacks natifs sont `internal`.
+### 4.2 Composants internes
 
-### 4.3 Modules supprimés ou fusionnés
+- `runtime` possède le moteur commun et les SPI d’implémentation.
+- `backend:appkit`, `backend:win32`, `backend:x11` et `backend:wayland` adaptent directement KFFI au SPI desktop.
+- `contracts:*`, `consumers`, `samples:*` et `benchmarks:*` fournissent preuves et parcours sans constituer une API publiée.
+- Kadre ne possède aucun projet FFI, binding généré ou input de génération ; KFFI en est l’unique owner.
 
-- `kadre-coroutines` est fusionné dans `kadre`.
-- les typealiases de façade disparaissent.
-- les deux anciennes classes `EventLoop` disparaissent.
+Les symboles de liaison nécessaires entre artifacts sont techniquement publics sous `org.graphiks.kadre.internal.*`, sans stabilité consommateur. Aucun de ces types ne peut apparaître dans une signature contractuelle.
 
-### 4.4 Packages publics
+### 4.3 Granularité
+
+Les coroutines et les domaines capture, fenêtres, input, gamepads et devices restent dans `foundation`/`runtime`; aucun enfant `core`, `coroutines`, `capture`, `window`, `input` ou `gamepad` n’est créé. Les anciennes façades, les deux classes `EventLoop` et le module coroutine séparé disparaissent de la surface cible.
+
+### 4.4 Packages publics communs
 
 ```text
 org.graphiks.kadre
@@ -103,11 +110,10 @@ org.graphiks.kadre
 ├── input
 ├── capture
 ├── policy
-├── diagnostics
-└── platform
+└── diagnostics
 ```
 
-L’artifact `kadre-test` expose `org.graphiks.kadre.test`.
+L’artifact `test` expose `org.graphiks.kadre.test`. Les packages `org.graphiks.kadre.platform.*` et `org.graphiks.kadre.integration.*` sont possédés exclusivement par les composants listés dans `PROJECT-ARCHITECTURE.md`.
 
 ### 4.5 Fermeture documentaire de l’API cible
 
@@ -249,7 +255,7 @@ public interface KadreHost {
 
 L’admission de la session constitue le point de linéarisation entre `attach` et un détachement concurrent du host. Si le host est déjà détaché avant cette admission, `attach` échoue synchroniquement sans session. S’il se détache après, `attach` peut retourner la session `Starting`, qui termine avec `HostDetached`. La transition vers `Running` et l’admission d’un arrêt sont sérialisées : `KadreApplicationFactory.create` et `KadreApplication.run` ne commencent jamais après l’admission du motif terminal. Un `run` déjà commencé est annulé par le teardown ordinaire. Comme `create` est non suspendu, un appel déjà commencé n’est pas préempté ; son résultat tardif est ignoré et `run` n’est pas invoqué. Une exception de factory observée avant `Terminated` conserve la priorité définie en section 5, tandis qu’une exception tardive après cette frontière est seulement reportée comme erreur de cleanup et ne réouvre pas l’outcome.
 
-Les adaptateurs officiels implémentent ce SPI. `kadre-test` l’utilise pour exécuter exactement les mêmes contrats sans backend natif. L’annotation expérimentale permet les backends tiers pendant l’incubation sans transformer immédiatement le SPI en garantie stable.
+Les adaptateurs officiels implémentent ce SPI. L’artifact `test` l’utilise pour exécuter exactement les mêmes contrats sans backend natif. L’annotation expérimentale permet les backends tiers pendant l’incubation sans transformer immédiatement le SPI en garantie stable.
 
 Les adaptateurs mono-session offrent une surcharge acceptant directement un `KadreApplication`. Les hosts capables de créer une scène ou activité supplémentaire exigent une `KadreApplicationFactory`; Kadre ne réutilise jamais silencieusement une instance applicative dans deux sessions.
 
@@ -1982,7 +1988,7 @@ Les handles :
 - n’exposent aucun `Any` dans l’API commune ;
 - sont valides uniquement tant que leur propriétaire est vivant ;
 - utilisent des types spécifiques dans les source sets de plateforme ;
-- ne laissent jamais fuiter les types FFI générés.
+- ne laissent jamais fuiter les types bruts fournis par KFFI.
 
 L’API Kotlin partagée est la surface normative. Pendant l’incubation initiale, une application est écrite en Kotlin partagé et les hosts Swift ne font qu’attacher une `KadreApplicationFactory` fournie par le module KMP. L’implémentation directe de `KadreApplication` en Swift n’est pas un contrat de cette première surface.
 
@@ -1990,7 +1996,7 @@ Les adapters étrangers exposent uniquement la façade host fermée par `INTEROP
 
 ## 17. Testabilité
 
-`kadre-test` fournit :
+L’artifact `test` fournit :
 
 - `FakeKadreHost` ;
 - `VirtualKadreClock` ;

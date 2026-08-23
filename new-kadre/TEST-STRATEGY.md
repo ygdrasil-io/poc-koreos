@@ -1,11 +1,11 @@
 # New Kadre — Stratégie normative de test et de preuve CI
 
 **Statut :** stratégie fermée pour l’implémentation de la nouvelle API.  
-**Portée :** API commune, `kadre-test`, adapters officiels (adaptateurs), façades Java/Swift/JavaScript et gates CI (contrôles bloquants).  
+**Portée :** API commune, artifact `test`, adapters officiels (adaptateurs), façades Java/Swift/JavaScript et gates CI (contrôles bloquants).  
 **Objectif CI initial :** p95 du gate bloquant d’une PR inférieur ou égal à 10 minutes, ajustable uniquement par une modification revue de cette stratégie.  
 **Principe :** maximiser les comportements prouvés, pas le nombre de tests ni le pourcentage de lignes exécutées.
 
-Ce document définit ce qui constitue une preuve acceptable des contrats de `DESIGN.md`, `PUBLIC-API-CATALOG.md`, `OPERATION-CONTRACTS.md`, `POLICY-PROFILES.md`, `BACKEND-CAPABILITIES.md` et `INTEROP-EXPORTS.md`. Un test absent de cette stratégie peut rester utile localement, mais il ne peut pas être compté comme preuve de conformité sans satisfaire les règles ci-dessous.
+Ce document définit ce qui constitue une preuve acceptable des contrats de `DESIGN.md`, `PROJECT-ARCHITECTURE.md`, `PUBLIC-API-CATALOG.md`, `OPERATION-CONTRACTS.md`, `POLICY-PROFILES.md`, `BACKEND-CAPABILITIES.md` et `INTEROP-EXPORTS.md`. Un test absent de cette stratégie peut rester utile localement, mais il ne peut pas être compté comme preuve de conformité sans satisfaire les règles ci-dessous.
 
 ## 1. Objectifs et non-objectifs
 
@@ -277,8 +277,8 @@ Un outil général de mutation testing (test par mutations) peut tourner en nigh
 
 Les consumer compile tests utilisent de petits projets externes à la source testée :
 
-- Kotlin KMP importe uniquement les packages du catalogue et compile sur chaque target publiée, dont JVM, Android, iOS, macOS, Linux, Windows, JS et Wasm ;
-- un consumer négatif prouve que `org.graphiks.kadre.core`, bindings, implementations backend et anciens bootstrap ne sont plus importables ;
+- Kotlin KMP importe uniquement les packages du catalogue et compile sur chaque target publiée : Android, iOS, JS, Wasm et JVM desktop couvrant macOS, Linux et Windows ;
+- un consumer négatif prouve que l’ancienne API et ses bindings ne sont plus importables, et qu’aucun type `org.graphiks.kadre.internal.*` ne fuit dans une signature contractuelle ; il ne prétend pas rendre inimportables les symboles de liaison techniquement publics d’un artifact transitif interne ;
 - Java attache, observe, stoppe et attend une session sans signature `Continuation` publique promise ;
 - Swift compile le host UIKit/SwiftUI, observe le state et vérifie la cancellation d’un waiter ;
 - TypeScript compile exactement le `.d.ts` promis, y compris `bigint`, discriminated unions et wrapper opaque de factory ;

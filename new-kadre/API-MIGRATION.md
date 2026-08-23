@@ -33,7 +33,7 @@ Décisions :
 | `ActiveEventLoop`, `EventLoopProxy` | remove | managers attachés à la session ; aucun proxy de boucle public |
 | `ControlFlow`, `StartCause` | remove | scheduling interne et primitives coroutine |
 | `kadre.coroutines.EventLoopDispatcher` | internalize | dispatcher/pump du backend |
-| `kadre.coroutines.KadreAppScope`, `KadreWindow`, `kadreApplication` | replace | API application et surface commune dans l’artifact `kadre` |
+| `kadre.coroutines.KadreAppScope`, `KadreWindow`, `kadreApplication` | replace | API application et surface commune dans l’artifact principal |
 | `FrameTimingTracer` | internalize | instrumentation interne ; Kadre n’impose pas une boucle de rendu |
 | `ApplicationHandler.memoryWarning` | replace | `KadreLifecycle.capabilities`, `KadreLifecycle.signals` et `HostSignal.MemoryPressure` |
 
@@ -127,7 +127,7 @@ Le flux input unifié conserve son ordre grâce à un scheduler borné : une lan
 | `config` Android | replace | lecture target-specific bornée via `withAndroidView`; aucun snapshot arbitraire de `Configuration` dans le commun |
 | `androidApp` | remove | le host possède déjà la `ComponentActivity`; aucun accès process-global depuis une event loop |
 | `startKadreApplication` | replace | `KadreIos.attach(windowScene, window, surfaceView, applicationFactory, policy)` |
-| tous les packages générés `*.bindings.**`, symboles FFI et types de framework réexportés | internalize | aucune déclaration FFI générée dans l’ABI des artifacts Kadre |
+| tous les packages générés `*.bindings.**`, symboles FFI et types de framework réexportés | remove | KFFI possède les bindings ; aucun binding, générateur ou input de génération n’entre dans `kadre-new` |
 | implémentations backend concrètes non listées comme point d’attachement | internalize | seules les factories/extensions documentées restent publiques |
 
 ## Modules backend sans dump ABI complet

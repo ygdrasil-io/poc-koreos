@@ -963,7 +963,7 @@ Les onze variantes sont exhaustives. Leur constructor est `internal`, mais leurs
 
 La forme exacte des points d’attachement et options est définie dans `BACKEND-CAPABILITIES.md`; leur décision d’export est définie dans `INTEROP-EXPORTS.md`. Aucun SDK type n’entre dans `commonMain`.
 
-## 10. `kadre-test`
+## 10. Artifact `test`
 
 Le package public `org.graphiks.kadre.test` est exactement :
 
@@ -1215,6 +1215,6 @@ Les contrôleurs attribuent eux-mêmes IDs, revisions, stamps et operation IDs ;
 - [x] Tous les packages publics sont listés.
 - [x] Tous les handles, snapshots, events, outcomes, capabilities, IDs et révisions cités dans `DESIGN.md` ont une forme fermée.
 - [x] Les anciennes formes génériques de géométrie sont remplacées par huit value objects monomorphes exportables.
-- [x] Le raw input et `kadre-test`, auparavant seulement nommés, ont une surface exacte.
+- [x] Le raw input et l’artifact `test`, auparavant seulement nommés, ont une surface exacte.
 - [x] Aucun `Any`, type FFI, renderer, widget, layout, event loop globale ou ressource closeable dans un `Flow` multicast n’entre dans le catalogue.
 - [x] Les exports non-Kotlin sont délégués à un registre fermé, pas à des suppositions du compilateur.
