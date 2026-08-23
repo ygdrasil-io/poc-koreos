@@ -7,6 +7,9 @@ kotlin {
     jvmToolchain(25)
     jvm()
     explicitApi()
+    compilerOptions {
+        freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
+    }
 
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation()

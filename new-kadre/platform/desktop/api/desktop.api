@@ -1,0 +1,108 @@
+public final class org/graphiks/kadre/platform/desktop/DesktopBackend : java/lang/Enum {
+	public static final field AppKit Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static final field Auto Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static final field Wayland Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static final field Win32 Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static final field X11 Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public static fun values ()[Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopHostKt {
+	public static final fun attachKadreDesktop (Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static final fun attachKadreDesktop (Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions;Lorg/graphiks/kadre/policy/KadrePolicy;Lorg/graphiks/kadre/application/KadreApplication;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadreDesktop$default (Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadreDesktop$default (Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions;Lorg/graphiks/kadre/policy/KadrePolicy;Lorg/graphiks/kadre/application/KadreApplication;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static final fun runKadreApplication (Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/application/SessionOutcome;
+	public static final fun runKadreApplication (Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;Lorg/graphiks/kadre/policy/KadrePolicy;Lorg/graphiks/kadre/application/KadreApplication;)Lorg/graphiks/kadre/application/SessionOutcome;
+	public static synthetic fun runKadreApplication$default (Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/application/SessionOutcome;
+	public static synthetic fun runKadreApplication$default (Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;Lorg/graphiks/kadre/policy/KadrePolicy;Lorg/graphiks/kadre/application/KadreApplication;ILjava/lang/Object;)Lorg/graphiks/kadre/application/SessionOutcome;
+}
+
+public abstract interface class org/graphiks/kadre/platform/desktop/DesktopHostOptions {
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopHostOptions$Embedded : org/graphiks/kadre/platform/desktop/DesktopHostOptions {
+	public fun <init> (Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;Lorg/graphiks/kadre/platform/desktop/DesktopBackend;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;Lorg/graphiks/kadre/platform/desktop/DesktopBackend;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public final fun component2 ()Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public final fun copy (Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;Lorg/graphiks/kadre/platform/desktop/DesktopBackend;)Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Embedded;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Embedded;Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;Lorg/graphiks/kadre/platform/desktop/DesktopBackend;ILjava/lang/Object;)Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Embedded;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackend ()Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public final fun getIntegration ()Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone : org/graphiks/kadre/platform/desktop/DesktopHostOptions {
+	public fun <init> ()V
+	public fun <init> (Lorg/graphiks/kadre/platform/desktop/DesktopBackend;Z)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/platform/desktop/DesktopBackend;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public final fun component2 ()Z
+	public final fun copy (Lorg/graphiks/kadre/platform/desktop/DesktopBackend;Z)Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;Lorg/graphiks/kadre/platform/desktop/DesktopBackend;ZILjava/lang/Object;)Lorg/graphiks/kadre/platform/desktop/DesktopHostOptions$Standalone;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackend ()Lorg/graphiks/kadre/platform/desktop/DesktopBackend;
+	public final fun getStopWhenLastWindowClosed ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopIntegration : java/lang/Enum {
+	public static final field AppKitMainLoop Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public static final field AwtEventDispatchThread Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public static final field JavaFxApplicationThread Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+	public static fun values ()[Lorg/graphiks/kadre/platform/desktop/DesktopIntegration;
+}
+
+public abstract interface class org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle {
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle$AppKit : org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle {
+	public final fun component1-s-VKNKU ()J
+	public final fun component2-s-VKNKU ()J
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getNsViewAddress-s-VKNKU ()J
+	public final fun getNsWindowAddress-s-VKNKU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle$Wayland : org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle {
+	public final fun component1-s-VKNKU ()J
+	public final fun component2-s-VKNKU ()J
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDisplayAddress-s-VKNKU ()J
+	public final fun getSurfaceAddress-s-VKNKU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle$Win32 : org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle {
+	public final fun component1-s-VKNKU ()J
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHwnd-s-VKNKU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle$X11 : org/graphiks/kadre/platform/desktop/DesktopNativeWindowHandle {
+	public final fun component1-s-VKNKU ()J
+	public final fun component2-s-VKNKU ()J
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDisplayAddress-s-VKNKU ()J
+	public final fun getWindow-s-VKNKU ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/desktop/DesktopWindowHandleKt {
+	public static final fun withDesktopHandle (Lorg/graphiks/kadre/window/Window;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
