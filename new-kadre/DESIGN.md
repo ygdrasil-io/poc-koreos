@@ -183,9 +183,9 @@ public value class RestorationToken internal constructor(public val value: Strin
 Contrats :
 
 - `close()` délègue à `requestStop()` ; les deux sont non bloquants, thread-safe et idempotents ;
-- `awaitTermination()` est idempotent et retourne toujours le même résultat terminal ;
+- `awaitTermination()` est idempotent, attend la terminaison logique publique de la session et retourne toujours le même résultat terminal ; il ne prétend pas joindre une coroutine applicative qui ignore la cancellation ;
 - appeler `awaitTermination()` depuis un job enfant de la session échoue immédiatement avec `IllegalStateException` au lieu de deadlocker ;
-- le retour normal de `KadreApplication.run` produit `SessionOutcome.Completed` et déclenche le teardown ;
+- le retour du corps de `KadreApplication.run` ferme immédiatement l’admission de nouveaux enfants applicatifs ; le job applicatif passe en `Completing`, attend uniquement les enfants déjà admis, puis produit `SessionOutcome.Completed` et déclenche le teardown ;
 - `KadreSession.requestStop()` propose `Stopped(HostRequested)` et `KadreScope.requestStop()` propose `Stopped(ApplicationRequested)` ; le premier motif d’arrêt non fatal accepté fait autorité ;
 - une annulation directe du job exposé par `KadreScope.coroutineContext`, alors que le parent et le host restent actifs, produit `Stopped(ApplicationCancelled)` ;
 - l’annulation du `parentScope` produit `Stopped(ParentCancelled)` ;
@@ -195,7 +195,7 @@ Contrats :
 - une factory crée exactement une instance de `KadreApplication` par session et peut être invoquée simultanément pour plusieurs scènes ;
 - un consumer qui capture de l’état mutable dans la factory reste responsable de sa synchronisation entre sessions.
 
-`KadreScope.coroutineContext` contient le job applicatif ordinaire, jamais le `SupervisorJob` racine de session. Il reprend le contexte du `parentScope` en remplaçant uniquement son `Job` par ce job applicatif. `KadreApplication.run` et les enfants lancés via le receiver utilisent donc le dispatcher du parent ; les appels natifs marshallent séparément vers le thread du host. Le retour de `run` attend tous ses enfants structurés. Un consumer doit utiliser `withContext` pour déplacer ses calculs lourds au lieu de supposer que le dispatcher applicatif est un thread UI ou un worker.
+`KadreScope.coroutineContext` contient le job applicatif ordinaire, jamais le `SupervisorJob` racine de session. Il reprend le contexte du `parentScope` en remplaçant uniquement son `Job` par ce job applicatif. `KadreApplication.run` et les enfants lancés via le receiver utilisent donc le dispatcher du parent ; les appels natifs marshallent séparément vers le thread du host. Lorsque le corps de `run` retourne, Kadre complète explicitement le job applicatif : une tentative ultérieure de `launch` via un receiver capturé crée un job immédiatement annulé et ne retarde pas la terminaison. Les enfants admis auparavant restent structurés et doivent tous terminer pour qu’un retour normal devienne `Completed` ; jusque-là, la session reste `Running` mais n’admet plus de nouvel enfant applicatif. Un consumer doit utiliser `withContext` pour déplacer ses calculs lourds au lieu de supposer que le dispatcher applicatif est un thread UI ou un worker.
 
 Lorsqu’un scope parent est lui-même possédé par le lifecycle du host, la notification terminale du host est admise avant l’annulation de ce scope et produit déterministement `HostDetached`. `ParentCancelled` est réservé à une annulation externe observée alors que le host reste attaché.
 
@@ -205,7 +205,9 @@ Une erreur non liée à la cancellation, observée avant `Terminated`, surclasse
 
 La session passe à `Running` immédiatement avant l’appel de `KadreApplication.run`, une fois lifecycle et managers initialisés. Le code applicatif ne peut donc jamais observer un manager partiellement construit.
 
-Le teardown suit cet ordre normatif : fermeture de l’admission des callbacks, annulation du job applicatif, arrêt des captures, drop transfers, interactions et sessions IME, arrêt des effets de périphériques, fermeture ou abandon des requêtes de fenêtre, fermeture des fenêtres en ordre inverse de création, détachement de la surface primaire et des subscriptions aux brokers, détachement des bridges natifs, puis attente de tous les enfants. Aucun callback ne peut réintroduire une ressource après la fermeture de l’admission.
+Le teardown suit cet ordre normatif : fermeture de l’admission des callbacks et des nouveaux enfants applicatifs, annulation du job applicatif, arrêt des captures, drop transfers, interactions et sessions IME, arrêt des effets de périphériques, fermeture ou abandon des requêtes de fenêtre, fermeture des fenêtres en ordre inverse de création, détachement de la surface primaire et des subscriptions aux brokers, puis détachement des bridges natifs. Aucun callback ne peut réintroduire une ressource après la fermeture de l’admission.
+
+`ExecutionPolicy.shutdownTimeout` commence à l’entrée dans `Stopping`. Il borne l’attente coopérative du job applicatif et l’achèvement de toutes les coroutines et ressources possédées par Kadre. À l’expiration, Kadre annule ses jobs internes, détache synchroniquement les derniers bridges capables de l’être, révoque tout accès applicatif aux ressources et publie `Failed(ShutdownTimedOut)`. La session passe alors à `Terminated` et `awaitTermination()` retourne, même si du code applicatif non coopératif continue à s’exécuter dans son job déjà annulé. `SessionState.Terminated` est donc une frontière de ressources publique, pas une affirmation que chaque job consumer est `isCompleted`. Ce job n’est ni reparenté ni considéré achevé : il reste enfant annulé du scope fourni par le host jusqu’à ce qu’il coopère, mais ne peut plus observer de ressource Kadre vivante. Kadre garantit ainsi un teardown logique et la fin de ses propres coroutines, pas la préemption de code consumer arbitraire.
 
 ## 6. Host SPI
 
@@ -224,6 +226,8 @@ public interface KadreHost {
 ```
 
 `attach` valide synchroniquement le host, le `parentScope` et la policy, puis retourne sans attendre l’exécution applicative. Un succès contient une session en état `Starting`; tout échec ultérieur devient son `SessionOutcome`. Un parent déjà annulé retourne `KadreFailure.ParentScopeCancelled` sans créer de session.
+
+L’admission de la session constitue le point de linéarisation entre `attach` et un détachement concurrent du host. Si le host est déjà détaché avant cette admission, `attach` échoue synchroniquement sans session. S’il se détache après, `attach` peut retourner la session `Starting`, qui termine avec `HostDetached`. La transition vers `Running` et l’admission d’un arrêt sont sérialisées : `KadreApplicationFactory.create` et `KadreApplication.run` ne commencent jamais après l’admission du motif terminal. Un `run` déjà commencé est annulé par le teardown ordinaire. Comme `create` est non suspendu, un appel déjà commencé n’est pas préempté ; son résultat tardif est ignoré et `run` n’est pas invoqué. Une exception de factory observée avant `Terminated` conserve la priorité définie en section 5, tandis qu’une exception tardive après cette frontière est seulement reportée comme erreur de cleanup et ne réouvre pas l’outcome.
 
 Les adaptateurs officiels implémentent ce SPI. `kadre-test` l’utilise pour exécuter exactement les mêmes contrats sans backend natif. L’annotation expérimentale permet les backends tiers pendant l’incubation sans transformer immédiatement le SPI en garantie stable.
 
@@ -349,7 +353,9 @@ Un `StateFlow` Kadre suit le contrat kotlinx.coroutines ordinaire : lire `value`
 
 Chaque `StateFlow` constitue une cellule atomique, mais plusieurs `StateFlow` d’un même owner ne forment pas implicitement une transaction. Lorsqu’un invariant public exige de lire plusieurs valeurs ensemble, l’owner expose un snapshot composé révisionné dans un seul `StateFlow`. Sinon, les flows sont explicitement eventually consistent, la capability est mise à jour avant l’état dépendant, et le résultat de l’opération ou l’événement embarque la révision effective à utiliser. Lire un flow différent après réception d’un événement peut révéler une révision plus récente.
 
-À la fermeture normale d’un owner, ses flux d’événements drainent les éléments déjà admis puis se terminent normalement. Une fermeture due à une failure termine les collectors avec `KadreException` portant la même failure stable. Un collector démarré après la terminaison observe immédiatement cette terminaison, sans replay d’événement. Les `StateFlow` ne se terminent pas : ils conservent indéfiniment leur snapshot terminal. Les implémentations ne sont donc pas contraintes d’utiliser `SharedFlow`, qui ne sait pas représenter une terminaison.
+À la fermeture normale d’une ressource pendant que la session reste active, ses flux d’événements drainent les éléments déjà admis vers chaque collector dont le job reste actif, puis se terminent normalement. Une fermeture due à une failure termine ces collectors avec `KadreException` portant la même failure stable. La cancellation du contexte d’un collector reste prioritaire : Kadre ne retarde jamais cette cancellation pour drainer sa file.
+
+Le teardown de la session annule d’abord le job applicatif et ne promet donc aucun drain vers ses collectors. Il peut abandonner les événements encore en file après avoir publié les snapshots terminaux et fermé ou libéré tout payload owned. Les `StateFlow` terminaux, et non la réception d’un dernier événement, constituent l’autorité après teardown. Un collector encore actif hors du sous-arbre applicatif observe la terminaison du flow, mais aucun contrat ne lui garantit les événements abandonnés par le shutdown. Un collector démarré après la terminaison observe immédiatement cette terminaison, sans replay d’événement. Les `StateFlow` ne se terminent pas : ils conservent indéfiniment leur snapshot terminal. Les implémentations ne sont donc pas contraintes d’utiliser `SharedFlow`, qui ne sait pas représenter une terminaison.
 
 Les frames constituent l’unique exception au modèle `Flow` multicast, car une ressource closeable ne peut pas avoir plusieurs owners implicites. Elles utilisent une opération suspendue structurée décrite en section 11.
 
@@ -483,10 +489,34 @@ public data class InputDeliveryPolicy(
 )
 
 public data class CaptureDeliveryPolicy(
+    public val events: EventDeliveryPolicy,
     public val frames: ContinuousDelivery,
     public val maxBufferedBytesPerSession: Long,
 )
 ```
+
+Mapping normatif exhaustif des flux publics :
+
+| Flux public | Policy de livraison | Owner fermé par `CloseSource` |
+|---|---|---|
+| `KadreLifecycle.events`, `KadreLifecycle.signals` | `lifecycleEvents` | `KadreSession` |
+| `HostSurface.events`, `DisplayManager.events`, `Window.events` | `windowEvents` | surface, manager display ou fenêtre concernée |
+| `InteractionRegistration.outcomes` | `windowEvents` | registration |
+| `DeviceManager.events` | `deviceEvents` | branche `DeviceManager` de la session |
+| parties discrètes de `SurfaceInput.events` et `Gamepad.events` | `input.discreteEvents` | `SurfaceInput` ou `Gamepad` |
+| mouvements pointeur de `SurfaceInput.events` | `input.pointerMotion` | `SurfaceInput` |
+| scroll de `SurfaceInput.events` | `input.scroll` | `SurfaceInput` |
+| changements analogiques de `Gamepad.events` | `input.gamepadChanges` | `Gamepad` |
+| `TextInputSession.events` | `input.discreteEvents` | `TextInputSession` |
+| `CaptureSession.events` | `capture.events` | `CaptureSession` |
+| `CaptureSession.collectFrames` | `capture.frames` | `CaptureSession` |
+| `KadreDiagnostics.events`, `CaptureSession.diagnostics` | `diagnostics` | uniquement le flux de diagnostics concerné |
+
+Cette table est fermée : ajouter un `Flow` public exige d’ajouter son mapping dans la même modification. Les `StateFlow` n’y figurent pas, car leur conflation et leur absence de terminaison suivent la section 7.1. Pour les diagnostics, `DiagnosticPolicy` gouverne la capacité et le drop explicite des détails ; les compteurs correspondants restent exacts. Tous les collectors d’événements, diagnostics inclus, consomment le budget agrégé `maxEventCollectorsPerSession`.
+
+`SurfaceInput.events` et `Gamepad.events` sont des flows mixtes : ils préservent un ordre unique tout en appliquant plusieurs policies. Leur ingress et chaque collector utilisent un scheduler borné composé d’une lane FIFO discrète et de lanes continues. À l’admission d’un événement discret, tout agrégat continu antérieur est scellé ; aucun mouvement, scroll ou changement analogique n’est coalescé à travers cette barrière. Le scheduler choisit ensuite la plus petite `SessionSequence` disponible entre les têtes de lanes. Un événement continu postérieur à la barrière ne peut donc jamais être livré avant elle.
+
+Chaque événement discret en attente délimite un segment de coalescing. Pour une catégorie `Latest` ou `Coalesced`, le scheduler conserve au plus une entrée par segment, soit `discreteCapacity + 1` entrées ; une entrée peut agréger plusieurs contrôles dont l’ensemble est borné par le descriptor du périphérique vivant. `Buffered(n, ...)` conserve au plus `n` entrées au total pour sa catégorie et n’agrège jamais deux segments ; atteindre cette limite applique son action d’overflow. La taille maximale du scheduler est ainsi calculable depuis la capacité discrète et chaque policy continue, sans file cachée supplémentaire. Un drop continu laisse un trou de séquence et produit le diagnostic prévu sans affecter la lane discrète. Un overflow discret ou une action continue `CloseSource`/`FailSession` applique la terminaison hors file définie pour l’owner ; il n’essaie jamais d’insérer un dernier événement dans la lane saturée.
 
 Profils :
 
@@ -496,7 +526,7 @@ Profils :
 | `Realtime` | capacité 64 et scheduling prioritaire | coalescing à chaque tour du host, gamepad `Latest` | `Latest`, 64 MiB | collector lent annulé explicitement |
 | `Recording` | capacité 8192 | `Buffered(8192, FailSession)` | `Buffered(3, CloseSource)`, 512 MiB | aucune perte ajoutée par Kadre ; arrêt explicite plutôt que drop |
 
-La capacité de transitions du tableau est utilisée pour l’ingress et pour chaque collector des lanes lifecycle, window, device et input.
+La capacité de transitions du tableau est utilisée pour l’ingress et pour chaque collector des lanes lifecycle, window, device, input et capture events.
 
 | Profil | Collectors d’événements/flow | Collectors d’événements/session | Requêtes fenêtre | Interactions pendantes | Captures | Drop transfers/chunk |
 |---|---:|---:|---:|---:|---:|---:|
@@ -504,7 +534,7 @@ La capacité de transitions du tableau est utilisée pour l’ingress et pour ch
 | `Realtime` | 8 | 64 | 8 | 8 | 2 | 2 / 64 KiB |
 | `Recording` | 16 | 128 | 16 | 16 | 4 | 8 / 1 MiB |
 
-Pour `Default` et `Realtime`, l’ingress lifecycle utilise `FailSession`, les ingress window/device/input utilisent `CloseSource`, et les collectors utilisent `CancelSlowCollector`. `Recording` utilise `FailSession` à tous les niveaux afin qu’un enregistrement incomplet ne ressemble jamais à un succès.
+Pour `Default` et `Realtime`, l’ingress lifecycle utilise `FailSession`, les ingress window/device/input/capture events utilisent `CloseSource`, et les collectors utilisent `CancelSlowCollector`. `Recording` utilise `FailSession` à tous les niveaux afin qu’un enregistrement incomplet ne ressemble jamais à un succès.
 
 `Default` utilise `Balanced`, un shutdown de 5 secondes et 256 diagnostics détaillés. `Realtime` utilise `LatencyFirst`, 2 secondes et 64 diagnostics. `Recording` utilise `Throughput`, 30 secondes et 8192 diagnostics. L’overflow des événements de diagnostic supprime le plus ancien événement détaillé, tandis que les compteurs restent exacts.
 
@@ -531,11 +561,11 @@ val policy = KadrePolicies.Default.copy(
 
 Les capacités de buffer, limites de collectors d’événements, budgets de ressources, budgets capture en octets et `shutdownTimeout` sont strictement positifs et validés à la construction. L’ingress discret choisit `CloseSource` ou `FailSession`; chaque collector peut aussi choisir `CancelSlowCollector`. Les données continues peuvent choisir `DropOldestAndReport`, `DropLatestAndReport`, `CloseSource` ou `FailSession`. Il n’existe pas de variante `Unlimited` pour une file ou une ressource possédée par Kadre.
 
-Chaque source possède une file d’ingress bornée avant le fan-out, puis chaque collector possède sa propre file bornée. `CloseSource` ferme l’owner du flux saturé : la session pour lifecycle, la fenêtre pour ses événements, la branche `SurfaceInput` pour son input, le périphérique pour son flux propre et la `CaptureSession` pour ses frames. `CancelSlowCollector` termine uniquement le collector concerné avec `SlowCollectorCancellationException`.
+Chaque source non mixte possède une file d’ingress bornée avant le fan-out, puis chaque collector possède sa propre file bornée. Les flows mixtes utilisent le scheduler borné défini ci-dessus à ces deux niveaux. `CloseSource` ferme exactement l’owner indiqué par la table normative ; `CancelSlowCollector` termine uniquement le collector concerné avec `SlowCollectorCancellationException`.
 
 Les profils fixent aussi des limites finies de collectors d’événements et de ressources. `Default` et `Realtime` routent les gamepads vers la session active et utilisent un ownership exclusif des effets. `Recording` peut router vers toutes les sessions foreground, mais ne peut demander un effet partagé que si la capability du périphérique le garantit. Atteindre un budget retourne `KadreFailure.ResourceLimitExceeded`; Kadre n’alloue jamais d’abord pour diagnostiquer ensuite.
 
-`ExecutionPriority` influence uniquement les workers internes et leur cadence de réveil. Les dispatchers UI/main propriétaires restent imposés par le host et ne sont jamais remplaçables par une policy applicative. `shutdownTimeout` borne le teardown ; son dépassement ferme les bridges encore actifs, produit un diagnostic fatal et termine la session en `Failed`.
+`ExecutionPriority` influence uniquement les workers internes et leur cadence de réveil. Les dispatchers UI/main propriétaires restent imposés par le host et ne sont jamais remplaçables par une policy applicative. `shutdownTimeout` suit le contrat de terminaison logique de la section 5 ; son dépassement produit un diagnostic fatal et `KadreFailure.ShutdownTimedOut`, sans prétendre préempter une coroutine consumer non coopérative.
 
 `Coalesced` a une sémantique propre au type : une position absolue conserve la dernière valeur, un mouvement relatif ou scroll additionne tous les deltas, et une valeur analogique conserve la dernière valeur par contrôle. `Latest` ferme la valeur remplacée lorsqu’elle possède une ressource.
 
@@ -601,6 +631,8 @@ public interface Display {
 
 Les displays remplacent `MonitorHandle` et `VideoMode`. Leur inventaire est observable et ne fabrique pas de monitor synthétique pour masquer une absence d’énumération. Un backend peut néanmoins exposer explicitement un display de type `HostViewport` lorsqu’il ne représente que le viewport courant. `DisplayState` décrit ce type, le nom optionnel, les bounds physiques dans l’espace du bureau virtuel, la work area, le scale factor, le mode courant et les modes réellement connus.
 
+`Display` est un handle vivant tant qu’il appartient à `DisplayInventory.Enumerated.displays`. Son `DisplayState` contient un `DisplayConnectionState`; une disparition publie d’abord l’état terminal `Disconnected`, retire ensuite le handle de l’inventaire, puis admet `DisplayManager.events.Removed`. Comme les deux `StateFlow` sont des cellules distinctes, une lecture concurrente peut brièvement voir le handle terminal dans l’ancien inventaire, mais jamais le nouvel inventaire avec un état non terminal ni l’événement avant les deux mises à jour. Le handle retiré conserve son ID et son dernier snapshot terminal pour les références existantes. Une réapparition après le retrait crée un nouveau `DisplayId`, même si le backend reconnaît le même matériel ; aucune identité persistante cross-session ou cross-connexion n’est inférée.
+
 Les coordonnées du bureau virtuel sont physiques, peuvent être négatives et n’ont aucune conversion logique globale : la conversion logique/physique utilise toujours le scale factor de la surface ou du display ciblé, avec une règle d’arrondi documentée par l’opération. Une modification d’échelle ou de mode incrémente la révision avant l’événement correspondant.
 
 ### 9.3 WindowManager
@@ -659,6 +691,7 @@ public sealed interface WindowCancellationOutcome {
 ```
 
 - `await()` attend un état terminal et retourne toujours la même valeur ensuite.
+- annuler uniquement la coroutine qui exécute `await()` annule cette attente, pas la `WindowRequest`; le caller doit invoquer `cancel()` ou `close()` pour agir sur l’opération.
 - l’outer `KadreResult` de `requestWindow` échoue uniquement si la requête ne peut pas être admise (spec invalide, session fermée ou budget atteint) ; une décision du host appartient au `WindowRequestOutcome` observable.
 - `cancel()` distingue l’annulation avant commit, une demande d’annulation encore en attente, une terminaison déjà connue et un commit natif trop tardif pour être annulé ; `TooLate` laisse la requête en attente de son vrai résultat.
 - `cancel()` est idempotent : plusieurs callers observent une décision compatible et une seule transition terminale fait autorité.
@@ -801,6 +834,8 @@ Une surface accepte au maximum un handler actif. `InteractionRegistration.outcom
 
 Une application peut aussi pré-armer une action compatible via une requête observable owned par la surface. `InteractionArmOptions` fixe un trigger typé — prochaine activation éligible, pression pointeur filtrée ou pression clavier filtrée — et une expiration monotone strictement positive. Une surface n’accepte qu’un `ArmedInteraction` pendant ; un second reçoit `AlreadyInUse`. Un événement non correspondant ne le consomme pas. Le détachement, la perte durable de capability, l’expiration ou `close()` produisent un outcome terminal explicite.
 
+`ArmedInteraction.await()` est idempotent. La cancellation d’un waiter ne désarme pas l’action et n’affecte aucun autre waiter ; seul `close()`, l’expiration, le détachement ou une transition native documentée modifie son état.
+
 Sur un événement correspondant, le handler installé reçoit d’abord l’interaction. S’il consomme le token, l’action armée reste pendante ; sinon le backend exécute l’unique action armée avant de quitter le callback. Un token ne committe jamais plus d’une action nécessitant une autorité single-use. `InteractionRegistration.outcomes` utilise la policy des événements de fenêtre ; chaque requête acceptée occupe le budget `maxPendingInteractionRequests` jusqu’à son outcome terminal. Les capabilities indiquent quelles actions et quels triggers supportent ce mode. Aucune API suspendue ordinaire ne prétend prolonger une user activation native.
 
 ### 9.7 Capabilities
@@ -934,6 +969,8 @@ Un code natif inconnu reste inconnu. Aucun ordinal invalide n’est transformé 
 
 `playEffect` signifie que l’effet a été accepté et retourne un owner observable ; il ne signifie pas que l’effet est achevé. La déconnexion, le teardown et la perte de la lease exclusive terminent la session d’effet avec un outcome typé. Le broker process-wide applique `DeviceEffectOwnership`; un conflit retourne `AlreadyInUse` au lieu de mélanger silencieusement deux effets.
 
+`GamepadEffectSession.awaitTermination()` est idempotent. La cancellation d’un waiter ne stoppe pas l’effet ; `requestStop()` ou `close()` exprime cet ownership explicitement.
+
 ### 10.3 IME
 
 ```kotlin
@@ -981,16 +1018,26 @@ public interface DropTransfer : AutoCloseable {
 
 public interface DroppedItem {
     public val descriptor: DropItemDescriptor
+    public val readMode: DropItemReadMode
     public suspend fun collectBytes(
         maxBytes: Long,
         collector: suspend (ByteArray) -> Unit,
     ): KadreResult<Unit>
 }
+
+public enum class DropItemReadMode {
+    Replayable,
+    SingleUse,
+}
 ```
 
 L’entrée d’une offre, ses mouvements, sa sortie et son drop apparaissent dans l’ordre du flux `SurfaceInput.events`. Accepter une offre lorsque le host exige une réponse synchrone utilise `InteractionAction.AcceptDrop`; l’acceptation produit ensuite un `DropTransfer` owned par la session. Une offre expirée retourne `InteractionRequired(Expired)`.
 
-`DropItemDescriptor` expose uniquement les métadonnées réellement portables : nom d’affichage optionnel, taille optionnelle, MIME types et nature text/file/URI. Aucun backend ne fabrique un chemin de fichier sur Web ou un path accessible lorsque le sandbox ne l’accorde pas. `collectBytes` fournit des chunks détenus par l’application, chacun borné par `maxDropChunkBytes`; `maxBytes` borne le transfert total demandé par le consumer. Les handles de fichier ou `Blob` natifs restent sous `@KadrePlatformApi` et suivent le lifetime du `DropTransfer`.
+`DropItemDescriptor` expose uniquement les métadonnées réellement portables : nom d’affichage optionnel, taille optionnelle, MIME types et nature text/file/URI. Aucun backend ne fabrique un chemin de fichier sur Web ou un path accessible lorsque le sandbox ne l’accorde pas. `DropItemReadMode` indique honnêtement si le backend peut rouvrir l’item ; un item `SingleUse` est consommé dès l’admission de sa première lecture, même si celle-ci est ensuite annulée ou échoue.
+
+Un `DropTransfer` accepte au maximum un `collectBytes` actif à la fois, tous items confondus ; une tentative concurrente retourne `AlreadyInUse(DropTransfer)`. Un item `Replayable` accepte plusieurs lectures séquentielles, tandis qu’une seconde lecture d’un item `SingleUse` retourne `Closed(DropItem)`. La cancellation du caller propage sa `CancellationException`, arrête uniquement la lecture courante et ne ferme pas le transfert. Une exception non-cancellation du collector est propagée sans encapsulation après arrêt de la production ; l’item `SingleUse` reste consommé, tandis qu’un item `Replayable` peut être relu. `DropTransfer.close()` interdit toute nouvelle lecture, arrête la production de nouveaux chunks et fait terminer la lecture active avec `Failure(Closed(DropTransfer))` dès que le callback collector courant rend la main ; il ne peut pas préempter du code consumer non coopératif.
+
+`collectBytes` fournit des chunks détenus par l’application, chacun borné par `maxDropChunkBytes`; un `maxBytes` non strictement positif retourne `InvalidRequest` avant de consommer l’item. Sa valeur valide borne le total livré par cet appel. Si la taille connue dépasse la limite, l’appel échoue avec `ResourceLimitExceeded` avant le premier chunk. Si elle est inconnue, Kadre ne livre jamais d’octet au-delà de `maxBytes`, mais peut avoir livré un préfixe avant de retourner la même failure ; le consumer doit considérer ce préfixe invalide lorsque le résultat est un échec. Un succès signifie que l’item complet a été livré. Les handles de fichier ou `Blob` natifs restent sous `@KadrePlatformApi` et suivent le lifetime du `DropTransfer`.
 
 ### 10.5 Raw input
 
@@ -1037,6 +1084,8 @@ public sealed interface CaptureSources {
 
 `HostPickerOnly` représente les plateformes qui interdisent une énumération préalable. Dans ce cas, `CaptureRequest` utilise une cible `HostChoice` et l’appel suspendu à `open` attend le choix ou l’annulation utilisateur. Kadre ne fabrique jamais de faux inventaire vide.
 
+`CaptureSource` est un descriptor immuable, pas un handle vivant. Il contient son `CaptureSourceId`, les métadonnées portables disponibles et la `CaptureManagerRevision` de l’inventaire qui l’a produit. Un refresh conserve l’ID d’une source restée continûment présente ; une source retirée invalide son ID et toute réapparition ultérieure en reçoit un nouveau. `open` avec un descriptor qui n’appartient plus à la révision courante retourne `StaleRevision` avant tout picker ou réservation. `CaptureSession.source` conserve une copie descriptive lisible après la disparition de la source, sans permettre de la rouvrir implicitement.
+
 ```kotlin
 public interface CaptureSession : AutoCloseable {
     public val source: CaptureSource
@@ -1055,11 +1104,23 @@ public interface CaptureSession : AutoCloseable {
 public sealed interface CaptureSessionState {
     public data object Ready : CaptureSessionState
     public data class Streaming(
-        public val revision: CaptureConfigurationRevision,
+        public val configuration: CaptureConfiguration,
     ) : CaptureSessionState
     public data object Stopping : CaptureSessionState
     public data class Terminated(public val outcome: CaptureOutcome) : CaptureSessionState
 }
+
+public data class CaptureConfiguration(
+    public val revision: CaptureConfigurationRevision,
+    public val size: PhysicalSize<Int>,
+    public val format: PixelFormat,
+    public val colorEncoding: ColorEncoding,
+    public val alphaMode: AlphaMode,
+    public val orientation: CaptureOrientation,
+    public val nominalFrameInterval: Duration?,
+    public val region: CaptureRegion?,
+    public val cursorMode: CaptureCursorMode,
+)
 
 public sealed interface CaptureOutcome {
     public data object SourceCompleted : CaptureOutcome
@@ -1078,9 +1139,11 @@ public enum class CaptureStopReason {
 
 `CaptureManager.state` est l’unique snapshot atomique de permission, capabilities et inventaire. Une révocation publie donc une combinaison cohérente en une seule révision avant de fermer les captures concernées. Les éventuels helpers de lecture sont des propriétés dérivées de `state.value`, jamais des `StateFlow` indépendants.
 
-`open` valide la requête, effectue le picker éventuel et réserve la source, mais ne commence pas à produire des frames. Une `CaptureSession` accepte exactement un appel réussi à `collectFrames` pendant sa durée de vie. Cet appel démarre la production native et un second appel, simultané ou ultérieur, reçoit `KadreFailure.AlreadyInUse`. La collection se termine avec la source, `requestStop`, la fermeture de la session applicative ou une erreur attendue de capture. Annuler le caller arrête toute la `CaptureSession` avec `CollectorCancelled`. Une exception non-cancellation du collector est propagée sans encapsulation après libération de la frame courante et produit `Stopped(CollectorFailed)` pour la capture ; si le caller ne la traite pas, les règles ordinaires du job applicatif la promeuvent séparément en `SessionOutcome.Failed(ApplicationFailure)`.
+`open` valide la requête, effectue le picker éventuel et réserve la source, mais ne commence pas à produire des frames. Annuler le caller avant son retour détache uniquement ce waiter : Kadre tente d’annuler un picker exclusivement possédé et encore réversible, mais ne ferme jamais un prompt OS partagé, ne perturbe aucun autre waiter et ne crée pas de `CaptureSession` abandonnée lorsque le résultat natif arrive plus tard.
 
-`awaitTermination()` est idempotent et retourne toujours le même `CaptureOutcome`. Une révocation de permission ferme la production et produit `Stopped(PermissionRevoked)` ; une perte de source produit `Failed(SourceLost)`. Une failure de capture ne termine pas la `KadreSession`, sauf lorsqu’une policy explicitement choisie demande `FailSession`.
+Une `CaptureSession` accepte exactement un appel réussi à `collectFrames` pendant sa durée de vie. Cet appel démarre la production native et un second appel, simultané ou ultérieur, reçoit `KadreFailure.AlreadyInUse`. `collectFrames` retourne `Success(Unit)` pour `SourceCompleted` ou un arrêt demandé par `requestStop`/`close`, `Failure(PermissionDenied)` pour `Stopped(PermissionRevoked)`, et `Failure` avec la même `KadreFailure` pour `CaptureOutcome.Failed`. Annuler le caller propage sa `CancellationException` et arrête toute la `CaptureSession` avec `CollectorCancelled`. Une exception non-cancellation du collector est propagée sans encapsulation après libération de la frame courante et produit `Stopped(CollectorFailed)` pour la capture ; si le caller ne la traite pas, les règles ordinaires du job applicatif la promeuvent séparément en `SessionOutcome.Failed(ApplicationFailure)`. Le teardown parent annule normalement le caller et publie `Stopped(ParentSessionStopping)` sans convertir cette cancellation en `KadreResult`.
+
+`awaitTermination()` est idempotent et retourne toujours le même `CaptureOutcome`. La cancellation d’un waiter ne stoppe pas la capture. L’appeler depuis le collector actif de cette même `CaptureSession` échoue immédiatement avec `IllegalStateException` au lieu de deadlocker. Une révocation de permission ferme la production et produit `Stopped(PermissionRevoked)` ; une perte de source produit `Failed(SourceLost)`. Une failure de capture ne termine pas la `KadreSession`, sauf lorsqu’une policy explicitement choisie demande `FailSession`.
 
 `close()` délègue à `requestStop()` ; les deux sont non bloquants, thread-safe et idempotents. Après un outcome terminal, `awaitTermination()` retourne ce terminal et les autres opérations retournent `KadreFailure.Closed` sans réouvrir la source.
 
@@ -1090,7 +1153,7 @@ public enum class CaptureStopReason {
 public interface CaptureFrame : AutoCloseable {
     public val size: PhysicalSize<Int>
     public val format: PixelFormat
-    public val planes: List<PixelPlane>
+    public val planes: List<PixelPlaneLayout>
     public val configurationRevision: CaptureConfigurationRevision
     public val stamp: EventStamp
     public val sourceTimestamp: CaptureSourceInstant?
@@ -1101,28 +1164,32 @@ public interface CaptureFrame : AutoCloseable {
     public val orientation: CaptureOrientation
 
     public override fun close()
-    public fun copyPlanes(): List<ByteArray>
+    public fun copyPlanes(): List<CopiedPixelPlane>
 }
 
-public interface PixelPlane {
-    public val width: Int
-    public val height: Int
-    public val rowStride: Int
-    public val pixelStride: Int
-    public val byteOffset: Int
-    public val byteCount: Int
-    public val horizontalSubsampling: Int
-    public val verticalSubsampling: Int
-}
+public data class PixelPlaneLayout(
+    public val width: Int,
+    public val height: Int,
+    public val rowStride: Int,
+    public val pixelStride: Int,
+    public val byteCount: Int,
+    public val horizontalSubsampling: Int,
+    public val verticalSubsampling: Int,
+)
+
+public class CopiedPixelPlane internal constructor(
+    public val layout: PixelPlaneLayout,
+    public val bytes: ByteArray,
+)
 ```
 
-Une frame est une lease valide uniquement pendant l’appel du collector. Kadre la ferme dans un `finally`, que le collector retourne, échoue ou soit annulé. `close()` reste idempotent pour permettre une libération anticipée. `copyPlanes()` produit une copie distincte de chaque plane, détenue par l’application ; après fermeture, `copyPlanes()` échoue avec `IllegalStateException` et les vues de `PixelPlane` sont invalides. Kadre ferme aussi les frames remplacées ou écartées par la delivery policy. Le zero-copy retenable est réservé à `@KadrePlatformApi` avec un owner spécifique au backend.
+Une frame est une lease valide uniquement pendant l’appel du collector. Kadre la ferme dans un `finally`, que le collector retourne, échoue ou soit annulé. `close()` reste idempotent pour permettre une libération anticipée. `PixelPlaneLayout` ne contient aucune vue mémoire et reste un value object valide après fermeture. `copyPlanes()` produit une entrée par layout, dans le même ordre, dont le `ByteArray` est une copie détenue par l’application ; après fermeture, seul cet appel échoue avec `IllegalStateException`. Kadre ferme aussi les frames remplacées ou écartées par la delivery policy. Le zero-copy retenable est réservé à `@KadrePlatformApi` avec un owner spécifique au backend.
 
-Le format, les dimensions et subsampling de chaque plane, les strides, le color encoding, l’alpha et l’orientation font partie du contrat de chaque frame. Le noyau portable fermé de `ColorEncoding` contient les primaries, la transfer function, la matrix, le range et les métadonnées HDR connues, chaque information inconnue possédant une variante explicite. `copyPlanes()` copie exactement `byteCount` octets par plane, padding inclus ; aucune conversion implicite de format, packing ou espace colorimétrique n’est effectuée.
+Le format, les dimensions et subsampling de chaque plane, les strides, le color encoding, l’alpha et l’orientation font partie du contrat de chaque frame. Le noyau portable fermé de `ColorEncoding` contient les primaries, la transfer function, la matrix, le range et les métadonnées HDR connues, chaque information inconnue possédant une variante explicite. Chaque `CopiedPixelPlane.bytes` commence à l’octet logique zéro de sa plane et contient exactement `layout.byteCount` octets, padding inclus ; aucun offset vers un backing buffer natif ne fuite dans l’API commune. Aucune conversion implicite de format, packing ou espace colorimétrique n’est effectuée.
 
 `stamp.timestamp` mesure l’arrivée de la frame dans la session. `sourceTimestamp`, lorsqu’il existe, utilise l’horloge média monotone de cette `CaptureSession` et sert au pacing ou à l’encodage ; il n’est comparable ni à `SessionInstant` ni au timestamp d’une autre capture. `duration` décrit la durée de présentation connue. Une pause, un saut d’horloge, une frame répétée ou une autre rupture détectable renseigne `discontinuity` au lieu de falsifier une continuité.
 
-Le format, la taille et l’encodage peuvent changer pendant une session. `CaptureSessionState` contient une `CaptureConfigurationRevision`; elle est mise à jour et un `CaptureEvent.Reconfigured` est publié avant la première frame portant la nouvelle révision. Chaque frame référence cette révision afin qu’une frame retardée ne soit jamais interprétée avec le snapshot courant incorrect.
+Le format, la taille, la cadence nominale, la région, le mode cursor, l’orientation et l’encodage peuvent changer pendant une session. `CaptureSessionState.Streaming` contient toujours la `CaptureConfiguration` effective complète, y compris sa révision. Pour une reconfiguration, Kadre publie d’abord ce snapshot, admet ensuite `CaptureEvent.Reconfigured(configuration)` sous `capture.events`, puis seulement la première frame portant la nouvelle révision. Chaque frame conserve aussi ses propriétés effectives et sa révision ; celles-ci doivent correspondre exactement à la configuration référencée, afin qu’une frame retardée ne soit jamais interprétée avec le snapshot courant plus récent.
 
 `CaptureDeliveryPolicy.maxBufferedBytesPerSession` borne la somme des buffers ingress, des frames en attente, de la lease livrée au collector et du pool natif réservé par Kadre pour une session de capture. Le backend calcule le coût à partir de la configuration négociée avant de démarrer. Une requête qui ne tient pas dans le budget échoue sans démarrer avec `ResourceLimitExceeded`. Si une reconfiguration dépasserait le budget, elle n’est pas publiée comme réussie : la capture se termine avec la même failure. Un buffer opaque dont le backend ne peut pas borner le coût interdit les modes buffered concernés ; aucun nombre de frames ne remplace silencieusement la limite en octets. Avec `maxConcurrentCaptureSessions`, cette borne rend aussi finie la réservation totale possédée par une session Kadre. Les copies produites par `copyPlanes()` sont ensuite sous le budget de l’application et ne restent pas comptées par Kadre.
 
@@ -1204,6 +1271,11 @@ public sealed interface KadreFailure {
         public override val message: String,
     ) : KadreFailure
 
+    public data class ShutdownTimedOut(
+        public val timeout: Duration,
+        public override val message: String,
+    ) : KadreFailure
+
     public data class SourceLost(
         public val source: CaptureSourceId,
         public override val message: String,
@@ -1242,6 +1314,7 @@ public enum class KadreResourceKind {
     EventCollector,
     Interaction,
     DropTransfer,
+    DropItem,
     CustomCursor,
     GamepadEffect,
     TextInputSession,
@@ -1318,7 +1391,13 @@ KadreSession Job
 - Le code des collectors s’exécute dans le contexte du collector, jamais arbitrairement dans un callback natif.
 - Aucun `GlobalScope` ni job détaché.
 
-Sauf contrat plus restrictif explicitement indiqué, tout `AutoCloseable` public Kadre possède la même sémantique : `close()` est non bloquant, thread-safe et idempotent ; il ferme immédiatement l’admission de nouvelles opérations, marshal le cleanup natif si nécessaire et ne lance pas d’exception pour une failure attendue. L’état terminal ou `awaitTermination()` expose l’achèvement asynchrone. `CaptureFrame.close()` suit aussi ces garanties, mais n’étend jamais la validité de la lease au-delà du callback collector. Après fermeture, les snapshots terminaux et IDs restent lisibles ; toute autre opération retourne `KadreFailure.Closed`, sauf opération explicitement documentée comme erreur de programmation après invalidation, telle que `CaptureFrame.copyPlanes()`.
+Par défaut, annuler une coroutine suspendue dans `await`, `awaitTermination`, une requête de permission ou un picker annule uniquement ce waiter. L’opération observable, le prompt natif partagé et les autres waiters continuent ; le backend peut annuler best-effort une opération exclusivement possédée et encore réversible, mais ne transforme jamais cette tentative en effet implicite sur un owner déjà retourné. Modifier un owner exige son verbe explicite `cancel`, `requestStop` ou `close`. Les seules exceptions sont les opérations qui déclarent posséder leur source pendant tout l’appel, notamment `collectFrames`, et les règles de cancellation y sont documentées localement.
+
+Toute fonction suspendue qui crée et retourne un owner `AutoCloseable` possède un point de handoff unique immédiatement avant son retour normal. Avant ce point, Kadre possède la ressource : une cancellation empêche son admission ou la ferme automatiquement, avec les effets irréversibles décrits par le contrat local, afin qu’aucun owner ni budget ne soit abandonné. Après ce point, l’application possède la ressource et la cancellation ultérieure de la coroutine appelante ne la ferme pas. Un `KadreResult.Failure` ne transfère jamais d’owner.
+
+Tous les managers, handles vivants, getters et méthodes publiques non suspendues sont thread-safe sauf confinement explicitement déclaré. Les lectures de `StateFlow.value` suivent le contrat kotlinx.coroutines ; les mutations concurrentes sont sérialisées par l’owner et aucun callback consumer n’est invoqué sous un lock interne. Les builders, `InteractionContext`, tokens transitoires et accès au contenu des leases limitées à un collector sont les exceptions : ils sont non thread-safe et confinés au bloc documenté ; leur `close()` conserve néanmoins le contrat thread-safe commun. `installInteractionHandler` peut être appelé depuis tout thread, mais le handler installé s’exécute uniquement sur le thread du host, sérialisé et non réentrant comme défini en section 9.6.
+
+Sauf contrat plus restrictif explicitement indiqué, tout `AutoCloseable` public Kadre possède la même sémantique : `close()` est non bloquant, thread-safe et idempotent ; il ferme immédiatement l’admission de nouvelles opérations, marshal le cleanup natif si nécessaire et ne lance pas d’exception pour une failure attendue. L’état terminal ou `awaitTermination()` expose l’achèvement asynchrone. `CaptureFrame.close()` suit aussi ces garanties, mais n’étend jamais la validité de la lease au-delà du callback collector. Après fermeture ou terminaison logique de la session, les snapshots terminaux et IDs restent lisibles ; toute autre opération retourne `KadreFailure.Closed`, sauf opération explicitement documentée comme erreur de programmation après invalidation, telle que `CaptureFrame.copyPlanes()`.
 
 ## 15. Adaptateurs de plateforme
 
@@ -1475,7 +1554,7 @@ Les adapters Swift exposent des wrappers idiomatiques pour la session et le life
 
 Chaque backend valide les mêmes invariants de lifecycle, threading, capabilities, fermeture, flux, handles, permissions, surface/window et routing process-wide.
 
-Les contract tests couvrent explicitement la température, le replay, la cardinalité, la terminaison tardive des flux, les budgets agrégés, l’ordre intra-flow, l’absence de garantie d’ordre inter-flows, l’ordre state/event, la cohérence des snapshots composés, l’isolation des collectors d’événements lents, l’absence de rejet des collectors `StateFlow`, les spans coalescés, l’expiration des interactions, les resets et terminaisons d’input, les révisions IME, le protocole close, la fermeture automatique des frames, les budgets capture en octets et les transitions légales du lifecycle. Des consumer tests compilent une intégration minimale Java, Swift, JS et Wasm.
+Les contract tests couvrent explicitement la température, le replay, la cardinalité, la terminaison tardive des flux, le mapping exhaustif `Flow`/policy, les budgets agrégés, l’ordre intra-flow, l’absence de garantie d’ordre inter-flows, les barrières discrètes des schedulers mixtes, l’ordre state/event, la cohérence des snapshots composés, l’isolation des collectors d’événements lents, l’absence de rejet des collectors `StateFlow`, les spans coalescés, l’expiration des interactions, les resets et terminaisons d’input, les révisions IME, la cancellation non propriétaire des waiters, le protocole close, la fermeture automatique des frames, les configurations capture révisionnées, les budgets capture en octets, la cardinalité des drop transfers, le retrait terminal des displays et les transitions légales du lifecycle. Un test avec coroutine applicative non coopérative valide que `awaitTermination()` est borné, que l’accès aux ressources est révoqué et que seul le job consumer annulé peut rester physiquement incomplet. Des consumer tests compilent une intégration minimale Java, Swift, JS et Wasm.
 
 ## 18. Performance
 
@@ -1485,7 +1564,7 @@ Invariants mesurables :
 - aucun fan-out d’événements non borné : ses allocations maximales dérivent des capacités et limites de collectors publiées par la policy ;
 - un `StateFlow` ne possède qu’une cellule productrice conflated et aucune file par collector ; le coût O(collectors) des subscriptions et coroutines demandées par l’application est mesuré mais n’est pas transformé en rejet Kadre ;
 - aucune perte silencieuse de transition discrète ;
-- aucune coroutine orpheline après teardown ;
+- aucune coroutine interne possédée par Kadre après le teardown logique ; une coroutine consumer non coopérative peut rester physiquement incomplète uniquement dans son job annulé toujours rattaché au scope du host, sans ressource Kadre vivante ;
 - frames abandonnées toujours fermées et mémoire de capture sous `maxBufferedBytesPerSession` ;
 - coût mesuré avec zéro, un et plusieurs collectors pour les flux multicast, et avec le collector unique pour la capture ;
 - benchmarks pour input haute fréquence, gamepad, état fenêtre et capture.
@@ -1525,3 +1604,5 @@ La refonte est terminée lorsque :
 10. les avertissements d’opt-in expérimentaux sont traités localement et intentionnellement ;
 11. chaque catalogue public documentaire approuvé correspond exactement aux dumps ABI et exports de plateforme ;
 12. aucun symbole classé par une règle résiduelle ne reste sans revue nominative.
+13. chaque `Flow` public possède exactement une ligne dans le mapping normatif de delivery, y compris les sous-lanes d’un flow mixte ;
+14. les timeouts bornent le teardown Kadre sans prétendre préempter le code consumer, et les attentes suspendues n’acquièrent aucun ownership implicite.

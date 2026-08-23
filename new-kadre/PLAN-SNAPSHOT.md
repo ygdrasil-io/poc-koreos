@@ -106,6 +106,7 @@ Créer la nouvelle surface publique sans encore migrer les backends natifs.
 11. Créer une tâche racine `checkPublicApi` qui agrège cette couverture et la validation ABI de tous les modules encore publiés.
 12. Faire de `Default` le minimum obligatoire des hosts supportés, limiter seulement les collectors d’événements et ajouter les budgets d’interactions et de capture en octets.
 13. Produire avant le code le catalogue documentaire exhaustif du chantier 1 et faire échouer la revue si une forme publique reste ouverte.
+14. Ajouter `ShutdownTimedOut`, `CaptureDeliveryPolicy.events` et une table fermée associant chaque `Flow` public à sa policy, son owner et son action `CloseSource`.
 
 ### Critères de sortie
 
@@ -149,15 +150,20 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 3. Contexte de `KadreScope` obtenu en remplaçant uniquement le `Job` du parent, dispatcher hérité et arrêt applicatif explicite.
 4. `KadreApplicationFactory`, contexte de lancement, token de restoration opaque et création indépendante par session.
 5. États `Starting`, `Running`, `Stopping` et `Terminated(SessionOutcome)`.
-6. `close()`, arrêts host/application, auto-cancellation et `awaitTermination()` idempotents, avec protection contre l’attente depuis un enfant.
+6. `close()`, arrêts host/application, auto-cancellation et `awaitTermination()` idempotents, avec protection contre l’attente depuis un enfant et distinction entre terminaison logique et achèvement physique d’un consumer non coopératif.
 7. Lifecycle orthogonal attachment/visibility/activation, signaux de pression mémoire et mapping normatif de chaque host.
 8. Contrats hot/cold, replay, cardinalité, terminaison, ordre state/event, spans coalescés et limites agrégées des seuls flows d’événements.
 9. Host SPI expérimental retournant `KadreResult<KadreSession>` et implémentation fake.
 10. Infrastructure de brokers internes sans session courante et routing testable entre plusieurs sessions.
 11. Diagnostics redacted par défaut et propagation correcte des exceptions/cancellations.
-12. Teardown ordonné et tests prouvant qu’aucun enfant ne survit.
+12. Teardown ordonné et borné : aucun job interne Kadre ne survit, l’accès aux ressources est révoqué au timeout et un job consumer non coopératif reste annulé sous le scope du host sans bloquer `awaitTermination()`.
 13. Sémantique commune de tous les `AutoCloseable` : admission fermée immédiatement, `close()` non bloquant, thread-safe et idempotent, état terminal conservé.
 14. Tests prouvant l’ordre croissant dans chaque flow et l’absence de promesse d’ordre de livraison entre flows distincts.
+15. Fermeture de l’admission des enfants dès le retour du corps de `KadreApplication.run`; un receiver capturé ne peut pas prolonger la session après ce point.
+16. Point de linéarisation entre `attach`, détachement du host et passage à `Running`, sans démarrage applicatif après admission d’un motif terminal.
+17. Règle commune de cancellation : un waiter ne possède pas l’opération attendue, sauf streaming explicitement owner comme `collectFrames`; toute factory suspendue conserve l’owner jusqu’au handoff de son retour et le ferme si le caller est annulé avant.
+18. Thread-safety par défaut pour managers, handles, getters et méthodes non suspendues, avec confinement explicite des builders, callbacks transitoires et leases.
+19. Drain garanti uniquement à la fermeture normale d’une ressource vers les collectors encore actifs ; le teardown de session s’appuie sur les snapshots terminaux.
 
 ### Critères de sortie
 
@@ -167,6 +173,7 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 - Une application peut demander son propre arrêt sans annuler arbitrairement le scope du host.
 - Une fermeture hôte annule fenêtres, devices et captures factices.
 - Aucun `GlobalScope`, singleton de handler/session courante ou job détaché n’est utilisé ; un broker process-wide ne contient que l’état natif partagé autorisé.
+- Une coroutine applicative volontairement non coopérative ne bloque ni le teardown logique ni `awaitTermination()` au-delà de `shutdownTimeout`, et ne conserve aucun accès Kadre vivant.
 
 ### Vérification
 
@@ -218,6 +225,8 @@ Séparer les surfaces fournies par l’hôte des fenêtres top-level, puis rempl
 12. Contract tests de fermeture, focus, resize, fullscreen, expiration d’interaction et absence de faux succès.
 13. Protocole de fermeture fenêtre distinguant requête différable, rejet, fermeture forcée, commit asynchrone et snapshot terminal.
 14. Ordre de détachement surface → input/events → retrait de `primarySurface`, avec handles terminaux encore lisibles.
+15. Lifecycle d’un `Display` retiré : état terminal avant retrait d’inventaire, événement après les snapshots et nouvel ID après réapparition.
+16. Cancellation de `WindowRequest.await` et `ArmedInteraction.await` limitée au waiter ; seules les méthodes explicites modifient l’owner.
 
 ### Critères de sortie
 
@@ -267,6 +276,9 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 12. Broker gamepad partagé sans IDs cross-session et arbitrage explicite des effets.
 13. Tests de saturation pour événements discrets et continus, limites de collectors d’événements comprises.
 14. Tests d’edit IME obsolète, de régression de révision et de cursor rect calculé sur une ancienne révision.
+15. Scheduler mixte borné pour `SurfaceInput.events` et `Gamepad.events`, avec lane FIFO discrète, lanes continues et barrières de séquence empêchant tout coalescing à travers un événement discret.
+16. Cancellation de `GamepadEffectSession.awaitTermination` limitée au waiter.
+17. `DropItemReadMode`, une seule lecture active par transfert, distinction replayable/single-use, résultats partiels bornés et effets de cancellation/close définis.
 
 ### Critères de sortie
 
@@ -279,6 +291,8 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 - Aucun type natif clavier n’est requis dans le chemin portable.
 - Les coordonnées logiques/physiques et l’ordre snapshot/événement sont identiques sur tous les backends.
 - Une lane input saturée n’a pas besoin d’accepter un dernier événement pour rendre son état terminal observable.
+- Une policy continue ne peut ni réordonner un événement discret ni créer une file cachée non bornée.
+- Aucun transfert de drop ne livre plus de `maxBytes`, et un succès signifie toujours que l’item complet a été livré.
 
 ### Vérification
 
@@ -303,16 +317,18 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 
 1. `CaptureManager` attaché à `KadreScope`.
 2. Permission, capabilities et sources dans un unique `CaptureManagerState` révisionné, avec `HostPickerOnly` pour les sources non énumérables.
-3. IDs de source typés.
+3. `CaptureSource` descriptor immuable lié à la révision d’inventaire, IDs typés, détection des requêtes obsolètes et nouvel ID après retrait/réapparition.
 4. `CaptureRequest` avec rate, région, format, cursor et delivery policy.
 5. `CaptureSession` enfant de `KadreSession`, `CaptureOutcome` et raisons terminales stables.
 6. `open` réserve sans produire ; le premier et unique `collectFrames` démarre la source et encadre sa fermeture.
-7. `CaptureFrame` closeable, configuration revision, `PixelPlane` dimensionné/subsamplé, color encoding complet, timestamp média optionnel, durée et discontinuité.
+7. `CaptureFrame` closeable, `PixelPlaneLayout` immuable sans vue native, `CopiedPixelPlane` associant layout et bytes possédés, color encoding complet, timestamp média optionnel, durée et discontinuité.
 8. Fermeture automatique des frames consommées, droppées, remplacées ou interrompues.
 9. Chemin sûr `copyPlanes()` et zero-copy retenable sous opt-in.
-10. Reconfiguration de taille/format/colorimétrie observable avant la première frame concernée.
+10. `CaptureConfiguration` effective complète dans l’état `Streaming` et dans `Reconfigured`, publiée avant la première frame concernée.
 11. Fake capture avec révocation et perte de source.
 12. Contract tests de collector unique-ever, outcomes, teardown, reconfiguration, buffer pool, budget total en octets et overflow.
+13. `CaptureDeliveryPolicy.events`, résultats normatifs de `collectFrames`, cancellation non propriétaire de `awaitTermination` et garde anti-deadlock depuis le collector actif.
+14. Cancellation d’un picker : détachement du waiter, annulation best-effort seulement si exclusive et aucune session abandonnée lors d’un résultat tardif.
 
 ### Critères de sortie
 
@@ -323,6 +339,8 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 - Une capture ou reconfiguration qui dépasserait `maxBufferedBytesPerSession` échoue avant d’admettre une frame hors budget.
 - `EventStamp` d’arrivée et timestamp média de source ne sont jamais confondus.
 - `ScreenCapturer.resolve()` n’est plus nécessaire.
+- Les layouts de plane restent lisibles après fermeture, mais aucun buffer natif ni offset vers son backing storage n’est exposé.
+- Toute frame référence une configuration complète déjà observable avec la même révision.
 
 ### Vérification
 
@@ -604,6 +622,12 @@ rtk ./gradlew checkPublicApi
 
 **Réponse :** ingress non bloquant, buffers bornés, lanes discrètes/continues et diagnostics d’overflow.
 
+### Coroutine applicative non coopérative
+
+**Risque :** confondre cancellation coopérative et préemption, puis bloquer indéfiniment `awaitTermination()` ou prétendre qu’un job consumer est achevé.
+
+**Réponse :** terminaison logique bornée, révocation des ressources, fin garantie des seuls jobs internes Kadre et job consumer annulé restant rattaché au scope du host jusqu’à sa coopération.
+
 ### User activation et serials transitoires
 
 **Risque :** une opération fullscreen, pointer lock, popup, drag ou resize est livrée trop tard par un `Flow` et échoue malgré un geste valide.
@@ -632,7 +656,7 @@ rtk ./gradlew checkPublicApi
 
 **Risque :** allocations et latence pour les jeux.
 
-**Réponse :** snapshots `StateFlow` sans file par collector, collections spécialisées, profils Realtime, benchmarks, buffers et nombre de collectors d’événements bornés. Les coroutines d’observation créées par l’application restent sous son propre budget.
+**Réponse :** snapshots `StateFlow` sans file par collector, collections spécialisées, profils Realtime, benchmarks, buffers et nombre de collectors d’événements bornés. Les flows mixtes utilisent un scheduler borné à barrières discrètes et chaque `Flow` public possède un mapping de policy fermé. Les coroutines d’observation créées par l’application restent sous son propre budget.
 
 ### Ressources OS process-wide
 
@@ -644,7 +668,13 @@ rtk ./gradlew checkPublicApi
 
 **Risque :** use-after-close ou fuite native.
 
-**Réponse :** ressources closeable, constructeurs internes, lifetime lié à la session et contract tests de teardown.
+**Réponse :** ressources closeable, constructeurs internes, lifetime lié à la session, layouts de plane sans vue native, copies explicitement app-owned et contract tests de teardown.
+
+### Cancellation confondue avec ownership
+
+**Risque :** annuler un waiter ferme une fenêtre, un effet, un picker ou une capture encore utilisée par un autre consumer.
+
+**Réponse :** cancellation limitée au waiter par défaut ; seuls `cancel`, `requestStop`, `close` et les opérations streaming explicitement propriétaires modifient la ressource.
 
 ### Explosion du nombre d’options
 

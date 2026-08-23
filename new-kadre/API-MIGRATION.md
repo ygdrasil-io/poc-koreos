@@ -29,7 +29,7 @@ Décisions :
 | Surface actuelle | Décision | Cible ou justification |
 |---|---|---|
 | `kadre.EventLoop`, `kadre.core.EventLoop` | remove | `KadreHost.attach`, adaptateurs embeddable et `runKadreApplication` desktop |
-| `ApplicationHandler` | replace | `KadreApplication`, `KadreApplicationFactory`, `KadreScope` |
+| `ApplicationHandler` | replace | `KadreApplication`, `KadreApplicationFactory`, `KadreScope`, admission d’enfants fermée au retour de `run` et terminaison logique bornée |
 | `ActiveEventLoop`, `EventLoopProxy` | remove | managers attachés à la session ; aucun proxy de boucle public |
 | `ControlFlow`, `StartCause` | remove | scheduling interne et primitives coroutine |
 | `kadre.coroutines.EventLoopDispatcher` | internalize | dispatcher/pump du backend |
@@ -53,7 +53,7 @@ Décisions :
 | `Window` et tous ses getters/setters | replace | `HostSurface`, `Window`, `StateFlow`, `Window.apply` et opérations dédiées |
 | `WindowAttributes`, `AppKitWindowAttributes`, `AndroidWindowAttributes`, `UiKitWindowAttributes` | replace | `WindowSpec` immuable, DSL et options plateforme typées |
 | `WindowRequestResult`, `SurfaceSizeRequestResult`, `RequestError` | replace | `KadreResult`, `WindowRequestOutcome`, `WindowUpdateOutcome`, `WindowCloseOutcome` et réponses close typées |
-| `MonitorHandle`, `VideoMode` | replace | `DisplayManager`, `DisplayInventory`, `DisplayState` |
+| `MonitorHandle`, `VideoMode` | replace | `DisplayManager`, `DisplayInventory`, `DisplayState` terminal avant retrait et nouvel ID après réapparition |
 | `Fullscreen` | replace | modes et contraintes dans `WindowSpec`/`WindowUpdate` et `WindowCapabilities` |
 | `Theme`, `WindowLevel`, `WindowButtons` | keep/move | valeurs de `WindowState`, `WindowSpec` ou `WindowUpdate` avec capability typée |
 | `ActiveEventLoop.systemTheme` | replace | theme observable de `SurfaceState`; aucune préférence globale fictive pour une session headless |
@@ -61,7 +61,7 @@ Décisions :
 | `Icon` | replace | valeur immuable avec copie défensive dans `WindowSpec`/`WindowUpdate` |
 | `UserAttentionType`, `ResizeDirection` | keep/move | opérations dédiées de fenêtre ; token d’interaction lorsque le host l’exige |
 | redraw, resize, move, scale, focus, theme, occlusion et close requested de `WindowEvent` | replace | `SurfaceState`/`SurfaceEvent` ou `WindowState`/`WindowEvent`, avec révision, stamp et protocole close accept/reject/forced |
-| drag-and-drop de `WindowEvent` à base de chemins `String` | replace | offre de drop attachée à la surface ; aucun faux chemin portable ou accès implicite au filesystem |
+| drag-and-drop de `WindowEvent` à base de chemins `String` | replace | offre/transfer attaché à la surface, mode replayable/single-use et lecture bornée ; aucun faux chemin portable ou accès implicite au filesystem |
 | transparent, blur, decorations, hit-test, content protection, system menu, drag window/resize | replace | champs ou verbes dédiés avec capabilities et résultats typés ; aucun no-op silencieux |
 | `RawWindowHandle`, `RawDisplayHandle`, `OwnedDisplayHandle` | replace | handles owner-scoped sous `@KadrePlatformApi` dans les source sets concernés |
 
@@ -82,11 +82,13 @@ Un `HTMLElement`, une `View` ou une vue UIKit matche toujours la ligne `HostSurf
 
 La perte de focus, la déconnexion ou la révocation remplace les releases synthétiques par un `SurfaceInputState` neutre suivi de `InputEvent.StateReset`. Un overflow publie directement le snapshot composé terminal et termine le flow avec une failure hors de la lane saturée, sans promettre un dernier événement impossible à admettre. Les APIs nécessitant un serial ou une user activation utilisent `InteractionContext`, pas un événement `Flow` livré trop tard.
 
+Le flux input unifié conserve son ordre grâce à un scheduler borné : une lane FIFO discrète et des lanes continues ne coalescent jamais à travers une barrière discrète. La cancellation d’un simple waiter n’acquiert aucun ownership sur une requête, une interaction ou un effet.
+
 ## Gamepads
 
 | Surface actuelle | Décision | Cible ou justification |
 |---|---|---|
-| `GamepadController`, `Gamepad`, `GamepadState`, `GamepadEvent`, `Axis`, `Button`, `PowerInfo` | replace | `DeviceManager`, snapshots immuables, événements estampillés et collections spécialisées |
+| `GamepadController`, `Gamepad`, `GamepadState`, `GamepadEvent`, `Axis`, `Button`, `PowerInfo` | replace | `DeviceManager`, snapshots immuables, événements estampillés, scheduler discret/continu et collections spécialisées |
 | `PlatformGamepad`, `PlatformGamepadBackend` | internalize | broker natif process-wide et adapters |
 | fonctions `fromOrdinal` et fallback vers un contrôle arbitraire | remove | valeur unknown/native explicite |
 | rumble/effects retournant `Unit` | replace | `GamepadEffectSession` owned et outcome observable |
@@ -97,9 +99,9 @@ La perte de focus, la déconnexion ou la révocation remplace les releases synth
 |---|---|---|
 | `ScreenCapturer` | replace | `CaptureManager` attaché à la session |
 | `CapturePermission` | replace | `CaptureManagerState` atomique regroupant permission observable, capabilities, sources et révision |
-| `CaptureSource`, `DisplayInfo`, `WindowInfo`, `CaptureRegion`, `CaptureConfig` | replace | sources/requests typées, host picker et IDs opaques |
-| `CaptureSession` | replace | owner structuré, démarrage au premier `collectFrames`, `CaptureOutcome` |
-| `CaptureFrame`, `PixelFormat` | replace | lease closeable, planes décrites, configuration revision, color encoding complet, horloge média distincte et budget buffer en octets |
+| `CaptureSource`, `DisplayInfo`, `WindowInfo`, `CaptureRegion`, `CaptureConfig` | replace | descriptor source lié à une révision d’inventaire, request typée, host picker, IDs opaques et `CaptureConfiguration` effective complète |
+| `CaptureSession` | replace | owner structuré, démarrage au premier `collectFrames`, `CaptureOutcome`, événements sous policy et cancellation des waiters non propriétaire |
+| `CaptureFrame`, `PixelFormat` | replace | lease closeable, `PixelPlaneLayout` sans vue native, `CopiedPixelPlane` app-owned, configuration revision, color encoding complet, horloge média distincte et budget buffer en octets |
 | `CaptureError` | replace | `KadreFailure` et outcomes stables |
 | `UIKitScreenCapturer`, `UIKitCaptureSession`, `AndroidScreenCapturer`, `AndroidCaptureSession` et équivalents backend | internalize | implémentations derrière `CaptureManager` |
 
