@@ -30,4 +30,15 @@ class GamepadValuesTest {
         assertEquals(positive, negative)
         assertEquals(positive.hashCode(), negative.hashCode())
     }
+
+    @Test
+    fun effectIntensitiesCanonicalizeNegativeZero() {
+        val effect = GamepadEffect.DualRumble(-0.0, -0.0, 1.seconds)
+        val trigger = GamepadEffect.TriggerRumble(-0.0, -0.0, 1.seconds)
+
+        assertEquals(0.0.toBits(), effect.strong.toBits())
+        assertEquals(0.0.toBits(), effect.weak.toBits())
+        assertEquals(0.0.toBits(), trigger.left.toBits())
+        assertEquals(0.0.toBits(), trigger.right.toBits())
+    }
 }

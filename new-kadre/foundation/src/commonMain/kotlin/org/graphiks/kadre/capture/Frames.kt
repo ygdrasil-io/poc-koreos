@@ -38,46 +38,107 @@ public class Chromaticity(x: Double, y: Double) {
     override fun toString(): String = "Chromaticity(x=$x, y=$y)"
 }
 
-public data class MasteringDisplayMetadata(
+public data class MasteringDisplayMetadata private constructor(
     public val red: Chromaticity,
     public val green: Chromaticity,
     public val blue: Chromaticity,
     public val whitePoint: Chromaticity,
     public val minimumLuminanceNits: Double,
     public val maximumLuminanceNits: Double,
+    private val canonicalized: Unit,
 ) {
+    public constructor(
+        red: Chromaticity,
+        green: Chromaticity,
+        blue: Chromaticity,
+        whitePoint: Chromaticity,
+        minimumLuminanceNits: Double,
+        maximumLuminanceNits: Double,
+    ) : this(
+        red,
+        green,
+        blue,
+        whitePoint,
+        canonicalLuminance(minimumLuminanceNits, "minimumLuminanceNits"),
+        canonicalLuminance(maximumLuminanceNits, "maximumLuminanceNits"),
+        Unit,
+    )
+
     init {
-        require(
-            minimumLuminanceNits.isFinite() &&
-                maximumLuminanceNits.isFinite() &&
-                minimumLuminanceNits >= 0.0 &&
-                maximumLuminanceNits > minimumLuminanceNits,
-        ) { "mastering luminance range is invalid" }
+        require(maximumLuminanceNits > minimumLuminanceNits) { "mastering luminance range is invalid" }
     }
+
+    public fun copy(
+        red: Chromaticity = this.red,
+        green: Chromaticity = this.green,
+        blue: Chromaticity = this.blue,
+        whitePoint: Chromaticity = this.whitePoint,
+        minimumLuminanceNits: Double = this.minimumLuminanceNits,
+        maximumLuminanceNits: Double = this.maximumLuminanceNits,
+    ): MasteringDisplayMetadata = MasteringDisplayMetadata(
+        red,
+        green,
+        blue,
+        whitePoint,
+        minimumLuminanceNits,
+        maximumLuminanceNits,
+    )
+
+    override fun toString(): String =
+        "MasteringDisplayMetadata(red=$red, green=$green, blue=$blue, whitePoint=$whitePoint, " +
+            "minimumLuminanceNits=$minimumLuminanceNits, maximumLuminanceNits=$maximumLuminanceNits)"
 }
 
 public sealed interface HdrMetadata {
     public data object None : HdrMetadata
 
-    public data class Static(
+    public data class Static private constructor(
         public val masteringDisplay: MasteringDisplayMetadata?,
         public val maximumContentLightLevelNits: Double?,
         public val maximumFrameAverageLightLevelNits: Double?,
+        private val canonicalized: Unit,
     ) : HdrMetadata {
+        public constructor(
+            masteringDisplay: MasteringDisplayMetadata?,
+            maximumContentLightLevelNits: Double?,
+            maximumFrameAverageLightLevelNits: Double?,
+        ) : this(
+            masteringDisplay,
+            canonicalOptionalLuminance(maximumContentLightLevelNits, "maximumContentLightLevelNits"),
+            canonicalOptionalLuminance(
+                maximumFrameAverageLightLevelNits,
+                "maximumFrameAverageLightLevelNits",
+            ),
+            Unit,
+        )
+
         init {
             require(
                 masteringDisplay != null ||
                     maximumContentLightLevelNits != null ||
                     maximumFrameAverageLightLevelNits != null,
             ) { "static HDR metadata must contain at least one value" }
-            validateOptionalLuminance(maximumContentLightLevelNits, "maximumContentLightLevelNits")
-            validateOptionalLuminance(maximumFrameAverageLightLevelNits, "maximumFrameAverageLightLevelNits")
             require(
                 maximumContentLightLevelNits == null ||
                     maximumFrameAverageLightLevelNits == null ||
                     maximumFrameAverageLightLevelNits <= maximumContentLightLevelNits,
             ) { "frame average light level must not exceed content light level" }
         }
+
+        public fun copy(
+            masteringDisplay: MasteringDisplayMetadata? = this.masteringDisplay,
+            maximumContentLightLevelNits: Double? = this.maximumContentLightLevelNits,
+            maximumFrameAverageLightLevelNits: Double? = this.maximumFrameAverageLightLevelNits,
+        ): Static = Static(
+            masteringDisplay,
+            maximumContentLightLevelNits,
+            maximumFrameAverageLightLevelNits,
+        )
+
+        override fun toString(): String =
+            "Static(masteringDisplay=$masteringDisplay, " +
+                "maximumContentLightLevelNits=$maximumContentLightLevelNits, " +
+                "maximumFrameAverageLightLevelNits=$maximumFrameAverageLightLevelNits)"
     }
 
     public data object Unknown : HdrMetadata
@@ -143,8 +204,13 @@ public class CopiedPixelPlane internal constructor(
     }
 }
 
-private fun validateOptionalLuminance(value: Double?, name: String) {
-    require(value == null || value.isFinite() && value >= 0.0) { "$name must be finite and non-negative" }
+private fun canonicalLuminance(value: Double, name: String): Double {
+    require(value.isFinite() && value >= 0.0) { "$name must be finite and non-negative" }
+    return if (value == 0.0) 0.0 else value
+}
+
+private fun canonicalOptionalLuminance(value: Double?, name: String): Double? {
+    return value?.let { canonicalLuminance(it, name) }
 }
 
 private fun canonicalChromaticity(value: Double, name: String): Double {

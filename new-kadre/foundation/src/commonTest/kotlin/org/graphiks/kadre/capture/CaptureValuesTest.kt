@@ -35,4 +35,25 @@ class CaptureValuesTest {
         assertEquals(positive, negative)
         assertEquals(positive.hashCode(), negative.hashCode())
     }
+
+    @Test
+    fun luminanceValuesCanonicalizeNegativeZero() {
+        val metadata = MasteringDisplayMetadata(
+            red = Chromaticity(0.1, 0.1),
+            green = Chromaticity(0.2, 0.2),
+            blue = Chromaticity(0.3, 0.3),
+            whitePoint = Chromaticity(0.4, 0.4),
+            minimumLuminanceNits = -0.0,
+            maximumLuminanceNits = 1.0,
+        )
+        val hdr = HdrMetadata.Static(
+            masteringDisplay = null,
+            maximumContentLightLevelNits = -0.0,
+            maximumFrameAverageLightLevelNits = -0.0,
+        )
+
+        assertEquals(0.0.toBits(), metadata.minimumLuminanceNits.toBits())
+        assertEquals(0.0.toBits(), hdr.maximumContentLightLevelNits?.toBits())
+        assertEquals(0.0.toBits(), hdr.maximumFrameAverageLightLevelNits?.toBits())
+    }
 }

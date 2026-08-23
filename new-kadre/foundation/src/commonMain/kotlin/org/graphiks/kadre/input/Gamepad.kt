@@ -176,28 +176,48 @@ public sealed interface GamepadEvent {
 public sealed interface GamepadEffect {
     public val duration: Duration
 
-    public data class DualRumble(
+    public data class DualRumble private constructor(
         public val strong: Double,
         public val weak: Double,
         override val duration: Duration,
+        private val canonicalized: Unit,
     ) : GamepadEffect {
-        init {
-            validateEffectValue(strong, "strong")
-            validateEffectValue(weak, "weak")
-            validateEffectDuration(duration)
-        }
+        public constructor(strong: Double, weak: Double, duration: Duration) : this(
+            canonicalEffectValue(strong, "strong"),
+            canonicalEffectValue(weak, "weak"),
+            duration.also(::validateEffectDuration),
+            Unit,
+        )
+
+        public fun copy(
+            strong: Double = this.strong,
+            weak: Double = this.weak,
+            duration: Duration = this.duration,
+        ): DualRumble = DualRumble(strong, weak, duration)
+
+        override fun toString(): String = "DualRumble(strong=$strong, weak=$weak, duration=$duration)"
     }
 
-    public data class TriggerRumble(
+    public data class TriggerRumble private constructor(
         public val left: Double,
         public val right: Double,
         override val duration: Duration,
+        private val canonicalized: Unit,
     ) : GamepadEffect {
-        init {
-            validateEffectValue(left, "left")
-            validateEffectValue(right, "right")
-            validateEffectDuration(duration)
-        }
+        public constructor(left: Double, right: Double, duration: Duration) : this(
+            canonicalEffectValue(left, "left"),
+            canonicalEffectValue(right, "right"),
+            duration.also(::validateEffectDuration),
+            Unit,
+        )
+
+        public fun copy(
+            left: Double = this.left,
+            right: Double = this.right,
+            duration: Duration = this.duration,
+        ): TriggerRumble = TriggerRumble(left, right, duration)
+
+        override fun toString(): String = "TriggerRumble(left=$left, right=$right, duration=$duration)"
     }
 }
 
@@ -234,8 +254,9 @@ private fun validateGamepadCode(value: String) {
     }
 }
 
-private fun validateEffectValue(value: Double, name: String) {
+private fun canonicalEffectValue(value: Double, name: String): Double {
     require(value.isFinite() && value in 0.0..1.0) { "$name must be in [0, 1]" }
+    return if (value == 0.0) 0.0 else value
 }
 
 private fun validateEffectDuration(value: Duration) {

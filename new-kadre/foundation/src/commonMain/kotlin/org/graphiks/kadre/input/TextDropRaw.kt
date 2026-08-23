@@ -170,16 +170,44 @@ public sealed interface RawInputState {
 
 public enum class RawInputUnit { DeviceCount, LogicalPixel, PhysicalPixel }
 
-public data class RawInputEvent(
+public data class RawInputEvent private constructor(
     public val deltaX: Double,
     public val deltaY: Double,
     public val unit: RawInputUnit,
     public val deviceId: DeviceId?,
     public val stamp: EventStamp,
+    private val canonicalized: Unit,
 ) {
-    init {
-        require(deltaX.isFinite() && deltaY.isFinite()) { "raw input delta must be finite" }
-    }
+    public constructor(
+        deltaX: Double,
+        deltaY: Double,
+        unit: RawInputUnit,
+        deviceId: DeviceId?,
+        stamp: EventStamp,
+    ) : this(
+        canonicalRawDelta(deltaX, "deltaX"),
+        canonicalRawDelta(deltaY, "deltaY"),
+        unit,
+        deviceId,
+        stamp,
+        Unit,
+    )
+
+    public fun copy(
+        deltaX: Double = this.deltaX,
+        deltaY: Double = this.deltaY,
+        unit: RawInputUnit = this.unit,
+        deviceId: DeviceId? = this.deviceId,
+        stamp: EventStamp = this.stamp,
+    ): RawInputEvent = RawInputEvent(deltaX, deltaY, unit, deviceId, stamp)
+
+    override fun toString(): String =
+        "RawInputEvent(deltaX=$deltaX, deltaY=$deltaY, unit=$unit, deviceId=$deviceId, stamp=$stamp)"
+}
+
+private fun canonicalRawDelta(value: Double, name: String): Double {
+    require(value.isFinite()) { "$name must be finite" }
+    return if (value == 0.0) 0.0 else value
 }
 
 private fun isCanonicalMediaType(value: String): Boolean {

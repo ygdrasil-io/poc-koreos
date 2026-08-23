@@ -160,28 +160,64 @@ public class PenState(
         "PenState(tiltXDegrees=$tiltXDegrees, tiltYDegrees=$tiltYDegrees, twistRadians=$twistRadians, tangentialPressure=$tangentialPressure)"
 }
 
-public data class PointerState(
+public data class PointerState private constructor(
     public val id: PointerId,
     public val kind: PointerKind,
     public val position: LogicalPoint?,
     public val pressedButtons: Set<PointerButton>,
     public val pressure: Double?,
     public val pen: PenState?,
+    private val canonicalized: Unit,
 ) {
+    public constructor(
+        id: PointerId,
+        kind: PointerKind,
+        position: LogicalPoint?,
+        pressedButtons: Set<PointerButton>,
+        pressure: Double?,
+        pen: PenState?,
+    ) : this(id, kind, position, pressedButtons, canonicalPressure(pressure), pen, Unit)
+
     init {
-        validateOptionalRange(pressure, 0.0, 1.0, "pressure")
         require(pen == null || kind == PointerKind.Pen || kind == PointerKind.Eraser) {
             "pen state requires a pen or eraser pointer"
         }
     }
+
+    public fun copy(
+        id: PointerId = this.id,
+        kind: PointerKind = this.kind,
+        position: LogicalPoint? = this.position,
+        pressedButtons: Set<PointerButton> = this.pressedButtons,
+        pressure: Double? = this.pressure,
+        pen: PenState? = this.pen,
+    ): PointerState = PointerState(id, kind, position, pressedButtons, pressure, pen)
+
+    override fun toString(): String =
+        "PointerState(id=$id, kind=$kind, position=$position, pressedButtons=$pressedButtons, " +
+            "pressure=$pressure, pen=$pen)"
 }
 
-public data class TouchState(
+public data class TouchState private constructor(
     public val id: TouchId,
     public val position: LogicalPoint,
     public val pressure: Double?,
+    private val canonicalized: Unit,
 ) {
-    init { validateOptionalRange(pressure, 0.0, 1.0, "pressure") }
+    public constructor(id: TouchId, position: LogicalPoint, pressure: Double?) : this(
+        id,
+        position,
+        canonicalPressure(pressure),
+        Unit,
+    )
+
+    public fun copy(
+        id: TouchId = this.id,
+        position: LogicalPoint = this.position,
+        pressure: Double? = this.pressure,
+    ): TouchState = TouchState(id, position, pressure)
+
+    override fun toString(): String = "TouchState(id=$id, position=$position, pressure=$pressure)"
 }
 
 public data class InputCapabilities(
@@ -198,12 +234,34 @@ public enum class TouchPhase { Started, Moved, Ended, Cancelled }
 public enum class GestureKind { Pan, Pinch, Rotation, DoubleTap, TouchpadPressure }
 
 public sealed interface ScrollDelta {
-    public data class Logical(public val x: Double, public val y: Double) : ScrollDelta {
-        init { require(x.isFinite() && y.isFinite()) { "scroll delta must be finite" } }
+    public data class Logical private constructor(
+        public val x: Double,
+        public val y: Double,
+        private val canonicalized: Unit,
+    ) : ScrollDelta {
+        public constructor(x: Double, y: Double) : this(
+            canonicalFinite(x, "scroll x"),
+            canonicalFinite(y, "scroll y"),
+            Unit,
+        )
+
+        public fun copy(x: Double = this.x, y: Double = this.y): Logical = Logical(x, y)
+        override fun toString(): String = "Logical(x=$x, y=$y)"
     }
 
-    public data class Lines(public val x: Double, public val y: Double) : ScrollDelta {
-        init { require(x.isFinite() && y.isFinite()) { "scroll delta must be finite" } }
+    public data class Lines private constructor(
+        public val x: Double,
+        public val y: Double,
+        private val canonicalized: Unit,
+    ) : ScrollDelta {
+        public constructor(x: Double, y: Double) : this(
+            canonicalFinite(x, "scroll x"),
+            canonicalFinite(y, "scroll y"),
+            Unit,
+        )
+
+        public fun copy(x: Double = this.x, y: Double = this.y): Lines = Lines(x, y)
+        override fun toString(): String = "Lines(x=$x, y=$y)"
     }
 }
 
@@ -242,7 +300,7 @@ public sealed interface InputEvent {
         override val stateRevision: InputStateRevision,
     ) : InputEvent
 
-    public data class PointerMoved(
+    public data class PointerMoved private constructor(
         public val pointerId: PointerId,
         public val kind: PointerKind,
         public val position: LogicalPoint,
@@ -252,11 +310,61 @@ public sealed interface InputEvent {
         override val stamp: EventStamp,
         override val deviceId: DeviceId?,
         override val stateRevision: InputStateRevision,
+        private val canonicalized: Unit,
     ) : InputEvent {
+        public constructor(
+            pointerId: PointerId,
+            kind: PointerKind,
+            position: LogicalPoint,
+            delta: LogicalDelta,
+            pressure: Double?,
+            pen: PenState?,
+            stamp: EventStamp,
+            deviceId: DeviceId?,
+            stateRevision: InputStateRevision,
+        ) : this(
+            pointerId,
+            kind,
+            position,
+            delta,
+            canonicalPressure(pressure),
+            pen,
+            stamp,
+            deviceId,
+            stateRevision,
+            Unit,
+        )
+
         init { validatePointerPayload(kind, pressure, pen) }
+
+        public fun copy(
+            pointerId: PointerId = this.pointerId,
+            kind: PointerKind = this.kind,
+            position: LogicalPoint = this.position,
+            delta: LogicalDelta = this.delta,
+            pressure: Double? = this.pressure,
+            pen: PenState? = this.pen,
+            stamp: EventStamp = this.stamp,
+            deviceId: DeviceId? = this.deviceId,
+            stateRevision: InputStateRevision = this.stateRevision,
+        ): PointerMoved = PointerMoved(
+            pointerId,
+            kind,
+            position,
+            delta,
+            pressure,
+            pen,
+            stamp,
+            deviceId,
+            stateRevision,
+        )
+
+        override fun toString(): String =
+            "PointerMoved(pointerId=$pointerId, kind=$kind, position=$position, delta=$delta, " +
+                "pressure=$pressure, pen=$pen, stamp=$stamp, deviceId=$deviceId, stateRevision=$stateRevision)"
     }
 
-    public data class PointerButtonChanged(
+    public data class PointerButtonChanged private constructor(
         public val pointerId: PointerId,
         public val kind: PointerKind,
         public val button: PointerButton,
@@ -267,8 +375,63 @@ public sealed interface InputEvent {
         override val stamp: EventStamp,
         override val deviceId: DeviceId?,
         override val stateRevision: InputStateRevision,
+        private val canonicalized: Unit,
     ) : InputEvent {
+        public constructor(
+            pointerId: PointerId,
+            kind: PointerKind,
+            button: PointerButton,
+            buttonState: PointerButtonState,
+            position: LogicalPoint,
+            pressure: Double?,
+            pen: PenState?,
+            stamp: EventStamp,
+            deviceId: DeviceId?,
+            stateRevision: InputStateRevision,
+        ) : this(
+            pointerId,
+            kind,
+            button,
+            buttonState,
+            position,
+            canonicalPressure(pressure),
+            pen,
+            stamp,
+            deviceId,
+            stateRevision,
+            Unit,
+        )
+
         init { validatePointerPayload(kind, pressure, pen) }
+
+        public fun copy(
+            pointerId: PointerId = this.pointerId,
+            kind: PointerKind = this.kind,
+            button: PointerButton = this.button,
+            buttonState: PointerButtonState = this.buttonState,
+            position: LogicalPoint = this.position,
+            pressure: Double? = this.pressure,
+            pen: PenState? = this.pen,
+            stamp: EventStamp = this.stamp,
+            deviceId: DeviceId? = this.deviceId,
+            stateRevision: InputStateRevision = this.stateRevision,
+        ): PointerButtonChanged = PointerButtonChanged(
+            pointerId,
+            kind,
+            button,
+            buttonState,
+            position,
+            pressure,
+            pen,
+            stamp,
+            deviceId,
+            stateRevision,
+        )
+
+        override fun toString(): String =
+            "PointerButtonChanged(pointerId=$pointerId, kind=$kind, button=$button, " +
+                "buttonState=$buttonState, position=$position, pressure=$pressure, pen=$pen, " +
+                "stamp=$stamp, deviceId=$deviceId, stateRevision=$stateRevision)"
     }
 
     public data class Scrolled(
@@ -278,7 +441,7 @@ public sealed interface InputEvent {
         override val stateRevision: InputStateRevision,
     ) : InputEvent
 
-    public data class TouchChanged(
+    public data class TouchChanged private constructor(
         public val touchId: TouchId,
         public val phase: TouchPhase,
         public val position: LogicalPoint,
@@ -286,11 +449,34 @@ public sealed interface InputEvent {
         override val stamp: EventStamp,
         override val deviceId: DeviceId?,
         override val stateRevision: InputStateRevision,
+        private val canonicalized: Unit,
     ) : InputEvent {
-        init { validateOptionalRange(pressure, 0.0, 1.0, "pressure") }
+        public constructor(
+            touchId: TouchId,
+            phase: TouchPhase,
+            position: LogicalPoint,
+            pressure: Double?,
+            stamp: EventStamp,
+            deviceId: DeviceId?,
+            stateRevision: InputStateRevision,
+        ) : this(touchId, phase, position, canonicalPressure(pressure), stamp, deviceId, stateRevision, Unit)
+
+        public fun copy(
+            touchId: TouchId = this.touchId,
+            phase: TouchPhase = this.phase,
+            position: LogicalPoint = this.position,
+            pressure: Double? = this.pressure,
+            stamp: EventStamp = this.stamp,
+            deviceId: DeviceId? = this.deviceId,
+            stateRevision: InputStateRevision = this.stateRevision,
+        ): TouchChanged = TouchChanged(touchId, phase, position, pressure, stamp, deviceId, stateRevision)
+
+        override fun toString(): String =
+            "TouchChanged(touchId=$touchId, phase=$phase, position=$position, pressure=$pressure, " +
+                "stamp=$stamp, deviceId=$deviceId, stateRevision=$stateRevision)"
     }
 
-    public data class Gesture(
+    public data class Gesture private constructor(
         public val kind: GestureKind,
         public val phase: TouchPhase,
         public val delta: LogicalDelta?,
@@ -300,8 +486,59 @@ public sealed interface InputEvent {
         override val stamp: EventStamp,
         override val deviceId: DeviceId?,
         override val stateRevision: InputStateRevision,
+        private val canonicalized: Unit,
     ) : InputEvent {
+        public constructor(
+            kind: GestureKind,
+            phase: TouchPhase,
+            delta: LogicalDelta?,
+            scale: Double?,
+            rotationRadians: Double?,
+            pressure: Double?,
+            stamp: EventStamp,
+            deviceId: DeviceId?,
+            stateRevision: InputStateRevision,
+        ) : this(
+            kind,
+            phase,
+            delta,
+            canonicalOptionalFinite(scale, "scale"),
+            canonicalOptionalFinite(rotationRadians, "rotationRadians"),
+            canonicalPressure(pressure),
+            stamp,
+            deviceId,
+            stateRevision,
+            Unit,
+        )
+
         init { validateGesture(kind, delta, scale, rotationRadians, pressure) }
+
+        public fun copy(
+            kind: GestureKind = this.kind,
+            phase: TouchPhase = this.phase,
+            delta: LogicalDelta? = this.delta,
+            scale: Double? = this.scale,
+            rotationRadians: Double? = this.rotationRadians,
+            pressure: Double? = this.pressure,
+            stamp: EventStamp = this.stamp,
+            deviceId: DeviceId? = this.deviceId,
+            stateRevision: InputStateRevision = this.stateRevision,
+        ): Gesture = Gesture(
+            kind,
+            phase,
+            delta,
+            scale,
+            rotationRadians,
+            pressure,
+            stamp,
+            deviceId,
+            stateRevision,
+        )
+
+        override fun toString(): String =
+            "Gesture(kind=$kind, phase=$phase, delta=$delta, scale=$scale, " +
+                "rotationRadians=$rotationRadians, pressure=$pressure, stamp=$stamp, " +
+                "deviceId=$deviceId, stateRevision=$stateRevision)"
     }
 
     public data class DropEntered(
@@ -361,6 +598,17 @@ private fun canonicalOptionalRange(value: Double?, minimum: Double, maximum: Dou
     validateOptionalRange(value, minimum, maximum, name)
     return if (value == 0.0) 0.0 else value
 }
+
+private fun canonicalPressure(value: Double?): Double? =
+    canonicalOptionalRange(value, 0.0, 1.0, "pressure")
+
+private fun canonicalFinite(value: Double, name: String): Double {
+    require(value.isFinite()) { "$name must be finite" }
+    return if (value == 0.0) 0.0 else value
+}
+
+private fun canonicalOptionalFinite(value: Double?, name: String): Double? =
+    value?.let { canonicalFinite(it, name) }
 
 private fun validatePointerPayload(kind: PointerKind, pressure: Double?, pen: PenState?) {
     validateOptionalRange(pressure, 0.0, 1.0, "pressure")
