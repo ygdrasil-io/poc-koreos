@@ -11,3 +11,5 @@ RUN-003	active	DESIGN.md#5	teardown and failure priority	lost failure or hanging
 RUN-004	active	DESIGN.md#7	lifecycle publication	stale snapshot or unordered stamp	O2	runtime-lifecycle	jvm	-	event-before-snapshot	-
 RUN-005	active	DESIGN.md#6	session isolation	cross-session identity or lifecycle leak	O2	runtime-session-isolation	jvm	-	process-id-collision	-
 RUN-006	active	DESIGN.md#12	unsupported managers	false success or partial manager	O2	runtime-unsupported-managers	jvm	-	silent-unsupported-operation	-
+DSK-001	active	BACKEND-CAPABILITIES.md#6.4	Desktop provider selection	wrong or nondeterministic backend	O2	desktop-provider-selection	jvm	-	provider-order-controls-auto	-
+DSK-002	active	OPERATION-CONTRACTS.md#2	Desktop attach boundary	fallback or invalid failure leak	O2	desktop-provider-failures	jvm	-	fallback-after-provider-failure	-
