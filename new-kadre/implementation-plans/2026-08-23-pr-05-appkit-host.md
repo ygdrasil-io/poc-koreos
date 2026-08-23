@@ -44,21 +44,21 @@ L'embedded entrera dans le scope dès que le bridge KFFI sera disponible, sans m
 
 1. Créer/récupérer `NSApplication.sharedApplication` sur le main thread seulement.
 2. Appeler `NSApplication.run()` sans `terminate:`.
-3. À la terminaison de session, scheduler `stop:` sur le main thread via le helper KFFI existant ; traiter aussi une demande arrivée avant l'entrée dans `run()`.
+3. À la terminaison de session, scheduler `stop:` sur le main thread via le helper KFFI existant, puis poster un événement application-defined de réveil ; traiter aussi une demande arrivée avant l'entrée dans `run()`.
 4. Au retour externe de la boucle, détacher le host puis attendre le même outcome terminal.
 5. Une exception native après admission devient `Failed(PlatformFailure(AppKit, "appkit-host", code))`, jamais une failure externe du runner.
 
 ## Task 5 — Scénarios O2/O3 ciblés
 
 1. Avec bridge injecté : main thread refusé, application stop, application failure, exception native, busy concurrent, réutilisation séquentielle et embedded non supporté.
-2. Avec KFFI réel sur macOS et `-XstartOnFirstThread` : découverte ServiceLoader, main thread, entrée/sortie de `NSApplication.run()` avec application qui demande son arrêt.
+2. Avec KFFI réel sur macOS et `-XstartOnFirstThread` : découverte ServiceLoader, main thread, deux entrées/sorties séquentielles de `NSApplication.run()` avec application qui demande son arrêt immédiatement.
 3. Aucun sleep/retry ; synchronisation par latches et outcomes.
 4. Activer seulement les contrats standalone réellement prouvés.
 
 ## Task 6 — Audit et PR
 
 1. Exécuter les checks `backend:appkit`, runtime, Desktop ABI et `:kadre-new:check` avec `--rerun-tasks`.
-2. Vérifier metadata common/JVM 25, service descriptor, POM runtime et absence de `java.lang.foreign` dans `backend:appkit`.
+2. Vérifier metadata common/JVM 25, service descriptor, POM runtime et absence de `Linker`, `Arena`, downcall ou upcall dans `backend:appkit`; les layouts utilisés par l'unique appel générique KFFI restent confinés à l'adapter natif.
 3. Pousser `codex/appkit-host` et ouvrir la PR contre `codex/desktop-provider`.
 
 ## Hors scope

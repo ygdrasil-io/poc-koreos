@@ -21,6 +21,7 @@ kotlin {
 tasks.named("check") {
     dependsOn(":kadre-new:foundation:check")
     dependsOn(":kadre-new:contracts:validator:check")
+    dependsOn(":kadre-new:backend:appkit:check")
     dependsOn(":kadre-new:platform:desktop:check")
     dependsOn(":kadre-new:runtime:check")
     dependsOn("validateKotlinConsumer")
@@ -31,6 +32,7 @@ val contractTestRepository = rootProject.layout.buildDirectory.dir("new-kadre-co
 val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre-new:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre-new:foundation:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre-new:backend:appkit:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre-new:platform:desktop:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre-new:runtime:publishAllPublicationsToContractTestRepository")
 }
