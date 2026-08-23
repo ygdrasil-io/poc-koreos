@@ -1,5 +1,6 @@
 package org.graphiks.kadre.contracts
 
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -49,6 +50,21 @@ class ContractRegistryTest {
     }
 
     @Test
+    fun blankListCellsAreNotAcceptedAsEvidence() {
+        val records = ContractRegistry.parse(
+            "$HEADER\n" +
+                "SES-001\tactive\tDESIGN.md#5\tKadreSession\tterminal race\tO2\t\t\t\t\t-",
+        )
+
+        val errors = ContractRegistry.validate(records)
+
+        assertTrue(errors.any { "SES-001" in it && "scenarios" in it })
+        assertTrue(errors.any { "SES-001" in it && "requiredTargets" in it })
+        assertTrue(errors.any { "SES-001" in it && "conditionalCapabilities" in it })
+        assertTrue(errors.any { "SES-001" in it && "sentinels" in it })
+    }
+
+    @Test
     fun duplicateContractIdsAreRejected() {
         val records = ContractRegistry.parse(
             "$HEADER\n" +
@@ -74,6 +90,15 @@ class ContractRegistryTest {
         assertTrue(errors.any { "SES-001" in it && "scenarios" in it })
         assertTrue(errors.any { "SES-001" in it && "requiredTargets" in it })
         assertTrue(errors.any { "SES-001" in it && "sentinels" in it })
+    }
+
+    @Test
+    fun missingRegistryFileIsRejected() {
+        val exception = assertFailsWith<IllegalArgumentException> {
+            validateContractRegistry(Path.of("does-not-exist", "contracts.tsv"))
+        }
+
+        assertContains(exception.message.orEmpty(), "does not exist")
     }
 
     private companion object {

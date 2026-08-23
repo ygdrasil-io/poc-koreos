@@ -16,4 +16,5 @@ kotlin {
 
 tasks.named("check") {
     dependsOn(":kadre-new:foundation:check")
+    dependsOn(":kadre-new:contracts:validator:check")
 }

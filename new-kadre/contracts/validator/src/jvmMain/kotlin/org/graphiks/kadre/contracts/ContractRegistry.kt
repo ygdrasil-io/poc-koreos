@@ -76,6 +76,14 @@ internal object ContractRegistry {
             if (record.source.isBlank()) add("$id: source is required")
             if (record.subject.isBlank()) add("$id: subject is required")
             if (record.risk.isBlank()) add("$id: risk is required")
+            listOf(
+                "scenarios" to record.scenarios,
+                "requiredTargets" to record.requiredTargets,
+                "conditionalCapabilities" to record.conditionalCapabilities,
+                "sentinels" to record.sentinels,
+            ).forEach { (field, values) ->
+                if (values.any(String::isBlank)) add("$id: $field must not contain blank values")
+            }
 
             when (record.status) {
                 ContractStatus.Planned -> {
@@ -90,7 +98,7 @@ internal object ContractRegistry {
                 }
 
                 ContractStatus.Retired -> {
-                    if (record.retirementRef == null) add("$id: retired contract requires retirementRef")
+                    if (record.retirementRef.isNullOrBlank()) add("$id: retired contract requires retirementRef")
                     if (record.scenarios.isNotEmpty()) add("$id: retired contract must not define scenarios")
                     if (record.requiredTargets.isNotEmpty()) add("$id: retired contract must not define requiredTargets")
                     if (record.sentinels.isNotEmpty()) add("$id: retired contract must not define sentinels")
