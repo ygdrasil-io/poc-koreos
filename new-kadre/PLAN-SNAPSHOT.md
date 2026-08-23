@@ -21,12 +21,13 @@
 - Aucun renderer, widget ou layout dans Kadre.
 - Aucun état global applicatif.
 - Les brokers internes process-wide imposés par l’OS sont autorisés sans session courante et avec enregistrement reference-counted.
-- Aucun buffer ni fan-out d’événements non borné ; les profiles fixent aussi les limites agrégées de collectors d’événements et ressources. Les `StateFlow` conservent un snapshot producteur unique et ne refusent jamais un collector.
+- Aucun buffer ni fan-out d’événements non borné ; les profiles fixent des limites de collectors par flow et par session, ainsi que des budgets finis de ressources, payloads, images, fenêtres, requêtes, captures et drop transfers. Les `StateFlow` conservent un snapshot producteur unique et ne refusent jamais un collector.
 - Aucun faux succès pour une fonctionnalité non disponible.
 - Une `HostSurface` n’est jamais présentée comme une fenêtre top-level fictive.
 - Les opérations dépendant d’une user activation ou d’un serial natif utilisent un contexte d’interaction transitoire explicite.
 - Tout value object publié est profondément immuable ; une collection de handles est un snapshot immuable d’appartenance dont les ressources restent vivantes et identifiables.
 - Temps et délais monotones.
+- Un timeout exige une opportunité de scheduling : il borne le cleanup coopératif mais ne promet ni préemption hard real-time ni exécution après destruction du runtime.
 - Chaque événement public est estampillé et chaque snapshot est mis à jour avant sa transition observable.
 - Les flux d’événements sont hot, multicast et sans replay ; la capture closeable utilise un collector unique encadré.
 - Une erreur de session ne cancelle pas le scope de son host ; l’annulation du host ferme sa session.
@@ -37,6 +38,8 @@
 - Chaque backend doit passer la même suite de contract tests.
 - `KadrePolicies.Default` est accepté par tout host adapter déclaré supporté ; seuls un profil avancé ou custom peuvent échouer avec `UnsupportedPolicy`.
 - Un invariant réparti entre plusieurs champs utilise un snapshot composé révisionné ; plusieurs `StateFlow` indépendants ne promettent pas une transaction implicite.
+- Les valeurs numériques publiques excluent `NaN`, les infinis et les durées infinies ; les chaînes sémantiques ne sont ni normalisées ni tronquées silencieusement.
+- Toute mutation suspendue possède des points d’admission et de commit ; une cancellation après commit détache le waiter sans rollback implicite.
 
 ## Graphe de dépendances
 
@@ -97,14 +100,14 @@ Créer la nouvelle surface publique sans encore migrer les backends natifs.
 2. Créer les annotations `ExperimentalKadreApi`, `KadrePlatformApi` et `DelicateKadreApi`.
 3. Créer `KadreResult`, la taxonomie stable de `KadreFailure`, `Capability`, `FeatureAvailability`, les IDs opaques, `EventStamp` et les primitives de temps monotone.
 4. Ajouter les combinators idiomatiques de `KadreResult` et `KadreException` pour l’interop avec le style exception.
-5. Créer `KadrePolicy`, les trois profils, les files bornées distinctes ingress/collector, les limites de fan-out/ressources et les compteurs de diagnostics non perdables.
+5. Créer `KadrePolicy`, les trois profils, les files bornées distinctes ingress/collector, les limites de fan-out/ressources et les compteurs de diagnostics monotones, non perdables et explicitement saturables.
 6. Déplacer les contrats publics vers les packages cibles sous `org.graphiks.kadre`.
 7. Rendre internes les bridges `PlatformGamepad*`, `FrameTimingTracer` et autres détails présents dans les dumps ABI.
 8. Préparer la fusion de `kadre-coroutines` en déplaçant sa dépendance coroutine et ses contrats généraux vers `kadre`.
 9. Ajouter des tests d’API qui interdisent les imports consommateurs depuis `org.graphiks.kadre.core`.
 10. Matérialiser `new-kadre/API-MIGRATION.md` dans une tâche qui classe chaque symbole ABI comme `keep/move`, `replace`, `internalize` ou `remove`, et échoue sur tout symbole non couvert.
 11. Créer une tâche racine `checkPublicApi` qui agrège cette couverture et la validation ABI de tous les modules encore publiés.
-12. Faire de `Default` le minimum obligatoire des hosts supportés, limiter seulement les collectors d’événements et ajouter les budgets d’interactions et de capture en octets.
+12. Faire de `Default` le minimum obligatoire des hosts supportés, limiter les collectors d’événements par flow/session et ajouter les budgets d’interactions, fenêtres, requêtes, payloads, images, captures, effets gamepad et drop transfers.
 13. Produire avant le code le catalogue documentaire exhaustif du chantier 1 et faire échouer la revue si une forme publique reste ouverte.
 14. Ajouter `ShutdownTimedOut`, `CaptureDeliveryPolicy.events` et une table fermée associant chaque `Flow` public à sa policy, son owner et son action `CloseSource`.
 
@@ -152,11 +155,11 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 5. États `Starting`, `Running`, `Stopping` et `Terminated(SessionOutcome)`.
 6. `close()`, arrêts host/application, auto-cancellation et `awaitTermination()` idempotents, avec protection contre l’attente depuis un enfant et distinction entre terminaison logique et achèvement physique d’un consumer non coopératif.
 7. Lifecycle orthogonal attachment/visibility/activation, signaux de pression mémoire et mapping normatif de chaque host.
-8. Contrats hot/cold, replay, cardinalité, terminaison, ordre state/event, spans coalescés et limites agrégées des seuls flows d’événements.
+8. Contrats hot/cold, replay, cardinalité, terminaison, ordre state/event, `EventDeliverySpan` pour coalescing/remplacement et limites agrégées des seuls flows d’événements.
 9. Host SPI expérimental retournant `KadreResult<KadreSession>` et implémentation fake.
 10. Infrastructure de brokers internes sans session courante et routing testable entre plusieurs sessions.
 11. Diagnostics redacted par défaut et propagation correcte des exceptions/cancellations.
-12. Teardown ordonné et borné : aucun job interne Kadre ne survit, l’accès aux ressources est révoqué au timeout et un job consumer non coopératif reste annulé sous le scope du host sans bloquer `awaitTermination()`.
+12. Teardown ordonné et borné lorsque le runtime reste schedulable : aucune coroutine interne Kadre active ne survit, l’accès aux ressources est révoqué à la première opportunité après le timeout et un job consumer non coopératif peut rester annulé et physiquement incomplet sans garder de ressource Kadre.
 13. Sémantique commune de tous les `AutoCloseable` : admission fermée immédiatement, `close()` non bloquant, thread-safe et idempotent, état terminal conservé.
 14. Tests prouvant l’ordre croissant dans chaque flow et l’absence de promesse d’ordre de livraison entre flows distincts.
 15. Fermeture de l’admission des enfants dès le retour du corps de `KadreApplication.run`; un receiver capturé ne peut pas prolonger la session après ce point.
@@ -164,6 +167,7 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 17. Règle commune de cancellation : un waiter ne possède pas l’opération attendue, sauf streaming explicitement owner comme `collectFrames`; toute factory suspendue conserve l’owner jusqu’au handoff de son retour et le ferme si le caller est annulé avant.
 18. Thread-safety par défaut pour managers, handles, getters et méthodes non suspendues, avec confinement explicite des builders, callbacks transitoires et leases.
 19. Drain garanti uniquement à la fermeture normale d’une ressource vers les collectors encore actifs ; le teardown de session s’appuie sur les snapshots terminaux.
+20. Validation synchrone d’un `parentScope` contenant un `Job` actif et règle de priorité où la première failure non-cancellation admise reste primaire devant les failures de cleanup.
 
 ### Critères de sortie
 
@@ -173,7 +177,7 @@ rtk ./gradlew :kadre:checkKotlinAbi :kadre-core:checkKotlinAbi
 - Une application peut demander son propre arrêt sans annuler arbitrairement le scope du host.
 - Une fermeture hôte annule fenêtres, devices et captures factices.
 - Aucun `GlobalScope`, singleton de handler/session courante ou job détaché n’est utilisé ; un broker process-wide ne contient que l’état natif partagé autorisé.
-- Une coroutine applicative volontairement non coopérative ne bloque ni le teardown logique ni `awaitTermination()` au-delà de `shutdownTimeout`, et ne conserve aucun accès Kadre vivant.
+- Une coroutine applicative volontairement non coopérative ne bloque ni le teardown logique ni `awaitTermination()` après la première opportunité de scheduling suivant `shutdownTimeout`, et ne conserve aucun accès Kadre vivant ; monopoliser l’unique dispatcher retarde explicitement l’observation de cette échéance.
 
 ### Vérification
 
@@ -212,8 +216,8 @@ Séparer les surfaces fournies par l’hôte des fenêtres top-level, puis rempl
 ### Livrables
 
 1. `KadreScope.primarySurface` et `HostSurface` pour les régions possédées par le host, sans opérations top-level fictives.
-2. `DisplayManager`, inventaire permission-aware, displays révisés et coordonnées physiques du bureau virtuel.
-3. `WindowManager.primary`, `windows` et `capabilities` en `StateFlow`, limités aux vraies fenêtres top-level.
+2. `DisplayManagerState` atomique regroupant inventaire permission-aware, capabilities et révision, plus displays vivants révisés et coordonnées physiques du bureau virtuel.
+3. `WindowManagerState` atomique regroupant fenêtre primaire, liste des fenêtres top-level, capabilities et révision ; `primary` est toujours `null` ou membre exact de `windows`.
 4. `WindowRequest` observable séparant `Pending` du `WindowRequestOutcome` terminal, avec cancellation typée et opérations irréversibles.
 5. DSL `WindowSpec`, value objects profondément immuables et identité stable des handles vivants.
 6. Snapshots atomiques `SurfaceState` et `WindowState`, chacun avec révision et état terminal explicite.
@@ -227,6 +231,7 @@ Séparer les surfaces fournies par l’hôte des fenêtres top-level, puis rempl
 14. Ordre de détachement surface → input/events → retrait de `primarySurface`, avec handles terminaux encore lisibles.
 15. Lifecycle d’un `Display` retiré : état terminal avant retrait d’inventaire, événement après les snapshots et nouvel ID après réapparition.
 16. Cancellation de `WindowRequest.await` et `ArmedInteraction.await` limitée au waiter ; seules les méthodes explicites modifient l’owner.
+17. Inventaire display trop grand rendu terminalement `Unavailable(ResourceLimitExceeded)` sans liste partielle ; `WindowManagerState` met atomiquement à jour appartenance, primaire et capabilities.
 
 ### Critères de sortie
 
@@ -262,23 +267,23 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 
 ### Livrables
 
-1. `DeviceManager`, inventaire et lifecycle des devices.
+1. `DeviceManagerState` atomique regroupant disponibilité, inventaires complets des devices/gamepads et révision ; aucune liste partielle n’est publiée comme complète.
 2. `SurfaceInput` avec ordre total des événements par surface.
 3. Événements clavier, pointeur, tactile et gestes avec `EventStamp` monotone et séquence de session.
 4. `SurfaceInputState` atomique regroupant clavier, modifiers, pointeurs, capabilities et révision dans un seul `StateFlow`.
-5. `Gamepad` avec snapshot atomique descriptor/connexion/contrôles/capabilities, événements révisionnés et `GamepadEffectSession` owned.
+5. `Gamepad` avec snapshot atomique descriptor/connexion/routing/contrôles/capabilities, neutralisation lors d’une suspension de routing, événements révisionnés et `GamepadEffectSession` owned sous budget agrégé.
 6. Collections spécialisées `ButtonValues` et `AxisValues`.
 7. Suppression des fallbacks d’ordinal silencieux.
 8. `TextInputSession` unique par surface, cursor rect logique, surrounding text indexé en UTF-16 et révision de document sur chaque échange IME.
 9. `InputEvent.StateReset` après publication atomique d’un `SurfaceInputState` neutre sur perte de focus, déconnexion ou révocation ; un overflow publie directement le snapshot terminal et une terminaison typée hors de la lane saturée.
-10. Drag-and-drop par offre/transfer sans faux chemin portable, acceptation via interaction et chunks bornés.
+10. Drag-and-drop par offre/transfer sans faux chemin portable, acceptation via interaction, état fermé de l’offre, handoff single-winner, claim timeout et chunks bornés.
 11. `RawInputAccess` sous policy, permission, routing de session et opt-in appropriés.
 12. Broker gamepad partagé sans IDs cross-session et arbitrage explicite des effets.
 13. Tests de saturation pour événements discrets et continus, limites de collectors d’événements comprises.
 14. Tests d’edit IME obsolète, de régression de révision et de cursor rect calculé sur une ancienne révision.
 15. Scheduler mixte borné pour `SurfaceInput.events` et `Gamepad.events`, avec lane FIFO discrète, lanes continues et barrières de séquence empêchant tout coalescing à travers un événement discret.
 16. Cancellation de `GamepadEffectSession.awaitTermination` limitée au waiter.
-17. `DropItemReadMode`, une seule lecture active par transfert, distinction replayable/single-use, résultats partiels bornés et effets de cancellation/close définis.
+17. `DropItemReadMode`, une seule lecture active par transfert, distinction replayable/single-use, résultats partiels bornés et effets de cancellation/close définis ; le transfer reste compté dans le budget jusqu’à sa fermeture effective.
 
 ### Critères de sortie
 
@@ -293,6 +298,8 @@ Fournir une API d’entrée ordonnée, observable et adaptée aux applications t
 - Une lane input saturée n’a pas besoin d’accepter un dernier événement pour rendre son état terminal observable.
 - Une policy continue ne peut ni réordonner un événement discret ni créer une file cachée non bornée.
 - Aucun transfert de drop ne livre plus de `maxBytes`, et un succès signifie toujours que l’item complet a été livré.
+- Une seule coroutine gagne `claimTransfer`; annuler un waiter ne consomme pas le handoff et un transfer non claimé expire selon la policy.
+- Une suspension de routing gamepad neutralise le snapshot sans masquer connexion ou déconnexion physique, puis une reprise republie l’état physique courant avant les nouveaux contrôles.
 
 ### Vérification
 
@@ -316,7 +323,7 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 ### Livrables
 
 1. `CaptureManager` attaché à `KadreScope`.
-2. Permission, capabilities et sources dans un unique `CaptureManagerState` révisionné, avec `HostPickerOnly` pour les sources non énumérables.
+2. Permission, capabilities et sources dans un unique `CaptureManagerState` révisionné, avec `HostPickerOnly` pour les sources non énumérables et `Unavailable(failure)` lorsqu’aucun inventaire complet ne peut être publié.
 3. `CaptureSource` descriptor immuable lié à la révision d’inventaire, IDs typés, détection des requêtes obsolètes et nouvel ID après retrait/réapparition.
 4. `CaptureRequest` avec rate, région, format, cursor et delivery policy.
 5. `CaptureSession` enfant de `KadreSession`, `CaptureOutcome` et raisons terminales stables.
@@ -324,11 +331,12 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 7. `CaptureFrame` closeable, `PixelPlaneLayout` immuable sans vue native, `CopiedPixelPlane` associant layout et bytes possédés, color encoding complet, timestamp média optionnel, durée et discontinuité.
 8. Fermeture automatique des frames consommées, droppées, remplacées ou interrompues.
 9. Chemin sûr `copyPlanes()` et zero-copy retenable sous opt-in.
-10. `CaptureConfiguration` effective complète dans l’état `Streaming` et dans `Reconfigured`, publiée avant la première frame concernée.
+10. `CaptureConfiguration` effective complète dans l’état `Streaming` et dans `Reconfigured`, avec cadence `Fixed`, `Variable` ou `Unknown`, publiée avant l’admission de la première frame concernée.
 11. Fake capture avec révocation et perte de source.
 12. Contract tests de collector unique-ever, outcomes, teardown, reconfiguration, buffer pool, budget total en octets et overflow.
-13. `CaptureDeliveryPolicy.events`, résultats normatifs de `collectFrames`, cancellation non propriétaire de `awaitTermination` et garde anti-deadlock depuis le collector actif.
+13. `CaptureDeliveryPolicy.events`, `FrameDelivery` limité à `Latest` ou `Buffered` sans coalescing de frames, résultats normatifs de `collectFrames`, cancellation non propriétaire de `awaitTermination` et garde anti-deadlock depuis le collector actif.
 14. Cancellation d’un picker : détachement du waiter, annulation best-effort seulement si exclusive et aucune session abandonnée lors d’un résultat tardif.
+15. `refreshSources()` peut récupérer d’un inventaire `Unavailable` uniquement en publiant une nouvelle révision complète ; aucun faux inventaire vide ni liste tronquée.
 
 ### Critères de sortie
 
@@ -341,6 +349,7 @@ Rendre la capture observable, permission-aware et sûre pour les buffers natifs.
 - `ScreenCapturer.resolve()` n’est plus nécessaire.
 - Les layouts de plane restent lisibles après fermeture, mais aucun buffer natif ni offset vers son backing storage n’est exposé.
 - Toute frame référence une configuration complète déjà observable avec la même révision.
+- L’ordre entre le flow d’événements et le stream de frames n’est jamais supposé à la réception ; la révision embarquée dans chaque frame suffit à l’interpréter.
 
 ### Vérification
 
@@ -465,7 +474,7 @@ Attacher Kadre à des éléments DOM existants avec un contrat identique en JS e
 
 - Le même code partagé fonctionne en JS et Wasm.
 - Deux canvases peuvent héberger deux sessions indépendantes.
-- Un canvas ou élément attaché n’apparaît jamais dans `WindowManager.windows`.
+- Un canvas ou élément attaché n’apparaît jamais dans `WindowManager.state.value.windows`.
 - Retirer un élément ferme la session en `StopWhenDetached` ou la laisse explicitement attachée en `Manual`.
 - Aucun warning Wasm interop non traité dans les fichiers migrés.
 
@@ -536,7 +545,7 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 1. Finaliser `runKadreTest` et tous les contrôleurs virtuels.
 2. Extraire une contract suite commune consommée par chaque backend.
 3. Ajouter des tests de lifecycle, threading, surfaces/windows, close requests, displays, interactions, capabilities, overflow, handles et permissions.
-4. Ajouter les contract tests de température/replay/cardinalité/terminaison des flux, ordre intra-flow, absence de garantie inter-flows, ordre state/event, spans coalescés, budgets agrégés et collectors d’événements lents.
+4. Ajouter les contract tests de température/replay/cardinalité/terminaison des flux, ordre intra-flow, absence de garantie inter-flows, ordre state/event, delivery spans, limites de collectors par flow/session, budgets agrégés et collectors d’événements lents.
 5. Ajouter des consumer compile tests Java, Swift, JS et Wasm, y compris les artefacts exportés.
 6. Mesurer la baseline avant suppression de l’ancien chemin.
 7. Ajouter les benchmarks input, state, gamepad et capture.
@@ -548,6 +557,9 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 13. Générer le rapport de couverture du registre `API-MIGRATION.md` depuis tous les dumps ABI publiés.
 14. Vérifier que chaque catalogue public documentaire approuvé correspond exactement aux dumps ABI et exports générés.
 15. Tester qu’un nombre élevé de collectors `StateFlow` ne reçoit jamais `ResourceLimitExceeded` de Kadre.
+16. Tester séparément un consumer non coopératif avec scheduler disponible et la monopolisation de l’unique dispatcher, afin de prouver la borne schedulable sans inventer une garantie hard real-time.
+17. Tester les handoffs single-winner, claims expirés, mutations annulées avant/après commit, inventaires devenus `Unavailable` et limites de payload sans troncature sémantique.
+18. Tester l’aplatissement exact des spans lors d’un coalescing ingress puis collector, les enveloppes et spans distincts de collectors de vitesses différentes, la saturation signalée des compteurs et l’absence de diagnostic récursif lorsque le flow de diagnostics déborde.
 
 ### Critères de sortie
 
@@ -626,7 +638,7 @@ rtk ./gradlew checkPublicApi
 
 **Risque :** confondre cancellation coopérative et préemption, puis bloquer indéfiniment `awaitTermination()` ou prétendre qu’un job consumer est achevé.
 
-**Réponse :** terminaison logique bornée, révocation des ressources, fin garantie des seuls jobs internes Kadre et job consumer annulé restant rattaché au scope du host jusqu’à sa coopération.
+**Réponse :** à la première opportunité de scheduling suivant l’échéance, terminaison logique, révocation des ressources et fin des coroutines internes Kadre ; un job consumer annulé peut rester physiquement incomplet sous la hiérarchie du host jusqu’à sa coopération. Aucune préemption ni borne murale n’est promise si l’unique dispatcher ou le runtime ne s’exécute plus.
 
 ### User activation et serials transitoires
 
@@ -638,7 +650,7 @@ rtk ./gradlew checkPublicApi
 
 **Risque :** un élément DOM ou une vue mobile reçoit des opérations top-level sans signification, recréant des no-op silencieux.
 
-**Réponse :** `HostSurface` et `Window` distinctes, capabilities séparées et `WindowManager.primary = null` lorsqu’aucune vraie fenêtre top-level n’existe.
+**Réponse :** `HostSurface` et `Window` distinctes, capabilities séparées et `WindowManager.state.value.primary = null` lorsqu’aucune vraie fenêtre top-level n’existe.
 
 ### Migration trop horizontale
 
