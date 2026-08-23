@@ -57,17 +57,17 @@
 **Files:** `runtime/.../UnsupportedManagers.kt`, `UnsupportedWindowRequest.kt`, `RuntimeDiagnostics.kt`.
 
 1. Tester les snapshots initiaux complets accessibles avant `Running`.
-2. Exposer `primarySurface = null`, display vide/non énumérable, devices `Unsupported`, capture indisponible et diagnostics vides avec compteurs nuls.
+2. Exposer `primarySurface = null`, displays/capture `Unavailable(Unsupported(...))`, devices `Unsupported` et diagnostics vides avec compteurs nuls.
 3. Retourner les failures directes exactes pour display/capture.
 4. Pour `WindowManager.requestWindow`, retourner un owner déjà terminal `Rejected(Unsupported(RequestWindow))`, jamais une failure externe ni un faux succès de fenêtre.
-5. Assurer IDs de requête uniques par session, `close` idempotent, `cancel/await` déterministes et `WindowManagerState` inchangé.
+5. Assurer des `WindowRequestId` process-wide, `close` idempotent, `cancel/await` déterministes et `WindowManagerState` inchangé.
 
 ## Task 5 — Scénarios O2 actifs
 
 **Files:** tests runtime, `new-kadre/contracts/registry/contracts.tsv`.
 
 1. Ajouter des scénarios à oracle explicite couvrant attach/stop/failure/lifecycle/unsupported/isolation.
-2. Ajouter deux sessions sur le même contrôleur et deux contrôleurs distincts pour prouver l'absence de fuite d'IDs, jobs et lifecycle events.
+2. Ajouter deux sessions sur le même contrôleur et deux contrôleurs distincts pour prouver l'isolation des jobs/lifecycle et l'unicité process-wide des `SessionId` et `WindowRequestId`.
 3. Ajouter les contrats actifs `RUN-*` uniquement pour ces preuves.
 4. Ne pas créer `contracts:model` tant qu'un modèle plus petit que l'implémentation n'est pas nécessaire ; les expected des scénarios sont des traces fermées écrites indépendamment.
 
