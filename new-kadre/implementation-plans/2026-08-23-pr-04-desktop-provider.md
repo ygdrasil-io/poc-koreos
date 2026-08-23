@@ -41,7 +41,7 @@
 
 **Files:** `platform/desktop/.../DesktopProviderCatalog.kt`, tests avec classloader isolé si utile.
 
-1. Charger `DesktopBackendProvider` uniquement au premier attach/run réel.
+1. Charger `DesktopBackendProvider` uniquement au premier attach/run réel et sonder sa disponibilité sans initialiser le SDK natif.
 2. Mettre en cache la liste immutable sans état de session.
 3. Ne pas initialiser KFFI depuis le catalogue ; cette responsabilité sera prouvée avec le provider AppKit dans la PR suivante.
 4. Traduire `ServiceConfigurationError` et autres erreurs de découverte en `PlatformFailure` sans fuite d'exception.

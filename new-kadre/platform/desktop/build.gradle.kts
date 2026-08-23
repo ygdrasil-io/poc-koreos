@@ -17,6 +17,7 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             api(project(":kadre-new:foundation"))
+            implementation(project(":kadre-new:runtime"))
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))
