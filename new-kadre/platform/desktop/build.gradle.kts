@@ -7,19 +7,15 @@ kotlin {
     jvmToolchain(25)
     jvm()
     explicitApi()
-    compilerOptions {
-        freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
-    }
 
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation()
 
     sourceSets {
-        commonMain.dependencies {
-            api(libs.kotlinx.coroutines.core)
+        jvmMain.dependencies {
+            api(project(":kadre-new:foundation"))
         }
-
-        commonTest.dependencies {
+        jvmTest.dependencies {
             implementation(kotlin("test"))
         }
     }
