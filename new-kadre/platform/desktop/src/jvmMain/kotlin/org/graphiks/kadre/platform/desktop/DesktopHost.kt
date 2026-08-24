@@ -5,9 +5,6 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.diagnostics.KadreException
-import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
@@ -32,7 +29,7 @@ public fun CoroutineScope.attachKadreDesktop(
     applicationFactory: KadreApplicationFactory,
     options: DesktopHostOptions,
     policy: KadrePolicy = KadrePolicies.Default,
-): KadreResult<KadreSession> = unsupportedHostAttach()
+): KadreResult<KadreSession> = defaultDesktopHostFacade.attach(this, applicationFactory, options, policy)
 
 public fun CoroutineScope.attachKadreDesktop(
     options: DesktopHostOptions,
@@ -48,7 +45,7 @@ public fun runKadreApplication(
     applicationFactory: KadreApplicationFactory,
     options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
     policy: KadrePolicy = KadrePolicies.Default,
-): SessionOutcome = throw KadreException(UNSUPPORTED_HOST_ATTACH)
+): SessionOutcome = defaultDesktopHostFacade.run(applicationFactory, options, policy)
 
 public fun runKadreApplication(
     options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
@@ -59,9 +56,3 @@ public fun runKadreApplication(
     options = options,
     policy = policy,
 )
-
-private val UNSUPPORTED_HOST_ATTACH: KadreFailure.Unsupported =
-    KadreFailure.Unsupported(KadreOperation.HostAttach)
-
-private fun unsupportedHostAttach(): KadreResult<KadreSession> =
-    KadreResult.Failure(UNSUPPORTED_HOST_ATTACH)
