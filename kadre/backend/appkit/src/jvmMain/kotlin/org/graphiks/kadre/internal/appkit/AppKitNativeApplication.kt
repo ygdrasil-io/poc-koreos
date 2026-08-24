@@ -27,6 +27,10 @@ internal fun interface AppKitStopRequest {
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
+    // Use AppKit's own state when synchronizing with run(); Kadre assigning the application
+    // reference only proves setup has started, not that the native loop is pumping events.
+    fun isRunning(): Boolean
+
     fun run()
 
     fun requestStop(): AppKitStopRequest
@@ -42,6 +46,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
+
+    override fun isRunning(): Boolean = synchronized(lock) { application?.isRunning() == true }
 
     override fun run() {
         check(isMainThread()) { "the AppKit event loop must run on the process main thread" }

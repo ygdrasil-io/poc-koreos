@@ -1,5 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
@@ -19,6 +21,8 @@ import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -281,12 +285,27 @@ class AppKitBackendProviderTest {
             assertFalse(AppKitBackendProvider().isAvailable())
             return
         }
-        val provider = AppKitBackendProvider()
+        val native = KffiAppKitNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitStandaloneOwnership(),
+        ) { true }
+        val stopRequestedOffMainThread = AtomicBoolean(false)
 
         repeat(2) {
             val result = provider.run(
                 DesktopStandaloneRequest(
-                    KadreApplicationFactory { KadreApplication { requestStop() } },
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            // Cross the native boundary before requesting stop so this test cannot
+                            // accidentally exercise only the pre-run pending-stop handoff.
+                            withTimeout(5.seconds) {
+                                while (!native.isRunning()) yield()
+                            }
+                            stopRequestedOffMainThread.set(!native.isMainThread())
+                            requestStop()
+                        }
+                    },
                     true,
                     KadrePolicies.Default,
                 ),
@@ -297,6 +316,20 @@ class AppKitBackendProviderTest {
                 result,
             )
         }
+        assertTrue(stopRequestedOffMainThread.get())
+    }
+
+    @Test
+    fun realKffiPendingStopIsConsumedOnMacOs() {
+        if (!isMacOs()) return
+        val native = KffiAppKitNativeApplication()
+
+        // Request before run() on purpose: this proves the pending-stop handoff separately from
+        // the active-loop wakeup scenario above.
+        val stop = native.requestStop()
+        native.run()
+
+        assertEquals(AppKitStopResult.Accepted, stop.await())
     }
 }
 
@@ -315,6 +348,8 @@ private class RecordingNativeApplication(
         mainThreadCheckCount += 1
         return mainThread
     }
+
+    override fun isRunning(): Boolean = false
 
     override fun run() {
         runCount += 1
@@ -336,6 +371,8 @@ private class StopDrivenNativeApplication : AppKitNativeApplication {
         private set
 
     override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = false
 
     override fun run() {
         trace += "run"
@@ -362,6 +399,8 @@ private class FailingStopNativeApplication : AppKitNativeApplication {
         private set
 
     override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = false
 
     override fun run() {
         stop.await()
