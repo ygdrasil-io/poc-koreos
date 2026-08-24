@@ -5,3 +5,9 @@ API-003	active	POLICY-PROFILES.md#8	policy profiles	invalid or drifting policy	O
 API-004	active	DESIGN.md#12	KadreResult	failure identity loss	O2	result-combinators	jvm	-	transform-exception-captured	-
 API-005	active	INTEROP-EXPORTS.md#1	Kotlin consumer	unusable published Kotlin API	O1	kotlin-consumer	jvm	-	internal-type-leak	-
 API-006	active	INTEROP-EXPORTS.md#4	Java consumer	unusable JVM value model	O1	java-consumer	jvm	-	continuation-leak	-
+RUN-001	active	DESIGN.md#5	session state machine	incorrect terminal outcome	O2	runtime-session-lifecycle	jvm	-	duplicate-termination	-
+RUN-002	active	DESIGN.md#5	structured session hierarchy	job leak or reverse cancellation	O2	runtime-structured-concurrency	jvm	-	parent-job-cancelled-by-session	-
+RUN-003	active	DESIGN.md#5	teardown and failure priority	lost failure or hanging termination	O2	runtime-teardown	jvm	-	noncooperative-application-hangs-session	-
+RUN-004	active	DESIGN.md#7	lifecycle publication	stale snapshot or unordered stamp	O2	runtime-lifecycle	jvm	-	event-before-snapshot	-
+RUN-005	active	DESIGN.md#6	session isolation	cross-session identity or lifecycle leak	O2	runtime-session-isolation	jvm	-	process-id-collision	-
+RUN-006	active	DESIGN.md#12	unsupported managers	false success or partial manager	O2	runtime-unsupported-managers	jvm	-	silent-unsupported-operation	-
