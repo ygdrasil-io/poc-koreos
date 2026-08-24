@@ -127,7 +127,7 @@ Le flux input unifié conserve son ordre grâce à un scheduler borné : une lan
 | `config` Android | replace | lecture target-specific bornée via `withAndroidView`; aucun snapshot arbitraire de `Configuration` dans le commun |
 | `androidApp` | remove | le host possède déjà la `ComponentActivity`; aucun accès process-global depuis une event loop |
 | `startKadreApplication` | replace | `KadreIos.attach(windowScene, window, surfaceView, applicationFactory, policy)` |
-| tous les packages générés `*.bindings.**`, symboles FFI et types de framework réexportés | remove | KFFI possède les bindings ; aucun binding, générateur ou input de génération n’entre dans `kadre-new` |
+| tous les packages générés `*.bindings.**`, symboles FFI et types de framework réexportés | remove | KFFI possède les bindings ; aucun binding, générateur ou input de génération n’entre dans `kadre` |
 | implémentations backend concrètes non listées comme point d’attachement | internalize | seules les factories/extensions documentées restent publiques |
 
 ## Modules backend sans dump ABI complet

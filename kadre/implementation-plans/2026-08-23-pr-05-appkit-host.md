@@ -21,7 +21,7 @@ L'embedded entrera dans le scope dès que le bridge KFFI sera disponible, sans m
 
 ## Task 1 — Artifact AppKit et ServiceLoader
 
-1. Inclure `:kadre-new:backend:appkit`, KMP JVM 25, groupe interne, dépendances `runtime` et `kffi-objc`.
+1. Inclure `:kadre:backend:appkit`, KMP JVM 25, groupe interne, dépendances `runtime` et `kffi-objc`.
 2. Ajouter le service descriptor du provider.
 3. Ajouter le backend en `runtimeOnly` de `platform:desktop` et aux publications contractuelles.
 4. Prouver que découverte, lecture de `backend` et `isAvailable()` n'initialisent aucune primitive KFFI.
@@ -57,7 +57,7 @@ L'embedded entrera dans le scope dès que le bridge KFFI sera disponible, sans m
 
 ## Task 6 — Audit et PR
 
-1. Exécuter les checks `backend:appkit`, runtime, Desktop ABI et `:kadre-new:check` avec `--rerun-tasks`.
+1. Exécuter les checks `backend:appkit`, runtime, Desktop ABI et `:kadre:check` avec `--rerun-tasks`.
 2. Vérifier metadata common/JVM 25, service descriptor, POM runtime et absence de `Linker`, `Arena`, downcall ou upcall dans `backend:appkit`; les layouts utilisés par l'unique appel générique KFFI restent confinés à l'adapter natif.
 3. Pousser `codex/appkit-host` et ouvrir la PR contre `codex/desktop-provider`.
 

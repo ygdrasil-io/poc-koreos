@@ -21,7 +21,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
     dependsOn("jvmMainClasses")
     classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
     mainClass.set("org.graphiks.kadre.contracts.ValidateContractRegistryKt")
-    args(rootProject.file("new-kadre/contracts/registry/contracts.tsv").absolutePath)
+    args(rootProject.file("kadre/contracts/registry/contracts.tsv").absolutePath)
 }
 
 tasks.named("check") {

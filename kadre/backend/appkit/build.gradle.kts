@@ -12,7 +12,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":kadre-new:runtime"))
+            api(project(":kadre:runtime"))
             implementation(libs.kffi.objc)
         }
         jvmTest.dependencies {
@@ -34,7 +34,7 @@ publishing {
     repositories {
         maven {
             name = "contractTest"
-            url = rootProject.layout.buildDirectory.dir("new-kadre-contract-repository").get().asFile.toURI()
+            url = rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.toURI()
         }
     }
 }

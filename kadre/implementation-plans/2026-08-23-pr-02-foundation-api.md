@@ -8,7 +8,7 @@
 
 **Tech Stack:** Kotlin Multiplatform 2.4.0, kotlinx.coroutines 1.10.1, Gradle 9.5, JDK 25, Kotlin ABI validation, kotlin-test, Maven Publish.
 
-**Spec:** `new-kadre/DESIGN.md`, `new-kadre/PUBLIC-API-CATALOG.md`, `new-kadre/POLICY-PROFILES.md`, `new-kadre/BACKEND-CAPABILITIES.md`, `new-kadre/INTEROP-EXPORTS.md`, `new-kadre/PROJECT-ARCHITECTURE.md`, `new-kadre/TEST-STRATEGY.md`.
+**Spec:** `kadre/DESIGN.md`, `kadre/PUBLIC-API-CATALOG.md`, `kadre/POLICY-PROFILES.md`, `kadre/BACKEND-CAPABILITIES.md`, `kadre/INTEROP-EXPORTS.md`, `kadre/PROJECT-ARCHITECTURE.md`, `kadre/TEST-STRATEGY.md`.
 
 ## Global Constraints
 
@@ -20,7 +20,7 @@
 - Les signatures sont copiées littéralement depuis `PUBLIC-API-CATALOG.md`, complétées uniquement par celles que ce catalogue délègue explicitement à `DESIGN.md`.
 - Les collections d'un value object construit localement sont revalidées et copiées à l'admission par leur futur owner. Toutes les collections publiées par Kadre seront déjà owned et immuables ; cette PR ne prétend pas rendre magiquement immuable une `MutableList` conservée par le caller d'un constructeur de `data class`.
 - Les constructeurs vérifient seulement les invariants intrinsèques indépendants de `KadrePolicy`; les limites liées à une policy appartiennent à l'admission runtime.
-- Aucun test historique n'entre dans la gate. Les seules commandes de sortie commencent par `:kadre-new:` ou exécutent les consumers autonomes de cette PR.
+- Aucun test historique n'entre dans la gate. Les seules commandes de sortie commencent par `:kadre:` ou exécutent les consumers autonomes de cette PR.
 - Aucun test de réflexion tautologique n'est ajouté : l'ABI prouve la forme, les consumers prouvent l'utilisabilité et les tests runtime couvrent seulement les invariants qui peuvent réellement régresser.
 
 ---
@@ -29,14 +29,14 @@
 
 **Files:**
 - Modify: `settings.gradle.kts`
-- Modify: `new-kadre/build.gradle.kts`
-- Modify: `new-kadre/foundation/build.gradle.kts`
-- Create: `new-kadre/platform/desktop/build.gradle.kts`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/diagnostics/KadreResultTest.kt`
+- Modify: `kadre/build.gradle.kts`
+- Modify: `kadre/foundation/build.gradle.kts`
+- Create: `kadre/platform/desktop/build.gradle.kts`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/diagnostics/KadreResultTest.kt`
 
 **Interfaces:**
-- Consumes: `libs.kotlinx.coroutines.core`, plugin `maven-publish`, repository Maven temporaire sous `build/new-kadre-contract-repository`.
-- Produces: projets `:kadre-new:platform:desktop`; publication JVM de `kadre-new`, `foundation` et `desktop`; dépendance API coroutines de `foundation`.
+- Consumes: `libs.kotlinx.coroutines.core`, plugin `maven-publish`, repository Maven temporaire sous `build/kadre-contract-repository`.
+- Produces: projets `:kadre:platform:desktop`; publication JVM de `kadre`, `foundation` et `desktop`; dépendance API coroutines de `foundation`.
 
 - [ ] **Step 1: Écrire le premier test rouge de résultat**
 
@@ -76,14 +76,14 @@ class KadreResultTest {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:jvmTest --tests org.graphiks.kadre.diagnostics.KadreResultTest
+rtk ./gradlew :kadre:foundation:jvmTest --tests org.graphiks.kadre.diagnostics.KadreResultTest
 ```
 
 Expected: FAIL à la compilation sur `KadreResult`, `KadreFailure` et `KadreResourceKind` absents.
 
 - [ ] **Step 3: Configurer les modules sans ajouter de target prématurée**
 
-Ajouter `include(":kadre-new:platform:desktop")`. Dans `foundation`, ajouter `api(libs.kotlinx.coroutines.core)` à `commonMain`. Appliquer `maven-publish` aux trois artifacts contractuels, pointer leur repository `contractTest` vers `rootProject.layout.buildDirectory.dir("new-kadre-contract-repository")`, et activer `explicitApi()`/`abiValidation()` dans `platform:desktop`. L'umbrella expose `api(project(":kadre-new:platform:desktop"))` et agrège son `check`.
+Ajouter `include(":kadre:platform:desktop")`. Dans `foundation`, ajouter `api(libs.kotlinx.coroutines.core)` à `commonMain`. Appliquer `maven-publish` aux trois artifacts contractuels, pointer leur repository `contractTest` vers `rootProject.layout.buildDirectory.dir("kadre-contract-repository")`, et activer `explicitApi()`/`abiValidation()` dans `platform:desktop`. L'umbrella expose `api(project(":kadre:platform:desktop"))` et agrège son `check`.
 
 - [ ] **Step 4: Vérifier la nouvelle topologie**
 
@@ -91,7 +91,7 @@ Run:
 
 ```bash
 rtk ./gradlew projects
-rtk ./gradlew :kadre-new:platform:desktop:tasks --all
+rtk ./gradlew :kadre:platform:desktop:tasks --all
 ```
 
 Expected: `platform:desktop` existe avec JVM uniquement ; aucun autre enfant réservé n'apparaît.
@@ -101,13 +101,13 @@ Expected: `platform:desktop` existe avec JVM uniquement ; aucun autre enfant ré
 ### Task 2: Diagnostics, IDs, temps et géométrie
 
 **Files:**
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Results.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Capabilities.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Diagnostics.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Identity.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/surface/Geometry.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/surface/GeometryTest.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/application/EventStampTest.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Results.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Capabilities.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/Diagnostics.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Identity.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/surface/Geometry.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/surface/GeometryTest.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/application/EventStampTest.kt`
 
 **Interfaces:**
 - Produces: `KadreResult`, failures, operations/resources/platforms, capabilities, diagnostic types, opaque IDs/revisions/timestamps, geometry, `PropertyChange`, images.
@@ -135,7 +135,7 @@ Les tests couvrent exactement : géométrie finie et `-0.0` canonicalisé, taill
 
 - [ ] **Step 2: Prouver le rouge**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest`
 
 Expected: FAIL à la compilation sur les nouvelles primitives.
 
@@ -145,14 +145,14 @@ Implémenter littéralement les sections `DESIGN.md` 7.1, 9.7, 12 et 13, ainsi q
 
 - [ ] **Step 4: Passer les tests du noyau de valeurs**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add new-kadre/foundation settings.gradle.kts new-kadre/build.gradle.kts new-kadre/platform/desktop/build.gradle.kts
+rtk git add kadre/foundation settings.gradle.kts kadre/build.gradle.kts kadre/platform/desktop/build.gradle.kts
 rtk git commit -m "feat: add New Kadre value foundation"
 ```
 
@@ -161,11 +161,11 @@ rtk git commit -m "feat: add New Kadre value foundation"
 ### Task 3: Policies fermées et profils exacts
 
 **Files:**
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/DeliveryPolicies.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/KadrePolicy.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/KadrePolicies.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy/KadrePoliciesTest.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy/PolicyValidationTest.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/DeliveryPolicies.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/KadrePolicy.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy/KadrePolicies.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy/KadrePoliciesTest.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy/PolicyValidationTest.kt`
 
 **Interfaces:**
 - Produces: toutes les déclarations du package `org.graphiks.kadre.policy`, y compris les trois values exactes `Default`, `Realtime`, `Recording`.
@@ -181,7 +181,7 @@ Cas minimaux distincts : capacité `0`, budget `Long` nul, collectors/flow supé
 
 - [ ] **Step 3: Prouver le rouge**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest --tests 'org.graphiks.kadre.policy.*'`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest --tests 'org.graphiks.kadre.policy.*'`
 
 Expected: FAIL à la compilation sur `KadrePolicy` et ses composants.
 
@@ -191,14 +191,14 @@ Recopier les signatures de `DESIGN.md` section 8. Chaque constructeur exécute s
 
 - [ ] **Step 5: Passer la suite policy**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest --tests 'org.graphiks.kadre.policy.*'`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest --tests 'org.graphiks.kadre.policy.*'`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy
+rtk git add kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/policy kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/policy
 rtk git commit -m "feat: define immutable Kadre policy profiles"
 ```
 
@@ -207,14 +207,14 @@ rtk git commit -m "feat: define immutable Kadre policy profiles"
 ### Task 4: Catalogue application, surfaces, displays, fenêtres et interactions
 
 **Files:**
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Application.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Lifecycle.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/surface/Surface.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/display/Display.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/window/Window.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/interaction/Interaction.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/window/WindowValuesTest.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/interaction/InteractionValuesTest.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Application.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/application/Lifecycle.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/surface/Surface.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/display/Display.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/window/Window.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/interaction/Interaction.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/window/WindowValuesTest.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/interaction/InteractionValuesTest.kt`
 
 **Interfaces:**
 - Produces: toutes les déclarations des six packages listées dans l'index fermé, hors implémentations runtime.
@@ -226,7 +226,7 @@ Tester `WindowSpec`/`LogicalSizeRange` min-max, content size hors intervalle, in
 
 - [ ] **Step 2: Prouver le rouge**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest --tests 'org.graphiks.kadre.window.*' --tests 'org.graphiks.kadre.interaction.*'`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest --tests 'org.graphiks.kadre.window.*' --tests 'org.graphiks.kadre.interaction.*'`
 
 Expected: FAIL à la compilation sur les types de domaine.
 
@@ -236,7 +236,7 @@ Recopier les sections `DESIGN.md` 5–7 et 9, puis les compléments exacts de `P
 
 - [ ] **Step 4: Passer les tests du groupe**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest`
 
 Expected: PASS.
 
@@ -245,8 +245,8 @@ Expected: PASS.
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:updateKotlinAbi
-rtk ./gradlew :kadre-new:foundation:checkKotlinAbi
+rtk ./gradlew :kadre:foundation:updateKotlinAbi
+rtk ./gradlew :kadre:foundation:checkKotlinAbi
 ```
 
 Expected: PASS ; aucun package interne ou SDK n'apparaît.
@@ -254,7 +254,7 @@ Expected: PASS ; aucun package interne ou SDK n'apparaît.
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add new-kadre/foundation
+rtk git add kadre/foundation
 rtk git commit -m "feat: add application window and surface contracts"
 ```
 
@@ -263,15 +263,15 @@ rtk git commit -m "feat: add application window and surface contracts"
 ### Task 5: Catalogue input, gamepad, IME, drop et capture
 
 **Files:**
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/Devices.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/SurfaceInput.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/Gamepad.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/TextDropRaw.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/capture/Capture.kt`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/capture/Frames.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/input/InputValuesTest.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/input/GamepadValuesTest.kt`
-- Test: `new-kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/capture/CaptureValuesTest.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/Devices.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/SurfaceInput.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/Gamepad.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/input/TextDropRaw.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/capture/Capture.kt`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/capture/Frames.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/input/InputValuesTest.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/input/GamepadValuesTest.kt`
+- Test: `kadre/foundation/src/commonTest/kotlin/org/graphiks/kadre/capture/CaptureValuesTest.kt`
 
 **Interfaces:**
 - Produces: le reste du catalogue commun fermé, sans fake ni backend.
@@ -283,7 +283,7 @@ Cas obligatoires : HID hors `0..65535`, logical character vide, pression/tilt/tw
 
 - [ ] **Step 2: Prouver le rouge**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest`
 
 Expected: FAIL à la compilation sur les types input/capture.
 
@@ -293,7 +293,7 @@ Recopier `DESIGN.md` sections 10–11 et `PUBLIC-API-CATALOG.md` sections 6–7.
 
 - [ ] **Step 4: Passer toute la suite foundation**
 
-Run: `rtk ./gradlew :kadre-new:foundation:jvmTest`
+Run: `rtk ./gradlew :kadre:foundation:jvmTest`
 
 Expected: PASS.
 
@@ -302,8 +302,8 @@ Expected: PASS.
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:updateKotlinAbi
-rtk ./gradlew :kadre-new:foundation:checkKotlinAbi
+rtk ./gradlew :kadre:foundation:updateKotlinAbi
+rtk ./gradlew :kadre:foundation:checkKotlinAbi
 ```
 
 Expected: PASS.
@@ -311,7 +311,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add new-kadre/foundation
+rtk git add kadre/foundation
 rtk git commit -m "feat: complete the common Kadre API catalog"
 ```
 
@@ -320,9 +320,9 @@ rtk git commit -m "feat: complete the common Kadre API catalog"
 ### Task 6: Surface Desktop honnêtement indisponible avant runtime
 
 **Files:**
-- Create: `new-kadre/platform/desktop/src/jvmMain/kotlin/org/graphiks/kadre/platform/desktop/DesktopHost.kt`
-- Generate: `new-kadre/platform/desktop/api/desktop.api`
-- Test: `new-kadre/platform/desktop/src/jvmTest/kotlin/org/graphiks/kadre/platform/desktop/DesktopHostTest.kt`
+- Create: `kadre/platform/desktop/src/jvmMain/kotlin/org/graphiks/kadre/platform/desktop/DesktopHost.kt`
+- Generate: `kadre/platform/desktop/api/desktop.api`
+- Test: `kadre/platform/desktop/src/jvmTest/kotlin/org/graphiks/kadre/platform/desktop/DesktopHostTest.kt`
 
 **Interfaces:**
 - Produces: `DesktopBackend`, `DesktopIntegration`, `DesktopHostOptions`, les quatre overloads attach/run exacts.
@@ -334,7 +334,7 @@ Le test Kotlin compile et invoque les overloads factory/lambda. `attachKadreDesk
 
 - [ ] **Step 2: Prouver le rouge**
 
-Run: `rtk ./gradlew :kadre-new:platform:desktop:jvmTest`
+Run: `rtk ./gradlew :kadre:platform:desktop:jvmTest`
 
 Expected: FAIL à la compilation sur `DesktopHostOptions` et les entry points.
 
@@ -347,9 +347,9 @@ Recopier `BACKEND-CAPABILITIES.md` section 6.4. Ne valider aucune sélection ine
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:platform:desktop:jvmTest
-rtk ./gradlew :kadre-new:platform:desktop:updateKotlinAbi
-rtk ./gradlew :kadre-new:platform:desktop:checkKotlinAbi
+rtk ./gradlew :kadre:platform:desktop:jvmTest
+rtk ./gradlew :kadre:platform:desktop:updateKotlinAbi
+rtk ./gradlew :kadre:platform:desktop:checkKotlinAbi
 ```
 
 Expected: PASS.
@@ -357,7 +357,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add new-kadre/platform/desktop new-kadre/build.gradle.kts
+rtk git add kadre/platform/desktop kadre/build.gradle.kts
 rtk git commit -m "feat: expose the Desktop host contract"
 ```
 
@@ -366,18 +366,18 @@ rtk git commit -m "feat: expose the Desktop host contract"
 ### Task 7: Publications, consumers autonomes et contrats actifs
 
 **Files:**
-- Create: `new-kadre/consumers/kotlin/settings.gradle.kts`
-- Create: `new-kadre/consumers/kotlin/build.gradle.kts`
-- Create: `new-kadre/consumers/kotlin/src/main/kotlin/Consumer.kt`
-- Create: `new-kadre/consumers/java/settings.gradle.kts`
-- Create: `new-kadre/consumers/java/build.gradle.kts`
-- Create: `new-kadre/consumers/java/src/main/java/org/graphiks/kadre/consumer/Consumer.java`
-- Modify: `new-kadre/build.gradle.kts`
-- Modify: `new-kadre/contracts/registry/contracts.tsv`
+- Create: `kadre/consumers/kotlin/settings.gradle.kts`
+- Create: `kadre/consumers/kotlin/build.gradle.kts`
+- Create: `kadre/consumers/kotlin/src/main/kotlin/Consumer.kt`
+- Create: `kadre/consumers/java/settings.gradle.kts`
+- Create: `kadre/consumers/java/build.gradle.kts`
+- Create: `kadre/consumers/java/src/main/java/org/graphiks/kadre/consumer/Consumer.java`
+- Modify: `kadre/build.gradle.kts`
+- Modify: `kadre/contracts/registry/contracts.tsv`
 
 **Interfaces:**
 - Produces: tasks `validateKotlinConsumer` et `validateJavaConsumer`; premières lignes `API-*` actives.
-- Consumes: artifacts publiés, jamais `project(...)`, depuis `build/new-kadre-contract-repository`.
+- Consumes: artifacts publiés, jamais `project(...)`, depuis `build/kadre-contract-repository`.
 
 - [ ] **Step 1: Écrire les consumers avant leur gate**
 
@@ -388,7 +388,7 @@ Le consumer Kotlin construit et copie les trois policies, utilise les combinator
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:publishAllPublicationsToContractTestRepository :kadre-new:foundation:publishAllPublicationsToContractTestRepository :kadre-new:platform:desktop:publishAllPublicationsToContractTestRepository
+rtk ./gradlew :kadre:publishAllPublicationsToContractTestRepository :kadre:foundation:publishAllPublicationsToContractTestRepository :kadre:platform:desktop:publishAllPublicationsToContractTestRepository
 ```
 
 Expected: PASS ; les trois builds consumers n'ont encore aucune task root qui les masque.
@@ -398,15 +398,15 @@ Expected: PASS ; les trois builds consumers n'ont encore aucune task root qui le
 Run:
 
 ```bash
-rtk ./gradlew -p new-kadre/consumers/kotlin compileKotlin -PkadreRepository=../../../build/new-kadre-contract-repository -PkadreVersion=1.0.0
-rtk ./gradlew -p new-kadre/consumers/java compileJava -PkadreRepository=../../../build/new-kadre-contract-repository -PkadreVersion=1.0.0
+rtk ./gradlew -p kadre/consumers/kotlin compileKotlin -PkadreRepository=../../../build/kadre-contract-repository -PkadreVersion=1.0.0
+rtk ./gradlew -p kadre/consumers/java compileJava -PkadreRepository=../../../build/kadre-contract-repository -PkadreVersion=1.0.0
 ```
 
 Expected: PASS. Le numéro est uniquement la coordonnée de test héritée du build existant, pas une version New Kadre déclarée par les specs.
 
 - [ ] **Step 4: Câbler les deux gates depuis l'umbrella**
 
-Créer deux `GradleBuild` dépendant des publications, avec repository absolu et `project.version`; faire dépendre `:kadre-new:check` des deux.
+Créer deux `GradleBuild` dépendant des publications, avec repository absolu et `project.version`; faire dépendre `:kadre:check` des deux.
 
 - [ ] **Step 5: Activer les contrats structurels réels**
 
@@ -423,14 +423,14 @@ API-006	active	INTEROP-EXPORTS.md#4	Java consumer	unusable JVM value model	O1	ja
 
 - [ ] **Step 6: Passer le gate root**
 
-Run: `rtk ./gradlew :kadre-new:check :kadre-new:foundation:checkKotlinAbi :kadre-new:platform:desktop:checkKotlinAbi`
+Run: `rtk ./gradlew :kadre:check :kadre:foundation:checkKotlinAbi :kadre:platform:desktop:checkKotlinAbi`
 
 Expected: PASS, consumers compris.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-rtk git add new-kadre/build.gradle.kts new-kadre/consumers new-kadre/contracts/registry/contracts.tsv
+rtk git add kadre/build.gradle.kts kadre/consumers kadre/contracts/registry/contracts.tsv
 rtk git commit -m "test: gate the published foundation API"
 ```
 
@@ -446,8 +446,8 @@ rtk git commit -m "test: gate the published foundation API"
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:check :kadre-new:foundation:checkKotlinAbi :kadre-new:platform:desktop:checkKotlinAbi
-rtk ./gradlew :kadre-new:foundation:buildKotlinToolingMetadata :kadre-new:platform:desktop:buildKotlinToolingMetadata
+rtk ./gradlew :kadre:check :kadre:foundation:checkKotlinAbi :kadre:platform:desktop:checkKotlinAbi
+rtk ./gradlew :kadre:foundation:buildKotlinToolingMetadata :kadre:platform:desktop:buildKotlinToolingMetadata
 ```
 
 Expected: PASS ; chaque metadata liste seulement `common` et `jvmTarget = 25`.
@@ -457,7 +457,7 @@ Expected: PASS ; chaque metadata liste seulement `common` et `jvmTarget = 25`.
 Run:
 
 ```bash
-rtk rg -n "kffi|kadre-core|kadre-appkit|androidTarget|iosArm64|iosX64|wasmJs|js\\s*\\{|org.graphiks.kadre.internal" new-kadre --glob '*.kts' --glob '*.kt'
+rtk rg -n "kffi|kadre-core|kadre-appkit|androidTarget|iosArm64|iosX64|wasmJs|js\\s*\\{|org.graphiks.kadre.internal" kadre --glob '*.kts' --glob '*.kt'
 ```
 
 Expected: aucune correspondance dans les builds/sources publiés.

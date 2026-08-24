@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.graphiks.kadre:kadre-new:$kadreVersion")
+    implementation("org.graphiks.kadre:kadre:$kadreVersion")
 }
 
 kotlin {

@@ -12,22 +12,22 @@
 
 - JVM 25 et metadata common uniquement ; le code runtime initial vit dans `jvmMain` tant que la target JVM est la seule active.
 - `runtime` dépend de `foundation`, jamais d'un SDK, backend ou KFFI.
-- Le groupe publié est `org.graphiks.kadre.internal`; aucun type de ce package ne fuit dans l'ABI de `foundation`, `desktop` ou `kadre-new`.
+- Le groupe publié est `org.graphiks.kadre.internal`; aucun type de ce package ne fuit dans l'ABI de `foundation`, `desktop` ou `kadre`.
 - Les constructeurs internes des IDs/révisions de `foundation` sont accessibles uniquement via une compilation friend explicite de `runtime`; aucune factory publique n'est ajoutée au catalogue.
 - Aucun `GlobalScope`, singleton de session courante, sleep arbitraire, retry, test historique ou test de timing mural.
-- La gate reste limitée à `:kadre-new:`.
+- La gate reste limitée à `:kadre:`.
 - L'exception applicative originale est transmise au reporter technique, mais seul `ApplicationFailure` entre dans le contrat public.
 - La PR active uniquement les contrats réellement prouvés ; aucun fake public incomplet n'est publié.
 
 ## Task 1 — Build interne et accès friend
 
-**Files:** `settings.gradle.kts`, `new-kadre/runtime/build.gradle.kts`, `new-kadre/build.gradle.kts`.
+**Files:** `settings.gradle.kts`, `kadre/runtime/build.gradle.kts`, `kadre/build.gradle.kts`.
 
 1. Ajouter un test de compilation rouge utilisant `RuntimeHostController`.
-2. Inclure `:kadre-new:runtime`, KMP JVM 25, `explicitApi()`, coroutines et `foundation` en API interne.
+2. Inclure `:kadre:runtime`, KMP JVM 25, `explicitApi()`, coroutines et `foundation` en API interne.
 3. Configurer le jar JVM de `foundation` comme friend path et dépendance explicite de compilation.
 4. Publier `runtime` sous `org.graphiks.kadre.internal:runtime` vers le repository contractuel, sans l'exposer encore depuis l'umbrella.
-5. Faire dépendre `:kadre-new:check` de `:kadre-new:runtime:check`.
+5. Faire dépendre `:kadre:check` de `:kadre:runtime:check`.
 
 ## Task 2 — Lifecycle et horloge de session
 
@@ -64,7 +64,7 @@
 
 ## Task 5 — Scénarios O2 actifs
 
-**Files:** tests runtime, `new-kadre/contracts/registry/contracts.tsv`.
+**Files:** tests runtime, `kadre/contracts/registry/contracts.tsv`.
 
 1. Ajouter des scénarios à oracle explicite couvrant attach/stop/failure/lifecycle/unsupported/isolation.
 2. Ajouter deux sessions sur le même contrôleur et deux contrôleurs distincts pour prouver l'isolation des jobs/lifecycle et l'unicité process-wide des `SessionId` et `WindowRequestId`.
@@ -77,7 +77,7 @@
 2. Exécuter :
 
    ```bash
-   rtk ./gradlew :kadre-new:check :kadre-new:runtime:check --rerun-tasks
+   rtk ./gradlew :kadre:check :kadre:runtime:check --rerun-tasks
    ```
 
 3. Vérifier metadata common/JVM 25 et absence de SDK/KFFI/ancien Kadre.

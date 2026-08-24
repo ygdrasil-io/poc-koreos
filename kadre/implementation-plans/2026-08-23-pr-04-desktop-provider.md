@@ -16,7 +16,7 @@
 - Les providers techniques sont `public` uniquement dans `org.graphiks.kadre.internal.*` pour traverser les artifacts ; aucun de leurs types ne fuit dans l'ABI Desktop contractuelle.
 - Les tests injectent OS et catalogue de providers ; ils ne dépendent ni de la machine CI ni de `ServiceLoader` global.
 - Les erreurs de découverte ou exceptions provider deviennent une `PlatformFailure` stable ; une `CancellationException` reste une cancellation.
-- La gate reste limitée à `:kadre-new:` et ignore les tests historiques.
+- La gate reste limitée à `:kadre:` et ignore les tests historiques.
 
 ## Task 1 — SPI backend technique dans runtime
 
@@ -68,7 +68,7 @@
 
 ## Task 6 — Audit et PR empilée
 
-1. Exécuter `:kadre-new:platform:desktop:jvmTest`, la validation ABI puis la gate `:kadre-new:check` avec `--rerun-tasks`.
+1. Exécuter `:kadre:platform:desktop:jvmTest`, la validation ABI puis la gate `:kadre:check` avec `--rerun-tasks`.
 2. Vérifier les metadata common/JVM 25 et l'absence de SDK/KFFI/anciens imports.
 3. Pousser `codex/desktop-provider` et ouvrir la PR contre `codex/runtime-kernel`.
 

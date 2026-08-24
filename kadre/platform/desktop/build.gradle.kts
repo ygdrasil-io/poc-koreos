@@ -15,13 +15,13 @@ kotlin {
     abiValidation()
 
     sourceSets {
-        commonMain.dependencies {
-            api(libs.kotlinx.coroutines.core)
+        jvmMain.dependencies {
+            api(project(":kadre:foundation"))
+            implementation(project(":kadre:runtime"))
+            runtimeOnly(project(":kadre:backend:appkit"))
         }
-
-        commonTest.dependencies {
+        jvmTest.dependencies {
             implementation(kotlin("test"))
-            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
@@ -30,7 +30,7 @@ publishing {
     repositories {
         maven {
             name = "contractTest"
-            url = rootProject.layout.buildDirectory.dir("new-kadre-contract-repository").get().asFile.toURI()
+            url = rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.toURI()
         }
     }
 }
