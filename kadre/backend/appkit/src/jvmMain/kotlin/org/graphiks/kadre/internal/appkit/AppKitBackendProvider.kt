@@ -65,6 +65,8 @@ public class AppKitBackendProvider private constructor(
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),
+                // Stop AppKit before committing the terminal outcome so a native stop failure
+                // can still become the authoritative SessionOutcome.
                 sessionStopHandler = RuntimeSessionStopHandler {
                     if (nativeLoopReturned.get()) {
                         null
@@ -101,6 +103,8 @@ public class AppKitBackendProvider private constructor(
 
     private fun requestNativeStop(): KadreFailure.PlatformFailure? =
         try {
+            // Waiting is intentional: the runtime must know whether AppKit accepted the stop
+            // before it makes the session's terminal outcome observable.
             when (nativeApplication.requestStop().await()) {
                 AppKitStopResult.Accepted -> null
                 is AppKitStopResult.Failed -> stopFailure()
@@ -115,6 +119,8 @@ public class AppKitBackendProvider private constructor(
 
     private fun emergencyNativeStop() {
         try {
+            // Bypass the selector/event path because a failure there can leave the main run loop
+            // asleep forever even though the Kadre session has already stopped.
             nativeApplication.emergencyStop()
         } catch (_: Exception) {
             // The typed stop failure remains authoritative even if the fallback also fails.

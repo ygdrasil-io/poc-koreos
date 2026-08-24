@@ -237,6 +237,8 @@ internal class SessionRuntime(
             stopHandlerStarted = true
         }
 
+        // Run host shutdown before publishing a terminal outcome: a native stop failure must
+        // still be able to promote an otherwise successful stop to Failed(PlatformFailure).
         val stopFailure = onStopping(this)
         val finishImmediately: Boolean
         synchronized(lock) {

@@ -78,6 +78,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         val request: AppKitStopRequest
         val target = synchronized(lock) {
             stopRequested = true
+            // Concurrent callers share one attempt so every waiter observes the same native
+            // acceptance or failure instead of racing independent stop operations.
             val completion = stopCompletion ?: CompletableFuture<AppKitStopResult>().also {
                 stopCompletion = it
             }
@@ -89,6 +91,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     }
 
     override fun emergencyStop() {
+        // This bypasses NSApplication.stop: and the synthetic event path; it is only used when
+        // that normal path failed and can no longer be trusted to release run().
         val mainRunLoop = CFRunLoopGetMain()
         CFRunLoopStop(mainRunLoop)
         CFRunLoopWakeUp(mainRunLoop)
@@ -131,6 +135,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         }
         synchronized(lock) {
             if (application === target && stopCompletion === completion) {
+                // Release only this failed reservation so a later caller can retry without
+                // clearing a newer stop request installed by another thread.
                 stopScheduled = false
                 stopCompletion = null
             }
@@ -144,6 +150,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
             ptr,
             true,
         )
+        // stop: only changes AppKit's run state. A synthetic event wakes a windowless loop so
+        // run() gets another iteration in which it can observe that state and return.
         ObjCRuntime.autoreleasePool {
             postEvent_atStart(createWakeEvent(), false)
         }

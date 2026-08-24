@@ -161,6 +161,8 @@ public class RuntimeHostController private constructor(
 
     private fun sessionStopping(session: SessionRuntime): KadreFailure.PlatformFailure? =
         try {
+            // Functional stop failures must be returned explicitly; thrown adapter bugs remain
+            // diagnostic-only so arbitrary host code cannot escape through session teardown.
             sessionStopHandler.stop(session.id)
         } catch (cause: Exception) {
             reportFailure(cause)
