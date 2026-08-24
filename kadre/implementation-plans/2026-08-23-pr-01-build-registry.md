@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduire la racine Gradle `kadre-new`, un premier artifact `foundation` JVM réel et le registre contractuel validé qui permettra aux PRs suivantes d'activer leurs preuves progressivement.
+**Goal:** Introduire la racine Gradle `kadre`, un premier artifact `foundation` JVM réel et le registre contractuel validé qui permettra aux PRs suivantes d'activer leurs preuves progressivement.
 
 **Architecture:** Cette PR n'introduit que les composants possédant déjà une responsabilité effective : l'umbrella, `foundation` et `contracts:validator`. Elle n'utilise pas la convention KMP historique, car celle-ci matérialise Android et iOS ; chaque nouveau projet configure uniquement une target JVM avec JDK 25. Le registre est un TSV relisible sans dépendance de sérialisation et son validateur reste entièrement séparé du code de production.
 
 **Tech Stack:** Kotlin 2.4.0, Kotlin Multiplatform JVM, Gradle Kotlin DSL, JVM/JDK 25, `kotlin.test`, validation ABI Kotlin.
 
-**Spec:** `new-kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md`
+**Spec:** `kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md`
 
 ## Global Constraints
 
 - Seule la target JVM est créée, compilée et testée dans cette PR.
 - Le toolchain et le runtime minimum sont JDK 25.
-- Aucun enfant de `kadre-new` ne contient `kadre` dans son propre nom.
+- Aucun enfant de `kadre` ne contient `kadre` dans son propre nom.
 - Aucun projet vide n'entre dans `settings.gradle.kts`.
 - `foundation` ne dépend d'aucun autre projet Kadre.
 - Aucune couche FFI, aucun binding et aucune dépendance KFFI n'entrent dans cette PR.
@@ -45,7 +45,7 @@ Expected: seuls le snapshot et ce plan sont initialement non suivis ; la seconde
 
 ```text
 settings.gradle.kts                                      modifié
-new-kadre/
+kadre/
 |-- build.gradle.kts                                    créé
 |-- TEST-STRATEGY.md                                    modifié
 |-- foundation/
@@ -68,7 +68,7 @@ new-kadre/
 
 Responsabilité de chaque fichier :
 
-- `new-kadre/build.gradle.kts` configure l'umbrella JVM et agrège les checks des seuls enfants présents.
+- `kadre/build.gradle.kts` configure l'umbrella JVM et agrège les checks des seuls enfants présents.
 - `foundation/build.gradle.kts` configure l'artifact contractuel public JVM et son ABI.
 - `OptInAnnotations.kt` introduit les trois annotations publiques déjà fermées par la spec.
 - `contracts.tsv` est la donnée normative lisible par machine ; il commence avec son header, sans faux contrat actif.
@@ -81,9 +81,9 @@ Responsabilité de chaque fichier :
 ### Task 1: Amendement du statut contractuel
 
 **Files:**
-- Modify: `new-kadre/TEST-STRATEGY.md`
-- Create: `new-kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md`
-- Create: `new-kadre/implementation-plans/2026-08-23-pr-01-build-registry.md`
+- Modify: `kadre/TEST-STRATEGY.md`
+- Create: `kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md`
+- Create: `kadre/implementation-plans/2026-08-23-pr-01-build-registry.md`
 
 **Interfaces:**
 - Consumes: le schéma du registre défini en section 3 de `TEST-STRATEGY.md`.
@@ -94,7 +94,7 @@ Responsabilité de chaque fichier :
 Run:
 
 ```bash
-rtk rg -n "planned.*active.*retired|status.*retirementRef" new-kadre/TEST-STRATEGY.md
+rtk rg -n "planned.*active.*retired|status.*retirementRef" kadre/TEST-STRATEGY.md
 ```
 
 Expected: aucune correspondance décrivant les trois statuts et leur gate.
@@ -131,7 +131,7 @@ Dans les sections décrivant les gates PR, nightly et release, remplacer toute e
 Run:
 
 ```bash
-rtk rg -n -C 2 "planned|active|retired|retirementRef" new-kadre/TEST-STRATEGY.md
+rtk rg -n -C 2 "planned|active|retired|retirementRef" kadre/TEST-STRATEGY.md
 ```
 
 Expected: les champs, transitions, contraintes de capability et règles de gate apparaissent ; aucun statut supplémentaire n'existe.
@@ -139,7 +139,7 @@ Expected: les champs, transitions, contraintes de capability et règles de gate 
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add new-kadre/TEST-STRATEGY.md new-kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md new-kadre/implementation-plans/2026-08-23-pr-01-build-registry.md
+rtk git add kadre/TEST-STRATEGY.md kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md kadre/implementation-plans/2026-08-23-pr-01-build-registry.md
 rtk git commit -m "docs: define AppKit JVM implementation baseline"
 ```
 
@@ -149,14 +149,14 @@ rtk git commit -m "docs: define AppKit JVM implementation baseline"
 
 **Files:**
 - Modify: `settings.gradle.kts`
-- Create: `new-kadre/build.gradle.kts`
-- Create: `new-kadre/foundation/build.gradle.kts`
-- Create: `new-kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/OptInAnnotations.kt`
-- Generate: `new-kadre/foundation/api/foundation.api`
+- Create: `kadre/build.gradle.kts`
+- Create: `kadre/foundation/build.gradle.kts`
+- Create: `kadre/foundation/src/commonMain/kotlin/org/graphiks/kadre/diagnostics/OptInAnnotations.kt`
+- Generate: `kadre/foundation/api/foundation.api`
 
 **Interfaces:**
 - Consumes: plugins `org.jetbrains.kotlin.multiplatform` déjà disponibles depuis `buildSrc`; JDK 25 installé.
-- Produces: projets Gradle `:kadre-new` et `:kadre-new:foundation`; annotations `ExperimentalKadreApi`, `KadrePlatformApi` et `DelicateKadreApi`.
+- Produces: projets Gradle `:kadre` et `:kadre:foundation`; annotations `ExperimentalKadreApi`, `KadrePlatformApi` et `DelicateKadreApi`.
 
 - [ ] **Step 1: Prouver que les nouveaux projets n'existent pas encore**
 
@@ -166,23 +166,23 @@ Run:
 rtk ./gradlew projects
 ```
 
-Expected: aucune entrée `Project ':kadre-new'`.
+Expected: aucune entrée `Project ':kadre'`.
 
 - [ ] **Step 2: Enregistrer uniquement l'umbrella et foundation**
 
 Ajouter à `settings.gradle.kts` :
 
 ```kotlin
-include(":kadre-new")
-project(":kadre-new").projectDir = file("new-kadre")
-include(":kadre-new:foundation")
+include(":kadre")
+project(":kadre").projectDir = file("kadre")
+include(":kadre:foundation")
 ```
 
 Ne pas inclure `runtime`, `platform`, `backend`, `test`, `contracts:model`, `contracts:suite`, les drivers, consumers ou samples.
 
 - [ ] **Step 3: Créer le build de foundation**
 
-Créer `new-kadre/foundation/build.gradle.kts` :
+Créer `kadre/foundation/build.gradle.kts` :
 
 ```kotlin
 plugins {
@@ -255,7 +255,7 @@ La compilation et l'ABI constituent la preuve structurelle appropriée ; ne pas 
 
 - [ ] **Step 5: Créer le build de l'umbrella**
 
-Créer `new-kadre/build.gradle.kts` :
+Créer `kadre/build.gradle.kts` :
 
 ```kotlin
 plugins {
@@ -269,13 +269,13 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":kadre-new:foundation"))
+            api(project(":kadre:foundation"))
         }
     }
 }
 
 tasks.named("check") {
-    dependsOn(":kadre-new:foundation:check")
+    dependsOn(":kadre:foundation:check")
 }
 ```
 
@@ -286,7 +286,7 @@ L'umbrella est volontairement mince : sa responsabilité effective est l'agréga
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:compileKotlinJvm :kadre-new:compileKotlinJvm
+rtk ./gradlew :kadre:foundation:compileKotlinJvm :kadre:compileKotlinJvm
 ```
 
 Expected: PASS sous JDK 25 ; aucune task Android, iOS, JS ou Wasm n'est créée pour ces projets.
@@ -296,8 +296,8 @@ Expected: PASS sous JDK 25 ; aucune task Android, iOS, JS ou Wasm n'est créée 
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:updateKotlinAbi
-rtk ./gradlew :kadre-new:foundation:checkKotlinAbi
+rtk ./gradlew :kadre:foundation:updateKotlinAbi
+rtk ./gradlew :kadre:foundation:checkKotlinAbi
 ```
 
 Expected: `foundation.api` contient exactement les trois annotations et le check passe.
@@ -308,15 +308,15 @@ Run:
 
 ```bash
 rtk ./gradlew projects
-rtk ./gradlew :kadre-new:tasks --all
+rtk ./gradlew :kadre:tasks --all
 ```
 
-Expected: seuls `:kadre-new` et `:kadre-new:foundation` existent sous la nouvelle racine ; aucune task liée à une autre target n'apparaît.
+Expected: seuls `:kadre` et `:kadre:foundation` existent sous la nouvelle racine ; aucune task liée à une autre target n'apparaît.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-rtk git add settings.gradle.kts new-kadre/build.gradle.kts new-kadre/foundation
+rtk git add settings.gradle.kts kadre/build.gradle.kts kadre/foundation
 rtk git commit -m "build: add JVM-only new Kadre foundation"
 ```
 
@@ -326,9 +326,9 @@ rtk git commit -m "build: add JVM-only new Kadre foundation"
 
 **Files:**
 - Modify: `settings.gradle.kts`
-- Create: `new-kadre/contracts/validator/build.gradle.kts`
-- Create: `new-kadre/contracts/validator/src/jvmTest/kotlin/org/graphiks/kadre/contracts/ContractRegistryTest.kt`
-- Create: `new-kadre/contracts/validator/src/jvmMain/kotlin/org/graphiks/kadre/contracts/ContractRegistry.kt`
+- Create: `kadre/contracts/validator/build.gradle.kts`
+- Create: `kadre/contracts/validator/src/jvmTest/kotlin/org/graphiks/kadre/contracts/ContractRegistryTest.kt`
+- Create: `kadre/contracts/validator/src/jvmMain/kotlin/org/graphiks/kadre/contracts/ContractRegistry.kt`
 
 **Interfaces:**
 - Consumes: texte TSV UTF-8 avec header fermé.
@@ -347,10 +347,10 @@ Les listes utilisent `,` comme séparateur et `-` pour l'ensemble vide. Les comm
 Ajouter à `settings.gradle.kts` :
 
 ```kotlin
-include(":kadre-new:contracts:validator")
+include(":kadre:contracts:validator")
 ```
 
-Créer `new-kadre/contracts/validator/build.gradle.kts` :
+Créer `kadre/contracts/validator/build.gradle.kts` :
 
 ```kotlin
 plugins {
@@ -401,7 +401,7 @@ class ContractRegistryTest {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ContractRegistryTest.parsesAnActiveContractWithEvidenceLists
+rtk ./gradlew :kadre:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ContractRegistryTest.parsesAnActiveContractWithEvidenceLists
 ```
 
 Expected: FAIL à la compilation, `Unresolved reference 'ContractRegistry'`.
@@ -484,7 +484,7 @@ internal object ContractRegistry {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ContractRegistryTest.parsesAnActiveContractWithEvidenceLists
+rtk ./gradlew :kadre:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ContractRegistryTest.parsesAnActiveContractWithEvidenceLists
 ```
 
 Expected: PASS.
@@ -545,7 +545,7 @@ fun retiredContractRequiresReferenceAndNoExecutableScenarios() {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:jvmTest
+rtk ./gradlew :kadre:contracts:validator:jvmTest
 ```
 
 Expected: FAIL à la compilation, `Unresolved reference 'validate'`.
@@ -606,7 +606,7 @@ fun validate(records: List<ContractRecord>): List<String> = buildList {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:jvmTest
+rtk ./gradlew :kadre:contracts:validator:jvmTest
 ```
 
 Expected: PASS, quatre scénarios significatifs en plus du parsing positif.
@@ -614,7 +614,7 @@ Expected: PASS, quatre scénarios significatifs en plus du parsing positif.
 - [ ] **Step 9: Commit**
 
 ```bash
-rtk git add settings.gradle.kts new-kadre/contracts/validator
+rtk git add settings.gradle.kts kadre/contracts/validator
 rtk git commit -m "test: add contract registry validator"
 ```
 
@@ -623,15 +623,15 @@ rtk git commit -m "test: add contract registry validator"
 ### Task 4: Registre réel et gate Gradle
 
 **Files:**
-- Create: `new-kadre/contracts/registry/contracts.tsv`
-- Create: `new-kadre/contracts/registry/README.md`
-- Create: `new-kadre/contracts/validator/src/jvmMain/kotlin/org/graphiks/kadre/contracts/ValidateContractRegistry.kt`
-- Modify: `new-kadre/contracts/validator/build.gradle.kts`
-- Modify: `new-kadre/build.gradle.kts`
+- Create: `kadre/contracts/registry/contracts.tsv`
+- Create: `kadre/contracts/registry/README.md`
+- Create: `kadre/contracts/validator/src/jvmMain/kotlin/org/graphiks/kadre/contracts/ValidateContractRegistry.kt`
+- Modify: `kadre/contracts/validator/build.gradle.kts`
+- Modify: `kadre/build.gradle.kts`
 
 **Interfaces:**
 - Consumes: `ContractRegistry.parse` et `ContractRegistry.validate` de Task 3.
-- Produces: task Gradle `:kadre-new:contracts:validator:validateContractRegistry`, appelée par `:kadre-new:check`.
+- Produces: task Gradle `:kadre:contracts:validator:validateContractRegistry`, appelée par `:kadre:check`.
 
 - [ ] **Step 1: Créer un registre vide mais valide**
 
@@ -708,7 +708,7 @@ fun missingRegistryFileIsRejected() {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:jvmTest
+rtk ./gradlew :kadre:contracts:validator:jvmTest
 ```
 
 Expected: PASS.
@@ -724,7 +724,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
     dependsOn("jvmMainClasses")
     classpath = configurations.named("jvmRuntimeClasspath").get()
     mainClass.set("org.graphiks.kadre.contracts.ValidateContractRegistryKt")
-    args(rootProject.file("new-kadre/contracts/registry/contracts.tsv").absolutePath)
+    args(rootProject.file("kadre/contracts/registry/contracts.tsv").absolutePath)
 }
 
 tasks.named("check") {
@@ -732,11 +732,11 @@ tasks.named("check") {
 }
 ```
 
-Compléter `new-kadre/build.gradle.kts` :
+Compléter `kadre/build.gradle.kts` :
 
 ```kotlin
 tasks.named("check") {
-    dependsOn(":kadre-new:contracts:validator:check")
+    dependsOn(":kadre:contracts:validator:check")
 }
 ```
 
@@ -745,7 +745,7 @@ tasks.named("check") {
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:contracts:validator:validateContractRegistry
+rtk ./gradlew :kadre:contracts:validator:validateContractRegistry
 ```
 
 Expected: PASS sans warning ni entrée synthétique.
@@ -753,7 +753,7 @@ Expected: PASS sans warning ni entrée synthétique.
 - [ ] **Step 8: Commit**
 
 ```bash
-rtk git add new-kadre/build.gradle.kts new-kadre/contracts/registry new-kadre/contracts/validator
+rtk git add kadre/build.gradle.kts kadre/contracts/registry kadre/contracts/validator
 rtk git commit -m "build: gate the contract registry"
 ```
 
@@ -773,7 +773,7 @@ rtk git commit -m "build: gate the contract registry"
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:check :kadre-new:foundation:checkKotlinAbi
+rtk ./gradlew :kadre:check :kadre:foundation:checkKotlinAbi
 ```
 
 Expected: PASS ; les tests du validator et la validation du registre sont exécutés transitivement.
@@ -783,8 +783,8 @@ Expected: PASS ; les tests du validator et la validation du registre sont exécu
 Run:
 
 ```bash
-rtk ./gradlew :kadre-new:foundation:kotlinToolingMetadata
-rtk ./gradlew :kadre-new:foundation:tasks --all
+rtk ./gradlew :kadre:foundation:kotlinToolingMetadata
+rtk ./gradlew :kadre:foundation:tasks --all
 ```
 
 Expected: seule la compilation JVM est configurée pour `foundation`; aucune target Android, Native, JS ou Wasm.
@@ -794,7 +794,7 @@ Expected: seule la compilation JVM est configurée pour `foundation`; aucune tar
 Run:
 
 ```bash
-rtk rg -n "kffi|kadre-core|kadre-appkit|androidTarget|iosArm64|iosX64|wasmJs|js\s*\{" new-kadre --glob '*.kts' --glob '*.kt'
+rtk rg -n "kffi|kadre-core|kadre-appkit|androidTarget|iosArm64|iosX64|wasmJs|js\s*\{" kadre --glob '*.kts' --glob '*.kt'
 ```
 
 Expected: aucune correspondance dans les nouveaux build scripts et sources ; les mentions documentaires du snapshot ne sont pas incluses par les globs.
@@ -836,22 +836,22 @@ rtk gh pr create \
   --base "$(rtk gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')" \
   --head codex/first-implementation \
   --title "build: bootstrap New Kadre JVM contracts" \
-  --body $'## Summary\n- bootstrap the JVM-only New Kadre umbrella and foundation\n- define progressive contract activation in the normative test strategy\n- add and gate the machine-readable contract registry validator\n\n## Verification\n- ./gradlew :kadre-new:check :kadre-new:foundation:checkKotlinAbi'
+  --body $'## Summary\n- bootstrap the JVM-only New Kadre umbrella and foundation\n- define progressive contract activation in the normative test strategy\n- add and gate the machine-readable contract registry validator\n\n## Verification\n- ./gradlew :kadre:check :kadre:foundation:checkKotlinAbi'
 ```
 
 La PR 1 cible la branche par défaut, qui contient déjà les spécifications mergées. Si ce prérequis est faux au moment de l'exécution, arrêter avant le push et faire corriger la base plutôt que créer une PR incohérente.
 
 ## Critères de sortie de PR 1
 
-- `:kadre-new` et `:kadre-new:foundation` sont les seuls nouveaux projets publiables.
-- `:kadre-new:contracts:validator` est interne et possède une responsabilité effective.
+- `:kadre` et `:kadre:foundation` sont les seuls nouveaux projets publiables.
+- `:kadre:contracts:validator` est interne et possède une responsabilité effective.
 - Aucun autre sous-projet réservé n'existe physiquement dans le build.
 - Les trois annotations publiques correspondent exactement à `DESIGN.md`.
 - `foundation` utilise `explicitApi()` et possède un dump ABI revu.
 - Le registre machine-readable accepte les trois statuts fermés.
 - Un contrat actif incomplet et un ID dupliqué font échouer le validator.
 - Le registre réel ne contient aucun faux contrat actif.
-- `:kadre-new:check` agrège le validator.
+- `:kadre:check` agrège le validator.
 - Toute la nouvelle racine utilise uniquement JVM/JDK 25.
 
 ## Handoff vers PR 2

@@ -8,21 +8,21 @@
 
 **Référence d’exécution :** les plans détaillés dérivés de ce document doivent conserver ses invariants
 
-**Registre de migration :** `new-kadre/API-MIGRATION.md` attribue une décision à chaque famille de symboles de l’ABI actuelle ; `new-kadre/MIGRATION-AUDIT.md` ferme la revue nominative des résidus.
+**Registre de migration :** `kadre/API-MIGRATION.md` attribue une décision à chaque famille de symboles de l’ABI actuelle ; `kadre/MIGRATION-AUDIT.md` ferme la revue nominative des résidus.
 
-**Catalogue lexical :** `new-kadre/PUBLIC-API-CATALOG.md` énumère la surface Kotlin fermée ; les matrices normatives associées complètent ce document sans générer de source Kotlin.
+**Catalogue lexical :** `kadre/PUBLIC-API-CATALOG.md` énumère la surface Kotlin fermée ; les matrices normatives associées complètent ce document sans générer de source Kotlin.
 
-**Contrats d’opération :** `new-kadre/OPERATION-CONTRACTS.md` ferme résultats, failures, cancellation, commit et handoff de chaque appel public.
+**Contrats d’opération :** `kadre/OPERATION-CONTRACTS.md` ferme résultats, failures, cancellation, commit et handoff de chaque appel public.
 
-**Profils intégrés :** `new-kadre/POLICY-PROFILES.md` donne la valeur exacte de chaque champ de `Default`, `Realtime` et `Recording`.
+**Profils intégrés :** `kadre/POLICY-PROFILES.md` donne la valeur exacte de chaque champ de `Default`, `Realtime` et `Recording`.
 
-**Adapters :** `new-kadre/BACKEND-CAPABILITIES.md` ferme les topologies host, les fallbacks et les points d’attachement exacts.
+**Adapters :** `kadre/BACKEND-CAPABILITIES.md` ferme les topologies host, les fallbacks et les points d’attachement exacts.
 
-**Interop :** `new-kadre/INTEROP-EXPORTS.md` distingue l’API Kotlin complète, les façades host étrangères et les escape hatches target-specific.
+**Interop :** `kadre/INTEROP-EXPORTS.md` distingue l’API Kotlin complète, les façades host étrangères et les escape hatches target-specific.
 
-**Preuves :** `new-kadre/TEST-STRATEGY.md` définit les oracles indépendants, la contract suite, la traçabilité et les gates PR/nightly/release.
+**Preuves :** `kadre/TEST-STRATEGY.md` définit les oracles indépendants, la contract suite, la traçabilité et les gates PR/nightly/release.
 
-**Architecture des projets :** `new-kadre/PROJECT-ARCHITECTURE.md` ferme la topologie Gradle/KMP, les responsabilités, dépendances, publications et frontières KFFI.
+**Architecture des projets :** `kadre/PROJECT-ARCHITECTURE.md` ferme la topologie Gradle/KMP, les responsabilités, dépendances, publications et frontières KFFI.
 
 **Niveau de fermeture :** les contrats d’architecture, la forme documentaire de l’API et la stratégie de preuve sont fermés. Les dumps ABI, headers, déclarations TypeScript et consumer compile tests restent des preuves d’implémentation à produire plus tard ; leur absence ne rouvre pas le design.
 
@@ -75,11 +75,11 @@ Les handles natifs nécessaires à un renderer externe restent accessibles derri
 
 ## 4. Frontière des projets
 
-`PROJECT-ARCHITECTURE.md` est l’autorité normative de cette section. Le projet principal porte actuellement le nom `kadre-new` ; aucun de ses enfants ne reprend `kadre` dans son nom.
+`PROJECT-ARCHITECTURE.md` est l’autorité normative de cette section. Le projet principal porte actuellement le nom `kadre` ; aucun de ses enfants ne reprend `kadre` dans son nom.
 
 ### 4.1 Composants publics
 
-- `kadre-new` : umbrella KMP et dépendance principale standard.
+- `kadre` : umbrella KMP et dépendance principale standard.
 - `foundation` : contrats communs et surface lexicale définie par le catalogue.
 - `platform:android`, `platform:uikit`, `platform:web` et `platform:desktop` : points d’attachement et APIs target-specific transitives.
 - `test` : fake host, horloge virtuelle et périphériques virtuels destinés aux tests consommateurs.

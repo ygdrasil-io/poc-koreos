@@ -8,7 +8,7 @@ plugins {
 
 group = "org.graphiks.kadre.internal"
 
-val foundationJvmJar = project(":kadre-new:foundation").tasks.named<Jar>("jvmJar")
+val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
 
 kotlin {
     jvmToolchain(25)
@@ -17,7 +17,7 @@ kotlin {
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":kadre-new:foundation"))
+            api(project(":kadre:foundation"))
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))
@@ -39,7 +39,7 @@ publishing {
     repositories {
         maven {
             name = "contractTest"
-            url = rootProject.layout.buildDirectory.dir("new-kadre-contract-repository").get().asFile.toURI()
+            url = rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.toURI()
         }
     }
 }

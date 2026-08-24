@@ -65,13 +65,12 @@ dependencyResolutionManagement {
 
 rootProject.name = "kadre"
 
-// New Kadre incubation — only projects with an effective JVM responsibility
+// Kadre — only projects with an effective JVM responsibility
 // enter the build. Additional targets and adapters are added with their first
 // implementation and contract evidence.
-include(":kadre-new")
-project(":kadre-new").projectDir = file("new-kadre")
-include(":kadre-new:foundation")
-include(":kadre-new:contracts:validator")
-include(":kadre-new:platform:desktop")
-include(":kadre-new:runtime")
-include(":kadre-new:backend:appkit")
+include(":kadre")
+include(":kadre:foundation")
+include(":kadre:contracts:validator")
+include(":kadre:platform:desktop")
+include(":kadre:runtime")
+include(":kadre:backend:appkit")

@@ -63,7 +63,7 @@ Ces domaines ne sont pas simulés par des succès. Leur disponibilité et leurs 
 Seuls les composants possédant du code et des preuves réelles entrent dans le build :
 
 ```text
-kadre-new
+kadre
 |-- foundation
 |-- runtime
 |-- platform
@@ -87,7 +87,7 @@ kadre-new
 
 Responsabilités :
 
-- `kadre-new` est l'umbrella consommateur ;
+- `kadre` est l'umbrella consommateur ;
 - `foundation` contient le catalogue commun dans `commonMain`, avec une target JVM initiale ;
 - `runtime` contient le moteur interne de session, sans SDK host ni KFFI ;
 - `platform:desktop` contient l'API Desktop, la sélection de backend et les points d'entrée ;
@@ -106,7 +106,7 @@ Les projets réservés aux autres plateformes ou intégrations ne sont pas cré�
 application
     |
     v
-kadre-new
+kadre
     |-- foundation
     `-- platform:desktop
               |
@@ -228,7 +228,7 @@ La réutilisation est donc limitée au plumbing natif prouvé. Le runtime, le SP
 
 KFFI possède exclusivement les bindings natifs. Kadre n'ajoute ni wrapper FFM local, ni générateur, ni couche FFI.
 
-Tout binding manquant est ajouté au registre `new-kadre/KFFI-REQUIREMENTS.md` avec :
+Tout binding manquant est ajouté au registre `kadre/KFFI-REQUIREMENTS.md` avec :
 
 - framework, classe, selector ou symbole ;
 - signature et conventions d'ownership attendues ;

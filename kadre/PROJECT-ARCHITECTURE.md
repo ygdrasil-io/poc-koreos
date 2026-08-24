@@ -2,16 +2,16 @@
 
 **Statut :** architecture de projet fermée ; aucun sous-projet ni build script généré par cette spécification.  
 **Portée :** topologie Gradle/KMP, responsabilités, dépendances, publications, source sets, tests et intégrations.  
-**Projet principal actuel :** `kadre-new`, destiné à porter ultérieurement le nom `kadre`.  
+**Projet principal actuel :** `kadre`, destiné à porter ultérieurement le nom `kadre`.  
 **Autorités associées :** `DESIGN.md` pour la sémantique, `PUBLIC-API-CATALOG.md` pour les déclarations publiques et `TEST-STRATEGY.md` pour les preuves.
 
 Cette architecture ne fixe ni version, ni ordre d’implémentation, ni composition d’une livraison. Un nom réservé ci-dessous n’autorise pas la création d’un sous-projet vide : un composant n’entre physiquement dans le build que lorsqu’il possède une responsabilité réelle, du code et les preuves associées.
 
-La coexistence avec les anciens projets, leur suppression, les modifications transitoires de `settings.gradle.kts` et la mécanique du futur renommage sont hors périmètre. La seule contrainte de nommage anticipée est qu’aucun enfant de `kadre-new` ne reprend `kadre` dans son propre nom.
+La coexistence avec les anciens projets, leur suppression, les modifications transitoires de `settings.gradle.kts` et la mécanique du futur renommage sont hors périmètre. La seule contrainte de nommage anticipée est qu’aucun enfant de `kadre` ne reprend `kadre` dans son propre nom.
 
 ## 1. Principes
 
-1. `kadre-new` est le projet KMP principal et l’unique dépendance requise pour un usage standard.
+1. `kadre` est le projet KMP principal et l’unique dépendance requise pour un usage standard.
 2. Les contrats communs, le runtime, les hosts SDK et les backends desktop ont des frontières physiques distinctes.
 3. Les adapters standards sont agrégés automatiquement par la bonne variante KMP ; le consumer ne choisit pas un artifact bas niveau pour démarrer.
 4. Les frameworks tiers restent dans des intégrations optionnelles.
@@ -24,7 +24,7 @@ La coexistence avec les anciens projets, leur suppression, les modifications tra
 ## 2. Arborescence logique réservée
 
 ```text
-kadre-new/
+kadre/
 ├── build.gradle.kts
 ├── foundation/
 ├── runtime/
@@ -73,7 +73,7 @@ kadre-new/
 
 | Projet | Rôle | Publication | Dépendances Kadre autorisées |
 |---|---|---|---|
-| `kadre-new` | umbrella KMP et point d’entrée de dépendance | publique principale | `foundation`, puis `platform:*` selon la target |
+| `kadre` | umbrella KMP et point d’entrée de dépendance | publique principale | `foundation`, puis `platform:*` selon la target |
 | `foundation` | contrats, types, outcomes, policies et Host SPI publics | transitive contractuelle | aucune |
 | `runtime` | sessions, coroutines, ownership, flows, budgets et SPI d’implémentation | transitive interne | `foundation` |
 | `platform:android` | attach `Activity`/`View` et traduction du lifecycle Android | transitive contractuelle | `foundation`, `runtime` |
@@ -85,12 +85,12 @@ kadre-new/
 | `backend:x11` | provider desktop X11 | transitive interne | `runtime`, KFFI X11 |
 | `backend:wayland` | provider desktop Wayland | transitive interne | `runtime`, KFFI Wayland |
 | `test` | fake host, horloge et contrôleurs virtuels publics | publique optionnelle | `foundation`, `runtime` |
-| `integration:*` | glue de lifecycle pour un framework tiers | publique optionnelle | `kadre-new`, framework concerné |
+| `integration:*` | glue de lifecycle pour un framework tiers | publique optionnelle | `kadre`, framework concerné |
 | `contracts:*` | oracles, scénarios, drivers et validation CI | non publiée | selon la section 9 |
-| `samples:*` | applications consommatrices réelles | non publiée | `kadre-new` ou une intégration |
+| `samples:*` | applications consommatrices réelles | non publiée | `kadre` ou une intégration |
 | `benchmarks:*` | mesures ciblées, sans verdict fonctionnel | non publiée | composant mesuré |
 
-`kadre-new` peut être un umbrella mince : les classes publiques sont fournies transitivement par `foundation` et les composants de plateforme. Il reste le seul artifact principal documenté et évite le cycle impossible où un adapter dépendrait du projet qui doit lui-même l’agréger.
+`kadre` peut être un umbrella mince : les classes publiques sont fournies transitivement par `foundation` et les composants de plateforme. Il reste le seul artifact principal documenté et évite le cycle impossible où un adapter dépendrait du projet qui doit lui-même l’agréger.
 
 ## 4. Graphe de dépendances
 
@@ -98,7 +98,7 @@ kadre-new/
 application
     |
     v
-kadre-new ------------------------------+
+kadre ------------------------------+
     |                                   |
     +--> foundation                     +--> platform:android
     |        ^                          +--> platform:uikit
@@ -115,7 +115,7 @@ kadre-new ------------------------------+
 
 Le graphe respecte les invariants suivants :
 
-- aucune dépendance ne remonte d’un composant inférieur vers `kadre-new` ;
+- aucune dépendance ne remonte d’un composant inférieur vers `kadre` ;
 - `foundation` ne dépend d’aucun autre projet de l’arborescence ;
 - `runtime` ne connaît ni SDK host, ni integration tierce, ni KFFI ;
 - les modules `platform:*` ne se dépendent jamais mutuellement ;
@@ -127,7 +127,7 @@ Le graphe respecte les invariants suivants :
 
 | Projet | Targets/source sets prévus |
 |---|---|
-| `kadre-new` | metadata commune et variantes correspondant aux composants agrégés |
+| `kadre` | metadata commune et variantes correspondant aux composants agrégés |
 | `foundation` | `commonMain` principalement, sans type SDK |
 | `runtime` | `commonMain`, avec spécialisations Android, iOS, JS, Wasm et JVM seulement si le runtime l’exige |
 | `platform:android` | Android |
@@ -148,7 +148,7 @@ Cette table ferme la topologie, pas le calendrier. Une target ou une intégratio
 ### 6.1 Dépendances documentées aux consommateurs
 
 ```text
-org.graphiks.kadre:kadre-new
+org.graphiks.kadre:kadre
 org.graphiks.kadre:test
 org.graphiks.kadre:compose
 org.graphiks.kadre:swiftui
@@ -156,7 +156,7 @@ org.graphiks.kadre:awt
 org.graphiks.kadre:javafx
 ```
 
-Seul `kadre-new` est requis pour les hosts SDK standards. `test` et les quatre intégrations sont des choix explicites.
+Seul `kadre` est requis pour les hosts SDK standards. `test` et les quatre intégrations sont des choix explicites.
 
 ### 6.2 Composants transitifs contractuels
 
@@ -237,7 +237,7 @@ KFFI possède exclusivement :
 - les tests intrinsèques de correction de ces bindings ;
 - leur publication.
 
-`kadre-new` ne contient donc aucun projet `ffi`, aucun binding copié, aucun générateur et aucun input de génération KFFI. Un backend dépend directement des artifacts KFFI dont il a besoin et limite leur usage à son implémentation.
+`kadre` ne contient donc aucun projet `ffi`, aucun binding copié, aucun générateur et aucun input de génération KFFI. Un backend dépend directement des artifacts KFFI dont il a besoin et limite leur usage à son implémentation.
 
 Le SPI entre `runtime` et `backend:*` n’utilise aucun type KFFI. La CI Kadre prouve l’adaptation entre un backend et le contrat Kadre ; elle ne duplique pas les tests internes de KFFI.
 
@@ -318,7 +318,7 @@ Ces décisions exigent un plan séparé. Elles ne modifient pas les responsabili
 
 ## 13. Gate de fermeture
 
-- [x] `kadre-new` est l’artifact principal sans enfant au nom redondant.
+- [x] `kadre` est l’artifact principal sans enfant au nom redondant.
 - [x] Le cycle umbrella/adapters est supprimé par `foundation`.
 - [x] Runtime, plateformes et backends possèdent des responsabilités distinctes.
 - [x] Les hosts standards restent accessibles avec une seule dépendance principale.

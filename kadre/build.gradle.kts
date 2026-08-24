@@ -10,31 +10,31 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":kadre-new:foundation"))
+            api(project(":kadre:foundation"))
         }
         jvmMain.dependencies {
-            api(project(":kadre-new:platform:desktop"))
+            api(project(":kadre:platform:desktop"))
         }
     }
 }
 
 tasks.named("check") {
-    dependsOn(":kadre-new:foundation:check")
-    dependsOn(":kadre-new:contracts:validator:check")
-    dependsOn(":kadre-new:backend:appkit:check")
-    dependsOn(":kadre-new:platform:desktop:check")
-    dependsOn(":kadre-new:runtime:check")
+    dependsOn(":kadre:foundation:check")
+    dependsOn(":kadre:contracts:validator:check")
+    dependsOn(":kadre:backend:appkit:check")
+    dependsOn(":kadre:platform:desktop:check")
+    dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
 }
 
-val contractTestRepository = rootProject.layout.buildDirectory.dir("new-kadre-contract-repository")
+val contractTestRepository = rootProject.layout.buildDirectory.dir("kadre-contract-repository")
 val contractPublications = tasks.register("publishContractArtifacts") {
-    dependsOn(":kadre-new:publishAllPublicationsToContractTestRepository")
-    dependsOn(":kadre-new:foundation:publishAllPublicationsToContractTestRepository")
-    dependsOn(":kadre-new:backend:appkit:publishAllPublicationsToContractTestRepository")
-    dependsOn(":kadre-new:platform:desktop:publishAllPublicationsToContractTestRepository")
-    dependsOn(":kadre-new:runtime:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:backend:appkit:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
 }
 
 tasks.register<GradleBuild>("validateKotlinConsumer") {
@@ -61,7 +61,7 @@ publishing {
     repositories {
         maven {
             name = "contractTest"
-            url = rootProject.layout.buildDirectory.dir("new-kadre-contract-repository").get().asFile.toURI()
+            url = rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.toURI()
         }
     }
 }
