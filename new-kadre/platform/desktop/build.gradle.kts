@@ -15,13 +15,11 @@ kotlin {
     abiValidation()
 
     sourceSets {
-        commonMain.dependencies {
-            api(libs.kotlinx.coroutines.core)
+        jvmMain.dependencies {
+            api(project(":kadre-new:foundation"))
         }
-
-        commonTest.dependencies {
+        jvmTest.dependencies {
             implementation(kotlin("test"))
-            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
