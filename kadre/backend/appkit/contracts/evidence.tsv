@@ -1,0 +1,7 @@
+contractId	kind	evidenceId	testClass	testName
+APK-001	scenario	appkit-provider-discovery	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	discoveryAndAvailabilityDoNotTouchTheNativeBridge[jvm]
+APK-001	scenario	appkit-standalone-stop	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs[jvm]
+APK-001	scenario	appkit-standalone-failure	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	nativeFailureAfterAdmissionBecomesASessionOutcome[jvm]
+APK-001	scenario	appkit-standalone-reuse	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs[jvm]
+APK-001	sentinel	appkit-off-main-accepted	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	offMainThreadAndEmbeddedAreRejectedBeforeFactoryCreation[jvm]
+APK-001	sentinel	appkit-loop-not-woken	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs[jvm]
