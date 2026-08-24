@@ -1,0 +1,9 @@
+public abstract interface annotation class org/graphiks/kadre/diagnostics/DelicateKadreApi : java/lang/annotation/Annotation {
+}
+
+public abstract interface annotation class org/graphiks/kadre/diagnostics/ExperimentalKadreApi : java/lang/annotation/Annotation {
+}
+
+public abstract interface annotation class org/graphiks/kadre/diagnostics/KadrePlatformApi : java/lang/annotation/Annotation {
+}
+

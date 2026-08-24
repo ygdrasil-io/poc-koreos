@@ -70,11 +70,12 @@ Elles utilisent un consumer externe minimal, jamais une assertion interne du typ
 
 ## 3. Registre de contrats et traçabilité
 
-L’implémentation matérialise un registre lisible par machine, versionné et séparé du code de production. Une entrée possède exactement :
+L’implémentation matérialise un registre lisible par machine, suivi dans le dépôt et séparé du code de production. Une entrée possède exactement :
 
 | Champ | Contenu |
 |---|---|
 | `contractId` | identifiant stable et unique |
+| `status` | `planned`, `active` ou `retired` ; ce statut décrit l’activation de la preuve, jamais une version |
 | `source` | document et section normative |
 | `subject` | type, opération, flow ou frontière interop |
 | `risk` | violation observable visée |
@@ -83,6 +84,9 @@ L’implémentation matérialise un registre lisible par machine, versionné et 
 | `requiredTargets` | targets sur lesquels la preuve est obligatoire |
 | `conditionalCapabilities` | capabilities qui sélectionnent Supported/Unsupported sans skip |
 | `sentinels` | mutations fautives que ces scénarios doivent tuer |
+| `retirementRef` | référence obligatoire uniquement pour `retired`, `null` autrement |
+
+Un contrat `planned` appartient au design fermé mais n’est pas encore promis par le livrable courant. Il ne peut correspondre à aucune capability annoncée `Supported` ; l’opération reste explicitement `Unsupported` ou l’artifact concerné n’est pas publié. Un contrat `active` possède toutes les preuves imposées par cette stratégie et entre dans chaque gate applicable. Un contrat `retired` ne possède plus de scénario exécutable et conserve une `retirementRef` non vide vers la décision de suppression. Le passage `planned → active` et `active → retired` est revu dans le même changement que le registre et les preuves concernés.
 
 Les familles d’identifiants sont fermées :
 
@@ -104,7 +108,7 @@ Un ID n’est jamais réutilisé pour un autre contrat. Un contrat supprimé res
 
 ### 3.1 Gate de complétude
 
-Le registre est complet uniquement si :
+Le registre actif est complet uniquement si chaque contrat dont `status == active` satisfait les règles suivantes. Les contrats `planned` restent visibles dans l’audit mais ne produisent aucune preuve factice, aucun skip et aucune capability `Supported`. Les contrats `retired` sont exclus de l’ensemble exécutable et exigent leur référence de retrait :
 
 - chaque ligne de `OPERATION-CONTRACTS.md` possède un scénario de succès ou résultat attendu, chaque family de failure directe, la cancellation avant admission et l’autorité après commit/handoff applicable ;
 - chaque domaine fermé de failure dans un state ou outcome possède un cas admis et un cas hors domaine rejeté par le fake/test fixture ;
@@ -115,7 +119,7 @@ Le registre est complet uniquement si :
 - chaque ligne `G`, `C`, `N(op)`, `S` ou `H` de `BACKEND-CAPABILITIES.md` est reliée à une preuve target-specific ;
 - chaque façade promise de `INTEROP-EXPORTS.md` compile depuis son langage consommateur et observe attach, state, stop et outcome.
 
-Le nombre de tests n’est pas un seuil. Le gate compare l’ensemble des `contractId/scenarioId/target` requis aux preuves réellement exécutées ; un scénario dupliqué ne masque jamais un ID absent.
+Le nombre de tests n’est pas un seuil. Le gate compare l’ensemble des `contractId/scenarioId/target` actifs requis aux preuves réellement exécutées ; un scénario dupliqué ne masque jamais un ID actif absent.
 
 ## 4. Architecture de la contract suite
 
@@ -340,7 +344,7 @@ Chaque target produit un `contract-evidence.json` à structure canonique et list
 - liste des sentinelles tuées ;
 - compteur de tests/skips/failures/errors cohérent avec JUnit.
 
-`result` est un domaine fermé `Passed | Failed` ; il n’existe ni `Skipped`, ni `Ignored`, ni `NotApplicable`. Le validateur aggregate recalcule les scénarios requis depuis le registre, la promesse versionnée et l’environnement déclaré. Il ne fait pas confiance à un simple compteur fourni par le test runner. Une preuve inconnue, dupliquée avec deux résultats, absente ou associée à une mauvaise target fait échouer le gate.
+`result` est un domaine fermé `Passed | Failed` ; il n’existe ni `Skipped`, ni `Ignored`, ni `NotApplicable`. Le validateur aggregate recalcule les scénarios actifs requis depuis le registre, la promesse documentée et l’environnement déclaré. Il ne fait pas confiance à un simple compteur fourni par le test runner. Une preuve inconnue, dupliquée avec deux résultats, absente ou associée à une mauvaise target fait échouer le gate.
 
 ## 11. Nightly et release
 
@@ -366,7 +370,7 @@ Une release d’incubation exige :
 - dernier gate PR vert sur le commit exact ;
 - dernier nightly complet vert depuis moins de 24 heures ;
 - consumer compile tests sur tous les artefacts publiés ;
-- aucun `contractId` obligatoire absent, aucune sentinelle survivante et aucun test quarantined ;
+- aucun `contractId` actif obligatoire absent, aucune sentinelle active survivante et aucun test quarantined ;
 - registres de capabilities complets pour les environnements déclarés supportés ;
 - validation sur device physique pour toute capability officiellement promise mais non exerçable sur simulateur, ou retrait explicite de cette promesse.
 
@@ -382,8 +386,8 @@ La quarantaine ne consiste pas à ignorer un testcase. Elle exige soit de retire
 
 Les métriques bloquantes sont :
 
-- 100 % des `contractId/scenarioId/target` obligatoires exécutés ;
-- 100 % des sentinelles architecturales tuées ;
+- 100 % des `contractId/scenarioId/target` actifs obligatoires exécutés ;
+- 100 % des sentinelles architecturales actives tuées ;
 - 100 % des surfaces interop promises compilées depuis un consumer ;
 - zéro skip, failure masquée, residual de migration ou export public inattendu.
 

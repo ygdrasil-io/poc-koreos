@@ -99,3 +99,10 @@ include(":samples:hello-triangle-android-capture")
 include(":samples:simulation-demo")
 include(":samples:screen-capture-demo")
 
+// New Kadre incubation — only projects with an effective JVM responsibility
+// enter the build. Additional targets and adapters are added with their first
+// implementation and contract evidence.
+include(":kadre-new")
+project(":kadre-new").projectDir = file("new-kadre")
+include(":kadre-new:foundation")
+include(":kadre-new:contracts:validator")
