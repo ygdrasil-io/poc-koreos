@@ -1,9 +1,9 @@
 [submodule "third_party/winit"]
-	path = third_party/winit
+	path = kadre-old/third_party/winit
 	url = https://github.com/rust-windowing/winit.git
 [submodule "third_party/kextract"]
-	path = third_party/kextract
+	path = kadre-old/third_party/kextract
 	url = https://github.com/klang-toolkit/kextract.git
 [submodule "gilrs"]
-	path = gilrs
+	path = kadre-old/gilrs
 	url = https://github.com/Arvamer/gilrs.git

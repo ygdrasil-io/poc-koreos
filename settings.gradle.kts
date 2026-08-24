@@ -65,40 +65,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "kadre"
 
-// Kadre modules
-include(":kadre-web-common")
-include(":kadre-core")
-include(":kadre-test")
-include(":benchmarks:jmh-core")
-include(":kadre-appkit")
-include(":kadre-uikit")
-include(":kadre-win32")
-include(":kadre-x11")
-include(":kadre-wayland")
-include(":kadre-js")
-include(":kadre-wasm")
-include(":kadre")
-include(":kadre-coroutines")
-include(":kadre-android")
-include(":samples:compose:android")
-include(":samples:compose:desktop")
-include(":samples:compose:ios")
-include(":samples:compose:shared")
-include(":samples:compose:web")
-include(":samples:hello-metal")
-include(":samples:hello-triangle")
-include(":samples:hello-touch")
-include(":samples:hello-touch-android")
-include(":samples:hello-window")
-include(":samples:hello-window-android")
-include(":samples:pong")
-include(":samples:hello-window-web")
-include(":samples:hello-triangle-web")
-include(":samples:hello-triangle-ios")
-include(":samples:hello-triangle-android-capture")
-include(":samples:simulation-demo")
-include(":samples:screen-capture-demo")
-
 // New Kadre incubation — only projects with an effective JVM responsibility
 // enter the build. Additional targets and adapters are added with their first
 // implementation and contract evidence.
