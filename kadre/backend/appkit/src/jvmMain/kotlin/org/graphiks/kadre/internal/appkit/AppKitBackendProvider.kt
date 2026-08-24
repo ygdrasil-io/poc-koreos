@@ -17,7 +17,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
-import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
+import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
@@ -65,8 +65,12 @@ public class AppKitBackendProvider private constructor(
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),
-                sessionObserver = RuntimeSessionObserver { _, _ ->
-                    if (!nativeLoopReturned.get()) nativeApplication.requestStop()
+                sessionStopHandler = RuntimeSessionStopHandler {
+                    if (nativeLoopReturned.get()) {
+                        null
+                    } else {
+                        requestNativeStop()
+                    }
                 },
             )
             val attached = host.attach(parentScope, request.applicationFactory, request.policy)
@@ -95,6 +99,30 @@ public class AppKitBackendProvider private constructor(
         }
     }
 
+    private fun requestNativeStop(): KadreFailure.PlatformFailure? =
+        try {
+            when (nativeApplication.requestStop().await()) {
+                AppKitStopResult.Accepted -> null
+                is AppKitStopResult.Failed -> stopFailure()
+            }
+        } catch (_: Exception) {
+            emergencyNativeStop()
+            stopFailure()
+        } catch (_: LinkageError) {
+            emergencyNativeStop()
+            stopFailure()
+        }
+
+    private fun emergencyNativeStop() {
+        try {
+            nativeApplication.emergencyStop()
+        } catch (_: Exception) {
+            // The typed stop failure remains authoritative even if the fallback also fails.
+        } catch (_: LinkageError) {
+            // The typed stop failure remains authoritative even if the fallback also fails.
+        }
+    }
+
     internal companion object {
         fun forTesting(
             nativeApplication: AppKitNativeApplication,
@@ -110,6 +138,12 @@ public class AppKitBackendProvider private constructor(
             KadrePlatform.AppKit,
             "appkit-host",
             "run-exception",
+        )
+
+        private fun stopFailure(): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
+            KadrePlatform.AppKit,
+            "appkit-host",
+            "stop-exception",
         )
     }
 }

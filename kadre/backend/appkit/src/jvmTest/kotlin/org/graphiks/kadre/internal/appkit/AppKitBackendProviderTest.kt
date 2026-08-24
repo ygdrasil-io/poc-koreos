@@ -17,6 +17,8 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -112,6 +114,44 @@ class AppKitBackendProviderTest {
         assertEquals(1, native.trace.count { it == "run" })
         assertEquals(1, native.trace.count { it == "stop" })
         assertEquals(1, native.stopCount)
+    }
+
+    @Test
+    fun nativeStopFailureBecomesASessionOutcomeAndReleasesOwnership() {
+        val ownership = AppKitStandaloneOwnership()
+        val native = FailingStopNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
+        val executor = Executors.newSingleThreadExecutor()
+
+        try {
+            val result = executor.submit<KadreResult<SessionOutcome>> {
+                provider.run(
+                    DesktopStandaloneRequest(
+                        KadreApplicationFactory { KadreApplication { requestStop() } },
+                        stopWhenLastWindowClosed = true,
+                        KadrePolicies.Default,
+                    ),
+                )
+            }.get(2, TimeUnit.SECONDS)
+
+            assertEquals(
+                KadreResult.Success(
+                    SessionOutcome.Failed(
+                        KadreFailure.PlatformFailure(
+                            KadrePlatform.AppKit,
+                            "appkit-host",
+                            "stop-exception",
+                        ),
+                    ),
+                ),
+                result,
+            )
+            assertEquals(1, native.stopCount)
+            assertEquals(1, native.emergencyStopCount)
+            assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     @Test
@@ -281,9 +321,12 @@ private class RecordingNativeApplication(
         runFailure?.let { throw it }
     }
 
-    override fun requestStop() {
+    override fun requestStop(): AppKitStopRequest {
         stopCount += 1
+        return AppKitStopRequest { AppKitStopResult.Accepted }
     }
+
+    override fun emergencyStop() = Unit
 }
 
 private class StopDrivenNativeApplication : AppKitNativeApplication {
@@ -299,9 +342,38 @@ private class StopDrivenNativeApplication : AppKitNativeApplication {
         stop.await()
     }
 
-    override fun requestStop() {
+    override fun requestStop(): AppKitStopRequest {
         trace += "stop"
         stopCount += 1
+        stop.countDown()
+        return AppKitStopRequest { AppKitStopResult.Accepted }
+    }
+
+    override fun emergencyStop() {
+        stop.countDown()
+    }
+}
+
+private class FailingStopNativeApplication : AppKitNativeApplication {
+    private val stop = CountDownLatch(1)
+    var stopCount: Int = 0
+        private set
+    var emergencyStopCount: Int = 0
+        private set
+
+    override fun isMainThread(): Boolean = true
+
+    override fun run() {
+        stop.await()
+    }
+
+    override fun requestStop(): AppKitStopRequest {
+        stopCount += 1
+        throw IllegalStateException("native stop")
+    }
+
+    override fun emergencyStop() {
+        emergencyStopCount += 1
         stop.countDown()
     }
 }

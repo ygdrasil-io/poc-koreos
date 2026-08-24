@@ -1,5 +1,8 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kffi.objc.CFRunLoopGetMain
+import org.graphiks.kffi.objc.CFRunLoopStop
+import org.graphiks.kffi.objc.CFRunLoopWakeUp
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.ObjCRuntime
@@ -9,13 +12,26 @@ import java.lang.foreign.GroupLayout
 import java.lang.foreign.MemoryLayout
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
+import java.util.concurrent.CompletableFuture
+
+internal sealed interface AppKitStopResult {
+    data object Accepted : AppKitStopResult
+
+    data class Failed(val cause: Throwable) : AppKitStopResult
+}
+
+internal fun interface AppKitStopRequest {
+    fun await(): AppKitStopResult
+}
 
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
     fun run()
 
-    fun requestStop()
+    fun requestStop(): AppKitStopRequest
+
+    fun emergencyStop()
 }
 
 internal class KffiAppKitNativeApplication : AppKitNativeApplication {
@@ -23,6 +39,7 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private var application: NSApplication? = null
     private var stopRequested = false
     private var stopScheduled = false
+    private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
 
@@ -40,7 +57,7 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         val pendingStopThread = pendingStop?.let { target ->
             Thread.ofPlatform()
                 .name("kadre-appkit-pending-stop")
-                .start { target.scheduleStop() }
+                .start { completeStop(target) }
         }
         try {
             current.run()
@@ -51,17 +68,30 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
                     application = null
                     stopRequested = false
                     stopScheduled = false
+                    stopCompletion = null
                 }
             }
         }
     }
 
-    override fun requestStop() {
+    override fun requestStop(): AppKitStopRequest {
+        val request: AppKitStopRequest
         val target = synchronized(lock) {
             stopRequested = true
+            val completion = stopCompletion ?: CompletableFuture<AppKitStopResult>().also {
+                stopCompletion = it
+            }
+            request = AppKitStopRequest { completion.get() }
             takeStopTarget()
         }
-        target?.scheduleStop()
+        target?.let(::completeStop)
+        return request
+    }
+
+    override fun emergencyStop() {
+        val mainRunLoop = CFRunLoopGetMain()
+        CFRunLoopStop(mainRunLoop)
+        CFRunLoopWakeUp(mainRunLoop)
     }
 
     private fun takeStopTarget(): NSApplication? {
@@ -72,6 +102,40 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         } else {
             null
         }
+    }
+
+    private fun completeStop(target: NSApplication) {
+        val completion = checkNotNull(synchronized(lock) { stopCompletion })
+        val result = try {
+            target.scheduleStop()
+            AppKitStopResult.Accepted
+        } catch (cause: Exception) {
+            failedStop(target, completion, cause)
+        } catch (cause: LinkageError) {
+            failedStop(target, completion, cause)
+        }
+        completion.complete(result)
+    }
+
+    private fun failedStop(
+        target: NSApplication,
+        completion: CompletableFuture<AppKitStopResult>,
+        cause: Throwable,
+    ): AppKitStopResult.Failed {
+        try {
+            emergencyStop()
+        } catch (fallbackFailure: Exception) {
+            cause.addSuppressed(fallbackFailure)
+        } catch (fallbackFailure: LinkageError) {
+            cause.addSuppressed(fallbackFailure)
+        }
+        synchronized(lock) {
+            if (application === target && stopCompletion === completion) {
+                stopScheduled = false
+                stopCompletion = null
+            }
+        }
+        return AppKitStopResult.Failed(cause)
     }
 
     private fun NSApplication.scheduleStop() {
