@@ -27,6 +27,8 @@ internal fun interface AppKitStopRequest {
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
+    fun isRunning(): Boolean
+
     fun run()
 
     fun requestStop(): AppKitStopRequest
@@ -42,6 +44,8 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
+
+    override fun isRunning(): Boolean = synchronized(lock) { application?.isRunning() == true }
 
     override fun run() {
         check(isMainThread()) { "the AppKit event loop must run on the process main thread" }
