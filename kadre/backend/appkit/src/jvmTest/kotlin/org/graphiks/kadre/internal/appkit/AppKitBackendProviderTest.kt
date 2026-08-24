@@ -26,10 +26,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
@@ -159,23 +157,38 @@ class AppKitBackendProviderTest {
     }
 
     @Test
-    fun nativeCancellationIsPropagatedAndReleasesOwnership() {
+    fun nativeCancellationAfterAdmissionReturnsHostDetachedAndReleasesOwnership() {
         val cancellation = kotlinx.coroutines.CancellationException("cancelled")
+        val applicationStarted = CountDownLatch(1)
+        val applicationCancelled = CountDownLatch(1)
         val ownership = AppKitStandaloneOwnership()
-        val native = RecordingNativeApplication(runFailure = cancellation)
+        val native = CancellationNativeApplication(applicationStarted, cancellation)
         val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
 
-        val thrown = assertFailsWith<kotlinx.coroutines.CancellationException> {
-            provider.run(
-                DesktopStandaloneRequest(
-                    KadreApplicationFactory { KadreApplication { kotlinx.coroutines.awaitCancellation() } },
-                    false,
-                    KadrePolicies.Default,
-                ),
-            )
-        }
+        // The native loop waits for this application to start, proving that cancellation occurs
+        // after session admission and must therefore be represented by the session outcome.
+        val result = provider.run(
+            DesktopStandaloneRequest(
+                KadreApplicationFactory {
+                    KadreApplication {
+                        applicationStarted.countDown()
+                        try {
+                            kotlinx.coroutines.awaitCancellation()
+                        } finally {
+                            applicationCancelled.countDown()
+                        }
+                    }
+                },
+                false,
+                KadrePolicies.Default,
+            ),
+        )
 
-        assertSame(cancellation, thrown)
+        assertEquals(
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+            result,
+        )
+        assertTrue(applicationCancelled.await(2, TimeUnit.SECONDS))
         assertEquals(0, native.stopCount)
         assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
     }
@@ -389,6 +402,30 @@ private class StopDrivenNativeApplication : AppKitNativeApplication {
     override fun emergencyStop() {
         stop.countDown()
     }
+}
+
+private class CancellationNativeApplication(
+    private val applicationStarted: CountDownLatch,
+    private val cancellation: kotlinx.coroutines.CancellationException,
+) : AppKitNativeApplication {
+    var stopCount: Int = 0
+        private set
+
+    override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = false
+
+    override fun run() {
+        check(applicationStarted.await(2, TimeUnit.SECONDS)) { "application did not start" }
+        throw cancellation
+    }
+
+    override fun requestStop(): AppKitStopRequest {
+        stopCount += 1
+        return AppKitStopRequest { AppKitStopResult.Accepted }
+    }
+
+    override fun emergencyStop() = Unit
 }
 
 private class FailingStopNativeApplication : AppKitNativeApplication {
