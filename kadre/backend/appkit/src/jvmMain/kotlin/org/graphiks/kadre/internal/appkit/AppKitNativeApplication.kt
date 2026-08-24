@@ -27,6 +27,8 @@ internal fun interface AppKitStopRequest {
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
+    // Use AppKit's own state when synchronizing with run(); Kadre assigning the application
+    // reference only proves setup has started, not that the native loop is pumping events.
     fun isRunning(): Boolean
 
     fun run()

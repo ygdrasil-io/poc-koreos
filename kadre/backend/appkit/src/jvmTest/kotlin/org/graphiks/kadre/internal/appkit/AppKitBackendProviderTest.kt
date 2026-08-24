@@ -297,6 +297,8 @@ class AppKitBackendProviderTest {
                 DesktopStandaloneRequest(
                     KadreApplicationFactory {
                         KadreApplication {
+                            // Cross the native boundary before requesting stop so this test cannot
+                            // accidentally exercise only the pre-run pending-stop handoff.
                             withTimeout(5.seconds) {
                                 while (!native.isRunning()) yield()
                             }
@@ -322,6 +324,8 @@ class AppKitBackendProviderTest {
         if (!isMacOs()) return
         val native = KffiAppKitNativeApplication()
 
+        // Request before run() on purpose: this proves the pending-stop handoff separately from
+        // the active-loop wakeup scenario above.
         val stop = native.requestStop()
         native.run()
 
