@@ -83,9 +83,9 @@ public class AppKitBackendProvider private constructor(
                 nativeApplication.run()
                 nativeLoopReturned.set(true)
                 host.detach()
-            } catch (cancellation: CancellationException) {
+            } catch (_: CancellationException) {
                 nativeLoopReturned.set(true)
-                throw cancellation
+                host.detach()
             } catch (_: Exception) {
                 nativeLoopReturned.set(true)
                 host.fail(runFailure())
