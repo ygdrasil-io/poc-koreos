@@ -303,7 +303,7 @@ Chaque PR dépend de la précédente, reste revue séparément et laisse son pro
 | 2 — foundation | catalogue commun/Desktop compilable, invariants et policies | ABI + consumers Kotlin/Java |
 | 3 — runtime | session kernel, lifecycle, teardown, managers unsupported, fake minimal | scénarios O2 actifs |
 | 4 — Desktop host | façade Desktop, provider discovery et sélection déterministe | tests de sélection et failures |
-| 5 — AppKit host | process broker, main thread, standalone et embedded headless | tests O3 de host/lifecycle |
+| 5 — AppKit host | process broker, main thread et standalone headless ; embedded reste `planned` tant que KFFI-OBJC-001/003 est ouvert | tests O2/O3 standalone et refus explicite embedded |
 | 6 — window/surface | requête, NSWindow/NSView, state, redraw, close et primary | tests O2/O3 fenêtre |
 | 7 — input | clavier, modifiers, pointeur, scroll et focus reset | tests O2/O3 input |
 | 8 — interop et livraison | handle Desktop, sample, consumers finaux, audit KFFI/ressources | gate complet du livrable |

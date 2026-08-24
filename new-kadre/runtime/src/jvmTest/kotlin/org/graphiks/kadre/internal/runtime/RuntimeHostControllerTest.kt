@@ -288,6 +288,43 @@ class RuntimeHostControllerTest {
         testScheduler.runCurrent()
     }
 
+    @Test
+    fun platformFailureTerminatesTheSessionAndNotifiesItsObserverOnce() = runTest {
+        val observed = mutableListOf<Pair<org.graphiks.kadre.application.SessionId, SessionOutcome>>()
+        val host = RuntimeHostController(
+            KadrePlatform.AppKit,
+            sessionObserver = RuntimeSessionObserver { id, outcome -> observed += id to outcome },
+        )
+        val session = attach(host) { awaitCancellation() }
+        testScheduler.runCurrent()
+        val failure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "appkit-host", "run-failed")
+
+        host.fail(failure)
+        host.fail(failure)
+        testScheduler.runCurrent()
+
+        val outcome: SessionOutcome = SessionOutcome.Failed(failure)
+        assertEquals(outcome, session.awaitTermination())
+        assertEquals(listOf(session.id to outcome), observed)
+    }
+
+    @Test
+    fun sessionObserverFailureIsReportedWithoutChangingTheOutcome() = runTest {
+        val observerFailure = IllegalStateException("observer")
+        val reported = mutableListOf<Throwable>()
+        val host = RuntimeHostController(
+            KadrePlatform.Fake,
+            failureReporter = reported::add,
+            sessionObserver = RuntimeSessionObserver { _, _ -> throw observerFailure },
+        )
+        val session = attach(host) { }
+
+        testScheduler.runCurrent()
+
+        assertEquals(SessionOutcome.Completed, session.awaitTermination())
+        assertEquals(listOf<Throwable>(observerFailure), reported)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.attach(
         host: RuntimeHostController,
         policy: KadrePolicy = KadrePolicies.Default,

@@ -10,6 +10,8 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
+import org.graphiks.kadre.application.SessionId
+import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
@@ -24,12 +26,17 @@ public fun interface RuntimeFailureReporter {
     public fun report(cause: Throwable)
 }
 
+public fun interface RuntimeSessionObserver {
+    public fun terminated(sessionId: SessionId, outcome: SessionOutcome)
+}
+
 @OptIn(ExperimentalKadreApi::class)
 public class RuntimeHostController private constructor(
     override val platform: KadrePlatform,
     initialLifecycleState: LifecycleState,
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val failureReporter: RuntimeFailureReporter,
+    private val sessionObserver: RuntimeSessionObserver,
     private val clockFactory: RuntimeClockFactory,
 ) : KadreHost {
     public constructor(
@@ -37,11 +44,13 @@ public class RuntimeHostController private constructor(
         initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
         initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+        sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
     ) : this(
         platform,
         initialLifecycleState,
         initialLifecycleCapabilities,
         failureReporter,
+        sessionObserver,
         MonotonicRuntimeClockFactory,
     )
 
@@ -133,12 +142,20 @@ public class RuntimeHostController private constructor(
         targets.forEach(SessionRuntime::hostDetached)
     }
 
+    public fun fail(failure: KadreFailure.PlatformFailure) {
+        val targets = synchronized(lock) { sessions.toList() }
+        targets.forEach { it.hostFailed(failure) }
+    }
+
     private fun reportFailure(cause: Throwable) {
         runCatching { failureReporter.report(cause) }
     }
 
-    private fun sessionTerminated(session: SessionRuntime) {
+    private fun sessionTerminated(session: SessionRuntime, outcome: SessionOutcome) {
         synchronized(lock) { sessions.remove(session) }
+        runCatching { sessionObserver.terminated(session.id, outcome) }
+            .exceptionOrNull()
+            ?.let(::reportFailure)
     }
 
     internal companion object {
@@ -156,11 +173,13 @@ public class RuntimeHostController private constructor(
             initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
             initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
             failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
         ): RuntimeHostController = RuntimeHostController(
             platform,
             initialLifecycleState,
             initialLifecycleCapabilities,
             failureReporter,
+            sessionObserver,
             clockFactory,
         )
     }

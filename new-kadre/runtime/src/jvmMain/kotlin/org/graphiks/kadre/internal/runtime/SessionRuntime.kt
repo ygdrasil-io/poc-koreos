@@ -54,7 +54,7 @@ internal class SessionRuntime(
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val clock: RuntimeClock,
     private val failureReporter: (Throwable) -> Unit,
-    private val onTerminated: (SessionRuntime) -> Unit,
+    private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
 ) : KadreSession {
     private val lock = Any()
     private val parentJob = checkNotNull(parentScope.coroutineContext[Job])
@@ -175,6 +175,10 @@ internal class SessionRuntime(
         requestTermination(SessionOutcome.Stopped(SessionStopReason.HostDetached))
     }
 
+    fun hostFailed(failure: KadreFailure.PlatformFailure) {
+        requestTermination(SessionOutcome.Failed(failure))
+    }
+
     private fun requestHostStop() {
         requestTermination(SessionOutcome.Stopped(SessionStopReason.HostRequested))
     }
@@ -266,7 +270,7 @@ internal class SessionRuntime(
             final
         }
         parentCancellationHandle?.dispose()
-        onTerminated(this)
+        onTerminated(this, final)
         rootJob.cancel()
     }
 

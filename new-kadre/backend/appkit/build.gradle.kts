@@ -3,26 +3,30 @@ plugins {
     id("maven-publish")
 }
 
+group = "org.graphiks.kadre.internal"
+
 kotlin {
     jvmToolchain(25)
     jvm()
     explicitApi()
-    compilerOptions {
-        freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
-    }
-
-    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
-    abiValidation()
 
     sourceSets {
         jvmMain.dependencies {
-            api(project(":kadre-new:foundation"))
-            implementation(project(":kadre-new:runtime"))
-            runtimeOnly(project(":kadre-new:backend:appkit"))
+            api(project(":kadre-new:runtime"))
+            implementation(libs.kffi.objc)
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))
         }
+    }
+}
+
+if (System.getProperty("os.name", "").let { name ->
+        name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
+    }
+) {
+    tasks.named<Test>("jvmTest") {
+        jvmArgs("-XstartOnFirstThread", "--enable-native-access=ALL-UNNAMED")
     }
 }
 
