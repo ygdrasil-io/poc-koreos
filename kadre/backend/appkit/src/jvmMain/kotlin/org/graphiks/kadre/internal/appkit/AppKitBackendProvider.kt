@@ -85,6 +85,9 @@ public class AppKitBackendProvider private constructor(
                 host.detach()
             } catch (_: CancellationException) {
                 nativeLoopReturned.set(true)
+                // After admission, cancellation of the native loop means the host disappeared.
+                // Detach so the session's HostDetached outcome remains authoritative instead of
+                // leaking a bridge implementation exception from the blocking runner.
                 host.detach()
             } catch (_: Exception) {
                 nativeLoopReturned.set(true)

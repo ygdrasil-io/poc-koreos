@@ -165,6 +165,8 @@ class AppKitBackendProviderTest {
         val native = CancellationNativeApplication(applicationStarted, cancellation)
         val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
 
+        // The native loop waits for this application to start, proving that cancellation occurs
+        // after session admission and must therefore be represented by the session outcome.
         val result = provider.run(
             DesktopStandaloneRequest(
                 KadreApplicationFactory {
