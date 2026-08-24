@@ -1,5 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
@@ -17,13 +19,15 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
@@ -115,23 +119,76 @@ class AppKitBackendProviderTest {
     }
 
     @Test
-    fun nativeCancellationIsPropagatedAndReleasesOwnership() {
-        val cancellation = kotlinx.coroutines.CancellationException("cancelled")
+    fun nativeStopFailureBecomesASessionOutcomeAndReleasesOwnership() {
         val ownership = AppKitStandaloneOwnership()
-        val native = RecordingNativeApplication(runFailure = cancellation)
+        val native = FailingStopNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
+        val executor = Executors.newSingleThreadExecutor()
+
+        try {
+            val result = executor.submit<KadreResult<SessionOutcome>> {
+                provider.run(
+                    DesktopStandaloneRequest(
+                        KadreApplicationFactory { KadreApplication { requestStop() } },
+                        stopWhenLastWindowClosed = true,
+                        KadrePolicies.Default,
+                    ),
+                )
+            }.get(2, TimeUnit.SECONDS)
+
+            assertEquals(
+                KadreResult.Success(
+                    SessionOutcome.Failed(
+                        KadreFailure.PlatformFailure(
+                            KadrePlatform.AppKit,
+                            "appkit-host",
+                            "stop-exception",
+                        ),
+                    ),
+                ),
+                result,
+            )
+            assertEquals(1, native.stopCount)
+            assertEquals(1, native.emergencyStopCount)
+            assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun nativeCancellationAfterAdmissionReturnsHostDetachedAndReleasesOwnership() {
+        val cancellation = kotlinx.coroutines.CancellationException("cancelled")
+        val applicationStarted = CountDownLatch(1)
+        val applicationCancelled = CountDownLatch(1)
+        val ownership = AppKitStandaloneOwnership()
+        val native = CancellationNativeApplication(applicationStarted, cancellation)
         val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
 
-        val thrown = assertFailsWith<kotlinx.coroutines.CancellationException> {
-            provider.run(
-                DesktopStandaloneRequest(
-                    KadreApplicationFactory { KadreApplication { kotlinx.coroutines.awaitCancellation() } },
-                    false,
-                    KadrePolicies.Default,
-                ),
-            )
-        }
+        // The native loop waits for this application to start, proving that cancellation occurs
+        // after session admission and must therefore be represented by the session outcome.
+        val result = provider.run(
+            DesktopStandaloneRequest(
+                KadreApplicationFactory {
+                    KadreApplication {
+                        applicationStarted.countDown()
+                        try {
+                            kotlinx.coroutines.awaitCancellation()
+                        } finally {
+                            applicationCancelled.countDown()
+                        }
+                    }
+                },
+                false,
+                KadrePolicies.Default,
+            ),
+        )
 
-        assertSame(cancellation, thrown)
+        assertEquals(
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+            result,
+        )
+        assertTrue(applicationCancelled.await(2, TimeUnit.SECONDS))
         assertEquals(0, native.stopCount)
         assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
     }
@@ -241,12 +298,27 @@ class AppKitBackendProviderTest {
             assertFalse(AppKitBackendProvider().isAvailable())
             return
         }
-        val provider = AppKitBackendProvider()
+        val native = KffiAppKitNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitStandaloneOwnership(),
+        ) { true }
+        val stopRequestedOffMainThread = AtomicBoolean(false)
 
         repeat(2) {
             val result = provider.run(
                 DesktopStandaloneRequest(
-                    KadreApplicationFactory { KadreApplication { requestStop() } },
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            // Cross the native boundary before requesting stop so this test cannot
+                            // accidentally exercise only the pre-run pending-stop handoff.
+                            withTimeout(5.seconds) {
+                                while (!native.isRunning()) yield()
+                            }
+                            stopRequestedOffMainThread.set(!native.isMainThread())
+                            requestStop()
+                        }
+                    },
                     true,
                     KadrePolicies.Default,
                 ),
@@ -257,6 +329,20 @@ class AppKitBackendProviderTest {
                 result,
             )
         }
+        assertTrue(stopRequestedOffMainThread.get())
+    }
+
+    @Test
+    fun realKffiPendingStopIsConsumedOnMacOs() {
+        if (!isMacOs()) return
+        val native = KffiAppKitNativeApplication()
+
+        // Request before run() on purpose: this proves the pending-stop handoff separately from
+        // the active-loop wakeup scenario above.
+        val stop = native.requestStop()
+        native.run()
+
+        assertEquals(AppKitStopResult.Accepted, stop.await())
     }
 }
 
@@ -276,14 +362,19 @@ private class RecordingNativeApplication(
         return mainThread
     }
 
+    override fun isRunning(): Boolean = false
+
     override fun run() {
         runCount += 1
         runFailure?.let { throw it }
     }
 
-    override fun requestStop() {
+    override fun requestStop(): AppKitStopRequest {
         stopCount += 1
+        return AppKitStopRequest { AppKitStopResult.Accepted }
     }
+
+    override fun emergencyStop() = Unit
 }
 
 private class StopDrivenNativeApplication : AppKitNativeApplication {
@@ -294,14 +385,71 @@ private class StopDrivenNativeApplication : AppKitNativeApplication {
 
     override fun isMainThread(): Boolean = true
 
+    override fun isRunning(): Boolean = false
+
     override fun run() {
         trace += "run"
         stop.await()
     }
 
-    override fun requestStop() {
+    override fun requestStop(): AppKitStopRequest {
         trace += "stop"
         stopCount += 1
+        stop.countDown()
+        return AppKitStopRequest { AppKitStopResult.Accepted }
+    }
+
+    override fun emergencyStop() {
+        stop.countDown()
+    }
+}
+
+private class CancellationNativeApplication(
+    private val applicationStarted: CountDownLatch,
+    private val cancellation: kotlinx.coroutines.CancellationException,
+) : AppKitNativeApplication {
+    var stopCount: Int = 0
+        private set
+
+    override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = false
+
+    override fun run() {
+        check(applicationStarted.await(2, TimeUnit.SECONDS)) { "application did not start" }
+        throw cancellation
+    }
+
+    override fun requestStop(): AppKitStopRequest {
+        stopCount += 1
+        return AppKitStopRequest { AppKitStopResult.Accepted }
+    }
+
+    override fun emergencyStop() = Unit
+}
+
+private class FailingStopNativeApplication : AppKitNativeApplication {
+    private val stop = CountDownLatch(1)
+    var stopCount: Int = 0
+        private set
+    var emergencyStopCount: Int = 0
+        private set
+
+    override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = false
+
+    override fun run() {
+        stop.await()
+    }
+
+    override fun requestStop(): AppKitStopRequest {
+        stopCount += 1
+        throw IllegalStateException("native stop")
+    }
+
+    override fun emergencyStop() {
+        emergencyStopCount += 1
         stop.countDown()
     }
 }

@@ -309,6 +309,39 @@ class RuntimeHostControllerTest {
     }
 
     @Test
+    fun sessionStopHandlerRunsOnceBeforeTerminationAndCanPromoteTheOutcome() = runTest {
+        val events = mutableListOf<String>()
+        val stopFailure = KadreFailure.PlatformFailure(
+            KadrePlatform.AppKit,
+            "appkit-host",
+            "stop-exception",
+        )
+        val host = RuntimeHostController(
+            KadrePlatform.AppKit,
+            sessionStopHandler = RuntimeSessionStopHandler { id ->
+                events += "stopping:$id"
+                stopFailure
+            },
+            sessionObserver = RuntimeSessionObserver { id, outcome ->
+                events += "terminated:$id:$outcome"
+            },
+        )
+        val session = attach(host) { requestStop() }
+
+        testScheduler.runCurrent()
+
+        val outcome: SessionOutcome = SessionOutcome.Failed(stopFailure)
+        assertEquals(outcome, session.awaitTermination())
+        assertEquals(
+            listOf(
+                "stopping:${session.id}",
+                "terminated:${session.id}:$outcome",
+            ),
+            events,
+        )
+    }
+
+    @Test
     fun sessionObserverFailureIsReportedWithoutChangingTheOutcome() = runTest {
         val observerFailure = IllegalStateException("observer")
         val reported = mutableListOf<Throwable>()

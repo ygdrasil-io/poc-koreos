@@ -30,12 +30,17 @@ public fun interface RuntimeSessionObserver {
     public fun terminated(sessionId: SessionId, outcome: SessionOutcome)
 }
 
+public fun interface RuntimeSessionStopHandler {
+    public fun stop(sessionId: SessionId): KadreFailure.PlatformFailure?
+}
+
 @OptIn(ExperimentalKadreApi::class)
 public class RuntimeHostController private constructor(
     override val platform: KadrePlatform,
     initialLifecycleState: LifecycleState,
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val failureReporter: RuntimeFailureReporter,
+    private val sessionStopHandler: RuntimeSessionStopHandler,
     private val sessionObserver: RuntimeSessionObserver,
     private val clockFactory: RuntimeClockFactory,
 ) : KadreHost {
@@ -44,12 +49,14 @@ public class RuntimeHostController private constructor(
         initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
         initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+        sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
         sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
     ) : this(
         platform,
         initialLifecycleState,
         initialLifecycleCapabilities,
         failureReporter,
+        sessionStopHandler,
         sessionObserver,
         MonotonicRuntimeClockFactory,
     )
@@ -82,6 +89,7 @@ public class RuntimeHostController private constructor(
                 initialLifecycleCapabilities = lifecycleCapabilities,
                 clock = clockFactory.start(),
                 failureReporter = ::reportFailure,
+                onStopping = ::sessionStopping,
                 onTerminated = ::sessionTerminated,
             ).also(sessions::add)
         }
@@ -151,6 +159,19 @@ public class RuntimeHostController private constructor(
         runCatching { failureReporter.report(cause) }
     }
 
+    private fun sessionStopping(session: SessionRuntime): KadreFailure.PlatformFailure? =
+        try {
+            // Functional stop failures must be returned explicitly; thrown adapter bugs remain
+            // diagnostic-only so arbitrary host code cannot escape through session teardown.
+            sessionStopHandler.stop(session.id)
+        } catch (cause: Exception) {
+            reportFailure(cause)
+            null
+        } catch (cause: LinkageError) {
+            reportFailure(cause)
+            null
+        }
+
     private fun sessionTerminated(session: SessionRuntime, outcome: SessionOutcome) {
         synchronized(lock) { sessions.remove(session) }
         runCatching { sessionObserver.terminated(session.id, outcome) }
@@ -173,12 +194,14 @@ public class RuntimeHostController private constructor(
             initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
             initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
             failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
             sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
         ): RuntimeHostController = RuntimeHostController(
             platform,
             initialLifecycleState,
             initialLifecycleCapabilities,
             failureReporter,
+            sessionStopHandler,
             sessionObserver,
             clockFactory,
         )
