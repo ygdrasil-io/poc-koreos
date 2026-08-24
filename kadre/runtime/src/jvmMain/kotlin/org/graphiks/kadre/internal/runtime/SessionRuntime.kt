@@ -54,6 +54,7 @@ internal class SessionRuntime(
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val clock: RuntimeClock,
     private val failureReporter: (Throwable) -> Unit,
+    private val onStopping: (SessionRuntime) -> KadreFailure.PlatformFailure?,
     private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
 ) : KadreSession {
     private val lock = Any()
@@ -80,7 +81,7 @@ internal class SessionRuntime(
     private var startupJob: Job? = null
     private var applicationJob: Deferred<Unit>? = null
     private var selectedOutcome: SessionOutcome? = null
-    private var teardownStarted = false
+    private var stopHandlerStarted = false
     private var finished = false
     private var parentCancellationHandle: DisposableHandle? = null
 
@@ -226,16 +227,26 @@ internal class SessionRuntime(
     }
 
     private fun requestTermination(proposed: SessionOutcome) {
-        val finishImmediately: Boolean
         synchronized(lock) {
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, proposed)
             mutableState.value = SessionState.Stopping
             startupJob?.cancel()
             applicationJob?.cancel()
+            if (stopHandlerStarted) return
+            stopHandlerStarted = true
+        }
+
+        // Run host shutdown before publishing a terminal outcome: a native stop failure must
+        // still be able to promote an otherwise successful stop to Failed(PlatformFailure).
+        val stopFailure = onStopping(this)
+        val finishImmediately: Boolean
+        synchronized(lock) {
+            if (finished) return
+            if (stopFailure != null) {
+                selectedOutcome = selectOutcome(selectedOutcome, SessionOutcome.Failed(stopFailure))
+            }
             finishImmediately = applicationJob == null
-            if (!finishImmediately && teardownStarted) return
-            if (!finishImmediately) teardownStarted = true
         }
 
         if (finishImmediately) {
