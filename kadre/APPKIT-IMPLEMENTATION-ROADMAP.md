@@ -202,7 +202,7 @@ Un contrat passe à `active` uniquement dans une PR qui apporte simultanément :
 
 ## 4. Phases d’implémentation
 
-### Phase 0 — Fondations KFFI
+### Phase 0 — Fondations KFFI — terminée
 
 #### Objectif
 
@@ -218,9 +218,9 @@ Fournir les primitives managées nécessaires aux callbacks AppKit durables sans
 - primitives sûres de dispatch vers le main thread ;
 - inventaire des bindings nécessaires aux phases 1 à 4.
 
-#### Gate de sortie
+#### Gate de sortie — atteint
 
-- `KFFI-OBJC-001`, `KFFI-OBJC-002` et `KFFI-OBJC-003` sont fermés par des références KFFI vérifiables ;
+- `KFFI-OBJC-001`, `KFFI-OBJC-002` et `KFFI-OBJC-003` sont fermés par [KFFI #35](https://github.com/Graphiks-org/kffi/pull/35), [Kextract #50](https://github.com/klang-toolkit/kextract/pull/50) et l'artifact publié `org.graphiks:kffi-objc:1.0.0-SNAPSHOT` ;
 - KFFI couvre callback/close concurrent, exception de callback et réutilisation séquentielle ;
 - le backend AppKit ne contient aucune primitive FFI locale ;
 - aucune capability Kadre dépendante n’est encore activée par cette phase seule.

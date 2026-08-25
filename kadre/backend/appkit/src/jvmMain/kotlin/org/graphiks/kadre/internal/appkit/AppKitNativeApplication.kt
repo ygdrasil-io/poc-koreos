@@ -4,14 +4,16 @@ import org.graphiks.kffi.objc.CFRunLoopGetMain
 import org.graphiks.kffi.objc.CFRunLoopStop
 import org.graphiks.kffi.objc.CFRunLoopWakeUp
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSEvent
+import org.graphiks.kffi.objc.NSEventModifierFlags
+import org.graphiks.kffi.objc.NSEventType
+import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
 import org.graphiks.kffi.objc.postEvent_atStart
-import java.lang.foreign.GroupLayout
-import java.lang.foreign.MemoryLayout
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout
 import java.util.concurrent.CompletableFuture
 
 internal sealed interface AppKitStopResult {
@@ -163,32 +165,21 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         }
     }
 
-    private fun createWakeEvent(): MemorySegment =
-        ObjCRuntime.msgSend(
-            ValueLayout.ADDRESS,
-            ObjCRuntime.getClass("NSEvent"),
-            ObjCRuntime.sel(
-                "otherEventWithType:location:modifierFlags:timestamp:" +
-                    "windowNumber:context:subtype:data1:data2:",
-            ),
-            APPLICATION_DEFINED_EVENT_TYPE,
-            ObjCRuntime.ObjCStructArg(ZERO_POINT, POINT_LAYOUT),
-            NO_MODIFIER_FLAGS,
+    private fun createWakeEvent(): MemorySegment = Arena.ofConfined().use { arena ->
+        val origin = NSPoint.allocate(arena).also { point ->
+            point.x = 0.0
+            point.y = 0.0
+        }
+        NSEvent.otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2(
+            NSEventType.NSEventTypeApplicationDefined,
+            origin,
+            NSEventModifierFlags(0L),
             0.0,
             0L,
             MemorySegment.NULL,
             0.toShort(),
             0L,
             0L,
-        ) as MemorySegment
-
-    private companion object {
-        const val APPLICATION_DEFINED_EVENT_TYPE: Long = 15L
-        const val NO_MODIFIER_FLAGS: Long = 0L
-        val POINT_LAYOUT: GroupLayout = MemoryLayout.structLayout(
-            ValueLayout.JAVA_DOUBLE.withName("x"),
-            ValueLayout.JAVA_DOUBLE.withName("y"),
         )
-        val ZERO_POINT: MemorySegment = MemorySegment.ofArray(doubleArrayOf(0.0, 0.0))
     }
 }
