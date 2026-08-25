@@ -32,14 +32,19 @@ internal data class JUnitSummary(
 )
 
 internal object JUnitEvidence {
-    fun read(directory: Path): JUnitSummary {
-        require(Files.isDirectory(directory)) { "JUnit report directory does not exist: $directory" }
-        val reports = Files.list(directory).use { paths ->
-            paths.filter { it.isRegularFile() && it.name.startsWith("TEST-") && it.name.endsWith(".xml") }
-                .sorted()
-                .toList()
+    fun read(directory: Path): JUnitSummary = read(listOf(directory))
+
+    fun read(directories: List<Path>): JUnitSummary {
+        require(directories.isNotEmpty()) { "JUnit report directories must not be empty" }
+        val reports = directories.flatMap { directory ->
+            require(Files.isDirectory(directory)) { "JUnit report directory does not exist: $directory" }
+            Files.list(directory).use { paths ->
+                paths.filter { it.isRegularFile() && it.name.startsWith("TEST-") && it.name.endsWith(".xml") }
+                    .sorted()
+                    .toList()
+            }
         }
-        require(reports.isNotEmpty()) { "JUnit report directory contains no TEST-*.xml: $directory" }
+        require(reports.isNotEmpty()) { "JUnit report directories contain no TEST-*.xml" }
 
         val cases = linkedMapOf<Pair<String, String>, JUnitCase>()
         var tests = 0

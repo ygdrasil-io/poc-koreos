@@ -563,7 +563,7 @@ Transformer les garanties architecturales en preuves exécutables et en parcours
 6. Ajouter les douze sentinelles architecturales et faire échouer le gate si l’une d’elles survit.
 7. Ajouter un driver `O3` pour Web JS/Wasm, Android, UIKit, AppKit, Win32, X11 et Wayland, puis comparer les traces portables normalisées.
 8. Ajouter les consumer compile tests Kotlin KMP, Java, Swift et TypeScript, positifs et négatifs, y compris les artefacts exportés.
-9. Produire et valider `contract-evidence.json` avec zéro skip, scénario requis absent, preuve dupliquée ou résultat masqué.
+9. Produire et valider un `contract-evidence/<contractId>.json` par contrat actif, avec zéro skip, scénario requis absent, preuve dupliquée ou résultat masqué.
 10. Consolider la CI autour de l’unique aggregate bloquant `kadre-pr-contracts`, avec jobs parallèles, SLO p95 initial de 10 minutes et timeout hard de 15 minutes.
 11. Ajouter la cadence nightly pour properties élargies, stress threads réels, matrices de runtimes, leaks, mutation informative et matériel disponible.
 12. Ajouter le gate release : nightly récent, devices physiques requis par les promises, ABI/interop et absence de quarantaine.

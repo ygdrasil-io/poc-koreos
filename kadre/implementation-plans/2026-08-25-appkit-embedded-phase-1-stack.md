@@ -206,7 +206,7 @@ Each pull request is opened as a draft against its immediate predecessor. Review
 - Modify: `kadre/APPKIT-IMPLEMENTATION-ROADMAP.md`
 - Modify: `kadre/APPKIT-JVM-FIRST-IMPLEMENTATION.md`
 
-**Consumes:** `AppKitProcessBroker`, `NSNotificationCenter.observe`, and AppKit notification constants exposed by KFFI.
+**Consumes:** `AppKitProcessBroker`, `NSNotificationCenter.observe`, and the AppKit notification names passed through KFFI's managed Objective-C boundary.
 
 **Produces:** a supported `DesktopIntegrationKind.AppKitMainLoop`, attached sessions with their own closeable lifecycle observation owner, and an active `APK-002` contract with O2 deterministic proof plus O3 macOS notification proof.
 
@@ -246,7 +246,7 @@ Each pull request is opened as a draft against its immediate predecessor. Review
 
 - [ ] **Step 4: Add the native O3 lifecycle proof.**
 
-  On macOS, create the real KFFI lifecycle source, attach a session from the main thread while the AppKit loop is pumping, post `NSApplicationDidHideNotification`, and observe the public lifecycle state. Then close the session, post a second notification, and prove no session state is mutated. Keep the test scoped to the existing AppKit CI job and do not synthesize success when a native runner is unavailable.
+  On macOS, route a native `NSNotificationCenter` post through the real KFFI lifecycle source into an embedded session and observe the public lifecycle state. Close the source and post a second notification to prove the native owner no longer delivers. The deterministic provider test separately proves the shared-loop ownership and multi-session teardown protocol. Keep both tests scoped to the existing AppKit CI job and do not synthesize success when a native runner is unavailable.
 
 - [ ] **Step 5: Activate the contract and map evidence.**
 

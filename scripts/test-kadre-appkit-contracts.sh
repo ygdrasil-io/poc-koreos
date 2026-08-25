@@ -14,7 +14,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
-EVIDENCE="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence/contract-evidence.json"
+EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
+EVIDENCE_FILES=("APK-001.json" "APK-002.json")
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
 
 if [[ ! -x "$GRADLEW" ]]; then
@@ -40,12 +41,12 @@ run_phase() {
     fi
 }
 
-rm -f "$EVIDENCE"
+rm -rf "$EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
 run_phase tests \
     "$GRADLEW" \
-    :kadre:backend:appkit:jvmTest \
+    :kadre:backend:appkit:appKitNativeTests \
     --rerun-tasks \
     --no-daemon \
     --stacktrace \
@@ -60,7 +61,10 @@ run_phase evidence \
     --stacktrace \
     --console=plain
 
-if [[ ! -s "$EVIDENCE" ]]; then
-    echo "Kadre AppKit evidence is missing or empty: $EVIDENCE" >&2
-    exit 1
-fi
+for evidence_file in "${EVIDENCE_FILES[@]}"; do
+    evidence="$EVIDENCE_DIRECTORY/$evidence_file"
+    if [[ ! -s "$evidence" ]]; then
+        echo "Kadre AppKit evidence is missing or empty: $evidence" >&2
+        exit 1
+    fi
+done

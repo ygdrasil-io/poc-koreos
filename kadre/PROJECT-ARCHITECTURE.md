@@ -254,7 +254,7 @@ Le SPI entre `runtime` et `backend:*` n’utilise aucun type KFFI. La CI Kadre p
 | `contracts:registry` | données `contractId/scenarioId/target`, sans code de production |
 | `contracts:model` | modèle indépendant ; aucune dépendance vers `runtime`, `platform:*` ou `backend:*` |
 | `contracts:suite` | API publique, `test` et modèle ; aucune inspection interne |
-| `contracts:validator` | registre et `contract-evidence.json` |
+| `contracts:validator` | registre et preuves `contract-evidence/<contractId>.json` |
 | `contracts:driver:fake` | suite et controllers publics de `test` |
 | `contracts:driver:<target>` | suite, API host/SDK de la target et stimulus externe |
 

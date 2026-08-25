@@ -33,6 +33,9 @@ internal interface AppKitNativeApplication {
     // reference only proves setup has started, not that the native loop is pumping events.
     fun isRunning(): Boolean
 
+    /** Starts one independently closeable lifecycle observation owner for an embedded session. */
+    fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable
+
     fun run()
 
     fun requestStop(): AppKitStopRequest
@@ -46,10 +49,17 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private var stopRequested = false
     private var stopScheduled = false
     private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
+    private val lifecycleSource = KffiAppKitLifecycleSource()
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
 
-    override fun isRunning(): Boolean = synchronized(lock) { application?.isRunning() == true }
+    override fun isRunning(): Boolean = synchronized(lock) { application }?.isRunning()
+        ?: ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication()).isRunning()
+        }
+
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        lifecycleSource.start(listener)
 
     override fun run() {
         check(isMainThread()) { "the AppKit event loop must run on the process main thread" }

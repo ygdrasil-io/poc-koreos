@@ -321,7 +321,7 @@ Le dépassement du SLO ne rend pas automatiquement un test non bloquant et n’a
 
 Pour pouvoir être accepté comme `success`, chaque job obligatoire :
 
-- produit au moins un testcase et un fichier `contract-evidence.json` ;
+- produit au moins un testcase et un fichier `contract-evidence/<contractId>.json` par contrat actif de la target ;
 - refuse test skipped/ignored, failure, error, XML incohérent ou scénario attendu absent ;
 - interdit `continue-on-error`, `|| true`, retry automatique et condition `if` masquant la preuve ;
 - possède un watchdog externe qui tue aussi les processus enfants ;
@@ -333,7 +333,7 @@ L’aggregate utilise `always()` uniquement pour inspecter tous les résultats, 
 
 ## 10. Preuve d’exécution produite
 
-Chaque target produit un `contract-evidence.json` à structure canonique et listes triées. Le fichier n’est pas comparé octet par octet à une baseline, car sa durée varie ; son schéma versionné et sa sémantique sont validés. Il contient au minimum :
+Chaque target produit un `contract-evidence/<contractId>.json` par contrat actif, à structure canonique et listes triées. Chaque fichier n’est pas comparé octet par octet à une baseline, car sa durée varie ; son schéma versionné et sa sémantique sont validés. Il contient au minimum :
 
 - `schemaVersion` ;
 - commit, target, OS/runtime/toolchain et adapter ;

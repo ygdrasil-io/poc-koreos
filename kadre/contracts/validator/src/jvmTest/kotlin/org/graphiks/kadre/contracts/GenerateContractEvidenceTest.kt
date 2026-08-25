@@ -23,6 +23,7 @@ class GenerateContractEvidenceTest {
             junitDirectory = fixture.reports,
             outputPath = fixture.output,
             commit = "0123456789abcdef",
+            contractId = "APK-001",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
@@ -56,10 +57,47 @@ class GenerateContractEvidenceTest {
                 junitDirectory = fixture.reports,
                 outputPath = fixture.output,
                 commit = "fedcba9876543210",
+                contractId = "APK-001",
             )
         }
 
         assertEquals("previous valid evidence\n", fixture.output.readText())
+    }
+
+    @Test
+    fun selectedContractIgnoresMappingsForOtherKnownContracts() {
+        val fixture = createFixture(VALID_REPORT)
+        fixture.registry.writeText(
+            "$REGISTRY\n" +
+                "APK-002\tactive\tAPPKIT-JVM-FIRST-IMPLEMENTATION.md#6.2\tembedded AppKit host\trouting\tO3\tembedded\tjvm\t-\tembedded-refusal\t-",
+        )
+        fixture.mapping.writeText(
+            "$MAPPING\n" +
+                "APK-002\tscenario\tembedded\texample.AppKitTest\tembedded[jvm]\n" +
+                "APK-002\tsentinel\tembedded-refusal\texample.AppKitTest\tembeddedRefusal[jvm]",
+        )
+        fixture.reports.resolve("TEST-embedded.xml").writeText(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <testsuite name="EmbeddedAppKitTest[jvm]" tests="2" skipped="0" failures="0" errors="0" time="0.020">
+              <testcase name="embedded[jvm]" classname="example.AppKitTest" time="0.010"/>
+              <testcase name="embeddedRefusal[jvm]" classname="example.AppKitTest" time="0.010"/>
+            </testsuite>
+            """.trimIndent(),
+        )
+
+        generateContractEvidence(
+            registryPath = fixture.registry,
+            mappingPath = fixture.mapping,
+            junitDirectory = fixture.reports,
+            outputPath = fixture.output,
+            commit = "0123456789abcdef",
+            contractId = "APK-001",
+        )
+
+        val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
+        assertEquals(4, json["scenarios"]!!.jsonArray.size)
+        assertEquals(2, json["sentinels"]!!.jsonArray.size)
     }
 
     private fun createFixture(report: String): Fixture {
