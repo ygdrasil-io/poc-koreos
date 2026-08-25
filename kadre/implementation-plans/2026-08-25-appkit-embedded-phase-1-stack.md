@@ -122,7 +122,7 @@ Each pull request is opened as a draft against its immediate predecessor. Review
 - Create: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitProcessBroker.kt`
 - Create: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitLifecycleSignal.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitBackendProvider.kt`
-- Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitStandaloneOwnership.kt`
+- Delete: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitStandaloneOwnership.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitBackendProviderTest.kt`
 - Create: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitProcessBrokerTest.kt`
 
@@ -135,8 +135,8 @@ Each pull request is opened as a draft against its immediate predecessor. Review
   Cover the observable mutations:
 
   ```kotlin
-  val first = broker.registerEmbedded(firstHost)
-  val second = broker.registerEmbedded(secondHost)
+  val first = broker.createEmbeddedHost { state -> createRuntimeHost(state) }
+  val second = broker.createEmbeddedHost { state -> createRuntimeHost(state) }
   broker.accept(AppKitLifecycleSignal.BecameInactive)
   assertEquals(ActivationState.Inactive, firstSession.lifecycle.state.value.activation)
   assertEquals(ActivationState.Inactive, secondSession.lifecycle.state.value.activation)
@@ -169,7 +169,7 @@ Each pull request is opened as a draft against its immediate predecessor. Review
   }
   ```
 
-  `AppKitProcessBroker` holds registrations behind one lock. A registration removes exactly its own `RuntimeHostController`; `HostTerminated` snapshots then clears all registrations and calls `detach()` outside the lock. `BecameActive`, `BecameInactive`, `DidHide`, and `DidUnhide` preserve the other axes of the most recent lifecycle state. Reimplement the existing standalone lease as a broker lease so a later native adapter cannot bypass process ownership.
+`AppKitProcessBroker` creates and registers each embedded target atomically with the current lifecycle state. It serializes lifecycle delivery and termination so a target is never updated after detachment; a registration removes exactly its own target. `HostTerminated` clears all registrations before detaching them. `BecameActive`, `BecameInactive`, `DidHide`, and `DidUnhide` preserve the other axes of the most recent lifecycle state. Reimplement the existing standalone lease as a broker lease so a later native adapter cannot bypass process ownership.
 
 - [ ] **Step 4: Verify broker and existing standalone contracts.**
 

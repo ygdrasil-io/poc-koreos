@@ -44,7 +44,7 @@ class AppKitBackendProviderTest {
     fun offMainThreadAndEmbeddedAreRejectedBeforeFactoryCreation() {
         var factoryInvoked = false
         val native = RecordingNativeApplication(mainThread = false)
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { true }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
         val factory = KadreApplicationFactory {
             factoryInvoked = true
             KadreApplication { }
@@ -73,7 +73,7 @@ class AppKitBackendProviderTest {
     fun unavailableProviderDoesNotTouchTheNativeBridgeOrFactory() {
         var factoryInvoked = false
         val native = RecordingNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { false }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { false }
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -98,7 +98,7 @@ class AppKitBackendProviderTest {
     @Test
     fun applicationStopStopsTheNativeLoopAndReturnsTheSessionOutcome() {
         val native = StopDrivenNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { true }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -120,9 +120,9 @@ class AppKitBackendProviderTest {
 
     @Test
     fun nativeStopFailureBecomesASessionOutcomeAndReleasesOwnership() {
-        val ownership = AppKitStandaloneOwnership()
+        val broker = AppKitProcessBroker()
         val native = FailingStopNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
+        val provider = AppKitBackendProvider.forTesting(native, broker) { true }
         val executor = Executors.newSingleThreadExecutor()
 
         try {
@@ -150,7 +150,7 @@ class AppKitBackendProviderTest {
             )
             assertEquals(1, native.stopCount)
             assertEquals(1, native.emergencyStopCount)
-            assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
+            assertTrue(broker.tryAcquireStandalone()?.also { it.close() } != null)
         } finally {
             executor.shutdownNow()
         }
@@ -161,9 +161,9 @@ class AppKitBackendProviderTest {
         val cancellation = kotlinx.coroutines.CancellationException("cancelled")
         val applicationStarted = CountDownLatch(1)
         val applicationCancelled = CountDownLatch(1)
-        val ownership = AppKitStandaloneOwnership()
+        val broker = AppKitProcessBroker()
         val native = CancellationNativeApplication(applicationStarted, cancellation)
-        val provider = AppKitBackendProvider.forTesting(native, ownership) { true }
+        val provider = AppKitBackendProvider.forTesting(native, broker) { true }
 
         // The native loop waits for this application to start, proving that cancellation occurs
         // after session admission and must therefore be represented by the session outcome.
@@ -190,14 +190,14 @@ class AppKitBackendProviderTest {
         )
         assertTrue(applicationCancelled.await(2, TimeUnit.SECONDS))
         assertEquals(0, native.stopCount)
-        assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
+        assertTrue(broker.tryAcquireStandalone()?.also { it.close() } != null)
     }
 
     @Test
     fun nativeFailureAfterAdmissionBecomesASessionOutcome() {
         val nativeFailure = IllegalStateException("native")
         val native = RecordingNativeApplication(runFailure = nativeFailure)
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { true }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -221,7 +221,7 @@ class AppKitBackendProviderTest {
     @Test
     fun applicationFailureStopsTheNativeLoopAndReturnsTheSessionOutcome() {
         val native = StopDrivenNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { true }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -245,12 +245,12 @@ class AppKitBackendProviderTest {
 
     @Test
     fun standaloneOwnershipReturnsBusyAndCanBeReused() {
-        val ownership = AppKitStandaloneOwnership()
-        val first = ownership.tryAcquire()
-        assertIs<AppKitStandaloneOwnership.Lease>(first)
-        assertNull(ownership.tryAcquire())
+        val broker = AppKitProcessBroker()
+        val first = broker.tryAcquireStandalone()
+        assertIs<AppKitProcessBroker.StandaloneLease>(first)
+        assertNull(broker.tryAcquireStandalone())
 
-        val provider = AppKitBackendProvider.forTesting(RecordingNativeApplication(), ownership) { true }
+        val provider = AppKitBackendProvider.forTesting(RecordingNativeApplication(), broker) { true }
         assertEquals(
             KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
             provider.run(
@@ -263,18 +263,18 @@ class AppKitBackendProviderTest {
         )
 
         first.close()
-        val second = ownership.tryAcquire()
-        assertIs<AppKitStandaloneOwnership.Lease>(second)
+        val second = broker.tryAcquireStandalone()
+        assertIs<AppKitProcessBroker.StandaloneLease>(second)
         first.close()
-        assertNull(ownership.tryAcquire())
+        assertNull(broker.tryAcquireStandalone())
         second.close()
-        assertTrue(ownership.tryAcquire()?.also { it.close() } != null)
+        assertTrue(broker.tryAcquireStandalone()?.also { it.close() } != null)
     }
 
     @Test
     fun sequentialRunsReleaseAllProcessAndSessionState() {
         val native = RecordingNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, AppKitStandaloneOwnership()) { true }
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
         val request = DesktopStandaloneRequest(
             KadreApplicationFactory { KadreApplication { kotlinx.coroutines.awaitCancellation() } },
             true,
@@ -301,7 +301,7 @@ class AppKitBackendProviderTest {
         val native = KffiAppKitNativeApplication()
         val provider = AppKitBackendProvider.forTesting(
             native,
-            AppKitStandaloneOwnership(),
+            AppKitProcessBroker(),
         ) { true }
         val stopRequestedOffMainThread = AtomicBoolean(false)
 

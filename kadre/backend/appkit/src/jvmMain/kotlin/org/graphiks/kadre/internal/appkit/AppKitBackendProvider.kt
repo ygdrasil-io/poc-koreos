@@ -28,12 +28,12 @@ import kotlin.coroutines.cancellation.CancellationException
 
 public class AppKitBackendProvider private constructor(
     private val nativeApplication: AppKitNativeApplication,
-    private val ownership: AppKitStandaloneOwnership,
+    private val broker: AppKitProcessBroker,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
         KffiAppKitNativeApplication(),
-        ProcessAppKitStandaloneOwnership.value,
+        ProcessAppKitProcessBroker.value,
         ::isMacOs,
     )
 
@@ -52,7 +52,7 @@ public class AppKitBackendProvider private constructor(
         if (!nativeApplication.isMainThread()) {
             return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
         }
-        val lease = ownership.tryAcquire()
+        val lease = broker.tryAcquireStandalone()
             ?: return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -135,9 +135,9 @@ public class AppKitBackendProvider private constructor(
     internal companion object {
         fun forTesting(
             nativeApplication: AppKitNativeApplication,
-            ownership: AppKitStandaloneOwnership,
+            broker: AppKitProcessBroker,
             availability: () -> Boolean,
-        ): AppKitBackendProvider = AppKitBackendProvider(nativeApplication, ownership, availability)
+        ): AppKitBackendProvider = AppKitBackendProvider(nativeApplication, broker, availability)
 
         private fun isMacOs(): Boolean = System.getProperty("os.name", "").let { name ->
             name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
