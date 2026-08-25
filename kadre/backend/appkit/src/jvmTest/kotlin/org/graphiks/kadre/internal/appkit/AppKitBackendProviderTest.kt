@@ -1,9 +1,16 @@
 package org.graphiks.kadre.internal.appkit
 
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSNotificationCenter
+import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreLifecycle
+import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -17,11 +24,13 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.policy.KadrePolicies
+import java.lang.foreign.Arena
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,12 +45,12 @@ class AppKitBackendProviderTest {
         val providers = ServiceLoader.load(DesktopBackendProvider::class.java).toList()
         val provider = providers.single { it.backend == DesktopBackendKind.AppKit }
 
-        assertEquals(emptySet(), provider.supportedIntegrations)
+        assertEquals(setOf(DesktopIntegrationKind.AppKitMainLoop), provider.supportedIntegrations)
         assertEquals(isMacOs(), provider.isAvailable())
     }
 
     @Test
-    fun offMainThreadAndEmbeddedAreRejectedBeforeFactoryCreation() {
+    fun embeddedAttachRejectsInvalidHostStateBeforeFactoryCreation() {
         var factoryInvoked = false
         val native = RecordingNativeApplication(mainThread = false)
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
@@ -55,7 +64,7 @@ class AppKitBackendProviderTest {
             provider.run(DesktopStandaloneRequest(factory, true, KadrePolicies.Default)),
         )
         assertEquals(
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach)),
+            KadreResult.Failure(KadreFailure.InvalidRequest("options")),
             provider.attach(
                 DesktopEmbeddedRequest(
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
@@ -67,6 +76,124 @@ class AppKitBackendProviderTest {
         )
         assertFalse(factoryInvoked)
         assertEquals(0, native.runCount)
+    }
+
+    @Test
+    fun embeddedAttachRejectsWrongIntegrationAndInactiveNativeLoopBeforeFactoryCreation() {
+        var factoryInvoked = false
+        val factory = KadreApplicationFactory {
+            factoryInvoked = true
+            KadreApplication { }
+        }
+        val inactiveProvider = AppKitBackendProvider.forTesting(
+            RecordingNativeApplication(),
+            AppKitProcessBroker(),
+        ) { true }
+        val inactiveRequest = DesktopEmbeddedRequest(
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+            factory,
+            DesktopIntegrationKind.AppKitMainLoop,
+            KadrePolicies.Default,
+        )
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
+            inactiveProvider.attach(inactiveRequest),
+        )
+        assertFalse(factoryInvoked)
+
+        val activeProvider = AppKitBackendProvider.forTesting(
+            EmbeddedNativeApplication(),
+            AppKitProcessBroker(),
+        ) { true }
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("options")),
+            activeProvider.attach(
+                DesktopEmbeddedRequest(
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+                    factory,
+                    DesktopIntegrationKind.AwtEventDispatchThread,
+                    KadrePolicies.Default,
+                ),
+            ),
+        )
+        assertFalse(factoryInvoked)
+    }
+
+    @Test
+    fun embeddedAttachBusyClosesItsObservationBeforeFactoryCreation() {
+        val broker = AppKitProcessBroker()
+        val standalone = assertIs<AppKitProcessBroker.StandaloneLease>(broker.tryAcquireStandalone())
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(native, broker) { true }
+        var factoryInvoked = false
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+
+        try {
+            assertEquals(
+                KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
+                provider.attach(
+                    DesktopEmbeddedRequest(
+                        parentScope,
+                        KadreApplicationFactory {
+                            factoryInvoked = true
+                            KadreApplication { }
+                        },
+                        DesktopIntegrationKind.AppKitMainLoop,
+                        KadrePolicies.Default,
+                    ),
+                ),
+            )
+            assertEquals(0, native.observerCount)
+            assertFalse(factoryInvoked)
+        } finally {
+            standalone.close()
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedSessionsReceiveLifecycleWithoutOwningTheNativeLoop() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+        val firstScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val secondScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val firstLifecycle = CompletableDeferred<KadreLifecycle>()
+        val secondLifecycle = CompletableDeferred<KadreLifecycle>()
+
+        try {
+            val first = provider.attach(embeddedRequest(firstScope, firstLifecycle)).requireSession()
+            val second = provider.attach(embeddedRequest(secondScope, secondLifecycle)).requireSession()
+            val observedFirst = withTimeout(2.seconds) { firstLifecycle.await() }
+            val observedSecond = withTimeout(2.seconds) { secondLifecycle.await() }
+            assertEquals(2, native.observerCount)
+
+            native.emit(AppKitLifecycleSignal.DidHide)
+            assertEquals(org.graphiks.kadre.application.VisibilityState.Background, observedFirst.state.value.visibility)
+            assertEquals(org.graphiks.kadre.application.VisibilityState.Background, observedSecond.state.value.visibility)
+
+            first.close()
+            assertEquals(
+                SessionOutcome.Stopped(SessionStopReason.HostRequested),
+                first.awaitTermination(),
+            )
+            native.awaitObserverCount(1)
+
+            native.emit(AppKitLifecycleSignal.BecameActive)
+            assertEquals(org.graphiks.kadre.application.ActivationState.Active, observedSecond.state.value.activation)
+
+            native.emit(AppKitLifecycleSignal.HostTerminated)
+            assertEquals(
+                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+                second.awaitTermination(),
+            )
+            native.awaitObserverCount(0)
+            assertEquals(0, native.runCount)
+            assertEquals(0, native.stopCount)
+        } finally {
+            firstScope.cancel()
+            secondScope.cancel()
+        }
     }
 
     @Test
@@ -305,30 +432,28 @@ class AppKitBackendProviderTest {
         ) { true }
         val stopRequestedOffMainThread = AtomicBoolean(false)
 
-        repeat(2) {
-            val result = provider.run(
-                DesktopStandaloneRequest(
-                    KadreApplicationFactory {
-                        KadreApplication {
-                            // Cross the native boundary before requesting stop so this test cannot
-                            // accidentally exercise only the pre-run pending-stop handoff.
-                            withTimeout(5.seconds) {
-                                while (!native.isRunning()) yield()
-                            }
-                            stopRequestedOffMainThread.set(!native.isMainThread())
-                            requestStop()
+        val result = provider.run(
+            DesktopStandaloneRequest(
+                KadreApplicationFactory {
+                    KadreApplication {
+                        // Cross the native boundary before requesting stop so this test cannot
+                        // accidentally exercise only the pre-run pending-stop handoff.
+                        withTimeout(5.seconds) {
+                            while (!native.isRunning()) yield()
                         }
-                    },
-                    true,
-                    KadrePolicies.Default,
-                ),
-            )
+                        stopRequestedOffMainThread.set(!native.isMainThread())
+                        requestStop()
+                    }
+                },
+                true,
+                KadrePolicies.Default,
+            ),
+        )
 
-            assertEquals(
-                KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
-                result,
-            )
-        }
+        assertEquals(
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+            result,
+        )
         assertTrue(stopRequestedOffMainThread.get())
     }
 
@@ -343,6 +468,64 @@ class AppKitBackendProviderTest {
         native.run()
 
         assertEquals(AppKitStopResult.Accepted, stop.await())
+    }
+
+    @Test
+    fun realKffiLifecycleSourceStopsDeliveringAfterCloseOnMacOs() {
+        if (!isMacOs()) return
+        val application = ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication())
+        }
+        val center = ObjCRuntime.autoreleasePool {
+            NSNotificationCenter(NSNotificationCenter.defaultCenter())
+        }
+        val observed = AtomicReference<AppKitLifecycleSignal?>(null)
+        val observation = KffiAppKitLifecycleSource().start { observed.set(it) }
+
+        try {
+            center.postAppKitHideNotification(application)
+            assertEquals(AppKitLifecycleSignal.DidHide, observed.get())
+
+            observation.close()
+            observed.set(null)
+            center.postAppKitHideNotification(application)
+            assertNull(observed.get())
+        } finally {
+            observation.close()
+        }
+    }
+
+    @Test
+    fun realKffiNotificationRoutesThroughAnEmbeddedSessionOnMacOs() = kotlinx.coroutines.runBlocking {
+        if (!isMacOs()) return@runBlocking
+        val application = ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication())
+        }
+        val center = ObjCRuntime.autoreleasePool {
+            NSNotificationCenter(NSNotificationCenter.defaultCenter())
+        }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val lifecycle = CompletableDeferred<KadreLifecycle>()
+        val provider = AppKitBackendProvider.forTesting(
+            NativeLifecycleApplication(),
+            AppKitProcessBroker(),
+        ) { true }
+
+        try {
+            val session = provider.attach(embeddedRequest(parentScope, lifecycle)).requireSession()
+            val observed = withTimeout(2.seconds) { lifecycle.await() }
+
+            center.postAppKitNotification("NSApplicationDidHideNotification", application)
+            assertEquals(org.graphiks.kadre.application.VisibilityState.Background, observed.state.value.visibility)
+
+            session.close()
+            assertEquals(
+                SessionOutcome.Stopped(SessionStopReason.HostRequested),
+                session.awaitTermination(),
+            )
+        } finally {
+            parentScope.cancel()
+        }
     }
 }
 
@@ -364,6 +547,9 @@ private class RecordingNativeApplication(
 
     override fun isRunning(): Boolean = false
 
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        AutoCloseable { }
+
     override fun run() {
         runCount += 1
         runFailure?.let { throw it }
@@ -377,6 +563,62 @@ private class RecordingNativeApplication(
     override fun emergencyStop() = Unit
 }
 
+private class EmbeddedNativeApplication : AppKitNativeApplication {
+    private val observers = mutableListOf<(AppKitLifecycleSignal) -> Unit>()
+
+    val observerCount: Int
+        get() = observers.size
+    var runCount: Int = 0
+        private set
+    var stopCount: Int = 0
+        private set
+
+    override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = true
+
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        observe(listener)
+
+    override fun run() {
+        runCount += 1
+    }
+
+    override fun requestStop(): AppKitStopRequest {
+        stopCount += 1
+        return AppKitStopRequest { AppKitStopResult.Accepted }
+    }
+
+    override fun emergencyStop() = Unit
+
+    fun emit(signal: AppKitLifecycleSignal) {
+        observers.toList().forEach { it(signal) }
+    }
+
+    fun observe(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable {
+        observers += listener
+        return AutoCloseable { observers -= listener }
+    }
+}
+
+private class NativeLifecycleApplication : AppKitNativeApplication {
+    private val lifecycleSource = KffiAppKitLifecycleSource()
+
+    override fun isMainThread(): Boolean = true
+
+    override fun isRunning(): Boolean = true
+
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        lifecycleSource.start(listener)
+
+    override fun run(): Nothing = error("embedded test host must not run an AppKit loop")
+
+    override fun requestStop(): AppKitStopRequest =
+        error("embedded test host must not request AppKit stop")
+
+    override fun emergencyStop(): Nothing = error("embedded test host must not stop AppKit")
+}
+
 private class StopDrivenNativeApplication : AppKitNativeApplication {
     val trace = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val stop = CountDownLatch(1)
@@ -386,6 +628,9 @@ private class StopDrivenNativeApplication : AppKitNativeApplication {
     override fun isMainThread(): Boolean = true
 
     override fun isRunning(): Boolean = false
+
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        AutoCloseable { }
 
     override fun run() {
         trace += "run"
@@ -415,6 +660,9 @@ private class CancellationNativeApplication(
 
     override fun isRunning(): Boolean = false
 
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        AutoCloseable { }
+
     override fun run() {
         check(applicationStarted.await(2, TimeUnit.SECONDS)) { "application did not start" }
         throw cancellation
@@ -439,6 +687,9 @@ private class FailingStopNativeApplication : AppKitNativeApplication {
 
     override fun isRunning(): Boolean = false
 
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
+        AutoCloseable { }
+
     override fun run() {
         stop.await()
     }
@@ -456,4 +707,42 @@ private class FailingStopNativeApplication : AppKitNativeApplication {
 
 private fun isMacOs(): Boolean = System.getProperty("os.name", "").let { name ->
     name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
+}
+
+private fun embeddedRequest(
+    parentScope: kotlinx.coroutines.CoroutineScope,
+    captureLifecycle: CompletableDeferred<KadreLifecycle>,
+): DesktopEmbeddedRequest =
+    DesktopEmbeddedRequest(
+        parentScope,
+        KadreApplicationFactory {
+            KadreApplication {
+                captureLifecycle.complete(lifecycle)
+                kotlinx.coroutines.awaitCancellation()
+            }
+        },
+        DesktopIntegrationKind.AppKitMainLoop,
+        KadrePolicies.Default,
+    )
+
+private fun KadreResult<KadreSession>.requireSession(): KadreSession =
+    (this as? KadreResult.Success)?.value ?: error("Expected a Kadre session, got $this")
+
+private suspend fun EmbeddedNativeApplication.awaitObserverCount(expected: Int) {
+    withTimeout(2.seconds) {
+        while (observerCount != expected) yield()
+    }
+}
+
+private fun NSNotificationCenter.postAppKitHideNotification(application: NSApplication) {
+    postAppKitNotification("NSApplicationDidHideNotification", application)
+}
+
+private fun NSNotificationCenter.postAppKitNotification(name: String, application: NSApplication) {
+    ObjCRuntime.autoreleasePool {
+        postNotificationName_object(
+            ObjCRuntime.newNSString(Arena.global(), name),
+            application.ptr,
+        )
+    }
 }

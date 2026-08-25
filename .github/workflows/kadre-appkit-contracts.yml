@@ -29,13 +29,32 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew scripts/test-kadre-appkit-contracts.sh
 
+      - name: Collect AppKit environment
+        run: bash scripts/collect-appkit-diagnostics.sh kadre/backend/appkit/build/ci-diagnostics
+
       - name: Run AppKit contract gate
         run: scripts/test-kadre-appkit-contracts.sh
 
-      - name: Upload AppKit contract evidence
+      - name: Collect native crash reports
+        if: always()
+        run: |
+          destination="kadre/backend/appkit/build/ci-diagnostics/crash-reports"
+          mkdir -p "$destination"
+          source="$HOME/Library/Logs/DiagnosticReports"
+          if [[ -d "$source" ]]; then
+            find "$source" -maxdepth 1 -type f -print -exec cp {} "$destination" \;
+          else
+            echo "No DiagnosticReports directory at $source" > "$destination/status.txt"
+          fi
+
+      - name: Upload AppKit diagnostics and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: appkit-contract-evidence
-          path: kadre/backend/appkit/build/contract-evidence/contract-evidence.json
+          name: appkit-contract-artifacts
+          path: |
+            kadre/backend/appkit/build/contract-evidence/
+            kadre/backend/appkit/build/test-results/
+            kadre/backend/appkit/build/reports/tests/
+            kadre/backend/appkit/build/ci-diagnostics/
           if-no-files-found: ignore

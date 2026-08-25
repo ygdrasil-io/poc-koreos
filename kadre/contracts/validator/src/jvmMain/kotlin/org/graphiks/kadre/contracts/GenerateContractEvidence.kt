@@ -2,6 +2,7 @@ package org.graphiks.kadre.contracts
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.io.File
 import kotlin.io.path.readText
 
 internal fun generateContractEvidence(
@@ -10,19 +11,46 @@ internal fun generateContractEvidence(
     junitDirectory: Path,
     outputPath: Path,
     commit: String,
+    contractId: String,
+) = generateContractEvidence(
+    registryPath = registryPath,
+    mappingPath = mappingPath,
+    junitDirectories = listOf(junitDirectory),
+    outputPath = outputPath,
+    commit = commit,
+    contractId = contractId,
+)
+
+internal fun generateContractEvidence(
+    registryPath: Path,
+    mappingPath: Path,
+    junitDirectories: List<Path>,
+    outputPath: Path,
+    commit: String,
+    contractId: String,
 ) {
     require(Files.isRegularFile(registryPath)) { "contract registry does not exist: $registryPath" }
     require(Files.isRegularFile(mappingPath)) { "contract evidence mapping does not exist: $mappingPath" }
     val records = ContractRegistry.parse(registryPath.readText())
     val registryErrors = ContractRegistry.validate(records)
     check(registryErrors.isEmpty()) { registryErrors.joinToString(separator = "\n") }
-    val contract = records.singleOrNull { it.contractId == APPKIT_CONTRACT_ID }
-        ?: error("expected exactly one $APPKIT_CONTRACT_ID contract")
+    val contract = records.singleOrNull { it.contractId == contractId }
+        ?: error("expected exactly one $contractId contract")
     val mappings = ContractEvidenceMapping.parse(mappingPath.readText())
-    val junit = JUnitEvidence.read(junitDirectory)
+    val knownContractIds = records.mapTo(linkedSetOf(), ContractRecord::contractId)
+    val unknownMappingContractIds = mappings.asSequence()
+        .map(EvidenceMapping::contractId)
+        .filter { it !in knownContractIds }
+        .distinct()
+        .sorted()
+        .toList()
+    check(unknownMappingContractIds.isEmpty()) {
+        "unknown contract evidence mapping: ${unknownMappingContractIds.joinToString()}"
+    }
+    val junit = JUnitEvidence.read(junitDirectories)
     val evidence = ContractEvidence.create(
         contract = contract,
-        mappings = mappings,
+        mappings = mappings.filter { it.contractId == contractId },
         junit = junit,
         commit = commit,
         os = System.getProperty("os.name").orEmpty(),
@@ -36,16 +64,15 @@ internal fun generateContractEvidence(
 }
 
 public fun main(args: Array<String>) {
-    require(args.size == 5) {
-        "expected registry, mapping, JUnit directory, output and commit arguments"
+    require(args.size == 6) {
+        "expected registry, mapping, JUnit directories, output, commit and contractId arguments"
     }
     generateContractEvidence(
         registryPath = Path.of(args[0]),
         mappingPath = Path.of(args[1]),
-        junitDirectory = Path.of(args[2]),
+        junitDirectories = args[2].split(File.pathSeparator).map(Path::of),
         outputPath = Path.of(args[3]),
         commit = args[4],
+        contractId = args[5],
     )
 }
-
-private const val APPKIT_CONTRACT_ID = "APK-001"

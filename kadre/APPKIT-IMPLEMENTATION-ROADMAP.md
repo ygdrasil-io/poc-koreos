@@ -54,7 +54,7 @@ La roadmap commence après les capacités suivantes, déjà implémentées et co
 - conversion des failures et cancellations post-admission vers le `SessionOutcome` autoritaire ;
 - gate CI AppKit avec preuve O3 de la boucle active, réutilisation et sentinelles.
 
-`APK-002`, relatif au host embedded, reste `planned` jusqu’à la sortie de la phase 1.
+`APK-002`, relatif au host embedded, est `active`. Sa preuve associe le routage déterministe de deux sessions (O2) à une observation Objective-C réelle par KFFI (O3) ; elle n’active ni fenêtres ni input, qui restent dans les phases suivantes.
 
 ## 3. Invariants globaux
 
@@ -225,7 +225,7 @@ Fournir les primitives managées nécessaires aux callbacks AppKit durables sans
 - le backend AppKit ne contient aucune primitive FFI locale ;
 - aucune capability Kadre dépendante n’est encore activée par cette phase seule.
 
-### Phase 1 — Broker, embedded et lifecycle
+### Phase 1 — Broker, embedded et lifecycle — active
 
 #### Objectif
 
@@ -241,9 +241,9 @@ Attacher plusieurs sessions Kadre à une boucle AppKit existante sans en prendre
 - fermeture d’une session sans arrêter `NSApplication` ;
 - activation policy standalone sans modification de celle d’un host embedded.
 
-#### Gate de sortie
+#### Gate de sortie — atteinte
 
-- `APK-002` devient `active` ;
+- `APK-002` est `active` ;
 - deux sessions embedded partagent une boucle mais aucun ID, job, callback ou événement ;
 - fermer une session ne ferme ni l’autre session ni la boucle native ;
 - le teardown et la révocation des observers sont observés depuis AppKit ;
