@@ -23,6 +23,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.window.WindowManager
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +33,21 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class RuntimeHostControllerTest {
+    @Test
+    fun publicConstructorKeepsWindowsUnsupported() = runTest {
+        val host = RuntimeHostController(KadrePlatform.Fake)
+        lateinit var observed: WindowManager
+
+        val session = attach(host) {
+            observed = windows
+            requestStop()
+        }
+        testScheduler.runCurrent()
+
+        assertIs<UnsupportedWindowManager>(observed)
+        assertEquals(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested), session.awaitTermination())
+    }
+
     @Test
     fun attachRejectsMissingOrInactiveParentJob() {
         val host = RuntimeHostController(KadrePlatform.Fake)

@@ -43,6 +43,7 @@ public class RuntimeHostController private constructor(
     private val sessionStopHandler: RuntimeSessionStopHandler,
     private val sessionObserver: RuntimeSessionObserver,
     private val clockFactory: RuntimeClockFactory,
+    private val componentsFactory: RuntimeSessionComponentsFactory,
 ) : KadreHost {
     public constructor(
         platform: KadrePlatform,
@@ -59,6 +60,7 @@ public class RuntimeHostController private constructor(
         sessionStopHandler,
         sessionObserver,
         MonotonicRuntimeClockFactory,
+        UnsupportedRuntimeSessionComponentsFactory,
     )
 
     private val lock = Any()
@@ -76,22 +78,49 @@ public class RuntimeHostController private constructor(
             ?: return KadreResult.Failure(KadreFailure.InvalidRequest("parentScope"))
         if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
 
-        val session = synchronized(lock) {
+        val initialLifecycle = synchronized(lock) {
             if (detached) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
             if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
-
+            lifecycleState to lifecycleCapabilities
+        }
+        val clock = clockFactory.start()
+        val session = try {
             SessionRuntime(
                 id = RuntimeProcessIds.nextSessionId(),
                 parentScope = parentScope,
                 applicationFactory = applicationFactory,
                 policy = policy,
-                initialLifecycleState = lifecycleState,
-                initialLifecycleCapabilities = lifecycleCapabilities,
-                clock = clockFactory.start(),
+                initialLifecycleState = initialLifecycle.first,
+                initialLifecycleCapabilities = initialLifecycle.second,
+                clock = clock,
                 failureReporter = ::reportFailure,
                 onStopping = ::sessionStopping,
                 onTerminated = ::sessionTerminated,
-            ).also(sessions::add)
+                componentsFactory = componentsFactory,
+            )
+        } catch (cause: Exception) {
+            reportFailure(cause)
+            return KadreResult.Failure(runtimeSessionComponentsFailure())
+        } catch (cause: LinkageError) {
+            reportFailure(cause)
+            return KadreResult.Failure(runtimeSessionComponentsFailure())
+        }
+
+        val installFailure = synchronized(lock) {
+            when {
+                detached -> KadreFailure.Closed(KadreResourceKind.Host)
+                !parentJob.isActive -> KadreFailure.ParentScopeCancelled
+                else -> {
+                    session.updateLifecycle(lifecycleState)
+                    session.updateLifecycleCapabilities(lifecycleCapabilities)
+                    sessions += session
+                    null
+                }
+            }
+        }
+        if (installFailure != null) {
+            session.disposeUnstarted()
+            return KadreResult.Failure(installFailure)
         }
 
         session.start()
@@ -179,7 +208,14 @@ public class RuntimeHostController private constructor(
             ?.let(::reportFailure)
     }
 
-    internal companion object {
+    private fun runtimeSessionComponentsFailure(): KadreFailure.PlatformFailure =
+        KadreFailure.PlatformFailure(
+            platform,
+            "runtime-session-components",
+            "create-failed",
+        )
+
+    public companion object {
         private val DEFAULT_LIFECYCLE_STATE: LifecycleState = LifecycleState(
             AttachmentState.Attached,
             VisibilityState.Foreground,
@@ -188,7 +224,7 @@ public class RuntimeHostController private constructor(
         private val DEFAULT_LIFECYCLE_CAPABILITIES: LifecycleCapabilities =
             LifecycleCapabilities(FeatureAvailability.Unsupported)
 
-        fun withClock(
+        internal fun withClock(
             platform: KadrePlatform,
             clockFactory: RuntimeClockFactory,
             initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
@@ -204,6 +240,33 @@ public class RuntimeHostController private constructor(
             sessionStopHandler,
             sessionObserver,
             clockFactory,
+            UnsupportedRuntimeSessionComponentsFactory,
         )
+
+        /**
+         * Unstable backend SPI for creating a host with session-owned backend components.
+         *
+         * This function is technically public only for backend integration. It is not part of
+         * Kadre's supported public API and may change without compatibility guarantees.
+         */
+        public fun withComponents(
+            platform: KadrePlatform,
+            componentsFactory: RuntimeSessionComponentsFactory,
+            initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
+            initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
+            failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
+            sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
+        ): RuntimeHostController = RuntimeHostController(
+            platform,
+            initialLifecycleState,
+            initialLifecycleCapabilities,
+            failureReporter,
+            sessionStopHandler,
+            sessionObserver,
+            MonotonicRuntimeClockFactory,
+            componentsFactory,
+        )
+
     }
 }
