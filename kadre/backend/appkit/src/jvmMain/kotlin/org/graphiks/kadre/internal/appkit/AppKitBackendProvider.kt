@@ -17,6 +17,8 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
+import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
@@ -30,11 +32,13 @@ import kotlin.coroutines.cancellation.CancellationException
 public class AppKitBackendProvider private constructor(
     private val nativeApplication: AppKitNativeApplication,
     private val broker: AppKitProcessBroker,
+    private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
         KffiAppKitNativeApplication(),
         ProcessAppKitProcessBroker.value,
+        AppKitWindowRuntimeDriverFactory(),
         ::isMacOs,
     )
 
@@ -66,8 +70,9 @@ public class AppKitBackendProvider private constructor(
         val registration = try {
             broker.createEmbeddedHost { initial ->
                 AppKitRuntimeHost(
-                    RuntimeHostController(
+                    RuntimeHostController.withComponents(
                         platform = KadrePlatform.AppKit,
+                        componentsFactory = windowComponentsFactory(request.policy.resources),
                         initialLifecycleState = initial,
                         sessionObserver = RuntimeSessionObserver { _, _ -> owner.close() },
                     ),
@@ -108,8 +113,13 @@ public class AppKitBackendProvider private constructor(
 
         try {
             val nativeLoopReturned = AtomicBoolean(false)
-            val host = RuntimeHostController(
+            val lastWindowStop = AppKitLastWindowStopBridge()
+            val host = RuntimeHostController.withComponents(
                 platform = KadrePlatform.AppKit,
+                componentsFactory = windowComponentsFactory(
+                    request.policy.resources,
+                    if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                ),
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
                     VisibilityState.Background,
@@ -128,6 +138,7 @@ public class AppKitBackendProvider private constructor(
             val attached = host.attach(parentScope, request.applicationFactory, request.policy)
             if (attached is KadreResult.Failure) return attached
             val session = (attached as KadreResult.Success).value
+            lastWindowStop.install(session)
 
             try {
                 nativeApplication.run()
@@ -186,8 +197,14 @@ public class AppKitBackendProvider private constructor(
         fun forTesting(
             nativeApplication: AppKitNativeApplication,
             broker: AppKitProcessBroker,
+            windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
             availability: () -> Boolean,
-        ): AppKitBackendProvider = AppKitBackendProvider(nativeApplication, broker, availability)
+        ): AppKitBackendProvider = AppKitBackendProvider(
+            nativeApplication,
+            broker,
+            windowDriverFactory,
+            availability,
+        )
 
         private fun isMacOs(): Boolean = System.getProperty("os.name", "").let { name ->
             name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
@@ -210,6 +227,42 @@ public class AppKitBackendProvider private constructor(
             "appkit-host",
             "lifecycle-observation-exception",
         )
+    }
+
+    private fun windowComponentsFactory(
+        resources: org.graphiks.kadre.policy.ResourceBudgetPolicy,
+        onLastWindowClosed: (() -> Unit)? = null,
+    ): RuntimeSessionComponentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+        val driver = windowDriverFactory.create(
+            resources = resources,
+            publicAppKitCapabilities = true,
+            onLastWindowClosed = onLastWindowClosed,
+        )
+        RuntimeSessionComponents(driver.manager, driver::close)
+    }
+}
+
+private class AppKitLastWindowStopBridge {
+    private val lock = Any()
+    private var session: KadreSession? = null
+    private var requested = false
+
+    fun install(value: KadreSession) {
+        val stop = synchronized(lock) {
+            check(session == null) { "AppKit last-window session was already installed" }
+            session = value
+            requested
+        }
+        if (stop) value.close()
+    }
+
+    fun request() {
+        val target = synchronized(lock) {
+            if (requested) return
+            requested = true
+            session
+        }
+        target?.close()
     }
 }
 

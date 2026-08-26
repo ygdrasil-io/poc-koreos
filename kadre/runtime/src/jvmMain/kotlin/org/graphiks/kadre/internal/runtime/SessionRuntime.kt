@@ -80,6 +80,9 @@ internal class SessionRuntime(
         throw cause
     }
     private val runtimeWindows = runtimeComponents.windows
+        .also { manager ->
+            (manager as? RuntimeWindowManager)?.installSessionEventStampSource(::nextStamp)
+        }
     private val runtimeDisplays = UnsupportedDisplayManager()
     private val runtimeDevices = UnsupportedDeviceManager()
     private val runtimeCapture = UnsupportedCaptureManager()

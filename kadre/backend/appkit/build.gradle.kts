@@ -17,6 +17,7 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))
+            implementation(project(":kadre:platform:desktop"))
         }
     }
 }

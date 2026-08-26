@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
@@ -22,7 +23,20 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.OpenedWindowCloseCommand
+import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
+import org.graphiks.kadre.internal.runtime.PendingWindowCancellationCommand
+import org.graphiks.kadre.internal.runtime.PendingWindowCancellationOutcome
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
+import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
+import org.graphiks.kadre.internal.runtime.WindowCommandPort
+import org.graphiks.kadre.internal.runtime.WindowOpenCommand
+import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.window.WindowRequestOutcome
+import org.graphiks.kadre.window.WindowSpec
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -318,6 +332,83 @@ class DesktopHostTest {
         assertEquals(listOf(provider), catalog.providers())
         assertEquals(1, loads)
     }
+
+    @OptIn(org.graphiks.kadre.diagnostics.DelicateKadreApi::class, org.graphiks.kadre.diagnostics.KadrePlatformApi::class)
+    @Test
+    fun desktopHandleMapsTheScopedAppKitLeaseAndRejectsAccessAfterClose() = runBlocking {
+        val owner = RecordingDesktopHandleOwner()
+        val port = ImmediateDesktopHandlePort(owner)
+        val manager = RuntimeWindowManager(
+            resources = KadrePolicies.Default.resources,
+            commandPort = port,
+            platform = KadrePlatform.AppKit,
+            failureReporter = RuntimeFailureReporter { throw AssertionError(it) },
+            publicWindowCapabilities = true,
+        )
+        val window = assertIs<WindowRequestOutcome.OpenedHere>(
+            manager.requestWindow(WindowSpec(title = "handle")).successValue().await(),
+        ).window
+        var callbackThread: Thread? = null
+
+        val mapped = window.withDesktopHandle { value ->
+            callbackThread = Thread.currentThread()
+            assertEquals(
+                DesktopNativeWindowHandle.AppKit(0xA11uL, 0xB22uL),
+                value,
+            )
+            "mapped"
+        }.successValue()
+
+        assertEquals("mapped", mapped)
+        assertSame(Thread.currentThread(), callbackThread)
+        assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, window.close().successValue())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+            window.withDesktopHandle { error("closed windows must not invoke the callback") },
+        )
+    }
+}
+
+private class ImmediateDesktopHandlePort(
+    private val owner: RecordingDesktopHandleOwner,
+) : WindowCommandPort {
+    private lateinit var open: WindowOpenCommand
+
+    override fun requestOpen(command: WindowOpenCommand) {
+        open = command
+        command.commit(owner)
+    }
+
+    override fun requestPendingCancellation(
+        command: PendingWindowCancellationCommand,
+    ): PendingWindowCancellationOutcome = PendingWindowCancellationOutcome.CancelledBeforeCommit
+
+    override fun requestOpenedClose(command: OpenedWindowCloseCommand): OpenedWindowCloseOutcome {
+        owner.close()
+        open.nativeClosed()
+        return OpenedWindowCloseOutcome.Accepted
+    }
+}
+
+private class RecordingDesktopHandleOwner : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
+    private var closed = false
+
+    override suspend fun <R> withDesktopHandle(
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R> = if (closed) {
+        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+    } else {
+        KadreResult.Success(block(RuntimeDesktopNativeWindowHandle.AppKit(0xA11uL, 0xB22uL)))
+    }
+
+    override fun close() {
+        closed = true
+    }
+}
+
+private fun <T> KadreResult<T>.successValue(): T = when (this) {
+    is KadreResult.Success -> value
+    is KadreResult.Failure -> error("expected success, got $reason")
 }
 
 private class RecordingProvider(

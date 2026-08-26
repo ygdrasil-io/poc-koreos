@@ -1,11 +1,20 @@
 package org.graphiks.kadre.internal.appkit
 
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSNotificationCenter
+import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
@@ -13,6 +22,8 @@ import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -23,11 +34,24 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
+import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.WindowCloseDecision
+import org.graphiks.kadre.window.WindowCloseOutcome
+import org.graphiks.kadre.window.WindowCloseResponseOutcome
+import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowEvent
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowManager
+import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequestOutcome
+import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
 import java.lang.foreign.Arena
+import java.lang.foreign.MemorySegment
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -41,6 +65,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
@@ -201,9 +226,14 @@ class AppKitBackendProviderTest {
     }
 
     @Test
-    fun privateWindowDriversDoNotReplaceTheOrdinaryUnsupportedSessionManager() = kotlinx.coroutines.runBlocking {
+    fun privateWindowDriversDoNotReplaceThePublicSessionOwnedManager() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
-        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+        val publicPort = DeterministicAppKitNativeWindowPort("public-session")
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            AppKitWindowRuntimeDriverFactory { publicPort },
+        ) { true }
         val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
         val observedWindows = CompletableDeferred<WindowManager>()
         val first = AppKitWindowRuntimeDriverFactory {
@@ -231,13 +261,13 @@ class AppKitBackendProviderTest {
 
             assertNotSame(first.manager, ordinary)
             assertNotSame(second.manager, ordinary)
-            assertEquals("UnsupportedWindowManager", ordinary::class.simpleName)
-            assertEquals(
-                WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
-                ordinary.requestWindow(WindowSpec(title = "still-unsupported"))
+            assertEquals("RuntimeWindowManager", ordinary::class.simpleName)
+            assertIs<WindowRequestOutcome.OpenedHere>(
+                ordinary.requestWindow(WindowSpec(title = "public-owned"))
                     .appKitSuccessValue()
                     .await(),
             )
+            assertEquals(listOf("public-owned"), publicPort.createdWindowTitles)
             assertEquals(emptyList(), first.manager.state.value.windows)
             assertEquals(emptyList(), second.manager.state.value.windows)
 
@@ -250,6 +280,554 @@ class AppKitBackendProviderTest {
             parentScope.cancel()
         }
     }
+
+    @Test
+    fun publicAppKitSessionCancelsAPendingRequestWithoutLeavingNativeOrManagerResidue() =
+        kotlinx.coroutines.runBlocking {
+            val preparationStarted = CountDownLatch(1)
+            val allowPreparation = CountDownLatch(1)
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-cancellation",
+                beforeCreateWindow = {
+                    preparationStarted.countDown()
+                    check(allowPreparation.await(2, TimeUnit.SECONDS))
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                assertEquals(
+                    Capability.Supported(setOf(WindowCreationMode.OpenedHere), FeatureAvailability.Available),
+                    windows.state.value.capabilities.requestWindow,
+                )
+                val request = windows.requestWindow(WindowSpec(title = "cancel-before-commit")).appKitSuccessValue()
+                assertEquals(WindowRequestState.Pending, request.state.value)
+                assertTrue(preparationStarted.await(2, TimeUnit.SECONDS))
+
+                assertEquals(
+                    org.graphiks.kadre.window.WindowCancellationOutcome.CancellationRequested,
+                    request.cancel(),
+                )
+                allowPreparation.countDown()
+
+                assertEquals(WindowRequestOutcome.Cancelled, withTimeout(2.seconds) { request.await() })
+                withTimeout(2.seconds) {
+                    while (port.closedWindowTitles != listOf("cancel-before-commit")) yield()
+                }
+                assertEquals(emptyList(), windows.state.value.windows)
+            } finally {
+                allowPreparation.countDown()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitSessionKeepsAdmissionOrderAndMovesPrimaryOnlyAfterClosure() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort("public-membership")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "first")).appKitSuccessValue().await(),
+                ).window
+                val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "second")).appKitSuccessValue().await(),
+                ).window
+
+                assertEquals(listOf(first, second), windows.state.value.windows)
+                assertSame(first, windows.state.value.primary)
+                assertIs<Capability.Unsupported>(first.capabilities.value.title)
+                assertIs<Capability.Unsupported>(first.surface.capabilities.value.platformAccess)
+
+                first.close()
+                withTimeout(2.seconds) { first.state.first { it.phase == WindowPhase.Closed } }
+
+                assertEquals(listOf(second), windows.state.value.windows)
+                assertSame(second, windows.state.value.primary)
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort("public-effective-state")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(
+                        WindowSpec(
+                            title = "effective",
+                            contentSize = LogicalSize(320.0, 180.0),
+                            minimumSize = LogicalSize(100.0, 80.0),
+                            maximumSize = LogicalSize(640.0, 360.0),
+                            fullscreen = FullscreenMode.Borderless,
+                            level = WindowLevel.Floating,
+                            transparent = true,
+                            blurBehind = true,
+                            contentProtection = true,
+                        ),
+                    ).appKitSuccessValue().await(),
+                ).window
+
+                assertEquals("effective", window.state.value.title)
+                assertEquals(LogicalSize(320.0, 180.0), window.state.value.contentSize)
+                assertNull(window.state.value.minimumSize)
+                assertNull(window.state.value.maximumSize)
+                assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+                assertEquals(WindowLevel.Normal, window.state.value.level)
+                assertFalse(window.state.value.transparent)
+                assertFalse(window.state.value.blurBehind)
+                assertFalse(window.state.value.contentProtection)
+
+                val windowCapabilities = window.capabilities.value
+                listOf<Capability<*>>(
+                    windowCapabilities.title,
+                    windowCapabilities.outerPosition,
+                    windowCapabilities.contentSize,
+                    windowCapabilities.minimumSize,
+                    windowCapabilities.maximumSize,
+                    windowCapabilities.resizable,
+                    windowCapabilities.fullscreen,
+                    windowCapabilities.decorations,
+                    windowCapabilities.systemButtons,
+                    windowCapabilities.level,
+                    windowCapabilities.transparency,
+                    windowCapabilities.blurBehind,
+                    windowCapabilities.icon,
+                    windowCapabilities.attention,
+                    windowCapabilities.contentProtection,
+                ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertIs<Capability.Supported<*>>(windowCapabilities.closeInterception)
+                assertIs<Capability.Supported<*>>(windowCapabilities.platformAccess)
+
+                val surfaceCapabilities = window.surface.capabilities.value
+                listOf<Capability<*>>(
+                    surfaceCapabilities.cursor,
+                    surfaceCapabilities.customCursor,
+                    surfaceCapabilities.pointerCapture,
+                    surfaceCapabilities.hitTesting,
+                    surfaceCapabilities.inputDefaultBehavior,
+                    surfaceCapabilities.handlerInteractions,
+                    surfaceCapabilities.armedInteractions,
+                    surfaceCapabilities.platformAccess,
+                ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = false)),
+                    window.surface.requestRedraw(),
+                )
+                val inputCapabilities = window.surface.input.state.value.capabilities
+                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.keyboard)
+                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.pointer)
+                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.touch)
+                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.gestures)
+                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.dragAndDrop)
+                assertIs<Capability.Unsupported>(inputCapabilities.textInput)
+                assertIs<Capability.Unsupported>(inputCapabilities.rawInput)
+                Unit
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitWindowDefersNativeCloseAndUsesTheFirstApplicationResponse() =
+        kotlinx.coroutines.runBlocking {
+            val nativeCloseStarted = CountDownLatch(1)
+            val allowNativeClose = CountDownLatch(1)
+            val port = DeterministicAppKitNativeWindowPort(
+                "public-native-close",
+                beforeCloseWindow = {
+                    nativeCloseStarted.countDown()
+                    check(allowNativeClose.await(2, TimeUnit.SECONDS))
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "intercepted")).appKitSuccessValue().await(),
+                ).window
+                val rejectedEvent = async(start = CoroutineStart.UNDISPATCHED) {
+                    window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+                }
+
+                assertFalse(port.requestNativeClose("intercepted"))
+                val rejected = withTimeout(2.seconds) { rejectedEvent.await() }
+                assertEquals(
+                    WindowCloseResponseOutcome.KeptOpen,
+                    window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject).appKitSuccessValue(),
+                )
+                assertEquals(WindowPhase.Open, window.state.value.phase)
+                assertEquals(emptyList(), port.closedWindowTitles)
+
+                val acceptedEvent = async(start = CoroutineStart.UNDISPATCHED) {
+                    window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+                }
+                assertFalse(port.requestNativeClose("intercepted"))
+                val accepted = withTimeout(2.seconds) { acceptedEvent.await() }
+                val response = assertIs<WindowCloseResponseOutcome.Closing>(
+                    window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept).appKitSuccessValue(),
+                )
+                assertTrue(nativeCloseStarted.await(2, TimeUnit.SECONDS))
+                assertEquals(
+                    WindowCloseResponseOutcome.Closing(response.operationId),
+                    window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept).appKitSuccessValue(),
+                )
+                assertEquals(
+                    WindowCloseResponseOutcome.AlreadyResolved,
+                    window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Reject).appKitSuccessValue(),
+                )
+
+                allowNativeClose.countDown()
+                withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+                assertEquals(listOf("intercepted"), port.closedWindowTitles)
+                assertEquals(listOf("intercepted"), port.windowWillCloseTitles)
+                assertEquals(emptyList(), windows.state.value.windows)
+            } finally {
+                allowNativeClose.countDown()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun repeatedNativeCloseCallbacksStayCoalescedUntilThePendingRequestIsRejected() =
+        kotlinx.coroutines.runBlocking {
+            val blockerCloseStarted = CountDownLatch(1)
+            val allowBlockerClose = CountDownLatch(1)
+            val betweenCallbacksStarted = CountDownLatch(1)
+            val allowBetweenCallbacks = CountDownLatch(1)
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "coalesced-native-close",
+                beforeCloseWindow = { title ->
+                    if (title == "blocker") {
+                        blockerCloseStarted.countDown()
+                        check(allowBlockerClose.await(2, TimeUnit.SECONDS))
+                    }
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val closeRequests = Channel<WindowEvent.CloseRequested>(Channel.UNLIMITED)
+            var collector: kotlinx.coroutines.Job? = null
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val blocker = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "blocker")).appKitSuccessValue().await(),
+                ).window
+                val target = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "target")).appKitSuccessValue().await(),
+                ).window
+                collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    target.events.filterIsInstance<WindowEvent.CloseRequested>().collect(closeRequests::send)
+                }
+
+                assertIs<WindowCloseOutcome.Accepted>(blocker.close().appKitSuccessValue())
+                assertTrue(blockerCloseStarted.await(2, TimeUnit.SECONDS))
+                assertFalse(port.requestNativeClose("target"))
+                val betweenCallbacks = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+                    target.withDesktopHandle {
+                        betweenCallbacksStarted.countDown()
+                        check(allowBetweenCallbacks.await(2, TimeUnit.SECONDS))
+                    }
+                }
+                assertFalse(port.requestNativeClose("target"))
+
+                allowBlockerClose.countDown()
+                val first = withTimeout(2.seconds) { closeRequests.receive() }
+                assertTrue(betweenCallbacksStarted.await(2, TimeUnit.SECONDS))
+                assertEquals(
+                    WindowCloseResponseOutcome.KeptOpen,
+                    target.respondToCloseRequest(first.requestId, WindowCloseDecision.Reject).appKitSuccessValue(),
+                )
+                val afterCallbacks = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+                    target.withDesktopHandle { }
+                }
+                allowBetweenCallbacks.countDown()
+                assertEquals(KadreResult.Success(Unit), betweenCallbacks.await())
+                assertEquals(KadreResult.Success(Unit), afterCallbacks.await())
+                assertNull(closeRequests.tryReceive().getOrNull())
+
+                assertFalse(port.requestNativeClose("target"))
+                val accepted = withTimeout(2.seconds) { closeRequests.receive() }
+                assertIs<WindowCloseResponseOutcome.Closing>(
+                    target.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept).appKitSuccessValue(),
+                )
+                withTimeout(2.seconds) { target.state.first { it.phase == WindowPhase.Closed } }
+                Unit
+            } finally {
+                allowBlockerClose.countDown()
+                allowBetweenCallbacks.countDown()
+                collector?.cancel()
+                closeRequests.close()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun forcedNativeTerminalWinsBeforeAQueuedRejectResponse() = kotlinx.coroutines.runBlocking {
+        val port = DeterministicAppKitNativeWindowPort("forced-native-terminal")
+        val provider = AppKitBackendProvider.forTesting(
+            EmbeddedNativeApplication(),
+            AppKitProcessBroker(),
+            windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+        ) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+        val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+        val leaseStarted = CountDownLatch(1)
+        val allowLeaseToReturn = CountDownLatch(1)
+
+        try {
+            val windows = withTimeout(2.seconds) { observedWindows.await() }
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                windows.requestWindow(WindowSpec(title = "forced")).appKitSuccessValue().await(),
+            ).window
+            val closeRequested = async(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+            }
+            assertFalse(port.requestNativeClose("forced"))
+            val request = withTimeout(2.seconds) { closeRequested.await() }
+            val lease = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+                window.withDesktopHandle {
+                    leaseStarted.countDown()
+                    check(allowLeaseToReturn.await(2, TimeUnit.SECONDS))
+                }
+            }
+            assertTrue(leaseStarted.await(2, TimeUnit.SECONDS))
+
+            port.emitNativeClosed("forced")
+
+            assertEquals(
+                WindowCloseResponseOutcome.TooLate,
+                window.respondToCloseRequest(request.requestId, WindowCloseDecision.Reject)
+                    .appKitSuccessValue(),
+            )
+            assertIs<WindowCloseOutcome.Accepted>(window.close().appKitSuccessValue())
+            assertEquals(
+                WindowCloseResponseOutcome.TooLate,
+                window.respondToCloseRequest(request.requestId, WindowCloseDecision.Accept)
+                    .appKitSuccessValue(),
+            )
+            allowLeaseToReturn.countDown()
+            assertEquals(KadreResult.Success(Unit), lease.await())
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            withTimeout(2.seconds) { windows.state.first { it.windows.isEmpty() } }
+            Unit
+        } finally {
+            allowLeaseToReturn.countDown()
+            session.close()
+            session.awaitTermination()
+            parentScope.cancel()
+        }
+    }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitDesktopHandleRunsOnTheOwnerThreadAndCloseWaitsForItsLease() =
+        kotlinx.coroutines.runBlocking {
+            val port = OwnerThreadAppKitNativeWindowPort("public-desktop-handle")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val callbackStarted = CountDownLatch(1)
+            val allowCallbackToReturn = CountDownLatch(1)
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "public-leased")).appKitSuccessValue().await(),
+                ).window
+                val lease = async(Dispatchers.Default) {
+                    window.withDesktopHandle { handle ->
+                        assertTrue(port.isMainThread())
+                        val appKitHandle = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        assertEquals(0xA11uL, appKitHandle.nsWindowAddress)
+                        assertEquals(0xB22uL, appKitHandle.nsViewAddress)
+                        callbackStarted.countDown()
+                        check(allowCallbackToReturn.await(2, TimeUnit.SECONDS))
+                        "leased"
+                    }
+                }
+                assertTrue(callbackStarted.await(2, TimeUnit.SECONDS))
+
+                assertIs<WindowCloseOutcome.Accepted>(window.close().appKitSuccessValue())
+                assertEquals(emptyList(), port.closedWindowTitles)
+
+                allowCallbackToReturn.countDown()
+                assertEquals(KadreResult.Success("leased"), lease.await())
+                withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+                assertEquals(listOf("public-leased"), port.closedWindowTitles)
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                    window.withDesktopHandle { error("closed windows must not invoke the callback") },
+                )
+            } finally {
+                allowCallbackToReturn.countDown()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+                port.close()
+            }
+        }
+
+    @Test
+    fun standaloneLastWindowPolicyIgnoresHeadlessStartupAndStopsAfterItsArmedTransition() {
+        val native = StopDrivenNativeApplication()
+        val port = DeterministicAppKitNativeWindowPort("standalone-last-window")
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+        ) { true }
+
+        val result = provider.run(
+            DesktopStandaloneRequest(
+                KadreApplicationFactory {
+                    KadreApplication {
+                        assertEquals(0, native.stopCount)
+                        val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                            windows.requestWindow(WindowSpec(title = "armed")).appKitSuccessValue().await(),
+                        ).window
+                        assertEquals(0, native.stopCount)
+                        window.close()
+                        window.state.first { it.phase == WindowPhase.Closed }
+                        kotlinx.coroutines.awaitCancellation()
+                    }
+                },
+                stopWhenLastWindowClosed = true,
+                KadrePolicies.Default,
+            ),
+        )
+
+        assertEquals(
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostRequested)),
+            result,
+        )
+        assertEquals(1, native.stopCount)
+        assertEquals(listOf("armed"), port.closedWindowTitles)
+    }
+
+    @Test
+    fun publicAppKitSessionTeardownDetachesPendingThenCommittedWindowsBeforeDelegateRevocation() =
+        kotlinx.coroutines.runBlocking {
+            val logicalStateAtRevocation = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+            val pendingPreparationStarted = CountDownLatch(1)
+            val allowPendingPreparation = CountDownLatch(1)
+            lateinit var windows: WindowManager
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-teardown",
+                beforeCreateWindow = { spec ->
+                    if (spec.title == "pending") {
+                        pendingPreparationStarted.countDown()
+                        check(allowPendingPreparation.await(2, TimeUnit.SECONDS))
+                    }
+                },
+                onDelegateRevoked = {
+                    logicalStateAtRevocation += windows.state.value.windows.map { it.state.value.title }
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                windows = withTimeout(2.seconds) { observedWindows.await() }
+                windows.requestWindow(WindowSpec(title = "first")).appKitSuccessValue().await()
+                windows.requestWindow(WindowSpec(title = "second")).appKitSuccessValue().await()
+                val pending = windows.requestWindow(WindowSpec(title = "pending")).appKitSuccessValue()
+                assertTrue(pendingPreparationStarted.await(2, TimeUnit.SECONDS))
+
+                session.close()
+                session.awaitTermination()
+                assertEquals(WindowRequestOutcome.RequesterDetached, pending.await())
+                allowPendingPreparation.countDown()
+                withTimeout(2.seconds) {
+                    while (port.closedWindowTitles.size < 3 || logicalStateAtRevocation.size < 3) yield()
+                }
+
+                assertEquals(listOf("pending", "second", "first"), port.closedWindowTitles)
+                assertTrue(logicalStateAtRevocation.all(List<String>::isEmpty))
+                assertEquals(emptyList(), windows.state.value.windows)
+            } finally {
+                allowPendingPreparation.countDown()
+                session.close()
+                parentScope.cancel()
+            }
+        }
 
     @Test
     fun unavailableProviderDoesNotTouchTheNativeBridgeOrFactory() {
@@ -474,6 +1052,10 @@ class AppKitBackendProviderTest {
         assertEquals(2, native.runCount)
     }
 
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
     @Test
     fun realKffiStandaloneLoopStartsAndStopsOnMacOs() {
         if (!isMacOs()) {
@@ -486,6 +1068,9 @@ class AppKitBackendProviderTest {
             AppKitProcessBroker(),
         ) { true }
         val stopRequestedOffMainThread = AtomicBoolean(false)
+        val publicHandleObserved = AtomicBoolean(false)
+        val nativeRejectObserved = AtomicBoolean(false)
+        val terminalCloseObserved = AtomicBoolean(false)
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -496,11 +1081,65 @@ class AppKitBackendProviderTest {
                         withTimeout(5.seconds) {
                             while (!native.isRunning()) yield()
                         }
+                        val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                            windows.requestWindow(WindowSpec(title = "Kadre O3 public window proof"))
+                                .appKitSuccessValue()
+                                .await(),
+                        ).window
+                        val events = Channel<WindowEvent>(Channel.UNLIMITED)
+                        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                            window.events.collect(events::send)
+                        }
+                        val performNativeUserClose: suspend () -> Unit = {
+                            assertEquals(
+                                KadreResult.Success(Unit),
+                                window.withDesktopHandle { handle ->
+                                    val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                    assertTrue(appKit.nsWindowAddress != 0uL)
+                                    assertTrue(appKit.nsViewAddress != 0uL)
+                                    publicHandleObserved.set(true)
+                                    ObjCRuntime.autoreleasePool {
+                                        NSWindow(
+                                            MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                        ).performClose(MemorySegment.NULL)
+                                    }
+                                },
+                            )
+                        }
+
+                        performNativeUserClose()
+                        val rejected = withTimeout(5.seconds) {
+                            assertIs<WindowEvent.CloseRequested>(events.receive())
+                        }
+                        assertEquals(
+                            WindowCloseResponseOutcome.KeptOpen,
+                            window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject)
+                                .appKitSuccessValue(),
+                        )
+                        assertEquals(WindowPhase.Open, window.state.value.phase)
+                        nativeRejectObserved.set(true)
+
+                        performNativeUserClose()
+                        val accepted = withTimeout(5.seconds) {
+                            assertIs<WindowEvent.CloseRequested>(events.receive())
+                        }
+                        val closing = assertIs<WindowCloseResponseOutcome.Closing>(
+                            window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept)
+                                .appKitSuccessValue(),
+                        )
+                        val terminal = withTimeout(5.seconds) {
+                            assertIs<WindowEvent.Closing>(events.receive())
+                        }
+                        assertEquals(closing.operationId, terminal.operationId)
+                        withTimeout(5.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+                        withTimeout(5.seconds) { windows.state.first { it.windows.isEmpty() } }
+                        terminalCloseObserved.set(true)
+                        collector.cancel()
                         stopRequestedOffMainThread.set(!native.isMainThread())
                         requestStop()
                     }
                 },
-                true,
+                false,
                 KadrePolicies.Default,
             ),
         )
@@ -510,6 +1149,9 @@ class AppKitBackendProviderTest {
             result,
         )
         assertTrue(stopRequestedOffMainThread.get())
+        assertTrue(publicHandleObserved.get())
+        assertTrue(nativeRejectObserved.get())
+        assertTrue(terminalCloseObserved.get())
     }
 
     @Test
@@ -779,6 +1421,21 @@ private fun embeddedRequest(
         DesktopIntegrationKind.AppKitMainLoop,
         KadrePolicies.Default,
     )
+
+private fun publicWindowRequest(
+    parentScope: kotlinx.coroutines.CoroutineScope,
+    captureWindows: CompletableDeferred<WindowManager>,
+): DesktopEmbeddedRequest = DesktopEmbeddedRequest(
+    parentScope,
+    KadreApplicationFactory {
+        KadreApplication {
+            captureWindows.complete(windows)
+            kotlinx.coroutines.awaitCancellation()
+        }
+    },
+    DesktopIntegrationKind.AppKitMainLoop,
+    KadrePolicies.Default,
+)
 
 private fun KadreResult<KadreSession>.requireSession(): KadreSession =
     (this as? KadreResult.Success)?.value ?: error("Expected a Kadre session, got $this")

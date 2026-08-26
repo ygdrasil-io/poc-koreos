@@ -355,6 +355,12 @@ private class RecordingAppKitNativeWindowPort(
         cleanupFailure?.let { throw it }
     }
 
+    override fun desktopHandle(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+    ): org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle.AppKit =
+        org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle.AppKit(1uL, 2uL)
+
     private fun failIfRequested(operation: String) {
         if (failAt == operation) error("native $operation failure")
     }

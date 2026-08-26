@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.window.WindowSpec
 
 /**
@@ -43,6 +44,11 @@ internal interface AppKitNativeWindowPort {
     fun detachContentView(window: AppKitNativeWindowOwner)
 
     fun closeWindow(window: AppKitNativeWindowOwner)
+
+    fun desktopHandle(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+    ): RuntimeDesktopNativeWindowHandle.AppKit
 }
 
 internal interface AppKitNativeWindowOwner : AutoCloseable {

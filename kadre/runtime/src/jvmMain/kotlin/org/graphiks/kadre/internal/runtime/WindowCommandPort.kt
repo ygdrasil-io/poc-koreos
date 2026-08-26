@@ -1,6 +1,9 @@
 package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
@@ -22,11 +25,35 @@ public interface WindowCommandPort {
     ): PendingWindowCancellationOutcome
 
     public fun requestOpenedClose(command: OpenedWindowCloseCommand): OpenedWindowCloseOutcome
+
+    /** Resolves backend-side coalescing when the application tries to keep a native close open. */
+    public fun closeRequestRejected(command: OpenedWindowCloseCommand): CloseRequestRejectionOutcome =
+        CloseRequestRejectionOutcome.Rejected
 }
 
 /** A backend-owned native peer whose release must be idempotent. */
 public fun interface WindowPeerOwner : AutoCloseable {
     override public fun close()
+}
+
+/** Unstable backend value used only while a bounded desktop-handle callback is executing. */
+public sealed interface RuntimeDesktopNativeWindowHandle {
+    public data class AppKit(
+        public val nsWindowAddress: ULong,
+        public val nsViewAddress: ULong,
+    ) : RuntimeDesktopNativeWindowHandle
+}
+
+/**
+ * Unstable backend SPI for a synchronous, owner-thread desktop handle lease.
+ *
+ * This type is technically public only so the desktop facade and backend modules can share the
+ * lease boundary. It is not part of Kadre's supported public API.
+ */
+public interface RuntimeDesktopWindowHandleAccess {
+    public suspend fun <R> withDesktopHandle(
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R>
 }
 
 /**
@@ -44,11 +71,11 @@ public class WindowOpenCommand internal constructor(
     private val ownerLock = Any()
     private val owners = IdentityHashMap<WindowPeerOwner, ManagedWindowPeerOwner>()
 
-    public fun commit(owner: WindowPeerOwner) {
+    public fun commit(owner: WindowPeerOwner, effectiveSpec: WindowSpec = spec) {
         val managedOwner = synchronized(ownerLock) {
             owners.getOrPut(owner) { ManagedWindowPeerOwner(owner) }
         }
-        stimulusSink.commit(requestId, windowId, managedOwner)
+        stimulusSink.commit(requestId, windowId, effectiveSpec, managedOwner)
     }
 
     public fun fail(failure: KadreFailure) {
@@ -58,11 +85,21 @@ public class WindowOpenCommand internal constructor(
     public fun nativeClosed() {
         stimulusSink.nativeClosed(requestId)
     }
+
+    public fun closeRequested() {
+        stimulusSink.closeRequested(requestId)
+    }
 }
 
 public data class PendingWindowCancellationCommand(
     public val requestId: WindowRequestId,
+    public val intent: PendingWindowCancellationIntent = PendingWindowCancellationIntent.RequesterCancellation,
 )
+
+public enum class PendingWindowCancellationIntent {
+    RequesterCancellation,
+    OwnershipRelease,
+}
 
 /** Immediate knowledge available for a pending request cancellation. */
 public sealed interface PendingWindowCancellationOutcome {
@@ -80,24 +117,46 @@ public data class OpenedWindowCloseCommand(
 /** Outcomes valid when asking the backend to close an already opened window. */
 public sealed interface OpenedWindowCloseOutcome {
     public data object Accepted : OpenedWindowCloseOutcome
+    public data object NativeCloseAlreadyCommitted : OpenedWindowCloseOutcome
     public data class TemporarilyUnavailable(public val retryable: Boolean) : OpenedWindowCloseOutcome
     public data class PlatformFailure(
         public val failure: KadreFailure.PlatformFailure,
     ) : OpenedWindowCloseOutcome
 }
 
+/** Immediate backend knowledge when rejecting an intercepted native close request. */
+public sealed interface CloseRequestRejectionOutcome {
+    public data object Rejected : CloseRequestRejectionOutcome
+    public data object TooLate : CloseRequestRejectionOutcome
+}
+
 internal interface WindowCommandStimulusSink {
-    fun commit(requestId: WindowRequestId, windowId: WindowId, owner: WindowPeerOwner)
+    fun commit(
+        requestId: WindowRequestId,
+        windowId: WindowId,
+        effectiveSpec: WindowSpec,
+        owner: WindowPeerOwner,
+    )
     fun fail(requestId: WindowRequestId, failure: KadreFailure)
     fun nativeClosed(requestId: WindowRequestId)
+    fun closeRequested(requestId: WindowRequestId)
 }
 
 internal class ManagedWindowPeerOwner(
     private val delegate: WindowPeerOwner,
-) : WindowPeerOwner {
+) : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
     private val closed = AtomicBoolean(false)
 
     override fun close() {
         if (closed.compareAndSet(false, true)) delegate.close()
+    }
+
+    override suspend fun <R> withDesktopHandle(
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R> {
+        if (closed.get()) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        val access = delegate as? RuntimeDesktopWindowHandleAccess
+            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.PlatformWindowAccess))
+        return access.withDesktopHandle(block)
     }
 }
