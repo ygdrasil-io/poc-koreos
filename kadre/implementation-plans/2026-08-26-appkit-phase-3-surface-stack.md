@@ -37,7 +37,7 @@
 
 - [ ] **Step 1: Write the manual protocol first**
 
-Document the six approved scenarios exactly: interactive resize; mixed-scale screen migration when available; focus/minimize/restore/occlusion; light/dark appearance; redraw bursts during resize/occlusion; and close during resize/redraw. Require macOS, architecture, display model, resolution, scale factor, appearance, build id, pass/fail/not-applicable and observation. Define unavailable second display/theme/visibility control as `not applicable`.
+Document the seven approved scenarios exactly: interactive resize on standard and HiDPI displays; mixed-scale screen migration when available; focus/minimize/restore/occlusion; light/dark appearance; redraw bursts during resize/occlusion; cursor and hit testing at the window edge; and close during resize/redraw/focus change. Require macOS, architecture, display model, resolution, scale factor, appearance, build id, pass/fail/not-applicable and observation. Define unavailable second display/theme/visibility control as `not applicable`.
 
 - [ ] **Step 2: Reserve evidence names**
 
@@ -205,7 +205,7 @@ Expected: GREEN; `APK-004` has no skip/failure/error; `APK-003` stays green.
 
 - [ ] **Step 4: Execute and record the manual checklist**
 
-Run the harness on one supported macOS configuration. Record each scenario with all mandatory metadata; mark environment-limited cases `not applicable`; attach failures to an issue/test before declaring the phase complete.
+Run the harness on one supported standard-scale display and one supported HiDPI display. Record each scenario with all mandatory metadata; mark environment-limited cases `not applicable`; attach failures to an issue/test before declaring the phase complete.
 
 - [ ] **Step 5: Commit**
 
