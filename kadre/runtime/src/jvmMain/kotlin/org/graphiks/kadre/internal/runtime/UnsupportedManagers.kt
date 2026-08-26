@@ -81,7 +81,10 @@ private class UnsupportedWindowRequest(
     override suspend fun await(): WindowRequestOutcome = outcome
 }
 
-internal class UnsupportedDisplayManager : DisplayManager {
+internal class UnsupportedDisplayManager(
+    collectorAllocator: RuntimeEventCollectorAllocator,
+    maxCollectorsPerFlow: Int,
+) : DisplayManager {
     private val unavailable = KadreFailure.Unsupported(KadreOperation.DisplayAccess)
     private val mutableState = MutableStateFlow(
         DisplayManagerState(
@@ -93,13 +96,18 @@ internal class UnsupportedDisplayManager : DisplayManager {
     private val mutableEvents = MutableSharedFlow<DisplayEvent>()
 
     override val state: StateFlow<DisplayManagerState> = mutableState.asStateFlow()
-    override val events: Flow<DisplayEvent> = mutableEvents.asSharedFlow()
+    override val events: Flow<DisplayEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(
+        collectorAllocator.newGate(maxCollectorsPerFlow),
+    )
 
     override suspend fun requestAccess(): KadreResult<DisplayManagerState> =
         KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.DisplayAccess))
 }
 
-internal class UnsupportedDeviceManager : DeviceManager {
+internal class UnsupportedDeviceManager(
+    collectorAllocator: RuntimeEventCollectorAllocator,
+    maxCollectorsPerFlow: Int,
+) : DeviceManager {
     private val mutableState = MutableStateFlow(
         DeviceManagerState(
             inventory = DeviceInventory.Unsupported,
@@ -109,7 +117,9 @@ internal class UnsupportedDeviceManager : DeviceManager {
     private val mutableEvents = MutableSharedFlow<DeviceLifecycleEvent>()
 
     override val state: StateFlow<DeviceManagerState> = mutableState.asStateFlow()
-    override val events: Flow<DeviceLifecycleEvent> = mutableEvents.asSharedFlow()
+    override val events: Flow<DeviceLifecycleEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(
+        collectorAllocator.newGate(maxCollectorsPerFlow),
+    )
 
     override fun device(id: DeviceId): InputDevice? = null
     override fun gamepad(id: GamepadId): Gamepad? = null

@@ -2,24 +2,31 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
@@ -46,6 +53,55 @@ class RuntimeHostControllerTest {
 
         assertIs<UnsupportedWindowManager>(observed)
         assertEquals(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested), session.awaitTermination())
+    }
+
+    @Test
+    fun eventCollectorBudgetIsSharedAcrossLifecycleAndDiagnosticsWithinOneSession() = runTest {
+        val host = RuntimeHostController(KadrePlatform.Fake)
+        val policy = KadrePolicies.Default.copy(
+            resources = KadrePolicies.Default.resources.copy(
+                maxEventCollectorsPerFlow = 1,
+                maxEventCollectorsPerSession = 1,
+            ),
+        )
+        lateinit var applicationScope: KadreScope
+        val session = attach(host, policy = policy) {
+            applicationScope = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        val lifecycleCollector = applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            applicationScope.lifecycle.events.collect()
+        }
+        val diagnosticsCollector = applicationScope.async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { applicationScope.diagnostics.events.collect() }.exceptionOrNull()
+        }
+        testScheduler.runCurrent()
+
+        try {
+            assertTrue(diagnosticsCollector.isCompleted)
+            val rejection = assertIs<KadreException>(diagnosticsCollector.await())
+            assertEquals(
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.EventCollector, 1),
+                rejection.failure,
+            )
+            lifecycleCollector.cancelAndJoin()
+            val admittedAfterRelease = applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                applicationScope.diagnostics.events.collect()
+            }
+            try {
+                testScheduler.runCurrent()
+                assertTrue(admittedAfterRelease.isActive)
+            } finally {
+                admittedAfterRelease.cancelAndJoin()
+            }
+        } finally {
+            diagnosticsCollector.cancelAndJoin()
+            lifecycleCollector.cancelAndJoin()
+            session.close()
+            testScheduler.runCurrent()
+        }
     }
 
     @Test
