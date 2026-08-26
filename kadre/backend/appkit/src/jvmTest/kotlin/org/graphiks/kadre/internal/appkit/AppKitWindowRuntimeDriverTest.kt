@@ -445,6 +445,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val closedWindowTitles = CopyOnWriteArrayList<String>()
     val windowWillCloseTitles = CopyOnWriteArrayList<String>()
     val createdPeerIds = CopyOnWriteArrayList<AppKitWindowPeerId>()
+    val requestedSurfaceRedrawGenerations = CopyOnWriteArrayList<Long>()
 
     override fun isMainThread(): Boolean = true
 
@@ -497,6 +498,7 @@ internal class DeterministicAppKitNativeWindowPort(
     ): AppKitNativeSurfaceObserverOwner = RecordingNativeSurfaceObserver(
         callbacks,
         initialSurfaceSnapshot,
+        requestedSurfaceRedrawGenerations::add,
     ).also { observer ->
         check(surfaceObservers.put(window.recordingWindow().title, observer) == null) {
             "$name duplicate test surface observer"
@@ -603,6 +605,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private class RecordingNativeSurfaceObserver(
         private val callbacks: AppKitSurfaceCallbacks,
         override val initialSnapshot: AppKitSurfaceSnapshot,
+        private val recordRedrawRequest: (Long) -> Unit,
     ) : AppKitNativeSurfaceObserverOwner {
         private val accepting = AtomicBoolean(true)
 
@@ -622,7 +625,9 @@ internal class DeterministicAppKitNativeWindowPort(
             callbacks.metricsChanged(metrics)
         }
 
-        override fun requestRedraw(generation: Long) = Unit
+        override fun requestRedraw(generation: Long) {
+            recordRedrawRequest(generation)
+        }
 
         override fun revokeCallbacks() {
             accepting.set(false)
@@ -723,6 +728,9 @@ internal class OwnerThreadAppKitNativeWindowPort(
     fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
         delegate.emitSurfaceRedrawConsumed(title, generation)
     }
+
+    val requestedSurfaceRedrawGenerations: List<Long>
+        get() = delegate.requestedSurfaceRedrawGenerations
 
     val closedWindowTitles: List<String>
         get() = delegate.closedWindowTitles

@@ -1,23 +1,32 @@
 package org.graphiks.kadre.internal.appkit
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowRequestOutcome
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.seconds
 
 class AppKitWindowSessionIntegrationTest {
@@ -31,8 +40,14 @@ class AppKitWindowSessionIntegrationTest {
             "second-surface-session",
             initialSurfaceSnapshot = deterministicSurfaceSnapshot(LogicalSize(300.0, 150.0), 2.0),
         )
-        val first = AppKitWindowRuntimeDriverFactory { firstPort }.create(KadrePolicies.Default.resources)
-        val second = AppKitWindowRuntimeDriverFactory { secondPort }.create(KadrePolicies.Default.resources)
+        val first = AppKitWindowRuntimeDriverFactory { firstPort }.create(
+            KadrePolicies.Default.resources,
+            publicSurfaceCapabilities = true,
+        )
+        val second = AppKitWindowRuntimeDriverFactory { secondPort }.create(
+            KadrePolicies.Default.resources,
+            publicSurfaceCapabilities = true,
+        )
 
         try {
             val firstWindow = assertNotNull(
@@ -47,11 +62,39 @@ class AppKitWindowSessionIntegrationTest {
             ).window
             val firstResize = deterministicMetrics(LogicalSize(640.0, 360.0), 2.0)
             val secondResize = deterministicMetrics(LogicalSize(800.0, 450.0), 1.0)
+            val firstRedrawCompletion = async(start = CoroutineStart.UNDISPATCHED) {
+                firstWindow.surface.events.first { it is SurfaceEvent.RedrawRequested }
+            }
 
             firstPort.emitSurfaceMetrics("first-surface", firstResize)
             secondPort.emitSurfaceMetrics("second-surface", secondResize)
-            firstPort.emitSurfaceRedrawConsumed("first-surface", 7L)
-            secondPort.emitSurfaceRedrawConsumed("second-surface", 11L)
+            assertEquals(KadreResult.Success(Unit), firstWindow.surface.requestRedraw())
+            withTimeout(2.seconds) {
+                while (firstPort.requestedSurfaceRedrawGenerations != listOf(0L)) yield()
+            }
+            val wrongDriverAcknowledgement = async(start = CoroutineStart.UNDISPATCHED) {
+                firstWindow.surface.events.first { it is SurfaceEvent.RedrawRequested }
+            }
+            secondPort.emitSurfaceRedrawConsumed("second-surface", 0L)
+            secondPort.emitSurfaceMetrics("second-surface", secondResize)
+            withTimeout(2.seconds) {
+                secondWindow.surface.state.first { it.logicalSize == LogicalSize(800.0, 450.0) }
+            }
+            assertFalse(wrongDriverAcknowledgement.isCompleted)
+            wrongDriverAcknowledgement.cancel()
+
+            firstPort.emitSurfaceRedrawConsumed("first-surface", 0L)
+            assertIs<SurfaceEvent.RedrawRequested>(withTimeout(2.seconds) { firstRedrawCompletion.await() })
+            val secondFirstDriverRedraw = async(start = CoroutineStart.UNDISPATCHED) {
+                firstWindow.surface.events.first { it is SurfaceEvent.RedrawRequested }
+            }
+            assertEquals(KadreResult.Success(Unit), firstWindow.surface.requestRedraw())
+            withTimeout(2.seconds) {
+                while (firstPort.requestedSurfaceRedrawGenerations != listOf(0L, 1L)) yield()
+            }
+            firstPort.emitSurfaceRedrawConsumed("first-surface", 1L)
+            assertIs<SurfaceEvent.RedrawRequested>(withTimeout(2.seconds) { secondFirstDriverRedraw.await() })
+            assertEquals(emptyList(), secondPort.requestedSurfaceRedrawGenerations)
 
             withTimeout(2.seconds) {
                 firstWindow.surface.state.first { it.logicalSize == LogicalSize(640.0, 360.0) }
@@ -97,9 +140,19 @@ class AppKitWindowSessionIntegrationTest {
     }
 
     @Test
-    fun nativeSurfaceCallbackDoesNotWaitForTheRuntimeOrAppKitOwner() = runBlocking {
+    fun nativeSurfaceCallbackQueuesBehindTheSerializerWithoutWaitingForTheRuntimeOrAppKitOwner() = runBlocking {
+        val serializerEntered = CountDownLatch(1)
+        val releaseSerializer = CountDownLatch(1)
         val port = OwnerThreadAppKitNativeWindowPort("callback-isolation")
-        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            beforeCommitDelivery = { spec ->
+                if (spec.title == "serializer-barrier") {
+                    serializerEntered.countDown()
+                    check(releaseSerializer.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
 
         try {
             val window = assertNotNull(
@@ -107,6 +160,11 @@ class AppKitWindowSessionIntegrationTest {
                     .appKitSuccessValue()
                     .await() as? WindowRequestOutcome.OpenedHere,
             ).window
+            val blockedOpen = async(start = CoroutineStart.UNDISPATCHED) {
+                driver.manager.requestWindow(WindowSpec(title = "serializer-barrier"))
+                    .appKitSuccessValue()
+            }
+            assertTrue(serializerEntered.await(2, TimeUnit.SECONDS))
             val callback = port.submitOnOwnerThread {
                 port.emitSurfaceMetrics(
                     "callback-isolation",
@@ -115,11 +173,15 @@ class AppKitWindowSessionIntegrationTest {
             }
 
             callback.get(2, TimeUnit.SECONDS)
+            assertEquals(LogicalSize(320.0, 240.0), window.surface.state.value.logicalSize)
+            releaseSerializer.countDown()
             withTimeout(2.seconds) {
                 window.surface.state.first { it.logicalSize == LogicalSize(640.0, 360.0) }
             }
+            blockedOpen.await()
             Unit
         } finally {
+            releaseSerializer.countDown()
             driver.close()
             port.close()
         }
@@ -127,25 +189,58 @@ class AppKitWindowSessionIntegrationTest {
 
     @Test
     fun inFlightRedrawAcknowledgementDoesNotDelayDriverTeardown() = runBlocking {
+        val serializerEntered = CountDownLatch(1)
+        val releaseSerializer = CountDownLatch(1)
         val port = OwnerThreadAppKitNativeWindowPort("redraw-teardown")
-        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            publicSurfaceCapabilities = true,
+            beforeCommitDelivery = { spec ->
+                if (spec.title == "teardown-barrier") {
+                    serializerEntered.countDown()
+                    check(releaseSerializer.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
 
         try {
-            driver.manager.requestWindow(WindowSpec(title = "redraw-teardown"))
-                .appKitSuccessValue()
-                .await()
-            val acknowledgement = port.submitOnOwnerThread {
-                port.emitSurfaceRedrawConsumed("redraw-teardown", 17L)
+            val window = assertNotNull(
+                driver.manager.requestWindow(WindowSpec(title = "redraw-teardown"))
+                    .appKitSuccessValue()
+                    .await() as? WindowRequestOutcome.OpenedHere,
+            ).window
+            assertEquals(KadreResult.Success(Unit), window.surface.requestRedraw())
+            withTimeout(2.seconds) {
+                while (port.requestedSurfaceRedrawGenerations != listOf(0L)) yield()
             }
-            val close = async(Dispatchers.Default) { driver.close() }
-
+            val blockedOpen = async(start = CoroutineStart.UNDISPATCHED) {
+                driver.manager.requestWindow(WindowSpec(title = "teardown-barrier"))
+                    .appKitSuccessValue()
+            }
+            assertTrue(serializerEntered.await(2, TimeUnit.SECONDS))
+            val acknowledgement = port.submitOnOwnerThread {
+                port.emitSurfaceRedrawConsumed("redraw-teardown", 0L)
+            }
             acknowledgement.get(2, TimeUnit.SECONDS)
-            withTimeout(2.seconds) { close.await() }
+            val close = port.submitOnOwnerThread(driver::close)
+
+            close.get(2, TimeUnit.SECONDS)
             assertEquals(emptyList(), driver.manager.state.value.windows)
+            assertEquals(SurfaceAttachmentState.Detached, window.surface.state.value.attachment)
+            assertEquals(WindowPhase.Closed, window.state.value.phase)
+            releaseSerializer.countDown()
+            blockedOpen.await()
+            Unit
         } finally {
+            releaseSerializer.countDown()
             driver.close()
             port.close()
         }
+    }
+
+    @Test
+    fun nativeRedrawGenerationRejectsNegativeValues() {
+        assertFailsWith<IllegalArgumentException> { SurfaceRedrawGeneration.fromNative(-1L) }
     }
 
     @Test

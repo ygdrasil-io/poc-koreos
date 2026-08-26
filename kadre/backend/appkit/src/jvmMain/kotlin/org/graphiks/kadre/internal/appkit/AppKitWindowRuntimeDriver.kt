@@ -42,6 +42,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     nativePort: AppKitNativeWindowPort,
     failureReporter: RuntimeFailureReporter,
     publicAppKitCapabilities: Boolean,
+    publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
 ) : AutoCloseable {
@@ -60,6 +61,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         platform = KadrePlatform.AppKit,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
+        publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )
 

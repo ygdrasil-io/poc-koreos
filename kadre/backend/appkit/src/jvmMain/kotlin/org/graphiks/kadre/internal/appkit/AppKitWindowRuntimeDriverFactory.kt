@@ -11,6 +11,7 @@ internal class AppKitWindowRuntimeDriverFactory(
         resources: ResourceBudgetPolicy,
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
         publicAppKitCapabilities: Boolean = false,
+        publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: (() -> Unit)? = null,
         beforeCommitDelivery: (org.graphiks.kadre.window.WindowSpec) -> Unit = { },
     ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriver(
@@ -18,6 +19,7 @@ internal class AppKitWindowRuntimeDriverFactory(
         nativePort = nativePortFactory(),
         failureReporter = failureReporter,
         publicAppKitCapabilities = publicAppKitCapabilities,
+        publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
         beforeCommitDelivery = beforeCommitDelivery,
     )
