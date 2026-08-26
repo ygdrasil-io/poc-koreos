@@ -145,6 +145,7 @@ class AppKitSurfacePeerTest {
 
         peer.close()
         port.forceLateFocus(SurfaceFocus.Unfocused)
+        port.forceLateTheme(SurfaceTheme.Dark)
         port.forceLateRedraw(91L)
 
         assertEquals(
@@ -253,6 +254,8 @@ private class RecordingSurfacePort : AppKitNativeWindowPort {
 
     fun forceLateFocus(value: SurfaceFocus) = onMainThread { surface.forceFocusCallback(value) }
 
+    fun forceLateTheme(value: SurfaceTheme) = onMainThread { surface.forceThemeCallback(value) }
+
     fun forceLateRedraw(generation: Long) = onMainThread { surface.forceRedrawCallback(generation) }
 }
 
@@ -299,6 +302,10 @@ private class RecordingSurfaceOwner(
 
     fun forceFocusCallback(value: SurfaceFocus) {
         callbacks.focusChanged(value)
+    }
+
+    fun forceThemeCallback(value: SurfaceTheme) {
+        callbacks.themeChanged(value)
     }
 
     fun forceRedrawCallback(generation: Long) {

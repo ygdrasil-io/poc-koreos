@@ -27,6 +27,7 @@ import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
+import org.graphiks.kffi.objc.managed.ObjCManagedInstance
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
 import org.graphiks.kffi.objc.managed.ObjCNotificationObservation
 import org.graphiks.kffi.objc.managed.observe
@@ -80,9 +81,24 @@ internal class KffiAppKitWindowPort(
 
     override fun createContentView(spec: WindowSpec): AppKitNativeViewOwner {
         requireMainThread()
-        val initialized = NSView(allocate("NSView")).initWithFrame(contentRect(spec))
-        check(initialized != MemorySegment.NULL) { "NSView initialization failed" }
-        return KffiViewOwner(NSView(initialized))
+        val appearanceAdmission = KffiViewAppearanceAdmission()
+        val instance = contentViewClass.createInstance {
+            onVoid(VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE) {
+                appearanceAdmission.viewDidChangeEffectiveAppearance()
+            }
+        }
+        return try {
+            val view = NSView(instance.receiver.ptr)
+            view.setFrame(contentRect(spec))
+            KffiViewOwner(view, instance, appearanceAdmission)
+        } catch (failure: Throwable) {
+            try {
+                instance.close()
+            } catch (closeFailure: Throwable) {
+                if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+            }
+            throw failure
+        }
     }
 
     override fun createDelegate(
@@ -135,7 +151,7 @@ internal class KffiAppKitWindowPort(
         requireMainThread()
         return KffiSurfaceObserverOwner.create(
             window = window.kffiWindow(),
-            view = view.kffiView(),
+            viewOwner = view.kffiViewOwner(),
             callbacks = callbacks,
             requireMainThread = ::requireMainThread,
         )
@@ -174,6 +190,7 @@ internal class KffiAppKitWindowPort(
     private companion object {
         const val WINDOW_SHOULD_CLOSE = "windowShouldClose:"
         const val WINDOW_WILL_CLOSE = "windowWillClose:"
+        const val VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE = "viewDidChangeEffectiveAppearance"
 
         val windowDelegateClass: ObjCManagedClass by lazy {
             ObjCManagedClass.registerOnce(
@@ -181,6 +198,15 @@ internal class KffiAppKitWindowPort(
                 methods = mapOf(
                     WINDOW_SHOULD_CLOSE to ObjCMethodSignatures.BooleanObject,
                     WINDOW_WILL_CLOSE to ObjCMethodSignatures.VoidObject,
+                ),
+            )
+        }
+
+        val contentViewClass: ObjCManagedClass by lazy {
+            ObjCManagedClass.registerOnce(
+                superclassName = "NSView",
+                methods = mapOf(
+                    VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE to ObjCMethodSignatures.Void,
                 ),
             )
         }
@@ -242,11 +268,43 @@ private class KffiWindowOwner(
 
 private class KffiViewOwner(
     val view: NSView,
+    private val instance: ObjCManagedInstance,
+    val appearanceAdmission: KffiViewAppearanceAdmission,
 ) : AppKitNativeViewOwner {
     private val closed = AtomicBoolean(false)
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) release(view.ptr)
+        if (closed.compareAndSet(false, true)) instance.close()
+    }
+}
+
+private class KffiViewAppearanceAdmission {
+    private val callback = AtomicReference<(() -> Unit)?>(null)
+
+    fun observe(onAppearanceChanged: () -> Unit): AutoCloseable {
+        check(callback.compareAndSet(null, onAppearanceChanged)) {
+            "AppKit view appearance callback is already observed"
+        }
+        return KffiViewAppearanceObservation(this, onAppearanceChanged)
+    }
+
+    fun viewDidChangeEffectiveAppearance() {
+        callback.get()?.invoke()
+    }
+
+    fun revoke(onAppearanceChanged: () -> Unit) {
+        callback.compareAndSet(onAppearanceChanged, null)
+    }
+}
+
+private class KffiViewAppearanceObservation(
+    private val admission: KffiViewAppearanceAdmission,
+    private val callback: () -> Unit,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) admission.revoke(callback)
     }
 }
 
@@ -259,6 +317,7 @@ private class KffiSurfaceObserverOwner private constructor(
 ) : AppKitNativeSurfaceObserverOwner {
     private val accepting = AtomicBoolean(true)
     private val closed = AtomicBoolean(false)
+    private var appearanceObservation: AutoCloseable? = null
     override lateinit var initialSnapshot: AppKitSurfaceSnapshot
         private set
 
@@ -272,6 +331,7 @@ private class KffiSurfaceObserverOwner private constructor(
 
     override fun revokeCallbacks() {
         accepting.set(false)
+        appearanceObservation?.close()
     }
 
     override fun close() {
@@ -313,13 +373,19 @@ private class KffiSurfaceObserverOwner private constructor(
         if (accepting.get()) callbacks.themeChanged(readTheme(view))
     }
 
+    private fun observeAppearance(admission: KffiViewAppearanceAdmission) {
+        check(appearanceObservation == null) { "AppKit view appearance is already observed" }
+        appearanceObservation = admission.observe(::emitTheme)
+    }
+
     companion object {
         fun create(
             window: NSWindow,
-            view: NSView,
+            viewOwner: KffiViewOwner,
             callbacks: AppKitSurfaceCallbacks,
             requireMainThread: () -> Unit,
         ): KffiSurfaceObserverOwner {
+            val view = viewOwner.view
             val observations = mutableListOf<ObjCNotificationObservation>()
             var owner: KffiSurfaceObserverOwner? = null
             try {
@@ -341,6 +407,7 @@ private class KffiSurfaceObserverOwner private constructor(
                     observations,
                 )
                 owner = installedOwner
+                installedOwner.observeAppearance(viewOwner.appearanceAdmission)
                 observe(
                     listOf(
                         "NSWindowDidResizeNotification",
@@ -368,20 +435,23 @@ private class KffiSurfaceObserverOwner private constructor(
                     window.ptr,
                     installedOwner::emitVisibility,
                 )
-                observe(
-                    listOf("NSViewDidChangeEffectiveAppearanceNotification"),
-                    view.ptr,
-                    installedOwner::emitTheme,
-                )
                 installedOwner.initialSnapshot = readSnapshot(view, window)
                 return installedOwner
             } catch (failure: Throwable) {
-                owner?.revokeCallbacks()
-                observations.asReversed().forEach { observation ->
+                val installedOwner = owner
+                if (installedOwner != null) {
                     try {
-                        observation.close()
+                        installedOwner.close()
                     } catch (closeFailure: Throwable) {
                         if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                    }
+                } else {
+                    observations.asReversed().forEach { observation ->
+                        try {
+                            observation.close()
+                        } catch (closeFailure: Throwable) {
+                            if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                        }
                     }
                 }
                 throw failure
@@ -509,7 +579,10 @@ private fun AppKitNativeWindowOwner.kffiWindow(): NSWindow =
     (this as? KffiWindowOwner)?.window ?: error("foreign AppKit window owner")
 
 private fun AppKitNativeViewOwner.kffiView(): NSView =
-    (this as? KffiViewOwner)?.view ?: error("foreign AppKit view owner")
+    kffiViewOwner().view
+
+private fun AppKitNativeViewOwner.kffiViewOwner(): KffiViewOwner =
+    this as? KffiViewOwner ?: error("foreign AppKit view owner")
 
 private fun AppKitNativeDelegateOwner.kffiDelegate(): KffiDelegateOwner =
     (this as? KffiDelegateOwner) ?: error("foreign AppKit delegate owner")

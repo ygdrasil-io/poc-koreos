@@ -3,6 +3,7 @@ package org.graphiks.kadre.internal.appkit
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
@@ -16,6 +17,7 @@ import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
 import org.graphiks.kffi.objc.managed.observe
@@ -32,6 +34,51 @@ import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
+    fun managedContentViewOverridePublishesEffectiveAppearanceChangeOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peerId = AppKitWindowPeerId(79L)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val port = KffiAppKitWindowPort()
+        val peer = port.prepare(
+            id = peerId,
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = stimuli::add,
+            acceptStimulus = { },
+        )
+
+        try {
+            val initialTheme = checkNotNull(peer.initialSurfaceSnapshot).theme
+            val (appearanceName, expectedTheme) = if (initialTheme == SurfaceTheme.Dark) {
+                "NSAppearanceNameAqua" to SurfaceTheme.Light
+            } else {
+                "NSAppearanceNameDarkAqua" to SurfaceTheme.Dark
+            }
+            val appearance = NSAppearance.appearanceNamed(
+                ObjCRuntime.newNSString(Arena.global(), appearanceName),
+            )
+
+            assertEquals(
+                KadreResult.Success(Unit),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                    val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
+                    view.setAppearance(appearance)
+                    view.viewDidChangeEffectiveAppearance()
+                },
+            )
+            assertEquals(
+                listOf<AppKitSurfaceStimulus>(
+                    AppKitSurfaceStimulus.ThemeChanged(peerId, expectedTheme),
+                ),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.ThemeChanged>(),
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
     fun publicKffiSurfaceObservationAndRedrawProofCompilesAndClosesOnMacOs() {
         if (!isMacOsHost()) return
 
@@ -39,11 +86,23 @@ class KffiAppKitWindowPortMacOsTest {
         val style = NSWindowStyleMask.NSWindowStyleMaskTitled +
             NSWindowStyleMask.NSWindowStyleMaskClosable +
             NSWindowStyleMask.NSWindowStyleMaskResizable
+        val appearanceChangedCount = AtomicInteger()
+        val viewClass = ObjCManagedClass.registerOnce(
+            superclassName = "NSView",
+            methods = mapOf(
+                "viewDidChangeEffectiveAppearance" to ObjCMethodSignatures.Void,
+            ),
+        )
 
         ObjCRuntime.autoreleasePool {
             NSApplication(NSApplication.sharedApplication())
             val window = allocateWindow(rect, style)
-            val view = allocateView(rect)
+            val viewInstance = viewClass.createInstance {
+                onVoid("viewDidChangeEffectiveAppearance") {
+                    appearanceChangedCount.incrementAndGet()
+                }
+            }
+            val view = NSView(viewInstance.receiver.ptr).also { it.setFrame(rect) }
             val center = NSNotificationCenter(NSNotificationCenter.defaultCenter())
             val notificationNames = listOf(
                 "NSWindowDidResizeNotification" to window.ptr,
@@ -55,7 +114,6 @@ class KffiAppKitWindowPortMacOsTest {
                 "NSWindowDidMiniaturizeNotification" to window.ptr,
                 "NSWindowDidDeminiaturizeNotification" to window.ptr,
                 "NSWindowDidChangeOcclusionStateNotification" to window.ptr,
-                "NSViewDidChangeEffectiveAppearanceNotification" to view.ptr,
             )
             val observations = notificationNames.map { (name, objectFilter) ->
                 center.observe(
@@ -77,13 +135,16 @@ class KffiAppKitWindowPortMacOsTest {
                 assertTrue(ObjCRuntime.toJavaString(windowAppearance.name()).isNotEmpty())
                 assertTrue(ObjCRuntime.toJavaString(viewAppearance.name()).isNotEmpty())
 
+                val appearanceCallbacksBeforeExplicitInvocation = appearanceChangedCount.get()
+                view.viewDidChangeEffectiveAppearance()
+                assertEquals(appearanceCallbacksBeforeExplicitInvocation + 1, appearanceChangedCount.get())
                 view.setNeedsDisplay(true)
                 assertTrue(view.needsDisplay())
             } finally {
                 observations.asReversed().forEach(AutoCloseable::close)
                 window.setContentView(MemorySegment.NULL)
                 window.close()
-                release(view.ptr)
+                viewInstance.close()
                 release(window.ptr)
             }
         }
