@@ -56,6 +56,7 @@ internal class SessionRuntime(
     private val failureReporter: (Throwable) -> Unit,
     private val onStopping: (SessionRuntime) -> KadreFailure.PlatformFailure?,
     private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
+    componentsFactory: RuntimeSessionComponentsFactory,
 ) : KadreSession {
     private val lock = Any()
     private val parentJob = checkNotNull(parentScope.coroutineContext[Job])
@@ -72,7 +73,13 @@ internal class SessionRuntime(
         ::nextStamp,
     )
     private val runtimeDiagnostics = RuntimeDiagnostics()
-    private val runtimeWindows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId)
+    private val runtimeComponents = try {
+        componentsFactory.create(id, rootScope)
+    } catch (cause: Throwable) {
+        rootJob.cancel()
+        throw cause
+    }
+    private val runtimeWindows = runtimeComponents.windows
     private val runtimeDisplays = UnsupportedDisplayManager()
     private val runtimeDevices = UnsupportedDeviceManager()
     private val runtimeCapture = UnsupportedCaptureManager()
@@ -276,13 +283,38 @@ internal class SessionRuntime(
             finished = true
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
             val final = checkNotNull(selectedOutcome)
-            mutableState.value = SessionState.Terminated(final)
-            terminal.complete(final)
             final
         }
         parentCancellationHandle?.dispose()
+        closeRuntimeComponents()
+        mutableState.value = SessionState.Terminated(final)
+        terminal.complete(final)
         onTerminated(this, final)
         rootJob.cancel()
+    }
+
+    fun disposeUnstarted() {
+        val shouldDispose = synchronized(lock) {
+            if (finished) {
+                false
+            } else {
+                check(startupJob == null) { "started sessions must terminate normally" }
+                check(applicationJob == null) { "started sessions must terminate normally" }
+                finished = true
+                true
+            }
+        }
+        if (!shouldDispose) return
+
+        parentCancellationHandle?.dispose()
+        closeRuntimeComponents()
+        rootJob.cancel()
+    }
+
+    private fun closeRuntimeComponents() {
+        runCatching { runtimeComponents.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
     }
 
     private fun isFinished(): Boolean = synchronized(lock) { finished }
