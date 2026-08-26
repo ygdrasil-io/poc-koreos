@@ -24,6 +24,9 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.window.WindowManager
+import org.graphiks.kadre.window.WindowRequestOutcome
+import org.graphiks.kadre.window.WindowSpec
 import java.lang.foreign.Arena
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
@@ -36,6 +39,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -193,6 +197,57 @@ class AppKitBackendProviderTest {
         } finally {
             firstScope.cancel()
             secondScope.cancel()
+        }
+    }
+
+    @Test
+    fun privateWindowDriversDoNotReplaceTheOrdinaryUnsupportedSessionManager() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+        val first = AppKitWindowRuntimeDriverFactory {
+            DeterministicAppKitNativeWindowPort("private-first")
+        }.create(KadrePolicies.Default.resources)
+        val second = AppKitWindowRuntimeDriverFactory {
+            DeterministicAppKitNativeWindowPort("private-second")
+        }.create(KadrePolicies.Default.resources)
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedWindows.complete(windows)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+            val ordinary = withTimeout(2.seconds) { observedWindows.await() }
+
+            assertNotSame(first.manager, ordinary)
+            assertNotSame(second.manager, ordinary)
+            assertEquals("UnsupportedWindowManager", ordinary::class.simpleName)
+            assertEquals(
+                WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+                ordinary.requestWindow(WindowSpec(title = "still-unsupported"))
+                    .appKitSuccessValue()
+                    .await(),
+            )
+            assertEquals(emptyList(), first.manager.state.value.windows)
+            assertEquals(emptyList(), second.manager.state.value.windows)
+
+            session.close()
+            session.awaitTermination()
+            Unit
+        } finally {
+            first.close()
+            second.close()
+            parentScope.cancel()
         }
     }
 

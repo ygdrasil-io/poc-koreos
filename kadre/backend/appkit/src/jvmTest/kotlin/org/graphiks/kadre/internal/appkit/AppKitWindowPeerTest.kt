@@ -285,6 +285,8 @@ private class RecordingAppKitNativeWindowPort(
     val trace = mutableListOf<String>()
     lateinit var delegate: RecordingDelegateOwner
 
+    override fun isMainThread(): Boolean = true
+
     override fun <T> onMainThread(block: () -> T): T {
         trace += "main:start"
         return try {

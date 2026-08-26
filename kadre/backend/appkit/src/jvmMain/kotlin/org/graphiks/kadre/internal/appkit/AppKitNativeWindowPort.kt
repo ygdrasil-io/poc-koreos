@@ -10,6 +10,9 @@ import org.graphiks.kadre.window.WindowSpec
  * backend package.
  */
 internal interface AppKitNativeWindowPort {
+    /** True only when the caller may execute AppKit operations without marshalling. */
+    fun isMainThread(): Boolean
+
     fun <T> onMainThread(block: () -> T): T
 
     fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner
