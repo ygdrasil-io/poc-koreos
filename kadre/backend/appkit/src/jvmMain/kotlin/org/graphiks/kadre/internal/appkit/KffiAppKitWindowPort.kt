@@ -35,6 +35,8 @@ internal class KffiAppKitWindowPort(
         acceptStimulus: (AppKitWindowStimulus) -> Unit,
     ): AppKitWindowPeer = AppKitWindowPeer.prepare(id, spec, this, acceptStimulus)
 
+    override fun isMainThread(): Boolean = NSThread.isMainThread()
+
     override fun <T> onMainThread(block: () -> T): T = KffiAppKitMainThread.call(block)
 
     override fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner {
