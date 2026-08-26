@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
@@ -117,6 +118,17 @@ internal class KffiAppKitWindowPort(
     override fun closeWindow(window: AppKitNativeWindowOwner) {
         requireMainThread()
         window.kffiWindow().close()
+    }
+
+    override fun desktopHandle(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+    ): RuntimeDesktopNativeWindowHandle.AppKit {
+        requireMainThread()
+        return RuntimeDesktopNativeWindowHandle.AppKit(
+            nsWindowAddress = window.kffiWindow().ptr.address().toULong(),
+            nsViewAddress = view.kffiView().ptr.address().toULong(),
+        )
     }
 
     private fun requireMainThread() {

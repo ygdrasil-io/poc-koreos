@@ -249,7 +249,7 @@ Attacher plusieurs sessions Kadre à une boucle AppKit existante sans en prendre
 - le teardown et la révocation des observers sont observés depuis AppKit ;
 - standalone et embedded restent verts dans le même gate.
 
-### Phase 2 — Fenêtres fondamentales
+### Phase 2 — Fenêtres fondamentales — active
 
 #### Objectif
 
@@ -266,13 +266,17 @@ Ouvrir, posséder et fermer une vraie fenêtre AppKit depuis `WindowManager.requ
 - `withDesktopHandle` et verrou de lifetime ;
 - fermeture inverse pendant le teardown.
 
-#### Gate de sortie
+#### Gate de sortie — atteinte
 
+- `APK-003` est `active` et son gate O3 traverse `KadreScope.windows`, `Window.events` et
+  `Window.withDesktopHandle` avant de créer, rejeter une première fermeture native puis fermer
+  une vraie `NSWindow` avec sa `NSView` via KFFI ;
 - aucune fenêtre résiduelle après cancellation pré-commit ;
 - state/outcome tardif autoritaire après commit ;
 - primary et règle dernière fenêtre prouvés avec plusieurs fenêtres ;
 - handle natif inaccessible après la fin de sa lease ;
-- vraie `NSWindow` créée, fermée et observée dans le gate O3.
+- teardown des requêtes pending puis des fenêtres committées en ordre inverse avant révocation des delegates ;
+- seules `requestWindow = OpenedHere`, l'interception de fermeture et `withDesktopHandle` sont activées ; les propriétés de surface et l'input des phases suivantes restent explicitement `Unsupported`, tandis que redraw conserve son résultat pré-Phase 3 `TemporarilyUnavailable(false)`.
 
 ### Phase 3 — Surface complète et redraw
 

@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -8,7 +9,10 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.window.WindowCloseOutcome
@@ -114,6 +118,92 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(listOf("pending", "second", "first"), port.closedWindowTitles)
         } finally {
             allowPreparation.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun closeReservesCommitIssuedPendingCleanupBeforeCommittedPeers() = runBlocking {
+        val commitReserved = CountDownLatch(1)
+        val allowCommitDelivery = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort("commit-issued-pending")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            beforeCommitDelivery = { spec ->
+                if (spec.title == "pending") {
+                    commitReserved.countDown()
+                    check(allowCommitDelivery.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        driver.manager.requestWindow(WindowSpec(title = "first")).successValue().awaitOpened()
+        driver.manager.requestWindow(WindowSpec(title = "second")).successValue().awaitOpened()
+        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+            driver.manager.requestWindow(WindowSpec(title = "pending"))
+        }
+
+        try {
+            assertTrue(commitReserved.await(2, TimeUnit.SECONDS))
+            val pendingRequest = withTimeout(2.seconds) { pending.await().successValue() }
+            assertEquals(
+                org.graphiks.kadre.window.WindowCancellationOutcome.TooLate,
+                pendingRequest.cancel(),
+            )
+
+            driver.close()
+            allowCommitDelivery.countDown()
+
+            assertEquals(WindowRequestOutcome.RequesterDetached, pendingRequest.await())
+            withTimeout(2.seconds) {
+                while (port.closedWindowTitles.size < 3) yield()
+            }
+            assertEquals(listOf("pending", "second", "first"), port.closedWindowTitles)
+        } finally {
+            allowCommitDelivery.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun requesterCancellationAfterCommitReservationDoesNotRollBackTheOpenedWindow() = runBlocking {
+        val commitReserved = CountDownLatch(1)
+        val allowCommitDelivery = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort("commit-issued-cancellation")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            beforeCommitDelivery = { spec ->
+                if (spec.title == "committing") {
+                    commitReserved.countDown()
+                    check(allowCommitDelivery.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+            driver.manager.requestWindow(WindowSpec(title = "committing"))
+        }
+
+        try {
+            assertTrue(commitReserved.await(2, TimeUnit.SECONDS))
+            val request = withTimeout(2.seconds) { pending.await().successValue() }
+
+            assertEquals(org.graphiks.kadre.window.WindowCancellationOutcome.TooLate, request.cancel())
+            allowCommitDelivery.countDown()
+
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                withTimeout(2.seconds) { request.await() },
+            ).window
+            val access = assertIs<RuntimeDesktopWindowHandleAccess>(window)
+            assertEquals(
+                KadreResult.Success(Unit),
+                access.withDesktopHandle { },
+            )
+            assertEquals(emptyList(), port.closedWindowTitles)
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            Unit
+        } finally {
+            allowCommitDelivery.countDown()
             driver.close()
         }
     }
@@ -287,16 +377,63 @@ class AppKitWindowRuntimeDriverTest {
             port.close()
         }
     }
+
+    @Test
+    fun desktopHandleLeaseRunsOnTheOwnerThreadAndDelaysCloseUntilTheCallbackReturns() = runBlocking {
+        val port = OwnerThreadAppKitNativeWindowPort("desktop-handle")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+        )
+        val callbackStarted = CountDownLatch(1)
+        val allowCallbackToReturn = CountDownLatch(1)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "leased")).successValue().await(),
+            ).window
+            val access = assertIs<RuntimeDesktopWindowHandleAccess>(window)
+            val lease = async(Dispatchers.Default) {
+                access.withDesktopHandle { handle ->
+                    assertTrue(port.isMainThread())
+                    assertEquals(RuntimeDesktopNativeWindowHandle.AppKit(0xA11uL, 0xB22uL), handle)
+                    callbackStarted.countDown()
+                    check(allowCallbackToReturn.await(2, TimeUnit.SECONDS))
+                    "leased"
+                }
+            }
+            assertTrue(callbackStarted.await(2, TimeUnit.SECONDS))
+
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+            assertEquals(emptyList(), port.closedWindowTitles)
+
+            allowCallbackToReturn.countDown()
+            assertEquals(KadreResult.Success("leased"), lease.await())
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("leased"), port.closedWindowTitles)
+            assertEquals(
+                KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                access.withDesktopHandle { error("closed windows must not invoke a callback") },
+            )
+        } finally {
+            allowCallbackToReturn.countDown()
+            driver.close()
+            port.close()
+        }
+    }
 }
 
 internal class DeterministicAppKitNativeWindowPort(
     private val name: String,
     private val closeFailures: Map<String, Throwable> = emptyMap(),
     private val beforeCreateWindow: (WindowSpec) -> Unit = { },
+    private val onDelegateRevoked: (String) -> Unit = { },
+    private val beforeCloseWindow: (String) -> Unit = { },
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     val createdWindowTitles = CopyOnWriteArrayList<String>()
     val closedWindowTitles = CopyOnWriteArrayList<String>()
+    val windowWillCloseTitles = CopyOnWriteArrayList<String>()
     val createdPeerIds = CopyOnWriteArrayList<AppKitWindowPeerId>()
 
     override fun isMainThread(): Boolean = true
@@ -316,7 +453,12 @@ internal class DeterministicAppKitNativeWindowPort(
     override fun createDelegate(
         peerId: AppKitWindowPeerId,
         callbacks: AppKitWindowDelegateCallbacks,
-    ): AppKitNativeDelegateOwner = RecordingNativeDelegateOwner(peerId, callbacks).also {
+    ): AppKitNativeDelegateOwner = RecordingNativeDelegateOwner(
+        peerId,
+        createdWindowTitles.last(),
+        callbacks,
+        onDelegateRevoked,
+    ).also {
         createdPeerIds += peerId
     }
 
@@ -348,17 +490,28 @@ internal class DeterministicAppKitNativeWindowPort(
 
     override fun closeWindow(window: AppKitNativeWindowOwner) {
         val recording = window.recordingWindow()
-        if (recording.nativeClosed.compareAndSet(false, true)) {
-            closedWindowTitles += recording.title
-            closeFailures[recording.title]?.let { throw it }
-        }
+        beforeCloseWindow(recording.title)
+        recordNativeClose(recording)
+        closeFailures[recording.title]?.let { throw it }
     }
+
+    override fun desktopHandle(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+    ): RuntimeDesktopNativeWindowHandle.AppKit = RuntimeDesktopNativeWindowHandle.AppKit(0xA11uL, 0xB22uL)
 
     fun requestNativeClose(title: String): Boolean =
         checkNotNull(windows[title]?.delegate).callbacks.windowShouldClose()
 
     fun emitNativeClosed(title: String) {
-        checkNotNull(windows[title]?.delegate).callbacks.windowWillClose()
+        recordNativeClose(checkNotNull(windows[title]))
+    }
+
+    private fun recordNativeClose(recording: RecordingNativeWindowOwner) {
+        if (!recording.nativeClosed.compareAndSet(false, true)) return
+        closedWindowTitles += recording.title
+        windowWillCloseTitles += recording.title
+        checkNotNull(recording.delegate).callbacks.windowWillClose()
     }
 
     private class RecordingNativeWindowOwner(
@@ -387,14 +540,16 @@ internal class DeterministicAppKitNativeWindowPort(
 
     private class RecordingNativeDelegateOwner(
         val peerId: AppKitWindowPeerId,
+        private val title: String,
         val callbacks: AppKitWindowDelegateCallbacks,
+        private val onRevoked: (String) -> Unit,
     ) : AppKitNativeDelegateOwner {
         private val callbacksRevoked = AtomicBoolean(false)
         private val retained = AtomicBoolean(false)
         private val released = AtomicBoolean(false)
 
         override fun revokeCallbacks() {
-            callbacksRevoked.set(true)
+            if (callbacksRevoked.compareAndSet(false, true)) onRevoked(title)
         }
 
         override fun retainAfterFailedDetachment() {
@@ -416,7 +571,7 @@ internal class DeterministicAppKitNativeWindowPort(
         this as? RecordingNativeDelegateOwner ?: error("foreign test delegate owner")
 }
 
-private class OwnerThreadAppKitNativeWindowPort(
+internal class OwnerThreadAppKitNativeWindowPort(
     name: String,
 ) : AppKitNativeWindowPort, AutoCloseable {
     private val delegate = DeterministicAppKitNativeWindowPort(name)
@@ -469,6 +624,11 @@ private class OwnerThreadAppKitNativeWindowPort(
     override fun closeWindow(window: AppKitNativeWindowOwner) {
         delegate.closeWindow(window)
     }
+
+    override fun desktopHandle(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+    ): RuntimeDesktopNativeWindowHandle.AppKit = delegate.desktopHandle(window, view)
 
     fun submitOnOwnerThread(action: () -> Unit): Future<*> = executor.submit(action)
 

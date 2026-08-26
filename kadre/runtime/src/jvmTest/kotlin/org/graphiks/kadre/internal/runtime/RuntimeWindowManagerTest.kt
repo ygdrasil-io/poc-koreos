@@ -7,11 +7,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -28,6 +31,9 @@ import org.graphiks.kadre.window.WindowCancellationOutcome
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseRequestId
+import org.graphiks.kadre.window.WindowCloseResponseOutcome
+import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
@@ -36,6 +42,7 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -755,6 +762,144 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun nativeCloseRequestIsPublishedAndTheFirstApplicationDecisionWins() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, publicWindowCapabilities = true)
+        val request = manager.requestWindow(WindowSpec(title = "native-close")).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+
+        assertEquals(
+            Capability.Supported(setOf(WindowCreationMode.OpenedHere), FeatureAvailability.Available),
+            manager.state.value.capabilities.requestWindow,
+        )
+        assertEquals(
+            Capability.Supported(Unit, FeatureAvailability.Available),
+            window.capabilities.value.closeInterception,
+        )
+        assertEquals(
+            Capability.Supported(Unit, FeatureAvailability.Available),
+            window.capabilities.value.platformAccess,
+        )
+
+        val firstEvent = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        command.closeRequested()
+        val rejectedRequest = withTimeout(2.seconds) { firstEvent.await() }
+
+        assertEquals(WindowCloseResponseOutcome.KeptOpen, window.respondToCloseRequest(
+            rejectedRequest.requestId,
+            WindowCloseDecision.Reject,
+        ).successValue())
+        assertEquals(WindowCloseResponseOutcome.KeptOpen, window.respondToCloseRequest(
+            rejectedRequest.requestId,
+            WindowCloseDecision.Reject,
+        ).successValue())
+        assertEquals(WindowCloseResponseOutcome.AlreadyResolved, window.respondToCloseRequest(
+            rejectedRequest.requestId,
+            WindowCloseDecision.Accept,
+        ).successValue())
+        assertEquals(WindowPhase.Open, window.state.value.phase)
+        assertEquals(emptyList(), port.openedCloseCommands)
+
+        val secondEvent = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        command.closeRequested()
+        val acceptedRequest = withTimeout(2.seconds) { secondEvent.await() }
+        val accepted = assertIs<WindowCloseResponseOutcome.Closing>(
+            window.respondToCloseRequest(acceptedRequest.requestId, WindowCloseDecision.Accept).successValue(),
+        )
+
+        assertEquals(WindowPhase.Closing, window.state.value.phase)
+        assertEquals(
+            WindowCloseResponseOutcome.Closing(accepted.operationId),
+            window.respondToCloseRequest(acceptedRequest.requestId, WindowCloseDecision.Accept).successValue(),
+        )
+        assertEquals(
+            WindowCloseResponseOutcome.AlreadyResolved,
+            window.respondToCloseRequest(acceptedRequest.requestId, WindowCloseDecision.Reject).successValue(),
+        )
+        assertEquals(1, port.openedCloseCommands.size)
+
+        command.nativeClosed()
+
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(emptyList(), manager.state.value.windows)
+        assertEquals(
+            WindowCloseResponseOutcome.TooLate,
+            window.respondToCloseRequest(acceptedRequest.requestId, WindowCloseDecision.Accept).successValue(),
+        )
+    }
+
+    @Test
+    fun aRejectedCloseRequestBecomesTooLateAfterAProgrammaticCloseWins() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, publicWindowCapabilities = true)
+        val request = manager.requestWindow(WindowSpec(title = "reject-then-close")).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+        val closeRequested = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+
+        command.closeRequested()
+        val rejected = withTimeout(2.seconds) { closeRequested.await() }
+        assertEquals(
+            WindowCloseResponseOutcome.KeptOpen,
+            window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject).successValue(),
+        )
+        assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+        command.nativeClosed()
+
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(
+            WindowCloseResponseOutcome.TooLate,
+            window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject).successValue(),
+        )
+    }
+
+    @Test
+    fun lastWindowPolicyArmsOnlyAfterACommitAndFiresOnTheLaterNonemptyToEmptyTransition() = runTest {
+        val port = DeterministicWindowCommandPort()
+        var stopProposals = 0
+        val manager = manager(
+            port,
+            maxWindows = 3,
+            maxPending = 3,
+            publicWindowCapabilities = true,
+            onLastWindowClosed = { stopProposals += 1 },
+        )
+
+        assertEquals(0, stopProposals)
+        val pending = manager.requestWindow(WindowSpec(title = "pending")).successValue()
+        assertEquals(0, stopProposals)
+        assertEquals(WindowCancellationOutcome.CancelledBeforeCommit, pending.cancel())
+        assertEquals(0, stopProposals)
+
+        val firstRequest = manager.requestWindow(WindowSpec(title = "first")).successValue()
+        val firstCommand = port.openCommands.last()
+        val first = commit(firstRequest, firstCommand)
+        val secondRequest = manager.requestWindow(WindowSpec(title = "second")).successValue()
+        val secondCommand = port.openCommands.last()
+        val second = commit(secondRequest, secondCommand)
+
+        firstCommand.nativeClosed()
+        assertEquals(0, stopProposals)
+        assertSame(second, manager.state.value.primary)
+
+        secondCommand.nativeClosed()
+        assertEquals(1, stopProposals)
+        assertEquals(emptyList(), manager.state.value.windows)
+
+        manager.close()
+        assertEquals(1, stopProposals)
+        assertEquals(WindowPhase.Closed, first.state.value.phase)
+        assertEquals(WindowPhase.Closed, second.state.value.phase)
+    }
+
+    @Test
     fun minimalWindowRejectsUnavailableOperationsAndKeepsTerminalSnapshots() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
@@ -798,6 +943,8 @@ class RuntimeWindowManagerTest {
         maxWindows: Int = 4,
         maxPending: Int = 4,
         reported: MutableList<Throwable> = mutableListOf(),
+        publicWindowCapabilities: Boolean = false,
+        onLastWindowClosed: () -> Unit = {},
     ): RuntimeWindowManager = RuntimeWindowManager(
         resources = KadrePolicies.Default.resources.copy(
             maxWindowsPerSession = maxWindows,
@@ -806,6 +953,8 @@ class RuntimeWindowManagerTest {
         commandPort = port,
         platform = KadrePlatform.Fake,
         failureReporter = RuntimeFailureReporter(reported::add),
+        publicWindowCapabilities = publicWindowCapabilities,
+        onLastWindowClosed = onLastWindowClosed,
     )
 
     private suspend fun commit(

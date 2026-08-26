@@ -181,7 +181,7 @@ Une session standalone commence `Background + Inactive` tant qu'elle reste headl
 
 ### 6.2 Embedded
 
-**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. Les fenêtres, surfaces et input restent explicitement `Unsupported` jusqu’aux phases correspondantes de la roadmap.
+**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. `APK-003` active les fenêtres fondamentales dans les sessions AppKit standalone et embedded. Son gate O3 traverse l'API publique jusqu'à une vraie `NSWindow`/`NSView` KFFI, y compris le handle borné et l'interception Reject puis Accept. Les propriétés de fenêtre, les surfaces riches et l'input restent explicitement `Unsupported` jusqu’aux phases correspondantes de la roadmap.
 
 - `attachKadreDesktop(Embedded(AppKitMainLoop))` exige le main thread et une boucle AppKit existante ;
 - l'attach ne remplace pas le delegate de l'application ;
@@ -193,6 +193,8 @@ Une session standalone commence `Background + Inactive` tant qu'elle reste headl
 Une session embedded sans fenêtre commence `Foreground + Active` tant que son intégration reste attachée et non suspendue.
 
 ## 7. Frontière fenêtre et input
+
+**État Phase 2 :** `WindowManager.requestWindow` admet `OpenedHere`, publie `primary` et l'ordre stable des fenêtres, puis route les fermetures natives et programmatiques jusqu'au terminal. `stopWhenLastWindowClosed` s'arme seulement après la première fenêtre committée. `Window.withDesktopHandle` expose ses adresses AppKit uniquement dans un callback synchrone exécuté sur le main thread et protégé par une lease de lifetime. Les autres mutations de fenêtre, les propriétés de surface et l'input restent non activés et retournent leurs failures `Unsupported` explicites. `requestRedraw()` conserve le résultat pré-Phase 3 `TemporarilyUnavailable(false)` autorisé par son contrat fermé.
 
 Une `WindowRequest` admise marshal sa création vers le main thread. Le commit natif intervient seulement après création cohérente de `NSWindow`, de la content `NSView`, du delegate et des callbacks. Avant le handoff public, Kadre reste owner et ferme toute ressource en cas de cancellation ou failure.
 

@@ -1,5 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kffi.objc.NSApplication
@@ -19,7 +21,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
@@ -130,12 +134,22 @@ class KffiAppKitWindowPortMacOsTest {
         if (!isMacOsHost()) return
 
         val peerId = AppKitWindowPeerId(73L)
-        val peer = KffiAppKitWindowPort().prepare(
+        val port = KffiAppKitWindowPort()
+        val peer = port.prepare(
             peerId,
             WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
         ) { }
 
         assertEquals(peerId, peer.id)
+        assertEquals(
+            KadreResult.Success(Unit),
+            peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                assertTrue(port.isMainThread())
+                val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                assertTrue(appKitHandle.nsWindowAddress != 0uL)
+                assertTrue(appKitHandle.nsViewAddress != 0uL)
+            },
+        )
         peer.close()
     }
 

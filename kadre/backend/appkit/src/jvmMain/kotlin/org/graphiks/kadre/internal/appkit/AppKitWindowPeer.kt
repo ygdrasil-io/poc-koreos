@@ -1,5 +1,9 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.window.WindowSpec
 import java.util.concurrent.atomic.AtomicBoolean
@@ -28,10 +32,15 @@ internal class AppKitWindowPeer private constructor(
     private val delegate: AppKitNativeDelegateOwner,
     private val callbackGate: AppKitWindowCallbackGate,
 ) : WindowPeerOwner {
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    private val lifetimeLock = Object()
     private val closed = AtomicBoolean(false)
+    private var activeHandleLeases = 0
+    private var nativeCloseCommitted = false
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        awaitHandleLeases()
         callbackGate.revoke()
         port.onMainThread {
             var failure: Throwable? = null
@@ -41,10 +50,69 @@ internal class AppKitWindowPeer private constructor(
             }
             failure = runSuppressing(failure) { port.detachContentView(window) }
             failure = closeSuppressing(failure, contentView)
-            failure = runSuppressing(failure) { port.closeWindow(window) }
+            val closeNative = synchronized(lifetimeLock) { !nativeCloseCommitted }
+            if (closeNative) failure = runSuppressing(failure) { port.closeWindow(window) }
             failure = closeSuppressing(failure, window)
             failure?.let { throw it }
         }
+    }
+
+    internal fun commitNativeClose() {
+        port.onMainThread {
+            try {
+                port.closeWindow(window)
+            } finally {
+                synchronized(lifetimeLock) { nativeCloseCommitted = true }
+            }
+        }
+    }
+
+    internal fun markNativeClosed() {
+        synchronized(lifetimeLock) { nativeCloseCommitted = true }
+    }
+
+    internal fun <R> withDesktopHandle(
+        admitCallback: () -> Boolean,
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R>? = port.onMainThread {
+        val admitted = synchronized(lifetimeLock) {
+            if (closed.get() || !admitCallback()) {
+                false
+            } else {
+                activeHandleLeases += 1
+                true
+            }
+        }
+        if (!admitted) {
+            return@onMainThread if (closed.get()) {
+                KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            } else {
+                null
+            }
+        }
+        try {
+            KadreResult.Success(block(port.desktopHandle(window, contentView)))
+        } finally {
+            synchronized(lifetimeLock) {
+                activeHandleLeases -= 1
+                check(activeHandleLeases >= 0) { "AppKit window handle lease underflow" }
+                lifetimeLock.notifyAll()
+            }
+        }
+    }
+
+    private fun awaitHandleLeases() {
+        var interrupted = false
+        synchronized(lifetimeLock) {
+            while (activeHandleLeases > 0) {
+                try {
+                    lifetimeLock.wait()
+                } catch (_: InterruptedException) {
+                    interrupted = true
+                }
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 
     internal companion object {
