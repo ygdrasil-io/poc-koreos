@@ -229,7 +229,15 @@ class AppKitWindowSessionIntegrationTest {
             assertEquals(SurfaceAttachmentState.Detached, window.surface.state.value.attachment)
             assertEquals(WindowPhase.Closed, window.state.value.phase)
             releaseSerializer.countDown()
-            blockedOpen.await()
+            val blockedRequest = blockedOpen.await()
+            assertEquals(
+                WindowRequestOutcome.RequesterDetached,
+                withTimeout(2.seconds) { blockedRequest.await() },
+            )
+            withTimeout(2.seconds) {
+                while ("teardown-barrier" !in port.closedWindowTitles) yield()
+            }
+            assertEquals(emptyList(), driver.manager.state.value.windows)
             Unit
         } finally {
             releaseSerializer.countDown()
