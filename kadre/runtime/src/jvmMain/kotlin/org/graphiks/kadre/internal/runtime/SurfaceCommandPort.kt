@@ -45,6 +45,11 @@ public value class SurfaceRedrawGeneration internal constructor(public val value
     init {
         require(value >= 0L) { "value must be non-negative" }
     }
+
+    public companion object {
+        /** Reconstructs the opaque generation echoed by a native backend. */
+        public fun fromNative(value: Long): SurfaceRedrawGeneration = SurfaceRedrawGeneration(value)
+    }
 }
 
 /** Immutable effective metrics captured together by the native backend. */

@@ -14,6 +14,12 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
+import org.graphiks.kadre.internal.runtime.SurfaceCommandPort
+import org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand
+import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
+import org.graphiks.kadre.internal.runtime.SurfaceStimulus
+import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
+import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
@@ -22,6 +28,7 @@ import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.surface.SurfaceId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -39,11 +46,17 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     beforeCommitDelivery: (WindowSpec) -> Unit,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
-    private val commandPort = AppKitWindowCommandPort(nativePort, failureReporter, beforeCommitDelivery)
+    private val commandPort = AppKitWindowCommandPort(
+        nativePort,
+        failureReporter,
+        beforeCommitDelivery,
+        surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
+    )
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
         commandPort = commandPort,
+        surfaceCommandPort = commandPort,
         platform = KadrePlatform.AppKit,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
@@ -65,11 +78,13 @@ private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
-) : WindowCommandPort {
+    private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
+) : WindowCommandPort, SurfaceCommandPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
     private val byRequest = linkedMapOf<WindowRequestId, PeerEntry>()
     private val byPeer = linkedMapOf<AppKitWindowPeerId, PeerEntry>()
+    private val bySurface = linkedMapOf<SurfaceId, PeerEntry>()
     private val commands = AppKitWindowCommandQueue(::reportFailure)
     private var closed = false
 
@@ -81,6 +96,7 @@ private class AppKitWindowCommandPort(
             } else {
                 check(byRequest.put(command.requestId, entry) == null) { "duplicate AppKit window request" }
                 check(byPeer.put(entry.peerId, entry) == null) { "duplicate AppKit window peer" }
+                check(bySurface.put(entry.surfaceId, entry) == null) { "duplicate AppKit window surface" }
                 true
             }
         }
@@ -150,6 +166,30 @@ private class AppKitWindowCommandPort(
         }
     }
 
+    override fun requestRedraw(command: SurfaceRedrawCommand): org.graphiks.kadre.diagnostics.KadreResult<Unit> {
+        val entry = synchronized(lock) {
+            bySurface[command.surfaceId]?.takeIf {
+                !closed &&
+                    !it.removed &&
+                    !it.surfaceCleanupReserved &&
+                    !it.closeAdmitted &&
+                    it.peer != null
+            }
+        } ?: return closedSurfaceFailure()
+        return if (commands.submitFollowUp { entry.peer?.requestRedraw(command.generation.value) }) {
+            org.graphiks.kadre.diagnostics.KadreResult.Success(Unit)
+        } else {
+            closedSurfaceFailure()
+        }
+    }
+
+    override suspend fun apply(
+        command: SurfaceUpdateCommand,
+    ): org.graphiks.kadre.diagnostics.KadreResult<SurfaceUpdateCommandOutcome> =
+        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+            KadreFailure.TemporarilyUnavailable(retryable = false),
+        )
+
     fun beginClose(): CloseDrainMode {
         synchronized(lock) { closed = true }
         if (!nativePort.isMainThread()) return CloseDrainMode.Blocking
@@ -187,6 +227,7 @@ private class AppKitWindowCommandPort(
                 spec = entry.command.spec,
                 port = nativePort,
                 acceptStimulus = ::enqueueStimulus,
+                acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
                 reportCallbackFailure = ::reportFailure,
             )
         } catch (cause: Exception) {
@@ -214,6 +255,7 @@ private class AppKitWindowCommandPort(
                 entry.command.commit(
                     entry.owner,
                     appKitEffectiveSpec(entry.command.spec),
+                    peer.initialSurfaceSnapshot?.metrics,
                 )
             }
             PreparationAction.Cancel -> scheduleCleanup(entry)
@@ -259,6 +301,28 @@ private class AppKitWindowCommandPort(
         if (accepted) commands.submitFollowUp { acceptStimulus(stimulus) }
     }
 
+    private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
+        val accepted = synchronized(lock) {
+            val entry = byPeer[stimulus.peerId]
+            entry != null &&
+                !closed &&
+                !entry.removed &&
+                !entry.surfaceCleanupReserved &&
+                !entry.closeAdmitted &&
+                entry.commitIssued
+        }
+        if (accepted) commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
+    }
+
+    private fun acceptSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
+        val surfaceId = synchronized(lock) {
+            byPeer[stimulus.peerId]?.takeIf {
+                !it.removed && !it.surfaceCleanupReserved && it.commitIssued
+            }?.surfaceId
+        } ?: return
+        surfaceStimulusSink(stimulus.toRuntime(surfaceId))
+    }
+
     private fun acceptStimulus(stimulus: AppKitWindowStimulus) {
         val entry = synchronized(lock) {
             byPeer[stimulus.peerId]?.takeUnless(PeerEntry::removed)
@@ -272,6 +336,7 @@ private class AppKitWindowCommandPort(
             }
 
             is AppKitWindowStimulus.NativeClosed -> {
+                synchronized(lock) { entry.surfaceCleanupReserved = true }
                 entry.peer?.markNativeClosed()
                 issueNativeTerminal(entry)
                 scheduleCleanup(entry)
@@ -381,6 +446,7 @@ private class AppKitWindowCommandPort(
             if (entry.removed || entry.cleanupScheduled || entry.cleanupFinished) {
                 false
             } else {
+                entry.surfaceCleanupReserved = true
                 entry.cleanupScheduled = true
                 true
             }
@@ -436,6 +502,7 @@ private class AppKitWindowCommandPort(
         entry.removed = true
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
+        if (bySurface[entry.surfaceId] === entry) bySurface.remove(entry.surfaceId)
     }
 
     private fun reportFailure(cause: Throwable) {
@@ -451,10 +518,16 @@ private class AppKitWindowCommandPort(
     private fun platformFailure(code: String): KadreFailure.PlatformFailure =
         KadreFailure.PlatformFailure(KadrePlatform.AppKit, "appkit-window", code)
 
+    private fun closedSurfaceFailure(): org.graphiks.kadre.diagnostics.KadreResult<Unit> =
+        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+            KadreFailure.Closed(KadreResourceKind.Surface),
+        )
+
     private inner class PeerEntry(
         val command: WindowOpenCommand,
         val peerId: AppKitWindowPeerId,
     ) {
+        val surfaceId: SurfaceId = command.surfaceId
         var peer: AppKitWindowPeer? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
@@ -465,6 +538,7 @@ private class AppKitWindowCommandPort(
         var nativeCloseScheduled: Boolean = false
         var closeRequestPending: Boolean = false
         var closeAdmitted: Boolean = false
+        var surfaceCleanupReserved: Boolean = false
         var removed: Boolean = false
         val owner: WindowPeerOwner = object : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
             override fun close() {
@@ -515,6 +589,17 @@ private class AppKitWindowCommandPort(
     private companion object {
         val CANCELLATION_COMPLETION: KadreFailure = KadreFailure.TemporarilyUnavailable(retryable = false)
     }
+}
+
+private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimulus = when (this) {
+    is AppKitSurfaceStimulus.MetricsChanged -> SurfaceStimulus.MetricsChanged(surfaceId, metrics)
+    is AppKitSurfaceStimulus.FocusChanged -> SurfaceStimulus.FocusChanged(surfaceId, focus)
+    is AppKitSurfaceStimulus.VisibilityChanged -> SurfaceStimulus.VisibilityChanged(surfaceId, visibility, occlusion)
+    is AppKitSurfaceStimulus.ThemeChanged -> SurfaceStimulus.ThemeChanged(surfaceId, theme)
+    is AppKitSurfaceStimulus.RedrawConsumed -> SurfaceStimulus.RedrawConsumed(
+        surfaceId,
+        SurfaceRedrawGeneration.fromNative(generation),
+    )
 }
 
 private fun appKitEffectiveSpec(requested: WindowSpec): WindowSpec = requested.copy(

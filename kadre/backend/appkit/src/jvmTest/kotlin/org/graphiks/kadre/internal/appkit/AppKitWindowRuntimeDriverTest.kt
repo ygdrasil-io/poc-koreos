@@ -14,7 +14,15 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
+import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
+import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequest
@@ -429,8 +437,10 @@ internal class DeterministicAppKitNativeWindowPort(
     private val beforeCreateWindow: (WindowSpec) -> Unit = { },
     private val onDelegateRevoked: (String) -> Unit = { },
     private val beforeCloseWindow: (String) -> Unit = { },
+    private val initialSurfaceSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot(),
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
+    private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
     val createdWindowTitles = CopyOnWriteArrayList<String>()
     val closedWindowTitles = CopyOnWriteArrayList<String>()
     val windowWillCloseTitles = CopyOnWriteArrayList<String>()
@@ -480,6 +490,19 @@ internal class DeterministicAppKitNativeWindowPort(
         window.recordingWindow().presented = true
     }
 
+    override fun observeSurface(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitSurfaceCallbacks,
+    ): AppKitNativeSurfaceObserverOwner = RecordingNativeSurfaceObserver(
+        callbacks,
+        initialSurfaceSnapshot,
+    ).also { observer ->
+        check(surfaceObservers.put(window.recordingWindow().title, observer) == null) {
+            "$name duplicate test surface observer"
+        }
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         window.recordingWindow().delegateAttached = false
     }
@@ -505,6 +528,22 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun emitNativeClosed(title: String) {
         recordNativeClose(checkNotNull(windows[title]))
+    }
+
+    fun emitSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
+        checkNotNull(surfaceObservers[title]).emitMetrics(metrics)
+    }
+
+    fun emitSurfaceFocus(title: String, focus: SurfaceFocus) {
+        checkNotNull(surfaceObservers[title]).emitFocus(focus)
+    }
+
+    fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
+        checkNotNull(surfaceObservers[title]).emitRedrawConsumed(generation)
+    }
+
+    fun forceLateSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
+        checkNotNull(surfaceObservers[title]).forceMetrics(metrics)
     }
 
     private fun recordNativeClose(recording: RecordingNativeWindowOwner) {
@@ -561,6 +600,37 @@ internal class DeterministicAppKitNativeWindowPort(
         }
     }
 
+    private class RecordingNativeSurfaceObserver(
+        private val callbacks: AppKitSurfaceCallbacks,
+        override val initialSnapshot: AppKitSurfaceSnapshot,
+    ) : AppKitNativeSurfaceObserverOwner {
+        private val accepting = AtomicBoolean(true)
+
+        fun emitMetrics(metrics: SurfaceMetrics) {
+            if (accepting.get()) callbacks.metricsChanged(metrics)
+        }
+
+        fun emitFocus(focus: SurfaceFocus) {
+            if (accepting.get()) callbacks.focusChanged(focus)
+        }
+
+        fun emitRedrawConsumed(generation: Long) {
+            if (accepting.get()) callbacks.redrawConsumed(generation)
+        }
+
+        fun forceMetrics(metrics: SurfaceMetrics) {
+            callbacks.metricsChanged(metrics)
+        }
+
+        override fun requestRedraw(generation: Long) = Unit
+
+        override fun revokeCallbacks() {
+            accepting.set(false)
+        }
+
+        override fun close() = Unit
+    }
+
     private fun AppKitNativeWindowOwner.recordingWindow(): RecordingNativeWindowOwner =
         this as? RecordingNativeWindowOwner ?: error("foreign test window owner")
 
@@ -613,6 +683,12 @@ internal class OwnerThreadAppKitNativeWindowPort(
         delegate.present(window)
     }
 
+    override fun observeSurface(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitSurfaceCallbacks,
+    ): AppKitNativeSurfaceObserverOwner = delegate.observeSurface(window, view, callbacks)
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         delegate.detachDelegate(window)
     }
@@ -640,6 +716,14 @@ internal class OwnerThreadAppKitNativeWindowPort(
         delegate.emitNativeClosed(title)
     }
 
+    fun emitSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
+        delegate.emitSurfaceMetrics(title, metrics)
+    }
+
+    fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
+        delegate.emitSurfaceRedrawConsumed(title, generation)
+    }
+
     val closedWindowTitles: List<String>
         get() = delegate.closedWindowTitles
 
@@ -650,6 +734,22 @@ internal class OwnerThreadAppKitNativeWindowPort(
 
 private fun newDaemonSingleThreadExecutor(name: String): ExecutorService =
     Executors.newSingleThreadExecutor { action -> Thread.ofPlatform().daemon().name(name).unstarted(action) }
+
+internal fun deterministicSurfaceSnapshot(
+    logicalSize: LogicalSize = LogicalSize(320.0, 240.0),
+    scaleFactor: Double = 2.0,
+): AppKitSurfaceSnapshot = AppKitSurfaceSnapshot(
+    metrics = SurfaceMetrics(
+        logicalSize = logicalSize,
+        physicalSize = logicalSize.toPhysical(scaleFactor),
+        scaleFactor = scaleFactor,
+        safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+    ),
+    focus = SurfaceFocus.Focused,
+    visibility = SurfaceVisibility.Visible,
+    occlusion = SurfaceOcclusion.Unknown,
+    theme = SurfaceTheme.Light,
+)
 
 internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {
     is KadreResult.Success -> value
