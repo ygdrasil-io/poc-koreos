@@ -278,7 +278,7 @@ Ouvrir, posséder et fermer une vraie fenêtre AppKit depuis `WindowManager.requ
 - teardown des requêtes pending puis des fenêtres committées en ordre inverse avant révocation des delegates ;
 - seules `requestWindow = OpenedHere`, l'interception de fermeture et `withDesktopHandle` sont activées ; les propriétés de surface et l'input des phases suivantes restent explicitement `Unsupported`, tandis que redraw conserve son résultat pré-Phase 3 `TemporarilyUnavailable(false)`.
 
-### Phase 3 — Surface complète et redraw
+### Phase 3 — Surface complète et redraw — planned
 
 #### Objectif
 
@@ -296,11 +296,19 @@ Rendre la zone de contenu AppKit entièrement observable sans introduire de rend
 
 #### Gate de sortie
 
+- `APK-004` O3 est activé avec tous ses scénarios et sentinelles, sans skip ni retry ;
 - `Window.surface` conserve son snapshot terminal après fermeture ;
 - toute opération tardive retourne `Closed(Surface)` ;
 - aucun événement ne précède le snapshot qu’il décrit ;
 - redraw, resize, focus et scale sont provoqués depuis AppKit ;
 - `SurfaceCapabilities.platformAccess` reste explicitement `Unsupported` sur Desktop conformément à la matrice.
+
+Le protocole manuel AppKit-only de cette phase est versionné dans
+`backend/appkit/manual/phase-3-surface.md`. Il observe les phénomènes visuels
+et matériels non réductibles à la CI ; il ne réexécute pas les preuves de
+fenêtres fondamentales déjà couvertes par `APK-003`. Jusqu'à l'activation
+complète de `APK-004`, aucune capability de surface Phase 3 ne devient
+`Available`.
 
 ### Phase 4 — Clavier, pointeur et scroll
 

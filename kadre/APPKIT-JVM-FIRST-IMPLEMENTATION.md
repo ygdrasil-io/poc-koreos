@@ -196,6 +196,11 @@ Une session embedded sans fenêtre commence `Foreground + Active` tant que son i
 
 **État Phase 2 :** `WindowManager.requestWindow` admet `OpenedHere`, publie `primary` et l'ordre stable des fenêtres, puis route les fermetures natives et programmatiques jusqu'au terminal. `stopWhenLastWindowClosed` s'arme seulement après la première fenêtre committée. `Window.withDesktopHandle` expose ses adresses AppKit uniquement dans un callback synchrone exécuté sur le main thread et protégé par une lease de lifetime. Les autres mutations de fenêtre, les propriétés de surface et l'input restent non activés et retournent leurs failures `Unsupported` explicites. `requestRedraw()` conserve le résultat pré-Phase 3 `TemporarilyUnavailable(false)` autorisé par son contrat fermé.
 
+**Préparation Phase 3 :** `APK-004` est `planned`, avec des identifiants O3
+réservés mais aucune capability publique activée. Le protocole de vérification
+manuelle AppKit-only est dans `backend/appkit/manual/phase-3-surface.md` ; il
+complète les futures preuves automatisées sans répéter `APK-003`.
+
 Une `WindowRequest` admise marshal sa création vers le main thread. Le commit natif intervient seulement après création cohérente de `NSWindow`, de la content `NSView`, du delegate et des callbacks. Avant le handoff public, Kadre reste owner et ferme toute ressource en cas de cancellation ou failure.
 
 Chaque `AppKitWindowPeer` possède :
