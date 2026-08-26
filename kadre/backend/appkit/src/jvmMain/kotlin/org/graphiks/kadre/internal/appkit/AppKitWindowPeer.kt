@@ -4,7 +4,12 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -23,6 +28,41 @@ internal sealed interface AppKitWindowStimulus {
     ) : AppKitWindowStimulus
 }
 
+/** Native-address-free surface observation emitted by one AppKit window peer. */
+internal sealed interface AppKitSurfaceStimulus {
+    val peerId: AppKitWindowPeerId
+
+    data class MetricsChanged(
+        override val peerId: AppKitWindowPeerId,
+        val metrics: SurfaceMetrics,
+    ) : AppKitSurfaceStimulus
+
+    data class FocusChanged(
+        override val peerId: AppKitWindowPeerId,
+        val focus: SurfaceFocus,
+    ) : AppKitSurfaceStimulus
+
+    data class VisibilityChanged(
+        override val peerId: AppKitWindowPeerId,
+        val visibility: SurfaceVisibility,
+        val occlusion: SurfaceOcclusion,
+    ) : AppKitSurfaceStimulus
+
+    data class ThemeChanged(
+        override val peerId: AppKitWindowPeerId,
+        val theme: SurfaceTheme,
+    ) : AppKitSurfaceStimulus
+
+    data class RedrawConsumed(
+        override val peerId: AppKitWindowPeerId,
+        val generation: Long,
+    ) : AppKitSurfaceStimulus {
+        init {
+            require(generation >= 0L) { "generation must be non-negative" }
+        }
+    }
+}
+
 /** One completely prepared AppKit window and the full reverse-order ownership chain it requires. */
 internal class AppKitWindowPeer private constructor(
     internal val id: AppKitWindowPeerId,
@@ -30,8 +70,12 @@ internal class AppKitWindowPeer private constructor(
     private val window: AppKitNativeWindowOwner,
     private val contentView: AppKitNativeViewOwner,
     private val delegate: AppKitNativeDelegateOwner,
+    private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val callbackGate: AppKitWindowCallbackGate,
 ) : WindowPeerOwner {
+    internal val initialSurfaceSnapshot: AppKitSurfaceSnapshot?
+        get() = surfaceObserver?.initialSnapshot
+
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lifetimeLock = Object()
     private val closed = AtomicBoolean(false)
@@ -44,6 +88,10 @@ internal class AppKitWindowPeer private constructor(
         callbackGate.revoke()
         port.onMainThread {
             var failure: Throwable? = null
+            surfaceObserver?.let { observer ->
+                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = closeSuppressing(failure, observer)
+            }
             failure = runSuppressing(failure, delegate::revokeCallbacks)
             failure = resolveDelegateAfterPossibleAttachment(failure, delegate) {
                 port.detachDelegate(window)
@@ -69,6 +117,14 @@ internal class AppKitWindowPeer private constructor(
 
     internal fun markNativeClosed() {
         synchronized(lifetimeLock) { nativeCloseCommitted = true }
+    }
+
+    internal fun requestRedraw(generation: Long) {
+        require(generation >= 0L) { "generation must be non-negative" }
+        if (closed.get()) return
+        port.onMainThread {
+            if (!closed.get()) surfaceObserver?.requestRedraw(generation)
+        }
     }
 
     internal fun <R> withDesktopHandle(
@@ -121,17 +177,20 @@ internal class AppKitWindowPeer private constructor(
             spec: WindowSpec,
             port: AppKitNativeWindowPort,
             acceptStimulus: (AppKitWindowStimulus) -> Unit = {},
+            acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
             val callbackGate = AppKitWindowCallbackGate(
                 id,
                 acceptStimulus,
+                acceptSurfaceStimulus,
                 reportCallbackFailure,
             )
             return port.onMainThread {
                 var window: AppKitNativeWindowOwner? = null
                 var contentView: AppKitNativeViewOwner? = null
                 var delegate: AppKitNativeDelegateOwner? = null
+                var surfaceObserver: AppKitNativeSurfaceObserverOwner? = null
                 var contentAttached = false
                 var delegateMayBeAttached = false
                 try {
@@ -149,17 +208,34 @@ internal class AppKitWindowPeer private constructor(
                     delegateMayBeAttached = true
                     port.attachDelegate(window, delegate)
                     port.present(window)
+                    surfaceObserver = port.observeSurface(
+                        window,
+                        contentView,
+                        AppKitSurfaceCallbacks(
+                            metricsChanged = callbackGate::metricsChanged,
+                            focusChanged = callbackGate::focusChanged,
+                            visibilityChanged = callbackGate::visibilityChanged,
+                            themeChanged = callbackGate::themeChanged,
+                            redrawConsumed = callbackGate::redrawConsumed,
+                        ),
+                    )
+                    surfaceObserver?.let { callbackGate.activateSurface(it.initialSnapshot) }
                     AppKitWindowPeer(
                         id,
                         port,
                         window,
                         contentView,
                         delegate,
+                        surfaceObserver,
                         callbackGate,
                     )
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
                     var cleanupFailure: Throwable? = failure
+                    surfaceObserver?.let { observer ->
+                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
+                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
+                    }
                     delegate?.let { nativeDelegate ->
                         cleanupFailure = runSuppressing(cleanupFailure, nativeDelegate::revokeCallbacks)
                         cleanupFailure = if (delegateMayBeAttached) {
@@ -189,18 +265,98 @@ internal class AppKitWindowPeer private constructor(
 
 private class AppKitWindowCallbackGate(
     private val peerId: AppKitWindowPeerId,
-    private val acceptStimulus: (AppKitWindowStimulus) -> Unit,
+    private val acceptWindowStimulus: (AppKitWindowStimulus) -> Unit,
+    private val acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit,
     private val reportFailure: (Throwable) -> Unit,
 ) {
     private val lock = Any()
     private var accepting = true
+    private var surfaceAccepting = false
     private var nativeCloseDelivered = false
+    private var lastMetrics: SurfaceMetrics? = null
+    private var lastFocus: SurfaceFocus? = null
+    private var lastVisibility: Pair<SurfaceVisibility, SurfaceOcclusion>? = null
+    private var lastTheme: SurfaceTheme? = null
+    private var lastRedrawGeneration = -1L
+
+    fun activateSurface(snapshot: AppKitSurfaceSnapshot) {
+        synchronized(lock) {
+            if (!accepting) return
+            lastMetrics = snapshot.metrics
+            lastFocus = snapshot.focus
+            lastVisibility = snapshot.visibility to snapshot.occlusion
+            lastTheme = snapshot.theme
+            surfaceAccepting = true
+        }
+    }
+
+    fun metricsChanged(metrics: SurfaceMetrics) {
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting || metrics == lastMetrics) {
+                null
+            } else {
+                lastMetrics = metrics
+                AppKitSurfaceStimulus.MetricsChanged(peerId, metrics)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun focusChanged(focus: SurfaceFocus) {
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting || focus == lastFocus) {
+                null
+            } else {
+                lastFocus = focus
+                AppKitSurfaceStimulus.FocusChanged(peerId, focus)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun visibilityChanged(visibility: SurfaceVisibility, occlusion: SurfaceOcclusion) {
+        val effective = visibility to occlusion
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting || effective == lastVisibility) {
+                null
+            } else {
+                lastVisibility = effective
+                AppKitSurfaceStimulus.VisibilityChanged(peerId, visibility, occlusion)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun themeChanged(theme: SurfaceTheme) {
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting || theme == lastTheme) {
+                null
+            } else {
+                lastTheme = theme
+                AppKitSurfaceStimulus.ThemeChanged(peerId, theme)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun redrawConsumed(generation: Long) {
+        require(generation >= 0L) { "generation must be non-negative" }
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting || generation <= lastRedrawGeneration) {
+                null
+            } else {
+                lastRedrawGeneration = generation
+                AppKitSurfaceStimulus.RedrawConsumed(peerId, generation)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
 
     fun windowShouldClose(): Boolean {
         val stimulus = synchronized(lock) {
             if (accepting) AppKitWindowStimulus.CloseRequested(peerId) else null
         }
-        stimulus?.let(::publish)
+        stimulus?.let(::publishWindow)
         return false
     }
 
@@ -213,18 +369,27 @@ private class AppKitWindowCallbackGate(
                 AppKitWindowStimulus.NativeClosed(peerId)
             }
         }
-        stimulus?.let(::publish)
+        stimulus?.let(::publishWindow)
     }
 
     fun revoke() {
         synchronized(lock) {
             accepting = false
+            surfaceAccepting = false
         }
     }
 
-    private fun publish(stimulus: AppKitWindowStimulus) {
+    private fun publishWindow(stimulus: AppKitWindowStimulus) {
+        publish(stimulus, acceptWindowStimulus)
+    }
+
+    private fun publishSurface(stimulus: AppKitSurfaceStimulus) {
+        publish(stimulus, acceptSurfaceStimulus)
+    }
+
+    private fun <T> publish(stimulus: T, consumer: (T) -> Unit) {
         try {
-            acceptStimulus(stimulus)
+            consumer(stimulus)
         } catch (failure: Throwable) {
             try {
                 reportFailure(failure)

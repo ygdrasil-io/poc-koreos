@@ -1,22 +1,37 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
+import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
+import org.graphiks.kffi.objc.managed.ObjCNotificationObservation
+import org.graphiks.kffi.objc.managed.observe
 import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -33,8 +48,15 @@ internal class KffiAppKitWindowPort(
     fun prepare(
         id: AppKitWindowPeerId,
         spec: WindowSpec,
+        acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
         acceptStimulus: (AppKitWindowStimulus) -> Unit,
-    ): AppKitWindowPeer = AppKitWindowPeer.prepare(id, spec, this, acceptStimulus)
+    ): AppKitWindowPeer = AppKitWindowPeer.prepare(
+        id = id,
+        spec = spec,
+        port = this,
+        acceptStimulus = acceptStimulus,
+        acceptSurfaceStimulus = acceptSurfaceStimulus,
+    )
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
 
@@ -103,6 +125,20 @@ internal class KffiAppKitWindowPort(
     override fun present(window: AppKitNativeWindowOwner) {
         requireMainThread()
         window.kffiWindow().makeKeyAndOrderFront(MemorySegment.NULL)
+    }
+
+    override fun observeSurface(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitSurfaceCallbacks,
+    ): AppKitNativeSurfaceObserverOwner {
+        requireMainThread()
+        return KffiSurfaceObserverOwner.create(
+            window = window.kffiWindow(),
+            view = view.kffiView(),
+            callbacks = callbacks,
+            requireMainThread = ::requireMainThread,
+        )
     }
 
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
@@ -211,6 +247,195 @@ private class KffiViewOwner(
 
     override fun close() {
         if (closed.compareAndSet(false, true)) release(view.ptr)
+    }
+}
+
+private class KffiSurfaceObserverOwner private constructor(
+    private val window: NSWindow,
+    private val view: NSView,
+    private val callbacks: AppKitSurfaceCallbacks,
+    private val requireMainThread: () -> Unit,
+    private val observations: List<ObjCNotificationObservation>,
+) : AppKitNativeSurfaceObserverOwner {
+    private val accepting = AtomicBoolean(true)
+    private val closed = AtomicBoolean(false)
+    override lateinit var initialSnapshot: AppKitSurfaceSnapshot
+        private set
+
+    override fun requestRedraw(generation: Long) {
+        require(generation >= 0L) { "generation must be non-negative" }
+        requireMainThread()
+        if (!accepting.get()) return
+        view.setNeedsDisplay(true)
+        if (accepting.get()) callbacks.redrawConsumed(generation)
+    }
+
+    override fun revokeCallbacks() {
+        accepting.set(false)
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        revokeCallbacks()
+        var failure: Throwable? = null
+        observations.asReversed().forEach { observation ->
+            failure = try {
+                observation.close()
+                failure
+            } catch (closeFailure: Throwable) {
+                failure?.also {
+                    if (it !== closeFailure) it.addSuppressed(closeFailure)
+                } ?: closeFailure
+            }
+        }
+        failure?.let { throw it }
+    }
+
+    private fun emitMetrics() {
+        requireMainThread()
+        if (accepting.get()) callbacks.metricsChanged(readMetrics(view, window))
+    }
+
+    private fun emitFocus() {
+        requireMainThread()
+        if (accepting.get()) callbacks.focusChanged(readFocus(window))
+    }
+
+    private fun emitVisibility() {
+        requireMainThread()
+        if (!accepting.get()) return
+        val (visibility, occlusion) = readVisibility(window)
+        callbacks.visibilityChanged(visibility, occlusion)
+    }
+
+    private fun emitTheme() {
+        requireMainThread()
+        if (accepting.get()) callbacks.themeChanged(readTheme(view))
+    }
+
+    companion object {
+        fun create(
+            window: NSWindow,
+            view: NSView,
+            callbacks: AppKitSurfaceCallbacks,
+            requireMainThread: () -> Unit,
+        ): KffiSurfaceObserverOwner {
+            val observations = mutableListOf<ObjCNotificationObservation>()
+            var owner: KffiSurfaceObserverOwner? = null
+            try {
+                val center = NSNotificationCenter(NSNotificationCenter.defaultCenter())
+                fun observe(names: List<String>, objectFilter: MemorySegment, callback: () -> Unit) {
+                    names.forEach { name ->
+                        observations += center.observe(
+                            name = ObjCRuntime.newNSString(Arena.global(), name),
+                            objectFilter = objectFilter,
+                        ) { callback() }
+                    }
+                }
+
+                val installedOwner = KffiSurfaceObserverOwner(
+                    window,
+                    view,
+                    callbacks,
+                    requireMainThread,
+                    observations,
+                )
+                owner = installedOwner
+                observe(
+                    listOf(
+                        "NSWindowDidResizeNotification",
+                        "NSWindowDidChangeBackingPropertiesNotification",
+                    ),
+                    window.ptr,
+                    installedOwner::emitMetrics,
+                )
+                observe(
+                    listOf(
+                        "NSWindowDidBecomeKeyNotification",
+                        "NSWindowDidResignKeyNotification",
+                    ),
+                    window.ptr,
+                    installedOwner::emitFocus,
+                )
+                observe(
+                    listOf(
+                        "NSWindowDidOrderOnScreenNotification",
+                        "NSWindowDidOrderOffScreenNotification",
+                        "NSWindowDidMiniaturizeNotification",
+                        "NSWindowDidDeminiaturizeNotification",
+                        "NSWindowDidChangeOcclusionStateNotification",
+                    ),
+                    window.ptr,
+                    installedOwner::emitVisibility,
+                )
+                observe(
+                    listOf("NSViewDidChangeEffectiveAppearanceNotification"),
+                    view.ptr,
+                    installedOwner::emitTheme,
+                )
+                installedOwner.initialSnapshot = readSnapshot(view, window)
+                return installedOwner
+            } catch (failure: Throwable) {
+                owner?.revokeCallbacks()
+                observations.asReversed().forEach { observation ->
+                    try {
+                        observation.close()
+                    } catch (closeFailure: Throwable) {
+                        if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                    }
+                }
+                throw failure
+            }
+        }
+    }
+}
+
+private fun readSnapshot(view: NSView, window: NSWindow): AppKitSurfaceSnapshot {
+    val (visibility, occlusion) = readVisibility(window)
+    return AppKitSurfaceSnapshot(
+        metrics = readMetrics(view, window),
+        focus = readFocus(window),
+        visibility = visibility,
+        occlusion = occlusion,
+        theme = readTheme(view),
+    )
+}
+
+private fun readMetrics(view: NSView, window: NSWindow): SurfaceMetrics {
+    val size = view.bounds().size
+    val logicalSize = LogicalSize(size.width, size.height)
+    val scaleFactor = window.backingScaleFactor()
+    return SurfaceMetrics(
+        logicalSize = logicalSize,
+        physicalSize = logicalSize.toPhysical(scaleFactor),
+        scaleFactor = scaleFactor,
+        safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+    )
+}
+
+private fun readFocus(window: NSWindow): SurfaceFocus =
+    if (window.isKeyWindow()) SurfaceFocus.Focused else SurfaceFocus.Unfocused
+
+private fun readVisibility(window: NSWindow): Pair<SurfaceVisibility, SurfaceOcclusion> {
+    val visible = window.isVisible() && !window.isMiniaturized()
+    if (!visible) return SurfaceVisibility.Hidden to SurfaceOcclusion.Unknown
+    val occlusion = if (
+        window.occlusionState().contains(NSWindowOcclusionState.NSWindowOcclusionStateVisible)
+    ) {
+        SurfaceOcclusion.Visible
+    } else {
+        SurfaceOcclusion.Occluded
+    }
+    return SurfaceVisibility.Visible to occlusion
+}
+
+private fun readTheme(view: NSView): SurfaceTheme {
+    val appearance = NSAppearance(view.effectiveAppearance())
+    val name = ObjCRuntime.toJavaString(appearance.name())
+    return when {
+        name.contains("Dark", ignoreCase = true) -> SurfaceTheme.Dark
+        name.isNotBlank() -> SurfaceTheme.Light
+        else -> SurfaceTheme.Unknown
     }
 }
 

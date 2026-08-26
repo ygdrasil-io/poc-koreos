@@ -5,7 +5,9 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
@@ -13,8 +15,11 @@ import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
+import org.graphiks.kffi.objc.managed.observe
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.atomic.AtomicInteger
@@ -26,6 +31,64 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun publicKffiSurfaceObservationAndRedrawProofCompilesAndClosesOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val rect = NSRect(NSPoint(0.0, 0.0), NSSize(320.0, 180.0))
+        val style = NSWindowStyleMask.NSWindowStyleMaskTitled +
+            NSWindowStyleMask.NSWindowStyleMaskClosable +
+            NSWindowStyleMask.NSWindowStyleMaskResizable
+
+        ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication())
+            val window = allocateWindow(rect, style)
+            val view = allocateView(rect)
+            val center = NSNotificationCenter(NSNotificationCenter.defaultCenter())
+            val notificationNames = listOf(
+                "NSWindowDidResizeNotification" to window.ptr,
+                "NSWindowDidChangeBackingPropertiesNotification" to window.ptr,
+                "NSWindowDidBecomeKeyNotification" to window.ptr,
+                "NSWindowDidResignKeyNotification" to window.ptr,
+                "NSWindowDidOrderOnScreenNotification" to window.ptr,
+                "NSWindowDidOrderOffScreenNotification" to window.ptr,
+                "NSWindowDidMiniaturizeNotification" to window.ptr,
+                "NSWindowDidDeminiaturizeNotification" to window.ptr,
+                "NSWindowDidChangeOcclusionStateNotification" to window.ptr,
+                "NSViewDidChangeEffectiveAppearanceNotification" to view.ptr,
+            )
+            val observations = notificationNames.map { (name, objectFilter) ->
+                center.observe(
+                    name = ObjCRuntime.newNSString(Arena.global(), name),
+                    objectFilter = objectFilter,
+                ) { }
+            }
+
+            try {
+                window.setReleasedWhenClosed(false)
+                window.setContentView(view.ptr)
+
+                val contentSize = view.bounds().size
+                assertEquals(320.0, contentSize.width)
+                assertEquals(180.0, contentSize.height)
+                assertTrue(window.backingScaleFactor() > 0.0)
+                val windowAppearance = NSAppearance(window.effectiveAppearance())
+                val viewAppearance = NSAppearance(view.effectiveAppearance())
+                assertTrue(ObjCRuntime.toJavaString(windowAppearance.name()).isNotEmpty())
+                assertTrue(ObjCRuntime.toJavaString(viewAppearance.name()).isNotEmpty())
+
+                view.setNeedsDisplay(true)
+                assertTrue(view.needsDisplay())
+            } finally {
+                observations.asReversed().forEach(AutoCloseable::close)
+                window.setContentView(MemorySegment.NULL)
+                window.close()
+                release(view.ptr)
+                release(window.ptr)
+            }
+        }
+    }
+
     @Test
     fun kffiDelegateOwnerRetainsItselfOnceAndCannotReleaseAfterFailedDetachment() {
         val retained = mutableListOf<KffiDelegateOwner>()
