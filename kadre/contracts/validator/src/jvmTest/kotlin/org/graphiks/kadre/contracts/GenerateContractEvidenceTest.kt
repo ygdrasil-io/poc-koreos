@@ -14,6 +14,50 @@ import kotlin.test.assertFailsWith
 
 class GenerateContractEvidenceTest {
     @Test
+    fun cliAcceptsAnActiveO2JvmContractWithItsDeclaredAdapter() {
+        val fixture = createFixture(VALID_REPORT)
+        fixture.registry.writeText(RUNTIME_REGISTRY)
+        fixture.mapping.writeText(RUNTIME_MAPPING)
+
+        main(
+            arrayOf(
+                fixture.registry.toString(),
+                fixture.mapping.toString(),
+                fixture.reports.toString(),
+                fixture.output.toString(),
+                "0123456789abcdef",
+                "INP-001",
+                "runtime-jvm",
+            ),
+        )
+
+        val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
+        assertEquals("runtime-jvm", json["adapter"]!!.jsonPrimitive.content)
+        assertEquals("O2", json["scenarios"]!!.jsonArray.single().jsonObject["oracle"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun cliRejectsABlankAdapter() {
+        val fixture = createFixture(VALID_REPORT)
+
+        val exception = assertFailsWith<IllegalArgumentException> {
+            main(
+                arrayOf(
+                    fixture.registry.toString(),
+                    fixture.mapping.toString(),
+                    fixture.reports.toString(),
+                    fixture.output.toString(),
+                    "0123456789abcdef",
+                    "APK-001",
+                    " ",
+                ),
+            )
+        }
+
+        assertEquals("adapter must not be blank", exception.message)
+    }
+
+    @Test
     fun cliBoundaryWritesACompleteCanonicalEvidenceFile() {
         val fixture = createFixture(VALID_REPORT)
 
@@ -24,6 +68,7 @@ class GenerateContractEvidenceTest {
             outputPath = fixture.output,
             commit = "0123456789abcdef",
             contractId = "APK-001",
+            adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
@@ -58,6 +103,7 @@ class GenerateContractEvidenceTest {
                 outputPath = fixture.output,
                 commit = "fedcba9876543210",
                 contractId = "APK-001",
+                adapter = "appkit-jvm",
             )
         }
 
@@ -93,6 +139,7 @@ class GenerateContractEvidenceTest {
             outputPath = fixture.output,
             commit = "0123456789abcdef",
             contractId = "APK-001",
+            adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
@@ -124,6 +171,13 @@ class GenerateContractEvidenceTest {
     )
 
     private companion object {
+        const val RUNTIME_REGISTRY =
+            "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n" +
+                "INP-001\tactive\tTEST-STRATEGY.md#3\truntime input reducer\tmissing runtime evidence\tO2\truntime-input-key-pointer\tjvm\t-\truntime-input-policy-bypass\t-"
+        const val RUNTIME_MAPPING =
+            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "INP-001\tscenario\truntime-input-key-pointer\texample.AppKitTest\tdiscovery[jvm]\n" +
+                "INP-001\tsentinel\truntime-input-policy-bypass\texample.AppKitTest\toffMain[jvm]"
         const val REGISTRY =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n" +
                 "APK-001\tactive\tAPPKIT-JVM-FIRST-IMPLEMENTATION.md#6.1\tstandalone AppKit host\thanging native loop\tO3\tappkit-provider-discovery,appkit-standalone-stop,appkit-standalone-failure,appkit-standalone-reuse\tjvm\t-\tappkit-off-main-accepted,appkit-loop-not-woken\t-"
