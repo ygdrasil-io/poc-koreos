@@ -49,7 +49,9 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceProperty
+import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.FullscreenMode
@@ -394,7 +396,12 @@ class AppKitBackendProviderTest {
             val initial = deterministicSurfaceSnapshot(
                 logicalSize = LogicalSize(300.0, 200.0),
                 scaleFactor = 2.0,
-            ).copy(focus = SurfaceFocus.Unfocused)
+            ).copy(
+                focus = SurfaceFocus.Focused,
+                visibility = org.graphiks.kadre.surface.SurfaceVisibility.Hidden,
+                occlusion = SurfaceOcclusion.Occluded,
+                theme = SurfaceTheme.Dark,
+            )
             val port = DeterministicAppKitNativeWindowPort(
                 name = "public-surface-ordering",
                 initialSurfaceSnapshot = initial,
@@ -422,6 +429,10 @@ class AppKitBackendProviderTest {
                 assertEquals(initial.metrics.physicalSize, initialState.physicalSize)
                 assertEquals(initial.metrics.scaleFactor, initialState.scaleFactor)
                 assertEquals(initial.metrics.safeAreaInsets, initialState.safeAreaInsets)
+                assertEquals(initial.focus, initialState.focus)
+                assertEquals(initial.visibility, initialState.visibility)
+                assertEquals(initial.occlusion, initialState.occlusion)
+                assertEquals(initial.theme, initialState.theme)
 
                 val events = Channel<SurfaceEvent>(Channel.UNLIMITED)
                 val collector = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -441,12 +452,12 @@ class AppKitBackendProviderTest {
                     assertEquals(resized.physicalSize, metricsEvent.state.physicalSize)
                     assertTrue(metricsEvent.state.revision.value > initialState.revision.value)
 
-                    port.emitSurfaceFocus("surface-ordering", SurfaceFocus.Focused)
+                    port.emitSurfaceFocus("surface-ordering", SurfaceFocus.Unfocused)
                     val focusEvent = withTimeout(2.seconds) {
                         assertIs<SurfaceEvent.FocusChanged>(events.receive())
                     }
                     assertEquals(focusEvent.state, surface.state.value)
-                    assertEquals(SurfaceFocus.Focused, focusEvent.state.focus)
+                    assertEquals(SurfaceFocus.Unfocused, focusEvent.state.focus)
                     assertTrue(focusEvent.state.revision.value > metricsEvent.state.revision.value)
 
                     repeat(8) {
@@ -1521,7 +1532,10 @@ class AppKitBackendProviderTest {
             process.outputStream.bufferedWriter().use { commands ->
                 commands.appendLine("redraw 8")
                 commands.appendLine("unsupported")
+                commands.appendLine("result M7 not-applicable premature result must be rejected")
                 commands.appendLine("close")
+                commands.appendLine("result M7 not-applicable automated proof does not satisfy manual M7")
+                commands.appendLine("finish")
             }
             val completed = process.waitFor(30, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly()
@@ -1552,7 +1566,16 @@ class AppKitBackendProviderTest {
             )
             assertTrue(report.contains("TERMINAL\tSurfaceState(attachment=Detached"), report)
             assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
-            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") }, report)
+            assertTrue(
+                report.contains("COMMAND\tresult-rejected\tM7 requires terminal observation before recording"),
+                report,
+            )
+            assertFalse(report.contains("SCENARIO\tM7\tnot-applicable\tpremature result must be rejected"), report)
+            assertTrue(
+                report.contains("SCENARIO\tM7\tnot-applicable\tautomated proof does not satisfy manual M7"),
+                report,
+            )
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
         } finally {
             Files.deleteIfExists(record)
             Files.deleteIfExists(output)

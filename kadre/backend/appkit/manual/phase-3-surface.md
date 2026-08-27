@@ -20,9 +20,14 @@ module, sans renderer Kadre ni build séparé :
 ```
 
 Commandes interactives : `snapshot`, `redraw [count]`, `unsupported`,
-`result M1..M7 pass|fail|not-applicable <note>` et `close`. Le fichier TSV
+`result M1..M7 pass|fail|not-applicable <note>`, `close` et `finish`. Le fichier TSV
 enregistre les métadonnées, snapshots, événements, commandes, résultats de
 scénarios et outcome terminal.
+
+`close` détache la surface et conserve les collectors pendant la fenêtre de
+stabilité terminale. Le harness reste ensuite actif afin que l'opérateur puisse
+enregistrer `result M7 ...`; `finish` termine enfin la session. Une fin de stdin
+(EOF) équivaut à `finish` et ferme d'abord la fenêtre si nécessaire.
 
 Ce cahier ne répète pas les comportements déjà établis par `APK-003` :
 admission de fenêtre, cancellation pré-commit, ordre primary, interception de
@@ -62,6 +67,9 @@ comme un succès.
 | M5 | Produire des rafales de redraw pendant un resize et pendant une occlusion. | La fenêtre reste réactive et le harness ne révèle pas de cycles de redraw en rafale non coalescés. |
 | M6 | Exécuter `unsupported` et contrôler cursor/hit testing au bord si une future activation les annonce. | Pour cette activation, cursor, hit testing et input default behavior sont explicitement `Unsupported` et l'update retourne les rejets typés sans mutation d'état. Aucune application fictive n'est admise. |
 | M7 | Fermer la fenêtre pendant un resize, un redraw et un changement de focus. | La fermeture est propre ; aucun nouvel événement de surface n'apparaît après le snapshot terminal affiché par le harness. |
+
+Pour M7, exécuter `close`, attendre la ligne `TERMINAL_STABILITY`, saisir
+`result M7 pass|fail|not-applicable <note>`, puis `finish`.
 
 ## Compte rendu
 

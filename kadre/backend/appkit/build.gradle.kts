@@ -67,6 +67,7 @@ if (System.getProperty("os.name", "").let { name ->
         dependsOn(tasks.named("jvmTestClasses"))
         classpath = jvmTest.get().classpath
         mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase3SurfaceHarnessKt")
+        workingDir(rootProject.projectDir)
         jvmArgs(
             "-XstartOnFirstThread",
             "--enable-native-access=ALL-UNNAMED",

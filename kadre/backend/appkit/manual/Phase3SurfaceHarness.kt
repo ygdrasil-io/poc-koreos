@@ -38,7 +38,8 @@ public fun main(args: Array<String>) {
     val commands = Channel<String>(Channel.UNLIMITED)
     Thread.ofPlatform().daemon().name("kadre-phase3-harness-input").start {
         generateSequence(::readlnOrNull).forEach { commands.trySend(it) }
-        commands.trySend("close")
+        commands.trySend("finish")
+        commands.close()
     }
 
     try {
@@ -88,6 +89,31 @@ public fun main(args: Array<String>) {
                     }
                 }
 
+                var terminalState: org.graphiks.kadre.surface.SurfaceState? = null
+                suspend fun closeAndObserveTerminal(): org.graphiks.kadre.surface.SurfaceState {
+                    terminalState?.let { return it }
+                    recorder.line("COMMAND\tclose\t${window.close()}")
+                    val terminal = withTimeout(5.seconds) {
+                        surface.state.first {
+                            it.attachment == SurfaceAttachmentState.Detached
+                        }
+                    }
+                    val terminalEventCount = observedEventCount.get()
+                    delay(250.milliseconds)
+                    val noLateRevision =
+                        latestStateRevision.get() == terminal.revision.value && surface.state.value == terminal
+                    val noLateEvent = observedEventCount.get() == terminalEventCount
+                    recorder.line(
+                        "TERMINAL_STABILITY\tnoLateRevision=$noLateRevision\tnoLateEvent=$noLateEvent" +
+                            "\tobservationMillis=250",
+                    )
+                    check(noLateRevision) { "surface revision changed after terminal detachment" }
+                    check(noLateEvent) { "surface event arrived after terminal detachment" }
+                    recorder.line("TERMINAL\t$terminal")
+                    terminalState = terminal
+                    return terminal
+                }
+
                 for (line in commands) {
                     val command = line.trim()
                     when {
@@ -112,34 +138,29 @@ public fun main(args: Array<String>) {
                             )
                             recorder.line("COMMAND\tunsupported-surface-update\t$result")
                         }
-                        command.startsWith("result ") -> recorder.scenario(command)
-                        command == "close" -> {
-                            recorder.line("COMMAND\tclose\t${window.close()}")
-                            withTimeout(5.seconds) {
-                                surface.state.first {
-                                    it.attachment == SurfaceAttachmentState.Detached
-                                }
+                        command.startsWith("result ") -> {
+                            val scenarioId = command.split(' ', limit = 3).getOrNull(1)
+                            if (scenarioId == "M7" && terminalState == null) {
+                                recorder.line(
+                                    "COMMAND\tresult-rejected" +
+                                        "\tM7 requires terminal observation before recording",
+                                )
+                            } else {
+                                recorder.scenario(command)
                             }
+                        }
+                        command == "close" -> closeAndObserveTerminal()
+                        command == "finish" -> {
+                            recorder.line("COMMAND\tfinish")
+                            closeAndObserveTerminal()
                             break
                         }
                         else -> recorder.line("COMMAND\tunknown\t$command")
                     }
                 }
-                val terminal = surface.state.value
-                val terminalEventCount = observedEventCount.get()
-                delay(250.milliseconds)
-                val noLateRevision =
-                    latestStateRevision.get() == terminal.revision.value && surface.state.value == terminal
-                val noLateEvent = observedEventCount.get() == terminalEventCount
-                recorder.line(
-                    "TERMINAL_STABILITY\tnoLateRevision=$noLateRevision\tnoLateEvent=$noLateEvent" +
-                        "\tobservationMillis=250",
-                )
-                check(noLateRevision) { "surface revision changed after terminal detachment" }
-                check(noLateEvent) { "surface event arrived after terminal detachment" }
+                closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
-                recorder.line("TERMINAL\t$terminal")
                 requestStop()
             },
         )
@@ -156,7 +177,7 @@ private fun stateRevisionVisible(
 
 private fun printHelp(recorder: HarnessRecorder) {
     recorder.line(
-        "HELP\tsnapshot | redraw [count] | unsupported | result M1..M7 pass|fail|not-applicable note | close",
+        "HELP\tsnapshot | redraw [count] | unsupported | result M1..M7 pass|fail|not-applicable note | close | finish",
     )
 }
 
