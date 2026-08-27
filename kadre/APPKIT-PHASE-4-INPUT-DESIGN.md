@@ -33,10 +33,27 @@ CoreGraphics (`CGScrollEventUnit`, `CGScrollPhase`,
 binaires ne sont pas interchangeables. Elle conserve le `CGEvent` créé,
 convertit dans un autorelease pool, le relâche après la conversion retenue par
 `NSEvent`, puis poste l'événement sans exposer de `MemorySegment` ou de
-`CGEventRef` libérable à Kadre. L'O3 doit constater les valeurs réellement
-reçues par `scrollWheel:` — précision, deltas, phase et momentum — car le SDK
-ne documente pas assez la conversion de tous les champs pour qu'un simple test
-de construction soit une preuve suffisante.
+`CGEventRef` libérable à Kadre. L'O3 KFFI doit retirer l'événement réellement
+posté de la file et observer son `NSEvent` converti — type, FIFO, précision,
+`deltaX`/`deltaY`, phase et momentum — car le SDK ne documente pas assez la
+conversion de tous les champs pour qu'un simple test de construction soit une
+preuve suffisante.
+
+Cette primitive ne cible pas une fenêtre AppKit : `eventWithCGEvent:` produit
+un événement avec `windowNumber == 0`. Même avec une fenêtre front/key dont la
+vue couvre sa position, `NSApplication.sendEvent:` ne le livre pas à
+`scrollWheel:`. KFFI ne contourne pas cette règle par `NSWindow.sendEvent:`,
+appel direct de callback, KVC ou API privée. La livraison effective à un
+responder reste une preuve manuelle Phase 4 avec un périphérique réel ; la CI
+prouve séparément la file et la conversion native.
+
+Les fields CoreGraphics fixed-point conservent les `Double` dans
+`NSEvent.deltaX`/`deltaY`. En revanche AppKit calcule
+`scrollingDeltaX`/`scrollingDeltaY` depuis les fields PointDelta entiers créés
+par `CGEventCreateScrollWheelEvent2`. Les scénarios CI qui vérifient les
+`scrollingDelta` précis emploient donc des valeurs intégrales ; le harness
+manuel vérifie les fractions d'un trackpad réel. Cette limite n'autorise jamais
+un arrondi silencieux dans le mapper des événements physiques reçus par Kadre.
 
 ## Autorités et trajet
 
@@ -105,11 +122,16 @@ révocation native, tout stimulus tardif est ignoré et le flow input est fermé
 `INP-001` couvre au niveau O2 le reducer, l’ordre état/événement, unknown keys,
 repeat, reset FocusLost, coalescing/barrières, overflow et fermeture. `APK-005`
 active la traversée O3 avec une vraie fenêtre/vie AppKit : acquisition du first
-responder, key down/up/repeat/modifiers, mouse enter/exit/move/button, scroll
-discret/précis injecté dans la file native, reset sur perte de focus et absence
-de callback après fermeture.
+responder, key down/up/repeat/modifiers, mouse enter/exit/move/button, et
+injection scroll discret/précis dans la file native avec conversion observée.
+La livraison de ce scroll synthétique à `scrollWheel:` est explicitement hors
+de la preuve CI car AppKit ne lui associe aucune fenêtre ; reset sur perte de
+focus et absence de callback après fermeture restent des preuves O3 des
+callbacks réellement reçus.
 
 Le harness manuel Phase 4 est distinct de cette CI. Il enregistre focus clavier,
-modifiers/repeat, mouvement/boutons, scroll souris et trackpad, momentum,
-perte de focus pendant une touche ou un bouton maintenu et fermeture pendant
-input. Une observation humaine ne remplace jamais les preuves O2/O3.
+modifiers/repeat, mouvement/boutons, scroll souris et trackpad, fractions de
+scroll précis, momentum, perte de focus pendant une touche ou un bouton
+maintenu et fermeture pendant input. Une observation humaine ne remplace jamais
+les preuves O2/O3 ; elle couvre seulement le routing responder que cette
+primitive synthétique ne sait pas cibler.

@@ -115,22 +115,25 @@
 
   La façade accepte seulement les enums CoreGraphics `CGScrollPhase` et
   `CGMomentumScrollPhase`, les unités, deltas et caractère continu; elle ne
-  laisse échapper ni `MemorySegment` ni `CGEventRef`. Le `CGEvent` de création
+  laisse échapper ni `MemorySegment` ni `CGEventRef`, ni un contrôle de queue
+  interne tel que `atStart`. Le `CGEvent` de création
   est +1, `eventWithCGEvent` le retient, puis KFFI appelle `CFRelease` dans un
   autorelease pool après conversion avant le post. Il est interdit de passer
   des valeurs `NSEventPhase`, dont les bits diffèrent.
 
-- [ ] **Step 4: Prouver O3 la file et le callback AppKit.**
+- [ ] **Step 4: Prouver O3 la file et la conversion AppKit.**
 
-  Créer une `NSWindow` et une `NSView` managée; poster un discret et un précis,
-  retirer chaque événement de la file AppKit puis le dispatcher par
-  `NSApplication.sendEvent:`. Ne jamais appeler `NSWindow.sendEvent:`
-  directement : AppKit le déconseille explicitement et un événement synthétique
-  sans fenêtre associée (`windowNumber == 0`) appartient au routing de
-  l'application. Dans
-  `scrollWheel:`, vérifier type, ordre FIFO, une callback par événement,
-  `hasPreciseScrollingDeltas`, deltas, phase et momentum effectivement lus. La
-  callback n'est jamais appelée directement par le test.
+  Poster un discret et un précis, puis retirer chaque événement de la file
+  `NSApplication`. Vérifier sur les `NSEvent` réellement convertis le type,
+  l'ordre FIFO, une entrée de file par post,
+  `hasPreciseScrollingDeltas`, `deltaX`/`deltaY`, phase et momentum. Les
+  valeurs CoreGraphics doivent devenir leurs valeurs AppKit observées, sans
+  passer de `NSEventPhase` à la façade. Ne jamais appeler
+  `NSWindow.sendEvent:` directement : AppKit le déconseille explicitement.
+  `eventWithCGEvent:` conserve `windowNumber == 0` et
+  `NSApplication.sendEvent:` ne le délivre pas à `scrollWheel:` même si le
+  hit-test vise une vue. Ce routing responder est donc une entrée explicite du
+  cahier manuel Phase 4, pas un faux callback CI.
 
 - [ ] **Step 5: Exécuter les tests Kextract/KFFI requis et les contrôles de génération, puis committer les couches dans l'ordre Kextract → gitlink KFFI → bindings → façade/O3.**
 - [ ] **Step 6: Publier KFFI selon l’autorité reçue, puis ajouter le compile proof Kadre.**
