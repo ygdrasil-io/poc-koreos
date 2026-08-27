@@ -12,9 +12,14 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.application.SessionInstant
+import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreException
@@ -23,6 +28,12 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.PropertyChange
@@ -52,6 +63,7 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -149,11 +161,86 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun sessionInputPolicyControlsTheIngressOfEveryCommittedSurface() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val inputPolicy = KadrePolicies.Default.input.copy(
+            discreteEvents = KadrePolicies.Default.input.discreteEvents.copy(
+                ingressCapacity = 1,
+                ingressOverflow = org.graphiks.kadre.policy.IngressOverflowAction.CloseSource,
+            ),
+        )
+        var sequence = 0L
+        manager.installSessionConfiguration(
+            deliveryPolicy = KadrePolicies.Default.window,
+            inputDeliveryPolicy = inputPolicy,
+            source = {
+                EventStamp(
+                    SessionSequence(sequence),
+                    SessionInstant((sequence++).nanoseconds),
+                    deliverySpan = null,
+                )
+            },
+            sessionFailureHandler = {},
+            collectorAllocator = RuntimeEventCollectorAllocator(4),
+            maxCollectorsPerFlow = 4,
+        )
+        val request = manager.requestWindow(WindowSpec(title = "input-policy")).successValue()
+        val window = commit(request, port.openCommands.single())
+        var injected = false
+        val terminal = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                window.surface.input.events
+                    .onEach { event ->
+                        if (!injected && event is InputEvent.Key) {
+                            injected = true
+                            manager.acceptSurfaceStimulus(inputKey(window.surface.id, "session-policy-one"))
+                            manager.acceptSurfaceStimulus(inputKey(window.surface.id, "session-policy-two"))
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        assertTrue(manager.acceptSurfaceStimulus(inputKey(window.surface.id, "session-policy-root")))
+
+        assertEquals(
+            KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+            assertIs<KadreException>(terminal.await()).failure,
+        )
+    }
+
+    @Test
+    fun inputStimuliRemainIsolatedToTheCommittedSurfaceThatOwnsTheirIdentity() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val firstRequest = manager.requestWindow(WindowSpec(title = "input-first")).successValue()
+        val secondRequest = manager.requestWindow(WindowSpec(title = "input-second")).successValue()
+        val first = commit(firstRequest, port.openCommands[0])
+        val second = commit(secondRequest, port.openCommands[1])
+        val event = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            first.surface.input.events.first()
+        }
+
+        assertTrue(manager.acceptSurfaceStimulus(inputKey(first.surface.id, "surface-one")))
+
+        assertIs<InputEvent.Key>(event.await())
+        assertEquals(1L, first.surface.input.state.value.revision.value)
+        assertEquals(0L, second.surface.input.state.value.revision.value)
+        assertFalse(
+            manager.acceptSurfaceStimulus(
+                inputKey(org.graphiks.kadre.surface.SurfaceId(9_999L), "unknown-surface"),
+            ),
+        )
+    }
+
+    @Test
     fun windowSurfaceAndInputCollectorsShareTheInjectedSessionAllocator() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
         manager.installSessionConfiguration(
             deliveryPolicy = KadrePolicies.Default.window,
+            inputDeliveryPolicy = KadrePolicies.Default.input,
             source = { error("event stamps are not used by this collector test") },
             sessionFailureHandler = {},
             collectorAllocator = RuntimeEventCollectorAllocator(1),
@@ -1147,6 +1234,19 @@ class RuntimeWindowManagerTest {
         command.commit(owner)
         return assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
     }
+
+    private fun inputKey(
+        surfaceId: org.graphiks.kadre.surface.SurfaceId,
+        nativeCode: String,
+    ): SurfaceStimulus.KeyChanged = SurfaceStimulus.KeyChanged(
+        surfaceId,
+        PhysicalKey.Unidentified(nativeCode),
+        LogicalKey.Unidentified(nativeCode),
+        KeyLocation.Standard,
+        KeyState.Pressed,
+        repeat = false,
+        KeyboardModifiers(emptySet()),
+    )
 
     private fun org.graphiks.kadre.window.WindowCapabilities.allPhaseThreeCapabilitiesAreUnsupported(): Boolean =
         listOf(

@@ -26,6 +26,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.LogicalInsets
@@ -101,6 +102,7 @@ public class RuntimeWindowManager public constructor(
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
     private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
+    private var surfaceInputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input
     private val isolatedEventCollectorAllocator = lazy {
         RuntimeEventCollectorAllocator(resources.maxEventCollectorsPerSession)
     }
@@ -160,6 +162,7 @@ public class RuntimeWindowManager public constructor(
 
     internal fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: RuntimeEventCollectorAllocator,
@@ -170,6 +173,7 @@ public class RuntimeWindowManager public constructor(
             check(pending.isEmpty() && committed.isEmpty()) { "window event stamp source must be installed before admission" }
             sessionEventStampSource = source
             surfaceDeliveryPolicy = deliveryPolicy
+            surfaceInputDeliveryPolicy = inputDeliveryPolicy
             surfaceSessionFailureHandler = sessionFailureHandler
             sessionEventCollectorAllocator = collectorAllocator
             sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
@@ -870,6 +874,7 @@ public class RuntimeWindowManager public constructor(
             platform = platform,
             failureReporter = failureReporter,
             deliveryPolicy = surfaceDeliveryPolicy,
+            inputDeliveryPolicy = surfaceInputDeliveryPolicy,
             maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,
             collectorAllocator = collectorAllocator,
             sessionFailureHandler = surfaceSessionFailureHandler,

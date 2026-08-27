@@ -25,8 +25,23 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DeviceId
+import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.InputStateResetReason
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.ModifierKey
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.policy.CollectorOverflowAction
+import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.IngressOverflowAction
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
@@ -35,6 +50,8 @@ import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
@@ -61,6 +78,454 @@ import kotlin.time.Duration.Companion.nanoseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowSurfaceTest {
+    @Test
+    fun keyAndPointerPublishReducedSnapshotsBeforeEventsAndKeepUnknownRepeatAndReleaseAtOneRevision() = runTest {
+        val surface = surface()
+        val observedRevisions = mutableListOf<Long>()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { observedRevisions += surface.input.state.value.revision.value }
+                .take(4)
+                .toList()
+        }
+        val physical = PhysicalKey.Unidentified("native-key-91")
+        val logical = LogicalKey.Unidentified("native-key-91")
+        val neverPressedPhysical = PhysicalKey.Unidentified("native-key-never-pressed")
+        val neverPressedLogical = LogicalKey.Unidentified("native-key-never-pressed")
+        val modifiers = KeyboardModifiers(setOf(ModifierKey.Shift))
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.KeyChanged(
+                    surface.id,
+                    physical,
+                    logical,
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    modifiers,
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.KeyChanged(
+                    surface.id,
+                    physical,
+                    logical,
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = true,
+                    modifiers,
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.PointerEntered(
+                    surface.id,
+                    PointerKind.Mouse,
+                    LogicalPoint(19.0, 23.0),
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.KeyChanged(
+                    surface.id,
+                    neverPressedPhysical,
+                    neverPressedLogical,
+                    KeyLocation.Standard,
+                    KeyState.Released,
+                    repeat = false,
+                    modifiers,
+                ),
+            ),
+        )
+
+        val received = events.await()
+        val keys = received.take(2).map { assertIs<InputEvent.Key>(it) }
+        val pointer = assertIs<InputEvent.PointerEntered>(received[2])
+        val released = assertIs<InputEvent.Key>(received[3])
+        assertEquals(listOf(1L, 1L, 2L, 2L), received.map { it.stateRevision.value })
+        assertEquals(listOf(1L, 1L, 2L, 2L), observedRevisions)
+        assertEquals(physical, keys.first().physicalKey)
+        assertEquals(logical, keys.first().logicalKey)
+        assertEquals(KeyState.Pressed, keys.last().keyState)
+        assertTrue(keys.last().repeat)
+        assertEquals(neverPressedPhysical, released.physicalKey)
+        assertEquals(neverPressedLogical, released.logicalKey)
+        assertEquals(KeyState.Released, released.keyState)
+        assertFalse(released.repeat)
+        assertEquals(LogicalPoint(19.0, 23.0), pointer.position)
+        assertEquals(setOf(physical), surface.input.state.value.keyboard.pressedKeys)
+        assertEquals(modifiers, surface.input.state.value.modifiers)
+        assertEquals(pointer.pointerId, surface.input.state.value.pointers.single().id)
+    }
+
+    @Test
+    fun mousePointerKeepsOneRuntimeIdentityAndRemovesItOnlyAfterTheExitEventCarriesItsLastPosition() = runTest {
+        val surface = surface()
+        val observedPointers = mutableListOf<List<org.graphiks.kadre.input.PointerState>>()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { observedPointers += surface.input.state.value.pointers }
+                .take(6)
+                .toList()
+        }
+        val enteredAt = LogicalPoint(3.0, 5.0)
+        val movedAt = LogicalPoint(9.0, 11.0)
+        val reenteredAt = LogicalPoint(13.0, 17.0)
+
+        assertTrue(surface.accept(SurfaceStimulus.PointerEntered(surface.id, PointerKind.Mouse, enteredAt)))
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.PointerMoved(
+                    surface.id,
+                    PointerKind.Mouse,
+                    movedAt,
+                    LogicalDelta(6.0, 6.0),
+                    pressure = null,
+                    pen = null,
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.PointerButtonChanged(
+                    surface.id,
+                    PointerKind.Mouse,
+                    PointerButton.Primary,
+                    PointerButtonState.Pressed,
+                    movedAt,
+                    pressure = null,
+                    pen = null,
+                ),
+            ),
+        )
+        assertTrue(surface.accept(SurfaceStimulus.PointerLeft(surface.id, PointerKind.Mouse)))
+        assertTrue(surface.accept(SurfaceStimulus.PointerEntered(surface.id, PointerKind.Mouse, reenteredAt)))
+        assertTrue(surface.accept(SurfaceStimulus.PointerLeft(surface.id, PointerKind.Mouse)))
+
+        val received = events.await()
+        val entered = assertIs<InputEvent.PointerEntered>(received[0])
+        val moved = assertIs<InputEvent.PointerMoved>(received[1])
+        val button = assertIs<InputEvent.PointerButtonChanged>(received[2])
+        val left = assertIs<InputEvent.PointerLeft>(received[3])
+        val reentered = assertIs<InputEvent.PointerEntered>(received[4])
+        val finalLeft = assertIs<InputEvent.PointerLeft>(received[5])
+        assertEquals(entered.pointerId, moved.pointerId)
+        assertEquals(entered.pointerId, button.pointerId)
+        assertEquals(entered.pointerId, left.pointerId)
+        assertEquals(entered.pointerId, reentered.pointerId)
+        assertEquals(entered.pointerId, finalLeft.pointerId)
+        assertEquals(enteredAt, entered.position)
+        assertEquals(movedAt, left.lastPosition)
+        assertEquals(reenteredAt, finalLeft.lastPosition)
+        assertEquals(listOf(1L, 2L, 3L, 3L, 5L, 5L), received.map { it.stateRevision.value })
+        assertEquals(movedAt, observedPointers[3].single().position)
+        assertEquals(setOf(PointerButton.Primary), observedPointers[3].single().pressedButtons)
+        assertEquals(reenteredAt, observedPointers[5].single().position)
+        assertEquals(6L, surface.input.state.value.revision.value)
+        assertEquals(emptyList(), surface.input.state.value.pointers)
+    }
+
+    @Test
+    fun scrollCoalescesAdditivelyOnlyInsideItsNativeBoundaryAndDoesNotReviseSnapshot() = runTest {
+        val surface = surface()
+        val firstDevice = DeviceId(1L)
+        val secondDevice = DeviceId(2L)
+        var injected = false
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { event ->
+                    if (!injected && event is InputEvent.Key) {
+                        injected = true
+                        surface.accept(
+                            SurfaceStimulus.Scroll(
+                                surface.id,
+                                ScrollDelta.Lines(1.0, -2.0),
+                                7L,
+                                firstDevice,
+                            ),
+                        )
+                        surface.accept(
+                            SurfaceStimulus.Scroll(
+                                surface.id,
+                                ScrollDelta.Lines(3.0, 5.0),
+                                7L,
+                                firstDevice,
+                            ),
+                        )
+                        surface.accept(
+                            SurfaceStimulus.Scroll(
+                                surface.id,
+                                ScrollDelta.Logical(7.0, 9.0),
+                                7L,
+                                firstDevice,
+                            ),
+                        )
+                        surface.accept(
+                            SurfaceStimulus.Scroll(
+                                surface.id,
+                                ScrollDelta.Lines(-4.0, 6.0),
+                                7L,
+                                secondDevice,
+                            ),
+                        )
+                    }
+                }
+                .take(4)
+                .toList()
+        }
+
+        surface.accept(
+            SurfaceStimulus.KeyChanged(
+                surface.id,
+                PhysicalKey.Unidentified("native-scroll-barrier"),
+                LogicalKey.Unidentified("native-scroll-barrier"),
+                KeyLocation.Standard,
+                KeyState.Pressed,
+                repeat = false,
+                KeyboardModifiers(emptySet()),
+            ),
+        )
+
+        val received = events.await()
+        val first = assertIs<InputEvent.Scrolled>(received[1])
+        val second = assertIs<InputEvent.Scrolled>(received[2])
+        val third = assertIs<InputEvent.Scrolled>(received[3])
+        assertEquals(ScrollDelta.Lines(4.0, 3.0), first.delta)
+        assertEquals(ScrollDelta.Logical(7.0, 9.0), second.delta)
+        assertEquals(ScrollDelta.Lines(-4.0, 6.0), third.delta)
+        assertEquals(EventDeliverySpan(SessionSequence(1), SessionSequence(2), 2), first.stamp.deliverySpan)
+        assertEquals(null, second.stamp.deliverySpan)
+        assertEquals(null, third.stamp.deliverySpan)
+        assertEquals(firstDevice, first.deviceId)
+        assertEquals(firstDevice, second.deviceId)
+        assertEquals(secondDevice, third.deviceId)
+        assertEquals(listOf(1L, 1L, 1L, 1L), received.map { it.stateRevision.value })
+        assertEquals(1L, surface.input.state.value.revision.value)
+    }
+
+    @Test
+    fun focusLossPublishesOneNeutralSnapshotAndResetWithoutSyntheticKeyRelease() = runTest {
+        val surface = surface()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.take(3).toList()
+        }
+        val physical = PhysicalKey.Unidentified("native-focus-key")
+
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused)))
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.KeyChanged(
+                    surface.id,
+                    physical,
+                    LogicalKey.Unidentified("native-focus-key"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(setOf(ModifierKey.Alt)),
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.PointerButtonChanged(
+                    surface.id,
+                    PointerKind.Mouse,
+                    PointerButton.Primary,
+                    PointerButtonState.Pressed,
+                    LogicalPoint(31.0, 37.0),
+                    pressure = null,
+                    pen = null,
+                ),
+            ),
+        )
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Unfocused)))
+
+        val received = events.await()
+        assertIs<InputEvent.Key>(received.first())
+        assertIs<InputEvent.PointerButtonChanged>(received[1])
+        val reset = assertIs<InputEvent.StateReset>(received.last())
+        assertEquals(InputStateResetReason.FocusLost, reset.reason)
+        assertEquals(3L, reset.stateRevision.value)
+        assertFalse(received.any { it is InputEvent.Key && it.keyState == KeyState.Released })
+        assertFalse(
+            received.any {
+                it is InputEvent.PointerButtonChanged && it.buttonState == PointerButtonState.Released
+            },
+        )
+        assertEquals(emptySet(), surface.input.state.value.keyboard.pressedKeys)
+        assertEquals(KeyboardModifiers(emptySet()), surface.input.state.value.modifiers)
+        assertEquals(emptyList(), surface.input.state.value.pointers)
+    }
+
+    @Test
+    fun inputCapabilitiesBecomeAvailableOnlyAfterTheirNativeObservationIsStructurallyInstalled() {
+        val surface = surface()
+
+        assertAllInputObservationCapabilitiesUnsupported(surface)
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.InputObservationChanged(
+                    surface.id,
+                    keyboardInstalled = true,
+                    pointerInstalled = false,
+                ),
+            ),
+        )
+        assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.keyboard)
+        assertEquals(FeatureAvailability.Unsupported, surface.input.state.value.capabilities.pointer)
+        assertAllOtherInputCapabilitiesUnsupported(surface)
+        assertEquals(1L, surface.input.state.value.revision.value)
+        assertFalse(
+            surface.accept(
+                SurfaceStimulus.InputObservationChanged(
+                    surface.id,
+                    keyboardInstalled = true,
+                    pointerInstalled = false,
+                ),
+            ),
+        )
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.InputObservationChanged(
+                    surface.id,
+                    keyboardInstalled = true,
+                    pointerInstalled = true,
+                ),
+            ),
+        )
+        assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.keyboard)
+        assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.pointer)
+        assertAllOtherInputCapabilitiesUnsupported(surface)
+        assertEquals(2L, surface.input.state.value.revision.value)
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.InputObservationChanged(
+                    surface.id,
+                    keyboardInstalled = false,
+                    pointerInstalled = false,
+                ),
+            ),
+        )
+        assertAllInputObservationCapabilitiesUnsupported(surface)
+        assertEquals(3L, surface.input.state.value.revision.value)
+    }
+
+    @Test
+    fun inputIngressOverflowNeutralisesTheSourceAndRejectsEveryLateStimulus() = runTest {
+        val inputPolicy = KadrePolicies.Default.input.copy(
+            discreteEvents = KadrePolicies.Default.input.discreteEvents.copy(
+                ingressCapacity = 1,
+                ingressOverflow = IngressOverflowAction.CloseSource,
+            ),
+        )
+        val surface = surface(inputDeliveryPolicy = inputPolicy)
+        var injected = false
+        val terminal = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                surface.input.events
+                    .onEach { event ->
+                        if (!injected && event is InputEvent.Key) {
+                            injected = true
+                            surface.accept(keyStimulus(surface, "overflow-one"))
+                            surface.accept(keyStimulus(surface, "overflow-two"))
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        assertTrue(surface.accept(keyStimulus(surface, "overflow-root")))
+
+        val expected = KadreFailure.SourceOverflow(KadreResourceKind.InputSource)
+        assertEquals(expected, assertIs<KadreException>(terminal.await()).failure)
+        assertEquals(emptySet(), surface.input.state.value.keyboard.pressedKeys)
+        assertEquals(expected, assertIs<FeatureAvailability.Unavailable>(surface.input.state.value.capabilities.keyboard).failure)
+        assertFalse(surface.accept(keyStimulus(surface, "late-after-overflow")))
+    }
+
+    @Test
+    fun slowInputCollectorCanCloseTheWholeInputSourceAccordingToItsDedicatedPolicy() = runTest {
+        val inputPolicy = KadrePolicies.Default.input.copy(
+            discreteEvents = KadrePolicies.Default.input.discreteEvents.copy(
+                collectorCapacity = 1,
+                collectorOverflow = CollectorOverflowAction.CloseSource,
+            ),
+        )
+        val surface = surface(inputDeliveryPolicy = inputPolicy)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val terminal = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                surface.input.events
+                    .onEach { event ->
+                        if (event is InputEvent.Key && event.logicalKey == LogicalKey.Unidentified("collector-root")) {
+                            entered.complete(Unit)
+                            release.await()
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        assertTrue(surface.accept(keyStimulus(surface, "collector-root")))
+        entered.await()
+        assertTrue(surface.accept(keyStimulus(surface, "collector-one")))
+        assertTrue(surface.accept(keyStimulus(surface, "collector-two")))
+        release.complete(Unit)
+
+        val expected = KadreFailure.SourceOverflow(KadreResourceKind.InputSource)
+        assertEquals(expected, assertIs<KadreException>(terminal.await()).failure)
+        assertEquals(emptySet(), surface.input.state.value.keyboard.pressedKeys)
+        assertEquals(expected, assertIs<FeatureAvailability.Unavailable>(surface.input.state.value.capabilities.pointer).failure)
+    }
+
+    @Test
+    fun slowInputCollectorCancellationDropsItsQueuedEventsBeforeReportingThePolicyFailure() = runTest {
+        val inputPolicy = KadrePolicies.Default.input.copy(
+            discreteEvents = KadrePolicies.Default.input.discreteEvents.copy(
+                collectorCapacity = 1,
+                collectorOverflow = CollectorOverflowAction.CancelSlowCollector,
+            ),
+        )
+        val surface = surface(inputDeliveryPolicy = inputPolicy)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val delivered = mutableListOf<InputEvent.Key>()
+        val terminal = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                surface.input.events
+                    .onEach { event ->
+                        val key = event as? InputEvent.Key ?: return@onEach
+                        delivered += key
+                        if (key.logicalKey == LogicalKey.Unidentified("cancel-root")) {
+                            entered.complete(Unit)
+                            release.await()
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        assertTrue(surface.accept(keyStimulus(surface, "cancel-root")))
+        entered.await()
+        assertTrue(surface.accept(keyStimulus(surface, "cancel-one")))
+        assertTrue(surface.accept(keyStimulus(surface, "cancel-two")))
+        release.complete(Unit)
+
+        assertIs<SlowCollectorCancellationException>(terminal.await())
+        assertEquals(
+            listOf(LogicalKey.Unidentified("cancel-root")),
+            delivered.map(InputEvent.Key::logicalKey),
+        )
+    }
+
     @Test
     fun initialSnapshotUsesAllEffectiveMetricsAtRevisionZero() {
         val surface = surface(
@@ -1115,6 +1580,17 @@ class RuntimeWindowSurfaceTest {
         assertTrue(surface.capabilities.value.allUnsupported())
     }
 
+    private fun keyStimulus(surface: RuntimeWindowSurface, nativeCode: String): SurfaceStimulus.KeyChanged =
+        SurfaceStimulus.KeyChanged(
+            surface.id,
+            PhysicalKey.Unidentified(nativeCode),
+            LogicalKey.Unidentified(nativeCode),
+            KeyLocation.Standard,
+            KeyState.Pressed,
+            repeat = false,
+            KeyboardModifiers(emptySet()),
+        )
+
     private fun surface(
         id: SurfaceId = SurfaceId(37),
         metrics: SurfaceMetrics = DEFAULT_METRICS,
@@ -1124,6 +1600,7 @@ class RuntimeWindowSurfaceTest {
         reported: MutableList<Throwable> = mutableListOf(),
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter(reported::add),
         deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
+        inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
         maxCollectorsPerFlow: Int = KadrePolicies.Default.resources.maxEventCollectorsPerFlow,
         collectorAllocator: RuntimeEventCollectorAllocator = RuntimeEventCollectorAllocator(
             KadrePolicies.Default.resources.maxEventCollectorsPerSession,
@@ -1144,6 +1621,7 @@ class RuntimeWindowSurfaceTest {
         eventStampSource = StampSource()::next,
         failureReporter = failureReporter,
         deliveryPolicy = deliveryPolicy,
+        inputDeliveryPolicy = inputDeliveryPolicy,
         maxCollectorsPerFlow = maxCollectorsPerFlow,
         collectorAllocator = collectorAllocator,
         sessionFailureHandler = sessionFailureHandler,
@@ -1212,6 +1690,22 @@ class RuntimeWindowSurfaceTest {
         armedInteractions,
         platformAccess,
     ).all { it is Capability.Unsupported }
+
+    private fun assertAllInputObservationCapabilitiesUnsupported(surface: RuntimeWindowSurface) {
+        val capabilities = surface.input.state.value.capabilities
+        assertEquals(FeatureAvailability.Unsupported, capabilities.keyboard)
+        assertEquals(FeatureAvailability.Unsupported, capabilities.pointer)
+        assertAllOtherInputCapabilitiesUnsupported(surface)
+    }
+
+    private fun assertAllOtherInputCapabilitiesUnsupported(surface: RuntimeWindowSurface) {
+        val capabilities = surface.input.state.value.capabilities
+        assertEquals(FeatureAvailability.Unsupported, capabilities.touch)
+        assertEquals(FeatureAvailability.Unsupported, capabilities.gestures)
+        assertEquals(FeatureAvailability.Unsupported, capabilities.dragAndDrop)
+        assertIs<Capability.Unsupported>(capabilities.textInput)
+        assertIs<Capability.Unsupported>(capabilities.rawInput)
+    }
 
     private fun <T> unsupported(operation: KadreOperation): Capability<T> =
         Capability.Unsupported(KadreFailure.Unsupported(operation))

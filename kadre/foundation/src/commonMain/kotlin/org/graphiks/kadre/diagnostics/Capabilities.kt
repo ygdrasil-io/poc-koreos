@@ -40,6 +40,7 @@ private fun KadreFailure.isAvailabilityFailure(): Boolean = when (this) {
     is KadreFailure.AlreadyInUse,
     is KadreFailure.Closed,
     is KadreFailure.ResourceLimitExceeded,
+    is KadreFailure.SourceOverflow,
     is KadreFailure.SourceLost,
     is KadreFailure.PlatformFailure,
     -> true

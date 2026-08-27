@@ -92,6 +92,7 @@ internal class SessionRuntime(
         .also { manager ->
             (manager as? RuntimeWindowManager)?.installSessionConfiguration(
                 policy.window,
+                policy.input,
                 ::nextStamp,
                 ::eventDeliveryFailed,
                 eventCollectorAllocator,

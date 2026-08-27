@@ -3,10 +3,23 @@ package org.graphiks.kadre.internal.runtime
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DeviceId
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PenState
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
@@ -113,6 +126,88 @@ public sealed interface SurfaceStimulus {
         override val surfaceId: SurfaceId,
         public val generation: SurfaceRedrawGeneration,
     ) : SurfaceStimulus
+
+    /** One immutable keyboard observation. Identity, stamps and revisions stay runtime-owned. */
+    public data class KeyChanged(
+        override val surfaceId: SurfaceId,
+        public val physicalKey: PhysicalKey,
+        public val logicalKey: LogicalKey,
+        public val location: KeyLocation,
+        public val keyState: KeyState,
+        public val repeat: Boolean,
+        public val modifiers: KeyboardModifiers,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus {
+        init {
+            require(keyState == KeyState.Pressed || !repeat) { "a key release cannot repeat" }
+        }
+    }
+
+    /**
+     * Reports which native input observers have been structurally installed for this surface.
+     *
+     * This is a capability observation, not an input packet: it neither fabricates an input
+     * event nor asserts that a callback is currently delivering native input.
+     */
+    public data class InputObservationChanged(
+        override val surfaceId: SurfaceId,
+        public val keyboardInstalled: Boolean,
+        public val pointerInstalled: Boolean,
+    ) : SurfaceStimulus
+
+    /** One pointer-entry observation; the runtime assigns the public [PointerId]. */
+    public data class PointerEntered(
+        override val surfaceId: SurfaceId,
+        public val kind: PointerKind,
+        public val position: LogicalPoint,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** One pointer-motion observation; the runtime retains pointer identity and state. */
+    public data class PointerMoved(
+        override val surfaceId: SurfaceId,
+        public val kind: PointerKind,
+        public val position: LogicalPoint,
+        public val delta: LogicalDelta,
+        public val pressure: Double?,
+        public val pen: PenState?,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** One pointer-button observation. */
+    public data class PointerButtonChanged(
+        override val surfaceId: SurfaceId,
+        public val kind: PointerKind,
+        public val button: PointerButton,
+        public val buttonState: PointerButtonState,
+        public val position: LogicalPoint,
+        public val pressure: Double?,
+        public val pen: PenState?,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** One pointer-exit observation; its last position comes from runtime state. */
+    public data class PointerLeft(
+        override val surfaceId: SurfaceId,
+        public val kind: PointerKind,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /**
+     * One scroll observation. Equal [coalescingBoundary] values may merge; a backend changes it
+     * whenever its native phase or momentum boundary changes. The boundary itself is not public
+     * input state.
+     */
+    public data class Scroll(
+        override val surfaceId: SurfaceId,
+        public val delta: ScrollDelta,
+        public val coalescingBoundary: Long,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus {
+        init {
+            require(coalescingBoundary >= 0L) { "coalescingBoundary must be non-negative" }
+        }
+    }
 
     /** Closes all ingress while preserving the last effective snapshot. */
     public data class Detached(override val surfaceId: SurfaceId) : SurfaceStimulus
