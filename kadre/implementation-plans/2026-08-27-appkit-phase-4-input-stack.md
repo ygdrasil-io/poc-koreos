@@ -96,8 +96,13 @@
   ajoutent une seconde régression : leur `EnumDecl` peut être une forward
   declaration. `TypeMaker` doit demander sa définition comme il le fait pour
   un record, avant `createTree`; couvrir la forme forward + definition dans le
-  test de génération. Aucun plan ne va dans Kextract ; les commits Kextract
-  restent isolés et précèdent le gitlink KFFI.
+  test de génération. Enfin, les structs CoreFoundation générés doivent
+  respecter l'alignement et le padding C : un `CFGregorianUnits` (cinq `int`
+  suivis d'un `double`) est la régression minimale, avec le padding nécessaire
+  avant le `double`. Le test doit construire/charger le layout FFM généré afin
+  de détecter un échec d'initialisation statique, pas seulement comparer le
+  texte produit. Aucun plan ne va dans Kextract ; les commits Kextract restent
+  isolés et précèdent le gitlink KFFI.
 
 - [ ] **Step 2: Mettre KFFI sur le commit Kextract et régénérer les trois downcalls.**
 
