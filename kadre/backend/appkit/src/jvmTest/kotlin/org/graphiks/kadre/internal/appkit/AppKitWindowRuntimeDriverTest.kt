@@ -52,6 +52,58 @@ import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
     @Test
+    fun inputPreCommitForOnePeerDoesNotCrossIntoAnotherSurfaceOfTheSameDriver() = runBlocking {
+        val firstPhysical = PhysicalKey.Unidentified("first-native-key")
+        val firstPosition = LogicalPoint(7.0, 11.0)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "multi-window-input-isolation",
+            inputObservationInstalledFor = setOf("first"),
+            afterInputObservationBeforeCommit = { native ->
+                native.emitInput(
+                    "first",
+                    AppKitInput.KeyChanged(
+                        firstPhysical,
+                        LogicalKey.Unidentified("first-native-key"),
+                        KeyLocation.Standard,
+                        KeyState.Pressed,
+                        repeat = false,
+                        KeyboardModifiers(emptySet()),
+                    ),
+                )
+                native.emitInput("first", AppKitInput.PointerEntered(firstPosition))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "first")).successValue().await(),
+            ).window
+            val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "second")).successValue().await(),
+            ).window
+
+            val firstInput = withTimeout(2.seconds) {
+                first.surface.input.state.first { it.revision.value == 3L }
+            }
+
+            assertEquals(FeatureAvailability.Available, firstInput.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Available, firstInput.capabilities.pointer)
+            assertEquals(setOf(firstPhysical), firstInput.keyboard.pressedKeys)
+            assertEquals(firstPosition, firstInput.pointers.single().position)
+
+            val secondInput = second.surface.input.state.value
+            assertEquals(0L, secondInput.revision.value)
+            assertEquals(FeatureAvailability.Unsupported, secondInput.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Unsupported, secondInput.capabilities.pointer)
+            assertEquals(emptySet(), secondInput.keyboard.pressedKeys)
+            assertEquals(emptyList(), secondInput.pointers)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun inputCallbacksBeforeCommitDrainInOrderAfterTheInitialSnapshot() = runBlocking {
         val physical = PhysicalKey.Unidentified("native-key-91")
         val logical = LogicalKey.Unidentified("native-key-91")
@@ -532,6 +584,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val initialSurfaceSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot(),
     private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val inputObservationInstalled: Boolean = false,
+    private val inputObservationInstalledFor: Set<String> = emptySet(),
     private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
@@ -612,7 +665,9 @@ internal class DeterministicAppKitNativeWindowPort(
         window: AppKitNativeWindowOwner,
         view: AppKitNativeViewOwner,
         callbacks: AppKitInputCallbacks,
-    ): AppKitNativeInputObserverOwner? = if (inputObservationInstalled) {
+    ): AppKitNativeInputObserverOwner? = if (
+        inputObservationInstalled || window.recordingWindow().title in inputObservationInstalledFor
+    ) {
         RecordingNativeInputObserver(callbacks).also { observer ->
         val title = window.recordingWindow().title
         check(inputObservers.put(title, observer) == null) { "$name duplicate test input observer" }
