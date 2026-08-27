@@ -116,6 +116,36 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun publishedKffiManagedNsViewAnswersAcceptsFirstResponderThroughBooleanSignatureOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val invocations = AtomicInteger()
+        val viewClass = ObjCManagedClass.registerOnce(
+            superclassName = "NSView",
+            methods = mapOf(
+                "acceptsFirstResponder" to ObjCMethodSignatures.Boolean,
+            ),
+        )
+
+        ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication())
+            val viewInstance = viewClass.createInstance {
+                onBoolean("acceptsFirstResponder", fallback = false) {
+                    invocations.incrementAndGet()
+                    true
+                }
+            }
+
+            try {
+                assertTrue(NSView(viewInstance.receiver.ptr).acceptsFirstResponder())
+                assertEquals(1, invocations.get())
+            } finally {
+                viewInstance.close()
+            }
+        }
+    }
+
+    @Test
     fun publicKffiSurfaceObservationAndRedrawProofCompilesAndClosesOnMacOs() {
         if (!isMacOsHost()) return
 
