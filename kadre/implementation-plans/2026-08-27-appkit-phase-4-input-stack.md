@@ -123,7 +123,11 @@
 - [ ] **Step 4: Prouver O3 la file et le callback AppKit.**
 
   Créer une `NSWindow` et une `NSView` managée; poster un discret et un précis,
-  retirer chaque événement de la file AppKit puis le dispatcher. Dans
+  retirer chaque événement de la file AppKit puis le dispatcher par
+  `NSApplication.sendEvent:`. Ne jamais appeler `NSWindow.sendEvent:`
+  directement : AppKit le déconseille explicitement et un événement synthétique
+  sans fenêtre associée (`windowNumber == 0`) appartient au routing de
+  l'application. Dans
   `scrollWheel:`, vérifier type, ordre FIFO, une callback par événement,
   `hasPreciseScrollingDeltas`, deltas, phase et momentum effectivement lus. La
   callback n'est jamais appelée directement par le test.
