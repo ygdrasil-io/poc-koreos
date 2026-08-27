@@ -312,7 +312,7 @@ entre écrans et l'occlusion physique, sans réexécuter les preuves de fenêtre
 fondamentales déjà couvertes par `APK-003`. La sortie complète de phase reste
 conditionnée aux observations standard-scale et HiDPI consignées dans le cahier.
 
-### Phase 4 — Clavier, pointeur et scroll
+### Phase 4 — Clavier, pointeur et scroll — planned, prérequis KFFI ouverts
 
 #### Objectif
 
@@ -323,10 +323,16 @@ Livrer l’input essentiel d’une application interactive macOS.
 - physical/logical keys, repeat et modifiers ;
 - entrée, sortie, mouvement, position et boutons du pointeur ;
 - scroll discret/précis, phases et momentum ;
-- pointer capture lorsqu’AppKit/macOS permet un contrat conforme ;
+- pointer capture explicitement hors scope et `Unsupported` ;
 - reset atomique à la perte de focus ;
 - backpressure et coalescing selon la policy ;
 - mappers purs séparés de l’admission runtime.
+
+La phase est détaillée par `APPKIT-PHASE-4-INPUT-DESIGN.md`. Elle conserve le
+catalogue public fermé : phase et momentum de scroll sont des frontières
+d’ordonnancement internes tant qu’aucun champ public ne les expose. Son
+activation est précédée des gaps `KFFI-OBJC-004` (first responder managé) et
+`KFFI-OBJC-005` (injection scroll O3), sans workaround FFI Kadre.
 
 #### Gate de sortie
 
