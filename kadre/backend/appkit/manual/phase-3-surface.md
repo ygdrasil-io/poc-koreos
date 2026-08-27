@@ -1,15 +1,28 @@
 # Cahier manuel AppKit — Phase 3 surface
 
-**Statut :** protocole de vérification ; `APK-004` reste `planned` jusqu'à son
-activation avec les preuves automatisées O3.
+**Statut :** `APK-004` actif pour les preuves automatisées O3 ; gate de sortie
+manuel standard-scale + HiDPI non satisfait au 27 août 2026.
 
 ## But et limites
 
 Ce cahier vérifie les observations visuelles et matérielles que la CI ne peut
 pas établir de manière fiable. Il s'exécute avec le harness AppKit de la
-Phase 3, qui affiche les snapshots et événements de surface et permet de
-demander un redraw, un cursor et un hit testing. Le harness ne rend aucun
-contenu applicatif Kadre.
+Phase 3, qui affiche les snapshots et événements de surface, permet de demander
+une rafale de redraw et rend explicites les updates encore `Unsupported`. Le
+harness ne rend aucun contenu applicatif Kadre.
+
+Le harness est un exécutable externe compilé avec le classpath existant du
+module, sans renderer Kadre ni build séparé :
+
+```shell
+./gradlew :kadre:backend:appkit:phase3SurfaceHarness \
+  --args='--record=kadre/backend/appkit/build/manual/phase-3-surface.tsv --build-id=<commit-ou-artefact>'
+```
+
+Commandes interactives : `snapshot`, `redraw [count]`, `unsupported`,
+`result M1..M7 pass|fail|not-applicable <note>` et `close`. Le fichier TSV
+enregistre les métadonnées, snapshots, événements, commandes, résultats de
+scénarios et outcome terminal.
 
 Ce cahier ne répète pas les comportements déjà établis par `APK-003` :
 admission de fenêtre, cancellation pré-commit, ordre primary, interception de
@@ -47,7 +60,7 @@ comme un succès.
 | M3 | Donner puis retirer le focus, minimiser/restaurer et masquer/démasquer ou occlure la fenêtre. | Le harness reflète les transitions réellement observables. Si l'occlusion ou la visibilité ne peut pas être contrôlée fiablement, marquer la sous-observation `not applicable`. |
 | M4 | Basculer l'apparence système clair/sombre pendant que la fenêtre est visible. | Le thème observé par le harness suit la notification AppKit. Si une seule apparence est disponible, marquer `not applicable`. |
 | M5 | Produire des rafales de redraw pendant un resize et pendant une occlusion. | La fenêtre reste réactive et le harness ne révèle pas de cycles de redraw en rafale non coalescés. |
-| M6 | Essayer cursor et hit testing au bord et dans les coins de la fenêtre. | Le comportement observé correspond à la demande du harness, sans zone morte ni application fictive. |
+| M6 | Exécuter `unsupported` et contrôler cursor/hit testing au bord si une future activation les annonce. | Pour cette activation, cursor, hit testing et input default behavior sont explicitement `Unsupported` et l'update retourne les rejets typés sans mutation d'état. Aucune application fictive n'est admise. |
 | M7 | Fermer la fenêtre pendant un resize, un redraw et un changement de focus. | La fermeture est propre ; aucun nouvel événement de surface n'apparaît après le snapshot terminal affiché par le harness. |
 
 ## Compte rendu
@@ -57,3 +70,40 @@ forme qui conserve les champs de préparation et une ligne par scénario. Tout
 `fail` doit être relié à une issue ou à un test automatisé avant de déclarer
 la Phase 3 terminée. Les cas `not applicable` doivent mentionner explicitement
 la contrainte d'environnement.
+
+## Exécution du 27 août 2026
+
+Le harness a été exécuté avec `-XstartOnFirstThread` via la tâche ci-dessus.
+Le record complet non versionné a été écrit dans
+`kadre/backend/appkit/build/manual/task-4-phase-3-surface.tsv`.
+
+| Champ | Valeur observée |
+|---|---|
+| macOS | 26.6.2 |
+| Architecture | aarch64 |
+| Matériel | Mac14,13, Apple M2 Max |
+| Écran principal | PL3467WQ, 3440 × 1440 @ 60 Hz |
+| Second écran détecté | PL2209HD, 1920 × 1080 @ 60 Hz |
+| Scale factor effectivement utilisé | 1.0 |
+| Apparence initiale | `Unknown` |
+| Build id | working tree Task 4 basé sur `1a4ed012c1d5b87bff98682561cccb723c1a11fb` |
+
+La rafale de huit `requestRedraw()` a produit un seul `RedrawRequested` avec
+`stateBeforeEvent=true`. L'update cursor/hit testing/input default behavior a
+retourné `PartiallyApplied` avec trois rejets `Unsupported(UpdateSurface)` et
+aucune mutation du snapshot. La fermeture a publié le snapshot `Detached`,
+puis la session s'est terminée avec `ApplicationRequested`.
+
+| ID | Résultat | Note |
+|---|---|---|
+| M1 | not applicable | Aucun opérateur humain n'a effectué de resize continu ni validé visuellement les deux classes d'écran ; seul un écran standard-scale à 1.0 a été effectivement utilisé. |
+| M2 | not applicable | Deux écrans ont été détectés, mais aucun déplacement humain ni scale factor différent n'a été observé. |
+| M3 | not applicable | L'exécution par terminal ne peut pas valider visuellement focus, minimisation/restauration et occlusion. |
+| M4 | not applicable | Le thème initial était `Unknown` et aucune bascule clair/sombre humaine n'a été effectuée. |
+| M5 | not applicable | La preuve automatisable de coalescing a été observée, mais pas la réactivité visuelle manuelle pendant resize/occlusion. |
+| M6 | not applicable | Les trois mutations restent volontairement `Unsupported` dans cette activation ; le rejet typé a été observé. |
+| M7 | not applicable | La fermeture propre a été observée, mais pas pendant un resize/focus/redraw humain concurrent. |
+
+Aucun scénario n'est marqué `fail`, donc aucune capture n'est requise. Aucun
+scénario manuel n'est marqué `pass` : le gate de sortie exige toujours une
+exécution humaine sur standard-scale et HiDPI.

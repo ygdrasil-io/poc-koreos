@@ -33,7 +33,7 @@ val appKitJUnitReports = rootProject.file("kadre/backend/appkit/build/test-resul
 val appKitStandaloneLoopJUnitReports = rootProject.file("kadre/backend/appkit/build/test-results/appKitStandaloneLoopTest")
 val appKitContractEvidenceDirectory = rootProject.file("kadre/backend/appkit/build/contract-evidence")
 val appKitContractCommit = providers.gradleProperty("kadreContractCommit").orElse("local")
-val appKitContractIds = listOf("APK-001", "APK-002", "APK-003")
+val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004")
 
 val appKitContractEvidenceTasks = appKitContractIds.map { contractId ->
     tasks.register<JavaExec>("generateAppKit${contractId.replace("-", "")}ContractEvidence") {

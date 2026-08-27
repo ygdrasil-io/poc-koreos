@@ -236,6 +236,7 @@ public class AppKitBackendProvider private constructor(
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
         )
         RuntimeSessionComponents(driver.manager, driver::close)

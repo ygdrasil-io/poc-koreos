@@ -35,5 +35,13 @@ APK-003	sentinel	appkit-window-forced-close-wins	org.graphiks.kadre.internal.app
 APK-003	sentinel	appkit-headless-auto-stop	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	standaloneLastWindowPolicyIgnoresHeadlessStartupAndStopsAfterItsArmedTransition[jvm]
 APK-003	sentinel	appkit-stale-window-handle	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitDesktopHandleRunsOnTheOwnerThreadAndCloseWaitsForItsLease[jvm]
 APK-003	sentinel	appkit-window-teardown-order	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	closeReservesCommitIssuedPendingCleanupBeforeCommittedPeers[jvm]
-# APK-004 is planned. Its scenario and sentinel identifiers are reserved in the
-# contract registry; exact test mappings are added only in the activation PR.
+APK-004	scenario	appkit-surface-snapshot	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
+APK-004	scenario	appkit-surface-native-stimulus	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs
+APK-004	scenario	appkit-surface-redraw	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
+APK-004	scenario	appkit-surface-terminal	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose[jvm]
+APK-004	scenario	appkit-surface-manual-harness	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs
+APK-004	sentinel	appkit-surface-stale-snapshot	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
+APK-004	sentinel	appkit-surface-event-before-state	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
+APK-004	sentinel	appkit-surface-redraw-not-coalesced	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
+APK-004	sentinel	appkit-surface-post-close-callback	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose[jvm]
+APK-004	sentinel	appkit-surface-unsupported-capability-activation	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied[jvm]

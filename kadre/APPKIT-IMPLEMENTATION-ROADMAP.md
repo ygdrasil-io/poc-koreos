@@ -276,9 +276,9 @@ Ouvrir, posséder et fermer une vraie fenêtre AppKit depuis `WindowManager.requ
 - primary et règle dernière fenêtre prouvés avec plusieurs fenêtres ;
 - handle natif inaccessible après la fin de sa lease ;
 - teardown des requêtes pending puis des fenêtres committées en ordre inverse avant révocation des delegates ;
-- seules `requestWindow = OpenedHere`, l'interception de fermeture et `withDesktopHandle` sont activées ; les propriétés de surface et l'input des phases suivantes restent explicitement `Unsupported`, tandis que redraw conserve son résultat pré-Phase 3 `TemporarilyUnavailable(false)`.
+- `requestWindow = OpenedHere`, l'interception de fermeture, `withDesktopHandle`, l'observation de surface et `requestRedraw()` sont activés ; les mutations de fenêtre, cursor, hit testing, input default behavior et l'input des phases suivantes restent explicitement `Unsupported`.
 
-### Phase 3 — Surface complète et redraw — planned
+### Phase 3 — Surface observable et redraw — active ; sortie manuelle en attente
 
 #### Objectif
 
@@ -291,7 +291,7 @@ Rendre la zone de contenu AppKit entièrement observable sans introduire de rend
 - révisions et ordre snapshot/événement ;
 - resize et changements de backing scale ;
 - `requestRedraw()` coalescé ;
-- cursor, hit testing et default input behavior ;
+- cursor, hit testing et default input behavior restent explicitement `Unsupported` tant qu'un backend `apply` AppKit n'est pas prouvé ;
 - détachement terminal et fermeture des flows.
 
 #### Gate de sortie
@@ -303,12 +303,12 @@ Rendre la zone de contenu AppKit entièrement observable sans introduire de rend
 - redraw, resize, focus et scale sont provoqués depuis AppKit ;
 - `SurfaceCapabilities.platformAccess` reste explicitement `Unsupported` sur Desktop conformément à la matrice.
 
-Le protocole manuel AppKit-only de cette phase est versionné dans
-`backend/appkit/manual/phase-3-surface.md`. Il observe les phénomènes visuels
-et matériels non réductibles à la CI ; il ne réexécute pas les preuves de
-fenêtres fondamentales déjà couvertes par `APK-003`. Jusqu'à l'activation
-complète de `APK-004`, aucune capability de surface Phase 3 ne devient
-`Available`.
+`APK-004` est actif pour l'observation publique et le redraw. Son protocole
+manuel AppKit-only et son harness externe sont versionnés dans
+`backend/appkit/manual/`. Ils observent les phénomènes visuels et matériels
+non réductibles à la CI sans réexécuter les preuves de fenêtres fondamentales
+déjà couvertes par `APK-003`. La sortie complète de phase reste conditionnée
+aux observations standard-scale et HiDPI consignées dans le cahier.
 
 ### Phase 4 — Clavier, pointeur et scroll
 
