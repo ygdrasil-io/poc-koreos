@@ -2,6 +2,16 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -50,6 +60,13 @@ internal interface AppKitNativeWindowPort {
         callbacks: AppKitSurfaceCallbacks,
     ): AppKitNativeSurfaceObserverOwner? = null
 
+    /** Installs one native keyboard/pointer observer after the surface observer is active. */
+    fun observeInput(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitInputCallbacks,
+    ): AppKitNativeInputObserverOwner? = null
+
     /** Returns only when the native window is known not to reference its delegate. */
     fun detachDelegate(window: AppKitNativeWindowOwner)
 
@@ -94,6 +111,54 @@ internal interface AppKitNativeSurfaceObserverOwner : AutoCloseable {
     val initialSnapshot: AppKitSurfaceSnapshot
 
     fun requestRedraw(generation: Long)
+
+    fun revokeCallbacks()
+
+    override fun close()
+}
+
+/** Immutable native-address-free input captured synchronously from one borrowed AppKit event. */
+internal sealed interface AppKitInput {
+    data class KeyChanged(
+        val physicalKey: PhysicalKey,
+        val logicalKey: LogicalKey,
+        val location: KeyLocation,
+        val keyState: KeyState,
+        val repeat: Boolean,
+        val modifiers: KeyboardModifiers,
+    ) : AppKitInput {
+        init {
+            require(keyState == KeyState.Pressed || !repeat) { "a key release cannot repeat" }
+        }
+    }
+
+    data class PointerEntered(val position: LogicalPoint) : AppKitInput
+
+    data class PointerMoved(
+        val position: LogicalPoint,
+        val delta: LogicalDelta,
+        val pressure: Double?,
+    ) : AppKitInput
+
+    data class PointerButtonChanged(
+        val button: PointerButton,
+        val buttonState: PointerButtonState,
+        val position: LogicalPoint,
+        val pressure: Double?,
+    ) : AppKitInput
+
+    data object PointerLeft : AppKitInput
+}
+
+/** Callback boundary that admits only immutable input values, never a borrowed native event. */
+internal class AppKitInputCallbacks(
+    val input: (AppKitInput) -> Unit,
+)
+
+/** Owns native input callback admission and any tracking-area resource for one view. */
+internal interface AppKitNativeInputObserverOwner : AutoCloseable {
+    val keyboardInstalled: Boolean
+    val pointerInstalled: Boolean
 
     fun revokeCallbacks()
 
