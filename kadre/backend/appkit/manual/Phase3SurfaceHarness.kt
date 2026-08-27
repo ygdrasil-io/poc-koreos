@@ -2,6 +2,7 @@ package org.graphiks.kadre.internal.appkit.manual
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -25,6 +26,9 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /** External AppKit observation tool. It logs Kadre state; it does not render application content. */
@@ -62,14 +66,25 @@ public fun main(args: Array<String>) {
                 recorder.line("CAPABILITIES\t${surface.capabilities.value}")
                 printHelp(recorder)
 
+                val latestStateRevision = AtomicLong(surface.state.value.revision.value)
+                val observedEventCount = AtomicInteger()
+                val redrawEvents = Channel<Unit>(Channel.UNLIMITED)
                 val stateCollector = launch(start = CoroutineStart.UNDISPATCHED) {
-                    surface.state.collect { recorder.line("SNAPSHOT\tupdate\t$it") }
+                    surface.state.collect { state ->
+                        latestStateRevision.set(state.revision.value)
+                        recorder.line("SNAPSHOT\tupdate\t$state")
+                    }
                 }
                 val eventCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     surface.events.collect { event ->
+                        observedEventCount.incrementAndGet()
                         recorder.line(
-                            "EVENT\t${event::class.simpleName}\tstateBeforeEvent=${stateVisible(surface.state.value, event)}\t$event",
+                            "EVENT\t${event::class.simpleName}" +
+                                "\tstateRevisionVisible=${stateRevisionVisible(surface.state.value, event)}" +
+                                "\tcurrentRevision=${surface.state.value.revision.value}" +
+                                "\teventRevision=${event.stateRevision.value}\t$event",
                         )
+                        if (event is SurfaceEvent.RedrawRequested) redrawEvents.trySend(Unit)
                     }
                 }
 
@@ -83,6 +98,7 @@ public fun main(args: Array<String>) {
                             val count = command.substringAfter(' ', "1").toIntOrNull()?.coerceIn(1, 10_000) ?: 1
                             val outcomes = List(count) { surface.requestRedraw() }
                             recorder.line("COMMAND\tredraw\tcount=$count\toutcomes=${outcomes.toSet()}")
+                            withTimeout(5.seconds) { redrawEvents.receive() }
                         }
                         command == "unsupported" -> {
                             val result = surface.apply(
@@ -109,9 +125,21 @@ public fun main(args: Array<String>) {
                         else -> recorder.line("COMMAND\tunknown\t$command")
                     }
                 }
+                val terminal = surface.state.value
+                val terminalEventCount = observedEventCount.get()
+                delay(250.milliseconds)
+                val noLateRevision =
+                    latestStateRevision.get() == terminal.revision.value && surface.state.value == terminal
+                val noLateEvent = observedEventCount.get() == terminalEventCount
+                recorder.line(
+                    "TERMINAL_STABILITY\tnoLateRevision=$noLateRevision\tnoLateEvent=$noLateEvent" +
+                        "\tobservationMillis=250",
+                )
+                check(noLateRevision) { "surface revision changed after terminal detachment" }
+                check(noLateEvent) { "surface event arrived after terminal detachment" }
                 stateCollector.cancel()
                 eventCollector.cancel()
-                recorder.line("TERMINAL\t${surface.state.value}")
+                recorder.line("TERMINAL\t$terminal")
                 requestStop()
             },
         )
@@ -121,14 +149,10 @@ public fun main(args: Array<String>) {
     }
 }
 
-private fun stateVisible(current: org.graphiks.kadre.surface.SurfaceState, event: SurfaceEvent): Boolean =
-    when (event) {
-        is SurfaceEvent.MetricsChanged -> current == event.state
-        is SurfaceEvent.FocusChanged -> current == event.state
-        is SurfaceEvent.VisibilityChanged -> current == event.state
-        is SurfaceEvent.ThemeChanged -> current == event.state
-        is SurfaceEvent.RedrawRequested -> current.revision == event.stateRevision
-    }
+private fun stateRevisionVisible(
+    current: org.graphiks.kadre.surface.SurfaceState,
+    event: SurfaceEvent,
+): Boolean = current.revision.value >= event.stateRevision.value
 
 private fun printHelp(recorder: HarnessRecorder) {
     recorder.line(

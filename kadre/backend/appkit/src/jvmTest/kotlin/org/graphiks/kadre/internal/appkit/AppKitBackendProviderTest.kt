@@ -15,11 +15,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSApplicationActivationPolicy
 import org.graphiks.kffi.objc.NSNotificationCenter
-import org.graphiks.kffi.objc.NSPoint
-import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
-import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kadre.application.KadreApplication
@@ -68,6 +66,8 @@ import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -1255,6 +1255,8 @@ class AppKitBackendProviderTest {
         val nativeRejectObserved = AtomicBoolean(false)
         val terminalCloseObserved = AtomicBoolean(false)
         val nativeSurfaceResizeObserved = AtomicBoolean(false)
+        val nativeSurfaceFocusObserved = AtomicBoolean(false)
+        val nativeSurfaceVisibilityObserved = AtomicBoolean(false)
         val nativeSurfaceRedrawObserved = AtomicBoolean(false)
         val nativeSurfaceTerminalObserved = AtomicBoolean(false)
         val proofStage = AtomicReference("not-started")
@@ -1294,31 +1296,79 @@ class AppKitBackendProviderTest {
                                 surfaceEvents.send(event)
                             }
                         }
-                        val resized = LogicalSize(360.0, 220.0)
+                        proofStage.set("surface-visibility")
+                        val beforeOrderOutRevision = window.surface.state.value.revision.value
                         assertEquals(
                             KadreResult.Success(Unit),
                             window.withDesktopHandle { handle ->
                                 val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
                                 ObjCRuntime.autoreleasePool {
-                                    val nsWindow = NSWindow(
+                                    NSWindow(
                                         MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).orderOut(MemorySegment.NULL)
+                                }
+                            },
+                        )
+                        val hiddenEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.VisibilityChanged> {
+                                it.state.visibility == org.graphiks.kadre.surface.SurfaceVisibility.Hidden &&
+                                    it.state.revision.value > beforeOrderOutRevision
+                            }
+                        }
+                        assertTrue(
+                            window.surface.state.value.revision.value >= hiddenEvent.state.revision.value,
+                        )
+                        nativeSurfaceVisibilityObserved.set(true)
+
+                        proofStage.set("surface-focus")
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    val application = NSApplication(NSApplication.sharedApplication())
+                                    assertTrue(
+                                        application.setActivationPolicy(
+                                            NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
+                                        ),
                                     )
-                                    NSView(MemorySegment.ofAddress(appKit.nsViewAddress.toLong())).setFrame(
-                                        NSRect(NSPoint(0.0, 0.0), NSSize(resized.width, resized.height)),
-                                    )
-                                    NSNotificationCenter(NSNotificationCenter.defaultCenter())
-                                        .postNotificationName_object(
-                                            ObjCRuntime.newNSString(
-                                                Arena.global(),
-                                                "NSWindowDidResizeNotification",
-                                            ),
-                                            nsWindow.ptr,
-                                        )
+                                    application.activateIgnoringOtherApps(true)
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).makeKeyAndOrderFront(MemorySegment.NULL)
+                                }
+                            },
+                        )
+                        val focusEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.FocusChanged> {
+                                it.state.focus == SurfaceFocus.Focused &&
+                                    it.state.revision.value > hiddenEvent.state.revision.value
+                            }
+                        }
+                        assertTrue(
+                            window.surface.state.value.revision.value >= focusEvent.state.revision.value,
+                        )
+                        nativeSurfaceFocusObserved.set(true)
+
+                        proofStage.set("surface-resize")
+                        val resized = LogicalSize(360.0, 220.0)
+                        val beforeResizeRevision = window.surface.state.value.revision.value
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).setContentSize(NSSize(resized.width, resized.height))
                                 }
                             },
                         )
                         val resizeEvent = withTimeout(5.seconds) {
-                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.MetricsChanged>()
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.MetricsChanged> {
+                                it.state.logicalSize == resized &&
+                                    it.state.revision.value > beforeResizeRevision
+                            }
                         }
                         assertEquals(resized, resizeEvent.state.logicalSize)
                         assertTrue(
@@ -1394,7 +1444,13 @@ class AppKitBackendProviderTest {
                         assertEquals(terminalSurface, window.surface.state.value)
                         withTimeout(5.seconds) { surfaceCollector.join() }
                         val terminalEventCount = surfaceEventCount.get()
-                        yield()
+                        assertNull(
+                            withTimeoutOrNull(200.milliseconds) {
+                                window.surface.state.first {
+                                    it.revision.value > terminalSurface.revision.value
+                                }
+                            },
+                        )
                         assertEquals(terminalEventCount, surfaceEventCount.get())
                         assertTrue(surfaceEventStateWasVisible.get())
                         assertEquals(
@@ -1437,8 +1493,70 @@ class AppKitBackendProviderTest {
         assertTrue(nativeRejectObserved.get())
         assertTrue(terminalCloseObserved.get())
         assertTrue(nativeSurfaceResizeObserved.get())
+        assertTrue(nativeSurfaceFocusObserved.get())
+        assertTrue(nativeSurfaceVisibilityObserved.get())
         assertTrue(nativeSurfaceRedrawObserved.get())
         assertTrue(nativeSurfaceTerminalObserved.get())
+    }
+
+    @Test
+    fun phase3SurfaceHarnessWritesCompleteNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase3-surface-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase3-surface-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase3SurfaceHarnessKt",
+                "--record=$record",
+                "--build-id=automated-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("redraw 8")
+                commands.appendLine("unsupported")
+                commands.appendLine("close")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "displays=",
+                "initialScaleFactor=",
+                "appearance=",
+                "buildId=automated-harness-proof",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("SNAPSHOT\tinitial\t"), report)
+            assertTrue(report.contains("SNAPSHOT\tupdate\t"), report)
+            assertTrue(report.contains("COMMAND\tredraw\tcount=8"), report)
+            assertTrue(report.contains("EVENT\tRedrawRequested\tstateRevisionVisible=true"), report)
+            assertTrue(report.contains("COMMAND\tunsupported-surface-update\tSuccess(value=PartiallyApplied"), report)
+            assertTrue(report.contains("Unsupported(operation=UpdateSurface)"), report)
+            assertTrue(
+                report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL\tSurfaceState(attachment=Detached"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
     }
 
     @Test
@@ -1746,9 +1864,11 @@ private fun NSNotificationCenter.postAppKitNotification(name: String, applicatio
     }
 }
 
-private suspend inline fun <reified T : SurfaceEvent> Channel<SurfaceEvent>.receiveSurfaceEvent(): T {
+private suspend inline fun <reified T : SurfaceEvent> Channel<SurfaceEvent>.receiveSurfaceEvent(
+    predicate: (T) -> Boolean = { true },
+): T {
     while (true) {
         val event = receive()
-        if (event is T) return event
+        if (event is T && predicate(event)) return event
     }
 }

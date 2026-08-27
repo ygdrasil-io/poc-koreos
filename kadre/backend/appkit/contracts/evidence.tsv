@@ -39,7 +39,7 @@ APK-004	scenario	appkit-surface-snapshot	org.graphiks.kadre.internal.appkit.AppK
 APK-004	scenario	appkit-surface-native-stimulus	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs
 APK-004	scenario	appkit-surface-redraw	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
 APK-004	scenario	appkit-surface-terminal	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose[jvm]
-APK-004	scenario	appkit-surface-manual-harness	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs
+APK-004	scenario	appkit-surface-manual-harness	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	phase3SurfaceHarnessWritesCompleteNoninteractiveRecordOnMacOs[jvm]
 APK-004	sentinel	appkit-surface-stale-snapshot	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
 APK-004	sentinel	appkit-surface-event-before-state	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
 APK-004	sentinel	appkit-surface-redraw-not-coalesced	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts[jvm]
