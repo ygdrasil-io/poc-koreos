@@ -300,15 +300,17 @@ Rendre la zone de contenu AppKit entièrement observable sans introduire de rend
 - `Window.surface` conserve son snapshot terminal après fermeture ;
 - toute opération tardive retourne `Closed(Surface)` ;
 - aucun événement ne précède le snapshot qu’il décrit ;
-- redraw, resize, focus et scale sont provoqués depuis AppKit ;
+- redraw, resize, visibilité et focus sont provoqués depuis AppKit dans la vraie session publique ;
+- sous la frontière O3 publique, le peer natif et le routage déterministe de backing scale et d'occlusion restent prouvés, tandis que leurs transitions matérielles/compositor effectives sont réservées au gate manuel versionné ;
 - `SurfaceCapabilities.platformAccess` reste explicitement `Unsupported` sur Desktop conformément à la matrice.
 
 `APK-004` est actif pour l'observation publique et le redraw. Son protocole
 manuel AppKit-only et son harness externe sont versionnés dans
 `backend/appkit/manual/`. Ils observent les phénomènes visuels et matériels
-non réductibles à la CI sans réexécuter les preuves de fenêtres fondamentales
-déjà couvertes par `APK-003`. La sortie complète de phase reste conditionnée
-aux observations standard-scale et HiDPI consignées dans le cahier.
+non réductibles à la CI, notamment les changements réels de backing scale
+entre écrans et l'occlusion physique, sans réexécuter les preuves de fenêtres
+fondamentales déjà couvertes par `APK-003`. La sortie complète de phase reste
+conditionnée aux observations standard-scale et HiDPI consignées dans le cahier.
 
 ### Phase 4 — Clavier, pointeur et scroll
 

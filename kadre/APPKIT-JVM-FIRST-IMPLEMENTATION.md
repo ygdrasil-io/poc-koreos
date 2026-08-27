@@ -181,7 +181,7 @@ Une session standalone commence `Background + Inactive` tant qu'elle reste headl
 
 ### 6.2 Embedded
 
-**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. `APK-003` active les fenêtres fondamentales dans les sessions AppKit standalone et embedded. `APK-004` active les snapshots de surface observables et `requestRedraw()` coalescé. Le gate O3 traverse l'API publique jusqu'à une vraie `NSWindow`/`NSView` KFFI, y compris resize, redraw, handle borné et interception Reject puis Accept. Les propriétés de fenêtre, cursor, hit testing, input default behavior et l'input restent explicitement `Unsupported` jusqu’à leurs preuves dédiées.
+**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. `APK-003` active les fenêtres fondamentales dans les sessions AppKit standalone et embedded. `APK-004` active les snapshots de surface observables et `requestRedraw()` coalescé. Le gate O3 traverse l'API publique jusqu'à une vraie `NSWindow`/`NSView` KFFI, y compris resize, visibilité/focus, redraw, handle borné et interception Reject puis Accept. Les transitions matérielles de backing scale et d'occlusion restent au gate manuel versionné ; leur observation native et leur routage demeurent prouvés sous la frontière O3 publique. Les propriétés de fenêtre, cursor, hit testing, input default behavior et l'input restent explicitement `Unsupported` jusqu’à leurs preuves dédiées.
 
 - `attachKadreDesktop(Embedded(AppKitMainLoop))` exige le main thread et une boucle AppKit existante ;
 - l'attach ne remplace pas le delegate de l'application ;

@@ -6,7 +6,7 @@ Rendre `Window.surface` observable et cohérente sur AppKit sans introduire de r
 
 ## Limites
 
-La phase couvre le snapshot `HostSurface`, ses événements et `requestRedraw()`, ainsi que `cursor`, `hitTesting` et `inputDefaultBehavior`. Elle ne couvre ni clavier, ni pointeur, ni scroll, ni IME, ni mutabilité avancée de fenêtre. `SurfaceCapabilities.platformAccess` reste `Unsupported` sur Desktop.
+La phase couvre le snapshot `HostSurface`, ses événements et `requestRedraw()`. `cursor`, `hitTesting`, `inputDefaultBehavior`, clavier, pointeur, scroll, IME et mutabilité avancée de fenêtre restent explicitement `Unsupported`. `SurfaceCapabilities.platformAccess` reste également `Unsupported` sur Desktop.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Chaque stimulus qui modifie le snapshot publie d'abord le nouveau `SurfaceState`
 ## Capacités Phase 3
 
 - `requestRedraw()` est available et coalescé : une demande pendant qu'un redraw est déjà planifié ne programme pas un second cycle. Le backend livre l'invalidation à la vue AppKit, sans dessiner lui-même.
-- `SurfaceUpdate.cursor`, `hitTesting` et `inputDefaultBehavior` sont available uniquement lorsque la représentation AppKit peut appliquer la valeur demandée. Une valeur non applicable retourne le résultat contractuel explicite, jamais un succès fictif.
+- `SurfaceUpdate.cursor`, `hitTesting` et `inputDefaultBehavior` restent `Unsupported` durant cette phase : aucun backend AppKit `apply` n'est activé. Toute demande retourne ses rejets contractuels explicites, jamais un succès fictif.
 - Les métriques logiques/physiques, `scaleFactor`, safe areas, visibilité, occlusion, focus et thème sont reportés depuis AppKit. Les valeurs non observables sur une version macOS donnée restent des valeurs snapshot documentées, pas des capacités inventées.
 
 ## Invariants
@@ -30,11 +30,11 @@ Chaque stimulus qui modifie le snapshot publie d'abord le nouveau `SurfaceState`
 
 ## Preuves automatisées
 
-`APK-004` devient actif seulement lorsque des preuves O3 traversent une session AppKit publique, une vraie `NSWindow`/`NSView` et vérifient : resize, change de backing scale, focus, occlusion, redraw coalescé, cursor/hit testing appliqués, ordre snapshot/événement et snapshot terminal. Les tests purs couvrent les révisions, coalescing, opérations tardives, ordonnancement et cancellation ; les tests AppKit réels couvrent les notifications natives et le cycle de vie de la vue.
+`APK-004` devient actif seulement lorsque la preuve O3 traverse une session AppKit publique et une vraie `NSWindow`/`NSView`, provoque un resize par `NSWindow.setContentSize`, des transitions de visibilité/focus par `orderOut` puis `makeKeyAndOrderFront`, et un redraw coalescé par l'API publique. Cette preuve vérifie aussi l'ordre révision/événement et le snapshot terminal sans callback tardif. Sous cette frontière O3 publique, les tests du peer natif et du routage déterministe couvrent l'observation et l'acheminement des changements de backing scale et d'occlusion. Les transitions effectives entre écrans de scale différents et l'occlusion physique dépendent de la topologie d'affichage et du compositor ; elles appartiennent donc au gate manuel versionné et ne sont jamais fabriquées par une notification automatisée. Cursor, hit testing et input default behavior sont prouvés `Unsupported`, pas appliqués.
 
 ## Cahier manuel AppKit
 
-Le cahier est versionné avec la phase et exécuté avec un harness interactif AppKit. Le harness affiche les snapshots/événements et permet de demander redraw, cursor et hit testing ; il ne rend pas de contenu applicatif.
+Le cahier est versionné avec la phase et exécuté avec un harness interactif AppKit. Le harness affiche les snapshots/événements, permet de demander redraw et consigne les rejets explicites de cursor/hit testing/input default behavior ; il ne rend pas de contenu applicatif.
 
 Chaque exécution enregistre : version macOS, matériel, écran(s), scale factor, mode clair/sombre et résultat `pass`, `fail` ou `non applicable`, avec note courte et capture seulement en cas d'échec.
 

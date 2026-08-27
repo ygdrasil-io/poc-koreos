@@ -74,8 +74,9 @@ la contrainte d'environnement.
 ## Exécution du 27 août 2026
 
 Le harness a été exécuté avec `-XstartOnFirstThread` via la tâche ci-dessus.
-Le record complet non versionné a été écrit dans
-`kadre/backend/appkit/build/manual/task-4-phase-3-surface.tsv`.
+Le harness a aussi été réexécuté après la correction du contrôle terminal. Le
+record complet non versionné de ce run a été écrit dans
+`kadre/backend/appkit/build/manual/task-4-fix-round-1-phase-3-surface.tsv`.
 
 | Champ | Valeur observée |
 |---|---|
@@ -86,13 +87,15 @@ Le record complet non versionné a été écrit dans
 | Second écran détecté | PL2209HD, 1920 × 1080 @ 60 Hz |
 | Scale factor effectivement utilisé | 1.0 |
 | Apparence initiale | `Unknown` |
-| Build id | working tree Task 4 basé sur `1a4ed012c1d5b87bff98682561cccb723c1a11fb` |
+| Build id | `task-4-fix-round-1`, basé sur la pile Task 4 issue de `1a4ed012c1d5b87bff98682561cccb723c1a11fb` |
 
 La rafale de huit `requestRedraw()` a produit un seul `RedrawRequested` avec
-`stateBeforeEvent=true`. L'update cursor/hit testing/input default behavior a
-retourné `PartiallyApplied` avec trois rejets `Unsupported(UpdateSurface)` et
-aucune mutation du snapshot. La fermeture a publié le snapshot `Detached`,
-puis la session s'est terminée avec `ApplicationRequested`.
+`stateRevisionVisible=true`. L'update cursor/hit testing/input default behavior
+a retourné `PartiallyApplied` avec trois rejets `Unsupported(UpdateSurface)`
+et aucune mutation du snapshot. Après `Detached`, les collectors sont restés
+actifs pendant la fenêtre contrôlée de 250 ms et ont consigné
+`noLateRevision=true` et `noLateEvent=true`, puis la session s'est terminée
+avec `ApplicationRequested`.
 
 | ID | Résultat | Note |
 |---|---|---|
