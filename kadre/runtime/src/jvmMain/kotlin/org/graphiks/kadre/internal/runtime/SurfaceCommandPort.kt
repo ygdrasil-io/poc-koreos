@@ -69,6 +69,15 @@ public data class SurfaceMetrics(
     }
 }
 
+/** Complete immutable native snapshot used to initialise one portable runtime surface. */
+public data class SurfaceInitialSnapshot(
+    public val metrics: SurfaceMetrics,
+    public val focus: SurfaceFocus,
+    public val visibility: SurfaceVisibility,
+    public val occlusion: SurfaceOcclusion,
+    public val theme: SurfaceTheme,
+)
+
 /**
  * Complete immutable ingress understood by the runtime.
  *

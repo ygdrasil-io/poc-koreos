@@ -2,12 +2,14 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
@@ -21,6 +23,7 @@ import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
 import org.graphiks.kffi.objc.managed.observe
+import org.graphiks.kffi.objc.safeAreaInsets
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -33,6 +36,40 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun typedNsEdgeInsetsMapToKadreLogicalEdgeOrder() {
+        assertEquals(
+            LogicalInsets(top = 11.0, right = 44.0, bottom = 33.0, left = 22.0),
+            NSEdgeInsets(top = 11.0, left = 22.0, bottom = 33.0, right = 44.0).toLogicalInsets(),
+        )
+    }
+
+    @Test
+    fun nativeInitialSnapshotObservesTheContentViewSafeAreaOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val peer = port.prepare(
+            id = AppKitWindowPeerId(78L),
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            val observed = checkNotNull(peer.initialSurfaceSnapshot).metrics.safeAreaInsets
+            val fromPublishedKffiView = peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
+                    .safeAreaInsets()
+                    .toLogicalInsets()
+            }
+            assertEquals(KadreResult.Success(observed), fromPublishedKffiView)
+        } finally {
+            peer.close()
+        }
+    }
+
     @Test
     fun managedContentViewOverridePublishesEffectiveAppearanceChangeOnMacOs() {
         if (!isMacOsHost()) return

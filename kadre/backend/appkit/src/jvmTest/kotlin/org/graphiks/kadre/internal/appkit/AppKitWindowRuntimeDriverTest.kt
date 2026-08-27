@@ -45,6 +45,43 @@ import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
     @Test
+    fun surfaceCallbacksAfterPeerActivationAndBeforeCommitAreDrainedSequentiallyAfterInitialSnapshot() = runBlocking {
+        val initial = deterministicSurfaceSnapshot().copy(focus = SurfaceFocus.Unfocused)
+        val resized = deterministicSurfaceSnapshot(
+            logicalSize = LogicalSize(480.0, 270.0),
+            scaleFactor = 1.5,
+        ).metrics
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "pre-commit-surface-callback",
+            initialSurfaceSnapshot = initial,
+            afterSurfaceActivationBeforeCommit = { native ->
+                native.emitSurfaceFocus("pre-commit", SurfaceFocus.Focused)
+                native.emitSurfaceMetrics("pre-commit", resized)
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "pre-commit"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
+            assertEquals(resized.logicalSize, window.surface.state.value.logicalSize)
+            assertEquals(resized.physicalSize, window.surface.state.value.physicalSize)
+            assertEquals(2L, window.surface.state.value.revision.value)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun asynchronousDrainReservationKeepsWorkerAliveUntilCleanupIsSealed() {
         val taskStarted = CountDownLatch(1)
         val allowTaskToFinish = CountDownLatch(1)
@@ -438,6 +475,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val onDelegateRevoked: (String) -> Unit = { },
     private val beforeCloseWindow: (String) -> Unit = { },
     private val initialSurfaceSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot(),
+    private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
@@ -446,10 +484,17 @@ internal class DeterministicAppKitNativeWindowPort(
     val windowWillCloseTitles = CopyOnWriteArrayList<String>()
     val createdPeerIds = CopyOnWriteArrayList<AppKitWindowPeerId>()
     val requestedSurfaceRedrawGenerations = CopyOnWriteArrayList<Long>()
+    private val surfaceActivationHookDelivered = AtomicBoolean(false)
 
     override fun isMainThread(): Boolean = true
 
-    override fun <T> onMainThread(block: () -> T): T = block()
+    override fun <T> onMainThread(block: () -> T): T {
+        val result = block()
+        if (surfaceObservers.isNotEmpty() && surfaceActivationHookDelivered.compareAndSet(false, true)) {
+            afterSurfaceActivationBeforeCommit(this)
+        }
+        return result
+    }
 
     override fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner {
         beforeCreateWindow(spec)

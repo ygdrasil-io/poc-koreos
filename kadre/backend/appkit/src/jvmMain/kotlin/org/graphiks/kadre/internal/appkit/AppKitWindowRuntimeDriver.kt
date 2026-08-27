@@ -15,6 +15,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.SurfaceCommandPort
+import org.graphiks.kadre.internal.runtime.SurfaceInitialSnapshot
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
@@ -257,8 +258,10 @@ private class AppKitWindowCommandPort(
                 entry.command.commit(
                     entry.owner,
                     appKitEffectiveSpec(entry.command.spec),
-                    peer.initialSurfaceSnapshot?.metrics,
-                )
+                    peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
+                ) {
+                    commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
+                }
             }
             PreparationAction.Cancel -> scheduleCleanup(entry)
             PreparationAction.Cleanup -> scheduleCleanup(entry)
@@ -304,16 +307,51 @@ private class AppKitWindowCommandPort(
     }
 
     private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
+        var deliverThroughSerializer = false
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
-            entry != null &&
+            if (
+                entry != null &&
                 !closed &&
                 !entry.removed &&
                 !entry.surfaceCleanupReserved &&
-                !entry.closeAdmitted &&
-                entry.commitIssued
+                !entry.closeAdmitted
+            ) {
+                if (entry.runtimeSurfaceReady) {
+                    deliverThroughSerializer = true
+                } else {
+                    entry.bufferedSurfaceStimuli.addLast(stimulus)
+                }
+                true
+            } else {
+                false
+            }
         }
-        if (accepted) commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
+        if (accepted && deliverThroughSerializer) {
+            commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
+        }
+    }
+
+    private fun markRuntimeSurfaceReady(entry: PeerEntry) {
+        val bufferedSurfaceStimuli = synchronized(lock) {
+            if (
+                entry.removed ||
+                entry.surfaceCleanupReserved ||
+                entry.closeAdmitted ||
+                closed
+            ) {
+                entry.bufferedSurfaceStimuli.clear()
+                emptyList()
+            } else {
+                entry.runtimeSurfaceReady = true
+                entry.bufferedSurfaceStimuli.toList().also {
+                    entry.bufferedSurfaceStimuli.clear()
+                }
+            }
+        }
+        // This callback itself runs on the command queue, so the FIFO drain is serialized with
+        // every later surface callback admitted through submitFollowUp().
+        bufferedSurfaceStimuli.forEach(::acceptSurfaceStimulus)
     }
 
     private fun acceptSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
@@ -502,6 +540,7 @@ private class AppKitWindowCommandPort(
 
     private fun removeEntryLocked(entry: PeerEntry) {
         entry.removed = true
+        entry.bufferedSurfaceStimuli.clear()
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
         if (bySurface[entry.surfaceId] === entry) bySurface.remove(entry.surfaceId)
@@ -533,6 +572,8 @@ private class AppKitWindowCommandPort(
         var peer: AppKitWindowPeer? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
+        var runtimeSurfaceReady: Boolean = false
+        val bufferedSurfaceStimuli = ArrayDeque<AppKitSurfaceStimulus>()
         var cleanupScheduled: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
@@ -603,6 +644,14 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
         SurfaceRedrawGeneration.fromNative(generation),
     )
 }
+
+private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = SurfaceInitialSnapshot(
+    metrics = metrics,
+    focus = focus,
+    visibility = visibility,
+    occlusion = occlusion,
+    theme = theme,
+)
 
 private fun appKitEffectiveSpec(requested: WindowSpec): WindowSpec = requested.copy(
     minimumSize = null,

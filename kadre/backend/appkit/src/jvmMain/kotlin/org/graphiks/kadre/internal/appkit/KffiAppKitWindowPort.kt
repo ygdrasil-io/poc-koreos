@@ -15,6 +15,7 @@ import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
@@ -26,6 +27,7 @@ import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.safeAreaInsets
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCManagedInstance
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
@@ -479,9 +481,16 @@ private fun readMetrics(view: NSView, window: NSWindow): SurfaceMetrics {
         logicalSize = logicalSize,
         physicalSize = logicalSize.toPhysical(scaleFactor),
         scaleFactor = scaleFactor,
-        safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+        safeAreaInsets = view.safeAreaInsets().toLogicalInsets(),
     )
 }
+
+internal fun NSEdgeInsets.toLogicalInsets(): LogicalInsets = LogicalInsets(
+    top = top,
+    right = right,
+    bottom = bottom,
+    left = left,
+)
 
 private fun readFocus(window: NSWindow): SurfaceFocus =
     if (window.isKeyWindow()) SurfaceFocus.Focused else SurfaceFocus.Unfocused
