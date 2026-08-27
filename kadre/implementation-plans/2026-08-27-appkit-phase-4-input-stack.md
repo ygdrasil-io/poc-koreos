@@ -92,8 +92,12 @@
   Les fonctions C portent des enums CoreGraphics : le générateur doit les lower
   vers leur carrier ABI avant `invokeExact`, puis reconstruire un enum retourné
   lorsque nécessaire. Écrire le RED Kextract sur une factory C avec enum et un
-  setter C avec enum, puis le GREEN. Aucun plan ne va dans Kextract ; le commit
-  Kextract reste isolé et précède le gitlink KFFI.
+  setter C avec enum, puis le GREEN. Les `CF_ENUM` SDK à underlying type fixe
+  ajoutent une seconde régression : leur `EnumDecl` peut être une forward
+  declaration. `TypeMaker` doit demander sa définition comme il le fait pour
+  un record, avant `createTree`; couvrir la forme forward + definition dans le
+  test de génération. Aucun plan ne va dans Kextract ; les commits Kextract
+  restent isolés et précèdent le gitlink KFFI.
 
 - [ ] **Step 2: Mettre KFFI sur le commit Kextract et régénérer les trois downcalls.**
 
