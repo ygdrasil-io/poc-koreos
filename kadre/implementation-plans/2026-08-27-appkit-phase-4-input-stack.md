@@ -85,13 +85,43 @@
 
 **Consumes:** gap `KFFI-OBJC-005` de Task 0 et guide `CONTRIBUTING.md` KFFI/Kextract applicable.
 
-**Produces:** une voie KFFI publique typée qui injecte un scroll discret/précis avec phase et momentum dans `NSApplication`, accompagnée de son contrat ownership/thread et d’une preuve macOS.
+**Produces:** une voie KFFI publique typée qui injecte un scroll discret/précis avec phase et momentum dans `NSApplication`, accompagnée de son contrat ownership/thread et d’une preuve macOS. La primitive est fixée : `CGEventCreateScrollWheelEvent2`, setters `CGEventSetIntegerValueField`/`CGEventSetDoubleValueField`, `NSEvent.eventWithCGEvent` et `NSApplication.postEvent_atStart`.
 
-- [ ] **Step 1: Identifier la primitive AppKit ou CoreGraphics exacte et écrire le test native RED dans le dépôt propriétaire.**
-- [ ] **Step 2: Générer/implémenter le binding en respectant les guides propriétaires.**
-- [ ] **Step 3: Prouver l’injection dans la file AppKit et les champs lus par `scrollWheel:`.**
-- [ ] **Step 4: Publier KFFI selon l’autorité reçue, puis ajouter le compile proof Kadre.**
-- [ ] **Step 5: Commit Kadre de la preuve.**
+- [ ] **Step 1: Corriger Kextract avant tout binding.**
+
+  Les fonctions C portent des enums CoreGraphics : le générateur doit les lower
+  vers leur carrier ABI avant `invokeExact`, puis reconstruire un enum retourné
+  lorsque nécessaire. Écrire le RED Kextract sur une factory C avec enum et un
+  setter C avec enum, puis le GREEN. Aucun plan ne va dans Kextract ; le commit
+  Kextract reste isolé et précède le gitlink KFFI.
+
+- [ ] **Step 2: Mettre KFFI sur le commit Kextract et régénérer les trois downcalls.**
+
+  Générer `CGEventCreateScrollWheelEvent2`, `CGEventSetIntegerValueField` et
+  `CGEventSetDoubleValueField` depuis les headers SDK. Vérifier fraîcheur du
+  généré, descripteurs FFM et passage de `CGScrollEventUnit`/`CGEventField` par
+  leur valeur ABI ; ne jamais écrire ces bindings à la main.
+
+- [ ] **Step 3: Écrire la façade KFFI owner-safe RED puis GREEN.**
+
+  La façade accepte seulement les enums CoreGraphics `CGScrollPhase` et
+  `CGMomentumScrollPhase`, les unités, deltas et caractère continu; elle ne
+  laisse échapper ni `MemorySegment` ni `CGEventRef`. Le `CGEvent` de création
+  est +1, `eventWithCGEvent` le retient, puis KFFI appelle `CFRelease` dans un
+  autorelease pool après conversion avant le post. Il est interdit de passer
+  des valeurs `NSEventPhase`, dont les bits diffèrent.
+
+- [ ] **Step 4: Prouver O3 la file et le callback AppKit.**
+
+  Créer une `NSWindow` et une `NSView` managée; poster un discret et un précis,
+  retirer chaque événement de la file AppKit puis le dispatcher. Dans
+  `scrollWheel:`, vérifier type, ordre FIFO, une callback par événement,
+  `hasPreciseScrollingDeltas`, deltas, phase et momentum effectivement lus. La
+  callback n'est jamais appelée directement par le test.
+
+- [ ] **Step 5: Exécuter les tests Kextract/KFFI requis et les contrôles de génération, puis committer les couches dans l'ordre Kextract → gitlink KFFI → bindings → façade/O3.**
+- [ ] **Step 6: Publier KFFI selon l’autorité reçue, puis ajouter le compile proof Kadre.**
+- [ ] **Step 7: Commit Kadre de la preuve.**
 
 ### Task 4: Construire le pipeline runtime O2 input
 

@@ -25,6 +25,19 @@ Les callbacks `void(id, SEL, id)` existants servent à `keyDown:`, `keyUp:`,
 borrowed : le peer AppKit le mappe immédiatement vers un stimulus immuable sans
 adresse native, puis le route vers le serializer de session.
 
+La voie O3 de scroll est bornée à `CGEventCreateScrollWheelEvent2`, à ses
+setters de champs et à `NSEvent.eventWithCGEvent:` suivi de
+`NSApplication.postEvent_atStart`. La façade KFFI prend des unités et phases
+CoreGraphics (`CGScrollEventUnit`, `CGScrollPhase`,
+`CGMomentumScrollPhase`), jamais des valeurs `NSEventPhase` : leurs valeurs
+binaires ne sont pas interchangeables. Elle conserve le `CGEvent` créé,
+convertit dans un autorelease pool, le relâche après la conversion retenue par
+`NSEvent`, puis poste l'événement sans exposer de `MemorySegment` ou de
+`CGEventRef` libérable à Kadre. L'O3 doit constater les valeurs réellement
+reçues par `scrollWheel:` — précision, deltas, phase et momentum — car le SDK
+ne documente pas assez la conversion de tous les champs pour qu'un simple test
+de construction soit une preuve suffisante.
+
 ## Autorités et trajet
 
 ```text
