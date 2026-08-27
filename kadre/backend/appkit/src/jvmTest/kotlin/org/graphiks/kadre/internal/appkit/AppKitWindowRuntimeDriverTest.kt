@@ -52,26 +52,12 @@ import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
     @Test
-    fun inputPreCommitForOnePeerDoesNotCrossIntoAnotherSurfaceOfTheSameDriver() = runBlocking {
+    fun inputForOneLivePeerDoesNotCrossIntoAnotherSurfaceOfTheSameDriver() = runBlocking {
         val firstPhysical = PhysicalKey.Unidentified("first-native-key")
         val firstPosition = LogicalPoint(7.0, 11.0)
         val port = DeterministicAppKitNativeWindowPort(
             name = "multi-window-input-isolation",
             inputObservationInstalledFor = setOf("first"),
-            afterInputObservationBeforeCommit = { native ->
-                native.emitInput(
-                    "first",
-                    AppKitInput.KeyChanged(
-                        firstPhysical,
-                        LogicalKey.Unidentified("first-native-key"),
-                        KeyLocation.Standard,
-                        KeyState.Pressed,
-                        repeat = false,
-                        KeyboardModifiers(emptySet()),
-                    ),
-                )
-                native.emitInput("first", AppKitInput.PointerEntered(firstPosition))
-            },
         )
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
 
@@ -82,6 +68,22 @@ class AppKitWindowRuntimeDriverTest {
             val second = assertIs<WindowRequestOutcome.OpenedHere>(
                 driver.manager.requestWindow(WindowSpec(title = "second")).successValue().await(),
             ).window
+
+            assertEquals(1L, first.surface.input.state.value.revision.value)
+            assertEquals(0L, second.surface.input.state.value.revision.value)
+
+            port.emitInput(
+                "first",
+                AppKitInput.KeyChanged(
+                    firstPhysical,
+                    LogicalKey.Unidentified("first-native-key"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            )
+            port.emitInput("first", AppKitInput.PointerEntered(firstPosition))
 
             val firstInput = withTimeout(2.seconds) {
                 first.surface.input.state.first { it.revision.value == 3L }
