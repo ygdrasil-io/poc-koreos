@@ -72,10 +72,12 @@ class AppKitWindowRuntimeDriverTest {
                     .await(),
             ).window
 
-            assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
-            assertEquals(resized.logicalSize, window.surface.state.value.logicalSize)
-            assertEquals(resized.physicalSize, window.surface.state.value.physicalSize)
-            assertEquals(2L, window.surface.state.value.revision.value)
+            val drained = withTimeout(2.seconds) {
+                window.surface.state.first { it.revision.value == 2L }
+            }
+            assertEquals(SurfaceFocus.Focused, drained.focus)
+            assertEquals(resized.logicalSize, drained.logicalSize)
+            assertEquals(resized.physicalSize, drained.physicalSize)
         } finally {
             driver.close()
         }
