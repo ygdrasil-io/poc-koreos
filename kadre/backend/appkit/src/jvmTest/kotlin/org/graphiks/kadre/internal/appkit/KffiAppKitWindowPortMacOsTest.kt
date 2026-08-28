@@ -389,6 +389,48 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun nativeContentViewRevokesPublishedKffiKeyboardRouteBeforePeerCloseReleasesTheViewOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peerId = AppKitWindowPeerId(82L)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val port = KffiAppKitWindowPort()
+        val peer = port.prepare(
+            id = peerId,
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = stimuli::add,
+            acceptStimulus = { },
+        )
+        var retainedView: MemorySegment? = null
+
+        try {
+            assertEquals(
+                KadreResult.Success(Unit),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                    retainedView = MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong())
+                    retain(checkNotNull(retainedView))
+                    NSView(checkNotNull(retainedView)).keyDown(testKeyEvent())
+                },
+            )
+            assertTrue(stimuli.any { it is AppKitSurfaceStimulus.KeyChanged })
+            stimuli.clear()
+
+            peer.close()
+            port.onMainThread {
+                ObjCRuntime.autoreleasePool {
+                    NSView(checkNotNull(retainedView)).keyDown(testKeyEvent())
+                }
+            }
+
+            assertEquals(emptyList(), stimuli)
+        } finally {
+            peer.close()
+            retainedView?.let(::release)
+        }
+    }
+
+    @Test
     fun publicKffiSurfaceObservationAndRedrawProofCompilesAndClosesOnMacOs() {
         if (!isMacOsHost()) return
 
@@ -633,6 +675,23 @@ class KffiAppKitWindowPortMacOsTest {
     private fun release(receiver: MemorySegment) {
         ObjCRuntime.msgSend(null, receiver, ObjCRuntime.sel("release"))
     }
+
+    private fun retain(receiver: MemorySegment) {
+        ObjCRuntime.msgSend(ValueLayout.ADDRESS, receiver, ObjCRuntime.sel("retain"))
+    }
+
+    private fun testKeyEvent(): MemorySegment = NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+        type = NSEventType.NSEventTypeKeyDown,
+        location = NSPoint(12.5, 4.0),
+        flags = NSEventModifierFlags.NSEventModifierFlagShift,
+        time = 1.0,
+        wNum = 0L,
+        unusedPassNil = MemorySegment.NULL,
+        keys = "A",
+        ukeys = "a",
+        flag = false,
+        code = 0x00,
+    )
 }
 
 private class CountingWindowOwner : AppKitNativeWindowOwner {
