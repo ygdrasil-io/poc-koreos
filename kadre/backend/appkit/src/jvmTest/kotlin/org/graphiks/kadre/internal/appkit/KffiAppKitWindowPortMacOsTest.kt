@@ -2,6 +2,16 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.ModifierKey
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -10,6 +20,9 @@ import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSEdgeInsets
+import org.graphiks.kffi.objc.NSEvent
+import org.graphiks.kffi.objc.NSEventModifierFlags
+import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
@@ -22,6 +35,7 @@ import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
+import org.graphiks.kffi.objc.managed.NSEventObservation
 import org.graphiks.kffi.objc.managed.observe
 import org.graphiks.kffi.objc.safeAreaInsets
 import java.lang.foreign.Arena
@@ -36,6 +50,139 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun immutableKffiKeyboardObservationPreservesUnknownKeyAndEffectiveModifiers() {
+        val observation = NSEventObservation(
+            type = NSEventType.NSEventTypeKeyDown,
+            modifierFlags = NSEventModifierFlags.NSEventModifierFlagShift +
+                NSEventModifierFlags.NSEventModifierFlagCommand,
+            position = NSEventObservation.Position(4.0, 8.0),
+            details = NSEventObservation.Details.Keyboard(
+                keyCode = 0xffff,
+                characters = "Ω",
+                charactersIgnoringModifiers = "ω",
+                isRepeat = false,
+            ),
+        )
+
+        assertEquals(
+            AppKitInput.KeyChanged(
+                physicalKey = PhysicalKey.Unidentified("mac:65535"),
+                logicalKey = LogicalKey.Character("Ω"),
+                location = KeyLocation.Standard,
+                keyState = KeyState.Pressed,
+                repeat = false,
+                modifiers = KeyboardModifiers(setOf(ModifierKey.Shift, ModifierKey.Meta)),
+            ),
+            observation.toAppKitInput(),
+        )
+    }
+
+    @Test
+    fun immutableKffiKeyboardObservationsMapKeyReleaseAndModifierTransitions() {
+        val keyUp = NSEventObservation(
+            type = NSEventType.NSEventTypeKeyUp,
+            modifierFlags = NSEventModifierFlags(0L),
+            position = NSEventObservation.Position(0.0, 0.0),
+            details = NSEventObservation.Details.Keyboard(0, "A", "a", isRepeat = true),
+        )
+        val shiftReleased = NSEventObservation(
+            type = NSEventType.NSEventTypeFlagsChanged,
+            modifierFlags = NSEventModifierFlags(0L),
+            position = NSEventObservation.Position(0.0, 0.0),
+            details = NSEventObservation.Details.Keyboard(56, "", "", isRepeat = true),
+        )
+
+        assertEquals(
+            listOf(
+                AppKitInput.KeyChanged(
+                    PhysicalKey.Code(0x07, 0x04),
+                    LogicalKey.Character("A"),
+                    KeyLocation.Standard,
+                    KeyState.Released,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+                AppKitInput.KeyChanged(
+                    PhysicalKey.Code(0x07, 0xe1),
+                    LogicalKey.Named(org.graphiks.kadre.input.NamedKey.Shift),
+                    KeyLocation.Left,
+                    KeyState.Released,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            ),
+            listOf(keyUp.toAppKitInput(), shiftReleased.toAppKitInput()),
+        )
+    }
+
+    @Test
+    fun immutableKffiPointerObservationPreservesPositionDeltaAndPressure() {
+        val observation = NSEventObservation(
+            type = NSEventType.NSEventTypeMouseMoved,
+            modifierFlags = NSEventModifierFlags(0L),
+            position = NSEventObservation.Position(4.0, 8.0),
+            details = NSEventObservation.Details.Pointer(
+                buttonNumber = 0L,
+                clickCount = 0L,
+                pressure = 0.5f,
+                deltaX = -3.5,
+                deltaY = 7.25,
+            ),
+        )
+
+        assertEquals(
+            AppKitInput.PointerMoved(
+                position = LogicalPoint(4.0, 8.0),
+                delta = LogicalDelta(-3.5, 7.25),
+                pressure = 0.5,
+            ),
+            observation.toAppKitInput(),
+        )
+    }
+
+    @Test
+    fun immutableKffiPointerObservationMapsOtherButtonWithoutInventingItsNativeCode() {
+        val observation = NSEventObservation(
+            type = NSEventType.NSEventTypeOtherMouseDown,
+            modifierFlags = NSEventModifierFlags(0L),
+            position = NSEventObservation.Position(12.0, 16.0),
+            details = NSEventObservation.Details.Pointer(
+                buttonNumber = 17L,
+                clickCount = 1L,
+                pressure = 0.0f,
+                deltaX = 0.0,
+                deltaY = 0.0,
+            ),
+        )
+
+        assertEquals(
+            AppKitInput.PointerButtonChanged(
+                button = PointerButton.Other(17),
+                buttonState = PointerButtonState.Pressed,
+                position = LogicalPoint(12.0, 16.0),
+                pressure = 0.0,
+            ),
+            observation.toAppKitInput(),
+        )
+    }
+
+    @Test
+    fun immutableKffiPointerObservationsMapEnterAndExitWithoutRetainingNativeState() {
+        val entered = NSEventObservation(
+            type = NSEventType.NSEventTypeMouseEntered,
+            modifierFlags = NSEventModifierFlags(0L),
+            position = NSEventObservation.Position(9.0, 13.0),
+            details = NSEventObservation.Details.Pointer(0L, 0L, 0f, 0.0, 0.0),
+        )
+        val exited = entered.copy(type = NSEventType.NSEventTypeMouseExited)
+
+        assertEquals(
+            listOf(AppKitInput.PointerEntered(LogicalPoint(9.0, 13.0)), AppKitInput.PointerLeft),
+            listOf(entered.toAppKitInput(), exited.toAppKitInput()),
+        )
+    }
+
     @Test
     fun typedNsEdgeInsetsMapToKadreLogicalEdgeOrder() {
         assertEquals(
@@ -142,6 +289,102 @@ class KffiAppKitWindowPortMacOsTest {
             } finally {
                 viewInstance.close()
             }
+        }
+    }
+
+    @Test
+    fun nativeContentViewBecomesFirstResponderAndRoutesPublishedKeyboardObservationsOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peerId = AppKitWindowPeerId(80L)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val peer = KffiAppKitWindowPort().prepare(
+            id = peerId,
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = stimuli::add,
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                KadreResult.Success(Unit),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                    val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
+                    assertTrue(view.acceptsFirstResponder())
+                    val event = NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                        type = NSEventType.NSEventTypeKeyDown,
+                        location = NSPoint(12.5, 4.0),
+                        flags = NSEventModifierFlags.NSEventModifierFlagShift,
+                        time = 1.0,
+                        wNum = 0L,
+                        unusedPassNil = MemorySegment.NULL,
+                        keys = "A",
+                        ukeys = "a",
+                        flag = false,
+                        code = 0x00,
+                    )
+                    view.keyDown(event)
+                },
+            )
+            assertEquals(
+                listOf(
+                    AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled = true, pointerInstalled = false),
+                    AppKitSurfaceStimulus.KeyChanged(
+                        peerId,
+                        AppKitInput.KeyChanged(
+                            physicalKey = PhysicalKey.Code(0x07, 0x04),
+                            logicalKey = LogicalKey.Character("A"),
+                            location = KeyLocation.Standard,
+                            keyState = KeyState.Pressed,
+                            repeat = false,
+                            modifiers = KeyboardModifiers(setOf(ModifierKey.Shift)),
+                        ),
+                    ),
+                ),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.InputObservationChanged>() +
+                    stimuli.filterIsInstance<AppKitSurfaceStimulus.KeyChanged>(),
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
+    fun nativeContentViewDoesNotRoutePointerEventsBeforeTrackingIsInstalledOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(81L),
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = stimuli::add,
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                KadreResult.Success(Unit),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                    val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
+                    val event = NSEvent.mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                        type = NSEventType.NSEventTypeLeftMouseDown,
+                        location = NSPoint(12.5, 4.0),
+                        flags = NSEventModifierFlags(0L),
+                        time = 1.0,
+                        wNum = 0L,
+                        unusedPassNil = MemorySegment.NULL,
+                        eNum = 1L,
+                        cNum = 1L,
+                        pressure = 0.0f,
+                    )
+                    view.mouseDown(event)
+                },
+            )
+            assertEquals(emptyList(), stimuli.filterIsInstance<AppKitSurfaceStimulus.PointerInput>())
+        } finally {
+            peer.close()
         }
     }
 
