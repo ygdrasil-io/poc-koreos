@@ -329,7 +329,7 @@ class KffiAppKitWindowPortMacOsTest {
             )
             assertEquals(
                 listOf(
-                    AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled = true, pointerInstalled = false),
+                    AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled = true, pointerInstalled = true),
                     AppKitSurfaceStimulus.KeyChanged(
                         peerId,
                         AppKitInput.KeyChanged(
@@ -351,12 +351,13 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
-    fun nativeContentViewDoesNotRoutePointerEventsBeforeTrackingIsInstalledOnMacOs() {
+    fun nativeContentViewAdvertisesPointerTrackingAndRoutesPointerEventsOnMacOs() {
         if (!isMacOsHost()) return
 
+        val peerId = AppKitWindowPeerId(81L)
         val stimuli = mutableListOf<AppKitSurfaceStimulus>()
         val peer = KffiAppKitWindowPort().prepare(
-            id = AppKitWindowPeerId(81L),
+            id = peerId,
             spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
             acceptSurfaceStimulus = stimuli::add,
             acceptStimulus = { },
@@ -382,14 +383,37 @@ class KffiAppKitWindowPortMacOsTest {
                     view.mouseDown(event)
                 },
             )
-            assertEquals(emptyList(), stimuli.filterIsInstance<AppKitSurfaceStimulus.PointerInput>())
+            assertEquals(
+                listOf(
+                    AppKitSurfaceStimulus.InputObservationChanged(
+                        peerId,
+                        keyboardInstalled = true,
+                        pointerInstalled = true,
+                    ),
+                ),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.InputObservationChanged>(),
+            )
+            assertEquals(
+                listOf(
+                    AppKitSurfaceStimulus.PointerInput(
+                        peerId,
+                        AppKitInput.PointerButtonChanged(
+                            button = PointerButton.Primary,
+                            buttonState = PointerButtonState.Pressed,
+                            position = LogicalPoint(12.5, 4.0),
+                            pressure = 0.0,
+                        ),
+                    ),
+                ),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.PointerInput>(),
+            )
         } finally {
             peer.close()
         }
     }
 
     @Test
-    fun nativeInputObserverRevocationStopsKffiKeyboardCallbacksWhileTheManagedViewRemainsAliveOnMacOs() {
+    fun nativeInputObserverRevocationStopsKeyboardAndPointerCallbacksWhileTheManagedViewRemainsAliveOnMacOs() {
         if (!isMacOsHost()) return
 
         val port = KffiAppKitWindowPort()
@@ -415,9 +439,13 @@ class KffiAppKitWindowPortMacOsTest {
                 nativeView.keyDown(testKeyEvent())
                 assertEquals(1, received.size)
 
+                nativeView.mouseDown(testPointerEvent())
+                assertEquals(2, received.size)
+
                 checkNotNull(observer).revokeCallbacks()
                 nativeView.keyDown(testKeyEvent())
-                assertEquals(1, received.size)
+                nativeView.mouseDown(testPointerEvent())
+                assertEquals(2, received.size)
             }
         } finally {
             port.onMainThread {
@@ -735,6 +763,18 @@ class KffiAppKitWindowPortMacOsTest {
         ukeys = "a",
         flag = false,
         code = 0x00,
+    )
+
+    private fun testPointerEvent(): MemorySegment = NSEvent.mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+        type = NSEventType.NSEventTypeLeftMouseDown,
+        location = NSPoint(12.5, 4.0),
+        flags = NSEventModifierFlags(0L),
+        time = 1.0,
+        wNum = 0L,
+        unusedPassNil = MemorySegment.NULL,
+        eNum = 1L,
+        cNum = 1L,
+        pressure = 0.0f,
     )
 }
 

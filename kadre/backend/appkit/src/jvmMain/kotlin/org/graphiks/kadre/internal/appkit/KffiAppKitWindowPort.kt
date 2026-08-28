@@ -45,7 +45,9 @@ import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCManagedInstance
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
 import org.graphiks.kffi.objc.managed.ObjCNotificationObservation
+import org.graphiks.kffi.objc.managed.ObjCPointerTracking
 import org.graphiks.kffi.objc.managed.NSEventObservation
+import org.graphiks.kffi.objc.managed.installPointerTracking
 import org.graphiks.kffi.objc.managed.observe
 import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
 import java.lang.foreign.Arena
@@ -597,18 +599,35 @@ private class KffiViewInputObservation(
 
 private class KffiInputObserverOwner private constructor(
     private val observation: AutoCloseable,
+    private val pointerTracking: ObjCPointerTracking,
 ) : AppKitNativeInputObserverOwner {
     private val closed = AtomicBoolean(false)
 
     override val keyboardInstalled: Boolean = true
-    override val pointerInstalled: Boolean = false
+    override val pointerInstalled: Boolean = true
 
     override fun revokeCallbacks() {
         observation.close()
     }
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) revokeCallbacks()
+        if (!closed.compareAndSet(false, true)) return
+        var failure: Throwable? = null
+        try {
+            revokeCallbacks()
+        } catch (revokeFailure: Throwable) {
+            failure = revokeFailure
+        }
+        try {
+            pointerTracking.close()
+        } catch (trackingFailure: Throwable) {
+            if (failure != null && failure !== trackingFailure) {
+                failure.addSuppressed(trackingFailure)
+            } else {
+                failure = trackingFailure
+            }
+        }
+        failure?.let { throw it }
     }
 
     companion object {
@@ -617,13 +636,20 @@ private class KffiInputObserverOwner private constructor(
             viewOwner: KffiViewOwner,
             callbacks: AppKitInputCallbacks,
         ): KffiInputObserverOwner {
-            val observation = viewOwner.inputAdmission.install(callbacks, pointerEnabled = false)
+            val observation = viewOwner.inputAdmission.install(callbacks, pointerEnabled = true)
+            var pointerTracking: ObjCPointerTracking? = null
             return try {
                 check(window.makeFirstResponder(viewOwner.view.ptr)) {
                     "AppKit refused the Kadre content view as first responder"
                 }
-                KffiInputObserverOwner(observation)
+                pointerTracking = viewOwner.view.installPointerTracking(window)
+                KffiInputObserverOwner(observation, checkNotNull(pointerTracking))
             } catch (failure: Throwable) {
+                try {
+                    pointerTracking?.close()
+                } catch (closeFailure: Throwable) {
+                    if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                }
                 try {
                     observation.close()
                 } catch (closeFailure: Throwable) {
