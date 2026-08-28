@@ -424,10 +424,10 @@ class KffiAppKitWindowPortMacOsTest {
                 observer?.close()
                 window?.let { nativeWindow ->
                     port.detachContentView(nativeWindow)
+                    view?.close()
                     port.closeWindow(nativeWindow)
+                    nativeWindow.close()
                 }
-                view?.close()
-                window?.close()
             }
         }
     }
