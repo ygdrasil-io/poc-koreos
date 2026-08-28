@@ -389,6 +389,50 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun nativeInputObserverRevocationStopsKffiKeyboardCallbacksWhileTheManagedViewRemainsAliveOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val received = mutableListOf<AppKitInput>()
+        var window: AppKitNativeWindowOwner? = null
+        var view: AppKitNativeViewOwner? = null
+        var observer: AppKitNativeInputObserverOwner? = null
+
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                view = port.createContentView(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.attachContentView(checkNotNull(window), checkNotNull(view))
+                port.present(checkNotNull(window))
+                observer = port.observeInput(
+                    checkNotNull(window),
+                    checkNotNull(view),
+                    AppKitInputCallbacks(received::add),
+                )
+                val handle = port.desktopHandle(checkNotNull(window), checkNotNull(view))
+                val nativeView = NSView(MemorySegment.ofAddress(handle.nsViewAddress.toLong()))
+
+                nativeView.keyDown(testKeyEvent())
+                assertEquals(1, received.size)
+
+                checkNotNull(observer).revokeCallbacks()
+                nativeView.keyDown(testKeyEvent())
+                assertEquals(1, received.size)
+            }
+        } finally {
+            port.onMainThread {
+                observer?.close()
+                window?.let { nativeWindow ->
+                    port.detachContentView(nativeWindow)
+                    port.closeWindow(nativeWindow)
+                }
+                view?.close()
+                window?.close()
+            }
+        }
+    }
+
+    @Test
     fun nativeContentViewRevokesPublishedKffiKeyboardRouteBeforePeerCloseReleasesTheViewOnMacOs() {
         if (!isMacOsHost()) return
 
@@ -426,7 +470,7 @@ class KffiAppKitWindowPortMacOsTest {
             assertEquals(emptyList(), stimuli)
         } finally {
             peer.close()
-            retainedView?.let(::release)
+            retainedView?.let { view -> port.onMainThread { release(view) } }
         }
     }
 
