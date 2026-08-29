@@ -167,11 +167,28 @@ mutation restent explicitement `Unsupported`.
 
 ## Preuves et contrat
 
-`APK-006` est réservé comme contrat O3 `planned`. Son activation exige une
-preuve O2 du runtime et une preuve O3 de la session publique AppKit ; aucun
-mapping d'evidence ni gate CI n'est ajouté avant que ces preuves existent.
+`WIN-001` est réservé comme contrat O2 `planned` pour le runtime portable et
+`APK-006` comme contrat O3 `planned` pour la session publique AppKit. Les deux
+doivent être activés ensemble : aucun mapping d'evidence ni gate CI n'est
+ajouté avant que leurs preuves existent.
 
-Les scénarios réservés sont :
+`WIN-001` réserve les scénarios suivants :
+
+- `runtime-window-geometry-validation` ;
+- `runtime-window-geometry-serialization` ;
+- `runtime-window-geometry-cancellation-close` ;
+- `runtime-window-geometry-event-policy`.
+
+Ses sentinelles sont :
+
+- `runtime-window-geometry-invalid-precommit` ;
+- `runtime-window-geometry-stale-dispatch` ;
+- `runtime-window-geometry-event-before-state` ;
+- `runtime-window-geometry-operation-correlation` ;
+- `runtime-window-geometry-post-close-command` ;
+- `runtime-window-geometry-policy-bypass`.
+
+`APK-006` réserve les scénarios suivants :
 
 - `appkit-window-geometry-public-activation` ;
 - `appkit-window-geometry-initial-constraints` ;
@@ -179,7 +196,7 @@ Les scénarios réservés sont :
 - `appkit-window-geometry-external-resize` ;
 - `appkit-window-geometry-policy`.
 
-Les sentinelles réservées sont :
+Ses sentinelles sont :
 
 - `appkit-window-geometry-invalid-precommit` ;
 - `appkit-window-geometry-cancellation-boundary` ;
@@ -201,11 +218,12 @@ tranche.
 
 ## Découpage de la stack
 
-1. Cette PR réserve `APK-006`, ajoute ce design et référence la tranche dans la
+1. Cette PR réserve `WIN-001` et `APK-006`, ajoute ce design et référence la tranche dans la
    roadmap.
 2. La PR fille introduit le pipeline runtime portable et ses preuves O2, sans
    activer de capability AppKit.
 3. La PR suivante relie le peer et le port AppKit aux APIs KFFI générées, puis
    apporte les preuves O3.
-4. La dernière PR active `APK-006`, ajoute les mappings d'evidence et le gate
-   CI obligatoire dans la même modification que l'activation publique.
+4. La dernière PR active `WIN-001` et `APK-006`, ajoute les mappings d'evidence
+   et les gates CI obligatoires dans la même modification que l'activation
+   publique.
