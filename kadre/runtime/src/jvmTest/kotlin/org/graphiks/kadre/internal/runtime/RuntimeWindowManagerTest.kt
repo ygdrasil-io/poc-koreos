@@ -274,6 +274,32 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun repeatedExternalWindowObservationIsANoOp() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.single(),
+        ) as RuntimeWindow
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+        val before = window.state.value
+        val repeatedNativeSnapshot = before.copy(
+            title = "ignored-native-title",
+            outerBounds = PhysicalRect(PhysicalPoint(4, 6), PhysicalSize(240, 180)),
+            revision = WindowRevision(700L),
+        )
+
+        assertFalse(window.observeNativeUpdate(repeatedNativeSnapshot))
+        advanceUntilIdle()
+
+        assertEquals(before, window.state.value)
+        assertEquals(emptyList(), events)
+        collector.cancelAndJoin()
+    }
+
+    @Test
     fun windowGeometryEventsFollowConfiguredDeliveryPolicy() = runTest {
         val coalescedPort = DeterministicWindowCommandPort()
         val coalescedManager = manager(coalescedPort)

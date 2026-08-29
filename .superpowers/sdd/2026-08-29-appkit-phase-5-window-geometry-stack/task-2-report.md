@@ -137,3 +137,30 @@ BUILD SUCCESSFUL in 1s
 ```
 
 `git diff --check` completed successfully. No Surface code, capabilities, FFI, registry status, or CI gates changed in this fix.
+
+## Review fix — external observation no-op
+
+`observeNativeUpdate` now compares its sanitized geometry candidate to the current runtime state before allocating the next revision. A repeated native snapshot whose in-scope fields are unchanged returns `false`, preserves the current revision, and emits no event; a changed candidate still receives the next monotonic runtime revision.
+
+Regression added: `repeatedExternalWindowObservationIsANoOp`.
+
+RED:
+
+```text
+./gradlew :kadre:runtime:jvmTest --tests org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest.repeatedExternalWindowObservationIsANoOp --console=plain
+
+RuntimeWindowManagerTest[jvm] > repeatedExternalWindowObservationIsANoOp[jvm] FAILED
+    java.lang.AssertionError at RuntimeWindowManagerTest.kt:277
+
+1 test completed, 1 failed
+BUILD FAILED in 2s
+```
+
+GREEN:
+
+```text
+./gradlew :kadre:runtime:jvmTest :kadre:contracts:validator:validateContractRegistry --console=plain
+
+BUILD SUCCESSFUL in 2s
+20 actionable tasks: 7 executed, 13 up-to-date
+```
