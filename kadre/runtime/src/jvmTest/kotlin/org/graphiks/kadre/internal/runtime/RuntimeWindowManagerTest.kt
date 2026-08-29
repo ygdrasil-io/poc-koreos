@@ -718,6 +718,58 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun closeBetweenNativeUpdateAdmissionAndGeometryPublicationDeliversTheCorrelatedEvent() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        var sequence = 0L
+        var closeDuringGeometryPublication = false
+        lateinit var openCommand: WindowOpenCommand
+        installWindowEventPolicy(
+            manager = manager,
+            policy = KadrePolicies.Default.window,
+            eventStampSource = {
+                EventStamp(
+                    SessionSequence(sequence),
+                    SessionInstant((sequence++).nanoseconds),
+                    deliverySpan = null,
+                ).also {
+                    if (closeDuringGeometryPublication) {
+                        closeDuringGeometryPublication = false
+                        openCommand.nativeClosed()
+                    }
+                }
+            },
+        )
+        val request = manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue()
+        openCommand = port.openCommands.single()
+        val window = commit(request, openCommand)
+        val events = async(start = CoroutineStart.UNDISPATCHED) { window.events.toList() }
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val updateCommand = port.updateCommands.single()
+
+        assertIs<KadreResult.Success<WindowCloseOutcome.Accepted>>(window.close())
+        closeDuringGeometryPublication = true
+        updateCommand.applied(
+            window.state.value.copy(
+                phase = WindowPhase.Open,
+                contentSize = LogicalSize(120.0, 100.0),
+            ),
+        )
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        val delivered = events.await()
+        val geometry = assertIs<WindowEvent.GeometryChanged>(delivered.last())
+
+        assertEquals(WindowPhase.Closing, outcome.state.phase)
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(LogicalSize(120.0, 100.0), window.state.value.contentSize)
+        assertEquals(updateCommand.operationId, geometry.operationId)
+        assertEquals(outcome.state, geometry.state)
+    }
+
+    @Test
     fun windowUpdateCancellationAndCloseRespectTheNativeCommitBoundary() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
@@ -1931,12 +1983,13 @@ class RuntimeWindowManagerTest {
         manager: RuntimeWindowManager,
         policy: org.graphiks.kadre.policy.WindowDeliveryPolicy,
         sessionFailureHandler: (KadreFailure) -> Unit = {},
+        eventStampSource: (() -> EventStamp)? = null,
     ) {
         var sequence = 0L
         manager.installSessionConfiguration(
             deliveryPolicy = policy,
             inputDeliveryPolicy = KadrePolicies.Default.input,
-            source = {
+            source = eventStampSource ?: {
                 EventStamp(
                     SessionSequence(sequence),
                     SessionInstant((sequence++).nanoseconds),

@@ -1240,6 +1240,7 @@ internal class RuntimeWindow(
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
     private var eventDeliveryClosePending = false
+    private var eventPublicationInFlight = false
     internal var activeCloseRequest: RuntimeCloseRequest? = null
         private set
     private var resolvedCloseRequest: ResolvedCloseRequest? = null
@@ -1330,10 +1331,10 @@ internal class RuntimeWindow(
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var outcome: KadreResult<WindowUpdateOutcome>? = null
-        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
+            eventPublicationInFlight = true
             val lifecycle = mutableState.value
             val effective = if (lifecycle.phase == WindowPhase.Open) state.copy(
                 revision = WindowRevision(lifecycle.revision.value + 1L),
@@ -1347,10 +1348,17 @@ internal class RuntimeWindow(
             publication = WindowStatePublication(lifecycle, effective, operationId)
             completion = pending
             outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected + backendRejected))
-            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
-        publishStatePublication(checkNotNull(publication))
-        checkNotNull(completion).result.complete(checkNotNull(outcome))
+        var closeEventDelivery = false
+        try {
+            publishStatePublication(checkNotNull(publication))
+            checkNotNull(completion).result.complete(checkNotNull(outcome))
+        } finally {
+            closeEventDelivery = synchronized(updateLock) {
+                eventPublicationInFlight = false
+                takePendingEventDeliveryCloseLocked()
+            }
+        }
         if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
@@ -1576,7 +1584,7 @@ internal class RuntimeWindow(
                 phase = WindowPhase.Closed,
                 revision = WindowRevision(current.revision.value + 1L),
             )
-            if (dispatchedUpdate == null) {
+            if (dispatchedUpdate == null && !eventPublicationInFlight) {
                 true
             } else {
                 eventDeliveryClosePending = true
@@ -1587,7 +1595,7 @@ internal class RuntimeWindow(
     }
 
     private fun takePendingEventDeliveryCloseLocked(): Boolean {
-        if (!eventDeliveryClosePending || dispatchedUpdate != null) return false
+        if (!eventDeliveryClosePending || dispatchedUpdate != null || eventPublicationInFlight) return false
         eventDeliveryClosePending = false
         return true
     }
