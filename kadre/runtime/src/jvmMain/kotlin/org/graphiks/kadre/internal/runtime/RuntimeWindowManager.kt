@@ -2,6 +2,9 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +93,7 @@ public class RuntimeWindowManager public constructor(
     private val lock = Any()
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
+    private val dispatchedWindowUpdates = linkedMapOf<WindowOperationId, RuntimeWindow>()
     private val surfaces = linkedMapOf<SurfaceId, RuntimeWindowSurface>()
     private var nextAdmissionOrder = 0L
     private var reservedWindowSlots = 0
@@ -152,6 +156,7 @@ public class RuntimeWindowManager public constructor(
             acceptCloseRequest(requestId)
         }
     }
+    private val updateStimulusSink = WindowUpdateCommandStimulusSink(::acceptWindowUpdateStimulus)
 
     override val state: StateFlow<WindowManagerState> = mutableState.asStateFlow()
 
@@ -385,29 +390,51 @@ public class RuntimeWindowManager public constructor(
     internal suspend fun applyWindow(
         window: RuntimeWindow,
         update: WindowUpdate,
-    ): KadreResult<WindowUpdateOutcome> = synchronized(lock) {
-        val current = window.currentState()
-        if (current.phase != WindowPhase.Open) {
-            return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+    ): KadreResult<WindowUpdateOutcome> = window.applyUpdate(update)
+
+    internal fun dispatchWindowUpdate(window: RuntimeWindow, pending: PendingWindowUpdate) {
+        val command = WindowUpdateCommand(
+            windowId = window.id,
+            operationId = pending.operationId,
+            expectedRevision = pending.expectedRevision,
+            update = pending.update,
+            stimulusSink = updateStimulusSink,
+        )
+        synchronized(lock) {
+            dispatchedWindowUpdates[pending.operationId] = window
         }
-        update.expectedRevision?.let { expected ->
-            if (expected != current.revision) {
-                return@synchronized KadreResult.Failure(
-                    KadreFailure.StaleRevision(expected.value, current.revision.value),
-                )
+        when (val result = guardPort("window-update-exception") { commandPort.requestUpdate(command) }) {
+            is GuardedCall.Success -> Unit
+            is GuardedCall.Failure -> {
+                synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                window.rejectDispatchedUpdate(pending.operationId, result.failure)
             }
         }
-        val operationId = RuntimeProcessIds.nextWindowOperationId()
-        val rejected = changedProperties(update).map { property ->
-            RejectedWindowField(property, KadreFailure.Unsupported(KadreOperation.UpdateWindow))
+    }
+
+    internal fun withdrawWindowUpdate(window: RuntimeWindow, operationId: WindowOperationId) {
+        val outcome = guardPort("window-update-cancellation-exception") {
+            commandPort.requestUpdateCancellation(WindowUpdateCancellationCommand(operationId))
         }
-        KadreResult.Success(
-            if (rejected.isEmpty()) {
-                WindowUpdateOutcome.Applied(operationId, current)
-            } else {
-                WindowUpdateOutcome.PartiallyApplied(operationId, current, rejected)
-            },
-        )
+        if (outcome is GuardedCall.Success && outcome.value == WindowUpdateCancellationOutcome.CancelledBeforeCommit) {
+            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            window.withdrawDispatchedUpdate(operationId)
+        }
+    }
+
+    private fun acceptWindowUpdateStimulus(stimulus: WindowUpdateCommandStimulus) {
+        val operationId = when (stimulus) {
+            is WindowUpdateCommandStimulus.Applied -> stimulus.operationId
+            is WindowUpdateCommandStimulus.Rejected -> stimulus.operationId
+        }
+        val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) } ?: return
+        when (stimulus) {
+            is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
+            is WindowUpdateCommandStimulus.Rejected -> window.rejectDispatchedUpdate(
+                stimulus.operationId,
+                platformFailure("window-update-rejected"),
+            )
+        }
     }
 
     internal suspend fun requestAttention(window: RuntimeWindow): KadreResult<Unit> = synchronized(lock) {
@@ -1156,9 +1183,13 @@ internal class RuntimeWindow(
     publicWindowCapabilities: Boolean,
     eventCollectorGate: RuntimeEventCollectorGate,
 ) : Window, RuntimeDesktopWindowHandleAccess {
-    private val mutableState = MutableStateFlow(initialWindowState(spec))
+    private val initialState = initialWindowState(spec)
+    private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(windowCapabilities(publicWindowCapabilities))
     private val mutableEvents = MutableSharedFlow<WindowEvent>(extraBufferCapacity = 16)
+    private val updateLock = Any()
+    private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
+    private var dispatchedUpdate: PendingWindowUpdate? = null
     internal var activeCloseRequest: RuntimeCloseRequest? = null
         private set
     private var resolvedCloseRequest: ResolvedCloseRequest? = null
@@ -1188,6 +1219,137 @@ internal class RuntimeWindow(
     ): KadreResult<R> = manager.withDesktopHandle(this, block)
 
     fun currentState(): WindowState = mutableState.value
+
+    suspend fun applyUpdate(update: WindowUpdate): KadreResult<WindowUpdateOutcome> {
+        currentCoroutineContext().ensureActive()
+        val pending: PendingWindowUpdate
+        val immediate: KadreResult<WindowUpdateOutcome>?
+        synchronized(updateLock) {
+            val current = mutableState.value
+            if (current.phase != WindowPhase.Open) {
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            }
+            val operationId = RuntimeProcessIds.nextWindowOperationId()
+            val candidate = candidateFor(update, current, initialState)
+                ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
+            val rejected = changedProperties(update)
+                .filterNot(::isRuntimeGeometryProperty)
+                .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
+            val geometryChanged = geometryChanged(current, candidate)
+            if (!geometryChanged) {
+                update.expectedRevision?.let { expected ->
+                    if (expected != current.revision) {
+                        return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
+                    }
+                }
+                immediate = KadreResult.Success(updateOutcome(operationId, current, rejected))
+                pending = PendingWindowUpdate(operationId, null, update, rejected)
+            } else {
+                immediate = null
+                pending = PendingWindowUpdate(
+                    operationId = operationId,
+                    expectedRevision = update.expectedRevision,
+                    update = geometryOnly(update),
+                    rejected = rejected,
+                )
+                pendingUpdates.addLast(pending)
+            }
+        }
+        immediate?.let { return it }
+        dispatchNextUpdate()
+        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) cancelPendingUpdate(pending)
+        }
+        return try {
+            pending.result.await()
+        } catch (cancelled: CancellationException) {
+            cancelPendingUpdate(pending)
+            throw cancelled
+        } finally {
+            cancellationHandle?.dispose()
+        }
+    }
+
+    fun applyNativeUpdate(operationId: WindowOperationId, state: WindowState) {
+        synchronized(updateLock) {
+            val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
+            dispatchedUpdate = null
+            mutableState.value = state
+            pending.result.complete(KadreResult.Success(updateOutcome(operationId, state, pending.rejected)))
+        }
+        dispatchNextUpdate()
+    }
+
+    fun rejectDispatchedUpdate(operationId: WindowOperationId, failure: KadreFailure) {
+        synchronized(updateLock) {
+            val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
+            dispatchedUpdate = null
+            pending.result.complete(KadreResult.Failure(failure))
+        }
+        dispatchNextUpdate()
+    }
+
+    fun withdrawDispatchedUpdate(operationId: WindowOperationId) {
+        synchronized(updateLock) {
+            val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
+            dispatchedUpdate = null
+            pending.cancelled = true
+        }
+        dispatchNextUpdate()
+    }
+
+    private fun dispatchNextUpdate() {
+        var next: PendingWindowUpdate? = null
+        synchronized(updateLock) {
+            if (dispatchedUpdate != null) return
+            while (pendingUpdates.isNotEmpty()) {
+                val candidate = pendingUpdates.removeFirst()
+                if (candidate.cancelled) continue
+                val current = mutableState.value
+                if (current.phase != WindowPhase.Open) {
+                    candidate.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
+                    continue
+                }
+                val expected = candidate.expectedRevision
+                if (expected != null && expected != current.revision) {
+                    candidate.result.complete(
+                        KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value)),
+                    )
+                    continue
+                }
+                if (candidate.result.isCompleted) continue
+                dispatchedUpdate = candidate
+                next = candidate
+                break
+            }
+        }
+        next?.let { manager.dispatchWindowUpdate(this, it) }
+    }
+
+    private fun cancelPendingUpdate(pending: PendingWindowUpdate) {
+        var withdrawDispatched = false
+        synchronized(updateLock) {
+            if (dispatchedUpdate === pending) {
+                if (pending.cancellationRequested) return
+                pending.cancellationRequested = true
+                withdrawDispatched = true
+                return@synchronized
+            }
+            pending.cancelled = true
+            pendingUpdates.remove(pending)
+        }
+        if (withdrawDispatched) manager.withdrawWindowUpdate(this, pending.operationId)
+    }
+
+    private fun failQueuedUpdatesAfterClose() {
+        synchronized(updateLock) {
+            while (pendingUpdates.isNotEmpty()) {
+                pendingUpdates.removeFirst().result.complete(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                )
+            }
+        }
+    }
 
     fun prepareClose(operationId: WindowOperationId) {
         if (mutableState.value.phase == WindowPhase.Open) closeOperationId = operationId
@@ -1263,6 +1425,7 @@ internal class RuntimeWindow(
         val current = mutableState.value
         if (current.phase != WindowPhase.Open) return
         closeOperationId = operationId
+        failQueuedUpdatesAfterClose()
         mutableState.value = current.copy(
             phase = WindowPhase.Closing,
             revision = WindowRevision(current.revision.value + 1L),
@@ -1288,6 +1451,16 @@ internal class RuntimeWindow(
         )
     }
 }
+
+internal data class PendingWindowUpdate(
+    val operationId: WindowOperationId,
+    val expectedRevision: WindowRevision?,
+    val update: WindowUpdate,
+    val rejected: List<RejectedWindowField>,
+    val result: CompletableDeferred<KadreResult<WindowUpdateOutcome>> = CompletableDeferred(),
+    var cancelled: Boolean = false,
+    var cancellationRequested: Boolean = false,
+)
 
 internal data class RuntimeCloseRequest(
     val id: WindowCloseRequestId,
@@ -1362,6 +1535,82 @@ private fun changedProperties(update: WindowUpdate): List<WindowProperty> = buil
     if (update.blurBehind !is PropertyChange.Unchanged) add(WindowProperty.Blur)
     if (update.icon !is PropertyChange.Unchanged) add(WindowProperty.Icon)
     if (update.contentProtection !is PropertyChange.Unchanged) add(WindowProperty.ContentProtection)
+}
+
+private fun isRuntimeGeometryProperty(property: WindowProperty): Boolean = property in setOf(
+    WindowProperty.ContentSize,
+    WindowProperty.MinimumSize,
+    WindowProperty.MaximumSize,
+    WindowProperty.Resizable,
+)
+
+private fun candidateFor(
+    update: WindowUpdate,
+    current: WindowState,
+    initial: WindowState,
+): WindowState? = try {
+    current.copy(
+        contentSize = resolveContentSize(update.contentSize, current.contentSize, initial.contentSize),
+        minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize, initial.minimumSize),
+        maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize, initial.maximumSize),
+        resizable = resolveResizable(update.resizable, current.resizable, initial.resizable),
+    )
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+private fun resolveContentSize(
+    change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
+    current: org.graphiks.kadre.surface.LogicalSize,
+    initial: org.graphiks.kadre.surface.LogicalSize,
+): org.graphiks.kadre.surface.LogicalSize = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear -> initial
+    PropertyChange.Unchanged -> current
+}
+
+private fun resolveOptionalSize(
+    change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
+    current: org.graphiks.kadre.surface.LogicalSize?,
+    initial: org.graphiks.kadre.surface.LogicalSize?,
+): org.graphiks.kadre.surface.LogicalSize? = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear -> initial
+    PropertyChange.Unchanged -> current
+}
+
+private fun resolveResizable(
+    change: PropertyChange<Boolean>,
+    current: Boolean,
+    initial: Boolean,
+): Boolean = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear -> initial
+    PropertyChange.Unchanged -> current
+}
+
+private fun geometryChanged(current: WindowState, candidate: WindowState): Boolean =
+    current.contentSize != candidate.contentSize ||
+        current.minimumSize != candidate.minimumSize ||
+        current.maximumSize != candidate.maximumSize ||
+        current.resizable != candidate.resizable
+
+private fun geometryOnly(update: WindowUpdate): WindowUpdate = WindowUpdate(
+    contentSize = update.contentSize,
+    minimumSize = update.minimumSize,
+    maximumSize = update.maximumSize,
+    resizable = update.resizable,
+    expectedRevision = update.expectedRevision,
+)
+
+private fun updateOutcome(
+    operationId: WindowOperationId,
+    state: WindowState,
+    rejected: List<RejectedWindowField>,
+): WindowUpdateOutcome = if (rejected.isEmpty()) {
+    WindowUpdateOutcome.Applied(operationId, state)
+} else {
+    WindowUpdateOutcome.PartiallyApplied(operationId, state, rejected)
 }
 
 private fun <T> unsupported(operation: KadreOperation): Capability<T> =

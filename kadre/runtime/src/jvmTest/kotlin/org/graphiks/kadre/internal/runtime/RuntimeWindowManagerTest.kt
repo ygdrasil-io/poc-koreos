@@ -59,6 +59,7 @@ import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
+import org.graphiks.kadre.window.WindowRevision
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
@@ -74,6 +75,147 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowManagerTest {
+    @Test
+    fun windowUpdateValidatesCombinedSizeConstraintsBeforeDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(
+            WindowSpec(
+                contentSize = LogicalSize(100.0, 100.0),
+                minimumSize = LogicalSize(50.0, 50.0),
+                maximumSize = LogicalSize(200.0, 200.0),
+            ),
+        ).successValue()
+        val window = commit(request, port.openCommands.single())
+        val initial = window.state.value
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(40.0, 100.0)))),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(minimumSize = PropertyChange.Set(LogicalSize(150.0, 50.0)))),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(maximumSize = PropertyChange.Set(LogicalSize(40.0, 200.0)))),
+        )
+
+        assertEquals(emptyList<WindowUpdateCommand>(), port.updateCommands)
+        assertEquals(initial, window.state.value)
+        assertEquals(emptyList(), events)
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowUpdatesSerializePerWindowAndRevalidateExpectedRevisionAtDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val first = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.single(),
+        )
+        val second = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.last(),
+        )
+
+        val firstUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            first.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val staleUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            first.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(130.0, 100.0)),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val otherWindowUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            second.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(140.0, 100.0))))
+        }
+
+        assertEquals(2, port.updateCommands.size)
+        val firstCommand = port.updateCommands.single { it.windowId == first.id }
+        firstCommand.applied(first.state.value.copy(
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(firstUpdate.await())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            staleUpdate.await(),
+        )
+        assertEquals(2, port.updateCommands.size)
+        port.updateCommands.single { it.windowId == second.id }.applied(second.state.value.copy(
+            contentSize = LogicalSize(140.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(otherWindowUpdate.await())
+    }
+
+    @Test
+    fun windowUpdateCancellationAndCloseRespectTheNativeCommitBoundary() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue()
+        val openCommand = port.openCommands.single()
+        val window = commit(request, openCommand)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+        val preCommitCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(110.0, 100.0))))
+        }
+        val preCommitCommand = port.updateCommands.single()
+        preCommitCaller.cancelAndJoin()
+        assertEquals(1, port.updateCancellationCommands.size)
+        preCommitCommand.applied(window.state.value.copy(
+            contentSize = LogicalSize(110.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertEquals(LogicalSize(100.0, 100.0), window.state.value.contentSize)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        val committedCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val committedCommand = port.updateCommands.last()
+        committedCaller.cancel()
+        committedCommand.applied(window.state.value.copy(
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertTrue(committedCaller.isCancelled)
+        assertEquals(LogicalSize(120.0, 100.0), window.state.value.contentSize)
+
+        val blockingCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(130.0, 100.0))))
+        }
+        val withdrawnCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(140.0, 100.0))))
+        }
+        assertEquals(3, port.updateCommands.size)
+        withdrawnCaller.cancelAndJoin()
+        port.updateCommands.last().applied(window.state.value.copy(
+            contentSize = LogicalSize(130.0, 100.0),
+            revision = WindowRevision(2L),
+        ))
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(blockingCaller.await())
+        assertTrue(withdrawnCaller.isCancelled)
+        assertEquals(3, port.updateCommands.size)
+
+        assertIs<KadreResult.Success<WindowCloseOutcome.Accepted>>(window.close())
+        openCommand.nativeClosed()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(150.0, 100.0)))),
+        )
+    }
+
     @Test
     fun pendingRequestConsumesOnlyThePendingBudgetAndStaysOutOfTheWindowSnapshot() = runTest {
         val port = DeterministicWindowCommandPort()
@@ -1276,12 +1418,15 @@ class RuntimeWindowManagerTest {
 
     private class DeterministicWindowCommandPort : WindowCommandPort {
         val openCommands = mutableListOf<WindowOpenCommand>()
+        val updateCommands = mutableListOf<WindowUpdateCommand>()
+        val updateCancellationCommands = mutableListOf<WindowUpdateCancellationCommand>()
         val pendingCancellationCommands = mutableListOf<PendingWindowCancellationCommand>()
         val openedCloseCommands = mutableListOf<OpenedWindowCloseCommand>()
         val closeEvents = mutableListOf<PortCloseEvent>()
         var pendingCancellationOutcome: PendingWindowCancellationOutcome =
             PendingWindowCancellationOutcome.CancelledBeforeCommit
         var openedCloseOutcome: OpenedWindowCloseOutcome = OpenedWindowCloseOutcome.Accepted
+        var updateCancellationOutcome: WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
         var onOpen: (WindowOpenCommand) -> Unit = {}
         var onPendingCancellation: (PendingWindowCancellationCommand) -> Unit = {}
         var onOpenedClose: (OpenedWindowCloseCommand) -> Unit = {}
@@ -1289,6 +1434,17 @@ class RuntimeWindowManagerTest {
         override fun requestOpen(command: WindowOpenCommand) {
             openCommands += command
             onOpen(command)
+        }
+
+        override fun requestUpdate(command: WindowUpdateCommand) {
+            updateCommands += command
+        }
+
+        override fun requestUpdateCancellation(
+            command: WindowUpdateCancellationCommand,
+        ): WindowUpdateCancellationOutcome {
+            updateCancellationCommands += command
+            return updateCancellationOutcome
         }
 
         override fun requestPendingCancellation(

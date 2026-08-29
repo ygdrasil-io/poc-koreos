@@ -6,8 +6,12 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.WindowId
+import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowState
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowRevision
 import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -21,6 +25,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 public interface WindowCommandPort {
     public fun requestOpen(command: WindowOpenCommand)
 
+    /**
+     * Admits one window update for asynchronous native completion.
+     *
+     * Implementations must return promptly. They report the effective native snapshot, or a
+     * failure before native commit, through [WindowUpdateCommand.applied] or
+     * [WindowUpdateCommand.rejected].
+     */
+    public fun requestUpdate(command: WindowUpdateCommand)
+
+    /** Attempts to withdraw an update that has not crossed the native commit boundary. */
+    public fun requestUpdateCancellation(
+        command: WindowUpdateCancellationCommand,
+    ): WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+
     public fun requestPendingCancellation(
         command: PendingWindowCancellationCommand,
     ): PendingWindowCancellationOutcome
@@ -30,6 +48,54 @@ public interface WindowCommandPort {
     /** Resolves backend-side coalescing when the application tries to keep a native close open. */
     public fun closeRequestRejected(command: OpenedWindowCloseCommand): CloseRequestRejectionOutcome =
         CloseRequestRejectionOutcome.Rejected
+}
+
+/**
+ * One immutable geometry update admitted by the runtime.
+ *
+ * The operation ID is allocated before dispatch. The backend must echo its effective native
+ * snapshot through this command rather than assuming the requested values became effective.
+ */
+@ConsistentCopyVisibility
+public data class WindowUpdateCommand internal constructor(
+    public val windowId: WindowId,
+    public val operationId: WindowOperationId,
+    public val expectedRevision: WindowRevision?,
+    public val update: WindowUpdate,
+    private val stimulusSink: WindowUpdateCommandStimulusSink,
+) {
+    public fun applied(state: WindowState) {
+        stimulusSink.accept(WindowUpdateCommandStimulus.Applied(operationId, state))
+    }
+
+    public fun rejected(error: Throwable) {
+        stimulusSink.accept(WindowUpdateCommandStimulus.Rejected(operationId, error))
+    }
+}
+
+/** Correlated backend completion for one [WindowUpdateCommand]. */
+public sealed interface WindowUpdateCommandStimulus {
+    public data class Applied(
+        public val operationId: WindowOperationId,
+        public val state: WindowState,
+    ) : WindowUpdateCommandStimulus
+
+    public data class Rejected(
+        public val operationId: WindowOperationId,
+        public val error: Throwable,
+    ) : WindowUpdateCommandStimulus
+}
+
+/** A correlated request to withdraw a not-yet-committed [WindowUpdateCommand]. */
+public data class WindowUpdateCancellationCommand(
+    public val operationId: WindowOperationId,
+)
+
+/** Immediate backend knowledge about a requested window-update withdrawal. */
+public sealed interface WindowUpdateCancellationOutcome {
+    public data object CancelledBeforeCommit : WindowUpdateCancellationOutcome
+    public data object CancellationRequested : WindowUpdateCancellationOutcome
+    public data object TooLate : WindowUpdateCancellationOutcome
 }
 
 /** A backend-owned native peer whose release must be idempotent. */
@@ -164,6 +230,10 @@ internal interface WindowCommandStimulusSink {
     fun fail(requestId: WindowRequestId, failure: KadreFailure)
     fun nativeClosed(requestId: WindowRequestId)
     fun closeRequested(requestId: WindowRequestId)
+}
+
+internal fun interface WindowUpdateCommandStimulusSink {
+    fun accept(stimulus: WindowUpdateCommandStimulus)
 }
 
 internal class ManagedWindowPeerOwner(
