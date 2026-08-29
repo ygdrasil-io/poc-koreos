@@ -400,15 +400,19 @@ public class RuntimeWindowManager public constructor(
             update = pending.update,
             stimulusSink = updateStimulusSink,
         )
-        synchronized(lock) {
+        val dispatchFailure = synchronized(lock) {
+            if (!window.beginNativeUpdateDispatch(pending.operationId)) return
             dispatchedWindowUpdates[pending.operationId] = window
-        }
-        when (val result = guardPort("window-update-exception") { commandPort.requestUpdate(command) }) {
-            is GuardedCall.Success -> Unit
-            is GuardedCall.Failure -> {
-                synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
-                window.rejectDispatchedUpdate(pending.operationId, result.failure)
+            when (val result = guardPort("window-update-exception") { commandPort.requestUpdate(command) }) {
+                is GuardedCall.Success -> null
+                is GuardedCall.Failure -> {
+                    dispatchedWindowUpdates.remove(pending.operationId)
+                    result.failure
+                }
             }
+        }
+        dispatchFailure?.let { failure ->
+            window.rejectDispatchedUpdate(pending.operationId, failure)
         }
     }
 
@@ -430,10 +434,10 @@ public class RuntimeWindowManager public constructor(
         val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) } ?: return
         when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
-            is WindowUpdateCommandStimulus.Rejected -> window.rejectDispatchedUpdate(
-                stimulus.operationId,
-                platformFailure("window-update-rejected"),
-            )
+            is WindowUpdateCommandStimulus.Rejected -> {
+                safeReport(stimulus.error)
+                window.rejectDispatchedUpdate(stimulus.operationId, platformFailure("window-update-rejected"))
+            }
         }
     }
 
@@ -1274,8 +1278,15 @@ internal class RuntimeWindow(
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
-            mutableState.value = state
-            pending.result.complete(KadreResult.Success(updateOutcome(operationId, state, pending.rejected)))
+            val lifecycle = mutableState.value
+            val effective = if (lifecycle.phase == WindowPhase.Open) state else {
+                state.copy(
+                    phase = lifecycle.phase,
+                    revision = WindowRevision(maxOf(state.revision.value, lifecycle.revision.value)),
+                )
+            }
+            mutableState.value = effective
+            pending.result.complete(KadreResult.Success(updateOutcome(operationId, effective, pending.rejected)))
         }
         dispatchNextUpdate()
     }
@@ -1317,6 +1328,15 @@ internal class RuntimeWindow(
                     )
                     continue
                 }
+                val effectiveCandidate = candidateFor(candidate.update, current, initialState)
+                if (effectiveCandidate == null) {
+                    candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
+                    continue
+                }
+                if (!geometryChanged(current, effectiveCandidate)) {
+                    candidate.result.complete(KadreResult.Success(updateOutcome(candidate.operationId, current, candidate.rejected)))
+                    continue
+                }
                 if (candidate.result.isCompleted) continue
                 dispatchedUpdate = candidate
                 next = candidate
@@ -1341,13 +1361,15 @@ internal class RuntimeWindow(
         if (withdrawDispatched) manager.withdrawWindowUpdate(this, pending.operationId)
     }
 
-    private fun failQueuedUpdatesAfterClose() {
-        synchronized(updateLock) {
-            while (pendingUpdates.isNotEmpty()) {
-                pendingUpdates.removeFirst().result.complete(
-                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
-                )
-            }
+    fun beginNativeUpdateDispatch(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
+        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
+        if (mutableState.value.phase == WindowPhase.Open) {
+            pending.nativeDispatchStarted = true
+            true
+        } else {
+            dispatchedUpdate = null
+            pending.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
+            false
         }
     }
 
@@ -1422,19 +1444,29 @@ internal class RuntimeWindow(
         reason: WindowCloseReason,
         stamp: EventStamp,
     ) {
-        val current = mutableState.value
-        if (current.phase != WindowPhase.Open) return
-        closeOperationId = operationId
-        failQueuedUpdatesAfterClose()
-        mutableState.value = current.copy(
-            phase = WindowPhase.Closing,
-            revision = WindowRevision(current.revision.value + 1L),
-        )
+        val closingState = synchronized(updateLock) {
+            val current = mutableState.value
+            if (current.phase != WindowPhase.Open) return
+            closeOperationId = operationId
+            while (pendingUpdates.isNotEmpty()) {
+                pendingUpdates.removeFirst().result.complete(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                )
+            }
+            dispatchedUpdate?.takeIf { !it.nativeDispatchStarted }?.let { pending ->
+                dispatchedUpdate = null
+                pending.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
+            }
+            current.copy(
+                phase = WindowPhase.Closing,
+                revision = WindowRevision(current.revision.value + 1L),
+            ).also { mutableState.value = it }
+        }
         surface.detach()
         publish(
             WindowEvent.Closing(
                 reason = reason,
-                stateRevision = mutableState.value.revision,
+                stateRevision = closingState.revision,
                 operationId = operationId,
                 stamp = stamp,
             ),
@@ -1460,6 +1492,7 @@ internal data class PendingWindowUpdate(
     val result: CompletableDeferred<KadreResult<WindowUpdateOutcome>> = CompletableDeferred(),
     var cancelled: Boolean = false,
     var cancellationRequested: Boolean = false,
+    var nativeDispatchStarted: Boolean = false,
 )
 
 internal data class RuntimeCloseRequest(

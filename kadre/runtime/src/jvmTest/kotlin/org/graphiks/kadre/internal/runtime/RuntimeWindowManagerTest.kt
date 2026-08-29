@@ -159,6 +159,71 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun queuedWindowUpdateRevalidatesCombinedConstraintsAgainstTheDispatchedState() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(
+            WindowSpec(
+                contentSize = LogicalSize(100.0, 100.0),
+                minimumSize = LogicalSize(50.0, 50.0),
+                maximumSize = LogicalSize(200.0, 200.0),
+            ),
+        ).successValue()
+        val window = commit(request, port.openCommands.single())
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(150.0, 100.0)),
+                    minimumSize = PropertyChange.Set(LogicalSize(150.0, 50.0)),
+                ),
+            )
+        }
+        val laterInvalid = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(maximumSize = PropertyChange.Set(LogicalSize(120.0, 200.0))))
+        }
+
+        assertEquals(1, port.updateCommands.size)
+        port.updateCommands.single().applied(window.state.value.copy(
+            contentSize = LogicalSize(150.0, 100.0),
+            minimumSize = LogicalSize(150.0, 50.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(first.await())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            laterInvalid.await(),
+        )
+        assertEquals(1, port.updateCommands.size)
+    }
+
+    @Test
+    fun delayedNativeUpdateCannotRollbackTheWindowLifecyclePhase() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue()
+        val openCommand = port.openCommands.single()
+        val window = commit(request, openCommand)
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val updateCommand = port.updateCommands.single()
+
+        assertIs<KadreResult.Success<WindowCloseOutcome.Accepted>>(window.close())
+        openCommand.nativeClosed()
+        updateCommand.applied(window.state.value.copy(
+            phase = WindowPhase.Open,
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(LogicalSize(120.0, 100.0), window.state.value.contentSize)
+        assertEquals(WindowPhase.Closed, assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(update.await()).value.state.phase)
+    }
+
+    @Test
     fun windowUpdateCancellationAndCloseRespectTheNativeCommitBoundary() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
