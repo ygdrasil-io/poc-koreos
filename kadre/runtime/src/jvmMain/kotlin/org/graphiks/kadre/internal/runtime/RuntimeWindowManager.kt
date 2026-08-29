@@ -450,11 +450,17 @@ public class RuntimeWindowManager public constructor(
     private fun acceptWindowUpdateStimulus(stimulus: WindowUpdateCommandStimulus) {
         val operationId = when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> stimulus.operationId
+            is WindowUpdateCommandStimulus.PartiallyApplied -> stimulus.operationId
             is WindowUpdateCommandStimulus.Rejected -> stimulus.operationId
         }
         val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) } ?: return
         when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
+            is WindowUpdateCommandStimulus.PartiallyApplied -> window.applyNativeUpdate(
+                stimulus.operationId,
+                stimulus.state,
+                stimulus.rejected,
+            )
             is WindowUpdateCommandStimulus.Rejected -> {
                 safeReport(stimulus.error)
                 window.rejectDispatchedUpdate(stimulus.operationId, platformFailure("window-update-rejected"))
@@ -1233,6 +1239,7 @@ internal class RuntimeWindow(
     private val updateLock = Any()
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
+    private var eventDeliveryClosePending = false
     internal var activeCloseRequest: RuntimeCloseRequest? = null
         private set
     private var resolvedCloseRequest: ResolvedCloseRequest? = null
@@ -1271,8 +1278,11 @@ internal class RuntimeWindow(
             if (current.phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
+            invalidGeometryClearField(update)?.let { field ->
+                return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+            }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
-            val candidate = candidateFor(update, current, initialState)
+            val candidate = candidateFor(update, current)
                 ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             val rejected = changedProperties(update)
                 .filterNot(::isRuntimeGeometryProperty)
@@ -1312,10 +1322,15 @@ internal class RuntimeWindow(
         }
     }
 
-    fun applyNativeUpdate(operationId: WindowOperationId, state: WindowState) {
+    fun applyNativeUpdate(
+        operationId: WindowOperationId,
+        state: WindowState,
+        backendRejected: List<RejectedWindowField> = emptyList(),
+    ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var outcome: KadreResult<WindowUpdateOutcome>? = null
+        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
@@ -1331,10 +1346,12 @@ internal class RuntimeWindow(
             mutableState.value = effective
             publication = WindowStatePublication(lifecycle, effective, operationId)
             completion = pending
-            outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected))
+            outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected + backendRejected))
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
         publishStatePublication(checkNotNull(publication))
         checkNotNull(completion).result.complete(checkNotNull(outcome))
+        if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
 
@@ -1363,20 +1380,26 @@ internal class RuntimeWindow(
     }
 
     fun rejectDispatchedUpdate(operationId: WindowOperationId, failure: KadreFailure) {
+        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.result.complete(KadreResult.Failure(failure))
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
+        if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
 
     fun withdrawDispatchedUpdate(operationId: WindowOperationId) {
+        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.cancelled = true
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
+        if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
 
@@ -1399,7 +1422,7 @@ internal class RuntimeWindow(
                     )
                     continue
                 }
-                val effectiveCandidate = candidateFor(candidate.update, current, initialState)
+                val effectiveCandidate = candidateFor(candidate.update, current)
                 if (effectiveCandidate == null) {
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
                     continue
@@ -1545,14 +1568,28 @@ internal class RuntimeWindow(
     }
 
     fun finishClosing() {
-        val current = mutableState.value
-        if (current.phase == WindowPhase.Closed) return
-        check(current.phase == WindowPhase.Closing) { "window must enter Closing before its terminal close" }
-        mutableState.value = current.copy(
-            phase = WindowPhase.Closed,
-            revision = WindowRevision(current.revision.value + 1L),
-        )
-        eventFlow.close()
+        val closeEventDelivery = synchronized(updateLock) {
+            val current = mutableState.value
+            if (current.phase == WindowPhase.Closed) return
+            check(current.phase == WindowPhase.Closing) { "window must enter Closing before its terminal close" }
+            mutableState.value = current.copy(
+                phase = WindowPhase.Closed,
+                revision = WindowRevision(current.revision.value + 1L),
+            )
+            if (dispatchedUpdate == null) {
+                true
+            } else {
+                eventDeliveryClosePending = true
+                false
+            }
+        }
+        if (closeEventDelivery) eventFlow.close()
+    }
+
+    private fun takePendingEventDeliveryCloseLocked(): Boolean {
+        if (!eventDeliveryClosePending || dispatchedUpdate != null) return false
+        eventDeliveryClosePending = false
+        return true
     }
 
     private fun publishStatePublication(publication: WindowStatePublication) {
@@ -1707,13 +1744,12 @@ private fun isRuntimeGeometryProperty(property: WindowProperty): Boolean = prope
 private fun candidateFor(
     update: WindowUpdate,
     current: WindowState,
-    initial: WindowState,
 ): WindowState? = try {
     current.copy(
-        contentSize = resolveContentSize(update.contentSize, current.contentSize, initial.contentSize),
-        minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize, initial.minimumSize),
-        maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize, initial.maximumSize),
-        resizable = resolveResizable(update.resizable, current.resizable, initial.resizable),
+        contentSize = resolveContentSize(update.contentSize, current.contentSize),
+        minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize),
+        maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize),
+        resizable = resolveResizable(update.resizable, current.resizable),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -1722,31 +1758,34 @@ private fun candidateFor(
 private fun resolveContentSize(
     change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
     current: org.graphiks.kadre.surface.LogicalSize,
-    initial: org.graphiks.kadre.surface.LogicalSize,
 ): org.graphiks.kadre.surface.LogicalSize = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> current
     PropertyChange.Unchanged -> current
 }
 
 private fun resolveOptionalSize(
     change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
     current: org.graphiks.kadre.surface.LogicalSize?,
-    initial: org.graphiks.kadre.surface.LogicalSize?,
 ): org.graphiks.kadre.surface.LogicalSize? = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> null
     PropertyChange.Unchanged -> current
 }
 
 private fun resolveResizable(
     change: PropertyChange<Boolean>,
     current: Boolean,
-    initial: Boolean,
 ): Boolean = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> current
     PropertyChange.Unchanged -> current
+}
+
+private fun invalidGeometryClearField(update: WindowUpdate): String? = when {
+    update.contentSize is PropertyChange.Clear -> "contentSize"
+    update.resizable is PropertyChange.Clear -> "resizable"
+    else -> null
 }
 
 private fun geometryChanged(current: WindowState, candidate: WindowState): Boolean =

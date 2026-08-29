@@ -1390,6 +1390,54 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
+    fun publicAppKitClearOfInitialConstraintsRestoresNativeDefaultsAndPublishesNullOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val defaultWindow = openPublicGeometryWindow("public-geometry-native-defaults")
+            val nativeDefaults = readNativeConstraints(defaultWindow)
+            assertIs<WindowCloseOutcome.Accepted>(defaultWindow.close().appKitSuccessValue())
+            withTimeout(5.seconds) {
+                defaultWindow.state.first { it.phase == WindowPhase.Closed }
+            }
+            val minimum = LogicalSize(240.0, 160.0)
+            val maximum = LogicalSize(720.0, 520.0)
+            val window = openPublicGeometryWindow(
+                WindowSpec(
+                    title = "public-geometry-clear-initial",
+                    contentSize = LogicalSize(420.0, 280.0),
+                    minimumSize = minimum,
+                    maximumSize = maximum,
+                ),
+            )
+            assertEquals(
+                NativeWindowConstraints(
+                    minimumWidth = minimum.width,
+                    minimumHeight = minimum.height,
+                    maximumWidth = maximum.width,
+                    maximumHeight = maximum.height,
+                ),
+                readNativeConstraints(window),
+            )
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(
+                    WindowUpdate(
+                        minimumSize = PropertyChange.Clear,
+                        maximumSize = PropertyChange.Clear,
+                    ),
+                ).appKitSuccessValue(),
+            )
+
+            assertNull(outcome.state.minimumSize)
+            assertNull(outcome.state.maximumSize)
+            assertEquals(outcome.state, window.state.value)
+            assertEquals(nativeDefaults, readNativeConstraints(window))
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
     fun publicAppKitWindowRejectsInvalidGeometryBeforeNativeCommitOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-invalid")
@@ -2452,6 +2500,7 @@ private fun runPublicAppKitGeometrySession(
     if (!isMacOs()) return
     val native = KffiAppKitNativeApplication()
     val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+    val exerciseFailure = AtomicReference<Throwable?>(null)
     val result = provider.run(
         DesktopStandaloneRequest(
             KadreApplicationFactory {
@@ -2461,6 +2510,9 @@ private fun runPublicAppKitGeometrySession(
                     }
                     try {
                         exercise()
+                    } catch (failure: Throwable) {
+                        exerciseFailure.set(failure)
+                        throw failure
                     } finally {
                         windows.state.value.windows.forEach { window ->
                             if (window.state.value.phase != WindowPhase.Closed) {
@@ -2478,6 +2530,7 @@ private fun runPublicAppKitGeometrySession(
             policy = policy,
         ),
     )
+    exerciseFailure.get()?.let { throw it }
     assertEquals(
         KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
         result,
@@ -2489,9 +2542,49 @@ private fun runPublicAppKitGeometrySession(
     org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
 )
 private suspend fun KadreScope.openPublicGeometryWindow(title: String): Window =
+    openPublicGeometryWindow(WindowSpec(title = title))
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun KadreScope.openPublicGeometryWindow(spec: WindowSpec): Window =
     assertIs<WindowRequestOutcome.OpenedHere>(
-        windows.requestWindow(WindowSpec(title = title)).appKitSuccessValue().await(),
+        windows.requestWindow(spec).appKitSuccessValue().await(),
     ).window
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private data class NativeWindowConstraints(
+    val minimumWidth: Double,
+    val minimumHeight: Double,
+    val maximumWidth: Double,
+    val maximumHeight: Double,
+)
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeConstraints(window: Window): NativeWindowConstraints =
+    assertIs<KadreResult.Success<NativeWindowConstraints>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                val minimum = native.contentMinSize()
+                val maximum = native.contentMaxSize()
+                NativeWindowConstraints(
+                    minimumWidth = minimum.width,
+                    minimumHeight = minimum.height,
+                    maximumWidth = maximum.width,
+                    maximumHeight = maximum.height,
+                )
+            }
+        },
+    ).value
 
 @OptIn(
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,

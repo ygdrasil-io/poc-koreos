@@ -31,8 +31,20 @@ internal sealed interface AppKitWindowStimulus {
     data class GeometryChanged(
         override val peerId: AppKitWindowPeerId,
         val snapshot: AppKitWindowGeometrySnapshot,
+        val generation: Long,
     ) : AppKitWindowStimulus
 }
+
+internal data class AppKitWindowGeometryMutation(
+    val snapshot: AppKitWindowGeometrySnapshot,
+    val generation: Long,
+    val failure: Throwable?,
+)
+
+private data class NativeGeometryMutationResult(
+    val snapshot: AppKitWindowGeometrySnapshot,
+    val failure: Throwable?,
+)
 
 /** Native-address-free surface observation emitted by one AppKit window peer. */
 internal sealed interface AppKitSurfaceStimulus {
@@ -159,17 +171,49 @@ internal class AppKitWindowPeer private constructor(
         }
     }
 
-    /** Runs one native geometry mutation while filtering only its synchronous resize callbacks. */
-    internal fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot? {
+    /** Convenience path for direct peer tests and setup that cannot be cancelled. */
+    internal fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot? =
+        updateGeometry(target, ImmediateGeometryCommit())?.snapshot
+
+    /** Runs one native geometry mutation while ordering callbacks against its effective readback. */
+    internal fun updateGeometry(
+        target: AppKitWindowGeometryTarget,
+        commit: AppKitWindowGeometryCommit,
+    ): AppKitWindowGeometryMutation? {
         if (closed.get()) return null
         return port.onMainThread {
             if (closed.get()) {
                 null
             } else {
                 callbackGate.duringManagedGeometryMutation {
-                    port.updateGeometry(window, target)
+                    try {
+                        port.updateGeometry(window, target, commit)?.let { snapshot ->
+                            NativeGeometryMutationResult(snapshot, failure = null)
+                        }
+                    } catch (failure: Throwable) {
+                        if (!commit.started) throw failure
+                        val snapshot = try {
+                            port.readGeometry(window)
+                        } catch (readbackFailure: Throwable) {
+                            if (readbackFailure !== failure) failure.addSuppressed(readbackFailure)
+                            throw failure
+                        }
+                        NativeGeometryMutationResult(snapshot, failure)
+                    }
                 }
             }
+        }
+    }
+
+    private class ImmediateGeometryCommit : AppKitWindowGeometryCommit {
+        private var committed = false
+
+        override val started: Boolean
+            get() = committed
+
+        override fun beforeFirstSetter(): Boolean {
+            committed = true
+            return true
         }
     }
 
@@ -351,21 +395,31 @@ private class AppKitWindowCallbackGate(
     private var lastVisibility: Pair<SurfaceVisibility, SurfaceOcclusion>? = null
     private var lastTheme: SurfaceTheme? = null
     private var lastRedrawGeneration = -1L
+    private var geometryGeneration = 0L
     private var managedGeometryMutationDepth = 0
-    private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowGeometrySnapshot>()
+    private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
 
     fun duringManagedGeometryMutation(
-        block: () -> AppKitWindowGeometrySnapshot,
-    ): AppKitWindowGeometrySnapshot {
-        synchronized(lock) { managedGeometryMutationDepth += 1 }
-        val snapshot = try {
+        block: () -> NativeGeometryMutationResult?,
+    ): AppKitWindowGeometryMutation? {
+        synchronized(lock) {
+            check(managedGeometryMutationDepth == 0) { "AppKit managed geometry mutations must be serialized" }
+            managedGeometryMutationDepth = 1
+        }
+        val result = try {
             block()
         } catch (failure: Throwable) {
             flushManagedGeometryCallbacks(effectiveSnapshot = null)
             throw failure
         }
-        flushManagedGeometryCallbacks(snapshot)
-        return snapshot
+        val generation = flushManagedGeometryCallbacks(result?.snapshot)
+        return result?.let { mutation ->
+            AppKitWindowGeometryMutation(
+                snapshot = mutation.snapshot,
+                generation = checkNotNull(generation),
+                failure = mutation.failure,
+            )
+        }
     }
 
     fun activateSurface(snapshot: AppKitSurfaceSnapshot) {
@@ -468,30 +522,40 @@ private class AppKitWindowCallbackGate(
         val stimulus = synchronized(lock) {
             if (!accepting) {
                 null
-            } else if (managedGeometryMutationDepth > 0) {
-                bufferedManagedGeometryCallbacks.addLast(snapshot)
-                null
             } else {
-                AppKitWindowStimulus.GeometryChanged(peerId, snapshot)
+                val observed = AppKitWindowStimulus.GeometryChanged(
+                    peerId,
+                    snapshot,
+                    generation = ++geometryGeneration,
+                )
+                if (managedGeometryMutationDepth > 0) {
+                    bufferedManagedGeometryCallbacks.addLast(observed)
+                    null
+                } else {
+                    observed
+                }
             }
         }
         stimulus?.let(::publishWindow)
     }
 
-    private fun flushManagedGeometryCallbacks(effectiveSnapshot: AppKitWindowGeometrySnapshot?) {
-        val stimuli = synchronized(lock) {
+    private fun flushManagedGeometryCallbacks(effectiveSnapshot: AppKitWindowGeometrySnapshot?): Long? {
+        val (generation, stimuli) = synchronized(lock) {
             managedGeometryMutationDepth -= 1
             check(managedGeometryMutationDepth >= 0) { "AppKit managed geometry callback depth underflow" }
+            val managedGeneration = effectiveSnapshot?.let { ++geometryGeneration }
             if (managedGeometryMutationDepth > 0 || !accepting) {
                 if (!accepting) bufferedManagedGeometryCallbacks.clear()
-                emptyList()
+                managedGeneration to emptyList()
             } else {
-                bufferedManagedGeometryCallbacks.removeAll { it == effectiveSnapshot }
-                bufferedManagedGeometryCallbacks.map { AppKitWindowStimulus.GeometryChanged(peerId, it) }
-                    .also { bufferedManagedGeometryCallbacks.clear() }
+                bufferedManagedGeometryCallbacks.removeAll { it.snapshot == effectiveSnapshot }
+                managedGeneration to bufferedManagedGeometryCallbacks.toList().also {
+                    bufferedManagedGeometryCallbacks.clear()
+                }
             }
         }
         stimuli.forEach(::publishWindow)
+        return generation
     }
 
     fun windowShouldClose(): Boolean {

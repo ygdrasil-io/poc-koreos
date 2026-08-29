@@ -101,9 +101,15 @@ internal class KffiAppKitWindowPort(
     override fun updateGeometry(
         window: AppKitNativeWindowOwner,
         target: AppKitWindowGeometryTarget,
-    ): AppKitWindowGeometrySnapshot {
+        commit: AppKitWindowGeometryCommit,
+    ): AppKitWindowGeometrySnapshot? {
         requireMainThread()
-        return window.kffiWindowOwner().updateGeometry(target)
+        return window.kffiWindowOwner().updateGeometry(target, commit)
+    }
+
+    override fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot {
+        requireMainThread()
+        return window.kffiWindowOwner().readGeometry()
     }
 
     override fun observeGeometry(
@@ -537,7 +543,10 @@ private class KffiWindowOwner(
         window.setStyleMask(window.styleMask().withResizable(spec.resizable))
     }
 
-    fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot {
+    fun updateGeometry(
+        target: AppKitWindowGeometryTarget,
+        commit: AppKitWindowGeometryCommit,
+    ): AppKitWindowGeometrySnapshot? {
         val contentSize = target.contentSize.resolveValue(readContentSize(window))
         val minimumSize = target.minimumSize.resolveOptional(requestedMinimumSize)
         val maximumSize = target.maximumSize.resolveOptional(requestedMaximumSize)
@@ -546,23 +555,37 @@ private class KffiWindowOwner(
         val currentMinimum = window.contentMinSize()
         val currentMaximum = window.contentMaxSize()
 
+        if (!commit.beforeFirstSetter()) return null
         val minimumRelaxed = currentMinimum.exceeds(contentSize)
-        if (minimumRelaxed) window.setContentMinSize(nativeMinimum.copy())
+        if (minimumRelaxed) {
+            window.setContentMinSize(nativeMinimum.copy())
+            requestedMinimumSize = minimumSize
+        }
         val maximumRelaxed = currentMaximum.fallsBelow(contentSize)
-        if (maximumRelaxed) window.setContentMaxSize(nativeMaximum.copy())
+        if (maximumRelaxed) {
+            window.setContentMaxSize(nativeMaximum.copy())
+            requestedMaximumSize = maximumSize
+        }
 
         window.setContentSize(contentSize.toNSSize())
-        if (!minimumRelaxed) window.setContentMinSize(nativeMinimum.copy())
-        if (!maximumRelaxed) window.setContentMaxSize(nativeMaximum.copy())
+        if (!minimumRelaxed) {
+            window.setContentMinSize(nativeMinimum.copy())
+            requestedMinimumSize = minimumSize
+        }
+        if (!maximumRelaxed) {
+            window.setContentMaxSize(nativeMaximum.copy())
+            requestedMaximumSize = maximumSize
+        }
 
         val resizable = target.resizable.resolveValue(
             window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
         )
         window.setStyleMask(window.styleMask().withResizable(resizable))
-        requestedMinimumSize = minimumSize
-        requestedMaximumSize = maximumSize
-        return readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
+        return readGeometry()
     }
+
+    fun readGeometry(): AppKitWindowGeometrySnapshot =
+        readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
 
     fun installGeometryObserver(callbacks: AppKitWindowGeometryCallbacks): KffiGeometryObserverOwner {
         check(geometryObserver == null) { "AppKit window geometry is already observed" }
