@@ -479,22 +479,37 @@ private class AppKitWindowCommandPort(
     }
 
     private fun applyGeometry(pending: PendingGeometryCommand) {
-        val peer = synchronized(lock) {
-            if (
-                pending.cancelled ||
-                geometryCommands[pending.command.operationId] !== pending ||
-                closed ||
-                pending.entry.removed ||
-                pending.entry.closeAdmitted
-            ) {
-                geometryCommands.remove(pending.command.operationId, pending)
+        val admission = synchronized(lock) {
+            when {
+                pending.cancelled || geometryCommands[pending.command.operationId] !== pending ->
+                    GeometryCommandAdmission.Cancelled
+
+                closed || pending.entry.removed || pending.entry.closeAdmitted -> {
+                    geometryCommands.remove(pending.command.operationId, pending)
+                    GeometryCommandAdmission.Rejected
+                }
+
+                pending.entry.peer == null -> {
+                    geometryCommands.remove(pending.command.operationId, pending)
+                    GeometryCommandAdmission.Rejected
+                }
+
+                else -> GeometryCommandAdmission.Committed(
+                    checkNotNull(pending.entry.peer).also { pending.nativeCommitStarted = true },
+                )
+            }
+        }
+        when (admission) {
+            GeometryCommandAdmission.Cancelled -> return
+            GeometryCommandAdmission.Rejected -> {
+                pending.command.rejected(IllegalStateException("AppKit window geometry command closed before native commit"))
                 return
             }
-            pending.nativeCommitStarted = true
-            pending.entry.peer
+
+            is GeometryCommandAdmission.Committed -> Unit
         }
         val snapshot = try {
-            peer?.updateGeometry(pending.command.toGeometryTarget())
+            admission.peer.updateGeometry(pending.command.toGeometryTarget())
         } catch (cause: Throwable) {
             synchronized(lock) { geometryCommands.remove(pending.command.operationId, pending) }
             pending.command.rejected(cause)
@@ -671,7 +686,6 @@ private class AppKitWindowCommandPort(
         entry.removed = true
         entry.bufferedSurfaceStimuli.clear()
         entry.bufferedGeometryStimuli.clear()
-        geometryCommands.entries.removeIf { (_, pending) -> pending.entry === entry }
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
         if (byWindow[entry.command.windowId] === entry) byWindow.remove(entry.command.windowId)
@@ -757,6 +771,12 @@ private class AppKitWindowCommandPort(
         var cancelled: Boolean = false,
         var nativeCommitStarted: Boolean = false,
     )
+
+    private sealed interface GeometryCommandAdmission {
+        data object Cancelled : GeometryCommandAdmission
+        data object Rejected : GeometryCommandAdmission
+        data class Committed(val peer: AppKitWindowPeer) : GeometryCommandAdmission
+    }
 
     private enum class HandleLeaseState {
         Queued,

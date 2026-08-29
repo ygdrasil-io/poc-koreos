@@ -84,3 +84,49 @@ implementation in this PR. Task 4 must override `updateGeometry` and
 `observeGeometry` using generated KFFI setters/getters, capture/restore native
 constraint defaults for `Clear`, and preserve the actual `NSWindow` style-mask
 bits. This PR supplies the private seam and deterministic proof path only.
+
+## Review fix — command completion and reentrant geometry
+
+### Root cause
+
+The command queue marked a geometry operation as dispatch-started in the
+portable runtime before the queued native task ran. If `closeAdmitted` or the
+driver `closed` flag became true first, `applyGeometry` returned without an
+`applied` or `rejected` stimulus. The runtime therefore retained its dispatched
+operation indefinitely.
+
+The callback gate also used only a mutation-depth counter. It dropped every
+geometry callback delivered synchronously by a native setter, including a
+distinct external/reentrant observation.
+
+### RED
+
+Added two deterministic regression tests before changing production code:
+
+- `queuedGeometryUpdateCompletesWhenCloseIsAdmittedBeforeNativeCommit`
+- `peerForwardsDistinctReentrantGeometryDuringItsManagedMutation`
+
+The focused driver suite failed with a `TimeoutCancellationException` in both
+tests. The first timeout proved the silent queued-command drop; the second
+proved that the distinct synchronous observation was discarded.
+
+### GREEN
+
+- `applyGeometry` now distinguishes a requester-cancelled queued operation
+  from an operation made ineligible by close/driver shutdown. The former stays
+  withdrawn; the latter emits an explicit rejection before returning.
+- The peer keeps queued geometry snapshots while its native setter executes.
+  After the effective snapshot is known, it discards equal managed callbacks
+  and publishes every distinct snapshot as an uncorrelated stimulus.
+- Geometry observers now release in strict inverse-creation order: input,
+  surface, geometry, in both normal close and failed preparation cleanup.
+
+Verification:
+
+```text
+./gradlew :kadre:backend:appkit:jvmTest --tests org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest --console=plain
+./gradlew :kadre:backend:appkit:jvmTest :kadre:runtime:jvmTest --console=plain
+```
+
+Both commands passed. The remaining concern is unchanged: KFFI installation
+and native default/real-style-mask handling are deferred to Task 4.

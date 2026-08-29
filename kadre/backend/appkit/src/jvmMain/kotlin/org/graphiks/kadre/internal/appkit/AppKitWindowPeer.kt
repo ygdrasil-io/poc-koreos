@@ -112,15 +112,15 @@ internal class AppKitWindowPeer private constructor(
         callbackGate.revoke()
         port.onMainThread {
             var failure: Throwable? = null
-            geometryObserver?.let { observer ->
-                failure = runSuppressing(failure, observer::revokeCallbacks)
-                failure = closeSuppressing(failure, observer)
-            }
             inputObserver?.let { observer ->
                 failure = runSuppressing(failure, observer::revokeCallbacks)
                 failure = closeSuppressing(failure, observer)
             }
             surfaceObserver?.let { observer ->
+                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = closeSuppressing(failure, observer)
+            }
+            geometryObserver?.let { observer ->
                 failure = runSuppressing(failure, observer::revokeCallbacks)
                 failure = closeSuppressing(failure, observer)
             }
@@ -297,15 +297,15 @@ internal class AppKitWindowPeer private constructor(
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
                     var cleanupFailure: Throwable? = failure
-                    geometryObserver?.let { observer ->
-                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
-                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
-                    }
                     inputObserver?.let { observer ->
                         cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
                         cleanupFailure = closeSuppressing(cleanupFailure, observer)
                     }
                     surfaceObserver?.let { observer ->
+                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
+                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
+                    }
+                    geometryObserver?.let { observer ->
                         cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
                         cleanupFailure = closeSuppressing(cleanupFailure, observer)
                     }
@@ -352,17 +352,20 @@ private class AppKitWindowCallbackGate(
     private var lastTheme: SurfaceTheme? = null
     private var lastRedrawGeneration = -1L
     private var managedGeometryMutationDepth = 0
+    private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowGeometrySnapshot>()
 
-    fun <T> duringManagedGeometryMutation(block: () -> T): T {
+    fun duringManagedGeometryMutation(
+        block: () -> AppKitWindowGeometrySnapshot,
+    ): AppKitWindowGeometrySnapshot {
         synchronized(lock) { managedGeometryMutationDepth += 1 }
-        return try {
+        val snapshot = try {
             block()
-        } finally {
-            synchronized(lock) {
-                managedGeometryMutationDepth -= 1
-                check(managedGeometryMutationDepth >= 0) { "AppKit managed geometry callback depth underflow" }
-            }
+        } catch (failure: Throwable) {
+            flushManagedGeometryCallbacks(effectiveSnapshot = null)
+            throw failure
         }
+        flushManagedGeometryCallbacks(snapshot)
+        return snapshot
     }
 
     fun activateSurface(snapshot: AppKitSurfaceSnapshot) {
@@ -463,13 +466,32 @@ private class AppKitWindowCallbackGate(
 
     fun geometryChanged(snapshot: AppKitWindowGeometrySnapshot) {
         val stimulus = synchronized(lock) {
-            if (!accepting || managedGeometryMutationDepth > 0) {
+            if (!accepting) {
+                null
+            } else if (managedGeometryMutationDepth > 0) {
+                bufferedManagedGeometryCallbacks.addLast(snapshot)
                 null
             } else {
                 AppKitWindowStimulus.GeometryChanged(peerId, snapshot)
             }
         }
         stimulus?.let(::publishWindow)
+    }
+
+    private fun flushManagedGeometryCallbacks(effectiveSnapshot: AppKitWindowGeometrySnapshot?) {
+        val stimuli = synchronized(lock) {
+            managedGeometryMutationDepth -= 1
+            check(managedGeometryMutationDepth >= 0) { "AppKit managed geometry callback depth underflow" }
+            if (managedGeometryMutationDepth > 0 || !accepting) {
+                if (!accepting) bufferedManagedGeometryCallbacks.clear()
+                emptyList()
+            } else {
+                bufferedManagedGeometryCallbacks.removeAll { it == effectiveSnapshot }
+                bufferedManagedGeometryCallbacks.map { AppKitWindowStimulus.GeometryChanged(peerId, it) }
+                    .also { bufferedManagedGeometryCallbacks.clear() }
+            }
+        }
+        stimuli.forEach(::publishWindow)
     }
 
     fun windowShouldClose(): Boolean {

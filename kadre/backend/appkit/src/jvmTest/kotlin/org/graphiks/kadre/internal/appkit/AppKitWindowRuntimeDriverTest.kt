@@ -148,6 +148,84 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun peerForwardsDistinctReentrantGeometryDuringItsManagedMutation() = runBlocking {
+        val managed = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(480.0, 300.0),
+            minimumSize = null,
+            maximumSize = null,
+            resizable = true,
+        )
+        val external = managed.copy(contentSize = LogicalSize(520.0, 340.0))
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "reentrant-external-geometry",
+            effectiveGeometry = managed,
+            emitGeometryDuringUpdate = true,
+            reentrantGeometryDuringUpdate = external,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "reentrant-external-geometry"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            window.apply(
+                WindowUpdate(contentSize = PropertyChange.Set(managed.contentSize)),
+            ).successValue()
+            val observed = withTimeout(2.seconds) {
+                window.state.first { it.contentSize == external.contentSize }
+            }
+
+            assertEquals(2L, observed.revision.value)
+            assertEquals(external.contentSize, observed.contentSize)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun queuedGeometryUpdateCompletesWhenCloseIsAdmittedBeforeNativeCommit() = runBlocking {
+        val enteredHandle = CountDownLatch(1)
+        val releaseHandle = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort("geometry-close-fence")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "geometry-close-fence"))
+                    .successValue()
+                    .await(),
+            ).window
+            val access = assertIs<RuntimeDesktopWindowHandleAccess>(window)
+            val handle = async(Dispatchers.Default) {
+                access.withDesktopHandle {
+                    enteredHandle.countDown()
+                    check(releaseHandle.await(2, TimeUnit.SECONDS))
+                }
+            }
+            assertTrue(enteredHandle.await(2, TimeUnit.SECONDS))
+
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(480.0, 300.0))))
+            }
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+
+            releaseHandle.countDown()
+            handle.await()
+            assertIs<KadreResult.Failure>(withTimeout(2.seconds) { update.await() })
+            assertEquals(emptyList(), port.geometryTargets)
+        } finally {
+            releaseHandle.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun peerPreservesUnrelatedStyleMaskBitsWhenChangingResizable() = runBlocking {
         val title = "style-mask"
         val unrelatedBits = 0b1010_0000L
@@ -709,6 +787,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val effectiveGeometry: AppKitWindowGeometrySnapshot? = null,
     private val emitGeometryDuringUpdate: Boolean = false,
+    private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
@@ -797,6 +876,7 @@ internal class DeterministicAppKitNativeWindowPort(
             recording.styleMask and APPKIT_RESIZABLE_STYLE_MASK.inv()
         }
         if (emitGeometryDuringUpdate) geometryObservers[recording.title]?.emit(effective)
+        reentrantGeometryDuringUpdate?.let { geometryObservers[recording.title]?.emit(it) }
         return effective
     }
 
