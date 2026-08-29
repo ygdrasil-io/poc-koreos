@@ -61,7 +61,10 @@ import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
@@ -1419,8 +1422,18 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs() =
-        runPublicAppKitGeometrySession {
+    fun publicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs() {
+        val policyWasApplied = AtomicBoolean(false)
+        runPublicAppKitGeometrySession(
+            KadrePolicies.Default.copy(
+                window = KadrePolicies.Default.window.copy(
+                    geometryChanges = ContinuousDelivery.Buffered(
+                        capacity = 2,
+                        onOverflow = ContinuousOverflowAction.FailSession,
+                    ),
+                ),
+            ),
+        ) {
             val window = openPublicGeometryWindow("public-geometry-policy")
             val enteredFirstEvent = CompletableDeferred<Unit>()
             val releaseCollector = CompletableDeferred<Unit>()
@@ -1437,27 +1450,27 @@ class AppKitBackendProviderTest {
             try {
                 setNativeContentSize(window, LogicalSize(340.0, 220.0))
                 withTimeout(5.seconds) { enteredFirstEvent.await() }
-                val finalSize = LogicalSize(440.0, 280.0)
                 setNativeContentSize(window, LogicalSize(390.0, 250.0))
+                val finalSize = LogicalSize(440.0, 280.0)
                 setNativeContentSize(window, finalSize)
                 releaseCollector.complete(Unit)
 
                 withTimeout(5.seconds) {
-                    while (events.size < 2 || window.state.value.contentSize != finalSize) yield()
+                    while (events.size < 3 || window.state.value.contentSize != finalSize) yield()
                 }
-                assertEquals(listOf(LogicalSize(340.0, 220.0), finalSize), events.map { it.state.contentSize })
+                assertEquals(
+                    listOf(LogicalSize(340.0, 220.0), LogicalSize(390.0, 250.0), finalSize),
+                    events.map { it.state.contentSize },
+                )
                 assertTrue(events.all { it.operationId == null })
-                assertNull(withTimeoutOrNull(200.milliseconds) {
-                    while (true) {
-                        if (events.size > 2) return@withTimeoutOrNull events[2]
-                        yield()
-                    }
-                })
+                policyWasApplied.set(true)
             } finally {
                 releaseCollector.complete(Unit)
                 collector.cancel()
             }
         }
+        assertTrue(policyWasApplied.get(), "the public session must use its supplied WindowDeliveryPolicy")
+    }
 
     @OptIn(
         org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
@@ -2322,6 +2335,7 @@ private fun publicWindowRequest(
     org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
 )
 private fun runPublicAppKitGeometrySession(
+    policy: KadrePolicy = KadrePolicies.Default,
     exercise: suspend KadreScope.() -> Unit,
 ) {
     if (!isMacOs()) return
@@ -2350,7 +2364,7 @@ private fun runPublicAppKitGeometrySession(
                 }
             },
             stopWhenLastWindowClosed = false,
-            policy = KadrePolicies.Default,
+            policy = policy,
         ),
     )
     assertEquals(
