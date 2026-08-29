@@ -26,6 +26,12 @@ internal sealed interface AppKitWindowStimulus {
     data class NativeClosed(
         override val peerId: AppKitWindowPeerId,
     ) : AppKitWindowStimulus
+
+    /** An uncorrelated native observation, after peer-local managed-callback filtering. */
+    data class GeometryChanged(
+        override val peerId: AppKitWindowPeerId,
+        val snapshot: AppKitWindowGeometrySnapshot,
+    ) : AppKitWindowStimulus
 }
 
 /** Native-address-free surface observation emitted by one AppKit window peer. */
@@ -86,6 +92,7 @@ internal class AppKitWindowPeer private constructor(
     private val window: AppKitNativeWindowOwner,
     private val contentView: AppKitNativeViewOwner,
     private val delegate: AppKitNativeDelegateOwner,
+    private val geometryObserver: AppKitNativeGeometryObserverOwner?,
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val inputObserver: AppKitNativeInputObserverOwner?,
     private val callbackGate: AppKitWindowCallbackGate,
@@ -105,6 +112,10 @@ internal class AppKitWindowPeer private constructor(
         callbackGate.revoke()
         port.onMainThread {
             var failure: Throwable? = null
+            geometryObserver?.let { observer ->
+                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = closeSuppressing(failure, observer)
+            }
             inputObserver?.let { observer ->
                 failure = runSuppressing(failure, observer::revokeCallbacks)
                 failure = closeSuppressing(failure, observer)
@@ -145,6 +156,20 @@ internal class AppKitWindowPeer private constructor(
         if (closed.get()) return
         port.onMainThread {
             if (!closed.get()) surfaceObserver?.requestRedraw(generation)
+        }
+    }
+
+    /** Runs one native geometry mutation while filtering only its synchronous resize callbacks. */
+    internal fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot? {
+        if (closed.get()) return null
+        return port.onMainThread {
+            if (closed.get()) {
+                null
+            } else {
+                callbackGate.duringManagedGeometryMutation {
+                    port.updateGeometry(window, target)
+                }
+            }
         }
     }
 
@@ -211,6 +236,7 @@ internal class AppKitWindowPeer private constructor(
                 var window: AppKitNativeWindowOwner? = null
                 var contentView: AppKitNativeViewOwner? = null
                 var delegate: AppKitNativeDelegateOwner? = null
+                var geometryObserver: AppKitNativeGeometryObserverOwner? = null
                 var surfaceObserver: AppKitNativeSurfaceObserverOwner? = null
                 var inputObserver: AppKitNativeInputObserverOwner? = null
                 var contentAttached = false
@@ -230,6 +256,10 @@ internal class AppKitWindowPeer private constructor(
                     delegateMayBeAttached = true
                     port.attachDelegate(window, delegate)
                     port.present(window)
+                    geometryObserver = port.observeGeometry(
+                        window,
+                        AppKitWindowGeometryCallbacks(callbackGate::geometryChanged),
+                    )
                     surfaceObserver = port.observeSurface(
                         window,
                         contentView,
@@ -259,6 +289,7 @@ internal class AppKitWindowPeer private constructor(
                         window,
                         contentView,
                         delegate,
+                        geometryObserver,
                         surfaceObserver,
                         inputObserver,
                         callbackGate,
@@ -266,6 +297,10 @@ internal class AppKitWindowPeer private constructor(
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
                     var cleanupFailure: Throwable? = failure
+                    geometryObserver?.let { observer ->
+                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
+                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
+                    }
                     inputObserver?.let { observer ->
                         cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
                         cleanupFailure = closeSuppressing(cleanupFailure, observer)
@@ -316,6 +351,19 @@ private class AppKitWindowCallbackGate(
     private var lastVisibility: Pair<SurfaceVisibility, SurfaceOcclusion>? = null
     private var lastTheme: SurfaceTheme? = null
     private var lastRedrawGeneration = -1L
+    private var managedGeometryMutationDepth = 0
+
+    fun <T> duringManagedGeometryMutation(block: () -> T): T {
+        synchronized(lock) { managedGeometryMutationDepth += 1 }
+        return try {
+            block()
+        } finally {
+            synchronized(lock) {
+                managedGeometryMutationDepth -= 1
+                check(managedGeometryMutationDepth >= 0) { "AppKit managed geometry callback depth underflow" }
+            }
+        }
+    }
 
     fun activateSurface(snapshot: AppKitSurfaceSnapshot) {
         synchronized(lock) {
@@ -411,6 +459,17 @@ private class AppKitWindowCallbackGate(
             }
         }
         stimulus?.let(::publishSurface)
+    }
+
+    fun geometryChanged(snapshot: AppKitWindowGeometrySnapshot) {
+        val stimulus = synchronized(lock) {
+            if (!accepting || managedGeometryMutationDepth > 0) {
+                null
+            } else {
+                AppKitWindowStimulus.GeometryChanged(peerId, snapshot)
+            }
+        }
+        stimulus?.let(::publishWindow)
     }
 
     fun windowShouldClose(): Boolean {

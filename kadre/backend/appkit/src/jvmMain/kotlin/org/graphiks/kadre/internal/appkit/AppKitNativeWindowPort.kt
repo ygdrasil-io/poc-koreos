@@ -12,6 +12,8 @@ import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -53,6 +55,22 @@ internal interface AppKitNativeWindowPort {
 
     fun present(window: AppKitNativeWindowOwner)
 
+    /**
+     * Applies one private geometry request and returns the values AppKit made effective.
+     *
+     * Implementations keep `NSWindow`, style masks, and all native defaults behind this seam.
+     */
+    fun updateGeometry(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowGeometryTarget,
+    ): AppKitWindowGeometrySnapshot = error("AppKit geometry updates are not installed")
+
+    /** Installs the native geometry observer for one peer, when the port supports it. */
+    fun observeGeometry(
+        window: AppKitNativeWindowOwner,
+        callbacks: AppKitWindowGeometryCallbacks,
+    ): AppKitNativeGeometryObserverOwner? = null
+
     /** Installs one peer-local observer after the complete native window has been presented. */
     fun observeSurface(
         window: AppKitNativeWindowOwner,
@@ -85,6 +103,34 @@ internal interface AppKitNativeWindowOwner : AutoCloseable {
 }
 
 internal interface AppKitNativeViewOwner : AutoCloseable {
+    override fun close()
+}
+
+/** Private, native-address-free geometry request forwarded from the runtime command. */
+internal data class AppKitWindowGeometryTarget(
+    val contentSize: PropertyChange<LogicalSize>,
+    val minimumSize: PropertyChange<LogicalSize>,
+    val maximumSize: PropertyChange<LogicalSize>,
+    val resizable: PropertyChange<Boolean>,
+)
+
+/** Native values read together after AppKit has applied a geometry mutation or observation. */
+internal data class AppKitWindowGeometrySnapshot(
+    val contentSize: LogicalSize,
+    val minimumSize: LogicalSize?,
+    val maximumSize: LogicalSize?,
+    val resizable: Boolean,
+)
+
+/** Callback boundary for native-address-free geometry observations. */
+internal class AppKitWindowGeometryCallbacks(
+    val geometryChanged: (AppKitWindowGeometrySnapshot) -> Unit,
+)
+
+/** Owns the peer-local native geometry observation registration. */
+internal interface AppKitNativeGeometryObserverOwner : AutoCloseable {
+    fun revokeCallbacks()
+
     override fun close()
 }
 

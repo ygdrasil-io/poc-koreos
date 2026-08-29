@@ -24,10 +24,15 @@ import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
+import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationCommand
+import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationOutcome
+import org.graphiks.kadre.internal.runtime.WindowUpdateCommand
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
+import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.surface.SurfaceId
 import java.util.concurrent.CountDownLatch
@@ -53,6 +58,14 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         failureReporter,
         beforeCommitDelivery,
         surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
+        geometryStimulusSink = geometry@{ windowId, snapshot ->
+            val state = manager.state.value.windows.firstOrNull { it.id == windowId }?.state?.value
+                ?: return@geometry false
+            manager.acceptWindowGeometryObservation(windowId, snapshot.withGeometryFrom(state))
+        },
+        windowState = { windowId ->
+            manager.state.value.windows.firstOrNull { it.id == windowId }?.state?.value
+        },
     )
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
@@ -82,12 +95,16 @@ private class AppKitWindowCommandPort(
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
     private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
+    private val geometryStimulusSink: (WindowId, AppKitWindowGeometrySnapshot) -> Boolean,
+    private val windowState: (WindowId) -> WindowState?,
 ) : WindowCommandPort, SurfaceCommandPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
     private val byRequest = linkedMapOf<WindowRequestId, PeerEntry>()
     private val byPeer = linkedMapOf<AppKitWindowPeerId, PeerEntry>()
+    private val byWindow = linkedMapOf<WindowId, PeerEntry>()
     private val bySurface = linkedMapOf<SurfaceId, PeerEntry>()
+    private val geometryCommands = linkedMapOf<org.graphiks.kadre.window.WindowOperationId, PendingGeometryCommand>()
     private val commands = AppKitWindowCommandQueue(::reportFailure)
     private var closed = false
 
@@ -99,6 +116,7 @@ private class AppKitWindowCommandPort(
             } else {
                 check(byRequest.put(command.requestId, entry) == null) { "duplicate AppKit window request" }
                 check(byPeer.put(entry.peerId, entry) == null) { "duplicate AppKit window peer" }
+                check(byWindow.put(command.windowId, entry) == null) { "duplicate AppKit window" }
                 check(bySurface.put(entry.surfaceId, entry) == null) { "duplicate AppKit window surface" }
                 true
             }
@@ -110,6 +128,46 @@ private class AppKitWindowCommandPort(
         if (!commands.submit { prepare(entry) }) {
             synchronized(lock) { removeEntryLocked(entry) }
             command.fail(KadreFailure.Closed(KadreResourceKind.Host))
+        }
+    }
+
+    override fun requestUpdate(command: WindowUpdateCommand) {
+        val pending = synchronized(lock) {
+            val entry = byWindow[command.windowId]
+            if (
+                closed ||
+                entry == null ||
+                entry.removed ||
+                entry.closeAdmitted ||
+                entry.peer == null
+            ) {
+                null
+            } else {
+                PendingGeometryCommand(entry, command).also { pending ->
+                    check(geometryCommands.put(command.operationId, pending) == null) {
+                        "duplicate AppKit geometry operation"
+                    }
+                }
+            }
+        }
+        if (pending == null) {
+            command.rejected(IllegalStateException("AppKit window geometry peer is unavailable"))
+        } else if (!commands.submit { applyGeometry(pending) }) {
+            synchronized(lock) { geometryCommands.remove(command.operationId, pending) }
+            command.rejected(IllegalStateException("AppKit window geometry queue is closed"))
+        }
+    }
+
+    override fun requestUpdateCancellation(
+        command: WindowUpdateCancellationCommand,
+    ): WindowUpdateCancellationOutcome = synchronized(lock) {
+        val pending = geometryCommands[command.operationId] ?: return@synchronized WindowUpdateCancellationOutcome.TooLate
+        if (pending.nativeCommitStarted) {
+            WindowUpdateCancellationOutcome.TooLate
+        } else {
+            pending.cancelled = true
+            geometryCommands.remove(command.operationId)
+            WindowUpdateCancellationOutcome.CancelledBeforeCommit
         }
     }
 
@@ -261,6 +319,7 @@ private class AppKitWindowCommandPort(
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
                     commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
+                    commands.submitFollowUp { markRuntimeGeometryReady(entry) }
                 }
             }
             PreparationAction.Cancel -> scheduleCleanup(entry)
@@ -283,6 +342,7 @@ private class AppKitWindowCommandPort(
     }
 
     private fun enqueueStimulus(stimulus: AppKitWindowStimulus) {
+        var deliverGeometryThroughSerializer = false
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
             when {
@@ -296,14 +356,31 @@ private class AppKitWindowCommandPort(
                     }
                 }
 
-                else -> {
+                stimulus is AppKitWindowStimulus.NativeClosed -> {
                     entry.closeRequestPending = false
                     entry.closeAdmitted = true
                     true
                 }
+
+                stimulus is AppKitWindowStimulus.GeometryChanged -> if (
+                    entry.surfaceCleanupReserved || entry.closeAdmitted
+                ) {
+                    false
+                } else {
+                    if (entry.runtimeGeometryReady) {
+                        deliverGeometryThroughSerializer = true
+                    } else {
+                        entry.bufferedGeometryStimuli.addLast(stimulus)
+                    }
+                    true
+                }
+
+                else -> false
             }
         }
-        if (accepted) commands.submitFollowUp { acceptStimulus(stimulus) }
+        if (accepted && (stimulus !is AppKitWindowStimulus.GeometryChanged || deliverGeometryThroughSerializer)) {
+            commands.submitFollowUp { acceptStimulus(stimulus) }
+        }
     }
 
     private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
@@ -354,6 +431,19 @@ private class AppKitWindowCommandPort(
         bufferedSurfaceStimuli.forEach(::acceptSurfaceStimulus)
     }
 
+    private fun markRuntimeGeometryReady(entry: PeerEntry) {
+        val bufferedGeometryStimuli = synchronized(lock) {
+            if (entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted || closed) {
+                entry.bufferedGeometryStimuli.clear()
+                emptyList()
+            } else {
+                entry.runtimeGeometryReady = true
+                entry.bufferedGeometryStimuli.toList().also { entry.bufferedGeometryStimuli.clear() }
+            }
+        }
+        bufferedGeometryStimuli.forEach(::acceptStimulus)
+    }
+
     private fun acceptSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
         val surfaceId = synchronized(lock) {
             byPeer[stimulus.peerId]?.takeIf {
@@ -381,7 +471,46 @@ private class AppKitWindowCommandPort(
                 issueNativeTerminal(entry)
                 scheduleCleanup(entry)
             }
+
+            is AppKitWindowStimulus.GeometryChanged -> {
+                geometryStimulusSink(entry.command.windowId, stimulus.snapshot)
+            }
         }
+    }
+
+    private fun applyGeometry(pending: PendingGeometryCommand) {
+        val peer = synchronized(lock) {
+            if (
+                pending.cancelled ||
+                geometryCommands[pending.command.operationId] !== pending ||
+                closed ||
+                pending.entry.removed ||
+                pending.entry.closeAdmitted
+            ) {
+                geometryCommands.remove(pending.command.operationId, pending)
+                return
+            }
+            pending.nativeCommitStarted = true
+            pending.entry.peer
+        }
+        val snapshot = try {
+            peer?.updateGeometry(pending.command.toGeometryTarget())
+        } catch (cause: Throwable) {
+            synchronized(lock) { geometryCommands.remove(pending.command.operationId, pending) }
+            pending.command.rejected(cause)
+            return
+        }
+        synchronized(lock) { geometryCommands.remove(pending.command.operationId, pending) }
+        if (snapshot == null) {
+            pending.command.rejected(IllegalStateException("AppKit window geometry peer closed before commit"))
+            return
+        }
+        val current = windowState(pending.command.windowId)
+        if (current == null) {
+            pending.command.rejected(IllegalStateException("AppKit window geometry runtime is unavailable"))
+            return
+        }
+        pending.command.applied(snapshot.withGeometryFrom(current))
     }
 
     private fun scheduleNativeClose(entry: PeerEntry) {
@@ -541,8 +670,11 @@ private class AppKitWindowCommandPort(
     private fun removeEntryLocked(entry: PeerEntry) {
         entry.removed = true
         entry.bufferedSurfaceStimuli.clear()
+        entry.bufferedGeometryStimuli.clear()
+        geometryCommands.entries.removeIf { (_, pending) -> pending.entry === entry }
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
+        if (byWindow[entry.command.windowId] === entry) byWindow.remove(entry.command.windowId)
         if (bySurface[entry.surfaceId] === entry) bySurface.remove(entry.surfaceId)
     }
 
@@ -574,6 +706,8 @@ private class AppKitWindowCommandPort(
         var commitIssued: Boolean = false
         var runtimeSurfaceReady: Boolean = false
         val bufferedSurfaceStimuli = ArrayDeque<AppKitSurfaceStimulus>()
+        var runtimeGeometryReady: Boolean = false
+        val bufferedGeometryStimuli = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
         var cleanupScheduled: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
@@ -616,6 +750,13 @@ private class AppKitWindowCommandPort(
 
         fun admit(): Boolean = state.compareAndSet(HandleLeaseState.Queued, HandleLeaseState.Admitted)
     }
+
+    private class PendingGeometryCommand(
+        val entry: PeerEntry,
+        val command: WindowUpdateCommand,
+        var cancelled: Boolean = false,
+        var nativeCommitStarted: Boolean = false,
+    )
 
     private enum class HandleLeaseState {
         Queued,
@@ -706,6 +847,23 @@ private fun appKitEffectiveSpec(requested: WindowSpec): WindowSpec = requested.c
     blurBehind = false,
     icon = null,
     contentProtection = false,
+)
+
+private fun WindowUpdateCommand.toGeometryTarget(): AppKitWindowGeometryTarget = AppKitWindowGeometryTarget(
+    contentSize = update.contentSize,
+    minimumSize = update.minimumSize,
+    maximumSize = update.maximumSize,
+    resizable = update.resizable,
+)
+
+private fun AppKitWindowGeometrySnapshot.withGeometryFrom(
+    current: WindowState,
+): WindowState = current.copy(
+    contentSize = contentSize,
+    minimumSize = minimumSize,
+    maximumSize = maximumSize,
+    resizable = resizable,
+    revision = current.revision,
 )
 
 internal class AppKitWindowCommandQueue(
