@@ -1323,7 +1323,17 @@ internal class RuntimeWindow(
         val publication = synchronized(updateLock) {
             val lifecycle = mutableState.value
             if (lifecycle.phase != WindowPhase.Open) return@synchronized null
-            val effective = state.copy(phase = lifecycle.phase)
+            val effective = try {
+                lifecycle.copy(
+                    contentSize = state.contentSize,
+                    minimumSize = state.minimumSize,
+                    maximumSize = state.maximumSize,
+                    resizable = state.resizable,
+                    revision = WindowRevision(lifecycle.revision.value + 1L),
+                )
+            } catch (_: IllegalArgumentException) {
+                return@synchronized null
+            }
             if (effective == lifecycle) return@synchronized null
             mutableState.value = effective
             WindowStatePublication(lifecycle, effective, operationId = null)

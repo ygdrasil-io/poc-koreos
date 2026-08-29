@@ -98,3 +98,42 @@ Consider enabling configuration cache to speed up this build: https://docs.gradl
 ## Concern
 
 The initial RED output is preserved above exactly. Its first assertion failure exposed a test-helper shape error before the old `MutableSharedFlow` behavior was reached; the corrected tests are included in the final GREEN suite.
+
+## Review fix — serialized ingress and native-observation sanitization
+
+The review found that the first implementation performed policy scheduling only at the collector boundary. `RuntimeWindowEventFlow.publish` now has a Window-only, lock-protected ingress scheduler with the configured discrete ingress capacity and overflow action, one serialized drain, stamp-ordered polling, and discrete barriers that split geometry coalescing. Collector-local scheduling is retained unchanged after this source admission.
+
+The external-observation path now projects only `contentSize`, `minimumSize`, `maximumSize`, and `resizable` onto the current runtime state. The `WindowState.copy` constructor validates the projected constraints; phase, title, outer bounds and every other unsupported runtime-owned field remain unchanged, and the runtime increments its own revision instead of accepting the peer revision.
+
+Added regressions:
+
+- `windowIngressSerializesConcurrentPublicationsAndEnforcesDiscreteAdmission`
+- `externalWindowObservationSanitizesUnsupportedFieldsAndOwnsItsRevision`
+
+The review RED command, after the test compiled, was:
+
+```text
+./gradlew :kadre:runtime:jvmTest --tests org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest --console=plain
+
+RuntimeWindowManagerTest[jvm] > windowIngressSerializesConcurrentPublicationsAndEnforcesDiscreteAdmission[jvm] FAILED
+    java.lang.AssertionError at RuntimeWindowManagerTest.kt:89
+
+RuntimeWindowManagerTest[jvm] > externalWindowObservationSanitizesUnsupportedFieldsAndOwnsItsRevision[jvm] FAILED
+    java.lang.AssertionError at RuntimeWindowManagerTest.kt:234
+
+47 tests completed, 2 failed
+BUILD FAILED in 2s
+```
+
+The ingress regression was also mutation-checked by replacing the source capacity with `Int.MAX_VALUE`; its exact failing assertion was `expected:<1> but was:<0>` for the terminal window-close callback. The production capacity expression was immediately restored.
+
+The final review GREEN command was:
+
+```text
+./gradlew :kadre:runtime:jvmTest :kadre:contracts:validator:validateContractRegistry --console=plain
+
+BUILD SUCCESSFUL in 1s
+20 actionable tasks: 5 executed, 15 up-to-date
+```
+
+`git diff --check` completed successfully. No Surface code, capabilities, FFI, registry status, or CI gates changed in this fix.

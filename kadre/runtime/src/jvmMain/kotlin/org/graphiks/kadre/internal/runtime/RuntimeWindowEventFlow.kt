@@ -11,6 +11,7 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.IngressOverflowAction
 import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.window.WindowEvent
@@ -23,6 +24,12 @@ internal class RuntimeWindowEventFlow(
     private val sessionFailureHandler: (KadreFailure) -> Unit,
     private val closeWindow: () -> Unit,
 ) {
+    private val ingressLock = Any()
+    private val ingress = BoundedWindowEventScheduler(
+        discreteCapacity = policy.discreteEvents.ingressCapacity,
+        geometryDelivery = policy.geometryChanges,
+    )
+    private var ingressDrainActive = false
     private val subscribersLock = Any()
     private val subscribers = linkedMapOf<WindowEventSubscriber, RuntimeEventCollectorLease>()
     private var terminal: WindowEventFlowTerminal? = null
@@ -42,9 +49,60 @@ internal class RuntimeWindowEventFlow(
     }
 
     fun publish(event: WindowEvent) {
-        val subscribers = synchronized(subscribersLock) {
+        var shouldDrain = false
+        var reportOverflow = false
+        var terminalOverflow: Boolean? = null
+        synchronized(ingressLock) {
             if (terminal != null) return
-            subscribers.keys.toList()
+            when (val offered = ingress.offer(event)) {
+                WindowSchedulerOffer.Accepted -> shouldDrain = ensureIngressDrainLocked()
+                WindowSchedulerOffer.Dropped -> {
+                    reportOverflow = true
+                    shouldDrain = ensureIngressDrainLockedIfNeeded()
+                }
+
+                WindowSchedulerOffer.DiscreteOverflow -> {
+                    terminalOverflow = policy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession
+                }
+
+                is WindowSchedulerOffer.GeometryOverflow -> when (offered.action) {
+                    ContinuousOverflowAction.DropOldestAndReport,
+                    ContinuousOverflowAction.DropLatestAndReport,
+                    -> error("drop handled by window event scheduler")
+
+                    ContinuousOverflowAction.CloseSource -> terminalOverflow = false
+                    ContinuousOverflowAction.FailSession -> terminalOverflow = true
+                }
+            }
+        }
+        if (reportOverflow) safeReport(KadreException(overflowFailure()))
+        terminalOverflow?.let { failSession ->
+            terminalise(failSession)
+            return
+        }
+        if (shouldDrain) drainIngress()
+    }
+
+    private fun drainIngress() {
+        while (true) {
+            val event = synchronized(ingressLock) {
+                if (terminal != null) {
+                    ingressDrainActive = false
+                    return
+                }
+                ingress.poll() ?: run {
+                    ingressDrainActive = false
+                    return
+                }
+            }
+            deliver(event)
+        }
+    }
+
+    private fun deliver(event: WindowEvent) {
+        val subscribers = synchronized(ingressLock) {
+            if (terminal != null) return
+            synchronized(subscribersLock) { subscribers.keys.toList() }
         }
         var closeSource = false
         var failSession = false
@@ -65,10 +123,12 @@ internal class RuntimeWindowEventFlow(
         failSession: Boolean,
         failure: KadreFailure? = overflowFailure(),
     ) {
-        val subscribers = synchronized(subscribersLock) {
+        val subscribers = synchronized(ingressLock) {
             if (terminal != null) return
+            ingress.clear()
+            ingressDrainActive = false
             terminal = failure?.let(WindowEventFlowTerminal::Failed) ?: WindowEventFlowTerminal.Closed
-            subscribers.keys.toList()
+            synchronized(subscribersLock) { subscribers.keys.toList() }
         }
         subscribers.forEach { subscriber ->
             subscriber.terminate(failure?.let(::KadreException), drain = true)
@@ -78,17 +138,19 @@ internal class RuntimeWindowEventFlow(
     }
 
     private fun register(subscriber: WindowEventSubscriber): WindowSubscriberRegistration =
-        synchronized(subscribersLock) {
+        synchronized(ingressLock) {
             when (val knownTerminal = terminal) {
                 WindowEventFlowTerminal.Closed -> WindowSubscriberRegistration.Closed
                 is WindowEventFlowTerminal.Failed -> WindowSubscriberRegistration.Failed(knownTerminal.failure)
-                null -> when (val admission = eventCollectorGate.tryAcquire()) {
-                    is org.graphiks.kadre.diagnostics.KadreResult.Failure ->
-                        WindowSubscriberRegistration.Failed(admission.reason)
+                null -> synchronized(subscribersLock) {
+                    when (val admission = eventCollectorGate.tryAcquire()) {
+                        is org.graphiks.kadre.diagnostics.KadreResult.Failure ->
+                            WindowSubscriberRegistration.Failed(admission.reason)
 
-                    is org.graphiks.kadre.diagnostics.KadreResult.Success -> {
-                        check(subscribers.put(subscriber, admission.value) == null)
-                        WindowSubscriberRegistration.Registered
+                        is org.graphiks.kadre.diagnostics.KadreResult.Success -> {
+                            check(subscribers.put(subscriber, admission.value) == null)
+                            WindowSubscriberRegistration.Registered
+                        }
                     }
                 }
             }
@@ -119,6 +181,15 @@ internal class RuntimeWindowEventFlow(
             safeReport(cause)
         }
     }
+
+    private fun ensureIngressDrainLocked(): Boolean {
+        if (ingressDrainActive) return false
+        ingressDrainActive = true
+        return true
+    }
+
+    private fun ensureIngressDrainLockedIfNeeded(): Boolean =
+        if (ingress.isEmpty()) false else ensureIngressDrainLocked()
 }
 
 private enum class WindowEventLane { Discrete, Geometry }
@@ -155,18 +226,27 @@ private class BoundedWindowEventScheduler(
         return entries.removeAt(index)
     }
 
+    fun isEmpty(): Boolean = entries.isEmpty()
+
     fun clear() = entries.clear()
 
     private fun offerGeometry(event: WindowEvent): WindowSchedulerOffer = when (val delivery = geometryDelivery) {
         ContinuousDelivery.Latest,
         ContinuousDelivery.Coalesced,
         -> {
+            val sequence = event.stamp.sequence.value
             val lastBarrier = entries.asSequence()
-                .filter { it.windowLane() == WindowEventLane.Discrete }
+                .filter { it.windowLane() == WindowEventLane.Discrete && it.stamp.sequence.value < sequence }
                 .maxOfOrNull { it.stamp.sequence.value }
-                ?: -1L
+                ?: Long.MIN_VALUE
+            val nextBarrier = entries.asSequence()
+                .filter { it.windowLane() == WindowEventLane.Discrete && it.stamp.sequence.value > sequence }
+                .minOfOrNull { it.stamp.sequence.value }
+                ?: Long.MAX_VALUE
             val existingIndex = entries.indexOfFirst {
-                it.windowLane() == WindowEventLane.Geometry && it.stamp.sequence.value > lastBarrier
+                it.windowLane() == WindowEventLane.Geometry &&
+                    it.stamp.sequence.value > lastBarrier &&
+                    it.stamp.sequence.value < nextBarrier
             }
             if (existingIndex >= 0) {
                 entries[existingIndex] = coalesceWindowGeometry(entries[existingIndex], event)
@@ -312,7 +392,12 @@ private fun WindowEvent.copyForWindowDelivery(): WindowEvent = when (this) {
 
 private fun coalesceWindowGeometry(previous: WindowEvent, latest: WindowEvent): WindowEvent {
     check(previous is WindowEvent.GeometryChanged && latest is WindowEvent.GeometryChanged)
-    return latest.copy(stamp = coalescedWindowStamp(previous.stamp, latest.stamp))
+    val (earlier, later) = if (previous.stamp.sequence.value <= latest.stamp.sequence.value) {
+        previous to latest
+    } else {
+        latest to previous
+    }
+    return later.copy(stamp = coalescedWindowStamp(earlier.stamp, later.stamp))
 }
 
 private fun coalescedWindowStamp(previous: EventStamp, latest: EventStamp): EventStamp {
