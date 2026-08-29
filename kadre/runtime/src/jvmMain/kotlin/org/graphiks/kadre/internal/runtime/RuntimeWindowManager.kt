@@ -8,10 +8,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -105,6 +103,7 @@ public class RuntimeWindowManager public constructor(
     private val eventSequence = AtomicLong(0L)
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
+    private var windowDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceInputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input
     private val isolatedEventCollectorAllocator = lazy {
@@ -177,6 +176,7 @@ public class RuntimeWindowManager public constructor(
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
             check(pending.isEmpty() && committed.isEmpty()) { "window event stamp source must be installed before admission" }
             sessionEventStampSource = source
+            windowDeliveryPolicy = deliveryPolicy
             surfaceDeliveryPolicy = deliveryPolicy
             surfaceInputDeliveryPolicy = inputDeliveryPolicy
             surfaceSessionFailureHandler = sessionFailureHandler
@@ -391,6 +391,13 @@ public class RuntimeWindowManager public constructor(
         window: RuntimeWindow,
         update: WindowUpdate,
     ): KadreResult<WindowUpdateOutcome> = window.applyUpdate(update)
+
+    internal fun terminaliseWindowEventDelivery(window: RuntimeWindow) {
+        synchronized(lock) {
+            committed[window.requestId]?.let(::forceCloseLocked)
+        }
+        drainLastWindowStopProposal()
+    }
 
     internal fun dispatchWindowUpdate(window: RuntimeWindow, pending: PendingWindowUpdate) {
         val command = WindowUpdateCommand(
@@ -918,6 +925,10 @@ public class RuntimeWindowManager public constructor(
             manager = this,
             publicWindowCapabilities = publicWindowCapabilities,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
+            deliveryPolicy = windowDeliveryPolicy,
+            eventStampSource = ::nextEventStamp,
+            failureReporter = failureReporter,
+            sessionFailureHandler = surfaceSessionFailureHandler,
         )
         committed[record.request.id] = CommittedWindow(
             request = record.request,
@@ -1186,11 +1197,21 @@ internal class RuntimeWindow(
     private val manager: RuntimeWindowManager,
     publicWindowCapabilities: Boolean,
     eventCollectorGate: RuntimeEventCollectorGate,
+    deliveryPolicy: WindowDeliveryPolicy,
+    private val eventStampSource: () -> EventStamp,
+    failureReporter: RuntimeFailureReporter,
+    sessionFailureHandler: (KadreFailure) -> Unit,
 ) : Window, RuntimeDesktopWindowHandleAccess {
     private val initialState = initialWindowState(spec)
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(windowCapabilities(publicWindowCapabilities))
-    private val mutableEvents = MutableSharedFlow<WindowEvent>(extraBufferCapacity = 16)
+    private val eventFlow = RuntimeWindowEventFlow(
+        policy = deliveryPolicy,
+        eventCollectorGate = eventCollectorGate,
+        failureReporter = failureReporter,
+        sessionFailureHandler = sessionFailureHandler,
+        closeWindow = { manager.terminaliseWindowEventDelivery(this) },
+    )
     private val updateLock = Any()
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
@@ -1200,8 +1221,7 @@ internal class RuntimeWindow(
 
     override val state: StateFlow<WindowState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<WindowCapabilities> = mutableCapabilities.asStateFlow()
-    override val events: Flow<WindowEvent> = mutableEvents.asSharedFlow()
-        .withEventCollectorAdmission(eventCollectorGate)
+    override val events: Flow<WindowEvent> = eventFlow.events
     var closeOperationId: WindowOperationId? = null
         private set
 
@@ -1275,6 +1295,9 @@ internal class RuntimeWindow(
     }
 
     fun applyNativeUpdate(operationId: WindowOperationId, state: WindowState) {
+        var publication: WindowStatePublication? = null
+        var completion: PendingWindowUpdate? = null
+        var outcome: KadreResult<WindowUpdateOutcome>? = null
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
@@ -1286,9 +1309,27 @@ internal class RuntimeWindow(
                 )
             }
             mutableState.value = effective
-            pending.result.complete(KadreResult.Success(updateOutcome(operationId, effective, pending.rejected)))
+            publication = WindowStatePublication(lifecycle, effective, operationId)
+            completion = pending
+            outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected))
         }
+        publishStatePublication(checkNotNull(publication))
+        checkNotNull(completion).result.complete(checkNotNull(outcome))
         dispatchNextUpdate()
+    }
+
+    /** Accepts an uncorrelated native observation after the peer has filtered its own setters. */
+    fun observeNativeUpdate(state: WindowState): Boolean {
+        val publication = synchronized(updateLock) {
+            val lifecycle = mutableState.value
+            if (lifecycle.phase != WindowPhase.Open) return@synchronized null
+            val effective = state.copy(phase = lifecycle.phase)
+            if (effective == lifecycle) return@synchronized null
+            mutableState.value = effective
+            WindowStatePublication(lifecycle, effective, operationId = null)
+        } ?: return false
+        publishStatePublication(publication)
+        return true
     }
 
     fun rejectDispatchedUpdate(operationId: WindowOperationId, failure: KadreFailure) {
@@ -1398,7 +1439,7 @@ internal class RuntimeWindow(
     }
 
     fun publish(event: WindowEvent) {
-        check(mutableEvents.tryEmit(event)) { "window event publication failed" }
+        eventFlow.publish(event)
     }
 
     fun closeResponseFor(
@@ -1481,8 +1522,43 @@ internal class RuntimeWindow(
             phase = WindowPhase.Closed,
             revision = WindowRevision(current.revision.value + 1L),
         )
+        eventFlow.close()
+    }
+
+    private fun publishStatePublication(publication: WindowStatePublication) {
+        val before = publication.before
+        val effective = publication.effective
+        if (
+            before.contentSize != effective.contentSize ||
+            before.minimumSize != effective.minimumSize ||
+            before.maximumSize != effective.maximumSize
+        ) {
+            publish(
+                WindowEvent.GeometryChanged(
+                    state = effective,
+                    operationId = publication.operationId,
+                    stamp = eventStampSource(),
+                ),
+            )
+        }
+        if (before.resizable != effective.resizable) {
+            publish(
+                WindowEvent.PropertiesChanged(
+                    state = effective,
+                    changed = setOf(WindowProperty.Resizable),
+                    operationId = publication.operationId,
+                    stamp = eventStampSource(),
+                ),
+            )
+        }
     }
 }
+
+private data class WindowStatePublication(
+    val before: WindowState,
+    val effective: WindowState,
+    val operationId: WindowOperationId?,
+)
 
 internal data class PendingWindowUpdate(
     val operationId: WindowOperationId,
