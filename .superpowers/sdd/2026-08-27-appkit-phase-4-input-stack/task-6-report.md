@@ -32,3 +32,25 @@
 ## Concern
 
 A script rerun once failed in existing KFFI-native tests with transient worker `NoClassDefFoundError` / `ClassNotFoundException`, including an absent `RuntimeSessionComponentsSpiTest`; the smallest equivalent `:kadre:backend:appkit:jvmTest --rerun-tasks --no-daemon` immediately passed without source/config changes. This is recorded as an unreproduced AppKit worker/fork flake; no retry workaround or scope expansion was added. The manual guide explicitly reserves real responder scroll, fractional deltas and momentum for human verification because the typed synthetic event has `windowNumber == 0`.
+
+## Corrective loop after public review
+
+- The phase-4 harness now records every capability. `textInput` and `rawInput` use a canonical
+  `Unsupported(operation=...)` encoding, and the process-level proof rejects `M7 pass` until it
+  has observed terminal detachment.
+- The native first-responder proof now checks `NSWindow.firstResponder` against the managed
+  `NSView`, rather than only calling `acceptsFirstResponder` and the callback directly.
+- The actual process-owning AppKit loop now proves public input state-before-event, focus reset
+  without a synthetic key release, and two-window input isolation. The corresponding `APK-005`
+  sentinels point to this O3 test rather than to deterministic driver tests.
+- KFFI #43 is now published as `1.0.0-SNAPSHOT:20260829.065753-21`. A fresh resolution reaches
+  the real queue; the consumer proof filters `NSEventMaskScrollWheel`, dequeues exactly two FIFO
+  events and no third, and checks type, target-less `windowNumber`, precision, deltas, phase and
+  momentum. The preceding snapshot's `NSDefaultRunLoopMode` `WrongMethodTypeException` is gone.
+- The native task emits an unrelated physical `PointerMoved` before the synthetic key in some runs.
+  The O3 proof deliberately waits for the injected `InputEvent.Key`, then retains its state-before-
+  event assertion; it does not deny that real pointer input can coexist with the proof.
+- Final verification passed with `scripts/test-kadre-appkit-contracts.sh --refresh-dependencies
+  --rerun-tasks --no-daemon` and `:kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest
+  :kadre:check --refresh-dependencies --rerun-tasks --no-daemon` (113 Gradle tasks). The final
+  independent review remains required before commit.

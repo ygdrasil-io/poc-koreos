@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
@@ -65,7 +66,9 @@ public fun main(args: Array<String>) {
                         "\tpointer=${input.state.value.capabilities.pointer}" +
                         "\ttouch=${input.state.value.capabilities.touch}" +
                         "\tgestures=${input.state.value.capabilities.gestures}" +
-                        "\tdragAndDrop=${input.state.value.capabilities.dragAndDrop}",
+                        "\tdragAndDrop=${input.state.value.capabilities.dragAndDrop}" +
+                        "\ttextInput=${phase4Capability(input.state.value.capabilities.textInput)}" +
+                        "\trawInput=${phase4Capability(input.state.value.capabilities.rawInput)}",
                 )
                 printPhase4Help(recorder)
 
@@ -116,7 +119,14 @@ public fun main(args: Array<String>) {
                         command.isEmpty() -> Unit
                         command == "help" -> printPhase4Help(recorder)
                         command == "snapshot" -> recorder.line("COMMAND\tsnapshot\t${input.state.value}")
-                        command.startsWith("result ") -> recorder.scenario(command)
+                        command.startsWith("result ") -> {
+                            val scenario = command.split(' ', limit = 3).getOrNull(1)
+                            if (scenario == "M7" && !terminalObserved) {
+                                recorder.line("COMMAND\tresult-rejected\tM7 requires terminal observation before recording")
+                            } else {
+                                recorder.scenario(command)
+                            }
+                        }
                         command == "close" -> closeAndObserveTerminal()
                         command == "finish" -> {
                             recorder.line("COMMAND\tfinish")
@@ -140,6 +150,11 @@ public fun main(args: Array<String>) {
 
 private fun printPhase4Help(recorder: Phase4HarnessRecorder) {
     recorder.line("HELP\tsnapshot | result M1..M8 pass|fail|not-applicable note | close | finish")
+}
+
+private fun phase4Capability(capability: Capability<*>): String = when (capability) {
+    is Capability.Unsupported -> "Unsupported(operation=${capability.failure.operation})"
+    is Capability.Supported<*> -> "Supported"
 }
 
 private data class Phase4HarnessOptions(
