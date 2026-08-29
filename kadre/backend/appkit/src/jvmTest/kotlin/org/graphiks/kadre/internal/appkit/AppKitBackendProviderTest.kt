@@ -16,10 +16,15 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSApplicationActivationPolicy
+import org.graphiks.kffi.objc.CGMomentumScrollPhase
+import org.graphiks.kffi.objc.CGScrollEventUnit
+import org.graphiks.kffi.objc.CGScrollPhase
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.appkit.AppKitScrollWheelEvent
+import org.graphiks.kffi.objc.appkit.postScrollWheelEvent
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
@@ -1575,6 +1580,83 @@ class AppKitBackendProviderTest {
                 report.contains("SCENARIO\tM7\tnot-applicable\tautomated proof does not satisfy manual M7"),
                 report,
             )
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
+    fun publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs() {
+        if (!isMacOs()) return
+
+        ObjCRuntime.autoreleasePool {
+            val application = NSApplication(NSApplication.sharedApplication())
+            application.postScrollWheelEvent(
+                AppKitScrollWheelEvent(
+                    CGScrollEventUnit.kCGScrollEventUnitLine,
+                    deltaX = 3.0,
+                    deltaY = -5.0,
+                    phase = CGScrollPhase.kCGScrollPhaseChanged,
+                    momentumPhase = CGMomentumScrollPhase.kCGMomentumScrollPhaseNone,
+                    isContinuous = false,
+                ),
+            )
+            application.postScrollWheelEvent(
+                AppKitScrollWheelEvent(
+                    CGScrollEventUnit.kCGScrollEventUnitPixel,
+                    deltaX = 12.0,
+                    deltaY = -8.0,
+                    phase = CGScrollPhase.kCGScrollPhaseChanged,
+                    momentumPhase = CGMomentumScrollPhase.kCGMomentumScrollPhaseContinue,
+                    isContinuous = true,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun phase4InputHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase4-input-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase4-input-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase4InputHarnessKt",
+                "--record=$record",
+                "--build-id=automated-input-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("snapshot")
+                commands.appendLine("result M1 not-applicable automated run cannot prove physical keyboard focus")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            assertTrue(report.contains("INPUT_CAPABILITIES\tkeyboard=Available\tpointer=Available"), report)
+            assertTrue(report.contains("SNAPSHOT\tinitial\t"), report)
+            assertTrue(report.contains("COMMAND\tsnapshot\t"), report)
+            assertTrue(
+                report.contains("SCENARIO\tM1\tnot-applicable\tautomated run cannot prove physical keyboard focus"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
             assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
         } finally {
             Files.deleteIfExists(record)
