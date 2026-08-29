@@ -40,6 +40,7 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.LogicalSizeRange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCancellationOutcome
@@ -84,6 +85,7 @@ public class RuntimeWindowManager public constructor(
     private val platform: KadrePlatform,
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
+    private val enabledWindowGeometryCapabilities: Set<WindowProperty> = emptySet(),
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
@@ -936,6 +938,7 @@ public class RuntimeWindowManager public constructor(
             surface = surface,
             manager = this,
             publicWindowCapabilities = publicWindowCapabilities,
+            enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
             deliveryPolicy = windowDeliveryPolicy,
             eventStampSource = ::nextEventStamp,
@@ -1208,6 +1211,7 @@ internal class RuntimeWindow(
     override val surface: RuntimeWindowSurface,
     private val manager: RuntimeWindowManager,
     publicWindowCapabilities: Boolean,
+    enabledWindowGeometryCapabilities: Set<WindowProperty>,
     eventCollectorGate: RuntimeEventCollectorGate,
     deliveryPolicy: WindowDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
@@ -1216,7 +1220,9 @@ internal class RuntimeWindow(
 ) : Window, RuntimeDesktopWindowHandleAccess {
     private val initialState = initialWindowState(spec)
     private val mutableState = MutableStateFlow(initialState)
-    private val mutableCapabilities = MutableStateFlow(windowCapabilities(publicWindowCapabilities))
+    private val mutableCapabilities = MutableStateFlow(
+        windowCapabilities(publicWindowCapabilities, enabledWindowGeometryCapabilities),
+    )
     private val eventFlow = RuntimeWindowEventFlow(
         policy = deliveryPolicy,
         eventCollectorGate = eventCollectorGate,
@@ -1625,13 +1631,25 @@ private fun initialWindowState(spec: WindowSpec): WindowState = WindowState(
     revision = WindowRevision(0L),
 )
 
-private fun windowCapabilities(publicWindowCapabilities: Boolean): WindowCapabilities = WindowCapabilities(
+private fun windowCapabilities(
+    publicWindowCapabilities: Boolean,
+    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+): WindowCapabilities = WindowCapabilities(
     title = unsupported(KadreOperation.UpdateWindow),
     outerPosition = unsupported(KadreOperation.UpdateWindow),
-    contentSize = unsupported(KadreOperation.UpdateWindow),
-    minimumSize = unsupported(KadreOperation.UpdateWindow),
-    maximumSize = unsupported(KadreOperation.UpdateWindow),
-    resizable = unsupported(KadreOperation.UpdateWindow),
+    contentSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.ContentSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    minimumSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.MinimumSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    maximumSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.MaximumSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    resizable = enabledWindowGeometryCapabilities.capability(WindowProperty.Resizable, Unit),
     fullscreen = unsupported(KadreOperation.UpdateWindow),
     decorations = unsupported(KadreOperation.UpdateWindow),
     systemButtons = unsupported(KadreOperation.UpdateWindow),
@@ -1652,6 +1670,15 @@ private fun windowCapabilities(publicWindowCapabilities: Boolean): WindowCapabil
         unsupported(KadreOperation.PlatformWindowAccess)
     },
 )
+
+private fun <T> Set<WindowProperty>.capability(
+    property: WindowProperty,
+    supported: T,
+): Capability<T> = if (property in this) {
+    Capability.Supported(supported, FeatureAvailability.Available)
+} else {
+    unsupported(KadreOperation.UpdateWindow)
+}
 
 private fun changedProperties(update: WindowUpdate): List<WindowProperty> = buildList {
     if (update.title !is PropertyChange.Unchanged) add(WindowProperty.Title)

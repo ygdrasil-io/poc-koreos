@@ -32,6 +32,7 @@ import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.appkit.AppKitScrollWheelEvent
 import org.graphiks.kffi.objc.appkit.postScrollWheelEvent
@@ -39,6 +40,7 @@ import org.graphiks.kffi.objc.nextEventMatchingMask_untilDate_inMode_dequeue
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
+import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
@@ -74,6 +76,8 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.LogicalSizeRange
+import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
@@ -85,6 +89,8 @@ import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.file.Files
@@ -592,8 +598,8 @@ class AppKitBackendProviderTest {
 
                 assertEquals("effective", window.state.value.title)
                 assertEquals(LogicalSize(320.0, 180.0), window.state.value.contentSize)
-                assertNull(window.state.value.minimumSize)
-                assertNull(window.state.value.maximumSize)
+                assertEquals(LogicalSize(100.0, 80.0), window.state.value.minimumSize)
+                assertEquals(LogicalSize(640.0, 360.0), window.state.value.maximumSize)
                 assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
                 assertEquals(WindowLevel.Normal, window.state.value.level)
                 assertFalse(window.state.value.transparent)
@@ -604,10 +610,6 @@ class AppKitBackendProviderTest {
                 listOf<Capability<*>>(
                     windowCapabilities.title,
                     windowCapabilities.outerPosition,
-                    windowCapabilities.contentSize,
-                    windowCapabilities.minimumSize,
-                    windowCapabilities.maximumSize,
-                    windowCapabilities.resizable,
                     windowCapabilities.fullscreen,
                     windowCapabilities.decorations,
                     windowCapabilities.systemButtons,
@@ -618,6 +620,10 @@ class AppKitBackendProviderTest {
                     windowCapabilities.attention,
                     windowCapabilities.contentProtection,
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertIs<Capability.Supported<*>>(windowCapabilities.contentSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.minimumSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.maximumSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.resizable)
                 assertIs<Capability.Supported<*>>(windowCapabilities.closeInterception)
                 assertIs<Capability.Supported<*>>(windowCapabilities.platformAccess)
 
@@ -1264,6 +1270,194 @@ class AppKitBackendProviderTest {
         )
         assertEquals(2, native.runCount)
     }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-capabilities")
+            val range = LogicalSizeRange(null, null, null)
+
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.contentSize,
+            )
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.minimumSize,
+            )
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.maximumSize,
+            )
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.resizable,
+            )
+            assertNull(window.state.value.outerBounds)
+            listOf<Capability<*>>(
+                window.capabilities.value.title,
+                window.capabilities.value.outerPosition,
+                window.capabilities.value.fullscreen,
+                window.capabilities.value.decorations,
+                window.capabilities.value.systemButtons,
+                window.capabilities.value.level,
+                window.capabilities.value.transparency,
+                window.capabilities.value.blurBehind,
+                window.capabilities.value.icon,
+                window.capabilities.value.attention,
+                window.capabilities.value.contentProtection,
+            ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowApplyUsesGeneratedNativeGeometryAndCorrelatesOperationOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-apply")
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                val target = LogicalSize(420.0, 260.0)
+                val minimum = LogicalSize(200.0, 120.0)
+                val maximum = LogicalSize(800.0, 600.0)
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            contentSize = PropertyChange.Set(target),
+                            minimumSize = PropertyChange.Set(minimum),
+                            maximumSize = PropertyChange.Set(maximum),
+                            resizable = PropertyChange.Set(false),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                assertEquals(target, outcome.state.contentSize)
+                assertEquals(minimum, outcome.state.minimumSize)
+                assertEquals(maximum, outcome.state.maximumSize)
+                assertFalse(outcome.state.resizable)
+                assertEquals(outcome.state, window.state.value)
+
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    window.withDesktopHandle { handle ->
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        ObjCRuntime.autoreleasePool {
+                            val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                            assertEquals(NSSize(target.width, target.height), native.contentRectForFrameRect(native.frame()).size)
+                            assertEquals(NSSize(minimum.width, minimum.height), native.contentMinSize())
+                            assertEquals(NSSize(maximum.width, maximum.height), native.contentMaxSize())
+                            assertFalse(
+                                native.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+                            )
+                        }
+                    },
+                )
+                val geometry = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                val properties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(outcome.operationId, geometry.operationId)
+                assertEquals(outcome.operationId, properties.operationId)
+                assertEquals(outcome.state, geometry.state)
+                assertEquals(outcome.state, properties.state)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun nativeExternalResizeUpdatesWindowStateWithNullOperationIdOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-external")
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                val resized = LogicalSize(380.0, 240.0)
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    window.withDesktopHandle { handle ->
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        ObjCRuntime.autoreleasePool {
+                            NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                                .setContentSize(NSSize(resized.width, resized.height))
+                        }
+                    },
+                )
+                val state = withTimeout(5.seconds) {
+                    window.state.first { it.contentSize == resized }
+                }
+                val event = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                assertEquals(state, event.state)
+                assertNull(event.operationId)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-policy")
+            val enteredFirstEvent = CompletableDeferred<Unit>()
+            val releaseCollector = CompletableDeferred<Unit>()
+            val events = mutableListOf<WindowEvent.GeometryChanged>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect { event ->
+                    events += event
+                    if (!enteredFirstEvent.isCompleted) {
+                        enteredFirstEvent.complete(Unit)
+                        releaseCollector.await()
+                    }
+                }
+            }
+            try {
+                setNativeContentSize(window, LogicalSize(340.0, 220.0))
+                withTimeout(5.seconds) { enteredFirstEvent.await() }
+                val finalSize = LogicalSize(440.0, 280.0)
+                setNativeContentSize(window, LogicalSize(390.0, 250.0))
+                setNativeContentSize(window, finalSize)
+                releaseCollector.complete(Unit)
+
+                withTimeout(5.seconds) {
+                    while (events.size < 2 || window.state.value.contentSize != finalSize) yield()
+                }
+                assertEquals(listOf(LogicalSize(340.0, 220.0), finalSize), events.map { it.state.contentSize })
+                assertTrue(events.all { it.operationId == null })
+                assertNull(withTimeoutOrNull(200.milliseconds) {
+                    while (true) {
+                        if (events.size > 2) return@withTimeoutOrNull events[2]
+                        yield()
+                    }
+                })
+            } finally {
+                releaseCollector.complete(Unit)
+                collector.cancel()
+            }
+        }
 
     @OptIn(
         org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
@@ -2122,6 +2316,74 @@ private fun publicWindowRequest(
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
 )
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private fun runPublicAppKitGeometrySession(
+    exercise: suspend KadreScope.() -> Unit,
+) {
+    if (!isMacOs()) return
+    val native = KffiAppKitNativeApplication()
+    val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+    val result = provider.run(
+        DesktopStandaloneRequest(
+            KadreApplicationFactory {
+                KadreApplication {
+                    withTimeout(5.seconds) {
+                        while (!native.isRunning()) yield()
+                    }
+                    try {
+                        exercise()
+                    } finally {
+                        windows.state.value.windows.forEach { window ->
+                            if (window.state.value.phase != WindowPhase.Closed) {
+                                window.close().appKitSuccessValue()
+                                withTimeout(5.seconds) {
+                                    window.state.first { it.phase == WindowPhase.Closed }
+                                }
+                            }
+                        }
+                        requestStop()
+                    }
+                }
+            },
+            stopWhenLastWindowClosed = false,
+            policy = KadrePolicies.Default,
+        ),
+    )
+    assertEquals(
+        KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+        result,
+    )
+}
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun KadreScope.openPublicGeometryWindow(title: String): Window =
+    assertIs<WindowRequestOutcome.OpenedHere>(
+        windows.requestWindow(WindowSpec(title = title)).appKitSuccessValue().await(),
+    ).window
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun setNativeContentSize(window: Window, size: LogicalSize) {
+    assertEquals(
+        KadreResult.Success(Unit),
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                    .setContentSize(NSSize(size.width, size.height))
+            }
+        },
+    )
+}
 
 private fun KadreResult<KadreSession>.requireSession(): KadreSession =
     (this as? KadreResult.Success)?.value ?: error("Expected a Kadre session, got $this")

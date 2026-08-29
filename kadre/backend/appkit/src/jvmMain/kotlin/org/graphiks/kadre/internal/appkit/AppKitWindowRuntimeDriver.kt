@@ -34,6 +34,7 @@ import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.surface.SurfaceId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,6 +49,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     nativePort: AppKitNativeWindowPort,
     failureReporter: RuntimeFailureReporter,
     publicAppKitCapabilities: Boolean,
+    private val enabledWindowGeometryCapabilities: Set<WindowProperty>,
     publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
@@ -57,6 +59,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         nativePort,
         failureReporter,
         beforeCommitDelivery,
+        enabledWindowGeometryCapabilities,
         surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
         geometryStimulusSink = geometry@{ windowId, snapshot ->
             val state = manager.state.value.windows.firstOrNull { it.id == windowId }?.state?.value
@@ -75,6 +78,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         platform = KadrePlatform.AppKit,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
+        enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )
@@ -94,6 +98,7 @@ private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
+    private val enabledWindowGeometryCapabilities: Set<WindowProperty>,
     private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
     private val geometryStimulusSink: (WindowId, AppKitWindowGeometrySnapshot) -> Boolean,
     private val windowState: (WindowId) -> WindowState?,
@@ -315,7 +320,7 @@ private class AppKitWindowCommandPort(
                 beforeCommitDelivery(entry.command.spec)
                 entry.command.commit(
                     entry.owner,
-                    appKitEffectiveSpec(entry.command.spec),
+                    appKitEffectiveSpec(entry.command.spec, enabledWindowGeometryCapabilities),
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
                     commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
@@ -857,9 +862,16 @@ private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = 
     theme = theme,
 )
 
-private fun appKitEffectiveSpec(requested: WindowSpec): WindowSpec = requested.copy(
-    minimumSize = null,
-    maximumSize = null,
+private fun appKitEffectiveSpec(
+    requested: WindowSpec,
+    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+): WindowSpec = requested.copy(
+    minimumSize = requested.minimumSize.takeIf {
+        WindowProperty.MinimumSize in enabledWindowGeometryCapabilities
+    },
+    maximumSize = requested.maximumSize.takeIf {
+        WindowProperty.MaximumSize in enabledWindowGeometryCapabilities
+    },
     outerPosition = null,
     fullscreen = FullscreenMode.Windowed,
     level = WindowLevel.Normal,

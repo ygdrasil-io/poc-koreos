@@ -26,6 +26,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -236,12 +237,20 @@ public class AppKitBackendProvider private constructor(
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
+            enabledWindowGeometryCapabilities = APPKIT_PUBLIC_WINDOW_GEOMETRY_CAPABILITIES,
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
         )
         RuntimeSessionComponents(driver.manager, driver::close)
     }
 }
+
+private val APPKIT_PUBLIC_WINDOW_GEOMETRY_CAPABILITIES: Set<WindowProperty> = setOf(
+    WindowProperty.ContentSize,
+    WindowProperty.MinimumSize,
+    WindowProperty.MaximumSize,
+    WindowProperty.Resizable,
+)
 
 private class AppKitLastWindowStopBridge {
     private val lock = Any()
