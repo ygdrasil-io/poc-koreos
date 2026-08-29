@@ -347,12 +347,12 @@ activation est précédée des gaps `KFFI-OBJC-004` (first responder managé) et
 
 Couvrir toutes les mutations top-level et leurs résultats asynchrones applicables à AppKit.
 
-La première tranche est définie par
-`APPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md`. Elle couvre taille de contenu,
-contraintes min/max et `resizable`, avec état effectif, corrélation d'opération
-et policy de géométrie. `outerPosition` reste hors tranche jusqu'à la phase 9 :
-les coordonnées physiques publiques exigent l'inventaire et le repère
-multi-écran réellement observables.
+La première sous-tranche, définie par
+`APPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md`, est achevée : AppKit prend en
+charge `contentSize`, `minimumSize`, `maximumSize` et `resizable`, avec état
+effectif, corrélation d'opération et policy de géométrie. `outerPosition`
+reste reportée à la phase 9 : les coordonnées physiques publiques exigent
+l'inventaire et le repère multi-écran réellement observables.
 
 #### Contenu
 

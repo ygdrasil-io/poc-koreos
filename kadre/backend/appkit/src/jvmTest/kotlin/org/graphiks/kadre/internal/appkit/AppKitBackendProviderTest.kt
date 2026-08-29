@@ -1354,9 +1354,15 @@ class AppKitBackendProviderTest {
                         val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
                         ObjCRuntime.autoreleasePool {
                             val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
-                            assertEquals(NSSize(target.width, target.height), native.contentRectForFrameRect(native.frame()).size)
-                            assertEquals(NSSize(minimum.width, minimum.height), native.contentMinSize())
-                            assertEquals(NSSize(maximum.width, maximum.height), native.contentMaxSize())
+                            val effectiveContentSize = native.contentRectForFrameRect(native.frame()).size
+                            assertEquals(target.width, effectiveContentSize.width)
+                            assertEquals(target.height, effectiveContentSize.height)
+                            val effectiveMinimum = native.contentMinSize()
+                            assertEquals(minimum.width, effectiveMinimum.width)
+                            assertEquals(minimum.height, effectiveMinimum.height)
+                            val effectiveMaximum = native.contentMaxSize()
+                            assertEquals(maximum.width, effectiveMaximum.width)
+                            assertEquals(maximum.height, effectiveMaximum.height)
                             assertFalse(
                                 native.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
                             )
@@ -1862,10 +1868,27 @@ class AppKitBackendProviderTest {
                             )
                         }
 
+                        val closeEventTrace = ArrayDeque<WindowEvent>()
+                        suspend fun awaitCloseRequested(stage: String): WindowEvent.CloseRequested =
+                            withTimeout(5.seconds) {
+                                while (true) {
+                                    val event = events.receive()
+                                    if (closeEventTrace.size == 8) closeEventTrace.removeFirst()
+                                    closeEventTrace.addLast(event)
+                                    when (event) {
+                                        is WindowEvent.CloseRequested -> return@withTimeout event
+                                        is WindowEvent.GeometryChanged -> Unit
+                                        else -> error(
+                                            "$stage expected CloseRequested after geometry observations; " +
+                                                "received $event, trace=$closeEventTrace",
+                                        )
+                                    }
+                                }
+                                error("unreachable")
+                            }
+
                         performNativeUserClose()
-                        val rejected = withTimeout(5.seconds) {
-                            assertIs<WindowEvent.CloseRequested>(events.receive())
-                        }
+                        val rejected = awaitCloseRequested("native-close-reject")
                         assertEquals(
                             WindowCloseResponseOutcome.KeptOpen,
                             window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject)
@@ -1876,9 +1899,7 @@ class AppKitBackendProviderTest {
 
                         proofStage.set("native-close-accept")
                         performNativeUserClose()
-                        val accepted = withTimeout(5.seconds) {
-                            assertIs<WindowEvent.CloseRequested>(events.receive())
-                        }
+                        val accepted = awaitCloseRequested("native-close-accept")
                         val closing = assertIs<WindowCloseResponseOutcome.Closing>(
                             window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept)
                                 .appKitSuccessValue(),
