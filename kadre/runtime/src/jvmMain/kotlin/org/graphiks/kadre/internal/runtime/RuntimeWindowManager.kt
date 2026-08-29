@@ -1240,7 +1240,7 @@ internal class RuntimeWindow(
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
     private var eventDeliveryClosePending = false
-    private var eventPublicationInFlight = false
+    private var eventPublicationsInFlight = 0
     internal var activeCloseRequest: RuntimeCloseRequest? = null
         private set
     private var resolvedCloseRequest: ResolvedCloseRequest? = null
@@ -1334,7 +1334,7 @@ internal class RuntimeWindow(
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
-            eventPublicationInFlight = true
+            eventPublicationsInFlight += 1
             val lifecycle = mutableState.value
             val effective = if (lifecycle.phase == WindowPhase.Open) state.copy(
                 revision = WindowRevision(lifecycle.revision.value + 1L),
@@ -1349,18 +1349,18 @@ internal class RuntimeWindow(
             completion = pending
             outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected + backendRejected))
         }
-        var closeEventDelivery = false
         try {
             publishStatePublication(checkNotNull(publication))
-            checkNotNull(completion).result.complete(checkNotNull(outcome))
         } finally {
-            closeEventDelivery = synchronized(updateLock) {
-                eventPublicationInFlight = false
+            checkNotNull(completion).result.complete(checkNotNull(outcome))
+            val closeEventDelivery = synchronized(updateLock) {
+                check(eventPublicationsInFlight > 0) { "window event publication accounting underflow" }
+                eventPublicationsInFlight -= 1
                 takePendingEventDeliveryCloseLocked()
             }
+            if (closeEventDelivery) eventFlow.close()
+            dispatchNextUpdate()
         }
-        if (closeEventDelivery) eventFlow.close()
-        dispatchNextUpdate()
     }
 
     /** Accepts an uncorrelated native observation after the peer has filtered its own setters. */
@@ -1584,7 +1584,7 @@ internal class RuntimeWindow(
                 phase = WindowPhase.Closed,
                 revision = WindowRevision(current.revision.value + 1L),
             )
-            if (dispatchedUpdate == null && !eventPublicationInFlight) {
+            if (dispatchedUpdate == null && eventPublicationsInFlight == 0) {
                 true
             } else {
                 eventDeliveryClosePending = true
@@ -1595,7 +1595,7 @@ internal class RuntimeWindow(
     }
 
     private fun takePendingEventDeliveryCloseLocked(): Boolean {
-        if (!eventDeliveryClosePending || dispatchedUpdate != null || eventPublicationInFlight) return false
+        if (!eventDeliveryClosePending || dispatchedUpdate != null || eventPublicationsInFlight != 0) return false
         eventDeliveryClosePending = false
         return true
     }
