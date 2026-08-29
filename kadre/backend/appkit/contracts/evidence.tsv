@@ -57,3 +57,7 @@ APK-005	sentinel	appkit-input-scroll-boundary-loss	org.graphiks.kadre.internal.a
 APK-005	sentinel	appkit-input-late-callback	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	nativeContentViewRevokesPublishedKffiKeyboardRouteBeforePeerCloseReleasesTheViewOnMacOs[jvm]
 APK-005	sentinel	appkit-input-cross-surface	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	realKffiStandaloneLoopStartsAndStopsOnMacOs
 APK-005	sentinel	appkit-input-policy-bypass	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied[jvm]
+APK-006	scenario	appkit-window-geometry-initial-constraints	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	generatedKffiWindowAppliesInitialContentConstraintsAndResizableMaskOnMacOs[jvm]
+APK-006	scenario	appkit-window-geometry-native-update	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	generatedKffiWindowUpdatesContentConstraintsAndRestoresNativeDefaultsOnMacOs[jvm]
+APK-006	sentinel	appkit-window-geometry-style-mask-preservation	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	generatedKffiWindowUpdatesContentConstraintsAndRestoresNativeDefaultsOnMacOs[jvm]
+APK-006	sentinel	appkit-window-geometry-clear-constraint	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	generatedKffiWindowUpdatesContentConstraintsAndRestoresNativeDefaultsOnMacOs[jvm]

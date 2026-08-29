@@ -14,6 +14,7 @@ import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kffi.objc.NSApplication
@@ -50,6 +51,151 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun generatedKffiWindowAppliesInitialContentConstraintsAndResizableMaskOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(83L),
+            spec = WindowSpec(
+                contentSize = LogicalSize(420.0, 280.0),
+                minimumSize = LogicalSize(320.0, 200.0),
+                maximumSize = LogicalSize(640.0, 480.0),
+                resizable = false,
+            ),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowGeometry(
+                        contentWidth = 420.0,
+                        contentHeight = 280.0,
+                        minimumWidth = 320.0,
+                        minimumHeight = 200.0,
+                        maximumWidth = 640.0,
+                        maximumHeight = 480.0,
+                        resizable = false,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                        .readGeneratedNativeGeometry()
+                },
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
+    fun generatedKffiWindowUpdatesContentConstraintsAndRestoresNativeDefaultsOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val defaultPeer = port.prepare(
+            id = AppKitWindowPeerId(84L),
+            spec = WindowSpec(contentSize = LogicalSize(300.0, 180.0)),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+        val nativeDefaults = try {
+            assertIs<KadreResult.Success<NativeWindowGeometry>>(
+                defaultPeer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                        .readGeneratedNativeGeometry()
+                },
+            ).value
+        } finally {
+            defaultPeer.close()
+        }
+        val peer = port.prepare(
+            id = AppKitWindowPeerId(85L),
+            spec = WindowSpec(
+                contentSize = LogicalSize(420.0, 280.0),
+                minimumSize = LogicalSize(320.0, 200.0),
+                maximumSize = LogicalSize(640.0, 480.0),
+                resizable = true,
+            ),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            val unrelatedStyleBits = assertIs<KadreResult.Success<Long>>(
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                        .styleMask()
+                        .rawValue and NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue.inv()
+                },
+            ).value
+
+            assertEquals(
+                AppKitWindowGeometrySnapshot(
+                    contentSize = LogicalSize(520.0, 360.0),
+                    minimumSize = LogicalSize(500.0, 340.0),
+                    maximumSize = LogicalSize(560.0, 400.0),
+                    resizable = false,
+                ),
+                peer.updateGeometry(
+                    AppKitWindowGeometryTarget(
+                        contentSize = PropertyChange.Set(LogicalSize(520.0, 360.0)),
+                        minimumSize = PropertyChange.Set(LogicalSize(500.0, 340.0)),
+                        maximumSize = PropertyChange.Set(LogicalSize(560.0, 400.0)),
+                        resizable = PropertyChange.Set(false),
+                    ),
+                ),
+            )
+            assertEquals(
+                AppKitWindowGeometrySnapshot(
+                    contentSize = LogicalSize(520.0, 360.0),
+                    minimumSize = null,
+                    maximumSize = null,
+                    resizable = false,
+                ),
+                peer.updateGeometry(
+                    AppKitWindowGeometryTarget(
+                        contentSize = PropertyChange.Unchanged,
+                        minimumSize = PropertyChange.Clear,
+                        maximumSize = PropertyChange.Clear,
+                        resizable = PropertyChange.Unchanged,
+                    ),
+                ),
+            )
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowGeometry(
+                        contentWidth = 520.0,
+                        contentHeight = 360.0,
+                        minimumWidth = nativeDefaults.minimumWidth,
+                        minimumHeight = nativeDefaults.minimumHeight,
+                        maximumWidth = nativeDefaults.maximumWidth,
+                        maximumHeight = nativeDefaults.maximumHeight,
+                        resizable = false,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                        .readGeneratedNativeGeometry()
+                },
+            )
+            assertEquals(
+                unrelatedStyleBits,
+                assertIs<KadreResult.Success<Long>>(
+                    peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                        NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                            .styleMask()
+                            .rawValue and NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue.inv()
+                    },
+                ).value,
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
     @Test
     fun immutableKffiKeyboardObservationPreservesUnknownKeyAndEffectiveModifiers() {
         val observation = NSEventObservation(
@@ -790,6 +936,34 @@ private class CountingWindowOwner : AppKitNativeWindowOwner {
     override fun close() {
         closeCount += 1
     }
+}
+
+private fun RuntimeDesktopNativeWindowHandle.appKitWindowAddress(): Long =
+    assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(this).nsWindowAddress.toLong()
+
+private data class NativeWindowGeometry(
+    val contentWidth: Double,
+    val contentHeight: Double,
+    val minimumWidth: Double,
+    val minimumHeight: Double,
+    val maximumWidth: Double,
+    val maximumHeight: Double,
+    val resizable: Boolean,
+)
+
+private fun NSWindow.readGeneratedNativeGeometry(): NativeWindowGeometry {
+    val contentSize = contentRectForFrameRect(frame()).size
+    val minimumSize = contentMinSize()
+    val maximumSize = contentMaxSize()
+    return NativeWindowGeometry(
+        contentWidth = contentSize.width,
+        contentHeight = contentSize.height,
+        minimumWidth = minimumSize.width,
+        minimumHeight = minimumSize.height,
+        maximumWidth = maximumSize.width,
+        maximumHeight = maximumSize.height,
+        resizable = styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+    )
 }
 
 private fun isMacOsHost(): Boolean = System.getProperty("os.name", "").let { name ->
