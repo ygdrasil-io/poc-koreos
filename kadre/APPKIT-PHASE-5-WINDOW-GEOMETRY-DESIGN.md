@@ -25,10 +25,14 @@ frontières d'autorité et preuves.
 ## Précondition KFFI
 
 Le snapshot KFFI publié fournit déjà les bindings générés nécessaires :
-`NSWindow.setContentSize`, `setContentMinSize`, `setContentMaxSize`, leurs
-getters, ainsi que `styleMask` et `setStyleMask`. Kadre appelle uniquement ces
-APIs typées générées ; cette tranche ne contient ni `ObjCRuntime.msgSend` local,
-ni binding écrit à la main, ni changement Kextract/KFFI.
+`NSWindow.setContentSize`, `setContentMinSize`, `setContentMaxSize`, les
+getters min/max, ainsi que `styleMask` et `setStyleMask`. AppKit ne déclare pas
+de selector `contentSize` : le snapshot effectif de taille de contenu est donc
+dérivé, dans le port natif privé, par `contentRectForFrameRect(frame()).size`,
+à partir de deux APIs `NSWindow` elles aussi générées. Ce `frame` ne devient
+jamais un `outerBounds` public. Kadre appelle uniquement ces APIs typées
+générées ; cette tranche ne contient ni `ObjCRuntime.msgSend` local, ni binding
+écrit à la main, ni changement Kextract/KFFI.
 
 Si une résolution fraîche de la dépendance révélait une divergence de binding,
 la correction suit obligatoirement la chaîne Kextract, puis la régénération et
