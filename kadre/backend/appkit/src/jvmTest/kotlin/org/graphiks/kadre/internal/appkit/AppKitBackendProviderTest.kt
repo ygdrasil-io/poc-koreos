@@ -1384,6 +1384,96 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
+    fun publicAppKitWindowRejectsInvalidGeometryBeforeNativeCommitOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-invalid")
+            val beforeState = window.state.value
+            val beforeNativeSize = readNativeContentSize(window)
+            val events = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(events::send)
+            }
+            try {
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+                    window.apply(
+                        WindowUpdate(
+                            minimumSize = PropertyChange.Set(LogicalSize(600.0, 400.0)),
+                            maximumSize = PropertyChange.Set(LogicalSize(500.0, 300.0)),
+                        ),
+                    ),
+                )
+                assertEquals(beforeState, window.state.value)
+                assertEquals(beforeNativeSize, readNativeContentSize(window))
+                assertNull(withTimeoutOrNull(200.milliseconds) { events.receive() })
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowGeometryDoesNotCrossBetweenTwoWindowsOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val first = openPublicGeometryWindow("public-geometry-first")
+            val second = openPublicGeometryWindow("public-geometry-second")
+            val firstEvents = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val secondEvents = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val firstCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                first.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(firstEvents::send)
+            }
+            val secondCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                second.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(secondEvents::send)
+            }
+            try {
+                val beforeSecondState = second.state.value
+                val observedFirstSize = LogicalSize(380.0, 240.0)
+                setNativeContentSize(first, observedFirstSize)
+                val observedFirstState = withTimeout(5.seconds) {
+                    first.state.first { it.contentSize == observedFirstSize }
+                }
+                val firstObservation = withTimeout(5.seconds) { firstEvents.receive() }
+                assertNull(firstObservation.operationId)
+                assertEquals(observedFirstState, firstObservation.state)
+                assertEquals(observedFirstSize, readNativeContentSize(first))
+                assertEquals(beforeSecondState, second.state.value)
+                assertNull(withTimeoutOrNull(200.milliseconds) { secondEvents.receive() })
+
+                val requestedSecondSize = LogicalSize(520.0, 360.0)
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    second.apply(
+                        WindowUpdate(
+                            contentSize = PropertyChange.Set(requestedSecondSize),
+                            minimumSize = PropertyChange.Set(LogicalSize(400.0, 280.0)),
+                            maximumSize = PropertyChange.Set(LogicalSize(640.0, 480.0)),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                val secondOperation = withTimeout(5.seconds) { secondEvents.receive() }
+                assertEquals(outcome.operationId, secondOperation.operationId)
+                assertEquals(outcome.state, secondOperation.state)
+                assertEquals(requestedSecondSize, second.state.value.contentSize)
+                assertEquals(requestedSecondSize, readNativeContentSize(second))
+                assertEquals(observedFirstState, first.state.value)
+                assertEquals(observedFirstSize, readNativeContentSize(first))
+                assertNull(withTimeoutOrNull(200.milliseconds) { firstEvents.receive() })
+            } finally {
+                firstCollector.cancel()
+                secondCollector.cancel()
+                firstEvents.close()
+                secondEvents.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
     fun nativeExternalResizeUpdatesWindowStateWithNullOperationIdOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-external")
@@ -2398,6 +2488,25 @@ private suspend fun setNativeContentSize(window: Window, size: LogicalSize) {
         },
     )
 }
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeContentSize(window: Window): LogicalSize =
+    assertIs<KadreResult.Success<LogicalSize>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                    .contentRectForFrameRect(
+                        NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong())).frame(),
+                    )
+                    .size
+                    .let { size -> LogicalSize(size.width, size.height) }
+            }
+        },
+    ).value
 
 private fun KadreResult<KadreSession>.requireSession(): KadreSession =
     (this as? KadreResult.Success)?.value ?: error("Expected a Kadre session, got $this")

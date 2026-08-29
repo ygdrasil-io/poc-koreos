@@ -29,29 +29,40 @@ internal fun validateContractRegistry(
         .sorted()
         .forEach { errors += "unknown contract evidence mapping: $it" }
 
-    mappings.asSequence()
-        .map(EvidenceMapping::contractId)
-        .distinct()
-        .sorted()
-        .forEach { contractId ->
-            val contract = recordsById[contractId] ?: return@forEach
-            if (contract.status == ContractStatus.Active && contractId !in requiredEvidenceGateIds) {
-                errors += "$contractId: active mapping is outside configured evidence gates"
+    records.asSequence()
+        .filter { it.status == ContractStatus.Active && it.requiresEvidenceGate() }
+        .sortedBy(ContractRecord::contractId)
+        .forEach { contract ->
+            when {
+                contract.contractId !in requiredEvidenceGateIds ->
+                    errors += if (mappings.any { it.contractId == contract.contractId }) {
+                        "${contract.contractId}: active mapping is outside configured evidence gates"
+                    } else {
+                        "${contract.contractId}: active contract has no configured evidence gate"
+                    }
+                else -> errors += validateMappings(
+                    contract,
+                    mappings.filter { it.contractId == contract.contractId },
+                )
             }
         }
 
-    requiredEvidenceGateIds.sorted().forEach { contractId ->
-        val contract = recordsById[contractId]
-        when {
-            contract == null -> errors += "configured evidence gate references unknown contract: $contractId"
-            contract.status != ContractStatus.Active ->
-                errors += "$contractId: configured evidence gate requires an active contract"
-            else -> errors += validateMappings(contract, mappings.filter { it.contractId == contractId })
-        }
-    }
+    requiredEvidenceGateIds.sorted()
+        .filter { it !in recordsById }
+        .forEach { errors += "configured evidence gate references unknown contract: $it" }
+
+    requiredEvidenceGateIds.sorted()
+        .mapNotNull(recordsById::get)
+        .filter { it.status != ContractStatus.Active }
+        .forEach { errors += "${it.contractId}: configured evidence gate requires an active contract" }
 
     return errors
 }
+
+private fun ContractRecord.requiresEvidenceGate(): Boolean =
+    contractId.startsWith("APK-") ||
+        contractId.startsWith("INP-") ||
+        contractId.startsWith("WIN-")
 
 public fun main(args: Array<String>) {
     require(args.size == 1 || args.size == 3) {

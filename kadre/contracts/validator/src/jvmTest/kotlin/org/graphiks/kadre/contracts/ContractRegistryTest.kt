@@ -134,6 +134,21 @@ class ContractRegistryTest {
         )
     }
 
+    @Test
+    fun activeWindowContractMissingFromMappingsAndGatesIsRejected() {
+        val fixture = createTempDirectory("kadre-window-contracts-")
+        val registry = fixture.resolve("contracts.tsv").also { it.writeText(WINDOW_REGISTRY) }
+        val mapping = fixture.resolve("evidence.tsv").also { it.writeText(WIN_ONLY_MAPPING) }
+
+        val errors = validateContractRegistry(
+            registry,
+            listOf(mapping),
+            setOf("WIN-001"),
+        )
+
+        assertTrue(errors.any { "APK-006: active contract has no configured evidence gate" in it })
+    }
+
     private companion object {
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
@@ -152,5 +167,9 @@ class ContractRegistryTest {
                 "WIN-001\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
                 "APK-006\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
                 "APK-006\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
+        const val WIN_ONLY_MAPPING =
+            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "WIN-001\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
+                "WIN-001\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]"
     }
 }

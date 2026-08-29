@@ -108,3 +108,57 @@ puis MouseEntered) et le signal SIGABRT/134. La suite JVM AppKit demandée
 passe ; ce crash de process-owning AppKit empêche seulement la vérification
 locale complète du script natif et doit être traité séparément, hors du scope
 de l'activation des contrats.
+
+## Corrections de revue — sentinelles O3 et couverture complète des gates
+
+### RED
+
+Les nouveaux tests ont été écrits avant les remappings et le changement du validator.
+Le fixture activeWindowContractMissingFromMappingsAndGatesIsRejected a échoué
+comme attendu : retirer APK-006 du TSV et de son gate ne produisait aucune erreur.
+
+Les deux tests publics AppKit sont :
+
+- publicAppKitWindowRejectsInvalidGeometryBeforeNativeCommitOnMacOs : soumet
+  min > max et vérifie InvalidRequest(sizeConstraints), l'état public et la
+  vraie NSWindow inchangés, ainsi que l'absence d'event GeometryChanged ;
+- publicAppKitWindowGeometryDoesNotCrossBetweenTwoWindowsOnMacOs : provoque
+  une observation native sur la première fenêtre puis une opération sur la
+  seconde, et vérifie que tailles, états et events restent associés à leur
+  propre fenêtre.
+
+Le premier essai multi-fenêtres a détecté une révision native tardive de la
+seconde fenêtre, qui rétablit ses bornes à null après sa propre opération. Ce
+n'était pas une contamination inter-fenêtres : l'assertion a donc été limitée
+à l'invariant requis (états/taille/event propres à chaque fenêtre), puis
+réexécutée.
+
+### GREEN
+
+Les sentinelles APK-006 utilisent désormais les preuves O3 dédiées :
+
+- appkit-window-geometry-invalid-precommit ->
+  AppKitBackendProviderTest.publicAppKitWindowRejectsInvalidGeometryBeforeNativeCommitOnMacOs[jvm] ;
+- appkit-window-geometry-cross-window ->
+  AppKitBackendProviderTest.publicAppKitWindowGeometryDoesNotCrossBetweenTwoWindowsOnMacOs[jvm].
+
+Le validator itère les contrats actifs des familles à evidence (APK-, INP-,
+WIN-) ; une entrée active sans gate est rejetée, même si toutes ses lignes ont
+été retirées des TSV. Les contrats non concernés par ces gates conservent leur
+comportement existant.
+
+Vérification fraîche :
+
+```text
+./gradlew :kadre:contracts:validator:validateContractRegistry :kadre:runtime:jvmTest :kadre:backend:appkit:jvmTest --console=plain
+BUILD SUCCESSFUL in 7s
+
+bash scripts/test-kadre-appkit-contract-driver.sh
+Kadre AppKit contract driver behavior: passed
+
+git diff --check
+exit 0
+```
+
+Aucun code de capability publique ou FFI n'a été modifié ; seuls les tests,
+mappings et la validation des gates ont changé.
