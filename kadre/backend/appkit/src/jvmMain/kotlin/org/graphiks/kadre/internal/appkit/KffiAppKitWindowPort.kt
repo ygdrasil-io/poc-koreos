@@ -15,6 +15,7 @@ import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -97,6 +98,22 @@ internal class KffiAppKitWindowPort(
         }
     }
 
+    override fun updateGeometry(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowGeometryTarget,
+    ): AppKitWindowGeometrySnapshot {
+        requireMainThread()
+        return window.kffiWindowOwner().updateGeometry(target)
+    }
+
+    override fun observeGeometry(
+        window: AppKitNativeWindowOwner,
+        callbacks: AppKitWindowGeometryCallbacks,
+    ): AppKitNativeGeometryObserverOwner {
+        requireMainThread()
+        return window.kffiWindowOwner().installGeometryObserver(callbacks)
+    }
+
     override fun createContentView(spec: WindowSpec): AppKitNativeViewOwner {
         requireMainThread()
         val appearanceAdmission = KffiViewAppearanceAdmission()
@@ -177,6 +194,7 @@ internal class KffiAppKitWindowPort(
         return KffiSurfaceObserverOwner.create(
             window = window.kffiWindow(),
             viewOwner = view.kffiViewOwner(),
+            geometryObserver = window.kffiWindowOwner().geometryObserver(),
             callbacks = callbacks,
             requireMainThread = ::requireMainThread,
         )
@@ -493,6 +511,7 @@ private fun styleMask(spec: WindowSpec): NSWindowStyleMask {
 }
 
 private fun configureKffiWindow(owner: AppKitNativeWindowOwner, spec: WindowSpec) {
+    owner.kffiWindowOwner().applyInitialGeometry(spec)
     owner.kffiWindow().apply {
         setReleasedWhenClosed(false)
         setTitle(spec.title)
@@ -503,10 +522,105 @@ private class KffiWindowOwner(
     val window: NSWindow,
 ) : AppKitNativeWindowOwner {
     private val closed = AtomicBoolean(false)
+    private val nativeMinimumDefault = window.contentMinSize().copy()
+    private val nativeMaximumDefault = window.contentMaxSize().copy()
+    private var requestedMinimumSize: LogicalSize? = null
+    private var requestedMaximumSize: LogicalSize? = null
+    private var geometryObserver: KffiGeometryObserverOwner? = null
+
+    fun applyInitialGeometry(spec: WindowSpec) {
+        requestedMinimumSize = spec.minimumSize
+        requestedMaximumSize = spec.maximumSize
+        window.setContentSize(spec.contentSize.toNSSize())
+        window.setContentMinSize((spec.minimumSize?.toNSSize() ?: nativeMinimumDefault).copy())
+        window.setContentMaxSize((spec.maximumSize?.toNSSize() ?: nativeMaximumDefault).copy())
+        window.setStyleMask(window.styleMask().withResizable(spec.resizable))
+    }
+
+    fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot {
+        val contentSize = target.contentSize.resolveValue(readContentSize(window))
+        val minimumSize = target.minimumSize.resolveOptional(requestedMinimumSize)
+        val maximumSize = target.maximumSize.resolveOptional(requestedMaximumSize)
+        val nativeMinimum = minimumSize?.toNSSize() ?: nativeMinimumDefault
+        val nativeMaximum = maximumSize?.toNSSize() ?: nativeMaximumDefault
+        val currentMinimum = window.contentMinSize()
+        val currentMaximum = window.contentMaxSize()
+
+        val minimumRelaxed = currentMinimum.exceeds(contentSize)
+        if (minimumRelaxed) window.setContentMinSize(nativeMinimum.copy())
+        val maximumRelaxed = currentMaximum.fallsBelow(contentSize)
+        if (maximumRelaxed) window.setContentMaxSize(nativeMaximum.copy())
+
+        window.setContentSize(contentSize.toNSSize())
+        if (!minimumRelaxed) window.setContentMinSize(nativeMinimum.copy())
+        if (!maximumRelaxed) window.setContentMaxSize(nativeMaximum.copy())
+
+        val resizable = target.resizable.resolveValue(
+            window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+        )
+        window.setStyleMask(window.styleMask().withResizable(resizable))
+        requestedMinimumSize = minimumSize
+        requestedMaximumSize = maximumSize
+        return readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
+    }
+
+    fun installGeometryObserver(callbacks: AppKitWindowGeometryCallbacks): KffiGeometryObserverOwner {
+        check(geometryObserver == null) { "AppKit window geometry is already observed" }
+        return KffiGeometryObserverOwner(callbacks) {
+            readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
+        }.also { geometryObserver = it }
+    }
+
+    fun geometryObserver(): KffiGeometryObserverOwner? = geometryObserver
 
     override fun close() {
         if (closed.compareAndSet(false, true)) release(window.ptr)
     }
+}
+
+private fun LogicalSize.toNSSize(): NSSize = NSSize(width, height)
+
+private fun NSSize.copy(): NSSize = NSSize(width, height)
+
+private fun NSSize.exceeds(size: LogicalSize): Boolean = width > size.width || height > size.height
+
+private fun NSSize.fallsBelow(size: LogicalSize): Boolean = width < size.width || height < size.height
+
+private fun NSWindowStyleMask.withResizable(resizable: Boolean): NSWindowStyleMask {
+    val rawValue = if (resizable) {
+        rawValue or NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue
+    } else {
+        rawValue and NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue.inv()
+    }
+    return NSWindowStyleMask(rawValue)
+}
+
+private fun readGeometrySnapshot(
+    window: NSWindow,
+    requestedMinimumSize: LogicalSize?,
+    requestedMaximumSize: LogicalSize?,
+): AppKitWindowGeometrySnapshot = AppKitWindowGeometrySnapshot(
+    contentSize = readContentSize(window),
+    minimumSize = requestedMinimumSize?.let { window.contentMinSize().toLogicalSize() },
+    maximumSize = requestedMaximumSize?.let { window.contentMaxSize().toLogicalSize() },
+    resizable = window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+)
+
+private fun readContentSize(window: NSWindow): LogicalSize =
+    window.contentRectForFrameRect(window.frame()).size.toLogicalSize()
+
+private fun NSSize.toLogicalSize(): LogicalSize = LogicalSize(width, height)
+
+private fun <T> PropertyChange<T>.resolveValue(current: T): T = when (this) {
+    PropertyChange.Unchanged -> current
+    is PropertyChange.Set -> value
+    PropertyChange.Clear -> current
+}
+
+private fun <T> PropertyChange<T>.resolveOptional(current: T?): T? = when (this) {
+    PropertyChange.Unchanged -> current
+    is PropertyChange.Set -> value
+    PropertyChange.Clear -> null
 }
 
 private class KffiViewOwner(
@@ -661,9 +775,30 @@ private class KffiInputObserverOwner private constructor(
     }
 }
 
+private class KffiGeometryObserverOwner(
+    private val callbacks: AppKitWindowGeometryCallbacks,
+    private val readSnapshot: () -> AppKitWindowGeometrySnapshot,
+) : AppKitNativeGeometryObserverOwner {
+    private val accepting = AtomicBoolean(true)
+    private val closed = AtomicBoolean(false)
+
+    fun emit() {
+        if (accepting.get()) callbacks.geometryChanged(readSnapshot())
+    }
+
+    override fun revokeCallbacks() {
+        accepting.set(false)
+    }
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) revokeCallbacks()
+    }
+}
+
 private class KffiSurfaceObserverOwner private constructor(
     private val window: NSWindow,
     private val view: NSView,
+    private val geometryObserver: KffiGeometryObserverOwner?,
     private val callbacks: AppKitSurfaceCallbacks,
     private val requireMainThread: () -> Unit,
     private val observations: List<ObjCNotificationObservation>,
@@ -709,6 +844,11 @@ private class KffiSurfaceObserverOwner private constructor(
         if (accepting.get()) callbacks.metricsChanged(readMetrics(view, window))
     }
 
+    private fun emitGeometry() {
+        requireMainThread()
+        geometryObserver?.emit()
+    }
+
     private fun emitFocus() {
         requireMainThread()
         if (accepting.get()) callbacks.focusChanged(readFocus(window))
@@ -735,6 +875,7 @@ private class KffiSurfaceObserverOwner private constructor(
         fun create(
             window: NSWindow,
             viewOwner: KffiViewOwner,
+            geometryObserver: KffiGeometryObserverOwner?,
             callbacks: AppKitSurfaceCallbacks,
             requireMainThread: () -> Unit,
         ): KffiSurfaceObserverOwner {
@@ -755,6 +896,7 @@ private class KffiSurfaceObserverOwner private constructor(
                 val installedOwner = KffiSurfaceObserverOwner(
                     window,
                     view,
+                    geometryObserver,
                     callbacks,
                     requireMainThread,
                     observations,
@@ -762,10 +904,14 @@ private class KffiSurfaceObserverOwner private constructor(
                 owner = installedOwner
                 installedOwner.observeAppearance(viewOwner.appearanceAdmission)
                 observe(
-                    listOf(
-                        "NSWindowDidResizeNotification",
-                        "NSWindowDidChangeBackingPropertiesNotification",
-                    ),
+                    listOf("NSWindowDidResizeNotification"),
+                    window.ptr,
+                ) {
+                    installedOwner.emitMetrics()
+                    installedOwner.emitGeometry()
+                }
+                observe(
+                    listOf("NSWindowDidChangeBackingPropertiesNotification"),
                     window.ptr,
                     installedOwner::emitMetrics,
                 )
@@ -936,7 +1082,10 @@ private class KffiDelegateAdmission(
 }
 
 private fun AppKitNativeWindowOwner.kffiWindow(): NSWindow =
-    (this as? KffiWindowOwner)?.window ?: error("foreign AppKit window owner")
+    kffiWindowOwner().window
+
+private fun AppKitNativeWindowOwner.kffiWindowOwner(): KffiWindowOwner =
+    this as? KffiWindowOwner ?: error("foreign AppKit window owner")
 
 private fun AppKitNativeViewOwner.kffiView(): NSView =
     kffiViewOwner().view

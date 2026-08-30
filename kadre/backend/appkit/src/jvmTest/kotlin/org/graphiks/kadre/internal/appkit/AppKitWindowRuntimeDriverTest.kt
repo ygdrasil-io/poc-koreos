@@ -25,6 +25,7 @@ import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -35,6 +36,8 @@ import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
@@ -51,6 +54,200 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun peerForwardsGeometryUpdatesAndReturnsTheEffectiveNativeSnapshot() = runBlocking {
+        val requestedSize = LogicalSize(640.0, 400.0)
+        val effective = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(624.0, 390.0),
+            minimumSize = LogicalSize(200.0, 120.0),
+            maximumSize = LogicalSize(900.0, 700.0),
+            resizable = false,
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "effective-geometry",
+            effectiveGeometry = effective,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "effective-geometry"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(
+                    WindowUpdate(
+                        contentSize = PropertyChange.Set(requestedSize),
+                        minimumSize = PropertyChange.Set(LogicalSize(200.0, 120.0)),
+                        maximumSize = PropertyChange.Set(LogicalSize(900.0, 700.0)),
+                        resizable = PropertyChange.Set(false),
+                    ),
+                ).successValue(),
+            )
+
+            assertEquals(effective.contentSize, outcome.state.contentSize)
+            assertEquals(effective.minimumSize, outcome.state.minimumSize)
+            assertEquals(effective.maximumSize, outcome.state.maximumSize)
+            assertEquals(effective.resizable, outcome.state.resizable)
+            assertEquals(
+                listOf(
+                    AppKitWindowGeometryTarget(
+                        contentSize = PropertyChange.Set(requestedSize),
+                        minimumSize = PropertyChange.Set(LogicalSize(200.0, 120.0)),
+                        maximumSize = PropertyChange.Set(LogicalSize(900.0, 700.0)),
+                        resizable = PropertyChange.Set(false),
+                    ),
+                ),
+                port.geometryTargets,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun peerSuppressesManagedResizeCallbacksButForwardsExternalGeometry() = runBlocking {
+        val managed = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(480.0, 300.0),
+            minimumSize = null,
+            maximumSize = null,
+            resizable = true,
+        )
+        val external = managed.copy(contentSize = LogicalSize(512.0, 320.0))
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "geometry-callbacks",
+            effectiveGeometry = managed,
+            emitGeometryDuringUpdate = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "geometry-callbacks"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            window.apply(
+                WindowUpdate(contentSize = PropertyChange.Set(managed.contentSize)),
+            ).successValue()
+            assertEquals(1L, window.state.value.revision.value)
+
+            port.emitExternalGeometry("geometry-callbacks", external)
+            val observed = withTimeout(2.seconds) {
+                window.state.first { it.contentSize == external.contentSize }
+            }
+
+            assertEquals(2L, observed.revision.value)
+            assertEquals(external.contentSize, observed.contentSize)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun peerForwardsDistinctReentrantGeometryDuringItsManagedMutation() = runBlocking {
+        val managed = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(480.0, 300.0),
+            minimumSize = null,
+            maximumSize = null,
+            resizable = true,
+        )
+        val external = managed.copy(contentSize = LogicalSize(520.0, 340.0))
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "reentrant-external-geometry",
+            effectiveGeometry = managed,
+            emitGeometryDuringUpdate = true,
+            reentrantGeometryDuringUpdate = external,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "reentrant-external-geometry"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            window.apply(
+                WindowUpdate(contentSize = PropertyChange.Set(managed.contentSize)),
+            ).successValue()
+            val observed = withTimeout(2.seconds) {
+                window.state.first { it.contentSize == external.contentSize }
+            }
+
+            assertEquals(2L, observed.revision.value)
+            assertEquals(external.contentSize, observed.contentSize)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun queuedGeometryUpdateCompletesWhenCloseIsAdmittedBeforeNativeCommit() = runBlocking {
+        val enteredHandle = CountDownLatch(1)
+        val releaseHandle = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort("geometry-close-fence")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "geometry-close-fence"))
+                    .successValue()
+                    .await(),
+            ).window
+            val access = assertIs<RuntimeDesktopWindowHandleAccess>(window)
+            val handle = async(Dispatchers.Default) {
+                access.withDesktopHandle {
+                    enteredHandle.countDown()
+                    check(releaseHandle.await(2, TimeUnit.SECONDS))
+                }
+            }
+            assertTrue(enteredHandle.await(2, TimeUnit.SECONDS))
+
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(480.0, 300.0))))
+            }
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+
+            releaseHandle.countDown()
+            handle.await()
+            assertIs<KadreResult.Failure>(withTimeout(2.seconds) { update.await() })
+            assertEquals(emptyList(), port.geometryTargets)
+        } finally {
+            releaseHandle.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun peerPreservesUnrelatedStyleMaskBitsWhenChangingResizable() = runBlocking {
+        val title = "style-mask"
+        val unrelatedBits = 0b1010_0000L
+        val port = DeterministicAppKitNativeWindowPort(
+            name = title,
+            initialStyleMask = unrelatedBits or APPKIT_RESIZABLE_STYLE_MASK,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = title)).successValue().await(),
+            ).window
+
+            window.apply(WindowUpdate(resizable = PropertyChange.Set(false))).successValue()
+
+            assertEquals(unrelatedBits, port.styleMask(title))
+        } finally {
+            driver.close()
+        }
+    }
+
     @Test
     fun inputForOneLivePeerDoesNotCrossIntoAnotherSurfaceOfTheSameDriver() = runBlocking {
         val firstPhysical = PhysicalKey.Unidentified("first-native-key")
@@ -588,15 +785,21 @@ internal class DeterministicAppKitNativeWindowPort(
     private val inputObservationInstalled: Boolean = false,
     private val inputObservationInstalledFor: Set<String> = emptySet(),
     private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
+    private val effectiveGeometry: AppKitWindowGeometrySnapshot? = null,
+    private val emitGeometryDuringUpdate: Boolean = false,
+    private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
+    private val initialStyleMask: Long? = null,
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
     private val inputObservers = linkedMapOf<String, RecordingNativeInputObserver>()
+    private val geometryObservers = linkedMapOf<String, RecordingNativeGeometryObserver>()
     val createdWindowTitles = CopyOnWriteArrayList<String>()
     val closedWindowTitles = CopyOnWriteArrayList<String>()
     val windowWillCloseTitles = CopyOnWriteArrayList<String>()
     val createdPeerIds = CopyOnWriteArrayList<AppKitWindowPeerId>()
     val requestedSurfaceRedrawGenerations = CopyOnWriteArrayList<Long>()
+    val geometryTargets = CopyOnWriteArrayList<AppKitWindowGeometryTarget>()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
 
     override fun isMainThread(): Boolean = true
@@ -611,7 +814,16 @@ internal class DeterministicAppKitNativeWindowPort(
 
     override fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner {
         beforeCreateWindow(spec)
-        return RecordingNativeWindowOwner(spec.title).also { window ->
+        return RecordingNativeWindowOwner(
+            title = spec.title,
+            initialGeometry = AppKitWindowGeometrySnapshot(
+                contentSize = spec.contentSize,
+                minimumSize = spec.minimumSize,
+                maximumSize = spec.maximumSize,
+                resizable = spec.resizable,
+            ),
+            styleMask = initialStyleMask ?: if (spec.resizable) APPKIT_RESIZABLE_STYLE_MASK else 0L,
+        ).also { window ->
             check(windows.put(spec.title, window) == null) { "$name duplicate test window title" }
             createdWindowTitles += spec.title
         }
@@ -647,6 +859,33 @@ internal class DeterministicAppKitNativeWindowPort(
 
     override fun present(window: AppKitNativeWindowOwner) {
         window.recordingWindow().presented = true
+    }
+
+    override fun updateGeometry(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowGeometryTarget,
+    ): AppKitWindowGeometrySnapshot {
+        val recording = window.recordingWindow()
+        geometryTargets += target
+        val requested = recording.geometry.updateFor(target)
+        val effective = effectiveGeometry ?: requested
+        recording.geometry = effective
+        recording.styleMask = if (effective.resizable) {
+            recording.styleMask or APPKIT_RESIZABLE_STYLE_MASK
+        } else {
+            recording.styleMask and APPKIT_RESIZABLE_STYLE_MASK.inv()
+        }
+        if (emitGeometryDuringUpdate) geometryObservers[recording.title]?.emit(effective)
+        reentrantGeometryDuringUpdate?.let { geometryObservers[recording.title]?.emit(it) }
+        return effective
+    }
+
+    override fun observeGeometry(
+        window: AppKitNativeWindowOwner,
+        callbacks: AppKitWindowGeometryCallbacks,
+    ): AppKitNativeGeometryObserverOwner = RecordingNativeGeometryObserver(callbacks).also { observer ->
+        val title = window.recordingWindow().title
+        check(geometryObservers.put(title, observer) == null) { "$name duplicate test geometry observer" }
     }
 
     override fun observeSurface(
@@ -706,6 +945,19 @@ internal class DeterministicAppKitNativeWindowPort(
         recordNativeClose(checkNotNull(windows[title]))
     }
 
+    fun emitExternalGeometry(title: String, snapshot: AppKitWindowGeometrySnapshot) {
+        val window = checkNotNull(windows[title])
+        window.geometry = snapshot
+        window.styleMask = if (snapshot.resizable) {
+            window.styleMask or APPKIT_RESIZABLE_STYLE_MASK
+        } else {
+            window.styleMask and APPKIT_RESIZABLE_STYLE_MASK.inv()
+        }
+        checkNotNull(geometryObservers[title]).emit(snapshot)
+    }
+
+    fun styleMask(title: String): Long = checkNotNull(windows[title]).styleMask
+
     fun emitSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
         checkNotNull(surfaceObservers[title]).emitMetrics(metrics)
     }
@@ -735,6 +987,8 @@ internal class DeterministicAppKitNativeWindowPort(
 
     private class RecordingNativeWindowOwner(
         val title: String,
+        val initialGeometry: AppKitWindowGeometrySnapshot,
+        var styleMask: Long,
     ) : AppKitNativeWindowOwner {
         val nativeClosed = AtomicBoolean(false)
         var contentView: RecordingNativeViewOwner? = null
@@ -742,6 +996,7 @@ internal class DeterministicAppKitNativeWindowPort(
         var contentViewAttached: Boolean = true
         var delegateAttached: Boolean = true
         var presented: Boolean = false
+        var geometry: AppKitWindowGeometrySnapshot = initialGeometry
         private val released = AtomicBoolean(false)
 
         override fun close() {
@@ -814,6 +1069,22 @@ internal class DeterministicAppKitNativeWindowPort(
         override fun close() = Unit
     }
 
+    private class RecordingNativeGeometryObserver(
+        private val callbacks: AppKitWindowGeometryCallbacks,
+    ) : AppKitNativeGeometryObserverOwner {
+        private val accepting = AtomicBoolean(true)
+
+        fun emit(snapshot: AppKitWindowGeometrySnapshot) {
+            if (accepting.get()) callbacks.geometryChanged(snapshot)
+        }
+
+        override fun revokeCallbacks() {
+            accepting.set(false)
+        }
+
+        override fun close() = Unit
+    }
+
     private class RecordingNativeInputObserver(
         private val callbacks: AppKitInputCallbacks,
     ) : AppKitNativeInputObserverOwner {
@@ -841,6 +1112,24 @@ internal class DeterministicAppKitNativeWindowPort(
     private fun AppKitNativeDelegateOwner.recordingDelegate(): RecordingNativeDelegateOwner =
         this as? RecordingNativeDelegateOwner ?: error("foreign test delegate owner")
 }
+
+private fun AppKitWindowGeometrySnapshot.updateFor(
+    target: AppKitWindowGeometryTarget,
+): AppKitWindowGeometrySnapshot = copy(
+    contentSize = target.contentSize.resolve(contentSize),
+    minimumSize = target.minimumSize.resolve(minimumSize),
+    maximumSize = target.maximumSize.resolve(maximumSize),
+    resizable = target.resizable.resolve(resizable),
+)
+
+private fun <T> PropertyChange<T>.resolve(current: T): T = when (this) {
+    is PropertyChange.Set -> value
+    PropertyChange.Clear,
+    PropertyChange.Unchanged,
+    -> current
+}
+
+private const val APPKIT_RESIZABLE_STYLE_MASK: Long = 1L shl 3
 
 internal class OwnerThreadAppKitNativeWindowPort(
     name: String,

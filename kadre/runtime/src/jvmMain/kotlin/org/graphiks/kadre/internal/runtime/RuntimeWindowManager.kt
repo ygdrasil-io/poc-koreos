@@ -196,6 +196,18 @@ public class RuntimeWindowManager public constructor(
         return surface.accept(stimulus)
     }
 
+    /**
+     * Admits an uncorrelated native geometry observation for one live window.
+     *
+     * The runtime remains authoritative for revision assignment and event publication.
+     */
+    public fun acceptWindowGeometryObservation(windowId: WindowId, state: WindowState): Boolean {
+        val window = synchronized(lock) {
+            committed.values.firstOrNull { it.window.id == windowId }?.window
+        } ?: return false
+        return window.observeNativeUpdate(state)
+    }
+
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         currentCoroutineContext().ensureActive()
         lateinit var request: RuntimeWindowRequest
@@ -1302,10 +1314,12 @@ internal class RuntimeWindow(
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             val lifecycle = mutableState.value
-            val effective = if (lifecycle.phase == WindowPhase.Open) state else {
+            val effective = if (lifecycle.phase == WindowPhase.Open) state.copy(
+                revision = WindowRevision(lifecycle.revision.value + 1L),
+            ) else {
                 state.copy(
                     phase = lifecycle.phase,
-                    revision = WindowRevision(maxOf(state.revision.value, lifecycle.revision.value)),
+                    revision = WindowRevision(lifecycle.revision.value + 1L),
                 )
             }
             mutableState.value = effective
