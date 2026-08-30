@@ -33,6 +33,7 @@ val appKitJUnitReports = rootProject.file("kadre/backend/appkit/build/test-resul
 val appKitStandaloneLoopJUnitReports = rootProject.file("kadre/backend/appkit/build/test-results/appKitStandaloneLoopTest")
 val appKitContractEvidenceDirectory = rootProject.file("kadre/backend/appkit/build/contract-evidence")
 val appKitContractCommit = providers.gradleProperty("kadreContractCommit").orElse("local")
+val appKitContractAdapter = "appkit-jvm"
 val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004")
 
 val appKitContractEvidenceTasks = appKitContractIds.map { contractId ->
@@ -54,12 +55,14 @@ val appKitContractEvidenceTasks = appKitContractIds.map { contractId ->
             output.absolutePath,
             appKitContractCommit.get(),
             contractId,
+            appKitContractAdapter,
         )
         inputs.file(appKitContractRegistry)
         inputs.file(appKitContractMapping)
         inputs.dir(appKitJUnitReports)
         inputs.dir(appKitStandaloneLoopJUnitReports)
         inputs.property("contractCommit", appKitContractCommit)
+        inputs.property("contractAdapter", appKitContractAdapter)
         outputs.file(output)
     }
 }
@@ -71,6 +74,48 @@ val generateAppKitContractEvidence by tasks.registering {
     outputs.dir(appKitContractEvidenceDirectory)
 }
 
+val runtimeContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val runtimeContractMapping = rootProject.file("kadre/runtime/contracts/evidence.tsv")
+val runtimeJUnitReports = rootProject.file("kadre/runtime/build/test-results/jvmTest")
+val runtimeContractEvidenceDirectory = rootProject.file("kadre/runtime/build/contract-evidence")
+val runtimeContractCommit = providers.gradleProperty("kadreContractCommit").orElse("local")
+val runtimeContractAdapter = "runtime-jvm"
+val runtimeContractIds = listOf("INP-001")
+
+val runtimeContractEvidenceTasks = runtimeContractIds.map { contractId ->
+    tasks.register<JavaExec>("generateRuntime${contractId.replace("-", "")}ContractEvidence") {
+        group = "verification"
+        description = "Generates and validates $contractId evidence from runtime JUnit reports."
+        dependsOn("jvmMainClasses", ":kadre:runtime:jvmTest")
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
+        val output = runtimeContractEvidenceDirectory.resolve("$contractId.json")
+        args(
+            runtimeContractRegistry.absolutePath,
+            runtimeContractMapping.absolutePath,
+            runtimeJUnitReports.absolutePath,
+            output.absolutePath,
+            runtimeContractCommit.get(),
+            contractId,
+            runtimeContractAdapter,
+        )
+        inputs.file(runtimeContractRegistry)
+        inputs.file(runtimeContractMapping)
+        inputs.dir(runtimeJUnitReports)
+        inputs.property("contractCommit", runtimeContractCommit)
+        inputs.property("contractAdapter", runtimeContractAdapter)
+        outputs.file(output)
+    }
+}
+
+val generateRuntimeContractEvidence by tasks.registering {
+    group = "verification"
+    description = "Generates and validates evidence for every active runtime contract."
+    dependsOn(runtimeContractEvidenceTasks)
+    outputs.dir(runtimeContractEvidenceDirectory)
+}
+
 tasks.named("check") {
     dependsOn(validateContractRegistry)
+    dependsOn(generateRuntimeContractEvidence)
 }

@@ -13,6 +13,41 @@ import kotlin.test.assertFailsWith
 
 class ContractEvidenceTest {
     @Test
+    fun activeO2JvmContractCanProduceEvidence() {
+        val json = ContractEvidence.create(
+            contract = activeRuntimeContract(),
+            mappings = completeRuntimeMappings(),
+            junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+            commit = "0123456789abcdef",
+            adapter = "runtime-jvm",
+            os = "Mac OS X",
+            runtime = "OpenJDK Runtime Environment",
+            toolchain = "25",
+        )
+
+        assertEquals("O2", json["scenarios"]!!.jsonArray.single().jsonObject["oracle"]!!.jsonPrimitive.content)
+        assertEquals("runtime-jvm", json["adapter"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun oracleOutsideO2AndO3CannotProduceEvidence() {
+        val exception = assertFailsWith<IllegalStateException> {
+            ContractEvidence.create(
+                contract = activeRuntimeContract().copy(oracle = ContractOracle.O1),
+                mappings = completeRuntimeMappings(),
+                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                commit = "0123456789abcdef",
+                adapter = "runtime-jvm",
+                os = "Mac OS X",
+                runtime = "OpenJDK Runtime Environment",
+                toolchain = "25",
+            )
+        }
+
+        assertContains(exception.message.orEmpty(), "INP-001 must use oracle O2 or O3")
+    }
+
+    @Test
     fun evidenceIsBuiltFromPassingJUnitCases() {
         val junit = JUnitEvidence.read(writeReport(VALID_REPORT))
 
@@ -21,6 +56,7 @@ class ContractEvidenceTest {
             mappings = completeMappings(),
             junit = junit,
             commit = "0123456789abcdef",
+            adapter = "appkit-jvm",
             os = "Mac OS X",
             runtime = "OpenJDK Runtime Environment",
             toolchain = "25",
@@ -68,6 +104,24 @@ class ContractEvidenceTest {
         }
 
         assertContains(exception.message.orEmpty(), "mapped testcase is missing: example.AppKitTest#offMain[jvm]")
+    }
+
+    @Test
+    fun incompleteEvidenceMappingsAreRejected() {
+        val exception = assertFailsWith<IllegalStateException> {
+            ContractEvidence.create(
+                contract = activeAppKitContract(),
+                mappings = completeMappings().dropLast(1),
+                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                commit = "0123456789abcdef",
+                adapter = "appkit-jvm",
+                os = "Mac OS X",
+                runtime = "OpenJDK Runtime Environment",
+                toolchain = "25",
+            )
+        }
+
+        assertContains(exception.message.orEmpty(), "APK-001: missing sentinel: appkit-loop-not-woken")
     }
 
     @Test
@@ -134,6 +188,7 @@ class ContractEvidenceTest {
         mappings = completeMappings(),
         junit = junit,
         commit = "0123456789abcdef",
+        adapter = "appkit-jvm",
         os = "Mac OS X",
         runtime = "OpenJDK Runtime Environment",
         toolchain = "25",
@@ -166,6 +221,37 @@ class ContractEvidenceTest {
         conditionalCapabilities = emptyList(),
         sentinels = listOf("appkit-off-main-accepted", "appkit-loop-not-woken"),
         retirementRef = null,
+    )
+
+    private fun activeRuntimeContract(): ContractRecord = ContractRecord(
+        contractId = "INP-001",
+        status = ContractStatus.Active,
+        source = "TEST-STRATEGY.md#3",
+        subject = "runtime input reducer",
+        risk = "input events are not evidenced in CI",
+        oracle = ContractOracle.O2,
+        scenarios = listOf("runtime-input-key-pointer"),
+        requiredTargets = listOf("jvm"),
+        conditionalCapabilities = emptyList(),
+        sentinels = listOf("runtime-input-policy-bypass"),
+        retirementRef = null,
+    )
+
+    private fun completeRuntimeMappings(): List<EvidenceMapping> = listOf(
+        EvidenceMapping(
+            contractId = "INP-001",
+            kind = EvidenceKind.Scenario,
+            evidenceId = "runtime-input-key-pointer",
+            testClass = "example.AppKitTest",
+            testName = "discovery[jvm]",
+        ),
+        EvidenceMapping(
+            contractId = "INP-001",
+            kind = EvidenceKind.Sentinel,
+            evidenceId = "runtime-input-policy-bypass",
+            testClass = "example.AppKitTest",
+            testName = "offMain[jvm]",
+        ),
     )
 
     private fun writeReport(report: String): Path = createTempDirectory("kadre-junit-").also {

@@ -23,14 +23,22 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.InputStateRevision
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.KeyboardState
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerId
+import org.graphiks.kadre.input.PointerState
+import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.IngressOverflowAction
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
@@ -39,6 +47,7 @@ import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
@@ -66,6 +75,7 @@ internal class RuntimeWindowSurface(
     private val platform: KadrePlatform = KadrePlatform.Fake,
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
     private val deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
+    private val inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
     private val maxCollectorsPerFlow: Int = KadrePolicies.Default.resources.maxEventCollectorsPerFlow,
     private val collectorAllocator: RuntimeEventCollectorAllocator = RuntimeEventCollectorAllocator(
         KadrePolicies.Default.resources.maxEventCollectorsPerSession,
@@ -91,7 +101,13 @@ internal class RuntimeWindowSurface(
     private val liveCapabilities = if (commandsEnabled) enabledCapabilities else unsupportedSurfaceCapabilities()
     private val mutableCapabilities = MutableStateFlow(liveCapabilities)
     private val eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow)
-    private val surfaceInput = MinimalSurfaceInput(collectorAllocator.newGate(maxCollectorsPerFlow))
+    private val surfaceInput = RuntimeSurfaceInput(
+        deliveryPolicy = inputDeliveryPolicy,
+        eventStampSource = eventStampSource,
+        eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
+        failureReporter = ::safeReport,
+        sessionFailureHandler = sessionFailureHandler,
+    )
     private val eventSubscribersLock = Any()
     private val eventSubscribers = linkedMapOf<SurfaceEventSubscriber, RuntimeEventCollectorLease>()
     private var eventsTerminal: FlowTerminal? = null
@@ -224,13 +240,21 @@ internal class RuntimeWindowSurface(
     internal fun accept(stimulus: SurfaceStimulus): Boolean {
         if (stimulus.surfaceId != id) return false
         if (stimulus is SurfaceStimulus.Detached) return detach()
+        if (stimulus.isInputStimulus()) {
+            return synchronized(lock) {
+                currentState.attachment != SurfaceAttachmentState.Detached && surfaceInput.accept(stimulus)
+            }
+        }
 
         var admission: PublicationAdmission? = null
+        var resetInputForFocusLoss = false
         val accepted = synchronized(lock) {
             if (currentState.attachment == SurfaceAttachmentState.Detached) return@synchronized false
             val publication = when (stimulus) {
                 is SurfaceStimulus.MetricsChanged -> metricsPublicationLocked(stimulus.metrics)
-                is SurfaceStimulus.FocusChanged -> focusPublicationLocked(stimulus.focus)
+                is SurfaceStimulus.FocusChanged -> focusPublicationLocked(stimulus.focus).also { publication ->
+                    resetInputForFocusLoss = publication != null && stimulus.focus == SurfaceFocus.Unfocused
+                }
                 is SurfaceStimulus.VisibilityChanged -> visibilityPublicationLocked(
                     stimulus.visibility,
                     stimulus.occlusion,
@@ -238,11 +262,20 @@ internal class RuntimeWindowSurface(
 
                 is SurfaceStimulus.ThemeChanged -> themePublicationLocked(stimulus.theme)
                 is SurfaceStimulus.RedrawConsumed -> redrawPublicationLocked(stimulus.generation)
+                is SurfaceStimulus.KeyChanged,
+                is SurfaceStimulus.InputObservationChanged,
+                is SurfaceStimulus.PointerEntered,
+                is SurfaceStimulus.PointerMoved,
+                is SurfaceStimulus.PointerButtonChanged,
+                is SurfaceStimulus.PointerLeft,
+                is SurfaceStimulus.Scroll,
+                -> error("input stimuli are handled before surface publication")
                 is SurfaceStimulus.Detached -> error("handled before lock")
             } ?: return@synchronized false
             admission = enqueuePublicationLocked(publication)
             true
         }
+        if (resetInputForFocusLoss) surfaceInput.focusLost()
         admission?.let(::finishPublicationAdmission)
         return accepted
     }
@@ -1004,66 +1037,782 @@ private fun coalescedStamp(previous: EventStamp, latest: EventStamp): EventStamp
     )
 }
 
-private class MinimalSurfaceInput(
+private class RuntimeSurfaceInput(
+    private val deliveryPolicy: InputDeliveryPolicy,
+    private val eventStampSource: () -> EventStamp,
     private val eventCollectorGate: RuntimeEventCollectorGate,
+    private val failureReporter: (Throwable) -> Unit,
+    private val sessionFailureHandler: (KadreFailure) -> Unit,
 ) : SurfaceInput {
     private val lock = Any()
-    private val terminalSignal = CompletableDeferred<KadreFailure?>()
-    private var terminalState: FlowTerminal? = null
-    private val mutableState = MutableStateFlow(
-        SurfaceInputState(
+    private var currentState = unsupportedInputState()
+    private var nextPointerIdentity = 0L
+    private var mousePointerId: PointerId? = null
+    private val publications = BoundedInputScheduler(
+        discreteCapacity = deliveryPolicy.discreteEvents.ingressCapacity,
+        pointerDelivery = deliveryPolicy.pointerMotion,
+        scrollDelivery = deliveryPolicy.scroll,
+    )
+    private var publicationDrainActive = false
+    private var terminal: FlowTerminal? = null
+    private var terminalNotificationPending = false
+    private val mutableState = MutableStateFlow(currentState)
+    private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
+
+    override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
+    override val events: Flow<InputEvent> = flow {
+        val subscriber = InputEventSubscriber(deliveryPolicy)
+        when (val registration = registerSubscriber(subscriber)) {
+            InputCollectorRegistration.Closed -> return@flow
+            is InputCollectorRegistration.Failed -> throw KadreException(registration.failure)
+            is InputCollectorRegistration.Registered -> Unit
+        }
+        try {
+            while (true) {
+                val event = subscriber.next() ?: break
+                emit(event)
+            }
+        } finally {
+            unregisterSubscriber(subscriber)
+        }
+    }
+
+    fun accept(stimulus: SurfaceStimulus): Boolean {
+        var admission: InputPublicationAdmission? = null
+        val accepted = synchronized(lock) {
+            if (terminal != null) return@synchronized false
+            if (stimulus is SurfaceStimulus.InputObservationChanged) {
+                return@synchronized updateObservationCapabilitiesLocked(stimulus)
+            }
+            val publication = reduceLocked(stimulus) ?: return@synchronized false
+            admission = enqueuePublicationLocked(publication)
+            true
+        }
+        admission?.let(::finishPublicationAdmission)
+        return accepted
+    }
+
+    fun focusLost(): Boolean {
+        var admission: InputPublicationAdmission? = null
+        val accepted = synchronized(lock) {
+            if (terminal != null) return@synchronized false
+            val neutral = currentState.copy(
+                keyboard = KeyboardState(emptySet()),
+                pointers = emptyList(),
+                touches = emptyList(),
+                modifiers = KeyboardModifiers(emptySet()),
+                revision = currentState.revision.next(),
+            )
+            setStateLocked(neutral)
+            admission = enqueuePublicationLocked(
+                InputPublication(
+                    InputEvent.StateReset(
+                        InputStateResetReason.FocusLost,
+                        eventStampSource(),
+                        deviceId = null,
+                        stateRevision = currentState.revision,
+                    ),
+                ),
+            )
+            true
+        }
+        admission?.let(::finishPublicationAdmission)
+        return accepted
+    }
+
+    fun close(failure: KadreFailure?) {
+        val admission = synchronized(lock) {
+            if (terminal != null) return
+            terminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
+            terminalNotificationPending = true
+            InputPublicationAdmission(ensurePublicationDrainLocked())
+        }
+        finishPublicationAdmission(admission)
+    }
+
+    private fun reduceLocked(stimulus: SurfaceStimulus): InputPublication? = when (stimulus) {
+        is SurfaceStimulus.KeyChanged -> {
+            val pressed = currentState.keyboard.pressedKeys.toMutableSet()
+            when (stimulus.keyState) {
+                KeyState.Pressed -> pressed += stimulus.physicalKey
+                KeyState.Released -> pressed -= stimulus.physicalKey
+            }
+            updateStateLocked(
+                keyboard = KeyboardState(pressed),
+                modifiers = stimulus.modifiers,
+            )
+            InputPublication(
+                InputEvent.Key(
+                    physicalKey = stimulus.physicalKey,
+                    logicalKey = stimulus.logicalKey,
+                    location = stimulus.location,
+                    keyState = stimulus.keyState,
+                    repeat = stimulus.repeat,
+                    modifiers = stimulus.modifiers,
+                    stamp = eventStampSource(),
+                    deviceId = stimulus.deviceId,
+                    stateRevision = currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.PointerEntered -> {
+            val pointer = pointerStateLocked(
+                kind = stimulus.kind,
+                position = stimulus.position,
+                pressure = null,
+                pen = null,
+            )
+            updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
+            InputPublication(
+                InputEvent.PointerEntered(
+                    pointer.id,
+                    stimulus.kind,
+                    stimulus.position,
+                    eventStampSource(),
+                    stimulus.deviceId,
+                    currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.PointerMoved -> {
+            val pointer = pointerStateLocked(
+                kind = stimulus.kind,
+                position = stimulus.position,
+                pressure = stimulus.pressure,
+                pen = stimulus.pen,
+            )
+            updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
+            InputPublication(
+                InputEvent.PointerMoved(
+                    pointer.id,
+                    stimulus.kind,
+                    stimulus.position,
+                    stimulus.delta,
+                    stimulus.pressure,
+                    stimulus.pen,
+                    eventStampSource(),
+                    stimulus.deviceId,
+                    currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.PointerButtonChanged -> {
+            val id = mousePointerIdLocked()
+            val existing = currentState.pointers.firstOrNull { it.id == id }
+            val buttons = (existing?.pressedButtons ?: emptySet()).toMutableSet()
+            when (stimulus.buttonState) {
+                PointerButtonState.Pressed -> buttons += stimulus.button
+                PointerButtonState.Released -> buttons -= stimulus.button
+            }
+            val pointer = PointerState(
+                id = id,
+                kind = stimulus.kind,
+                position = stimulus.position,
+                pressedButtons = buttons,
+                pressure = stimulus.pressure,
+                pen = stimulus.pen,
+            )
+            updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
+            InputPublication(
+                InputEvent.PointerButtonChanged(
+                    id,
+                    stimulus.kind,
+                    stimulus.button,
+                    stimulus.buttonState,
+                    stimulus.position,
+                    stimulus.pressure,
+                    stimulus.pen,
+                    eventStampSource(),
+                    stimulus.deviceId,
+                    currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.PointerLeft -> {
+            val id = mousePointerId ?: return null
+            val existing = currentState.pointers.firstOrNull { it.id == id } ?: return null
+            InputPublication(
+                InputEvent.PointerLeft(
+                    id,
+                    stimulus.kind,
+                    existing.position,
+                    eventStampSource(),
+                    stimulus.deviceId,
+                    currentState.revision,
+                ),
+                afterDelivery = InputStateAfterDelivery.RemovePointer(id, existing),
+            )
+        }
+
+        is SurfaceStimulus.Scroll -> InputPublication(
+            InputEvent.Scrolled(
+                stimulus.delta,
+                eventStampSource(),
+                stimulus.deviceId,
+                currentState.revision,
+            ),
+            scrollBoundary = stimulus.coalescingBoundary,
+        )
+
+        is SurfaceStimulus.MetricsChanged,
+        is SurfaceStimulus.FocusChanged,
+        is SurfaceStimulus.VisibilityChanged,
+        is SurfaceStimulus.ThemeChanged,
+        is SurfaceStimulus.RedrawConsumed,
+        is SurfaceStimulus.InputObservationChanged,
+        is SurfaceStimulus.Detached,
+        -> error("surface observations cannot enter the input reducer")
+    }
+
+    private fun updateObservationCapabilitiesLocked(
+        stimulus: SurfaceStimulus.InputObservationChanged,
+    ): Boolean {
+        val capabilities = currentState.capabilities.copy(
+            keyboard = if (stimulus.keyboardInstalled) {
+                FeatureAvailability.Available
+            } else {
+                FeatureAvailability.Unsupported
+            },
+            pointer = if (stimulus.pointerInstalled) {
+                FeatureAvailability.Available
+            } else {
+                FeatureAvailability.Unsupported
+            },
+        )
+        if (capabilities == currentState.capabilities) return false
+        setStateLocked(
+            currentState.copy(
+                capabilities = capabilities,
+                revision = currentState.revision.next(),
+            ),
+        )
+        return true
+    }
+
+    private fun pointerStateLocked(
+        kind: org.graphiks.kadre.input.PointerKind,
+        position: org.graphiks.kadre.surface.LogicalPoint,
+        pressure: Double?,
+        pen: org.graphiks.kadre.input.PenState?,
+    ): PointerState {
+        val id = mousePointerIdLocked()
+        val existing = currentState.pointers.firstOrNull { it.id == id }
+        return PointerState(
+            id = id,
+            kind = kind,
+            position = position,
+            pressedButtons = existing?.pressedButtons ?: emptySet(),
+            pressure = pressure,
+            pen = pen,
+        )
+    }
+
+    private fun mousePointerIdLocked(): PointerId = mousePointerId ?: run {
+        check(nextPointerIdentity < Long.MAX_VALUE) { "pointer identity space exhausted" }
+        PointerId(nextPointerIdentity++).also { mousePointerId = it }
+    }
+
+    private fun updateStateLocked(
+        keyboard: KeyboardState = currentState.keyboard,
+        pointers: List<PointerState> = currentState.pointers,
+        modifiers: KeyboardModifiers = currentState.modifiers,
+    ) {
+        if (
+            keyboard == currentState.keyboard &&
+            pointers == currentState.pointers &&
+            modifiers == currentState.modifiers
+        ) return
+        setStateLocked(
+            currentState.copy(
+                keyboard = keyboard,
+                pointers = pointers,
+                modifiers = modifiers,
+                revision = currentState.revision.next(),
+            ),
+        )
+    }
+
+    private fun setStateLocked(value: SurfaceInputState) {
+        currentState = value
+        mutableState.value = value
+    }
+
+    private fun enqueuePublicationLocked(publication: InputPublication): InputPublicationAdmission =
+        when (val offered = publications.offer(publication)) {
+            QueueOfferResult.Accepted -> InputPublicationAdmission(ensurePublicationDrainLocked())
+            is QueueOfferResult.Dropped -> InputPublicationAdmission(
+                shouldDrain = ensurePublicationDrainLockedIfNeeded(),
+                reportOverflow = true,
+            )
+
+            QueueOfferResult.DiscreteOverflow -> terminaliseLocked(
+                failure = KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+                failSession = deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
+            )
+
+            is QueueOfferResult.ContinuousOverflow -> when (offered.action) {
+                ContinuousOverflowAction.DropOldestAndReport,
+                ContinuousOverflowAction.DropLatestAndReport,
+                -> error("drop is reported by the scheduler")
+
+                ContinuousOverflowAction.CloseSource -> terminaliseLocked(
+                    failure = KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+                    failSession = false,
+                )
+
+                ContinuousOverflowAction.FailSession -> terminaliseLocked(
+                    failure = KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+                    failSession = true,
+                )
+            }
+        }
+
+    private fun terminaliseLocked(
+        failure: KadreFailure,
+        failSession: Boolean,
+    ): InputPublicationAdmission {
+        if (terminal != null) return InputPublicationAdmission(shouldDrain = false)
+        val neutral = currentState.copy(
             keyboard = KeyboardState(emptySet()),
             pointers = emptyList(),
             touches = emptyList(),
             modifiers = KeyboardModifiers(emptySet()),
-            capabilities = InputCapabilities(
-                keyboard = FeatureAvailability.Unsupported,
-                pointer = FeatureAvailability.Unsupported,
-                touch = FeatureAvailability.Unsupported,
-                gestures = FeatureAvailability.Unsupported,
-                dragAndDrop = FeatureAvailability.Unsupported,
-                textInput = unsupported(KadreOperation.TextInput),
-                rawInput = unsupported(KadreOperation.RawInputAccess),
-            ),
-            revision = InputStateRevision(0L),
-        ),
-    )
+            capabilities = unavailableInputCapabilities(failure),
+            revision = currentState.revision.next(),
+        )
+        setStateLocked(neutral)
+        terminal = FlowTerminal.Failed(failure)
+        terminalNotificationPending = true
+        return InputPublicationAdmission(
+            shouldDrain = ensurePublicationDrainLocked(),
+            reportOverflow = true,
+            failSession = if (failSession) failure else null,
+        )
+    }
 
-    override val events: Flow<InputEvent> = flow {
-        val registration = synchronized(lock) {
-            when (val terminal = terminalState) {
-                FlowTerminal.Closed -> InputCollectorRegistration.Closed
-                is FlowTerminal.Failed -> InputCollectorRegistration.Failed(terminal.failure)
-                null -> when (val admission = eventCollectorGate.tryAcquire()) {
-                    is KadreResult.Success -> InputCollectorRegistration.Registered(admission.value)
-                    is KadreResult.Failure -> InputCollectorRegistration.Failed(admission.reason)
+    private fun finishPublicationAdmission(admission: InputPublicationAdmission) {
+        if (admission.reportOverflow) safeReport(KadreException(KadreFailure.SourceOverflow(KadreResourceKind.InputSource)))
+        if (admission.shouldDrain) drainPublications()
+        admission.failSession?.let(::safeFailSession)
+    }
+
+    private fun drainPublications() {
+        while (true) {
+            val publication = synchronized(lock) {
+                publications.poll() ?: if (terminalNotificationPending) {
+                    terminalNotificationPending = false
+                    null
+                } else {
+                    publicationDrainActive = false
+                    return
+                }
+            }
+            if (publication == null) {
+                closeSubscribers(checkNotNull(synchronized(lock) { terminal }))
+            } else {
+                publishEvent(publication)
+            }
+        }
+    }
+
+    private fun publishEvent(publication: InputPublication) {
+        val currentSubscribers = synchronized(lock) { subscribers.keys.toList() }
+        var closeSource = false
+        var failSession = false
+        currentSubscribers.forEach { subscriber ->
+            when (subscriber.offer(publication.copyForDelivery())) {
+                InputSubscriberOffer.Accepted -> Unit
+                InputSubscriberOffer.Dropped -> safeReport(
+                    KadreException(KadreFailure.SourceOverflow(KadreResourceKind.InputSource)),
+                )
+
+                InputSubscriberOffer.CloseSource -> closeSource = true
+                InputSubscriberOffer.FailSession -> failSession = true
+            }
+        }
+        publication.afterDelivery?.let(::applyAfterDelivery)
+        if (closeSource || failSession) closeFromDeliveryOverflow(failSession)
+    }
+
+    private fun applyAfterDelivery(effect: InputStateAfterDelivery) {
+        synchronized(lock) {
+            when (effect) {
+                is InputStateAfterDelivery.RemovePointer -> {
+                    val currentPointer = currentState.pointers.firstOrNull { it.id == effect.id }
+                    if (currentPointer == effect.expected) {
+                        updateStateLocked(pointers = currentState.pointers.filterNot { it.id == effect.id })
+                    }
                 }
             }
         }
-        when (registration) {
-            InputCollectorRegistration.Closed -> return@flow
-            is InputCollectorRegistration.Failed -> throw KadreException(registration.failure)
-            is InputCollectorRegistration.Registered -> try {
-                terminalSignal.await()?.let { throw KadreException(it) }
-            } finally {
-                registration.lease.close()
+    }
+
+    private fun closeFromDeliveryOverflow(failSession: Boolean) {
+        val admission = synchronized(lock) {
+            terminaliseLocked(
+                failure = KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+                failSession = failSession,
+            )
+        }
+        finishPublicationAdmission(admission)
+    }
+
+    private fun closeSubscribers(terminalSnapshot: FlowTerminal) {
+        val subscribersToClose = synchronized(lock) { subscribers.keys.toList() }
+        val cause = (terminalSnapshot as? FlowTerminal.Failed)?.failure?.let(::KadreException)
+        subscribersToClose.forEach { it.terminate(cause, drain = true) }
+    }
+
+    private fun registerSubscriber(subscriber: InputEventSubscriber): InputCollectorRegistration = synchronized(lock) {
+        when (val terminalSnapshot = terminal) {
+            FlowTerminal.Closed -> InputCollectorRegistration.Closed
+            is FlowTerminal.Failed -> InputCollectorRegistration.Failed(terminalSnapshot.failure)
+            null -> when (val admission = eventCollectorGate.tryAcquire()) {
+                is KadreResult.Success -> {
+                    check(subscribers.put(subscriber, admission.value) == null)
+                    InputCollectorRegistration.Registered(admission.value)
+                }
+
+                is KadreResult.Failure -> InputCollectorRegistration.Failed(admission.reason)
             }
         }
     }
-    override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
 
-    fun close(failure: KadreFailure?) {
-        val shouldComplete = synchronized(lock) {
-            if (terminalState != null) {
-                false
-            } else {
-                terminalState = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
-                true
-            }
+    private fun unregisterSubscriber(subscriber: InputEventSubscriber) {
+        val lease = synchronized(lock) { subscribers.remove(subscriber) }
+        lease?.close()
+        subscriber.dispose()
+    }
+
+    private fun ensurePublicationDrainLocked(): Boolean {
+        if (publicationDrainActive) return false
+        publicationDrainActive = true
+        return true
+    }
+
+    private fun ensurePublicationDrainLockedIfNeeded(): Boolean =
+        if (publications.isEmpty() && !terminalNotificationPending) false else ensurePublicationDrainLocked()
+
+    private fun safeReport(cause: Throwable) {
+        try {
+            failureReporter(cause)
+        } catch (_: Exception) {
+            // Input diagnostics cannot destabilise the surface runtime.
+        } catch (_: LinkageError) {
+            // Input diagnostics cannot destabilise the surface runtime.
         }
-        if (shouldComplete) check(terminalSignal.complete(failure))
+    }
+
+    private fun safeFailSession(failure: KadreFailure) {
+        try {
+            sessionFailureHandler(failure)
+        } catch (cause: Exception) {
+            safeReport(cause)
+        } catch (cause: LinkageError) {
+            safeReport(cause)
+        }
     }
 }
+
+private data class InputPublication(
+    val event: InputEvent,
+    val scrollBoundary: Long? = null,
+    val afterDelivery: InputStateAfterDelivery? = null,
+)
+
+private sealed interface InputStateAfterDelivery {
+    data class RemovePointer(
+        val id: PointerId,
+        val expected: PointerState,
+    ) : InputStateAfterDelivery
+}
+
+private data class InputPublicationAdmission(
+    val shouldDrain: Boolean,
+    val reportOverflow: Boolean = false,
+    val failSession: KadreFailure? = null,
+)
+
+private enum class InputEventLane { Discrete, PointerMotion, Scroll }
+
+private class BoundedInputScheduler(
+    private val discreteCapacity: Int,
+    private val pointerDelivery: ContinuousDelivery,
+    private val scrollDelivery: ContinuousDelivery,
+) {
+    private val entries = mutableListOf<InputPublication>()
+
+    fun offer(value: InputPublication): QueueOfferResult = when (val lane = value.lane()) {
+        InputEventLane.Discrete -> {
+            if (entries.count { it.lane() == InputEventLane.Discrete } >= discreteCapacity) {
+                QueueOfferResult.DiscreteOverflow
+            } else {
+                entries += value
+                QueueOfferResult.Accepted
+            }
+        }
+
+        InputEventLane.PointerMotion,
+        InputEventLane.Scroll,
+        -> offerContinuous(value, lane, if (lane == InputEventLane.PointerMotion) pointerDelivery else scrollDelivery)
+    }
+
+    fun poll(): InputPublication? {
+        if (entries.isEmpty()) return null
+        val next = entries.indices.minBy { entries[it].event.stamp.sequence.value }
+        return entries.removeAt(next)
+    }
+
+    fun isEmpty(): Boolean = entries.isEmpty()
+
+    fun clear() {
+        entries.clear()
+    }
+
+    private fun offerContinuous(
+        value: InputPublication,
+        lane: InputEventLane,
+        delivery: ContinuousDelivery,
+    ): QueueOfferResult = when (delivery) {
+        ContinuousDelivery.Latest,
+        ContinuousDelivery.Coalesced,
+        -> {
+            val lastBarrier = entries.asSequence()
+                .filter { it.lane() == InputEventLane.Discrete }
+                .maxOfOrNull { it.event.stamp.sequence.value }
+                ?: -1L
+            val existingIndex = entries.indices
+                .filter { entries[it].lane() == lane && entries[it].event.stamp.sequence.value > lastBarrier }
+                .lastOrNull()
+            if (existingIndex != null && entries[existingIndex].canCoalesceWith(value)) {
+                entries[existingIndex] = coalesceInputPublication(entries[existingIndex], value)
+            } else {
+                entries += value
+            }
+            QueueOfferResult.Accepted
+        }
+
+        is ContinuousDelivery.Buffered -> {
+            val matching = entries.indices.filter { entries[it].lane() == lane }
+            if (matching.size < delivery.capacity) {
+                entries += value
+                QueueOfferResult.Accepted
+            } else {
+                when (delivery.onOverflow) {
+                    ContinuousOverflowAction.DropOldestAndReport -> {
+                        entries.removeAt(matching.minBy { entries[it].event.stamp.sequence.value })
+                        entries += value
+                        QueueOfferResult.Dropped(latestWasDropped = false)
+                    }
+
+                    ContinuousOverflowAction.DropLatestAndReport -> QueueOfferResult.Dropped(latestWasDropped = true)
+                    ContinuousOverflowAction.CloseSource,
+                    ContinuousOverflowAction.FailSession,
+                    -> QueueOfferResult.ContinuousOverflow(delivery.onOverflow)
+                }
+            }
+        }
+    }
+}
+
+private sealed interface InputSubscriberOffer {
+    data object Accepted : InputSubscriberOffer
+    data object Dropped : InputSubscriberOffer
+    data object CloseSource : InputSubscriberOffer
+    data object FailSession : InputSubscriberOffer
+}
+
+private sealed interface InputSubscriberTerminal {
+    data object Closed : InputSubscriberTerminal
+    data class Failed(val cause: Throwable) : InputSubscriberTerminal
+}
+
+private class InputEventSubscriber(
+    policy: InputDeliveryPolicy,
+) {
+    private val lock = Any()
+    private val signal = Channel<Unit>(capacity = 1)
+    private val scheduler = BoundedInputScheduler(
+        discreteCapacity = policy.discreteEvents.collectorCapacity,
+        pointerDelivery = policy.pointerMotion,
+        scrollDelivery = policy.scroll,
+    )
+    private val discreteOverflow = policy.discreteEvents.collectorOverflow
+    private var terminal: InputSubscriberTerminal? = null
+
+    fun offer(event: InputPublication): InputSubscriberOffer {
+        val result = synchronized(lock) {
+            if (terminal != null) return InputSubscriberOffer.Accepted
+            when (val offered = scheduler.offer(event)) {
+                QueueOfferResult.Accepted -> InputSubscriberOffer.Accepted
+                is QueueOfferResult.Dropped -> InputSubscriberOffer.Dropped
+                QueueOfferResult.DiscreteOverflow -> when (discreteOverflow) {
+                    CollectorOverflowAction.CancelSlowCollector -> {
+                        scheduler.clear()
+                        terminal = InputSubscriberTerminal.Failed(
+                            SlowCollectorCancellationException("input event collector exceeded its policy capacity"),
+                        )
+                        InputSubscriberOffer.Accepted
+                    }
+
+                    CollectorOverflowAction.CloseSource -> InputSubscriberOffer.CloseSource
+                    CollectorOverflowAction.FailSession -> InputSubscriberOffer.FailSession
+                }
+
+                is QueueOfferResult.ContinuousOverflow -> when (offered.action) {
+                    ContinuousOverflowAction.DropOldestAndReport,
+                    ContinuousOverflowAction.DropLatestAndReport,
+                    -> InputSubscriberOffer.Dropped
+
+                    ContinuousOverflowAction.CloseSource -> InputSubscriberOffer.CloseSource
+                    ContinuousOverflowAction.FailSession -> InputSubscriberOffer.FailSession
+                }
+            }
+        }
+        signal.trySend(Unit)
+        return result
+    }
+
+    suspend fun next(): InputEvent? {
+        while (true) {
+            val terminalSnapshot = synchronized(lock) {
+                scheduler.poll()?.let { return it.event }
+                terminal
+            }
+            when (terminalSnapshot) {
+                InputSubscriberTerminal.Closed -> return null
+                is InputSubscriberTerminal.Failed -> throw terminalSnapshot.cause
+                null -> signal.receive()
+            }
+        }
+    }
+
+    fun terminate(cause: Throwable?, drain: Boolean) {
+        synchronized(lock) {
+            if (terminal != null) return
+            if (!drain) scheduler.clear()
+            terminal = cause?.let(InputSubscriberTerminal::Failed) ?: InputSubscriberTerminal.Closed
+        }
+        signal.trySend(Unit)
+    }
+
+    fun dispose() {
+        synchronized(lock) { scheduler.clear() }
+        signal.cancel()
+    }
+}
+
+private fun InputPublication.lane(): InputEventLane = when (event) {
+    is InputEvent.PointerMoved -> InputEventLane.PointerMotion
+    is InputEvent.Scrolled -> InputEventLane.Scroll
+    else -> InputEventLane.Discrete
+}
+
+private fun InputPublication.canCoalesceWith(latest: InputPublication): Boolean =
+    lane() == latest.lane() &&
+        when (lane()) {
+            InputEventLane.PointerMotion -> true
+            InputEventLane.Scroll -> {
+                val previousEvent = event as InputEvent.Scrolled
+                val latestEvent = latest.event as InputEvent.Scrolled
+                scrollBoundary == latest.scrollBoundary &&
+                    previousEvent.deviceId == latestEvent.deviceId &&
+                    previousEvent.delta.hasSameUnitAs(latestEvent.delta)
+            }
+            InputEventLane.Discrete -> false
+        }
+
+private fun coalesceInputPublication(previous: InputPublication, latest: InputPublication): InputPublication {
+    check(previous.canCoalesceWith(latest))
+    val stamp = coalescedStamp(previous.event.stamp, latest.event.stamp)
+    return when (val latestEvent = latest.event) {
+        is InputEvent.PointerMoved -> {
+            val previousEvent = previous.event as InputEvent.PointerMoved
+            latest.copy(
+                event = latestEvent.copy(
+                    delta = LogicalDelta(
+                        previousEvent.delta.x + latestEvent.delta.x,
+                        previousEvent.delta.y + latestEvent.delta.y,
+                    ),
+                    stamp = stamp,
+                ),
+            )
+        }
+
+        is InputEvent.Scrolled -> {
+            val previousEvent = previous.event as InputEvent.Scrolled
+            val delta = previousEvent.delta.plusSameUnit(latestEvent.delta) ?: return latest
+            latest.copy(event = latestEvent.copy(delta = delta, stamp = stamp))
+        }
+
+        else -> error("only continuous input events can coalesce")
+    }
+}
+
+private fun InputPublication.copyForDelivery(): InputPublication = copy(event = event.copyInputEvent())
+
+private fun InputEvent.copyInputEvent(): InputEvent = when (this) {
+    is InputEvent.Key -> copy(stamp = stamp.copy())
+    is InputEvent.PointerEntered -> copy(stamp = stamp.copy())
+    is InputEvent.PointerLeft -> copy(stamp = stamp.copy())
+    is InputEvent.PointerMoved -> copy(stamp = stamp.copy())
+    is InputEvent.PointerButtonChanged -> copy(stamp = stamp.copy())
+    is InputEvent.Scrolled -> copy(stamp = stamp.copy())
+    is InputEvent.StateReset -> copy(stamp = stamp.copy())
+    else -> error("inactive input event entered the essential input runtime")
+}
+
+private fun ScrollDelta.hasSameUnitAs(other: ScrollDelta): Boolean =
+    (this is ScrollDelta.Lines && other is ScrollDelta.Lines) ||
+        (this is ScrollDelta.Logical && other is ScrollDelta.Logical)
+
+private fun ScrollDelta.plusSameUnit(other: ScrollDelta): ScrollDelta? = when (this) {
+    is ScrollDelta.Lines -> {
+        val next = other as? ScrollDelta.Lines ?: return null
+        ScrollDelta.Lines(x + next.x, y + next.y)
+    }
+
+    is ScrollDelta.Logical -> {
+        val next = other as? ScrollDelta.Logical ?: return null
+        ScrollDelta.Logical(x + next.x, y + next.y)
+    }
+}
+
+private fun replacePointer(existing: List<PointerState>, pointer: PointerState): List<PointerState> =
+    existing.filterNot { it.id == pointer.id } + pointer
+
+private fun unsupportedInputState(): SurfaceInputState = SurfaceInputState(
+    keyboard = KeyboardState(emptySet()),
+    pointers = emptyList(),
+    touches = emptyList(),
+    modifiers = KeyboardModifiers(emptySet()),
+    capabilities = unsupportedInputCapabilities(),
+    revision = InputStateRevision(0L),
+)
+
+private fun unsupportedInputCapabilities(): InputCapabilities = InputCapabilities(
+    keyboard = FeatureAvailability.Unsupported,
+    pointer = FeatureAvailability.Unsupported,
+    touch = FeatureAvailability.Unsupported,
+    gestures = FeatureAvailability.Unsupported,
+    dragAndDrop = FeatureAvailability.Unsupported,
+    textInput = unsupported(KadreOperation.TextInput),
+    rawInput = unsupported(KadreOperation.RawInputAccess),
+)
+
+private fun unavailableInputCapabilities(failure: KadreFailure): InputCapabilities = InputCapabilities(
+    keyboard = FeatureAvailability.Unavailable(failure),
+    pointer = FeatureAvailability.Unavailable(failure),
+    touch = FeatureAvailability.Unavailable(failure),
+    gestures = FeatureAvailability.Unavailable(failure),
+    dragAndDrop = FeatureAvailability.Unavailable(failure),
+    textInput = unsupported(KadreOperation.TextInput),
+    rawInput = unsupported(KadreOperation.RawInputAccess),
+)
 
 private sealed interface InputCollectorRegistration {
     data class Registered(val lease: RuntimeEventCollectorLease) : InputCollectorRegistration
@@ -1121,6 +1870,30 @@ private fun SurfaceUpdateCommand.isEmpty(): Boolean =
 private fun SurfaceRevision.next(): SurfaceRevision {
     check(value < Long.MAX_VALUE) { "surface revision space exhausted" }
     return SurfaceRevision(value + 1L)
+}
+
+private fun InputStateRevision.next(): InputStateRevision {
+    check(value < Long.MAX_VALUE) { "input state revision space exhausted" }
+    return InputStateRevision(value + 1L)
+}
+
+private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
+    is SurfaceStimulus.KeyChanged,
+    is SurfaceStimulus.InputObservationChanged,
+    is SurfaceStimulus.PointerEntered,
+    is SurfaceStimulus.PointerMoved,
+    is SurfaceStimulus.PointerButtonChanged,
+    is SurfaceStimulus.PointerLeft,
+    is SurfaceStimulus.Scroll,
+    -> true
+
+    is SurfaceStimulus.MetricsChanged,
+    is SurfaceStimulus.FocusChanged,
+    is SurfaceStimulus.VisibilityChanged,
+    is SurfaceStimulus.ThemeChanged,
+    is SurfaceStimulus.RedrawConsumed,
+    is SurfaceStimulus.Detached,
+    -> false
 }
 
 private fun successfulUpdateOutcome(

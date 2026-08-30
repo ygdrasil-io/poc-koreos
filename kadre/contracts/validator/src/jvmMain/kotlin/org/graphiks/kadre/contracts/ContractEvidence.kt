@@ -21,14 +21,18 @@ internal object ContractEvidence {
         mappings: List<EvidenceMapping>,
         junit: JUnitSummary,
         commit: String,
+        adapter: String,
         os: String,
         runtime: String,
         toolchain: String,
     ): JsonObject {
         check(contract.status == ContractStatus.Active) { "${contract.contractId} is not active" }
-        check(contract.oracle == ContractOracle.O3) { "${contract.contractId} must use oracle O3" }
+        check(contract.oracle == ContractOracle.O2 || contract.oracle == ContractOracle.O3) {
+            "${contract.contractId} must use oracle O2 or O3"
+        }
         check("jvm" in contract.requiredTargets) { "${contract.contractId} does not require target jvm" }
         check(commit.isNotBlank()) { "commit must not be blank" }
+        require(adapter.isNotBlank()) { "adapter must not be blank" }
         check(os.isNotBlank()) { "os must not be blank" }
         check(runtime.isNotBlank()) { "runtime must not be blank" }
         check(toolchain.isNotBlank()) { "toolchain must not be blank" }
@@ -54,7 +58,7 @@ internal object ContractEvidence {
             put("schemaVersion", 1)
             put("commit", commit)
             put("target", "jvm")
-            put("adapter", "appkit-jvm")
+            put("adapter", adapter)
             put("environment", buildJsonObject {
                 put("os", os)
                 put("runtime", runtime)
