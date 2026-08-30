@@ -51,6 +51,7 @@ import org.graphiks.kadre.window.WindowCloseReason
 import org.graphiks.kadre.window.WindowCloseRequestId
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowManager
@@ -67,6 +68,7 @@ import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowRevision
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowState
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.util.concurrent.atomic.AtomicLong
@@ -1286,7 +1288,11 @@ internal class RuntimeWindow(
             }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
             val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties)
-            val candidate = candidateFor(supportedUpdate, current)
+            invalidChromeField(supportedUpdate, current)?.let { field ->
+                return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+            }
+            val canonicalUpdate = canonicalMutationUpdate(supportedUpdate, current)
+            val candidate = candidateFor(canonicalUpdate, current)
                 ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             val rejected = changedProperties(update)
                 .filterNot(supportedWindowUpdateProperties::contains)
@@ -1299,13 +1305,13 @@ internal class RuntimeWindow(
                     }
                 }
                 immediate = KadreResult.Success(updateOutcome(operationId, current, rejected))
-                pending = PendingWindowUpdate(operationId, null, supportedUpdate, rejected)
+                pending = PendingWindowUpdate(operationId, null, canonicalUpdate, rejected)
             } else {
                 immediate = null
                 pending = PendingWindowUpdate(
                     operationId = operationId,
                     expectedRevision = update.expectedRevision,
-                    update = supportedUpdate,
+                    update = canonicalUpdate,
                     rejected = rejected,
                 )
                 pendingUpdates.addLast(pending)
@@ -1433,6 +1439,11 @@ internal class RuntimeWindow(
                     )
                     continue
                 }
+                invalidChromeField(candidate.update, current)?.let { field ->
+                    candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest(field)))
+                    continue
+                }
+                candidate.update = canonicalMutationUpdate(candidate.update, current)
                 val effectiveCandidate = candidateFor(candidate.update, current)
                 if (effectiveCandidate == null) {
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
@@ -1622,6 +1633,8 @@ internal class RuntimeWindow(
         val changedProperties = buildSet {
             if (before.title != effective.title) add(WindowProperty.Title)
             if (before.resizable != effective.resizable) add(WindowProperty.Resizable)
+            if (before.decorations != effective.decorations) add(WindowProperty.Decorations)
+            if (before.systemButtons != effective.systemButtons) add(WindowProperty.SystemButtons)
         }
         if (changedProperties.isNotEmpty()) {
             publish(
@@ -1645,7 +1658,7 @@ private data class WindowStatePublication(
 internal data class PendingWindowUpdate(
     val operationId: WindowOperationId,
     val expectedRevision: WindowRevision?,
-    val update: WindowUpdate,
+    var update: WindowUpdate,
     val rejected: List<RejectedWindowField>,
     val result: CompletableDeferred<KadreResult<WindowUpdateOutcome>> = CompletableDeferred(),
     var cancelled: Boolean = false,
@@ -1707,8 +1720,22 @@ private fun windowCapabilities(
     ),
     resizable = enabledWindowUpdateCapabilities.capability(WindowProperty.Resizable, Unit),
     fullscreen = unsupported(KadreOperation.UpdateWindow),
-    decorations = unsupported(KadreOperation.UpdateWindow),
-    systemButtons = unsupported(KadreOperation.UpdateWindow),
+    decorations = if (publicWindowCapabilities) {
+        enabledWindowUpdateCapabilities.capability(
+            WindowProperty.Decorations,
+            setOf(WindowDecorations.System, WindowDecorations.Borderless),
+        )
+    } else {
+        unsupported(KadreOperation.UpdateWindow)
+    },
+    systemButtons = if (publicWindowCapabilities) {
+        enabledWindowUpdateCapabilities.capability(
+            WindowProperty.SystemButtons,
+            setOf(WindowSystemButtons.All, WindowSystemButtons.CloseOnly, WindowSystemButtons.None),
+        )
+    } else {
+        unsupported(KadreOperation.UpdateWindow)
+    },
     level = unsupported(KadreOperation.UpdateWindow),
     transparency = unsupported(KadreOperation.UpdateWindow),
     blurBehind = unsupported(KadreOperation.UpdateWindow),
@@ -1770,6 +1797,8 @@ private fun candidateFor(
         minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize),
         maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize),
         resizable = resolveResizable(update.resizable, current.resizable),
+        decorations = resolveDecorations(update.decorations, current.decorations),
+        systemButtons = resolveSystemButtons(update.systemButtons, current.systemButtons),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -1812,6 +1841,26 @@ private fun resolveResizable(
     PropertyChange.Unchanged -> current
 }
 
+private fun resolveDecorations(
+    change: PropertyChange<WindowDecorations>,
+    current: WindowDecorations,
+): WindowDecorations = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear,
+    PropertyChange.Unchanged,
+    -> current
+}
+
+private fun resolveSystemButtons(
+    change: PropertyChange<WindowSystemButtons>,
+    current: WindowSystemButtons,
+): WindowSystemButtons = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear,
+    PropertyChange.Unchanged,
+    -> current
+}
+
 private fun invalidRequiredClearField(
     update: WindowUpdate,
     supportedProperties: Set<WindowProperty>,
@@ -1819,7 +1868,57 @@ private fun invalidRequiredClearField(
     WindowProperty.Title in supportedProperties && update.title is PropertyChange.Clear -> "title"
     WindowProperty.ContentSize in supportedProperties && update.contentSize is PropertyChange.Clear -> "contentSize"
     WindowProperty.Resizable in supportedProperties && update.resizable is PropertyChange.Clear -> "resizable"
+    WindowProperty.Decorations in supportedProperties && update.decorations is PropertyChange.Clear -> "decorations"
+    WindowProperty.SystemButtons in supportedProperties && update.systemButtons is PropertyChange.Clear -> "systemButtons"
     else -> null
+}
+
+private fun invalidChromeField(
+    update: WindowUpdate,
+    current: WindowState,
+): String? {
+    val requestedButtons = (update.systemButtons as? PropertyChange.Set)?.value ?: return null
+    if (requestedButtons == WindowSystemButtons.None) return null
+    val effectiveDecorations = resolveDecorations(update.decorations, current.decorations)
+    return if (
+        effectiveDecorations == WindowDecorations.Borderless &&
+        update.decorations !is PropertyChange.Set<WindowDecorations>
+    ) {
+        "systemButtons"
+    } else {
+        null
+    }
+}
+
+/**
+ * Produces the complete effective chrome target for one native mutation.
+ *
+ * A borderless window has no system buttons. Returning to a system title bar without an
+ * explicit button value restores [WindowSystemButtons.All], rather than retaining an invisible
+ * preference from the borderless state.
+ */
+private fun canonicalMutationUpdate(
+    update: WindowUpdate,
+    current: WindowState,
+): WindowUpdate {
+    val decorations = resolveDecorations(update.decorations, current.decorations)
+    val requestedButtons = resolveSystemButtons(update.systemButtons, current.systemButtons)
+    val effectiveButtons = when {
+        decorations == WindowDecorations.Borderless -> WindowSystemButtons.None
+        current.decorations == WindowDecorations.Borderless &&
+            decorations == WindowDecorations.System &&
+            update.systemButtons is PropertyChange.Unchanged -> WindowSystemButtons.All
+        else -> requestedButtons
+    }
+    val buttonChange = if (
+        update.systemButtons is PropertyChange.Unchanged &&
+        effectiveButtons == current.systemButtons
+    ) {
+        PropertyChange.Unchanged
+    } else {
+        PropertyChange.Set(effectiveButtons)
+    }
+    return update.copy(systemButtons = buttonChange)
 }
 
 private fun mutationChanged(current: WindowState, candidate: WindowState): Boolean =
@@ -1827,7 +1926,9 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.contentSize != candidate.contentSize ||
         current.minimumSize != candidate.minimumSize ||
         current.maximumSize != candidate.maximumSize ||
-        current.resizable != candidate.resizable
+        current.resizable != candidate.resizable ||
+        current.decorations != candidate.decorations ||
+        current.systemButtons != candidate.systemButtons
 
 private fun supportedMutationOnly(
     update: WindowUpdate,
@@ -1838,6 +1939,8 @@ private fun supportedMutationOnly(
     minimumSize = update.minimumSize.whenSupported(WindowProperty.MinimumSize, supportedProperties),
     maximumSize = update.maximumSize.whenSupported(WindowProperty.MaximumSize, supportedProperties),
     resizable = update.resizable.whenSupported(WindowProperty.Resizable, supportedProperties),
+    decorations = update.decorations.whenSupported(WindowProperty.Decorations, supportedProperties),
+    systemButtons = update.systemButtons.whenSupported(WindowProperty.SystemButtons, supportedProperties),
     expectedRevision = update.expectedRevision,
 )
 
