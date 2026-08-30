@@ -84,25 +84,39 @@ l'`WindowOperationId`, la cible et l'une des phases atomiques suivantes :
 | Phase | Sens | Règle sur une notification `Will` |
 | --- | --- | --- |
 | `PreparedLocal` | commande admise, selector pas encore invoqué | un `Will` devient externe : il termine la commande par `TemporarilyUnavailable` sans selector |
-| `InvokingSelector` | appel de `toggleFullScreen` en cours, callbacks réentrants possibles | un `Will` de la cible confirme la tentative locale et passe à `AwaitingLocal` |
-| `AwaitingLocal` | selector franchi ou `Will` local observé | seul `Did`/`DidFail` correspondant peut terminer l'opération |
+| `InvokingSelector` | appel de `toggleFullScreen` actif, callbacks réentrants possibles | un `Will` de la cible est enregistré mais aucun terminal ne peut encore drainer la file |
+| `AwaitingLocal` | le selector est revenu ; ses callbacks enregistrés peuvent être consommés | seul `Did`/`DidFail` correspondant peut terminer l'opération |
 | `External` | AppKit a commencé une transition sans opération Kadre | aucune opération locale fullscreen n'est corrélable |
 
-Un `Will` opposé, un `Did` opposé ou un callback terminal sans la phase locale
-attendue désassocie l'opération locale et installe `External` avec la cible
-observée. La commande locale reçoit
-`PlatformFailure(AppKit, "fullscreen", "unexpected-transition")` si le
-selector avait été invoqué, ou `TemporarilyUnavailable(retryable = true)` sinon.
-La règle interdit un second toggle et garantit que l'événement de la transition
-externe porte `operationId = null`.
+`InvokingSelector` conserve `selectorCallActive = true`. Un `Did` ou `DidFail`
+réentrant est mémorisé mais ne publie ni état ni événement, ne libère pas la
+barrière et ne draine aucune commande avant le retour du selector. Au retour,
+le runtime passe à `AwaitingLocal`, consomme un terminal mémorisé exactement une
+fois, puis seulement alors conclut et draine. Si le selector lève après un
+`Will` ou terminal local mémorisé, cette observation établit la frontière de
+commit et gagne ; `selector-threw` n'est produit qu'en son absence.
 
-Si le selector lève après un `Will` réentrant apparié, ce `Will` établit la
-frontière de commit : la barrière reste `AwaitingLocal` et attend son callback
-terminal. Le code `selector-threw` n'est produit que si aucune transition locale
-appariée n'a été observée. Sans barrière, un premier `Did` dont le mode diffère
-du state courant est une completion externe légitime et publie avec
-`operationId = null`; un `Did` qui répète ce mode est dupliqué et ignoré. Un
-`DidFail` sans barrière est seulement diagnostiqué.
+Chaque peer conserve aussi une tombstone terminale `{ cible, kind }`, effacée
+par le prochain `Will` ou le prochain selector local. Elle supprime les
+callbacks terminaux dupliqués : AppKit ne fournit pas d'identifiant permettant
+de distinguer un doublon d'un nouvel échec externe identique sans `Will`, et la
+spécification choisit alors le diagnostic au plus une fois.
+
+La matrice de callbacks est fermée. `cible` désigne `Borderless` pour enter et
+`Windowed` pour exit ; un `Did` égal au state courant est toujours un doublon :
+
+| Phase | `Will` | `Did` égal au state | `Did` différent du state | `DidFail` |
+| --- | --- | --- | --- | --- |
+| aucune / tombstone | arme `External` et efface la tombstone | ignoré | completion externe, état/événement avec `operationId = null` | diagnostic une fois, puis tombstone |
+| `PreparedLocal` | arme `External`, retourne `TemporarilyUnavailable`, sans selector | ignoré | même règle externe, puis échec local `TemporarilyUnavailable` | diagnostic une fois ; la commande locale reste préparée |
+| `InvokingSelector` | cible locale : mémorise ; cible opposée : mémorise un conflit externe | ignoré | cible locale : mémorise le succès ; cible opposée : mémorise le conflit externe | cible locale : mémorise l'échec ; cible opposée : diagnostic une fois |
+| `AwaitingLocal` | cible locale : idempotent ; cible opposée : conflit externe | ignoré | cible locale : succès local ; cible opposée : completion externe et `unexpected-transition` local | cible locale : `enter-failed`/`exit-failed` ; cible opposée : diagnostic une fois |
+| `External` | reste externe, dernière cible observée | ignoré | completion externe et libération de barrière | cible attendue : diagnostic et libération ; cible opposée : diagnostic une fois |
+
+Un conflit externe après invocation locale termine la commande par
+`PlatformFailure(AppKit, "fullscreen", "unexpected-transition")`, mais publie
+l'observation externe avec `operationId = null`. La règle interdit un second
+toggle et garantit que chaque callback ne possède qu'un seul chemin terminal.
 
 Une mutation fullscreen locale conserve sa propre `PendingWindowUpdate` jusqu'à
 sa terminaison. Il n'existe ni déduplication ni partage d'`Accepted` entre deux
@@ -134,9 +148,14 @@ avec `KadreFailure.InvalidRequest("fullscreen")`. Cette frontière interdit
 une `PartiallyApplied` ambiguë pendant une transition native : l'appelant
 sépare la transition fullscreen des mutations synchrones.
 
-La précédence d'admission est fixe : fenêtre fermée, puis forme structurelle du
-payload (`Clear`, update mixte ou candidat impossible), puis `expectedRevision`,
-puis capability et barrière, enfin canonisation/no-op ou rejet de champ. Ainsi
+La précédence d'admission est totale : fenêtre fermée, forme structurelle du
+payload (`Clear`, update mixte ou candidat impossible), `expectedRevision`,
+domaine de valeur, disponibilité de feature, barrière, puis canonisation/no-op.
+Le domaine de valeur traite `Exclusive` comme rejet de champ avant toute
+disponibilité : `Exclusive + barrière externe` et `Exclusive + OS indisponible`
+retournent donc `PartiallyApplied`. Pour `Borderless` ou `Windowed`, une feature
+indisponible retourne `os-version-unavailable` avant une barrière ; ainsi
+`OS indisponible + barrière externe` retourne cette `PlatformFailure`.
 `stale + Clear` reste `InvalidRequest`, alors que `stale + Exclusive`,
 `stale + barrière externe` et `stale + OS indisponible` retournent
 `StaleRevision`. `expectedRevision` est vérifiée une seconde fois au moment où
@@ -157,10 +176,16 @@ réentrant apparié, est la frontière de commit :
 - `WindowUpdateOutcome.Accepted` n'est jamais le résultat d'un update
   fullscreen AppKit.
 
+Chaque peer conserve un `desiredLevel` interne. Il est initialisé par le
+`WindowSpec` effectif et ne change qu'après le readback autoritaire d'un
+`Set(level)` Kadre réussi. Une observation native, une failure committée ou un
+readback divergent ne l'écrase jamais ; `WindowState.level` reste, lui, toujours
+la valeur native effective.
+
 Une notification `Did` locale appariée établit le mode fullscreen effectif.
-Avant toute publication, le port réapplique le `WindowLevel` persistant puis
-lit son niveau effectif. Le snapshot terminal remplace donc `fullscreen` et,
-si nécessaire, `level` par leurs valeurs natives observées :
+Avant toute publication, le port réapplique `desiredLevel` puis lit son niveau
+effectif. Le snapshot terminal remplace donc `fullscreen` et, si nécessaire,
+`level` par leurs valeurs natives observées :
 
 - si le level relu est la valeur persistante demandée, le runtime publie un
   unique état, puis un `PropertiesChanged({ Fullscreen })`, et complète par
@@ -227,7 +252,7 @@ le mode effectif ; Kadre ne le déduit jamais d'une intention locale. Une failur
 externe ne laisse aucune barrière active.
 
 La même réconciliation de level s'applique à un `Did` externe. Si le niveau
-relisible diffère du niveau persistant, l'état et l'événement externe
+relisible diffère de `desiredLevel`, l'état et l'événement externe
 (`operationId = null`) portent aussi `WindowProperty.Level`, puis la failure exacte est
 rapportée une fois au diagnostic. Un level illisible terminalise la fenêtre ;
 aucun `WindowState.Open` ne conserve une valeur de niveau supposée.
@@ -284,13 +309,17 @@ capability active, ni evidence, ni gate.
 - `PreparedLocal`, `InvokingSelector`, `AwaitingLocal` et `External`, dont
   `Will` externe pré-selector, `Will` réentrant, direction opposée et absence
   de double toggle ;
-- `Did`, `DidFail`, selector qui lève après callback réentrant, callback
-  terminal dupliqué/sans `Will`/tardif, callback opposé externe sans
-  `operationId`, et reprise de file dans chaque branche ;
+- `Will + Did + return` et `Will + Did + throw` réentrants, sans publication ni
+  drainage avant le retour du selector ;
+- matrice `Did`/`DidFail` de chaque phase, callback opposé externe sans
+  `operationId`, terminal sans `Will`, tombstone et diagnostic au plus une fois ;
+- intersections `Exclusive + barrière`, `Exclusive + OS indisponible` et
+  `OS indisponible + barrière externe` ;
 - cancellation avant/après commit, failure exacte et diagnostic unique après
   détachement du waiter ;
 - `CommittedFailure`, état avant événement, level restauré, level différent
-  lisible, level illisible et fermeture terminale ;
+  lisible, level illisible, fermeture terminale, puis `desiredLevel` préservé
+  pour la transition locale et externe suivante ;
 - corrélation et policy discrète.
 
 Ses sentinelles couvrent l'absence de toggle avant commit, l'absence de double
@@ -320,8 +349,8 @@ il ne bloque pas la CI et ne remplace aucune preuve O2/O3.
 1. Cette PR ajoute ce design, réserve `WIN-005` et `APK-010`, et actualise
    la roadmap sans activer de capability.
 2. Une PR fille introduit la barrière runtime, les stimuli internes `Failed` /
-   `CommittedFailure`, l'attente terminale, les callbacks abstraits et les
-   preuves O2, sans exposition AppKit publique.
+   `CommittedFailure`, la tombstone, `desiredLevel`, l'attente terminale, les
+   callbacks abstraits et les preuves O2, sans exposition AppKit publique.
 3. Une PR fille raccorde peer, port déterministe et KFFI aux notifications
    fullscreen, aux callbacks d'échec et au readback de level, avec preuves
    macOS privées.
