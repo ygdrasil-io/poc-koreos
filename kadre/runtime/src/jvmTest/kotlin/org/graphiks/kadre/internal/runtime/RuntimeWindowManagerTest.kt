@@ -62,6 +62,7 @@ import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseRequestId
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
@@ -71,6 +72,7 @@ import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowRevision
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowState
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import kotlin.coroutines.CoroutineContext
@@ -747,6 +749,196 @@ class RuntimeWindowManagerTest {
         )
         assertEquals(1, port.updateCommands.size)
         assertEquals("first", window.state.value.title)
+    }
+
+    @Test
+    fun windowChromeCanonicalizesBorderlessAndRestoresSystemButtonsWhenReturningToSystem() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = chromeUpdateProperties())
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original")).successValue(),
+            port.openCommands.single(),
+        )
+
+        val borderless = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                ),
+            )
+        }
+        val borderlessCommand = port.updateCommands.single()
+        assertEquals(PropertyChange.Set(WindowDecorations.Borderless), borderlessCommand.update.decorations)
+        assertEquals(PropertyChange.Set(WindowSystemButtons.None), borderlessCommand.update.systemButtons)
+        borderlessCommand.applied(
+            window.state.value.copy(
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            ),
+        )
+
+        val borderlessOutcome = assertIs<WindowUpdateOutcome.Applied>(borderless.await().successValue())
+        assertEquals(WindowDecorations.Borderless, borderlessOutcome.state.decorations)
+        assertEquals(WindowSystemButtons.None, borderlessOutcome.state.systemButtons)
+
+        val system = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.System)))
+        }
+        val systemCommand = port.updateCommands.last()
+        assertEquals(PropertyChange.Set(WindowDecorations.System), systemCommand.update.decorations)
+        assertEquals(PropertyChange.Set(WindowSystemButtons.All), systemCommand.update.systemButtons)
+        systemCommand.applied(
+            window.state.value.copy(
+                decorations = WindowDecorations.System,
+                systemButtons = WindowSystemButtons.All,
+            ),
+        )
+
+        val systemOutcome = assertIs<WindowUpdateOutcome.Applied>(system.await().successValue())
+        assertEquals(WindowDecorations.System, systemOutcome.state.decorations)
+        assertEquals(WindowSystemButtons.All, systemOutcome.state.systemButtons)
+        assertIs<Capability.Unsupported>(window.capabilities.value.decorations)
+        assertIs<Capability.Unsupported>(window.capabilities.value.systemButtons)
+    }
+
+    @Test
+    fun windowChromeRejectsBorderlessButtonsAndClearBeforeNativeAdmission() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = chromeUpdateProperties())
+        val window = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        )
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.Borderless)))
+        }
+        port.updateCommands.single().applied(
+            window.state.value.copy(
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            ),
+        )
+        assertIs<WindowUpdateOutcome.Applied>(first.await().successValue())
+        val before = window.state.value
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("systemButtons")),
+            window.apply(WindowUpdate(systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly))),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("decorations")),
+            window.apply(WindowUpdate(decorations = PropertyChange.Clear)),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("systemButtons")),
+            window.apply(WindowUpdate(systemButtons = PropertyChange.Clear)),
+        )
+        assertEquals(1, port.updateCommands.size)
+        assertEquals(before, window.state.value)
+    }
+
+    @Test
+    fun windowChromeSharesTheCorrelatedCommandAndPublishesStateBeforeProperties() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = chromeAndTitleUpdateProperties())
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original", contentSize = LogicalSize(100.0, 100.0)))
+                .successValue(),
+            port.openCommands.single(),
+        )
+        val observedStates = mutableListOf<WindowState>()
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.onEach { event ->
+                observedStates += window.state.value
+                events += event
+            }.collect()
+        }
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("requested"),
+                    contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0)),
+                    decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.All),
+                ),
+            )
+        }
+
+        val command = port.updateCommands.single()
+        assertEquals(PropertyChange.Set(WindowSystemButtons.None), command.update.systemButtons)
+        command.applied(
+            window.state.value.copy(
+                title = "effective",
+                contentSize = LogicalSize(118.0, 100.0),
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            ),
+        )
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals(outcome.state, window.state.value)
+        assertEquals(listOf(outcome.state, outcome.state), observedStates)
+        val geometry = assertIs<WindowEvent.GeometryChanged>(events[0])
+        val properties = assertIs<WindowEvent.PropertiesChanged>(events[1])
+        assertEquals(command.operationId, geometry.operationId)
+        assertEquals(command.operationId, properties.operationId)
+        assertEquals(
+            setOf(WindowProperty.Title, WindowProperty.Decorations, WindowProperty.SystemButtons),
+            properties.changed,
+        )
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowChromeCancellationAndQueuedRevisionRespectTheNativeCommitBoundary() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = chromeUpdateProperties())
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+        val withdrawn = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.Borderless)))
+        }
+        val withdrawnCommand = port.updateCommands.single()
+        withdrawn.cancelAndJoin()
+        withdrawnCommand.applied(
+            window.state.value.copy(
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            ),
+        )
+        assertTrue(withdrawn.isCancelled)
+        assertEquals(WindowDecorations.System, window.state.value.decorations)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        val committed = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.Borderless)))
+        }
+        val stale = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val committedCommand = port.updateCommands.last()
+        committedCommand.applied(
+            window.state.value.copy(
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            ),
+        )
+
+        assertIs<WindowUpdateOutcome.Applied>(committed.await().successValue())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            stale.await(),
+        )
+        assertEquals(2, port.updateCommands.size)
     }
 
     @Test
@@ -2294,6 +2486,13 @@ class RuntimeWindowManagerTest {
 
     private fun titleUpdateProperties(): Set<WindowProperty> =
         DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + WindowProperty.Title
+
+    private fun chromeUpdateProperties(): Set<WindowProperty> =
+        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES +
+            setOf(WindowProperty.Decorations, WindowProperty.SystemButtons)
+
+    private fun chromeAndTitleUpdateProperties(): Set<WindowProperty> =
+        chromeUpdateProperties() + WindowProperty.Title
 
     private suspend fun kotlinx.coroutines.test.TestScope.applyContentSize(
         window: Window,
