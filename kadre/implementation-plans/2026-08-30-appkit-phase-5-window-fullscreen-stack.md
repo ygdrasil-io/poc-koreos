@@ -112,7 +112,7 @@ O2 déterministes. `WindowCapabilities.fullscreen` reste `Unsupported`.
 
       val command = port.updateCommands.single()
       assertFalse(result.isCompleted)
-      command.applied(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+      command.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
 
       assertEquals(FullscreenMode.Borderless,
           assertIs<WindowUpdateOutcome.Applied>(result.await().successValue()).state.fullscreen)
@@ -157,6 +157,13 @@ O2 déterministes. `WindowCapabilities.fullscreen` reste `Unsupported`.
       public val publicationOperationId: WindowOperationId?,
       public val failure: KadreFailure,
   ) : WindowUpdateCommandStimulus
+  ```
+
+  Étendre également le command avec l'intention de niveau que le bridge devra
+  restaurer après `Did` :
+
+  ```kotlin
+  public val desiredLevel: WindowLevel
   ```
 
   Ajouter aussi, sur `WindowUpdateCommand`, les trois helpers privés au SPI :
