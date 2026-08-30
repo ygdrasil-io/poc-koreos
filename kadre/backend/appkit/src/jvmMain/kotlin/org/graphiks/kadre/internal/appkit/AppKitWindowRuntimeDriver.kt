@@ -800,7 +800,7 @@ private class AppKitWindowCommandPort(
             return
         }
         val snapshot = completion.snapshot
-        completion.restoreFailure?.let(::reportFailure)
+        if (pending == null) completion.restoreFailure?.let(::reportFailure)
         val current = windowState(entry.command.windowId) ?: return
         val effective = snapshot.withMutationFrom(current).copy(fullscreen = target)
         if (pending != null) {

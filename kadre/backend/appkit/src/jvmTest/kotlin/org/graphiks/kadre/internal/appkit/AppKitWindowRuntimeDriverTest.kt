@@ -136,8 +136,47 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(WindowPhase.Open, window.state.value.phase)
             assertEquals(listOf(WindowLevel.Floating), port.fullscreenRestoreLevels)
             assertEquals(listOf("fullscreen-restore-failure"), port.fullscreenReadbackTitles)
-            assertEquals(listOf<Throwable>(restoreFailure), reported)
+            assertTrue(reported.isEmpty())
             assertTrue(port.closedWindowTitles.isEmpty())
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun detachedFullscreenRestoreFailureIsReportedExactlyOnce() = runBlocking {
+        val restoreFailure = IllegalStateException("restore")
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "detached-restore-failure",
+            fullscreenRestoreFailure = restoreFailure,
+        )
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "detached-restore-failure", level = WindowLevel.Floating),
+            )
+            val update = async {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+
+            awaitFullscreenToggle(port)
+            update.cancelAndJoin()
+            port.emitDidEnter("detached-restore-failure")
+
+            withTimeout(2.seconds) {
+                window.state.first { it.fullscreen == FullscreenMode.Borderless }
+            }
+            withTimeout(2.seconds) {
+                while (reported.none { it is KadreException }) yield()
+            }
+            assertEquals(1, reported.size)
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
         } finally {
             driver.close()
         }
@@ -2821,6 +2860,16 @@ private fun fullscreenDriver(
     port: DeterministicAppKitNativeWindowPort,
 ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriverFactory { port }.create(
     KadrePolicies.Default.resources,
+    publicAppKitCapabilities = true,
+    enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+)
+
+private fun fullscreenDriver(
+    port: DeterministicAppKitNativeWindowPort,
+    reported: MutableCollection<Throwable>,
+): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriverFactory { port }.create(
+    resources = KadrePolicies.Default.resources,
+    failureReporter = RuntimeFailureReporter(reported::add),
     publicAppKitCapabilities = true,
     enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
 )
