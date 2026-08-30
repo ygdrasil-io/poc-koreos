@@ -312,6 +312,11 @@ class KffiAppKitWindowPortMacOsTest {
                     val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
                     val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
                     assertTrue(view.acceptsFirstResponder())
+                    assertEquals(
+                        appKitHandle.nsViewAddress.toLong(),
+                        NSWindow(MemorySegment.ofAddress(appKitHandle.nsWindowAddress.toLong()))
+                            .firstResponder().address(),
+                    )
                     val event = NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
                         type = NSEventType.NSEventTypeKeyDown,
                         location = NSPoint(12.5, 4.0),

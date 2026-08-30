@@ -74,6 +74,19 @@ if (System.getProperty("os.name", "").let { name ->
         )
         standardInput = System.`in`
     }
+    tasks.register<JavaExec>("phase4InputHarness") {
+        group = "verification"
+        description = "Runs the external interactive AppKit Phase 4 input harness."
+        dependsOn(tasks.named("jvmTestClasses"))
+        classpath = jvmTest.get().classpath
+        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase4InputHarnessKt")
+        workingDir(rootProject.projectDir)
+        jvmArgs(
+            "-XstartOnFirstThread",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+        standardInput = System.`in`
+    }
     tasks.named("check") {
         dependsOn(appKitNativeTests)
     }

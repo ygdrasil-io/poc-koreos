@@ -16,10 +16,26 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSApplicationActivationPolicy
+import org.graphiks.kffi.objc.NSDefaultRunLoopMode
+import org.graphiks.kffi.objc.NSDate_distantFuture
+import org.graphiks.kffi.objc.NSDate_date
+import org.graphiks.kffi.objc.NSEvent
+import org.graphiks.kffi.objc.NSEventMask
+import org.graphiks.kffi.objc.NSEventPhase
+import org.graphiks.kffi.objc.NSEventModifierFlags
+import org.graphiks.kffi.objc.NSEventType
+import org.graphiks.kffi.objc.CGMomentumScrollPhase
+import org.graphiks.kffi.objc.CGScrollEventUnit
+import org.graphiks.kffi.objc.CGScrollPhase
 import org.graphiks.kffi.objc.NSNotificationCenter
+import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSSize
+import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.appkit.AppKitScrollWheelEvent
+import org.graphiks.kffi.objc.appkit.postScrollWheelEvent
+import org.graphiks.kffi.objc.nextEventMatchingMask_untilDate_inMode_dequeue
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
@@ -38,6 +54,9 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.InputStateResetReason
+import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.KadrePolicies
@@ -1270,6 +1289,9 @@ class AppKitBackendProviderTest {
         val nativeSurfaceVisibilityObserved = AtomicBoolean(false)
         val nativeSurfaceRedrawObserved = AtomicBoolean(false)
         val nativeSurfaceTerminalObserved = AtomicBoolean(false)
+        val nativeInputEventStateObserved = AtomicBoolean(false)
+        val nativeInputFocusResetObserved = AtomicBoolean(false)
+        val nativeInputIsolationObserved = AtomicBoolean(false)
         val proofStage = AtomicReference("not-started")
         val proofFailure = AtomicReference<Throwable?>(null)
 
@@ -1360,6 +1382,128 @@ class AppKitBackendProviderTest {
                             window.surface.state.value.revision.value >= focusEvent.state.revision.value,
                         )
                         nativeSurfaceFocusObserved.set(true)
+
+                        val inputEvents = Channel<InputEvent>(Channel.UNLIMITED)
+                        val inputEventStateWasVisible = AtomicBoolean(true)
+                        val inputCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                            window.surface.input.events.collect { event ->
+                                if (window.surface.input.state.value.revision.value < event.stateRevision.value) {
+                                    inputEventStateWasVisible.set(false)
+                                }
+                                inputEvents.send(event)
+                            }
+                        }
+                        proofStage.set("input-event-before-state")
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    NSView(
+                                        MemorySegment.ofAddress(appKit.nsViewAddress.toLong()),
+                                    ).keyDown(nativeKeyDownEvent())
+                                }
+                            },
+                        )
+                        val keyEvent = withTimeout(5.seconds) {
+                            inputEvents.receiveInputEvent<InputEvent.Key>()
+                        }
+                        assertEquals(KeyState.Pressed, keyEvent.keyState)
+                        assertEquals(keyEvent.stateRevision, window.surface.input.state.value.revision)
+                        assertEquals(
+                            setOf(keyEvent.physicalKey),
+                            window.surface.input.state.value.keyboard.pressedKeys,
+                        )
+                        assertTrue(inputEventStateWasVisible.get())
+                        nativeInputEventStateObserved.set(true)
+
+                        proofStage.set("input-focus-reset")
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).resignKeyWindow()
+                                }
+                            },
+                        )
+                        val reset = withTimeout(5.seconds) {
+                            var observed: InputEvent.StateReset? = null
+                            while (observed == null) {
+                                when (val event = inputEvents.receive()) {
+                                    is InputEvent.StateReset -> observed = event
+                                    is InputEvent.Key -> assertFalse(
+                                        event.keyState == KeyState.Released,
+                                        "focus reset must not be preceded by a synthetic key release: $event",
+                                    )
+                                    else -> Unit // Physical pointer motion may arrive from the host desktop.
+                                }
+                            }
+                            checkNotNull(observed)
+                        }
+                        assertEquals(InputStateResetReason.FocusLost, reset.reason)
+                        assertEquals(reset.stateRevision, window.surface.input.state.value.revision)
+                        assertEquals(emptySet(), window.surface.input.state.value.keyboard.pressedKeys)
+                        assertEquals(emptyList(), window.surface.input.state.value.pointers)
+                        assertNull(
+                            withTimeoutOrNull(200.milliseconds) {
+                                inputEvents.receiveInputEvent<InputEvent.Key> {
+                                    it.keyState == KeyState.Released
+                                }
+                            },
+                        )
+                        nativeInputFocusResetObserved.set(true)
+
+                        proofStage.set("input-cross-surface")
+                        val isolatedWindow = assertIs<WindowRequestOutcome.OpenedHere>(
+                            windows.requestWindow(WindowSpec(title = "Kadre O3 input isolation proof"))
+                                .appKitSuccessValue()
+                                .await(),
+                        ).window
+                        val isolatedInputEvents = Channel<InputEvent>(Channel.UNLIMITED)
+                        val isolatedInputCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                            isolatedWindow.surface.input.events.collect(isolatedInputEvents::send)
+                        }
+                        try {
+                            assertEquals(
+                                KadreResult.Success(Unit),
+                                window.withDesktopHandle { handle ->
+                                    val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                    ObjCRuntime.autoreleasePool {
+                                        NSView(
+                                            MemorySegment.ofAddress(appKit.nsViewAddress.toLong()),
+                                        ).keyDown(nativeKeyDownEvent())
+                                    }
+                                },
+                            )
+                            val isolatedKeyEvent = withTimeout(5.seconds) {
+                                inputEvents.receiveInputEvent<InputEvent.Key>()
+                            }
+                            assertEquals(
+                                setOf(isolatedKeyEvent.physicalKey),
+                                window.surface.input.state.value.keyboard.pressedKeys,
+                            )
+                            assertEquals(
+                                emptySet(),
+                                isolatedWindow.surface.input.state.value.keyboard.pressedKeys,
+                            )
+                            assertNull(
+                                withTimeoutOrNull(200.milliseconds) { isolatedInputEvents.receive() },
+                            )
+                            nativeInputIsolationObserved.set(true)
+                        } finally {
+                            isolatedInputCollector.cancel()
+                            if (isolatedWindow.state.value.phase != WindowPhase.Closed) {
+                                assertIs<WindowCloseOutcome.Accepted>(
+                                    isolatedWindow.close().appKitSuccessValue(),
+                                )
+                                withTimeout(5.seconds) {
+                                    isolatedWindow.state.first { it.phase == WindowPhase.Closed }
+                                }
+                            }
+                        }
 
                         proofStage.set("surface-resize")
                         val resized = LogicalSize(360.0, 220.0)
@@ -1472,6 +1616,7 @@ class AppKitBackendProviderTest {
                         terminalCloseObserved.set(true)
                         nativeSurfaceTerminalObserved.set(true)
                         collector.cancel()
+                        inputCollector.cancel()
                         proofStage.set("session-stop")
                         stopRequestedOffMainThread.set(!native.isMainThread())
                         requestStop()
@@ -1508,6 +1653,9 @@ class AppKitBackendProviderTest {
         assertTrue(nativeSurfaceVisibilityObserved.get())
         assertTrue(nativeSurfaceRedrawObserved.get())
         assertTrue(nativeSurfaceTerminalObserved.get())
+        assertTrue(nativeInputEventStateObserved.get())
+        assertTrue(nativeInputFocusResetObserved.get())
+        assertTrue(nativeInputIsolationObserved.get())
     }
 
     @Test
@@ -1575,6 +1723,116 @@ class AppKitBackendProviderTest {
                 report.contains("SCENARIO\tM7\tnot-applicable\tautomated proof does not satisfy manual M7"),
                 report,
             )
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
+    fun publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs() {
+        if (!isMacOs()) return
+
+        ObjCRuntime.autoreleasePool {
+            val application = NSApplication(NSApplication.sharedApplication())
+            val discrete = AppKitScrollWheelEvent(
+                    CGScrollEventUnit.kCGScrollEventUnitLine,
+                    deltaX = 3.0,
+                    deltaY = -5.0,
+                    phase = CGScrollPhase.kCGScrollPhaseChanged,
+                    momentumPhase = CGMomentumScrollPhase.kCGMomentumScrollPhaseNone,
+                    isContinuous = false,
+                )
+            val precise = AppKitScrollWheelEvent(
+                    CGScrollEventUnit.kCGScrollEventUnitPixel,
+                    deltaX = 12.0,
+                    deltaY = -8.0,
+                    phase = CGScrollPhase.kCGScrollPhaseChanged,
+                    momentumPhase = CGMomentumScrollPhase.kCGMomentumScrollPhaseContinue,
+                    isContinuous = true,
+                )
+            application.postScrollWheelEvent(discrete)
+            application.postScrollWheelEvent(precise)
+            val first = NSEvent(application.nextEventMatchingMask_untilDate_inMode_dequeue(
+                NSEventMask.NSEventMaskScrollWheel, NSDate_distantFuture(), NSDefaultRunLoopMode, true,
+            ))
+            val second = NSEvent(application.nextEventMatchingMask_untilDate_inMode_dequeue(
+                NSEventMask.NSEventMaskScrollWheel, NSDate_distantFuture(), NSDefaultRunLoopMode, true,
+            ))
+            val third = application.nextEventMatchingMask_untilDate_inMode_dequeue(
+                NSEventMask.NSEventMaskScrollWheel, NSDate_date(), NSDefaultRunLoopMode, true,
+            )
+            assertEquals(org.graphiks.kffi.objc.NSEventType.NSEventTypeScrollWheel, first.type())
+            assertEquals(org.graphiks.kffi.objc.NSEventType.NSEventTypeScrollWheel, second.type())
+            assertEquals(3.0, first.deltaX())
+            assertEquals(-5.0, first.deltaY())
+            assertFalse(first.hasPreciseScrollingDeltas())
+            assertEquals(12.0, second.deltaX())
+            assertEquals(-8.0, second.deltaY())
+            assertTrue(second.hasPreciseScrollingDeltas())
+            assertEquals(0L, first.windowNumber())
+            assertEquals(0L, second.windowNumber())
+            assertEquals(NSEventPhase.NSEventPhaseChanged, first.phase())
+            assertEquals(NSEventPhase.NSEventPhaseChanged, second.phase())
+            assertEquals(NSEventPhase.NSEventPhaseNone, first.momentumPhase())
+            assertEquals(NSEventPhase.NSEventPhaseChanged, second.momentumPhase())
+            assertTrue(third.address() == 0L)
+        }
+    }
+
+    @Test
+    fun phase4InputHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase4-input-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase4-input-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase4InputHarnessKt",
+                "--record=$record",
+                "--build-id=automated-input-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("snapshot")
+                commands.appendLine("result M7 pass premature terminal claim")
+                commands.appendLine("result M1 not-applicable automated run cannot prove physical keyboard focus")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            assertTrue(report.contains("INPUT_CAPABILITIES\tkeyboard=Available\tpointer=Available"), report)
+            assertTrue(report.contains("\ttouch=Unsupported\tgestures=Unsupported\tdragAndDrop=Unsupported"), report)
+            assertTrue(
+                report.contains(
+                    "\ttextInput=Unsupported(operation=TextInput)" +
+                        "\trawInput=Unsupported(operation=RawInputAccess)",
+                ),
+                report,
+            )
+            assertTrue(report.contains("SNAPSHOT\tinitial\t"), report)
+            assertTrue(report.contains("COMMAND\tsnapshot\t"), report)
+            assertTrue(
+                report.contains("SCENARIO\tM1\tnot-applicable\tautomated run cannot prove physical keyboard focus"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"), report)
+            assertTrue(report.contains("COMMAND\tresult-rejected\tM7 requires terminal observation before recording"), report)
+            assertFalse(report.contains("SCENARIO\tM7\tpass\tpremature terminal claim"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
             assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
         } finally {
             Files.deleteIfExists(record)
@@ -1884,6 +2142,29 @@ private fun NSNotificationCenter.postAppKitNotification(name: String, applicatio
             ObjCRuntime.newNSString(Arena.global(), name),
             application.ptr,
         )
+    }
+}
+
+private fun nativeKeyDownEvent(): MemorySegment =
+    NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+        type = NSEventType.NSEventTypeKeyDown,
+        location = NSPoint(12.5, 4.0),
+        flags = NSEventModifierFlags.NSEventModifierFlagShift,
+        time = 1.0,
+        wNum = 0L,
+        unusedPassNil = MemorySegment.NULL,
+        keys = "A",
+        ukeys = "a",
+        flag = false,
+        code = 0x00,
+    )
+
+private suspend inline fun <reified T : InputEvent> Channel<InputEvent>.receiveInputEvent(
+    predicate: (T) -> Boolean = { true },
+): T {
+    while (true) {
+        val event = receive()
+        if (event is T && predicate(event)) return event
     }
 }
 
