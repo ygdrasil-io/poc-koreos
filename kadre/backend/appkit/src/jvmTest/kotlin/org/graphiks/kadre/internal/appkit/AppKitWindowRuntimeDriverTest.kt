@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -722,6 +723,70 @@ class AppKitWindowRuntimeDriverTest {
             assertTrue(port.fullscreenToggleTargets.isEmpty())
         } finally {
             port.releaseCommitArbitration()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalWillClaimPreventsCancellationFromDispatchingASecondFullscreenToggle() = runBlocking {
+        val willClaimed = CountDownLatch(1)
+        val allowWillFollowUp = CountDownLatch(1)
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = pausingFullscreenPort("commit-external-claim")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+            beforeFullscreenFollowUpEnqueue = { callback ->
+                if (callback == AppKitFullscreenCallback.WillEnter) {
+                    willClaimed.countDown()
+                    check(allowWillFollowUp.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "commit-external-claim"))
+            val first = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            port.awaitCommitArbitration()
+
+            val externalWill = async(Dispatchers.Default) {
+                port.emitWillEnter("commit-external-claim")
+            }
+            assertTrue(willClaimed.await(2, TimeUnit.SECONDS))
+            first.cancelAndJoin()
+
+            val second = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            port.releaseCommitArbitration()
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+
+            assertTrue(port.fullscreenToggleTargets.isEmpty())
+
+            allowWillFollowUp.countDown()
+            withTimeout(2.seconds) { externalWill.await() }
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            port.emitDidEnter("commit-external-claim")
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { second.await() }.successValue(),
+            )
+            assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+            withTimeout(2.seconds) {
+                while (reported.isEmpty()) yield()
+            }
+            assertEquals(
+                KadreFailure.TemporarilyUnavailable(retryable = true),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+            assertTrue(port.fullscreenToggleTargets.isEmpty())
+        } finally {
+            port.releaseCommitArbitration()
+            allowWillFollowUp.countDown()
             driver.close()
         }
     }

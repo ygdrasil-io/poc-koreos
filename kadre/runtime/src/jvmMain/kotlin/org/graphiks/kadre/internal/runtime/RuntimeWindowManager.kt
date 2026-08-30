@@ -485,9 +485,15 @@ public class RuntimeWindowManager public constructor(
         val outcome = guardPort("window-update-cancellation-exception") {
             commandPort.requestUpdateCancellation(WindowUpdateCancellationCommand(operationId))
         }
-        if (outcome is GuardedCall.Success && outcome.value == WindowUpdateCancellationOutcome.CancelledBeforeCommit) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
-            window.withdrawDispatchedUpdate(operationId)
+        if (outcome is GuardedCall.Success) {
+            when (outcome.value) {
+                WindowUpdateCancellationOutcome.CancelledBeforeCommit -> {
+                    synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+                    window.withdrawDispatchedUpdate(operationId)
+                }
+                WindowUpdateCancellationOutcome.CancellationRequested -> Unit
+                WindowUpdateCancellationOutcome.TooLate -> window.detachDispatchedUpdateWaiter(operationId)
+            }
         }
     }
 
@@ -2050,6 +2056,12 @@ internal class RuntimeWindow(
         }
         if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
+    }
+
+    fun detachDispatchedUpdateWaiter(operationId: WindowOperationId) = synchronized(updateLock) {
+        dispatchedUpdate
+            ?.takeIf { it.operationId == operationId }
+            ?.let { it.waiterDetached = true }
     }
 
     private fun dispatchNextUpdate() {
