@@ -57,3 +57,6 @@ WIN-005	sentinel	runtime-window-fullscreen-barrier-release	org.graphiks.kadre.in
 WIN-005	sentinel	runtime-window-fullscreen-committed-effective-state	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenCommittedLevelRestoreFailurePublishesEffectiveStateBeforeFailure[jvm]
 WIN-005	sentinel	runtime-window-fullscreen-cross-window	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenBarrierHonoursWindowPolicyWithoutCrossWindowBlocking[jvm]
 WIN-005	sentinel	runtime-window-fullscreen-policy-bypass	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenBarrierHonoursWindowPolicyWithoutCrossWindowBlocking[jvm]
+WIN-005	sentinel	runtime-window-fullscreen-local-did-drain	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenLocalDidDrainsTheQueuedOppositeTransition[jvm]
+WIN-005	sentinel	runtime-window-fullscreen-borderless-creation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenBorderlessCreationFailsBeforeNativeOpenAdmission[jvm]
+WIN-005	sentinel	runtime-window-fullscreen-exclusive-creation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenExclusiveCreationRejectsTheRequestBeforeNativeOpenAdmission[jvm]

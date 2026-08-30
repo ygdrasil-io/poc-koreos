@@ -980,6 +980,34 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun fullscreenBorderlessCreationFailsBeforeNativeOpenAdmission() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
+            manager.requestWindow(WindowSpec(fullscreen = FullscreenMode.Borderless)),
+        )
+        assertTrue(port.openCommands.isEmpty())
+    }
+
+    @Test
+    fun fullscreenExclusiveCreationRejectsTheRequestBeforeNativeOpenAdmission() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+
+        val request = manager.requestWindow(
+            WindowSpec(fullscreen = exclusiveFullscreenFixture()),
+        ).successValue()
+
+        assertEquals(
+            WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+            request.await(),
+        )
+        assertTrue(port.openCommands.isEmpty())
+    }
+
+    @Test
     fun fullscreenWaitsForDidThenPublishesOneCorrelatedStateAndEvent() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
@@ -1006,6 +1034,29 @@ class RuntimeWindowManagerTest {
         assertEquals(setOf(WindowProperty.Fullscreen), event.changed)
         assertEquals(command.operationId, event.operationId)
         collector.cancelAndJoin()
+    }
+
+    @Test
+    fun fullscreenLocalDidDrainsTheQueuedOppositeTransition() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+        val window = openFullscreenWindow(manager, port)
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val exit = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+        }
+        val enterCommand = port.updateCommands.single()
+
+        enterCommand.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+
+        assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue())
+        assertEquals(2, port.updateCommands.size)
+        port.updateCommands.last().fullscreenDid(
+            window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+        )
+        assertIs<WindowUpdateOutcome.Applied>(exit.await().successValue())
     }
 
     @Test
@@ -1106,6 +1157,78 @@ class RuntimeWindowManagerTest {
                 WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
             ).successValue(),
         )
+    }
+
+    @Test
+    fun fullscreenGenericAppliedReentrantWaitsUntilTheSelectorReturns() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+        val window = openFullscreenWindow(manager, port)
+        port.onUpdate = { command ->
+            command.applied(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        }
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(
+            window.apply(
+                WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
+            ).successValue(),
+        )
+
+        assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+    }
+
+    @Test
+    fun fullscreenTerminalArrivingDuringFifoReplayCannotOvertakeTheBufferedWinner() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+        lateinit var window: Window
+        lateinit var command: WindowUpdateCommand
+        var injected = false
+        var sequence = 0L
+        installWindowEventPolicy(
+            manager,
+            KadrePolicies.Default.window,
+            eventStampSource = {
+                val stamp = EventStamp(
+                    SessionSequence(sequence),
+                    SessionInstant((sequence++).nanoseconds),
+                    deliverySpan = null,
+                )
+                if (!injected) {
+                    injected = true
+                    command.fullscreenDid(
+                        window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+                    )
+                    assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+                }
+                stamp
+            },
+        )
+        window = openFullscreenWindow(manager, port)
+        val events = mutableListOf<WindowEvent.PropertiesChanged>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.PropertiesChanged>().collect(events::add)
+        }
+        port.onUpdate = {
+            command = it
+            it.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+        }
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(
+            window.apply(
+                WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
+            ).successValue(),
+        )
+        advanceUntilIdle()
+
+        assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+        assertEquals(
+            listOf(FullscreenMode.Borderless, FullscreenMode.Windowed),
+            events.map { it.state.fullscreen },
+        )
+        assertEquals(listOf(command.operationId, null), events.map { it.operationId })
+        collector.cancelAndJoin()
     }
 
     @Test
@@ -1236,6 +1359,48 @@ class RuntimeWindowManagerTest {
             window.state.value.copy(fullscreen = FullscreenMode.Windowed),
         )
         assertIs<WindowUpdateOutcome.Applied>(nextFullscreen.await().successValue())
+    }
+
+    @Test
+    fun fullscreenDefersDesiredLevelRealignmentCapturedAfterTheActiveBarrier() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+        val window = openFullscreenWindow(manager, port)
+        val setFloating = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+        }
+        port.updateCommands.single().applied(window.state.value.copy(level = WindowLevel.Floating))
+        assertIs<WindowUpdateOutcome.Applied>(setFloating.await().successValue())
+        manager.acceptWindowFullscreenObservation(
+            window.id,
+            WindowFullscreenObservation.Did(
+                window.state.value.copy(
+                    fullscreen = FullscreenMode.Borderless,
+                    level = WindowLevel.Normal,
+                ),
+            ),
+        )
+        val exit = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+        }
+        val exitCommand = port.updateCommands.last()
+        assertEquals(WindowLevel.Floating, exitCommand.desiredLevel)
+        val realignment = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Normal)))
+        }
+
+        assertFalse(realignment.isCompleted)
+        exitCommand.applied(
+            window.state.value.copy(
+                fullscreen = FullscreenMode.Windowed,
+                level = WindowLevel.Floating,
+            ),
+        )
+        assertIs<WindowUpdateOutcome.Applied>(exit.await().successValue())
+        assertEquals(3, port.updateCommands.size)
+        port.updateCommands.last().applied(window.state.value.copy(level = WindowLevel.Normal))
+        assertIs<WindowUpdateOutcome.Applied>(realignment.await().successValue())
+        assertEquals(WindowLevel.Normal, window.state.value.level)
     }
 
     @Test

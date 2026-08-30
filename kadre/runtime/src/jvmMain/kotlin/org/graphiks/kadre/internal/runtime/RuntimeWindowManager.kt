@@ -218,6 +218,27 @@ public class RuntimeWindowManager public constructor(
 
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         currentCoroutineContext().ensureActive()
+        if (spec.fullscreen != FullscreenMode.Windowed) {
+            return synchronized(lock) {
+                if (closed) return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+                when (spec.fullscreen) {
+                    FullscreenMode.Borderless -> KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+                    is FullscreenMode.Exclusive -> {
+                        val request = RuntimeWindowRequest(
+                            RuntimeProcessIds.nextWindowRequestId(),
+                            RuntimeProcessIds.nextWindowId(),
+                            this,
+                        )
+                        request.terminate(
+                            WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+                        )
+                        request.markHandoffDelivered()
+                        KadreResult.Success(request)
+                    }
+                    FullscreenMode.Windowed -> error("windowed fullscreen was handled before admission")
+                }
+            }
+        }
         lateinit var request: RuntimeWindowRequest
         val admissionFailure = synchronized(lock) {
             when {
@@ -457,14 +478,22 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun acceptWindowUpdateStimulus(stimulus: WindowUpdateCommandStimulus) {
-        val operationId = when (stimulus) {
-            is WindowUpdateCommandStimulus.Applied -> stimulus.operationId
-            is WindowUpdateCommandStimulus.CommittedFailure -> stimulus.operationId
-            is WindowUpdateCommandStimulus.Failed -> stimulus.operationId
-            is WindowUpdateCommandStimulus.PartiallyApplied -> stimulus.operationId
-            is WindowUpdateCommandStimulus.Rejected -> stimulus.operationId
-        }
-        val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) } ?: return
+        routeWindowUpdateStimulus(stimulus, bufferFullscreenTerminal = true, retainDispatch = false)
+    }
+
+    internal fun acceptBufferedWindowUpdateStimulus(stimulus: WindowUpdateCommandStimulus) {
+        routeWindowUpdateStimulus(stimulus, bufferFullscreenTerminal = false, retainDispatch = true)
+    }
+
+    private fun routeWindowUpdateStimulus(
+        stimulus: WindowUpdateCommandStimulus,
+        bufferFullscreenTerminal: Boolean,
+        retainDispatch: Boolean,
+    ) {
+        val operationId = stimulus.operationId()
+        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] } ?: return
+        if (bufferFullscreenTerminal && window.bufferFullscreenTerminal(stimulus)) return
+        if (!retainDispatch) synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
         when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
             is WindowUpdateCommandStimulus.CommittedFailure -> window.applyCommittedFailure(
@@ -1394,13 +1423,18 @@ internal class RuntimeWindow(
                 .filterNot(supportedWindowUpdateProperties::contains)
                 .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
             val mutationChanged = mutationChanged(current, candidate)
-            if (!mutationChanged) {
+            val requestedLevel = (canonicalUpdate.level as? PropertyChange.Set)?.value
+            val deferBehindFullscreenBarrier = fullscreenBarrier != null &&
+                (
+                    canonicalUpdate.fullscreen is PropertyChange.Set ||
+                        requestedLevel != null && requestedLevel != desiredLevel
+                    )
+            if (!mutationChanged && !deferBehindFullscreenBarrier) {
                 update.expectedRevision?.let { expected ->
                     if (expected != current.revision) {
                         return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
                     }
                 }
-                val requestedLevel = (canonicalUpdate.level as? PropertyChange.Set)?.value
                 if (requestedLevel != null && requestedLevel != desiredLevel) desiredLevel = requestedLevel
                 immediate = KadreResult.Success(updateOutcome(operationId, current, rejected))
                 pending = PendingWindowUpdate(operationId, null, canonicalUpdate, rejected)
@@ -1441,9 +1475,11 @@ internal class RuntimeWindow(
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
-            if (fullscreenBarrier?.operationId == operationId) {
-                fullscreenBarrier = null
-                fullscreenTombstone = FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.Did)
+            fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
+                completeFullscreenBarrierLocked(
+                    barrier,
+                    FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.Did),
+                )
             }
             eventPublicationsInFlight += 1
             val lifecycle = mutableState.value
@@ -1486,9 +1522,11 @@ internal class RuntimeWindow(
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
-            if (fullscreenBarrier?.operationId == operationId) {
-                fullscreenBarrier = null
-                fullscreenTombstone = FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.Did)
+            fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
+                completeFullscreenBarrierLocked(
+                    barrier,
+                    FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.Did),
+                )
             }
             val lifecycle = mutableState.value
             val candidate = state.copy(phase = lifecycle.phase, revision = lifecycle.revision)
@@ -1518,35 +1556,55 @@ internal class RuntimeWindow(
     fun acceptFullscreenObservation(
         observation: WindowFullscreenObservation,
         operationId: WindowOperationId?,
-    ): FullscreenObservationAcceptance = acceptFullscreenObservation(observation, operationId, drainAfter = true)
+    ): FullscreenObservationAcceptance = acceptFullscreenObservation(
+        observation,
+        operationId,
+        drainAfter = true,
+        bufferFullscreenTerminal = true,
+    )
+
+    fun bufferFullscreenTerminal(stimulus: WindowUpdateCommandStimulus): Boolean = synchronized(updateLock) {
+        val barrier = fullscreenBarrier?.takeIf { it.operationId == stimulus.operationId() }
+            ?: return@synchronized false
+        if (
+            barrier.phase != FullscreenPhase.InvokingSelector &&
+            barrier.phase != FullscreenPhase.DrainingTerminals
+        ) {
+            return@synchronized false
+        }
+        barrier.terminalCallbacks.addLast(FullscreenTerminalCallback.Stimulus(stimulus))
+        true
+    }
 
     private fun acceptFullscreenObservation(
         observation: WindowFullscreenObservation,
         operationId: WindowOperationId?,
         drainAfter: Boolean,
+        bufferFullscreenTerminal: Boolean,
     ): FullscreenObservationAcceptance {
         val resolution = synchronized(updateLock) {
-            val currentBarrier = fullscreenBarrier
+            val actualBarrier = fullscreenBarrier
             if (
                 operationId != null &&
-                currentBarrier != null &&
-                currentBarrier.operationId != operationId
+                actualBarrier != null &&
+                actualBarrier.operationId != operationId
             ) {
                 return@synchronized FullscreenResolution.Rejected
             }
             if (
-                currentBarrier?.phase == FullscreenPhase.InvokingSelector &&
-                observation is WindowFullscreenObservation.Did
+                bufferFullscreenTerminal &&
+                actualBarrier != null &&
+                (
+                    actualBarrier.phase == FullscreenPhase.DrainingTerminals ||
+                        actualBarrier.phase == FullscreenPhase.InvokingSelector &&
+                        observation !is WindowFullscreenObservation.Will
+                    )
             ) {
-                currentBarrier.terminalCallbacks.addLast(FullscreenTerminalCallback.Did(observation.effectiveState))
+                actualBarrier.terminalCallbacks.addLast(FullscreenTerminalCallback.Observation(observation))
                 return@synchronized FullscreenResolution.Accepted
             }
-            if (
-                currentBarrier?.phase == FullscreenPhase.InvokingSelector &&
-                observation is WindowFullscreenObservation.DidFail
-            ) {
-                currentBarrier.terminalCallbacks.addLast(FullscreenTerminalCallback.DidFail(observation.target))
-                return@synchronized FullscreenResolution.Accepted
+            val currentBarrier = actualBarrier?.takeUnless {
+                it.phase == FullscreenPhase.DrainingTerminals && it.terminalResolved
             }
             when (observation) {
                 is WindowFullscreenObservation.Will -> acceptFullscreenWillLocked(
@@ -1574,21 +1632,37 @@ internal class RuntimeWindow(
         operationId: WindowOperationId,
         dispatchFailure: KadreFailure?,
     ): Boolean {
-        val callbacks = synchronized(updateLock) {
-            val barrier = fullscreenBarrier?.takeIf { it.operationId == operationId }
-            if (barrier?.phase == FullscreenPhase.InvokingSelector) barrier.phase = FullscreenPhase.AwaitingLocal
-            buildList {
-                while (barrier != null && barrier.terminalCallbacks.isNotEmpty()) {
-                    add(barrier.terminalCallbacks.removeFirst())
+        val drainingBarrier = synchronized(updateLock) {
+            fullscreenBarrier?.takeIf { it.operationId == operationId }?.also { barrier ->
+                if (barrier.phase == FullscreenPhase.InvokingSelector) {
+                    barrier.phase = FullscreenPhase.DrainingTerminals
                 }
             }
         }
-        callbacks.forEach { callback ->
-            val observation = when (callback) {
-                is FullscreenTerminalCallback.Did -> WindowFullscreenObservation.Did(callback.effectiveState)
-                is FullscreenTerminalCallback.DidFail -> WindowFullscreenObservation.DidFail(callback.target)
+        while (drainingBarrier != null) {
+            val callback = synchronized(updateLock) {
+                if (drainingBarrier.terminalCallbacks.isNotEmpty()) {
+                    drainingBarrier.terminalCallbacks.removeFirst()
+                } else {
+                    if (fullscreenBarrier === drainingBarrier) {
+                        if (drainingBarrier.terminalResolved) {
+                            fullscreenBarrier = null
+                        } else {
+                            drainingBarrier.phase = FullscreenPhase.AwaitingLocal
+                        }
+                    }
+                    null
+                }
+            } ?: break
+            when (callback) {
+                is FullscreenTerminalCallback.Observation -> acceptFullscreenObservation(
+                    callback.observation,
+                    operationId,
+                    drainAfter = false,
+                    bufferFullscreenTerminal = false,
+                )
+                is FullscreenTerminalCallback.Stimulus -> manager.acceptBufferedWindowUpdateStimulus(callback.stimulus)
             }
-            acceptFullscreenObservation(observation, operationId, drainAfter = false)
         }
         val selectorFailure = synchronized(updateLock) {
             val barrier = fullscreenBarrier?.takeIf { it.operationId == operationId }
@@ -1636,6 +1710,7 @@ internal class RuntimeWindow(
                 }
             }
             FullscreenPhase.InvokingSelector,
+            FullscreenPhase.DrainingTerminals,
             FullscreenPhase.AwaitingLocal,
             -> {
                 barrier.willObserved = true
@@ -1689,8 +1764,11 @@ internal class RuntimeWindow(
         }
         val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId }
             ?: return FullscreenResolution.Rejected
-        fullscreenBarrier = null
-        fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.Did)
+        dispatchedUpdate = null
+        completeFullscreenBarrierLocked(
+            barrier,
+            FullscreenTombstone(target, FullscreenTerminalKind.Did),
+        )
         val localSuccess = target == barrier.target
         val publicationOperationId = if (localSuccess) barrier.operationId else null
         val publication = prepareFullscreenPublicationLocked(effectiveState, publicationOperationId)
@@ -1749,8 +1827,10 @@ internal class RuntimeWindow(
     ): FullscreenResolution? {
         val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId } ?: return null
         dispatchedUpdate = null
-        fullscreenBarrier = null
-        fullscreenTombstone = FullscreenTombstone(tombstoneTarget, FullscreenTerminalKind.DidFail)
+        completeFullscreenBarrierLocked(
+            barrier,
+            FullscreenTombstone(tombstoneTarget, FullscreenTerminalKind.DidFail),
+        )
         return FullscreenResolution(
             completion = pending,
             result = KadreResult.Failure(failure),
@@ -1771,6 +1851,18 @@ internal class RuntimeWindow(
         mutableState.value = effective
         eventPublicationsInFlight += 1
         return WindowStatePublication(lifecycle, effective, operationId)
+    }
+
+    private fun completeFullscreenBarrierLocked(
+        barrier: FullscreenBarrier,
+        tombstone: FullscreenTombstone,
+    ) {
+        if (barrier.phase == FullscreenPhase.DrainingTerminals) {
+            barrier.terminalResolved = true
+        } else if (fullscreenBarrier === barrier) {
+            fullscreenBarrier = null
+        }
+        fullscreenTombstone = tombstone
     }
 
     private fun executeFullscreenResolution(resolution: FullscreenResolution, drainAfter: Boolean) {
@@ -1844,9 +1936,11 @@ internal class RuntimeWindow(
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
-            if (fullscreenBarrier?.operationId == operationId) {
-                fullscreenBarrier = null
-                fullscreenTombstone = FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.DidFail)
+            fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
+                completeFullscreenBarrierLocked(
+                    barrier,
+                    FullscreenTombstone(fullscreenTarget(pending.update), FullscreenTerminalKind.DidFail),
+                )
             }
             pending.result.complete(KadreResult.Failure(failure))
             reportDetached = pending.waiterDetached
@@ -1873,7 +1967,7 @@ internal class RuntimeWindow(
         var next: PendingWindowUpdate? = null
         synchronized(updateLock) {
             if (dispatchedUpdate != null) return
-            if (fullscreenBarrier?.phase == FullscreenPhase.External) return
+            if (fullscreenBarrier != null) return
             while (pendingUpdates.isNotEmpty()) {
                 val candidate = pendingUpdates.removeFirst()
                 if (candidate.cancelled) continue
@@ -1900,6 +1994,8 @@ internal class RuntimeWindow(
                     continue
                 }
                 if (!mutationChanged(current, effectiveCandidate)) {
+                    val requestedLevel = (candidate.update.level as? PropertyChange.Set)?.value
+                    if (requestedLevel != null && requestedLevel != desiredLevel) desiredLevel = requestedLevel
                     candidate.result.complete(KadreResult.Success(updateOutcome(candidate.operationId, current, candidate.rejected)))
                     continue
                 }
@@ -2136,7 +2232,7 @@ internal data class PendingWindowUpdate(
     var waiterDetached: Boolean = false,
 )
 
-private enum class FullscreenPhase { PreparedLocal, InvokingSelector, AwaitingLocal, External }
+private enum class FullscreenPhase { PreparedLocal, InvokingSelector, DrainingTerminals, AwaitingLocal, External }
 
 private data class FullscreenBarrier(
     val operationId: WindowOperationId?,
@@ -2145,11 +2241,12 @@ private data class FullscreenBarrier(
     val terminalCallbacks: ArrayDeque<FullscreenTerminalCallback> = ArrayDeque(),
     var conflictTarget: FullscreenMode? = null,
     var willObserved: Boolean = false,
+    var terminalResolved: Boolean = false,
 )
 
 private sealed interface FullscreenTerminalCallback {
-    data class Did(val effectiveState: WindowState) : FullscreenTerminalCallback
-    data class DidFail(val target: FullscreenMode) : FullscreenTerminalCallback
+    data class Observation(val observation: WindowFullscreenObservation) : FullscreenTerminalCallback
+    data class Stimulus(val stimulus: WindowUpdateCommandStimulus) : FullscreenTerminalCallback
 }
 
 private enum class FullscreenTerminalKind { Did, DidFail }
@@ -2512,6 +2609,14 @@ private fun updateOutcome(
 
 private fun PendingWindowUpdate.isFullscreenUpdate(): Boolean =
     update.fullscreen is PropertyChange.Set
+
+private fun WindowUpdateCommandStimulus.operationId(): WindowOperationId = when (this) {
+    is WindowUpdateCommandStimulus.Applied -> operationId
+    is WindowUpdateCommandStimulus.CommittedFailure -> operationId
+    is WindowUpdateCommandStimulus.Failed -> operationId
+    is WindowUpdateCommandStimulus.PartiallyApplied -> operationId
+    is WindowUpdateCommandStimulus.Rejected -> operationId
+}
 
 private fun fullscreenTarget(update: WindowUpdate): FullscreenMode? =
     (update.fullscreen as? PropertyChange.Set)?.value
