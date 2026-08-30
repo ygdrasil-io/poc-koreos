@@ -359,6 +359,12 @@ effectif, corrélation d'opération et policy de géométrie. `outerPosition`
 reste reportée à la phase 9 : les coordonnées physiques publiques exigent
 l'inventaire et le repère multi-écran réellement observables.
 
+La sous-tranche suivante, définie par
+`APPKIT-PHASE-5-WINDOW-TITLE-DESIGN.md`, réserve la mutation de `title` via le
+même pipeline corrélé. Elle est isolée du chrome AppKit : les sémantiques de
+`Borderless`, décorations et boutons système restent à spécifier avant leur
+activation.
+
 #### Contenu
 
 - position, dimensions et contraintes ;
