@@ -10,11 +10,16 @@ import org.graphiks.kadre.diagnostics.DiagnosticCounters
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreDiagnostics
 
-internal class RuntimeDiagnostics : KadreDiagnostics {
+internal class RuntimeDiagnostics(
+    collectorAllocator: RuntimeEventCollectorAllocator,
+    maxCollectorsPerFlow: Int,
+) : KadreDiagnostics {
     private val mutableEvents = MutableSharedFlow<KadreDiagnostic>(extraBufferCapacity = 16)
     private val mutableCounters = MutableStateFlow(ZERO_COUNTERS)
 
-    override val events: Flow<KadreDiagnostic> = mutableEvents.asSharedFlow()
+    override val events: Flow<KadreDiagnostic> = mutableEvents.asSharedFlow().withEventCollectorAdmission(
+        collectorAllocator.newGate(maxCollectorsPerFlow),
+    )
     override val counters: StateFlow<DiagnosticCounters> = mutableCounters.asStateFlow()
 
     private companion object {

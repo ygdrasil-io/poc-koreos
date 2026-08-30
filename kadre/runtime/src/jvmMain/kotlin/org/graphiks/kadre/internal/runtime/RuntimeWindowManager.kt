@@ -26,7 +26,13 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
+import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.WindowDeliveryPolicy
+import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
@@ -68,14 +74,18 @@ import kotlin.time.Duration.Companion.nanoseconds
 public class RuntimeWindowManager public constructor(
     private val resources: ResourceBudgetPolicy,
     private val commandPort: WindowCommandPort,
+    private val surfaceCommandPort: SurfaceCommandPort = UnsupportedSurfaceCommandPort,
     private val platform: KadrePlatform,
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
+    private val publicSurfaceCapabilities: Boolean = false,
+    private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
 ) : WindowManager, AutoCloseable {
     private val lock = Any()
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
+    private val surfaces = linkedMapOf<SurfaceId, RuntimeWindowSurface>()
     private var nextAdmissionOrder = 0L
     private var reservedWindowSlots = 0
     private var managerRevision = 0L
@@ -86,6 +96,15 @@ public class RuntimeWindowManager public constructor(
     private val eventSequence = AtomicLong(0L)
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
+    private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
+    private val isolatedEventCollectorAllocator = lazy {
+        RuntimeEventCollectorAllocator(resources.maxEventCollectorsPerSession)
+    }
+    private var sessionEventCollectorAllocator: RuntimeEventCollectorAllocator? = null
+    private var sessionMaxCollectorsPerFlow = resources.maxEventCollectorsPerFlow
+    private var surfaceSessionFailureHandler: (KadreFailure) -> Unit = { failure ->
+        safeReport(KadreException(failure))
+    }
     private val mutableState = MutableStateFlow(
         WindowManagerState(
             primary = null,
@@ -108,9 +127,10 @@ public class RuntimeWindowManager public constructor(
             requestId: WindowRequestId,
             windowId: WindowId,
             effectiveSpec: WindowSpec,
+            initialSurfaceMetrics: SurfaceMetrics?,
             owner: WindowPeerOwner,
         ) {
-            acceptCommit(requestId, windowId, effectiveSpec, owner)
+            acceptCommit(requestId, windowId, effectiveSpec, initialSurfaceMetrics, owner)
         }
 
         override fun fail(requestId: WindowRequestId, failure: KadreFailure) {
@@ -133,12 +153,33 @@ public class RuntimeWindowManager public constructor(
         pending[requestId]?.request ?: committed[requestId]?.request
     }
 
-    internal fun installSessionEventStampSource(source: () -> EventStamp) {
+    internal fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: RuntimeEventCollectorAllocator,
+        maxCollectorsPerFlow: Int,
+    ) {
         synchronized(lock) {
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
             check(pending.isEmpty() && committed.isEmpty()) { "window event stamp source must be installed before admission" }
             sessionEventStampSource = source
+            surfaceDeliveryPolicy = deliveryPolicy
+            surfaceSessionFailureHandler = sessionFailureHandler
+            sessionEventCollectorAllocator = collectorAllocator
+            sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
         }
+    }
+
+    /**
+     * Unstable backend SPI accepting one immutable observation or acknowledgement.
+     *
+     * Returning `false` means the value was duplicate, unknown or terminal and requires no
+     * backend retry.
+     */
+    public fun acceptSurfaceStimulus(stimulus: SurfaceStimulus): Boolean {
+        val surface = synchronized(lock) { surfaces[stimulus.surfaceId] } ?: return false
+        return surface.accept(stimulus)
     }
 
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
@@ -160,9 +201,11 @@ public class RuntimeWindowManager public constructor(
                 else -> {
                     val requestId = RuntimeProcessIds.nextWindowRequestId()
                     val windowId = RuntimeProcessIds.nextWindowId()
+                    val surfaceId = RuntimeProcessIds.nextSurfaceId()
                     request = RuntimeWindowRequest(requestId, windowId, this)
                     val record = PendingWindow(
                         request = request,
+                        surfaceId = surfaceId,
                         spec = spec,
                         admissionOrder = nextAdmissionOrder++,
                     )
@@ -171,7 +214,7 @@ public class RuntimeWindowManager public constructor(
                     when (
                         val dispatch = guardPort("request-open-exception") {
                             commandPort.requestOpen(
-                                WindowOpenCommand(requestId, windowId, spec, stimulusSink),
+                                WindowOpenCommand(requestId, windowId, surfaceId, spec, stimulusSink),
                             )
                         }
                     ) {
@@ -549,6 +592,7 @@ public class RuntimeWindowManager public constructor(
         requestId: WindowRequestId,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
+        initialSurfaceMetrics: SurfaceMetrics?,
         owner: WindowPeerOwner,
     ) {
         try {
@@ -563,12 +607,13 @@ public class RuntimeWindowManager public constructor(
                     if (record.preparedOwner == null) {
                         record.preparedOwner = owner
                         record.preparedEffectiveSpec = effectiveSpec
+                        record.preparedInitialSurfaceMetrics = initialSurfaceMetrics
                     } else if (record.preparedOwner !== owner) {
                         closeOwner = owner
                     }
                     return@synchronized
                 }
-                commitPendingLocked(record, windowId, effectiveSpec, owner)
+                commitPendingLocked(record, windowId, effectiveSpec, initialSurfaceMetrics, owner)
             }
             closeOwner?.let(::safeCloseOwner)
         } catch (cause: Exception) {
@@ -636,6 +681,7 @@ public class RuntimeWindowManager public constructor(
                     }
                     record.window.markNativeCloseCommitted()
                     record.window.finishClosing()
+                    surfaces.remove(record.window.surface.id)
                     releaseWindowSlotsLocked(1)
                     publishMembershipLocked()
                     owner = record.owner
@@ -740,6 +786,7 @@ public class RuntimeWindowManager public constructor(
         }
         record.window.markNativeCloseCommitted()
         record.window.finishClosing()
+        surfaces.remove(record.window.surface.id)
         releaseWindowSlotsLocked(1)
         publishMembershipLocked()
         safeCloseOwner(record.owner)
@@ -750,9 +797,11 @@ public class RuntimeWindowManager public constructor(
         record.openDispatching = false
         val owner = record.preparedOwner ?: return
         val effectiveSpec = checkNotNull(record.preparedEffectiveSpec)
+        val initialSurfaceMetrics = record.preparedInitialSurfaceMetrics
         record.preparedOwner = null
         record.preparedEffectiveSpec = null
-        commitPendingLocked(record, record.request.windowId, effectiveSpec, owner)
+        record.preparedInitialSurfaceMetrics = null
+        commitPendingLocked(record, record.request.windowId, effectiveSpec, initialSurfaceMetrics, owner)
     }
 
     private fun terminaliseOpenDispatchFailureLocked(
@@ -771,13 +820,36 @@ public class RuntimeWindowManager public constructor(
         record: PendingWindow,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
+        initialSurfaceMetrics: SurfaceMetrics?,
         owner: WindowPeerOwner,
     ) {
+        if (publicSurfaceCapabilities && initialSurfaceMetrics == null) {
+            removePendingLocked(record)
+            safeCloseOwner(owner)
+            val failure = platformFailure("missing-initial-surface-metrics")
+            safeReport(KadreException(failure))
+            record.request.terminate(WindowRequestOutcome.Rejected(failure))
+            return
+        }
         if (pending.remove(record.request.id) !== record) {
             safeCloseOwner(owner)
             return
         }
-        val surface = MinimalWindowSurface(RuntimeProcessIds.nextSurfaceId(), effectiveSpec.contentSize)
+        val collectorAllocator = sessionEventCollectorAllocator ?: isolatedEventCollectorAllocator.value
+        val surface = RuntimeWindowSurface(
+            id = record.surfaceId,
+            initialMetrics = initialSurfaceMetrics ?: fallbackSurfaceMetrics(effectiveSpec),
+            commandPort = surfaceCommandPort,
+            commandsEnabled = publicSurfaceCapabilities,
+            enabledCapabilities = enabledSurfaceCapabilities,
+            eventStampSource = ::nextEventStamp,
+            platform = platform,
+            failureReporter = failureReporter,
+            deliveryPolicy = surfaceDeliveryPolicy,
+            maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,
+            collectorAllocator = collectorAllocator,
+            sessionFailureHandler = surfaceSessionFailureHandler,
+        )
         val window = RuntimeWindow(
             requestId = record.request.id,
             id = windowId,
@@ -785,6 +857,7 @@ public class RuntimeWindowManager public constructor(
             surface = surface,
             manager = this,
             publicWindowCapabilities = publicWindowCapabilities,
+            eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
         )
         committed[record.request.id] = CommittedWindow(
             request = record.request,
@@ -792,6 +865,7 @@ public class RuntimeWindowManager public constructor(
             owner = owner,
             admissionOrder = record.admissionOrder,
         )
+        check(surfaces.put(surface.id, surface) == null) { "duplicate runtime surface" }
         publishMembershipLocked()
         record.request.terminate(WindowRequestOutcome.OpenedHere(window))
     }
@@ -936,6 +1010,7 @@ public class RuntimeWindowManager public constructor(
 
     private data class PendingWindow(
         val request: RuntimeWindowRequest,
+        val surfaceId: SurfaceId,
         val spec: WindowSpec,
         val admissionOrder: Long,
         var cancellationOutcome: WindowCancellationOutcome? = null,
@@ -943,6 +1018,7 @@ public class RuntimeWindowManager public constructor(
         var openDispatching: Boolean = true,
         var preparedOwner: WindowPeerOwner? = null,
         var preparedEffectiveSpec: WindowSpec? = null,
+        var preparedInitialSurfaceMetrics: SurfaceMetrics? = null,
     )
 
     private data class CommittedWindow(
@@ -961,6 +1037,13 @@ public class RuntimeWindowManager public constructor(
         data class Failure(val failure: KadreFailure.PlatformFailure) : GuardedCall<Nothing>
     }
 }
+
+private fun fallbackSurfaceMetrics(effectiveSpec: WindowSpec): SurfaceMetrics = SurfaceMetrics(
+    logicalSize = effectiveSpec.contentSize,
+    physicalSize = effectiveSpec.contentSize.toPhysical(1.0),
+    scaleFactor = 1.0,
+    safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+)
 
 internal class RuntimeWindowRequest(
     override val id: WindowRequestId,
@@ -1031,9 +1114,10 @@ internal class RuntimeWindow(
     val requestId: WindowRequestId,
     override val id: WindowId,
     spec: WindowSpec,
-    override val surface: MinimalWindowSurface,
+    override val surface: RuntimeWindowSurface,
     private val manager: RuntimeWindowManager,
     publicWindowCapabilities: Boolean,
+    eventCollectorGate: RuntimeEventCollectorGate,
 ) : Window, RuntimeDesktopWindowHandleAccess {
     private val mutableState = MutableStateFlow(initialWindowState(spec))
     private val mutableCapabilities = MutableStateFlow(windowCapabilities(publicWindowCapabilities))
@@ -1045,6 +1129,7 @@ internal class RuntimeWindow(
     override val state: StateFlow<WindowState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<WindowCapabilities> = mutableCapabilities.asStateFlow()
     override val events: Flow<WindowEvent> = mutableEvents.asSharedFlow()
+        .withEventCollectorAdmission(eventCollectorGate)
     var closeOperationId: WindowOperationId? = null
         private set
 

@@ -4,6 +4,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
@@ -65,17 +66,28 @@ public interface RuntimeDesktopWindowHandleAccess {
 public class WindowOpenCommand internal constructor(
     public val requestId: WindowRequestId,
     public val windowId: WindowId,
+    public val surfaceId: SurfaceId,
     public val spec: WindowSpec,
     private val stimulusSink: WindowCommandStimulusSink,
 ) {
     private val ownerLock = Any()
     private val owners = IdentityHashMap<WindowPeerOwner, ManagedWindowPeerOwner>()
 
-    public fun commit(owner: WindowPeerOwner, effectiveSpec: WindowSpec = spec) {
+    /**
+     * Commits one fully prepared peer and its atomic initial content metrics.
+     *
+     * A null [initialSurfaceMetrics] exists only for pre-surface bootstrap compositions. A
+     * manager exposing surface commands rejects it instead of publishing synthetic metrics.
+     */
+    public fun commit(
+        owner: WindowPeerOwner,
+        effectiveSpec: WindowSpec = spec,
+        initialSurfaceMetrics: SurfaceMetrics? = null,
+    ) {
         val managedOwner = synchronized(ownerLock) {
             owners.getOrPut(owner) { ManagedWindowPeerOwner(owner) }
         }
-        stimulusSink.commit(requestId, windowId, effectiveSpec, managedOwner)
+        stimulusSink.commit(requestId, windowId, effectiveSpec, initialSurfaceMetrics, managedOwner)
     }
 
     public fun fail(failure: KadreFailure) {
@@ -135,6 +147,7 @@ internal interface WindowCommandStimulusSink {
         requestId: WindowRequestId,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
+        initialSurfaceMetrics: SurfaceMetrics?,
         owner: WindowPeerOwner,
     )
     fun fail(requestId: WindowRequestId, failure: KadreFailure)

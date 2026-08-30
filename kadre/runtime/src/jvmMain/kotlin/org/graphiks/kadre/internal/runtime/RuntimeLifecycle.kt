@@ -19,6 +19,8 @@ internal class RuntimeLifecycle(
     initialState: LifecycleState,
     initialCapabilities: LifecycleCapabilities,
     private val nextStamp: () -> EventStamp,
+    collectorAllocator: RuntimeEventCollectorAllocator,
+    maxCollectorsPerFlow: Int,
 ) : KadreLifecycle {
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(initialCapabilities)
@@ -27,8 +29,12 @@ internal class RuntimeLifecycle(
 
     override val state: StateFlow<LifecycleState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<LifecycleCapabilities> = mutableCapabilities.asStateFlow()
-    override val events: Flow<LifecycleEvent> = mutableEvents.asSharedFlow()
-    override val signals: Flow<HostSignal> = mutableSignals.asSharedFlow()
+    override val events: Flow<LifecycleEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(
+        collectorAllocator.newGate(maxCollectorsPerFlow),
+    )
+    override val signals: Flow<HostSignal> = mutableSignals.asSharedFlow().withEventCollectorAdmission(
+        collectorAllocator.newGate(maxCollectorsPerFlow),
+    )
 
     @Synchronized
     fun updateState(next: LifecycleState): LifecycleState {

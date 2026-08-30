@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -24,7 +26,12 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCancellationOutcome
@@ -45,6 +52,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -107,6 +115,162 @@ class RuntimeWindowManagerTest {
         assertSame(outcome.window, manager.state.value.primary)
         assertEquals("committed", outcome.window.state.value.title)
         assertEquals(0, owner.closeCount)
+    }
+
+    @Test
+    fun admittedSurfaceIdentityRoutesOnlyToItsLiveRuntimeSurface() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec(title = "surface-routing")).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+
+        assertEquals(command.surfaceId, window.surface.id)
+        assertTrue(
+            manager.acceptSurfaceStimulus(
+                SurfaceStimulus.FocusChanged(command.surfaceId, SurfaceFocus.Focused),
+            ),
+        )
+        assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
+
+        window.close()
+        command.nativeClosed()
+
+        assertEquals(SurfaceAttachmentState.Detached, window.surface.state.value.attachment)
+        assertFalse(
+            manager.acceptSurfaceStimulus(
+                SurfaceStimulus.FocusChanged(command.surfaceId, SurfaceFocus.Unfocused),
+            ),
+        )
+        assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
+    }
+
+    @Test
+    fun windowSurfaceAndInputCollectorsShareTheInjectedSessionAllocator() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        manager.installSessionConfiguration(
+            deliveryPolicy = KadrePolicies.Default.window,
+            source = { error("event stamps are not used by this collector test") },
+            sessionFailureHandler = {},
+            collectorAllocator = RuntimeEventCollectorAllocator(1),
+            maxCollectorsPerFlow = 1,
+        )
+        val request = manager.requestWindow(WindowSpec(title = "collector-budget")).successValue()
+        val window = commit(request, port.openCommands.single())
+
+        val windowCollector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect() }
+        val rejectedInput = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { window.surface.input.events.collect() }.exceptionOrNull()
+        }
+        try {
+            assertTrue(rejectedInput.isCompleted)
+            val rejection = assertIs<KadreException>(rejectedInput.await())
+            assertEquals(
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.EventCollector, 1),
+                rejection.failure,
+            )
+        } finally {
+            rejectedInput.cancelAndJoin()
+            windowCollector.cancelAndJoin()
+        }
+
+        val inputCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.surface.input.events.collect()
+        }
+        val rejectedSurface = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { window.surface.events.collect() }.exceptionOrNull()
+        }
+        try {
+            assertTrue(rejectedSurface.isCompleted)
+            val rejection = assertIs<KadreException>(rejectedSurface.await())
+            assertEquals(
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.EventCollector, 1),
+                rejection.failure,
+            )
+        } finally {
+            rejectedSurface.cancelAndJoin()
+            inputCollector.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun openCommitCarriesAtomicInitialMetricsAcrossPreAndPostCommitStimulusRaces() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, publicSurfaceCapabilities = true)
+        val request = manager.requestWindow(
+            WindowSpec(title = "native-metrics", contentSize = LogicalSize(700.0, 400.0)),
+        ).successValue()
+        val command = port.openCommands.single()
+        val preCommitMetrics = SurfaceMetrics(
+            logicalSize = LogicalSize(710.0, 405.0),
+            physicalSize = PhysicalSize(1420, 810),
+            scaleFactor = 2.0,
+            safeAreaInsets = LogicalInsets(1.0, 2.0, 3.0, 4.0),
+        )
+        val committedMetrics = SurfaceMetrics(
+            logicalSize = LogicalSize(720.25, 410.5),
+            physicalSize = PhysicalSize(1441, 821),
+            scaleFactor = 2.0,
+            safeAreaInsets = LogicalInsets(5.0, 6.0, 7.0, 8.0),
+        )
+        val postCommitMetrics = SurfaceMetrics(
+            logicalSize = LogicalSize(730.25, 420.5),
+            physicalSize = PhysicalSize(1461, 841),
+            scaleFactor = 2.0,
+            safeAreaInsets = LogicalInsets(9.0, 10.0, 11.0, 12.0),
+        )
+
+        assertFalse(
+            manager.acceptSurfaceStimulus(
+                SurfaceStimulus.MetricsChanged(command.surfaceId, preCommitMetrics),
+            ),
+        )
+        command.commit(CountingWindowPeerOwner(), initialSurfaceMetrics = committedMetrics)
+        val window = assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
+
+        assertEquals(committedMetrics.logicalSize, window.surface.state.value.logicalSize)
+        assertEquals(committedMetrics.physicalSize, window.surface.state.value.physicalSize)
+        assertEquals(committedMetrics.scaleFactor, window.surface.state.value.scaleFactor)
+        assertEquals(committedMetrics.safeAreaInsets, window.surface.state.value.safeAreaInsets)
+        assertEquals(SurfaceRevision(0), window.surface.state.value.revision)
+
+        assertTrue(
+            manager.acceptSurfaceStimulus(
+                SurfaceStimulus.MetricsChanged(command.surfaceId, postCommitMetrics),
+            ),
+        )
+        assertEquals(postCommitMetrics.logicalSize, window.surface.state.value.logicalSize)
+        assertEquals(postCommitMetrics.physicalSize, window.surface.state.value.physicalSize)
+        assertEquals(SurfaceRevision(1), window.surface.state.value.revision)
+    }
+
+    @Test
+    fun phaseThreeCommitWithoutNativeInitialMetricsCannotExposeAnOpenedWindow() = runTest {
+        val reported = mutableListOf<Throwable>()
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            reported = reported,
+            publicSurfaceCapabilities = true,
+        )
+        val request = manager.requestWindow(WindowSpec(title = "missing-metrics")).successValue()
+        val owner = CountingWindowPeerOwner()
+
+        port.openCommands.single().commit(owner)
+
+        val rejected = assertIs<WindowRequestOutcome.Rejected>(request.await())
+        assertEquals(
+            KadreFailure.PlatformFailure(
+                KadrePlatform.Fake,
+                "window-command-port",
+                "missing-initial-surface-metrics",
+            ),
+            rejected.failure,
+        )
+        assertEquals(emptyList(), manager.state.value.windows)
+        assertEquals(1, owner.closeCount)
+        assertIs<KadreException>(reported.single())
     }
 
     @Test
@@ -944,6 +1108,7 @@ class RuntimeWindowManagerTest {
         maxPending: Int = 4,
         reported: MutableList<Throwable> = mutableListOf(),
         publicWindowCapabilities: Boolean = false,
+        publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: () -> Unit = {},
     ): RuntimeWindowManager = RuntimeWindowManager(
         resources = KadrePolicies.Default.resources.copy(
@@ -954,6 +1119,7 @@ class RuntimeWindowManagerTest {
         platform = KadrePlatform.Fake,
         failureReporter = RuntimeFailureReporter(reported::add),
         publicWindowCapabilities = publicWindowCapabilities,
+        publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )
 

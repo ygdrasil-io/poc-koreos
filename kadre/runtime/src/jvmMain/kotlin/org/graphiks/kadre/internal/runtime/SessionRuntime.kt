@@ -33,6 +33,7 @@ import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.capture.CaptureManager
 import org.graphiks.kadre.diagnostics.KadreDiagnostics
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.input.DeviceManager
@@ -67,12 +68,20 @@ internal class SessionRuntime(
     private val terminal = CompletableDeferred<SessionOutcome>()
     private val nextSequence = AtomicLong(0L)
     private val marker = SessionMarker(id)
+    private val eventCollectorAllocator = RuntimeEventCollectorAllocator(
+        policy.resources.maxEventCollectorsPerSession,
+    )
     private val runtimeLifecycle = RuntimeLifecycle(
         initialLifecycleState,
         initialLifecycleCapabilities,
         ::nextStamp,
+        eventCollectorAllocator,
+        policy.resources.maxEventCollectorsPerFlow,
     )
-    private val runtimeDiagnostics = RuntimeDiagnostics()
+    private val runtimeDiagnostics = RuntimeDiagnostics(
+        eventCollectorAllocator,
+        policy.resources.maxEventCollectorsPerFlow,
+    )
     private val runtimeComponents = try {
         componentsFactory.create(id, rootScope)
     } catch (cause: Throwable) {
@@ -81,10 +90,22 @@ internal class SessionRuntime(
     }
     private val runtimeWindows = runtimeComponents.windows
         .also { manager ->
-            (manager as? RuntimeWindowManager)?.installSessionEventStampSource(::nextStamp)
+            (manager as? RuntimeWindowManager)?.installSessionConfiguration(
+                policy.window,
+                ::nextStamp,
+                ::eventDeliveryFailed,
+                eventCollectorAllocator,
+                policy.resources.maxEventCollectorsPerFlow,
+            )
         }
-    private val runtimeDisplays = UnsupportedDisplayManager()
-    private val runtimeDevices = UnsupportedDeviceManager()
+    private val runtimeDisplays = UnsupportedDisplayManager(
+        eventCollectorAllocator,
+        policy.resources.maxEventCollectorsPerFlow,
+    )
+    private val runtimeDevices = UnsupportedDeviceManager(
+        eventCollectorAllocator,
+        policy.resources.maxEventCollectorsPerFlow,
+    )
     private val runtimeCapture = UnsupportedCaptureManager()
     private val mutablePrimarySurface = MutableStateFlow<HostSurface?>(null)
 
@@ -187,6 +208,11 @@ internal class SessionRuntime(
     }
 
     fun hostFailed(failure: KadreFailure.PlatformFailure) {
+        requestTermination(SessionOutcome.Failed(failure))
+    }
+
+    private fun eventDeliveryFailed(failure: KadreFailure) {
+        failureReporter(KadreException(failure))
         requestTermination(SessionOutcome.Failed(failure))
     }
 
