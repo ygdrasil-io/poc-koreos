@@ -17,6 +17,8 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
+val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006")
+val runtimeContractIds = listOf("INP-001", "WIN-001")
 
 val validateContractRegistry by tasks.registering(JavaExec::class) {
     group = "verification"
@@ -24,7 +26,18 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
     dependsOn("jvmMainClasses")
     classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
     mainClass.set("org.graphiks.kadre.contracts.ValidateContractRegistryKt")
-    args(rootProject.file("kadre/contracts/registry/contracts.tsv").absolutePath)
+    args(
+        rootProject.file("kadre/contracts/registry/contracts.tsv").absolutePath,
+        listOf(
+            rootProject.file("kadre/runtime/contracts/evidence.tsv"),
+            rootProject.file("kadre/backend/appkit/contracts/evidence.tsv"),
+        ).joinToString(separator = ",") { it.absolutePath },
+        (runtimeContractIds + appKitContractIds).joinToString(separator = ","),
+    )
+    inputs.files(
+        rootProject.file("kadre/runtime/contracts/evidence.tsv"),
+        rootProject.file("kadre/backend/appkit/contracts/evidence.tsv"),
+    )
 }
 
 val appKitContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
@@ -34,8 +47,6 @@ val appKitStandaloneLoopJUnitReports = rootProject.file("kadre/backend/appkit/bu
 val appKitContractEvidenceDirectory = rootProject.file("kadre/backend/appkit/build/contract-evidence")
 val appKitContractCommit = providers.gradleProperty("kadreContractCommit").orElse("local")
 val appKitContractAdapter = "appkit-jvm"
-val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004", "APK-005")
-
 val appKitContractEvidenceTasks = appKitContractIds.map { contractId ->
     tasks.register<JavaExec>("generateAppKit${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"
@@ -80,8 +91,6 @@ val runtimeJUnitReports = rootProject.file("kadre/runtime/build/test-results/jvm
 val runtimeContractEvidenceDirectory = rootProject.file("kadre/runtime/build/contract-evidence")
 val runtimeContractCommit = providers.gradleProperty("kadreContractCommit").orElse("local")
 val runtimeContractAdapter = "runtime-jvm"
-val runtimeContractIds = listOf("INP-001")
-
 val runtimeContractEvidenceTasks = runtimeContractIds.map { contractId ->
     tasks.register<JavaExec>("generateRuntime${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"

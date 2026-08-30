@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -33,6 +34,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowPhase
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
@@ -148,19 +150,20 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
-    fun peerForwardsDistinctReentrantGeometryDuringItsManagedMutation() = runBlocking {
+    fun staleReentrantGeometryCannotRollbackManagedCompletionAndLaterExternalGeometrySurvives() = runBlocking {
         val managed = AppKitWindowGeometrySnapshot(
             contentSize = LogicalSize(480.0, 300.0),
             minimumSize = null,
             maximumSize = null,
             resizable = true,
         )
+        val stale = managed.copy(contentSize = LogicalSize(440.0, 280.0))
         val external = managed.copy(contentSize = LogicalSize(520.0, 340.0))
         val port = DeterministicAppKitNativeWindowPort(
             name = "reentrant-external-geometry",
             effectiveGeometry = managed,
             emitGeometryDuringUpdate = true,
-            reentrantGeometryDuringUpdate = external,
+            reentrantGeometryDuringUpdate = stale,
         )
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
 
@@ -174,12 +177,95 @@ class AppKitWindowRuntimeDriverTest {
             window.apply(
                 WindowUpdate(contentSize = PropertyChange.Set(managed.contentSize)),
             ).successValue()
+            port.emitExternalGeometry("reentrant-external-geometry", external)
             val observed = withTimeout(2.seconds) {
                 window.state.first { it.contentSize == external.contentSize }
             }
 
             assertEquals(2L, observed.revision.value)
             assertEquals(external.contentSize, observed.contentSize)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun cancellationWhileOwnerThreadWaitsBeforeFirstGeometrySetterWithdrawsTheUpdate() = runBlocking {
+        val beforeFirstSetter = CountDownLatch(1)
+        val allowFirstSetter = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "pre-setter-cancellation",
+            beforeGeometrySetter = {
+                beforeFirstSetter.countDown()
+                check(allowFirstSetter.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "pre-setter-cancellation"))
+                    .successValue()
+                    .await(),
+            ).window
+            val before = window.state.value
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(480.0, 300.0))))
+            }
+            assertTrue(beforeFirstSetter.await(2, TimeUnit.SECONDS))
+
+            update.cancel()
+            update.join()
+            allowFirstSetter.countDown()
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+
+            assertTrue(update.isCancelled)
+            assertEquals(before, window.state.value)
+        } finally {
+            allowFirstSetter.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun errorAfterContentSizeSetterPublishesReadbackAndRejectsOnlyUnappliedField() = runBlocking {
+        val failure = IllegalStateException("resizable setter failed")
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "post-setter-readback",
+            geometryFailureAfterContentSize = failure,
+        )
+        val reported = mutableListOf<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "post-setter-readback"))
+                    .successValue()
+                    .await(),
+            ).window
+            val target = LogicalSize(480.0, 300.0)
+
+            val outcome = assertIs<WindowUpdateOutcome.PartiallyApplied>(
+                window.apply(
+                    WindowUpdate(
+                        contentSize = PropertyChange.Set(target),
+                        resizable = PropertyChange.Set(false),
+                    ),
+                ).successValue(),
+            )
+
+            assertEquals(target, outcome.state.contentSize)
+            assertTrue(outcome.state.resizable)
+            assertEquals(outcome.state, window.state.value)
+            assertEquals(WindowProperty.Resizable, outcome.rejected.single().field)
+            assertIs<KadreFailure.PlatformFailure>(outcome.rejected.single().failure)
+            assertEquals(listOf<Throwable>(failure), reported)
         } finally {
             driver.close()
         }
@@ -691,25 +777,44 @@ class AppKitWindowRuntimeDriverTest {
     @Test
     fun pendingCleanupFailureDuringDriverCloseDetachesInsteadOfReportingFalseCancellation() = runBlocking {
         val cleanupFailure = IllegalStateException("pending native close failed")
+        val preparationStarted = CountDownLatch(1)
+        val allowPreparation = CountDownLatch(1)
         val port = DeterministicAppKitNativeWindowPort(
             name = "pending-cleanup-failure",
             closeFailures = mapOf("pending" to cleanupFailure),
+            beforeCreateWindow = { spec ->
+                if (spec.title == "pending") {
+                    preparationStarted.countDown()
+                    check(allowPreparation.await(2, TimeUnit.SECONDS))
+                }
+            },
         )
-        val reported = mutableListOf<Throwable>()
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val cleanupReported = CompletableDeferred<Unit>()
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             KadrePolicies.Default.resources,
-            RuntimeFailureReporter(reported::add),
+            RuntimeFailureReporter { cause ->
+                reported += cause
+                if (cause === cleanupFailure) cleanupReported.complete(Unit)
+            },
         )
         val pending = async(start = CoroutineStart.UNDISPATCHED) {
             driver.manager.requestWindow(WindowSpec(title = "pending"))
         }
 
-        driver.close()
-        yield()
+        try {
+            assertTrue(preparationStarted.await(2, TimeUnit.SECONDS))
+            driver.close()
+            allowPreparation.countDown()
 
-        assertEquals(WindowRequestOutcome.RequesterDetached, pending.await().successValue().await())
-        assertTrue(reported.contains(cleanupFailure))
-        assertEquals(emptyList(), driver.manager.state.value.windows)
+            assertEquals(WindowRequestOutcome.RequesterDetached, pending.await().successValue().await())
+            withTimeout(2.seconds) { cleanupReported.await() }
+            assertTrue(reported.contains(cleanupFailure))
+            assertEquals(emptyList(), driver.manager.state.value.windows)
+        } finally {
+            allowPreparation.countDown()
+            driver.close()
+        }
     }
 
     @Test
@@ -789,6 +894,8 @@ internal class DeterministicAppKitNativeWindowPort(
     private val emitGeometryDuringUpdate: Boolean = false,
     private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
+    private val beforeGeometrySetter: () -> Unit = { },
+    private val geometryFailureAfterContentSize: Throwable? = null,
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
@@ -864,9 +971,18 @@ internal class DeterministicAppKitNativeWindowPort(
     override fun updateGeometry(
         window: AppKitNativeWindowOwner,
         target: AppKitWindowGeometryTarget,
-    ): AppKitWindowGeometrySnapshot {
+        commit: AppKitWindowGeometryCommit,
+    ): AppKitWindowGeometrySnapshot? {
         val recording = window.recordingWindow()
         geometryTargets += target
+        beforeGeometrySetter()
+        if (!commit.beforeFirstSetter()) return null
+        geometryFailureAfterContentSize?.let { failure ->
+            recording.geometry = recording.geometry.copy(
+                contentSize = target.contentSize.resolve(recording.geometry.contentSize),
+            )
+            throw failure
+        }
         val requested = recording.geometry.updateFor(target)
         val effective = effectiveGeometry ?: requested
         recording.geometry = effective
@@ -879,6 +995,9 @@ internal class DeterministicAppKitNativeWindowPort(
         reentrantGeometryDuringUpdate?.let { geometryObservers[recording.title]?.emit(it) }
         return effective
     }
+
+    override fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot =
+        window.recordingWindow().geometry
 
     override fun observeGeometry(
         window: AppKitNativeWindowOwner,

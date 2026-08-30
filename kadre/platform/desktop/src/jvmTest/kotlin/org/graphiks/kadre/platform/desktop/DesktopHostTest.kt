@@ -34,6 +34,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
+import org.graphiks.kadre.internal.runtime.WindowUpdateCommand
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
@@ -377,6 +378,10 @@ private class ImmediateDesktopHandlePort(
     override fun requestOpen(command: WindowOpenCommand) {
         open = command
         command.commit(owner)
+    }
+
+    override fun requestUpdate(command: WindowUpdateCommand) {
+        command.rejected(UnsupportedOperationException("desktop handle test port does not support window updates"))
     }
 
     override fun requestPendingCancellation(

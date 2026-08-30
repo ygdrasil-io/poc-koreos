@@ -32,6 +32,7 @@ import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.appkit.AppKitScrollWheelEvent
 import org.graphiks.kffi.objc.appkit.postScrollWheelEvent
@@ -39,6 +40,7 @@ import org.graphiks.kffi.objc.nextEventMatchingMask_untilDate_inMode_dequeue
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
+import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
@@ -57,9 +59,13 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
@@ -74,6 +80,8 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.LogicalSizeRange
+import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
@@ -85,6 +93,8 @@ import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.file.Files
@@ -592,8 +602,8 @@ class AppKitBackendProviderTest {
 
                 assertEquals("effective", window.state.value.title)
                 assertEquals(LogicalSize(320.0, 180.0), window.state.value.contentSize)
-                assertNull(window.state.value.minimumSize)
-                assertNull(window.state.value.maximumSize)
+                assertEquals(LogicalSize(100.0, 80.0), window.state.value.minimumSize)
+                assertEquals(LogicalSize(640.0, 360.0), window.state.value.maximumSize)
                 assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
                 assertEquals(WindowLevel.Normal, window.state.value.level)
                 assertFalse(window.state.value.transparent)
@@ -604,10 +614,6 @@ class AppKitBackendProviderTest {
                 listOf<Capability<*>>(
                     windowCapabilities.title,
                     windowCapabilities.outerPosition,
-                    windowCapabilities.contentSize,
-                    windowCapabilities.minimumSize,
-                    windowCapabilities.maximumSize,
-                    windowCapabilities.resizable,
                     windowCapabilities.fullscreen,
                     windowCapabilities.decorations,
                     windowCapabilities.systemButtons,
@@ -618,6 +624,10 @@ class AppKitBackendProviderTest {
                     windowCapabilities.attention,
                     windowCapabilities.contentProtection,
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertIs<Capability.Supported<*>>(windowCapabilities.contentSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.minimumSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.maximumSize)
+                assertIs<Capability.Supported<*>>(windowCapabilities.resizable)
                 assertIs<Capability.Supported<*>>(windowCapabilities.closeInterception)
                 assertIs<Capability.Supported<*>>(windowCapabilities.platformAccess)
 
@@ -1270,6 +1280,348 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
+    fun publicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-capabilities")
+            val range = LogicalSizeRange(null, null, null)
+
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.contentSize,
+            )
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.minimumSize,
+            )
+            assertEquals(
+                Capability.Supported(range, FeatureAvailability.Available),
+                window.capabilities.value.maximumSize,
+            )
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.resizable,
+            )
+            assertNull(window.state.value.outerBounds)
+            listOf<Capability<*>>(
+                window.capabilities.value.title,
+                window.capabilities.value.outerPosition,
+                window.capabilities.value.fullscreen,
+                window.capabilities.value.decorations,
+                window.capabilities.value.systemButtons,
+                window.capabilities.value.level,
+                window.capabilities.value.transparency,
+                window.capabilities.value.blurBehind,
+                window.capabilities.value.icon,
+                window.capabilities.value.attention,
+                window.capabilities.value.contentProtection,
+            ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowApplyUsesGeneratedNativeGeometryAndCorrelatesOperationOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-apply")
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                val target = LogicalSize(420.0, 260.0)
+                val minimum = LogicalSize(200.0, 120.0)
+                val maximum = LogicalSize(800.0, 600.0)
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            contentSize = PropertyChange.Set(target),
+                            minimumSize = PropertyChange.Set(minimum),
+                            maximumSize = PropertyChange.Set(maximum),
+                            resizable = PropertyChange.Set(false),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                assertEquals(target, outcome.state.contentSize)
+                assertEquals(minimum, outcome.state.minimumSize)
+                assertEquals(maximum, outcome.state.maximumSize)
+                assertFalse(outcome.state.resizable)
+                assertEquals(outcome.state, window.state.value)
+
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    window.withDesktopHandle { handle ->
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        ObjCRuntime.autoreleasePool {
+                            val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                            val effectiveContentSize = native.contentRectForFrameRect(native.frame()).size
+                            assertEquals(target.width, effectiveContentSize.width)
+                            assertEquals(target.height, effectiveContentSize.height)
+                            val effectiveMinimum = native.contentMinSize()
+                            assertEquals(minimum.width, effectiveMinimum.width)
+                            assertEquals(minimum.height, effectiveMinimum.height)
+                            val effectiveMaximum = native.contentMaxSize()
+                            assertEquals(maximum.width, effectiveMaximum.width)
+                            assertEquals(maximum.height, effectiveMaximum.height)
+                            assertFalse(
+                                native.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+                            )
+                        }
+                    },
+                )
+                val geometry = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                val properties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(outcome.operationId, geometry.operationId)
+                assertEquals(outcome.operationId, properties.operationId)
+                assertEquals(outcome.state, geometry.state)
+                assertEquals(outcome.state, properties.state)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitClearOfInitialConstraintsRestoresNativeDefaultsAndPublishesNullOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val defaultWindow = openPublicGeometryWindow("public-geometry-native-defaults")
+            val nativeDefaults = readNativeConstraints(defaultWindow)
+            assertIs<WindowCloseOutcome.Accepted>(defaultWindow.close().appKitSuccessValue())
+            withTimeout(5.seconds) {
+                defaultWindow.state.first { it.phase == WindowPhase.Closed }
+            }
+            val minimum = LogicalSize(240.0, 160.0)
+            val maximum = LogicalSize(720.0, 520.0)
+            val window = openPublicGeometryWindow(
+                WindowSpec(
+                    title = "public-geometry-clear-initial",
+                    contentSize = LogicalSize(420.0, 280.0),
+                    minimumSize = minimum,
+                    maximumSize = maximum,
+                ),
+            )
+            assertEquals(
+                NativeWindowConstraints(
+                    minimumWidth = minimum.width,
+                    minimumHeight = minimum.height,
+                    maximumWidth = maximum.width,
+                    maximumHeight = maximum.height,
+                ),
+                readNativeConstraints(window),
+            )
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(
+                    WindowUpdate(
+                        minimumSize = PropertyChange.Clear,
+                        maximumSize = PropertyChange.Clear,
+                    ),
+                ).appKitSuccessValue(),
+            )
+
+            assertNull(outcome.state.minimumSize)
+            assertNull(outcome.state.maximumSize)
+            assertEquals(outcome.state, window.state.value)
+            assertEquals(nativeDefaults, readNativeConstraints(window))
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowRejectsInvalidGeometryBeforeNativeCommitOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-invalid")
+            val beforeState = window.state.value
+            val beforeNativeSize = readNativeContentSize(window)
+            val events = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(events::send)
+            }
+            try {
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+                    window.apply(
+                        WindowUpdate(
+                            minimumSize = PropertyChange.Set(LogicalSize(600.0, 400.0)),
+                            maximumSize = PropertyChange.Set(LogicalSize(500.0, 300.0)),
+                        ),
+                    ),
+                )
+                assertEquals(beforeState, window.state.value)
+                assertEquals(beforeNativeSize, readNativeContentSize(window))
+                assertNull(withTimeoutOrNull(200.milliseconds) { events.receive() })
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowGeometryDoesNotCrossBetweenTwoWindowsOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val first = openPublicGeometryWindow("public-geometry-first")
+            val second = openPublicGeometryWindow("public-geometry-second")
+            val firstEvents = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val secondEvents = Channel<WindowEvent.GeometryChanged>(Channel.UNLIMITED)
+            val firstCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                first.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(firstEvents::send)
+            }
+            val secondCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                second.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(secondEvents::send)
+            }
+            try {
+                val beforeSecondState = second.state.value
+                val observedFirstSize = LogicalSize(380.0, 240.0)
+                setNativeContentSize(first, observedFirstSize)
+                val observedFirstState = withTimeout(5.seconds) {
+                    first.state.first { it.contentSize == observedFirstSize }
+                }
+                val firstObservation = withTimeout(5.seconds) { firstEvents.receive() }
+                assertNull(firstObservation.operationId)
+                assertEquals(observedFirstState, firstObservation.state)
+                assertEquals(observedFirstSize, readNativeContentSize(first))
+                assertEquals(beforeSecondState, second.state.value)
+                assertNull(withTimeoutOrNull(200.milliseconds) { secondEvents.receive() })
+
+                val requestedSecondSize = LogicalSize(520.0, 360.0)
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    second.apply(
+                        WindowUpdate(
+                            contentSize = PropertyChange.Set(requestedSecondSize),
+                            minimumSize = PropertyChange.Set(LogicalSize(400.0, 280.0)),
+                            maximumSize = PropertyChange.Set(LogicalSize(640.0, 480.0)),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                val secondOperation = withTimeout(5.seconds) { secondEvents.receive() }
+                assertEquals(outcome.operationId, secondOperation.operationId)
+                assertEquals(outcome.state, secondOperation.state)
+                assertEquals(requestedSecondSize, second.state.value.contentSize)
+                assertEquals(requestedSecondSize, readNativeContentSize(second))
+                assertEquals(observedFirstState, first.state.value)
+                assertEquals(observedFirstSize, readNativeContentSize(first))
+                assertNull(withTimeoutOrNull(200.milliseconds) { firstEvents.receive() })
+            } finally {
+                firstCollector.cancel()
+                secondCollector.cancel()
+                firstEvents.close()
+                secondEvents.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun nativeExternalResizeUpdatesWindowStateWithNullOperationIdOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-geometry-external")
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                val resized = LogicalSize(380.0, 240.0)
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    window.withDesktopHandle { handle ->
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        ObjCRuntime.autoreleasePool {
+                            NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                                .setContentSize(NSSize(resized.width, resized.height))
+                        }
+                    },
+                )
+                val state = withTimeout(5.seconds) {
+                    window.state.first { it.contentSize == resized }
+                }
+                val event = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                assertEquals(state, event.state)
+                assertNull(event.operationId)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs() {
+        val policyWasApplied = AtomicBoolean(false)
+        runPublicAppKitGeometrySession(
+            KadrePolicies.Default.copy(
+                window = KadrePolicies.Default.window.copy(
+                    geometryChanges = ContinuousDelivery.Buffered(
+                        capacity = 2,
+                        onOverflow = ContinuousOverflowAction.FailSession,
+                    ),
+                ),
+            ),
+        ) {
+            val window = openPublicGeometryWindow("public-geometry-policy")
+            val enteredFirstEvent = CompletableDeferred<Unit>()
+            val releaseCollector = CompletableDeferred<Unit>()
+            val events = mutableListOf<WindowEvent.GeometryChanged>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect { event ->
+                    events += event
+                    if (!enteredFirstEvent.isCompleted) {
+                        enteredFirstEvent.complete(Unit)
+                        releaseCollector.await()
+                    }
+                }
+            }
+            try {
+                setNativeContentSize(window, LogicalSize(340.0, 220.0))
+                withTimeout(5.seconds) { enteredFirstEvent.await() }
+                setNativeContentSize(window, LogicalSize(390.0, 250.0))
+                val finalSize = LogicalSize(440.0, 280.0)
+                setNativeContentSize(window, finalSize)
+                releaseCollector.complete(Unit)
+
+                withTimeout(5.seconds) {
+                    while (events.size < 3 || window.state.value.contentSize != finalSize) yield()
+                }
+                assertEquals(
+                    listOf(LogicalSize(340.0, 220.0), LogicalSize(390.0, 250.0), finalSize),
+                    events.map { it.state.contentSize },
+                )
+                assertTrue(events.all { it.operationId == null })
+                policyWasApplied.set(true)
+            } finally {
+                releaseCollector.complete(Unit)
+                collector.cancel()
+            }
+        }
+        assertTrue(policyWasApplied.get(), "the public session must use its supplied WindowDeliveryPolicy")
+    }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
     fun realKffiStandaloneLoopStartsAndStopsOnMacOs() {
         if (!isMacOs()) {
             assertFalse(AppKitBackendProvider().isAvailable())
@@ -1383,6 +1735,7 @@ class AppKitBackendProviderTest {
                         )
                         nativeSurfaceFocusObserved.set(true)
 
+                        val injectedPhysicalKey = PhysicalKey.Code(usagePage = 0x07, usageId = 0x04)
                         val inputEvents = Channel<InputEvent>(Channel.UNLIMITED)
                         val inputEventStateWasVisible = AtomicBoolean(true)
                         val inputCollector = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -1406,13 +1759,19 @@ class AppKitBackendProviderTest {
                             },
                         )
                         val keyEvent = withTimeout(5.seconds) {
-                            inputEvents.receiveInputEvent<InputEvent.Key>()
+                            inputEvents.receiveInputEvent<InputEvent.Key> {
+                                it.keyState == KeyState.Pressed && it.physicalKey == injectedPhysicalKey
+                            }
                         }
                         assertEquals(KeyState.Pressed, keyEvent.keyState)
-                        assertEquals(keyEvent.stateRevision, window.surface.input.state.value.revision)
-                        assertEquals(
-                            setOf(keyEvent.physicalKey),
-                            window.surface.input.state.value.keyboard.pressedKeys,
+                        assertEquals(injectedPhysicalKey, keyEvent.physicalKey)
+                        assertTrue(
+                            window.surface.input.state.value.revision.value >= keyEvent.stateRevision.value,
+                            "physical host input may advance the state after the key is delivered",
+                        )
+                        assertTrue(
+                            injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys,
+                            "the injected key must be represented in the source window state",
                         )
                         assertTrue(inputEventStateWasVisible.get())
                         nativeInputEventStateObserved.set(true)
@@ -1434,23 +1793,27 @@ class AppKitBackendProviderTest {
                             while (observed == null) {
                                 when (val event = inputEvents.receive()) {
                                     is InputEvent.StateReset -> observed = event
-                                    is InputEvent.Key -> assertFalse(
-                                        event.keyState == KeyState.Released,
-                                        "focus reset must not be preceded by a synthetic key release: $event",
-                                    )
-                                    else -> Unit // Physical pointer motion may arrive from the host desktop.
+                                    is InputEvent.Key -> if (event.physicalKey == injectedPhysicalKey) {
+                                        assertFalse(
+                                            event.keyState == KeyState.Released,
+                                            "focus reset must not be preceded by a synthetic key release: $event",
+                                        )
+                                    }
+                                    else -> Unit // Unrelated physical host input may arrive concurrently.
                                 }
                             }
                             checkNotNull(observed)
                         }
                         assertEquals(InputStateResetReason.FocusLost, reset.reason)
-                        assertEquals(reset.stateRevision, window.surface.input.state.value.revision)
-                        assertEquals(emptySet(), window.surface.input.state.value.keyboard.pressedKeys)
-                        assertEquals(emptyList(), window.surface.input.state.value.pointers)
+                        assertTrue(
+                            window.surface.input.state.value.revision.value >= reset.stateRevision.value,
+                            "physical host input may advance the state after the reset is delivered",
+                        )
+                        assertFalse(injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys)
                         assertNull(
                             withTimeoutOrNull(200.milliseconds) {
                                 inputEvents.receiveInputEvent<InputEvent.Key> {
-                                    it.keyState == KeyState.Released
+                                    it.keyState == KeyState.Released && it.physicalKey == injectedPhysicalKey
                                 }
                             },
                         )
@@ -1478,19 +1841,29 @@ class AppKitBackendProviderTest {
                                     }
                                 },
                             )
-                            val isolatedKeyEvent = withTimeout(5.seconds) {
-                                inputEvents.receiveInputEvent<InputEvent.Key>()
+                            val sourceKeyEvent = withTimeout(5.seconds) {
+                                inputEvents.receiveInputEvent<InputEvent.Key> {
+                                    it.keyState == KeyState.Pressed && it.physicalKey == injectedPhysicalKey
+                                }
                             }
-                            assertEquals(
-                                setOf(isolatedKeyEvent.physicalKey),
-                                window.surface.input.state.value.keyboard.pressedKeys,
+                            assertEquals(injectedPhysicalKey, sourceKeyEvent.physicalKey)
+                            assertTrue(
+                                injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys,
+                                "the injected key must remain attached to the source window",
                             )
-                            assertEquals(
-                                emptySet(),
-                                isolatedWindow.surface.input.state.value.keyboard.pressedKeys,
+                            assertFalse(
+                                injectedPhysicalKey in isolatedWindow.surface.input.state.value.keyboard.pressedKeys,
+                                "the injected key must not cross to the isolated window",
                             )
+                            // Pointer motion belongs to the physical host desktop and may legitimately
+                            // reach the newly opened window. The synthetic key dispatched to `window`
+                            // must not cross to `isolatedWindow`.
                             assertNull(
-                                withTimeoutOrNull(200.milliseconds) { isolatedInputEvents.receive() },
+                                withTimeoutOrNull(200.milliseconds) {
+                                    isolatedInputEvents.receiveInputEvent<InputEvent.Key> {
+                                        it.physicalKey == injectedPhysicalKey
+                                    }
+                                },
                             )
                             nativeInputIsolationObserved.set(true)
                         } finally {
@@ -1565,10 +1938,27 @@ class AppKitBackendProviderTest {
                             )
                         }
 
+                        val closeEventTrace = ArrayDeque<WindowEvent>()
+                        suspend fun awaitCloseRequested(stage: String): WindowEvent.CloseRequested =
+                            withTimeout(5.seconds) {
+                                while (true) {
+                                    val event = events.receive()
+                                    if (closeEventTrace.size == 8) closeEventTrace.removeFirst()
+                                    closeEventTrace.addLast(event)
+                                    when (event) {
+                                        is WindowEvent.CloseRequested -> return@withTimeout event
+                                        is WindowEvent.GeometryChanged -> Unit
+                                        else -> error(
+                                            "$stage expected CloseRequested after geometry observations; " +
+                                                "received $event, trace=$closeEventTrace",
+                                        )
+                                    }
+                                }
+                                error("unreachable")
+                            }
+
                         performNativeUserClose()
-                        val rejected = withTimeout(5.seconds) {
-                            assertIs<WindowEvent.CloseRequested>(events.receive())
-                        }
+                        val rejected = awaitCloseRequested("native-close-reject")
                         assertEquals(
                             WindowCloseResponseOutcome.KeptOpen,
                             window.respondToCloseRequest(rejected.requestId, WindowCloseDecision.Reject)
@@ -1579,9 +1969,7 @@ class AppKitBackendProviderTest {
 
                         proofStage.set("native-close-accept")
                         performNativeUserClose()
-                        val accepted = withTimeout(5.seconds) {
-                            assertIs<WindowEvent.CloseRequested>(events.receive())
-                        }
+                        val accepted = awaitCloseRequested("native-close-accept")
                         val closing = assertIs<WindowCloseResponseOutcome.Closing>(
                             window.respondToCloseRequest(accepted.requestId, WindowCloseDecision.Accept)
                                 .appKitSuccessValue(),
@@ -2122,6 +2510,139 @@ private fun publicWindowRequest(
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
 )
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private fun runPublicAppKitGeometrySession(
+    policy: KadrePolicy = KadrePolicies.Default,
+    exercise: suspend KadreScope.() -> Unit,
+) {
+    if (!isMacOs()) return
+    val native = KffiAppKitNativeApplication()
+    val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
+    val exerciseFailure = AtomicReference<Throwable?>(null)
+    val result = provider.run(
+        DesktopStandaloneRequest(
+            KadreApplicationFactory {
+                KadreApplication {
+                    withTimeout(5.seconds) {
+                        while (!native.isRunning()) yield()
+                    }
+                    try {
+                        exercise()
+                    } catch (failure: Throwable) {
+                        exerciseFailure.set(failure)
+                        throw failure
+                    } finally {
+                        windows.state.value.windows.forEach { window ->
+                            if (window.state.value.phase != WindowPhase.Closed) {
+                                window.close().appKitSuccessValue()
+                                withTimeout(5.seconds) {
+                                    window.state.first { it.phase == WindowPhase.Closed }
+                                }
+                            }
+                        }
+                        requestStop()
+                    }
+                }
+            },
+            stopWhenLastWindowClosed = false,
+            policy = policy,
+        ),
+    )
+    exerciseFailure.get()?.let { throw it }
+    assertEquals(
+        KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+        result,
+    )
+}
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun KadreScope.openPublicGeometryWindow(title: String): Window =
+    openPublicGeometryWindow(WindowSpec(title = title))
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun KadreScope.openPublicGeometryWindow(spec: WindowSpec): Window =
+    assertIs<WindowRequestOutcome.OpenedHere>(
+        windows.requestWindow(spec).appKitSuccessValue().await(),
+    ).window
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private data class NativeWindowConstraints(
+    val minimumWidth: Double,
+    val minimumHeight: Double,
+    val maximumWidth: Double,
+    val maximumHeight: Double,
+)
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeConstraints(window: Window): NativeWindowConstraints =
+    assertIs<KadreResult.Success<NativeWindowConstraints>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                val minimum = native.contentMinSize()
+                val maximum = native.contentMaxSize()
+                NativeWindowConstraints(
+                    minimumWidth = minimum.width,
+                    minimumHeight = minimum.height,
+                    maximumWidth = maximum.width,
+                    maximumHeight = maximum.height,
+                )
+            }
+        },
+    ).value
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun setNativeContentSize(window: Window, size: LogicalSize) {
+    assertEquals(
+        KadreResult.Success(Unit),
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                    .setContentSize(NSSize(size.width, size.height))
+            }
+        },
+    )
+}
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeContentSize(window: Window): LogicalSize =
+    assertIs<KadreResult.Success<LogicalSize>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                    .contentRectForFrameRect(
+                        NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong())).frame(),
+                    )
+                    .size
+                    .let { size -> LogicalSize(size.width, size.height) }
+            }
+        },
+    ).value
 
 private fun KadreResult<KadreSession>.requireSession(): KadreSession =
     (this as? KadreResult.Success)?.value ?: error("Expected a Kadre session, got $this")

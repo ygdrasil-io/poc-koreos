@@ -40,6 +40,7 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.LogicalSizeRange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCancellationOutcome
@@ -84,6 +85,7 @@ public class RuntimeWindowManager public constructor(
     private val platform: KadrePlatform,
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
+    private val enabledWindowGeometryCapabilities: Set<WindowProperty> = emptySet(),
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
@@ -448,11 +450,17 @@ public class RuntimeWindowManager public constructor(
     private fun acceptWindowUpdateStimulus(stimulus: WindowUpdateCommandStimulus) {
         val operationId = when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> stimulus.operationId
+            is WindowUpdateCommandStimulus.PartiallyApplied -> stimulus.operationId
             is WindowUpdateCommandStimulus.Rejected -> stimulus.operationId
         }
         val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) } ?: return
         when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
+            is WindowUpdateCommandStimulus.PartiallyApplied -> window.applyNativeUpdate(
+                stimulus.operationId,
+                stimulus.state,
+                stimulus.rejected,
+            )
             is WindowUpdateCommandStimulus.Rejected -> {
                 safeReport(stimulus.error)
                 window.rejectDispatchedUpdate(stimulus.operationId, platformFailure("window-update-rejected"))
@@ -936,6 +944,7 @@ public class RuntimeWindowManager public constructor(
             surface = surface,
             manager = this,
             publicWindowCapabilities = publicWindowCapabilities,
+            enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
             deliveryPolicy = windowDeliveryPolicy,
             eventStampSource = ::nextEventStamp,
@@ -1208,6 +1217,7 @@ internal class RuntimeWindow(
     override val surface: RuntimeWindowSurface,
     private val manager: RuntimeWindowManager,
     publicWindowCapabilities: Boolean,
+    enabledWindowGeometryCapabilities: Set<WindowProperty>,
     eventCollectorGate: RuntimeEventCollectorGate,
     deliveryPolicy: WindowDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
@@ -1216,7 +1226,9 @@ internal class RuntimeWindow(
 ) : Window, RuntimeDesktopWindowHandleAccess {
     private val initialState = initialWindowState(spec)
     private val mutableState = MutableStateFlow(initialState)
-    private val mutableCapabilities = MutableStateFlow(windowCapabilities(publicWindowCapabilities))
+    private val mutableCapabilities = MutableStateFlow(
+        windowCapabilities(publicWindowCapabilities, enabledWindowGeometryCapabilities),
+    )
     private val eventFlow = RuntimeWindowEventFlow(
         policy = deliveryPolicy,
         eventCollectorGate = eventCollectorGate,
@@ -1227,6 +1239,8 @@ internal class RuntimeWindow(
     private val updateLock = Any()
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
+    private var eventDeliveryClosePending = false
+    private var eventPublicationsInFlight = 0
     internal var activeCloseRequest: RuntimeCloseRequest? = null
         private set
     private var resolvedCloseRequest: ResolvedCloseRequest? = null
@@ -1265,8 +1279,11 @@ internal class RuntimeWindow(
             if (current.phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
+            invalidGeometryClearField(update)?.let { field ->
+                return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+            }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
-            val candidate = candidateFor(update, current, initialState)
+            val candidate = candidateFor(update, current)
                 ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             val rejected = changedProperties(update)
                 .filterNot(::isRuntimeGeometryProperty)
@@ -1306,13 +1323,18 @@ internal class RuntimeWindow(
         }
     }
 
-    fun applyNativeUpdate(operationId: WindowOperationId, state: WindowState) {
+    fun applyNativeUpdate(
+        operationId: WindowOperationId,
+        state: WindowState,
+        backendRejected: List<RejectedWindowField> = emptyList(),
+    ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var outcome: KadreResult<WindowUpdateOutcome>? = null
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
+            eventPublicationsInFlight += 1
             val lifecycle = mutableState.value
             val effective = if (lifecycle.phase == WindowPhase.Open) state.copy(
                 revision = WindowRevision(lifecycle.revision.value + 1L),
@@ -1325,11 +1347,20 @@ internal class RuntimeWindow(
             mutableState.value = effective
             publication = WindowStatePublication(lifecycle, effective, operationId)
             completion = pending
-            outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected))
+            outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected + backendRejected))
         }
-        publishStatePublication(checkNotNull(publication))
-        checkNotNull(completion).result.complete(checkNotNull(outcome))
-        dispatchNextUpdate()
+        try {
+            publishStatePublication(checkNotNull(publication))
+        } finally {
+            checkNotNull(completion).result.complete(checkNotNull(outcome))
+            val closeEventDelivery = synchronized(updateLock) {
+                check(eventPublicationsInFlight > 0) { "window event publication accounting underflow" }
+                eventPublicationsInFlight -= 1
+                takePendingEventDeliveryCloseLocked()
+            }
+            if (closeEventDelivery) eventFlow.close()
+            dispatchNextUpdate()
+        }
     }
 
     /** Accepts an uncorrelated native observation after the peer has filtered its own setters. */
@@ -1357,20 +1388,26 @@ internal class RuntimeWindow(
     }
 
     fun rejectDispatchedUpdate(operationId: WindowOperationId, failure: KadreFailure) {
+        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.result.complete(KadreResult.Failure(failure))
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
+        if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
 
     fun withdrawDispatchedUpdate(operationId: WindowOperationId) {
+        var closeEventDelivery = false
         synchronized(updateLock) {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.cancelled = true
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
+        if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
 
@@ -1393,7 +1430,7 @@ internal class RuntimeWindow(
                     )
                     continue
                 }
-                val effectiveCandidate = candidateFor(candidate.update, current, initialState)
+                val effectiveCandidate = candidateFor(candidate.update, current)
                 if (effectiveCandidate == null) {
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
                     continue
@@ -1539,14 +1576,28 @@ internal class RuntimeWindow(
     }
 
     fun finishClosing() {
-        val current = mutableState.value
-        if (current.phase == WindowPhase.Closed) return
-        check(current.phase == WindowPhase.Closing) { "window must enter Closing before its terminal close" }
-        mutableState.value = current.copy(
-            phase = WindowPhase.Closed,
-            revision = WindowRevision(current.revision.value + 1L),
-        )
-        eventFlow.close()
+        val closeEventDelivery = synchronized(updateLock) {
+            val current = mutableState.value
+            if (current.phase == WindowPhase.Closed) return
+            check(current.phase == WindowPhase.Closing) { "window must enter Closing before its terminal close" }
+            mutableState.value = current.copy(
+                phase = WindowPhase.Closed,
+                revision = WindowRevision(current.revision.value + 1L),
+            )
+            if (dispatchedUpdate == null && eventPublicationsInFlight == 0) {
+                true
+            } else {
+                eventDeliveryClosePending = true
+                false
+            }
+        }
+        if (closeEventDelivery) eventFlow.close()
+    }
+
+    private fun takePendingEventDeliveryCloseLocked(): Boolean {
+        if (!eventDeliveryClosePending || dispatchedUpdate != null || eventPublicationsInFlight != 0) return false
+        eventDeliveryClosePending = false
+        return true
     }
 
     private fun publishStatePublication(publication: WindowStatePublication) {
@@ -1625,13 +1676,25 @@ private fun initialWindowState(spec: WindowSpec): WindowState = WindowState(
     revision = WindowRevision(0L),
 )
 
-private fun windowCapabilities(publicWindowCapabilities: Boolean): WindowCapabilities = WindowCapabilities(
+private fun windowCapabilities(
+    publicWindowCapabilities: Boolean,
+    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+): WindowCapabilities = WindowCapabilities(
     title = unsupported(KadreOperation.UpdateWindow),
     outerPosition = unsupported(KadreOperation.UpdateWindow),
-    contentSize = unsupported(KadreOperation.UpdateWindow),
-    minimumSize = unsupported(KadreOperation.UpdateWindow),
-    maximumSize = unsupported(KadreOperation.UpdateWindow),
-    resizable = unsupported(KadreOperation.UpdateWindow),
+    contentSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.ContentSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    minimumSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.MinimumSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    maximumSize = enabledWindowGeometryCapabilities.capability(
+        WindowProperty.MaximumSize,
+        LogicalSizeRange(null, null, null),
+    ),
+    resizable = enabledWindowGeometryCapabilities.capability(WindowProperty.Resizable, Unit),
     fullscreen = unsupported(KadreOperation.UpdateWindow),
     decorations = unsupported(KadreOperation.UpdateWindow),
     systemButtons = unsupported(KadreOperation.UpdateWindow),
@@ -1652,6 +1715,15 @@ private fun windowCapabilities(publicWindowCapabilities: Boolean): WindowCapabil
         unsupported(KadreOperation.PlatformWindowAccess)
     },
 )
+
+private fun <T> Set<WindowProperty>.capability(
+    property: WindowProperty,
+    supported: T,
+): Capability<T> = if (property in this) {
+    Capability.Supported(supported, FeatureAvailability.Available)
+} else {
+    unsupported(KadreOperation.UpdateWindow)
+}
 
 private fun changedProperties(update: WindowUpdate): List<WindowProperty> = buildList {
     if (update.title !is PropertyChange.Unchanged) add(WindowProperty.Title)
@@ -1680,13 +1752,12 @@ private fun isRuntimeGeometryProperty(property: WindowProperty): Boolean = prope
 private fun candidateFor(
     update: WindowUpdate,
     current: WindowState,
-    initial: WindowState,
 ): WindowState? = try {
     current.copy(
-        contentSize = resolveContentSize(update.contentSize, current.contentSize, initial.contentSize),
-        minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize, initial.minimumSize),
-        maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize, initial.maximumSize),
-        resizable = resolveResizable(update.resizable, current.resizable, initial.resizable),
+        contentSize = resolveContentSize(update.contentSize, current.contentSize),
+        minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize),
+        maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize),
+        resizable = resolveResizable(update.resizable, current.resizable),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -1695,31 +1766,34 @@ private fun candidateFor(
 private fun resolveContentSize(
     change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
     current: org.graphiks.kadre.surface.LogicalSize,
-    initial: org.graphiks.kadre.surface.LogicalSize,
 ): org.graphiks.kadre.surface.LogicalSize = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> current
     PropertyChange.Unchanged -> current
 }
 
 private fun resolveOptionalSize(
     change: PropertyChange<org.graphiks.kadre.surface.LogicalSize>,
     current: org.graphiks.kadre.surface.LogicalSize?,
-    initial: org.graphiks.kadre.surface.LogicalSize?,
 ): org.graphiks.kadre.surface.LogicalSize? = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> null
     PropertyChange.Unchanged -> current
 }
 
 private fun resolveResizable(
     change: PropertyChange<Boolean>,
     current: Boolean,
-    initial: Boolean,
 ): Boolean = when (change) {
     is PropertyChange.Set -> change.value
-    PropertyChange.Clear -> initial
+    PropertyChange.Clear -> current
     PropertyChange.Unchanged -> current
+}
+
+private fun invalidGeometryClearField(update: WindowUpdate): String? = when {
+    update.contentSize is PropertyChange.Clear -> "contentSize"
+    update.resizable is PropertyChange.Clear -> "resizable"
+    else -> null
 }
 
 private fun geometryChanged(current: WindowState, candidate: WindowState): Boolean =

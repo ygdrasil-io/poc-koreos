@@ -314,12 +314,12 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
-    fun immutableKffiPointerObservationsMapEnterAndExitWithoutRetainingNativeState() {
+    fun enterAndExitInputMappingRequiresOnlyTheEventTypeAndPosition() {
         val entered = NSEventObservation(
             type = NSEventType.NSEventTypeMouseEntered,
             modifierFlags = NSEventModifierFlags(0L),
             position = NSEventObservation.Position(9.0, 13.0),
-            details = NSEventObservation.Details.Pointer(0L, 0L, 0f, 0.0, 0.0),
+            details = NSEventObservation.Details.None,
         )
         val exited = entered.copy(type = NSEventType.NSEventTypeMouseExited)
 

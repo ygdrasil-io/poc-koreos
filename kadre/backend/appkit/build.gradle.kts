@@ -15,12 +15,20 @@ kotlin {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.objc)
         }
+        // This module is selected only for the macOS AppKit backend. Opt in explicitly to
+        // KFFI declarations that carry availability metadata for other Apple platforms.
+        jvmMain.languageSettings {
+            optIn("org.graphiks.kffi.objc.PlatformAvailability")
+        }
         val jvmTest by getting {
             kotlin.srcDir("manual")
             dependencies {
                 implementation(kotlin("test"))
                 implementation(project(":kadre:platform:desktop"))
             }
+        }
+        jvmTest.languageSettings {
+            optIn("org.graphiks.kffi.objc.PlatformAvailability")
         }
     }
 }

@@ -59,11 +59,18 @@ internal interface AppKitNativeWindowPort {
      * Applies one private geometry request and returns the values AppKit made effective.
      *
      * Implementations keep `NSWindow`, style masks, and all native defaults behind this seam.
+     * [commit] is consulted immediately before the first native setter; `null` means that setter
+     * was withdrawn and no native mutation occurred.
      */
     fun updateGeometry(
         window: AppKitNativeWindowOwner,
         target: AppKitWindowGeometryTarget,
-    ): AppKitWindowGeometrySnapshot = error("AppKit geometry updates are not installed")
+        commit: AppKitWindowGeometryCommit,
+    ): AppKitWindowGeometrySnapshot? = error("AppKit geometry updates are not installed")
+
+    /** Reads one authoritative effective snapshot after a setter began, including after failure. */
+    fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot =
+        error("AppKit geometry readback is not installed")
 
     /** Installs the native geometry observer for one peer, when the port supports it. */
     fun observeGeometry(
@@ -100,6 +107,13 @@ internal interface AppKitNativeWindowPort {
 
 internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
+}
+
+/** Peer-to-port token whose transition is the exact first native geometry setter boundary. */
+internal interface AppKitWindowGeometryCommit {
+    val started: Boolean
+
+    fun beforeFirstSetter(): Boolean
 }
 
 internal interface AppKitNativeViewOwner : AutoCloseable {

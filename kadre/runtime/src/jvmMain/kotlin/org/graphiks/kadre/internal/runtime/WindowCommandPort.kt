@@ -5,6 +5,7 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowRequestId
@@ -29,8 +30,8 @@ public interface WindowCommandPort {
      * Admits one window update for asynchronous native completion.
      *
      * Implementations must return promptly. They report the effective native snapshot, or a
-     * failure before native commit, through [WindowUpdateCommand.applied] or
-     * [WindowUpdateCommand.rejected].
+     * failure before native commit, through [WindowUpdateCommand.applied],
+     * [WindowUpdateCommand.partiallyApplied], or [WindowUpdateCommand.rejected].
      */
     public fun requestUpdate(command: WindowUpdateCommand)
 
@@ -68,6 +69,11 @@ public data class WindowUpdateCommand internal constructor(
         stimulusSink.accept(WindowUpdateCommandStimulus.Applied(operationId, state))
     }
 
+    /** Publishes an authoritative post-commit snapshot with the fields the backend could not apply. */
+    public fun partiallyApplied(state: WindowState, rejected: List<RejectedWindowField>) {
+        stimulusSink.accept(WindowUpdateCommandStimulus.PartiallyApplied(operationId, state, rejected))
+    }
+
     public fun rejected(error: Throwable) {
         stimulusSink.accept(WindowUpdateCommandStimulus.Rejected(operationId, error))
     }
@@ -84,6 +90,16 @@ public sealed interface WindowUpdateCommandStimulus {
         public val operationId: WindowOperationId,
         public val error: Throwable,
     ) : WindowUpdateCommandStimulus
+
+    public data class PartiallyApplied(
+        public val operationId: WindowOperationId,
+        public val state: WindowState,
+        public val rejected: List<RejectedWindowField>,
+    ) : WindowUpdateCommandStimulus {
+        init {
+            require(rejected.isNotEmpty()) { "rejected must not be empty" }
+        }
+    }
 }
 
 /** A correlated request to withdraw a not-yet-committed [WindowUpdateCommand]. */
