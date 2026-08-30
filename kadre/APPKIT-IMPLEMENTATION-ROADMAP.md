@@ -380,6 +380,13 @@ indépendante de toute modalité AppKit et du fullscreen. Les contrats `WIN-004`
 et `APK-009` sont actifs ; aucune vérification manuelle n'est requise, car le
 contrat porte sur une valeur native lisible et entièrement testable en CI.
 
+La sous-tranche suivante, définie par
+`APPKIT-PHASE-5-WINDOW-FULLSCREEN-DESIGN.md`, réserve le fullscreen natif
+`Borderless` corrélé aux notifications AppKit. Elle garde `Exclusive` hors
+scope jusqu'à la phase Display, refuse l'initialisation fullscreen non
+corrélable et réserve `WIN-005` et `APK-010` en statut `planned` jusqu'à
+l'activation publique et à ses preuves.
+
 #### Contenu
 
 - position, dimensions et contraintes ;
