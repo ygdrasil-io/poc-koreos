@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -780,19 +781,23 @@ class AppKitWindowRuntimeDriverTest {
             name = "pending-cleanup-failure",
             closeFailures = mapOf("pending" to cleanupFailure),
         )
-        val reported = mutableListOf<Throwable>()
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val cleanupReported = CompletableDeferred<Unit>()
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             KadrePolicies.Default.resources,
-            RuntimeFailureReporter(reported::add),
+            RuntimeFailureReporter { cause ->
+                reported += cause
+                if (cause === cleanupFailure) cleanupReported.complete(Unit)
+            },
         )
         val pending = async(start = CoroutineStart.UNDISPATCHED) {
             driver.manager.requestWindow(WindowSpec(title = "pending"))
         }
 
         driver.close()
-        yield()
 
         assertEquals(WindowRequestOutcome.RequesterDetached, pending.await().successValue().await())
+        withTimeout(2.seconds) { cleanupReported.await() }
         assertTrue(reported.contains(cleanupFailure))
         assertEquals(emptyList(), driver.manager.state.value.windows)
     }
