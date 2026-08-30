@@ -35,3 +35,5 @@ APK-003	sentinel	appkit-window-forced-close-wins	org.graphiks.kadre.internal.app
 APK-003	sentinel	appkit-headless-auto-stop	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	standaloneLastWindowPolicyIgnoresHeadlessStartupAndStopsAfterItsArmedTransition[jvm]
 APK-003	sentinel	appkit-stale-window-handle	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitDesktopHandleRunsOnTheOwnerThreadAndCloseWaitsForItsLease[jvm]
 APK-003	sentinel	appkit-window-teardown-order	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	closeReservesCommitIssuedPendingCleanupBeforeCommittedPeers[jvm]
+# APK-004 is planned. Its scenario and sentinel identifiers are reserved in the
+# contract registry; exact test mappings are added only in the activation PR.
