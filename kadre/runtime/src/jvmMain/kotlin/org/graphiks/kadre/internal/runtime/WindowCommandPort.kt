@@ -107,6 +107,15 @@ public data class WindowUpdateCommand internal constructor(
         fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Will(target))
     }
 
+    /** Atomically commits a prepared fullscreen command immediately before its first native setter. */
+    public fun fullscreenSelectorInvoking(): Boolean =
+        fullscreenObservationSink.beginSelectorInvocation(windowId, operationId)
+
+    /** Marks the actual return of the native selector after all reentrant callbacks were admitted. */
+    public fun fullscreenSelectorReturned(failure: KadreFailure? = null) {
+        fullscreenObservationSink.finishSelectorInvocation(windowId, operationId, failure)
+    }
+
     public fun fullscreenDid(
         effectiveState: WindowState,
         rejected: List<RejectedWindowField> = emptyList(),
@@ -190,9 +199,12 @@ public sealed interface RuntimeFullscreenObservation {
     public data class DidFail(public val target: FullscreenMode) : RuntimeFullscreenObservation
 }
 
-/** Serialised runtime ingress for native fullscreen observations without a local operation ID. */
+/** Serialised runtime coordination for fullscreen observations without a local operation ID. */
 public fun interface RuntimeFullscreenObservationSink {
     public fun accept(windowId: WindowId, observation: RuntimeFullscreenObservation): Boolean
+
+    /** Returns the runtime-authoritative level to restore after a native fullscreen transition. */
+    public fun desiredLevel(windowId: WindowId): WindowLevel? = null
 }
 
 /** A correlated request to withdraw a not-yet-committed [WindowUpdateCommand]. */
@@ -345,8 +357,16 @@ internal fun interface WindowUpdateCommandStimulusSink {
     fun accept(stimulus: WindowUpdateCommandStimulus)
 }
 
-internal fun interface WindowFullscreenObservationSink {
+internal interface WindowFullscreenObservationSink {
     fun accept(windowId: WindowId, operationId: WindowOperationId, observation: WindowFullscreenObservation)
+
+    fun beginSelectorInvocation(windowId: WindowId, operationId: WindowOperationId): Boolean
+
+    fun finishSelectorInvocation(
+        windowId: WindowId,
+        operationId: WindowOperationId,
+        failure: KadreFailure?,
+    )
 }
 
 internal class ManagedWindowPeerOwner(

@@ -1185,6 +1185,44 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun mixedFullscreenUpdateFailsStructureBeforeRevisionDomainAvailabilityAndBarrier() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val unavailable = KadreFailure.PlatformFailure(
+            KadrePlatform.Fake,
+            "fullscreen",
+            "os-version-unavailable",
+        )
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            fullscreenAvailabilityFailure = unavailable,
+        )
+        val window = openFullscreenWindow(manager, port)
+        manager.acceptWindowFullscreenObservation(
+            window.id,
+            WindowFullscreenObservation.Will(FullscreenMode.Borderless),
+        )
+        val stale = WindowRevision(window.state.value.revision.value + 1L)
+
+        listOf(
+            FullscreenMode.Borderless,
+            exclusiveFullscreenFixture(),
+        ).forEach { fullscreen ->
+            assertEquals(
+                KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
+                window.apply(
+                    WindowUpdate(
+                        title = PropertyChange.Set("mixed"),
+                        fullscreen = PropertyChange.Set(fullscreen),
+                        expectedRevision = stale,
+                    ),
+                ),
+            )
+        }
+        assertTrue(port.updateCommands.isEmpty())
+    }
+
+    @Test
     fun fullscreenReentrantDidDoesNotDrainUntilTheSelectorReturns() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
@@ -3384,7 +3422,11 @@ class RuntimeWindowManagerTest {
 
         override fun requestUpdate(command: WindowUpdateCommand) {
             updateCommands += command
-            onUpdate(command)
+            val fullscreen = command.update.fullscreen is PropertyChange.Set
+            if (!fullscreen || command.fullscreenSelectorInvoking()) {
+                onUpdate(command)
+                if (fullscreen) command.fullscreenSelectorReturned()
+            }
         }
 
         override fun requestUpdateCancellation(

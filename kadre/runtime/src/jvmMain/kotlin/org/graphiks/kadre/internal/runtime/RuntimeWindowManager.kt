@@ -164,7 +164,26 @@ public class RuntimeWindowManager public constructor(
         }
     }
     private val updateStimulusSink = WindowUpdateCommandStimulusSink(::acceptWindowUpdateStimulus)
-    private val fullscreenObservationSink = WindowFullscreenObservationSink(::acceptCorrelatedWindowFullscreenObservation)
+    private val fullscreenObservationSink = object : WindowFullscreenObservationSink {
+        override fun accept(
+            windowId: WindowId,
+            operationId: WindowOperationId,
+            observation: WindowFullscreenObservation,
+        ) {
+            acceptCorrelatedWindowFullscreenObservation(windowId, operationId, observation)
+        }
+
+        override fun beginSelectorInvocation(windowId: WindowId, operationId: WindowOperationId): Boolean =
+            beginCorrelatedWindowFullscreenSelectorInvocation(windowId, operationId)
+
+        override fun finishSelectorInvocation(
+            windowId: WindowId,
+            operationId: WindowOperationId,
+            failure: KadreFailure?,
+        ) {
+            finishCorrelatedWindowFullscreenSelectorInvocation(windowId, operationId, failure)
+        }
+    }
 
     override val state: StateFlow<WindowManagerState> = mutableState.asStateFlow()
 
@@ -456,13 +475,7 @@ public class RuntimeWindowManager public constructor(
             dispatchedWindowUpdates[pending.operationId] = window
             guardPort("window-update-exception") { commandPort.requestUpdate(command) }
         }
-        if (pending.isFullscreenUpdate()) {
-            val terminal = window.finishFullscreenSelectorInvocation(
-                pending.operationId,
-                (dispatch as? GuardedCall.Failure)?.failure,
-            )
-            if (terminal) synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
-        } else if (dispatch is GuardedCall.Failure) {
+        if (dispatch is GuardedCall.Failure) {
             synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
             window.rejectDispatchedUpdate(pending.operationId, dispatch.failure)
         }
@@ -527,7 +540,11 @@ public class RuntimeWindowManager public constructor(
         val window = synchronized(lock) {
             committed.values.firstOrNull { it.window.id == windowId }?.window
         } ?: return false
-        return window.acceptFullscreenObservation(observation, operationId = null).accepted
+        val acceptance = window.acceptFullscreenObservation(observation, operationId = null)
+        acceptance.terminalOperationId?.let { operationId ->
+            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+        }
+        return acceptance.accepted
     }
 
     override fun accept(windowId: WindowId, observation: RuntimeFullscreenObservation): Boolean =
@@ -540,6 +557,11 @@ public class RuntimeWindowManager public constructor(
             },
         )
 
+    override fun desiredLevel(windowId: WindowId): WindowLevel? =
+        synchronized(lock) {
+            committed.values.firstOrNull { it.window.id == windowId }?.window
+        }?.desiredLevel()
+
     private fun acceptCorrelatedWindowFullscreenObservation(
         windowId: WindowId,
         operationId: WindowOperationId,
@@ -550,6 +572,27 @@ public class RuntimeWindowManager public constructor(
         val acceptance = window.acceptFullscreenObservation(observation, operationId)
         if (acceptance.terminalOperationId != null) {
             synchronized(lock) { dispatchedWindowUpdates.remove(acceptance.terminalOperationId) }
+        }
+    }
+
+    private fun beginCorrelatedWindowFullscreenSelectorInvocation(
+        windowId: WindowId,
+        operationId: WindowOperationId,
+    ): Boolean {
+        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+            ?.takeIf { it.id == windowId } ?: return false
+        return window.beginFullscreenSelectorInvocation(operationId)
+    }
+
+    private fun finishCorrelatedWindowFullscreenSelectorInvocation(
+        windowId: WindowId,
+        operationId: WindowOperationId,
+        failure: KadreFailure?,
+    ) {
+        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+            ?.takeIf { it.id == windowId } ?: return
+        if (window.finishFullscreenSelectorInvocation(operationId, failure)) {
+            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
         }
     }
 
@@ -1386,6 +1429,12 @@ internal class RuntimeWindow(
             if (current.phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
+            if (
+                update.fullscreen !is PropertyChange.Unchanged &&
+                changedProperties(update).any { it != WindowProperty.Fullscreen }
+            ) {
+                return KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+            }
             invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
@@ -1684,7 +1733,7 @@ internal class RuntimeWindow(
             if (dispatchFailure != null && barrier != null && !barrier.willObserved) {
                 failLocalFullscreenLocked(
                     barrier,
-                    KadreFailure.PlatformFailure(platform, "fullscreen", "selector-threw"),
+                    dispatchFailure,
                 )
             } else {
                 null
@@ -1710,19 +1759,14 @@ internal class RuntimeWindow(
         }
         return when (barrier.phase) {
             FullscreenPhase.PreparedLocal -> {
-                if (operationId != null) {
-                    barrier.willObserved = true
-                    FullscreenResolution.Accepted
-                } else {
-                    val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId }
-                    dispatchedUpdate = null
-                    fullscreenBarrier = FullscreenBarrier(null, target, FullscreenPhase.External)
-                    FullscreenResolution(
-                        completion = pending,
-                        result = KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
-                        terminalOperationId = barrier.operationId,
-                    )
-                }
+                val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId }
+                dispatchedUpdate = null
+                fullscreenBarrier = FullscreenBarrier(null, target, FullscreenPhase.External)
+                FullscreenResolution(
+                    completion = pending,
+                    result = KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
+                    terminalOperationId = barrier.operationId,
+                )
             }
             FullscreenPhase.InvokingSelector,
             FullscreenPhase.DrainingTerminals,
@@ -1999,6 +2043,9 @@ internal class RuntimeWindow(
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.cancelled = true
+            fullscreenBarrier?.takeIf {
+                it.operationId == operationId && it.phase == FullscreenPhase.PreparedLocal
+            }?.let { fullscreenBarrier = null }
             closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
         if (closeEventDelivery) eventFlow.close()
@@ -2080,14 +2127,24 @@ internal class RuntimeWindow(
     fun beginNativeUpdateDispatch(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
         val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
         if (mutableState.value.phase == WindowPhase.Open) {
-            pending.nativeDispatchStarted = true
-            fullscreenBarrier?.takeIf { it.operationId == operationId }?.phase = FullscreenPhase.InvokingSelector
+            if (!pending.isFullscreenUpdate()) pending.nativeDispatchStarted = true
             true
         } else {
             dispatchedUpdate = null
             pending.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
             false
         }
+    }
+
+    fun beginFullscreenSelectorInvocation(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
+        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
+        val barrier = fullscreenBarrier?.takeIf {
+            it.operationId == operationId && it.phase == FullscreenPhase.PreparedLocal
+        } ?: return@synchronized false
+        if (mutableState.value.phase != WindowPhase.Open || pending.cancelled) return@synchronized false
+        pending.nativeDispatchStarted = true
+        barrier.phase = FullscreenPhase.InvokingSelector
+        true
     }
 
     fun prepareClose(operationId: WindowOperationId) {

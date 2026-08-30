@@ -154,7 +154,7 @@ class KffiAppKitWindowPortMacOsTest {
             onVoidObject(deferredExitSelector) {
                 try {
                     val activePeer = checkNotNull(peer.get())
-                    readbackLevels += activePeer.completeFullscreen(WindowLevel.Floating).level
+                    readbackLevels += activePeer.completeFullscreen(WindowLevel.Floating).snapshot.level
                     activePeer.toggleFullscreen(AppKitWindowFullscreenTarget(FullscreenMode.Windowed), commit)
                 } catch (failure: Throwable) {
                     starterFailure.compareAndSet(null, failure)
@@ -173,7 +173,7 @@ class KffiAppKitWindowPortMacOsTest {
                     )
                 }
                 AppKitFullscreenCallback.DidExit -> {
-                    readbackLevels += checkNotNull(peer.get()).completeFullscreen(WindowLevel.Floating).level
+                    readbackLevels += checkNotNull(peer.get()).completeFullscreen(WindowLevel.Floating).snapshot.level
                     nativeApplication.requestStop()
                 }
                 AppKitFullscreenCallback.DidFailEnter,

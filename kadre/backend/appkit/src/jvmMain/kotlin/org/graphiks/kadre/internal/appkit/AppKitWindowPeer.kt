@@ -48,6 +48,11 @@ internal data class AppKitWindowMutation(
     val failure: Throwable?,
 )
 
+internal data class AppKitFullscreenCompletion(
+    val snapshot: AppKitWindowMutationSnapshot,
+    val restoreFailure: Throwable?,
+)
+
 private data class NativeWindowMutationResult(
     val snapshot: AppKitWindowMutationSnapshot,
     val failure: Throwable?,
@@ -242,11 +247,24 @@ internal class AppKitWindowPeer private constructor(
         callbackGate.fullscreenWillObservedSinceToggle()
 
     /** Restores the persistent level and returns a fresh authoritative native snapshot. */
-    internal fun completeFullscreen(desiredLevel: WindowLevel): AppKitWindowMutationSnapshot =
+    internal fun completeFullscreen(desiredLevel: WindowLevel): AppKitFullscreenCompletion =
         port.onMainThread {
             check(!closed.get()) { "AppKit fullscreen peer closed before terminal readback" }
-            port.restoreWindowLevel(window, desiredLevel)
-            port.readWindow(window)
+            val restoreFailure = try {
+                port.restoreWindowLevel(window, desiredLevel)
+                null
+            } catch (failure: Throwable) {
+                failure
+            }
+            val snapshot = try {
+                port.readWindow(window)
+            } catch (readbackFailure: Throwable) {
+                if (restoreFailure != null && restoreFailure !== readbackFailure) {
+                    readbackFailure.addSuppressed(restoreFailure)
+                }
+                throw readbackFailure
+            }
+            AppKitFullscreenCompletion(snapshot, restoreFailure)
         }
 
     private class ImmediateWindowMutationCommit : AppKitWindowMutationCommit {
