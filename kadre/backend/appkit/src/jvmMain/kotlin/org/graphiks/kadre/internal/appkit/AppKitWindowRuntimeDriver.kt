@@ -111,7 +111,7 @@ private class AppKitWindowCommandPort(
     private val byPeer = linkedMapOf<AppKitWindowPeerId, PeerEntry>()
     private val byWindow = linkedMapOf<WindowId, PeerEntry>()
     private val bySurface = linkedMapOf<SurfaceId, PeerEntry>()
-    private val geometryCommands = linkedMapOf<org.graphiks.kadre.window.WindowOperationId, PendingGeometryCommand>()
+    private val mutationCommands = linkedMapOf<org.graphiks.kadre.window.WindowOperationId, PendingWindowMutationCommand>()
     private val commands = AppKitWindowCommandQueue(::reportFailure)
     private var closed = false
 
@@ -150,30 +150,30 @@ private class AppKitWindowCommandPort(
             ) {
                 null
             } else {
-                PendingGeometryCommand(entry, command).also { pending ->
-                    check(geometryCommands.put(command.operationId, pending) == null) {
-                        "duplicate AppKit geometry operation"
+                PendingWindowMutationCommand(entry, command).also { pending ->
+                    check(mutationCommands.put(command.operationId, pending) == null) {
+                        "duplicate AppKit window mutation operation"
                     }
                 }
             }
         }
         if (pending == null) {
             command.rejected(IllegalStateException("AppKit window geometry peer is unavailable"))
-        } else if (!commands.submit { applyGeometry(pending) }) {
-            synchronized(lock) { geometryCommands.remove(command.operationId, pending) }
-            command.rejected(IllegalStateException("AppKit window geometry queue is closed"))
+        } else if (!commands.submit { applyWindowMutation(pending) }) {
+            synchronized(lock) { mutationCommands.remove(command.operationId, pending) }
+            command.rejected(IllegalStateException("AppKit window mutation queue is closed"))
         }
     }
 
     override fun requestUpdateCancellation(
         command: WindowUpdateCancellationCommand,
     ): WindowUpdateCancellationOutcome = synchronized(lock) {
-        val pending = geometryCommands[command.operationId] ?: return@synchronized WindowUpdateCancellationOutcome.TooLate
+        val pending = mutationCommands[command.operationId] ?: return@synchronized WindowUpdateCancellationOutcome.TooLate
         if (pending.nativeCommitStarted) {
             WindowUpdateCancellationOutcome.TooLate
         } else {
             pending.cancelled = true
-            geometryCommands.remove(command.operationId)
+            mutationCommands.remove(command.operationId)
             WindowUpdateCancellationOutcome.CancelledBeforeCommit
         }
     }
@@ -488,54 +488,54 @@ private class AppKitWindowCommandPort(
         }
     }
 
-    private fun applyGeometry(pending: PendingGeometryCommand) {
+    private fun applyWindowMutation(pending: PendingWindowMutationCommand) {
         val admission = synchronized(lock) {
             when {
-                pending.cancelled || geometryCommands[pending.command.operationId] !== pending ->
-                    GeometryCommandAdmission.Cancelled
+                pending.cancelled || mutationCommands[pending.command.operationId] !== pending ->
+                    WindowMutationCommandAdmission.Cancelled
 
                 closed || pending.entry.removed || pending.entry.closeAdmitted -> {
-                    geometryCommands.remove(pending.command.operationId, pending)
-                    GeometryCommandAdmission.Rejected
+                    mutationCommands.remove(pending.command.operationId, pending)
+                    WindowMutationCommandAdmission.Rejected
                 }
 
                 pending.entry.peer == null -> {
-                    geometryCommands.remove(pending.command.operationId, pending)
-                    GeometryCommandAdmission.Rejected
+                    mutationCommands.remove(pending.command.operationId, pending)
+                    WindowMutationCommandAdmission.Rejected
                 }
 
-                else -> GeometryCommandAdmission.Ready(checkNotNull(pending.entry.peer))
+                else -> WindowMutationCommandAdmission.Ready(checkNotNull(pending.entry.peer))
             }
         }
         when (admission) {
-            GeometryCommandAdmission.Cancelled -> return
-            GeometryCommandAdmission.Rejected -> {
-                pending.command.rejected(IllegalStateException("AppKit window geometry command closed before native commit"))
+            WindowMutationCommandAdmission.Cancelled -> return
+            WindowMutationCommandAdmission.Rejected -> {
+                pending.command.rejected(IllegalStateException("AppKit window mutation command closed before native commit"))
                 return
             }
 
-            is GeometryCommandAdmission.Ready -> Unit
+            is WindowMutationCommandAdmission.Ready -> Unit
         }
         val mutation = try {
-            admission.peer.updateGeometry(pending.command.toGeometryTarget(), pending)
+            admission.peer.updateWindow(pending.command.toMutationTarget(), pending)
         } catch (cause: Throwable) {
             val reject = synchronized(lock) {
-                geometryCommands.remove(pending.command.operationId, pending) && !pending.cancelled
+                mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
             }
             if (reject) pending.command.rejected(cause)
             return
         }
         if (mutation == null) {
             val reject = synchronized(lock) {
-                geometryCommands.remove(pending.command.operationId, pending) && !pending.cancelled
+                mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
             }
             if (reject) {
-                pending.command.rejected(IllegalStateException("AppKit window geometry peer closed before commit"))
+                pending.command.rejected(IllegalStateException("AppKit window mutation peer closed before commit"))
             }
             return
         }
         synchronized(lock) {
-            geometryCommands.remove(pending.command.operationId, pending)
+            mutationCommands.remove(pending.command.operationId, pending)
             pending.entry.managedGeometryGeneration = maxOf(
                 pending.entry.managedGeometryGeneration,
                 mutation.generation,
@@ -543,17 +543,17 @@ private class AppKitWindowCommandPort(
         }
         val current = windowState(pending.command.windowId)
         if (current == null) {
-            pending.command.rejected(IllegalStateException("AppKit window geometry runtime is unavailable"))
+            pending.command.rejected(IllegalStateException("AppKit window runtime is unavailable"))
             return
         }
-        val effective = mutation.snapshot.withGeometryFrom(current)
+        val effective = mutation.snapshot.withMutationFrom(current)
         val failure = mutation.failure
         if (failure == null) {
             pending.command.applied(effective)
             return
         }
         reportFailure(failure)
-        val rejected = pending.command.rejectedGeometryFields(
+        val rejected = pending.command.rejectedMutationFields(
             mutation.snapshot,
             platformFailure("window-update-rejected"),
         )
@@ -802,19 +802,19 @@ private class AppKitWindowCommandPort(
         fun admit(): Boolean = state.compareAndSet(HandleLeaseState.Queued, HandleLeaseState.Admitted)
     }
 
-    private inner class PendingGeometryCommand(
+    private inner class PendingWindowMutationCommand(
         val entry: PeerEntry,
         val command: WindowUpdateCommand,
         var cancelled: Boolean = false,
         var nativeCommitStarted: Boolean = false,
-    ) : AppKitWindowGeometryCommit {
+    ) : AppKitWindowMutationCommit {
         override val started: Boolean
             get() = synchronized(lock) { nativeCommitStarted }
 
         override fun beforeFirstSetter(): Boolean = synchronized(lock) {
             when {
                 nativeCommitStarted -> true
-                cancelled || geometryCommands[command.operationId] !== this -> false
+                cancelled || mutationCommands[command.operationId] !== this -> false
                 closed || entry.removed || entry.closeAdmitted || entry.peer == null -> false
                 else -> {
                     nativeCommitStarted = true
@@ -824,10 +824,10 @@ private class AppKitWindowCommandPort(
         }
     }
 
-    private sealed interface GeometryCommandAdmission {
-        data object Cancelled : GeometryCommandAdmission
-        data object Rejected : GeometryCommandAdmission
-        data class Ready(val peer: AppKitWindowPeer) : GeometryCommandAdmission
+    private sealed interface WindowMutationCommandAdmission {
+        data object Cancelled : WindowMutationCommandAdmission
+        data object Rejected : WindowMutationCommandAdmission
+        data class Ready(val peer: AppKitWindowPeer) : WindowMutationCommandAdmission
     }
 
     private enum class HandleLeaseState {
@@ -928,50 +928,71 @@ private fun appKitEffectiveSpec(
     contentProtection = false,
 )
 
-private fun WindowUpdateCommand.toGeometryTarget(): AppKitWindowGeometryTarget = AppKitWindowGeometryTarget(
-    contentSize = update.contentSize,
-    minimumSize = update.minimumSize,
-    maximumSize = update.maximumSize,
-    resizable = update.resizable,
+private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget = AppKitWindowMutationTarget(
+    title = update.title,
+    geometry = AppKitWindowGeometryTarget(
+        contentSize = update.contentSize,
+        minimumSize = update.minimumSize,
+        maximumSize = update.maximumSize,
+        resizable = update.resizable,
+    ),
 )
 
-private fun WindowUpdateCommand.rejectedGeometryFields(
-    snapshot: AppKitWindowGeometrySnapshot,
+private fun WindowUpdateCommand.rejectedMutationFields(
+    snapshot: AppKitWindowMutationSnapshot,
     failure: KadreFailure,
 ): List<RejectedWindowField> = buildList {
+    when (val change = update.title) {
+        is PropertyChange.Set -> if (snapshot.title != change.value) {
+            add(RejectedWindowField(WindowProperty.Title, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Title, failure))
+        PropertyChange.Unchanged -> Unit
+    }
     when (val change = update.contentSize) {
-        is PropertyChange.Set -> if (snapshot.contentSize != change.value) {
+        is PropertyChange.Set -> if (snapshot.geometry.contentSize != change.value) {
             add(RejectedWindowField(WindowProperty.ContentSize, failure))
         }
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.ContentSize, failure))
         PropertyChange.Unchanged -> Unit
     }
     when (val change = update.minimumSize) {
-        is PropertyChange.Set -> if (snapshot.minimumSize != change.value) {
+        is PropertyChange.Set -> if (snapshot.geometry.minimumSize != change.value) {
             add(RejectedWindowField(WindowProperty.MinimumSize, failure))
         }
-        PropertyChange.Clear -> if (snapshot.minimumSize != null) {
+        PropertyChange.Clear -> if (snapshot.geometry.minimumSize != null) {
             add(RejectedWindowField(WindowProperty.MinimumSize, failure))
         }
         PropertyChange.Unchanged -> Unit
     }
     when (val change = update.maximumSize) {
-        is PropertyChange.Set -> if (snapshot.maximumSize != change.value) {
+        is PropertyChange.Set -> if (snapshot.geometry.maximumSize != change.value) {
             add(RejectedWindowField(WindowProperty.MaximumSize, failure))
         }
-        PropertyChange.Clear -> if (snapshot.maximumSize != null) {
+        PropertyChange.Clear -> if (snapshot.geometry.maximumSize != null) {
             add(RejectedWindowField(WindowProperty.MaximumSize, failure))
         }
         PropertyChange.Unchanged -> Unit
     }
     when (val change = update.resizable) {
-        is PropertyChange.Set -> if (snapshot.resizable != change.value) {
+        is PropertyChange.Set -> if (snapshot.geometry.resizable != change.value) {
             add(RejectedWindowField(WindowProperty.Resizable, failure))
         }
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Resizable, failure))
         PropertyChange.Unchanged -> Unit
     }
 }
+
+private fun AppKitWindowMutationSnapshot.withMutationFrom(
+    current: WindowState,
+): WindowState = current.copy(
+    title = title,
+    contentSize = geometry.contentSize,
+    minimumSize = geometry.minimumSize,
+    maximumSize = geometry.maximumSize,
+    resizable = geometry.resizable,
+    revision = current.revision,
+)
 
 private fun AppKitWindowGeometrySnapshot.withGeometryFrom(
     current: WindowState,

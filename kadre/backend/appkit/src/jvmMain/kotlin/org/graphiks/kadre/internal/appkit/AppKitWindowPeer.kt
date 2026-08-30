@@ -6,6 +6,7 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -35,14 +36,14 @@ internal sealed interface AppKitWindowStimulus {
     ) : AppKitWindowStimulus
 }
 
-internal data class AppKitWindowGeometryMutation(
-    val snapshot: AppKitWindowGeometrySnapshot,
+internal data class AppKitWindowMutation(
+    val snapshot: AppKitWindowMutationSnapshot,
     val generation: Long,
     val failure: Throwable?,
 )
 
-private data class NativeGeometryMutationResult(
-    val snapshot: AppKitWindowGeometrySnapshot,
+private data class NativeWindowMutationResult(
+    val snapshot: AppKitWindowMutationSnapshot,
     val failure: Throwable?,
 )
 
@@ -173,13 +174,23 @@ internal class AppKitWindowPeer private constructor(
 
     /** Convenience path for direct peer tests and setup that cannot be cancelled. */
     internal fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot? =
-        updateGeometry(target, ImmediateGeometryCommit())?.snapshot
+        updateWindow(
+            AppKitWindowMutationTarget(
+                title = PropertyChange.Unchanged,
+                geometry = target,
+            ),
+            ImmediateWindowMutationCommit(),
+        )?.snapshot?.geometry
 
-    /** Runs one native geometry mutation while ordering callbacks against its effective readback. */
-    internal fun updateGeometry(
-        target: AppKitWindowGeometryTarget,
-        commit: AppKitWindowGeometryCommit,
-    ): AppKitWindowGeometryMutation? {
+    /** Convenience path for direct peer tests and setup that cannot be cancelled. */
+    internal fun updateWindow(target: AppKitWindowMutationTarget): AppKitWindowMutationSnapshot? =
+        updateWindow(target, ImmediateWindowMutationCommit())?.snapshot
+
+    /** Runs one native window mutation while ordering geometry callbacks against its readback. */
+    internal fun updateWindow(
+        target: AppKitWindowMutationTarget,
+        commit: AppKitWindowMutationCommit,
+    ): AppKitWindowMutation? {
         if (closed.get()) return null
         return port.onMainThread {
             if (closed.get()) {
@@ -187,25 +198,25 @@ internal class AppKitWindowPeer private constructor(
             } else {
                 callbackGate.duringManagedGeometryMutation {
                     try {
-                        port.updateGeometry(window, target, commit)?.let { snapshot ->
-                            NativeGeometryMutationResult(snapshot, failure = null)
+                        port.updateWindow(window, target, commit)?.let { snapshot ->
+                            NativeWindowMutationResult(snapshot, failure = null)
                         }
                     } catch (failure: Throwable) {
                         if (!commit.started) throw failure
                         val snapshot = try {
-                            port.readGeometry(window)
+                            port.readWindow(window)
                         } catch (readbackFailure: Throwable) {
                             if (readbackFailure !== failure) failure.addSuppressed(readbackFailure)
                             throw failure
                         }
-                        NativeGeometryMutationResult(snapshot, failure)
+                        NativeWindowMutationResult(snapshot, failure)
                     }
                 }
             }
         }
     }
 
-    private class ImmediateGeometryCommit : AppKitWindowGeometryCommit {
+    private class ImmediateWindowMutationCommit : AppKitWindowMutationCommit {
         private var committed = false
 
         override val started: Boolean
@@ -400,8 +411,8 @@ private class AppKitWindowCallbackGate(
     private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
 
     fun duringManagedGeometryMutation(
-        block: () -> NativeGeometryMutationResult?,
-    ): AppKitWindowGeometryMutation? {
+        block: () -> NativeWindowMutationResult?,
+    ): AppKitWindowMutation? {
         synchronized(lock) {
             check(managedGeometryMutationDepth == 0) { "AppKit managed geometry mutations must be serialized" }
             managedGeometryMutationDepth = 1
@@ -412,9 +423,9 @@ private class AppKitWindowCallbackGate(
             flushManagedGeometryCallbacks(effectiveSnapshot = null)
             throw failure
         }
-        val generation = flushManagedGeometryCallbacks(result?.snapshot)
+        val generation = flushManagedGeometryCallbacks(result?.snapshot?.geometry)
         return result?.let { mutation ->
-            AppKitWindowGeometryMutation(
+            AppKitWindowMutation(
                 snapshot = mutation.snapshot,
                 generation = checkNotNull(generation),
                 failure = mutation.failure,
