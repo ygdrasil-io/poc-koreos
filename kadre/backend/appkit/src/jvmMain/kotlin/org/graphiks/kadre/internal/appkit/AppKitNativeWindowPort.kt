@@ -19,6 +19,7 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowSpec
@@ -74,6 +75,18 @@ internal interface AppKitNativeWindowPort {
     /** Reads one authoritative effective snapshot after a setter began, including after failure. */
     fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
         error("AppKit window readback is not installed")
+
+    /** Begins one native fullscreen transition without completing the runtime mutation. */
+    fun toggleFullscreen(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowFullscreenTarget,
+        commit: AppKitWindowMutationCommit,
+    ): Boolean = error("AppKit fullscreen mutations are not installed")
+
+    /** Restores the persistent level after a terminal fullscreen callback. */
+    fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
+        error("AppKit fullscreen level restoration is not installed")
+    }
 
     /** Installs the native geometry observer for one peer, when the port supports it. */
     fun observeGeometry(
@@ -141,6 +154,23 @@ internal data class AppKitWindowChromeTarget(
 internal data class AppKitWindowLevelTarget(
     val level: PropertyChange<WindowLevel>,
 )
+
+/** Private, native-address-free fullscreen request forwarded from the runtime command. */
+internal data class AppKitWindowFullscreenTarget(val mode: FullscreenMode)
+
+/** Directional callbacks admitted from the generated NSWindowDelegate receiver. */
+internal sealed interface AppKitFullscreenCallback {
+    data object WillEnter : AppKitFullscreenCallback
+    data object DidEnter : AppKitFullscreenCallback
+    data object DidFailEnter : AppKitFullscreenCallback
+    data object WillExit : AppKitFullscreenCallback
+    data object DidExit : AppKitFullscreenCallback
+    data object DidFailExit : AppKitFullscreenCallback
+}
+
+internal fun interface AppKitFullscreenCallbackSink {
+    fun accept(callback: AppKitFullscreenCallback)
+}
 
 /** Private, native-address-free window request forwarded from the runtime command. */
 internal data class AppKitWindowMutationTarget(
@@ -288,4 +318,10 @@ internal interface AppKitNativeDelegateOwner : AutoCloseable {
 internal class AppKitWindowDelegateCallbacks(
     val windowShouldClose: () -> Boolean,
     val windowWillClose: () -> Unit,
+    val windowWillEnterFullscreen: () -> Unit = {},
+    val windowDidEnterFullscreen: () -> Unit = {},
+    val windowDidFailEnterFullscreen: () -> Unit = {},
+    val windowWillExitFullscreen: () -> Unit = {},
+    val windowDidExitFullscreen: () -> Unit = {},
+    val windowDidFailExitFullscreen: () -> Unit = {},
 )

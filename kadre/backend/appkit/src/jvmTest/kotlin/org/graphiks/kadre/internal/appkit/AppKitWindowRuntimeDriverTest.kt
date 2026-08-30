@@ -4,7 +4,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -34,6 +37,9 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
@@ -59,6 +65,230 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun fullscreenToggleWaitsForTheDelegateTerminalAndRestoresTheDesiredLevel() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "fullscreen",
+            effectiveLevel = WindowLevel.Floating,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen", level = WindowLevel.Floating))
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(
+                    WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
+                )
+            }
+
+            awaitFullscreenToggle(port)
+            assertEquals(listOf<FullscreenMode>(FullscreenMode.Borderless), port.fullscreenToggleTargets)
+            assertFalse(update.isCompleted)
+            port.emitDidEnter("fullscreen")
+
+            assertEquals(
+                FullscreenMode.Borderless,
+                assertIs<WindowUpdateOutcome.Applied>(update.await().successValue()).state.fullscreen,
+            )
+            assertEquals(WindowLevel.Floating, port.level("fullscreen"))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenDidFailEnterPreservesTheLastEffectiveWindowedState() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-failure")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-failure"))
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(
+                    WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
+                )
+            }
+
+            awaitFullscreenToggle(port)
+            port.emitDidFailEnter("fullscreen-failure")
+
+            val failure = assertIs<KadreResult.Failure>(update.await()).reason
+            assertEquals(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "fullscreen", "enter-failed"),
+                failure,
+            )
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalFullscreenWillAndDidPublishAnUncorrelatedEffectiveObservation() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-external")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-external"))
+            val events = mutableListOf<WindowEvent>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::add)
+            }
+
+            port.emitWillEnter("fullscreen-external")
+            port.emitDidEnter("fullscreen-external")
+            withTimeout(2.seconds) {
+                window.state.first { it.fullscreen == FullscreenMode.Borderless }
+                while (events.isEmpty()) yield()
+            }
+
+            val event = assertIs<WindowEvent.PropertiesChanged>(events.single())
+            assertEquals(setOf(WindowProperty.Fullscreen), event.changed)
+            assertEquals(null, event.operationId)
+            collector.cancelAndJoin()
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenDelegateCallbacksAreRevokedBeforeTheReceiverIsReleased() = runBlocking {
+        val teardown = CopyOnWriteArrayList<String>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "fullscreen-teardown",
+            onDelegateRevoked = { teardown += "revoked:$it" },
+            onDelegateReleased = { teardown += "released:$it" },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        openedWindow(driver, WindowSpec(title = "fullscreen-teardown"))
+        driver.close()
+
+        assertEquals(
+            listOf("revoked:fullscreen-teardown", "released:fullscreen-teardown"),
+            teardown,
+        )
+    }
+
+    @Test
+    fun fullscreenSelectorThrowBeforeWillFailsWithoutPublishingAFalseState() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "fullscreen-selector-throw",
+            fullscreenToggleFailure = IllegalStateException("selector"),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-selector-throw"))
+            val failure = assertIs<KadreResult.Failure>(
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless))),
+            ).reason
+
+            assertEquals(fullscreenFailureFixture("selector-threw"), failure)
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenCancellationAfterToggleDetachesOnlyTheWaiterAndStillPublishesDid() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-cancel")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-cancel"))
+            val update = async {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+            update.cancelAndJoin()
+
+            port.emitDidEnter("fullscreen-cancel")
+            withTimeout(2.seconds) {
+                window.state.first { it.fullscreen == FullscreenMode.Borderless }
+            }
+
+            assertEquals(listOf<FullscreenMode>(FullscreenMode.Borderless), port.fullscreenToggleTargets)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenEnterThenExitUsesOneDirectionalTogglePerTerminal() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-exit")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-exit"))
+            val enter = async { window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless))) }
+            awaitFullscreenToggle(port)
+            port.emitDidEnter("fullscreen-exit")
+            assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue())
+
+            val exit = async { window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed))) }
+            withTimeout(2.seconds) {
+                while (port.fullscreenToggleTargets.size < 2) yield()
+            }
+            port.emitDidExit("fullscreen-exit")
+
+            assertEquals(
+                FullscreenMode.Windowed,
+                assertIs<WindowUpdateOutcome.Applied>(exit.await().successValue()).state.fullscreen,
+            )
+            assertEquals(
+                listOf<FullscreenMode>(FullscreenMode.Borderless, FullscreenMode.Windowed),
+                port.fullscreenToggleTargets,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalFullscreenCallbacksStayIsolatedToTheirNativePeer() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-cross-window")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+
+        try {
+            val first = openedWindow(driver, WindowSpec(title = "fullscreen-first"))
+            val second = openedWindow(driver, WindowSpec(title = "fullscreen-second"))
+
+            port.emitWillEnter("fullscreen-first")
+            port.emitDidEnter("fullscreen-first")
+            withTimeout(2.seconds) {
+                first.state.first { it.fullscreen == FullscreenMode.Borderless }
+            }
+
+            assertEquals(FullscreenMode.Borderless, first.state.value.fullscreen)
+            assertEquals(FullscreenMode.Windowed, second.state.value.fullscreen)
+        } finally {
+            driver.close()
+        }
+    }
+
     @Test
     fun peerForwardsGeometryUpdatesAndReturnsTheEffectiveNativeSnapshot() = runBlocking {
         val requestedSize = LogicalSize(640.0, 400.0)
@@ -1272,6 +1502,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val closeFailures: Map<String, Throwable> = emptyMap(),
     private val beforeCreateWindow: (WindowSpec) -> Unit = { },
     private val onDelegateRevoked: (String) -> Unit = { },
+    private val onDelegateReleased: (String) -> Unit = { },
     private val beforeCloseWindow: (String) -> Unit = { },
     private val initialSurfaceSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot(),
     private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
@@ -1283,6 +1514,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
     private val effectiveLevel: WindowLevel? = null,
+    private val fullscreenToggleFailure: Throwable? = null,
     private val beforeGeometrySetter: () -> Unit = { },
     private val geometryFailureAfterContentSize: Throwable? = null,
 ) : AppKitNativeWindowPort {
@@ -1298,6 +1530,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val geometryTargets = CopyOnWriteArrayList<AppKitWindowGeometryTarget>()
     val mutationTargets = CopyOnWriteArrayList<AppKitWindowMutationTarget>()
     val createdWindowLevels = CopyOnWriteArrayList<WindowLevel>()
+    val fullscreenToggleTargets = CopyOnWriteArrayList<FullscreenMode>()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
 
     override fun isMainThread(): Boolean = true
@@ -1344,6 +1577,7 @@ internal class DeterministicAppKitNativeWindowPort(
         createdWindowTitles.last(),
         callbacks,
         onDelegateRevoked,
+        onDelegateReleased,
     ).also {
         createdPeerIds += peerId
     }
@@ -1416,6 +1650,21 @@ internal class DeterministicAppKitNativeWindowPort(
         window.recordingWindow().let { recording ->
             AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome, recording.level)
         }
+
+    override fun toggleFullscreen(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowFullscreenTarget,
+        commit: AppKitWindowMutationCommit,
+    ): Boolean {
+        if (!commit.beforeFirstSetter()) return false
+        fullscreenToggleFailure?.let { throw it }
+        fullscreenToggleTargets += target.mode
+        return true
+    }
+
+    override fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
+        window.recordingWindow().level = effectiveLevel ?: desiredLevel
+    }
 
     override fun observeGeometry(
         window: AppKitNativeWindowOwner,
@@ -1493,6 +1742,30 @@ internal class DeterministicAppKitNativeWindowPort(
         checkNotNull(geometryObservers[title]).emit(snapshot)
     }
 
+    fun emitWillEnter(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowWillEnterFullscreen()
+    }
+
+    fun emitDidEnter(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowDidEnterFullscreen()
+    }
+
+    fun emitDidFailEnter(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowDidFailEnterFullscreen()
+    }
+
+    fun emitWillExit(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowWillExitFullscreen()
+    }
+
+    fun emitDidExit(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowDidExitFullscreen()
+    }
+
+    fun emitDidFailExit(title: String) {
+        checkNotNull(windows[title]?.delegate).callbacks.windowDidFailExitFullscreen()
+    }
+
     fun styleMask(title: String): Long = checkNotNull(windows[title]).styleMask
 
     fun chrome(title: String): AppKitWindowChromeSnapshot = checkNotNull(windows[title]).chrome
@@ -1561,6 +1834,7 @@ internal class DeterministicAppKitNativeWindowPort(
         private val title: String,
         val callbacks: AppKitWindowDelegateCallbacks,
         private val onRevoked: (String) -> Unit,
+        private val onReleased: (String) -> Unit,
     ) : AppKitNativeDelegateOwner {
         private val callbacksRevoked = AtomicBoolean(false)
         private val retained = AtomicBoolean(false)
@@ -1575,7 +1849,7 @@ internal class DeterministicAppKitNativeWindowPort(
         }
 
         override fun close() {
-            released.compareAndSet(false, true)
+            if (released.compareAndSet(false, true)) onReleased(title)
         }
     }
 
@@ -1871,6 +2145,22 @@ internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {
 }
 
 private fun <T> KadreResult<T>.successValue(): T = appKitSuccessValue()
+
+private suspend fun openedWindow(
+    driver: AppKitWindowRuntimeDriver,
+    spec: WindowSpec,
+): Window = assertIs<WindowRequestOutcome.OpenedHere>(
+    driver.manager.requestWindow(spec).successValue().await(),
+).window
+
+private suspend fun awaitFullscreenToggle(port: DeterministicAppKitNativeWindowPort) {
+    withTimeout(2.seconds) {
+        while (port.fullscreenToggleTargets.isEmpty()) yield()
+    }
+}
+
+private fun fullscreenFailureFixture(code: String): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "fullscreen", code)
 
 private suspend fun WindowRequest.awaitOpened() {
     check(await() is WindowRequestOutcome.OpenedHere) { "expected an AppKit window to open" }

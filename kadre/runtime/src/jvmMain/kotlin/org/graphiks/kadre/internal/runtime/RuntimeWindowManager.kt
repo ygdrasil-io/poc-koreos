@@ -94,7 +94,7 @@ public class RuntimeWindowManager public constructor(
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
-) : WindowManager, AutoCloseable {
+) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink {
     private val lock = Any()
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
@@ -527,6 +527,16 @@ public class RuntimeWindowManager public constructor(
         } ?: return false
         return window.acceptFullscreenObservation(observation, operationId = null).accepted
     }
+
+    override fun accept(windowId: WindowId, observation: RuntimeFullscreenObservation): Boolean =
+        acceptWindowFullscreenObservation(
+            windowId,
+            when (observation) {
+                is RuntimeFullscreenObservation.Will -> WindowFullscreenObservation.Will(observation.target)
+                is RuntimeFullscreenObservation.Did -> WindowFullscreenObservation.Did(observation.effectiveState)
+                is RuntimeFullscreenObservation.DidFail -> WindowFullscreenObservation.DidFail(observation.target)
+            },
+        )
 
     private fun acceptCorrelatedWindowFullscreenObservation(
         windowId: WindowId,

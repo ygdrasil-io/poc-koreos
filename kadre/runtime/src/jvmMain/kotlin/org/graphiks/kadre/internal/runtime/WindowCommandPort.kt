@@ -155,6 +155,18 @@ internal sealed interface WindowFullscreenObservation {
     data class DidFail(val target: FullscreenMode) : WindowFullscreenObservation
 }
 
+/** Unstable backend SPI for one uncorrelated native fullscreen observation. */
+public sealed interface RuntimeFullscreenObservation {
+    public data class Will(public val target: FullscreenMode) : RuntimeFullscreenObservation
+    public data class Did(public val effectiveState: WindowState) : RuntimeFullscreenObservation
+    public data class DidFail(public val target: FullscreenMode) : RuntimeFullscreenObservation
+}
+
+/** Serialised runtime ingress for native fullscreen observations without a local operation ID. */
+public fun interface RuntimeFullscreenObservationSink {
+    public fun accept(windowId: WindowId, observation: RuntimeFullscreenObservation): Boolean
+}
+
 /** A correlated request to withdraw a not-yet-committed [WindowUpdateCommand]. */
 public data class WindowUpdateCancellationCommand(
     public val operationId: WindowOperationId,

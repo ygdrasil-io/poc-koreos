@@ -63,12 +63,46 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+/** Version-only guard evaluated before any fullscreen selector or managed callback class is loaded. */
+internal class AppKitFullscreenAvailability(
+    systemVersion: String = System.getProperty("os.version", ""),
+) {
+    val isAvailable: Boolean = systemVersion.numericVersionOrNull()
+        ?.let { it >= APPKIT_FULLSCREEN_MINIMUM_VERSION }
+        ?: false
+}
+
+private data class AppKitNumericVersion(
+    val major: Long,
+    val minor: Long,
+    val patch: Long,
+) : Comparable<AppKitNumericVersion> {
+    override fun compareTo(other: AppKitNumericVersion): Int =
+        compareValuesBy(this, other, AppKitNumericVersion::major, AppKitNumericVersion::minor, AppKitNumericVersion::patch)
+}
+
+private fun String.numericVersionOrNull(): AppKitNumericVersion? {
+    val parts = split('.')
+    if (parts.isEmpty() || parts.size > 3) return null
+    val values = parts.map { component ->
+        component.toLongOrNull()?.takeIf { it >= 0L } ?: return null
+    }
+    return AppKitNumericVersion(
+        major = values.getOrElse(0) { 0L },
+        minor = values.getOrElse(1) { 0L },
+        patch = values.getOrElse(2) { 0L },
+    )
+}
+
+private val APPKIT_FULLSCREEN_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
+
 /** Public-KFFI-backed AppKit port. Native addresses remain private to this implementation. */
 internal class KffiAppKitWindowPort(
     private val createUnconfiguredWindow: (WindowSpec) -> AppKitNativeWindowOwner =
         ::createKffiUnconfiguredWindow,
     private val configureWindow: (AppKitNativeWindowOwner, WindowSpec) -> Unit =
         ::configureKffiWindow,
+    private val fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
 ) : AppKitNativeWindowPort {
     fun prepare(
         id: AppKitWindowPeerId,
@@ -117,6 +151,27 @@ internal class KffiAppKitWindowPort(
         return window.kffiWindowOwner().readWindow()
     }
 
+    override fun toggleFullscreen(
+        window: AppKitNativeWindowOwner,
+        target: AppKitWindowFullscreenTarget,
+        commit: AppKitWindowMutationCommit,
+    ): Boolean {
+        requireMainThread()
+        check(fullscreenAvailability.isAvailable) { "AppKit fullscreen requires macOS 10.7 or newer" }
+        check(target.mode == org.graphiks.kadre.window.FullscreenMode.Borderless ||
+            target.mode == org.graphiks.kadre.window.FullscreenMode.Windowed) {
+            "AppKit supports only borderless fullscreen transitions"
+        }
+        if (!commit.beforeFirstSetter()) return false
+        window.kffiWindow().toggleFullScreen(MemorySegment.NULL)
+        return true
+    }
+
+    override fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
+        requireMainThread()
+        window.kffiWindowOwner().restoreLevel(desiredLevel)
+    }
+
     override fun observeGeometry(
         window: AppKitNativeWindowOwner,
         callbacks: AppKitWindowGeometryCallbacks,
@@ -160,12 +215,25 @@ internal class KffiAppKitWindowPort(
     ): AppKitNativeDelegateOwner {
         requireMainThread()
         val admission = KffiDelegateAdmission(callbacks)
-        val instance = windowDelegateClass.createInstance {
+        val delegateClass = if (fullscreenAvailability.isAvailable) {
+            fullscreenWindowDelegateClass
+        } else {
+            basicWindowDelegateClass
+        }
+        val instance = delegateClass.createInstance {
             onBooleanObject(WINDOW_SHOULD_CLOSE, fallback = false) {
                 admission.windowShouldClose()
             }
             onVoidObject(WINDOW_WILL_CLOSE) {
                 admission.windowWillClose()
+            }
+            if (fullscreenAvailability.isAvailable) {
+                onVoidObject(WINDOW_WILL_ENTER_FULLSCREEN) { admission.windowWillEnterFullscreen() }
+                onVoidObject(WINDOW_DID_ENTER_FULLSCREEN) { admission.windowDidEnterFullscreen() }
+                onVoidObject(WINDOW_DID_FAIL_ENTER_FULLSCREEN) { admission.windowDidFailEnterFullscreen() }
+                onVoidObject(WINDOW_WILL_EXIT_FULLSCREEN) { admission.windowWillExitFullscreen() }
+                onVoidObject(WINDOW_DID_EXIT_FULLSCREEN) { admission.windowDidExitFullscreen() }
+                onVoidObject(WINDOW_DID_FAIL_EXIT_FULLSCREEN) { admission.windowDidFailExitFullscreen() }
             }
         }
         return KffiDelegateOwner(
@@ -257,15 +325,37 @@ internal class KffiAppKitWindowPort(
     private companion object {
         const val WINDOW_SHOULD_CLOSE = "windowShouldClose:"
         const val WINDOW_WILL_CLOSE = "windowWillClose:"
+        const val WINDOW_WILL_ENTER_FULLSCREEN = "windowWillEnterFullScreen:"
+        const val WINDOW_DID_ENTER_FULLSCREEN = "windowDidEnterFullScreen:"
+        const val WINDOW_DID_FAIL_ENTER_FULLSCREEN = "windowDidFailToEnterFullScreen:"
+        const val WINDOW_WILL_EXIT_FULLSCREEN = "windowWillExitFullScreen:"
+        const val WINDOW_DID_EXIT_FULLSCREEN = "windowDidExitFullScreen:"
+        const val WINDOW_DID_FAIL_EXIT_FULLSCREEN = "windowDidFailToExitFullScreen:"
         const val VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE = "viewDidChangeEffectiveAppearance"
         const val ACCEPTS_FIRST_RESPONDER = "acceptsFirstResponder"
 
-        val windowDelegateClass: ObjCManagedClass by lazy {
+        val basicWindowDelegateClass: ObjCManagedClass by lazy {
             ObjCManagedClass.registerOnce(
                 protocols = setOf("NSWindowDelegate"),
                 methods = mapOf(
                     WINDOW_SHOULD_CLOSE to ObjCMethodSignatures.BooleanObject,
                     WINDOW_WILL_CLOSE to ObjCMethodSignatures.VoidObject,
+                ),
+            )
+        }
+
+        val fullscreenWindowDelegateClass: ObjCManagedClass by lazy {
+            ObjCManagedClass.registerOnce(
+                protocols = setOf("NSWindowDelegate"),
+                methods = mapOf(
+                    WINDOW_SHOULD_CLOSE to ObjCMethodSignatures.BooleanObject,
+                    WINDOW_WILL_CLOSE to ObjCMethodSignatures.VoidObject,
+                    WINDOW_WILL_ENTER_FULLSCREEN to ObjCMethodSignatures.VoidObject,
+                    WINDOW_DID_ENTER_FULLSCREEN to ObjCMethodSignatures.VoidObject,
+                    WINDOW_DID_FAIL_ENTER_FULLSCREEN to ObjCMethodSignatures.VoidObject,
+                    WINDOW_WILL_EXIT_FULLSCREEN to ObjCMethodSignatures.VoidObject,
+                    WINDOW_DID_EXIT_FULLSCREEN to ObjCMethodSignatures.VoidObject,
+                    WINDOW_DID_FAIL_EXIT_FULLSCREEN to ObjCMethodSignatures.VoidObject,
                 ),
             )
         }
@@ -550,6 +640,10 @@ private class KffiWindowOwner(
 
     fun applyInitialLevel(spec: WindowSpec) {
         window.setLevel(spec.level.toAppKitWindowLevel())
+    }
+
+    fun restoreLevel(level: WindowLevel) {
+        window.setLevel(level.toAppKitWindowLevel())
     }
 
     fun updateWindow(
@@ -1261,6 +1355,30 @@ private class KffiDelegateAdmission(
 
     fun windowWillClose() {
         if (accepting.get()) callbacks.windowWillClose()
+    }
+
+    fun windowWillEnterFullscreen() {
+        if (accepting.get()) callbacks.windowWillEnterFullscreen()
+    }
+
+    fun windowDidEnterFullscreen() {
+        if (accepting.get()) callbacks.windowDidEnterFullscreen()
+    }
+
+    fun windowDidFailEnterFullscreen() {
+        if (accepting.get()) callbacks.windowDidFailEnterFullscreen()
+    }
+
+    fun windowWillExitFullscreen() {
+        if (accepting.get()) callbacks.windowWillExitFullscreen()
+    }
+
+    fun windowDidExitFullscreen() {
+        if (accepting.get()) callbacks.windowDidExitFullscreen()
+    }
+
+    fun windowDidFailExitFullscreen() {
+        if (accepting.get()) callbacks.windowDidFailExitFullscreen()
     }
 
     fun revoke() {
