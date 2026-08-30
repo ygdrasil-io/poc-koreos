@@ -110,6 +110,32 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun peerForwardsTitleUpdatesAndReturnsTheNativeReadback() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "title-readback")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowGeometryCapabilities = setOf(WindowProperty.Title),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "original"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(WindowUpdate(title = PropertyChange.Set("requested"))).successValue(),
+            )
+
+            assertEquals("requested", outcome.state.title)
+            assertEquals("requested", window.state.value.title)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun peerSuppressesManagedResizeCallbacksButForwardsExternalGeometry() = runBlocking {
         val managed = AppKitWindowGeometrySnapshot(
             contentSize = LogicalSize(480.0, 300.0),
@@ -907,6 +933,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val createdPeerIds = CopyOnWriteArrayList<AppKitWindowPeerId>()
     val requestedSurfaceRedrawGenerations = CopyOnWriteArrayList<Long>()
     val geometryTargets = CopyOnWriteArrayList<AppKitWindowGeometryTarget>()
+    val mutationTargets = CopyOnWriteArrayList<AppKitWindowMutationTarget>()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
 
     override fun isMainThread(): Boolean = true
@@ -922,6 +949,7 @@ internal class DeterministicAppKitNativeWindowPort(
     override fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner {
         beforeCreateWindow(spec)
         return RecordingNativeWindowOwner(
+            identity = spec.title,
             title = spec.title,
             initialGeometry = AppKitWindowGeometrySnapshot(
                 contentSize = spec.contentSize,
@@ -968,43 +996,53 @@ internal class DeterministicAppKitNativeWindowPort(
         window.recordingWindow().presented = true
     }
 
-    override fun updateGeometry(
+    override fun updateWindow(
         window: AppKitNativeWindowOwner,
-        target: AppKitWindowGeometryTarget,
-        commit: AppKitWindowGeometryCommit,
-    ): AppKitWindowGeometrySnapshot? {
+        target: AppKitWindowMutationTarget,
+        commit: AppKitWindowMutationCommit,
+    ): AppKitWindowMutationSnapshot? {
         val recording = window.recordingWindow()
-        geometryTargets += target
+        mutationTargets += target
+        geometryTargets += target.geometry
         beforeGeometrySetter()
         if (!commit.beforeFirstSetter()) return null
-        geometryFailureAfterContentSize?.let { failure ->
-            recording.geometry = recording.geometry.copy(
-                contentSize = target.contentSize.resolve(recording.geometry.contentSize),
-            )
-            throw failure
+        when (val title = target.title) {
+            is PropertyChange.Set -> recording.title = title.value
+            PropertyChange.Clear -> error("AppKit does not support clearing a window title")
+            PropertyChange.Unchanged -> Unit
         }
-        val requested = recording.geometry.updateFor(target)
-        val effective = effectiveGeometry ?: requested
-        recording.geometry = effective
-        recording.styleMask = if (effective.resizable) {
-            recording.styleMask or APPKIT_RESIZABLE_STYLE_MASK
-        } else {
-            recording.styleMask and APPKIT_RESIZABLE_STYLE_MASK.inv()
+        if (target.geometry.hasChange()) {
+            geometryFailureAfterContentSize?.let { failure ->
+                recording.geometry = recording.geometry.copy(
+                    contentSize = target.geometry.contentSize.resolve(recording.geometry.contentSize),
+                )
+                throw failure
+            }
+            val requested = recording.geometry.updateFor(target.geometry)
+            val effective = effectiveGeometry ?: requested
+            recording.geometry = effective
+            recording.styleMask = if (effective.resizable) {
+                recording.styleMask or APPKIT_RESIZABLE_STYLE_MASK
+            } else {
+                recording.styleMask and APPKIT_RESIZABLE_STYLE_MASK.inv()
+            }
+            if (emitGeometryDuringUpdate) geometryObservers[recording.identity]?.emit(effective)
+            reentrantGeometryDuringUpdate?.let { geometryObservers[recording.identity]?.emit(it) }
         }
-        if (emitGeometryDuringUpdate) geometryObservers[recording.title]?.emit(effective)
-        reentrantGeometryDuringUpdate?.let { geometryObservers[recording.title]?.emit(it) }
-        return effective
+        return AppKitWindowMutationSnapshot(recording.title, recording.geometry)
     }
 
-    override fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot =
-        window.recordingWindow().geometry
+    override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
+        window.recordingWindow().let { recording ->
+            AppKitWindowMutationSnapshot(recording.title, recording.geometry)
+        }
 
     override fun observeGeometry(
         window: AppKitNativeWindowOwner,
         callbacks: AppKitWindowGeometryCallbacks,
     ): AppKitNativeGeometryObserverOwner = RecordingNativeGeometryObserver(callbacks).also { observer ->
-        val title = window.recordingWindow().title
-        check(geometryObservers.put(title, observer) == null) { "$name duplicate test geometry observer" }
+        val identity = window.recordingWindow().identity
+        check(geometryObservers.put(identity, observer) == null) { "$name duplicate test geometry observer" }
     }
 
     override fun observeSurface(
@@ -1016,7 +1054,7 @@ internal class DeterministicAppKitNativeWindowPort(
         initialSurfaceSnapshot,
         requestedSurfaceRedrawGenerations::add,
     ).also { observer ->
-        check(surfaceObservers.put(window.recordingWindow().title, observer) == null) {
+        check(surfaceObservers.put(window.recordingWindow().identity, observer) == null) {
             "$name duplicate test surface observer"
         }
     }
@@ -1026,11 +1064,11 @@ internal class DeterministicAppKitNativeWindowPort(
         view: AppKitNativeViewOwner,
         callbacks: AppKitInputCallbacks,
     ): AppKitNativeInputObserverOwner? = if (
-        inputObservationInstalled || window.recordingWindow().title in inputObservationInstalledFor
+        inputObservationInstalled || window.recordingWindow().identity in inputObservationInstalledFor
     ) {
         RecordingNativeInputObserver(callbacks).also { observer ->
-        val title = window.recordingWindow().title
-        check(inputObservers.put(title, observer) == null) { "$name duplicate test input observer" }
+        val identity = window.recordingWindow().identity
+        check(inputObservers.put(identity, observer) == null) { "$name duplicate test input observer" }
         afterInputObservationBeforeCommit(this)
         }
     } else {
@@ -1047,9 +1085,9 @@ internal class DeterministicAppKitNativeWindowPort(
 
     override fun closeWindow(window: AppKitNativeWindowOwner) {
         val recording = window.recordingWindow()
-        beforeCloseWindow(recording.title)
+        beforeCloseWindow(recording.identity)
         recordNativeClose(recording)
-        closeFailures[recording.title]?.let { throw it }
+        closeFailures[recording.identity]?.let { throw it }
     }
 
     override fun desktopHandle(
@@ -1099,13 +1137,14 @@ internal class DeterministicAppKitNativeWindowPort(
 
     private fun recordNativeClose(recording: RecordingNativeWindowOwner) {
         if (!recording.nativeClosed.compareAndSet(false, true)) return
-        closedWindowTitles += recording.title
-        windowWillCloseTitles += recording.title
+        closedWindowTitles += recording.identity
+        windowWillCloseTitles += recording.identity
         checkNotNull(recording.delegate).callbacks.windowWillClose()
     }
 
     private class RecordingNativeWindowOwner(
-        val title: String,
+        val identity: String,
+        var title: String,
         val initialGeometry: AppKitWindowGeometrySnapshot,
         var styleMask: Long,
     ) : AppKitNativeWindowOwner {
@@ -1240,6 +1279,12 @@ private fun AppKitWindowGeometrySnapshot.updateFor(
     maximumSize = target.maximumSize.resolve(maximumSize),
     resizable = target.resizable.resolve(resizable),
 )
+
+private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
+    contentSize !is PropertyChange.Unchanged ||
+        minimumSize !is PropertyChange.Unchanged ||
+        maximumSize !is PropertyChange.Unchanged ||
+        resizable !is PropertyChange.Unchanged
 
 private fun <T> PropertyChange<T>.resolve(current: T): T = when (this) {
     is PropertyChange.Set -> value

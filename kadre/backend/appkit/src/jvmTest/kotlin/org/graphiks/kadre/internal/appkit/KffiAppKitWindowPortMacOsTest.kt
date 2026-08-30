@@ -91,6 +91,43 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun generatedKffiWindowUpdatesTitleAndReturnsTheNativeReadbackOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(86L),
+            spec = WindowSpec(title = "before"),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                "after",
+                peer.updateWindow(
+                    AppKitWindowMutationTarget(
+                        title = PropertyChange.Set("after"),
+                        geometry = AppKitWindowGeometryTarget(
+                            contentSize = PropertyChange.Unchanged,
+                            minimumSize = PropertyChange.Unchanged,
+                            maximumSize = PropertyChange.Unchanged,
+                            resizable = PropertyChange.Unchanged,
+                        ),
+                    ),
+                )?.title,
+            )
+            assertEquals(
+                KadreResult.Success("after"),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).titleAsString()
+                },
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
     fun generatedKffiWindowUpdatesContentConstraintsAndRestoresNativeDefaultsOnMacOs() {
         if (!isMacOsHost()) return
 

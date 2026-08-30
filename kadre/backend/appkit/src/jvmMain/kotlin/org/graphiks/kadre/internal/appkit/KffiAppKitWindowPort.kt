@@ -98,18 +98,18 @@ internal class KffiAppKitWindowPort(
         }
     }
 
-    override fun updateGeometry(
+    override fun updateWindow(
         window: AppKitNativeWindowOwner,
-        target: AppKitWindowGeometryTarget,
-        commit: AppKitWindowGeometryCommit,
-    ): AppKitWindowGeometrySnapshot? {
+        target: AppKitWindowMutationTarget,
+        commit: AppKitWindowMutationCommit,
+    ): AppKitWindowMutationSnapshot? {
         requireMainThread()
-        return window.kffiWindowOwner().updateGeometry(target, commit)
+        return window.kffiWindowOwner().updateWindow(target, commit)
     }
 
-    override fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot {
+    override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot {
         requireMainThread()
-        return window.kffiWindowOwner().readGeometry()
+        return window.kffiWindowOwner().readWindow()
     }
 
     override fun observeGeometry(
@@ -542,10 +542,23 @@ private class KffiWindowOwner(
         window.setStyleMask(window.styleMask().withResizable(spec.resizable))
     }
 
-    fun updateGeometry(
+    fun updateWindow(
+        target: AppKitWindowMutationTarget,
+        commit: AppKitWindowMutationCommit,
+    ): AppKitWindowMutationSnapshot? {
+        if (!commit.beforeFirstSetter()) return null
+        when (val title = target.title) {
+            is PropertyChange.Set -> window.setTitle(title.value)
+            PropertyChange.Clear -> error("AppKit does not support clearing a window title")
+            PropertyChange.Unchanged -> Unit
+        }
+        if (target.geometry.hasChange()) applyGeometry(target.geometry)
+        return readWindow()
+    }
+
+    private fun applyGeometry(
         target: AppKitWindowGeometryTarget,
-        commit: AppKitWindowGeometryCommit,
-    ): AppKitWindowGeometrySnapshot? {
+    ) {
         val contentSize = target.contentSize.resolveValue(readContentSize(window))
         val minimumSize = target.minimumSize.resolveOptional(requestedMinimumSize)
         val maximumSize = target.maximumSize.resolveOptional(requestedMaximumSize)
@@ -554,7 +567,6 @@ private class KffiWindowOwner(
         val currentMinimum = window.contentMinSize()
         val currentMaximum = window.contentMaxSize()
 
-        if (!commit.beforeFirstSetter()) return null
         val minimumRelaxed = currentMinimum.exceeds(contentSize)
         if (minimumRelaxed) {
             window.setContentMinSize(nativeMinimum.copy())
@@ -580,11 +592,15 @@ private class KffiWindowOwner(
             window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
         )
         window.setStyleMask(window.styleMask().withResizable(resizable))
-        return readGeometry()
     }
 
     fun readGeometry(): AppKitWindowGeometrySnapshot =
         readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
+
+    fun readWindow(): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
+        title = window.titleAsString(),
+        geometry = readGeometry(),
+    )
 
     fun installGeometryObserver(callbacks: AppKitWindowGeometryCallbacks): KffiGeometryObserverOwner {
         check(geometryObserver == null) { "AppKit window geometry is already observed" }
@@ -632,6 +648,12 @@ private fun readContentSize(window: NSWindow): LogicalSize =
     window.contentRectForFrameRect(window.frame()).size.toLogicalSize()
 
 private fun NSSize.toLogicalSize(): LogicalSize = LogicalSize(width, height)
+
+private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
+    contentSize !is PropertyChange.Unchanged ||
+        minimumSize !is PropertyChange.Unchanged ||
+        maximumSize !is PropertyChange.Unchanged ||
+        resizable !is PropertyChange.Unchanged
 
 private fun <T> PropertyChange<T>.resolveValue(current: T): T = when (this) {
     PropertyChange.Unchanged -> current

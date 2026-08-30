@@ -56,21 +56,21 @@ internal interface AppKitNativeWindowPort {
     fun present(window: AppKitNativeWindowOwner)
 
     /**
-     * Applies one private geometry request and returns the values AppKit made effective.
+     * Applies one private window mutation and returns the values AppKit made effective.
      *
      * Implementations keep `NSWindow`, style masks, and all native defaults behind this seam.
      * [commit] is consulted immediately before the first native setter; `null` means that setter
      * was withdrawn and no native mutation occurred.
      */
-    fun updateGeometry(
+    fun updateWindow(
         window: AppKitNativeWindowOwner,
-        target: AppKitWindowGeometryTarget,
-        commit: AppKitWindowGeometryCommit,
-    ): AppKitWindowGeometrySnapshot? = error("AppKit geometry updates are not installed")
+        target: AppKitWindowMutationTarget,
+        commit: AppKitWindowMutationCommit,
+    ): AppKitWindowMutationSnapshot? = error("AppKit window mutations are not installed")
 
     /** Reads one authoritative effective snapshot after a setter began, including after failure. */
-    fun readGeometry(window: AppKitNativeWindowOwner): AppKitWindowGeometrySnapshot =
-        error("AppKit geometry readback is not installed")
+    fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
+        error("AppKit window readback is not installed")
 
     /** Installs the native geometry observer for one peer, when the port supports it. */
     fun observeGeometry(
@@ -109,8 +109,8 @@ internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
 }
 
-/** Peer-to-port token whose transition is the exact first native geometry setter boundary. */
-internal interface AppKitWindowGeometryCommit {
+/** Peer-to-port token whose transition is the exact first native window setter boundary. */
+internal interface AppKitWindowMutationCommit {
     val started: Boolean
 
     fun beforeFirstSetter(): Boolean
@@ -128,12 +128,24 @@ internal data class AppKitWindowGeometryTarget(
     val resizable: PropertyChange<Boolean>,
 )
 
+/** Private, native-address-free window request forwarded from the runtime command. */
+internal data class AppKitWindowMutationTarget(
+    val title: PropertyChange<String>,
+    val geometry: AppKitWindowGeometryTarget,
+)
+
 /** Native values read together after AppKit has applied a geometry mutation or observation. */
 internal data class AppKitWindowGeometrySnapshot(
     val contentSize: LogicalSize,
     val minimumSize: LogicalSize?,
     val maximumSize: LogicalSize?,
     val resizable: Boolean,
+)
+
+/** Native values read together after AppKit has applied one window mutation. */
+internal data class AppKitWindowMutationSnapshot(
+    val title: String,
+    val geometry: AppKitWindowGeometrySnapshot,
 )
 
 /** Callback boundary for native-address-free geometry observations. */
