@@ -477,6 +477,42 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun windowTitleStatePrecedesOneCorrelatedPropertiesEvent() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original")).successValue(),
+            port.openCommands.single(),
+        )
+        val observedStates = mutableListOf<WindowState>()
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.onEach { event ->
+                observedStates += window.state.value
+                events += event
+            }.collect()
+        }
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("requested")))
+        }
+        val command = port.updateCommands.single()
+        val nativeSnapshot = window.state.value.copy(title = "effective")
+        val effective = nativeSnapshot.copy(revision = WindowRevision(1L))
+
+        command.applied(nativeSnapshot)
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals(effective, outcome.state)
+        assertEquals(effective, window.state.value)
+        val properties = assertIs<WindowEvent.PropertiesChanged>(events.single())
+        assertEquals(setOf(WindowProperty.Title), properties.changed)
+        assertEquals(command.operationId, properties.operationId)
+        assertEquals(effective, observedStates.single())
+        collector.cancelAndJoin()
+    }
+
+    @Test
     fun windowUpdateValidatesCombinedSizeConstraintsBeforeDispatch() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
@@ -566,6 +602,151 @@ class RuntimeWindowManagerTest {
             window.apply(WindowUpdate(resizable = PropertyChange.Clear)),
         )
         assertEquals(emptyList(), port.updateCommands)
+    }
+
+    @Test
+    fun windowTitleClearFailsBeforeDispatchOrPublication() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original")).successValue(),
+            port.openCommands.single(),
+        )
+        assertIs<Capability.Unsupported>(window.capabilities.value.title)
+        val before = window.state.value
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("title")),
+            window.apply(WindowUpdate(title = PropertyChange.Clear)),
+        )
+        assertEquals(emptyList(), port.updateCommands)
+        assertEquals(before, window.state.value)
+        assertEquals(emptyList(), events)
+
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowTitleAndGeometryShareOneCorrelatedCommand() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val window = commit(
+            manager.requestWindow(
+                WindowSpec(
+                    title = "original",
+                    contentSize = LogicalSize(100.0, 100.0),
+                ),
+            ).successValue(),
+            port.openCommands.single(),
+        )
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("requested"),
+                    contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0)),
+                ),
+            )
+        }
+
+        val command = port.updateCommands.single()
+        assertEquals(PropertyChange.Set("requested"), command.update.title)
+        command.applied(
+            window.state.value.copy(
+                title = "effective",
+                contentSize = LogicalSize(118.0, 100.0),
+            ),
+        )
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals("effective", outcome.state.title)
+        assertEquals(LogicalSize(118.0, 100.0), outcome.state.contentSize)
+        assertEquals(command.operationId, outcome.operationId)
+        assertEquals(1L, outcome.state.revision.value)
+    }
+
+    @Test
+    fun windowTitleNoOpDoesNotDispatchOrReviseState() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "unchanged")).successValue(),
+            port.openCommands.single(),
+        )
+        val before = window.state.value
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("unchanged")))
+        }
+
+        assertEquals(emptyList(), port.updateCommands)
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals(before, outcome.state)
+        assertEquals(before, window.state.value)
+    }
+
+    @Test
+    fun windowTitleCancellationRespectsTheNativeCommitBoundary() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original")).successValue(),
+            port.openCommands.single(),
+        )
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+        val beforeCommit = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("withdrawn")))
+        }
+        val withdrawn = port.updateCommands.single()
+        beforeCommit.cancelAndJoin()
+        withdrawn.applied(window.state.value.copy(title = "must-not-publish"))
+        assertEquals("original", window.state.value.title)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        val afterCommit = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("committed")))
+        }
+        val committed = port.updateCommands.last()
+        afterCommit.cancel()
+        committed.applied(window.state.value.copy(title = "effective"))
+
+        assertTrue(afterCommit.isCancelled)
+        assertEquals("effective", window.state.value.title)
+        assertEquals(1L, window.state.value.revision.value)
+    }
+
+    @Test
+    fun queuedWindowTitleRevalidatesExpectedRevisionAtDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "original")).successValue(),
+            port.openCommands.single(),
+        )
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("first")))
+        }
+        val stale = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("stale"),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val firstCommand = port.updateCommands.single()
+
+        firstCommand.applied(window.state.value.copy(title = "first"))
+
+        assertIs<WindowUpdateOutcome.Applied>(first.await().successValue())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            stale.await(),
+        )
+        assertEquals(1, port.updateCommands.size)
+        assertEquals("first", window.state.value.title)
     }
 
     @Test
@@ -2071,6 +2252,7 @@ class RuntimeWindowManagerTest {
         maxPending: Int = 4,
         reported: MutableList<Throwable> = mutableListOf(),
         publicWindowCapabilities: Boolean = false,
+        enabledWindowGeometryCapabilities: Set<WindowProperty> = emptySet(),
         publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: () -> Unit = {},
     ): RuntimeWindowManager = RuntimeWindowManager(
@@ -2082,6 +2264,7 @@ class RuntimeWindowManagerTest {
         platform = KadrePlatform.Fake,
         failureReporter = RuntimeFailureReporter(reported::add),
         publicWindowCapabilities = publicWindowCapabilities,
+        enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )
@@ -2108,6 +2291,9 @@ class RuntimeWindowManagerTest {
             maxCollectorsPerFlow = 16,
         )
     }
+
+    private fun titleUpdateProperties(): Set<WindowProperty> =
+        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + WindowProperty.Title
 
     private suspend fun kotlinx.coroutines.test.TestScope.applyContentSize(
         window: Window,
