@@ -326,6 +326,48 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun chromeUpdatesRemainPeerLocalAfterTheNativeStyleChanges() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "chrome-peer-isolation")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = chromeUpdateProperties(),
+        )
+
+        try {
+            val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "chrome-first"))
+                    .successValue()
+                    .await(),
+            ).window
+            val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "chrome-second"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                first.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.Borderless)))
+                    .successValue(),
+            )
+
+            assertEquals(WindowDecorations.Borderless, outcome.state.decorations)
+            assertEquals(WindowSystemButtons.None, first.state.value.systemButtons)
+            assertEquals(WindowDecorations.System, second.state.value.decorations)
+            assertEquals(WindowSystemButtons.All, second.state.value.systemButtons)
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.Borderless, WindowSystemButtons.None),
+                port.chrome("chrome-first"),
+            )
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.System, WindowSystemButtons.All),
+                port.chrome("chrome-second"),
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun peerSuppressesManagedResizeCallbacksButForwardsExternalGeometry() = runBlocking {
         val managed = AppKitWindowGeometrySnapshot(
             contentSize = LogicalSize(480.0, 300.0),

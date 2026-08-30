@@ -129,11 +129,11 @@ les autres mutations restent `Unsupported(UpdateWindow)`.
 
 ## Preuves et contrats
 
-`WIN-003` est le contrat O2 du pipeline runtime de chrome. `APK-008` est le
-contrat O3 de son activation AppKit. Ils restent `planned` jusqu'à la dernière
-PR de la stack, qui active aussi les capabilities, mappings et gates.
+`WIN-003` est le contrat O2 actif du pipeline runtime de chrome. `APK-008`
+est le contrat O3 actif de son activation AppKit. La dernière PR de la stack
+active simultanément les capabilities, mappings, evidence et gates.
 
-`WIN-003` couvrira :
+`WIN-003` couvre :
 
 - validation et canonisation du chrome ;
 - composition chrome + titre + géométrie ;
@@ -144,7 +144,7 @@ Ses sentinelles couvriront les boutons incompatibles sous `Borderless`, le
 no-op canonique, la revalidation de révision, la corrélation d'opération et le
 non-contournement de policy.
 
-`APK-008` couvrira :
+`APK-008` couvre :
 
 - création effective avec chaque combinaison système ;
 - update KFFI et readback du style et des boutons ;

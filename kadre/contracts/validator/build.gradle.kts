@@ -17,8 +17,8 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
-val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006", "APK-007")
-val runtimeContractIds = listOf("INP-001", "WIN-001", "WIN-002")
+val appKitContractIds = listOf("APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006", "APK-007", "APK-008")
+val runtimeContractIds = listOf("INP-001", "WIN-001", "WIN-002", "WIN-003")
 
 val validateContractRegistry by tasks.registering(JavaExec::class) {
     group = "verification"
