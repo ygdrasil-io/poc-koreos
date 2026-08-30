@@ -383,9 +383,10 @@ contrat porte sur une valeur native lisible et entièrement testable en CI.
 La sous-tranche suivante, définie par
 `APPKIT-PHASE-5-WINDOW-FULLSCREEN-DESIGN.md`, réserve le fullscreen natif
 `Borderless` corrélé aux notifications AppKit. `Window.apply` attend la
-completion terminale et retourne `Applied` ou une failure corrélée, jamais un
-`Accepted` intermédiaire. La sous-tranche garde `Exclusive` hors scope jusqu'à
-la phase Display, refuse l'initialisation `Borderless` non corrélable, rejette
+completion terminale et retourne `Applied`, `PartiallyApplied` pour un champ
+refusé, ou une failure corrélée après commit ; jamais un `Accepted`
+intermédiaire. La sous-tranche garde `Exclusive` hors scope jusqu'à la phase
+Display, refuse l'initialisation `Borderless` non corrélable, rejette
 l'initialisation `Exclusive` par `RequestWindow`, et réserve `WIN-005` et
 `APK-010` en statut `planned` jusqu'à l'activation publique et à ses preuves.
 

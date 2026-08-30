@@ -15,7 +15,7 @@ Le périmètre public est fermé :
 | --- | --- | --- |
 | `FullscreenMode.Windowed` | sortie du fullscreen natif | supportée |
 | `FullscreenMode.Borderless` | `NSWindow.toggleFullScreen` | supportée |
-| `FullscreenMode.Exclusive` | display et mode exclusifs | update : `Unsupported(UpdateWindow)` ; création : `Rejected(Unsupported(RequestWindow))` |
+| `FullscreenMode.Exclusive` | display et mode exclusifs | update : `PartiallyApplied(Fullscreen = Unsupported(UpdateWindow))` ; création : `Rejected(Unsupported(RequestWindow))` |
 
 `Borderless` désigne le fullscreen géré par l'espace macOS. Kadre ne modifie
 pas `collectionBehavior`, ne choisit pas d'écran, ne personnalise pas
@@ -78,10 +78,31 @@ majeure contemporaine ; ils n'emploient pas la version de la machine de CI.
 - après `DidExit`, il devient `Windowed`.
 
 Le runtime maintient, hors API publique, une unique barrière de fullscreen par
-fenêtre. Une barrière locale contient l'`WindowOperationId`, la cible et une
-phase `BeforeSelector` ou `AfterSelector`; une barrière externe ne porte aucun
-operation ID Kadre. Elle interdit un second `toggleFullScreen` jusqu'à une
-notification terminale, un échec natif ou le teardown.
+fenêtre, exclusivement mutée sur l'executor AppKit. Une barrière locale contient
+l'`WindowOperationId`, la cible et l'une des phases atomiques suivantes :
+
+| Phase | Sens | Règle sur une notification `Will` |
+| --- | --- | --- |
+| `PreparedLocal` | commande admise, selector pas encore invoqué | un `Will` devient externe : il termine la commande par `TemporarilyUnavailable` sans selector |
+| `InvokingSelector` | appel de `toggleFullScreen` en cours, callbacks réentrants possibles | un `Will` de la cible confirme la tentative locale et passe à `AwaitingLocal` |
+| `AwaitingLocal` | selector franchi ou `Will` local observé | seul `Did`/`DidFail` correspondant peut terminer l'opération |
+| `External` | AppKit a commencé une transition sans opération Kadre | aucune opération locale fullscreen n'est corrélable |
+
+Un `Will` opposé, un `Did` opposé ou un callback terminal sans la phase locale
+attendue désassocie l'opération locale et installe `External` avec la cible
+observée. La commande locale reçoit
+`PlatformFailure(AppKit, "fullscreen", "unexpected-transition")` si le
+selector avait été invoqué, ou `TemporarilyUnavailable(retryable = true)` sinon.
+La règle interdit un second toggle et garantit que l'événement de la transition
+externe porte `operationId = null`.
+
+Si le selector lève après un `Will` réentrant apparié, ce `Will` établit la
+frontière de commit : la barrière reste `AwaitingLocal` et attend son callback
+terminal. Le code `selector-threw` n'est produit que si aucune transition locale
+appariée n'a été observée. Sans barrière, un premier `Did` dont le mode diffère
+du state courant est une completion externe légitime et publie avec
+`operationId = null`; un `Did` qui répète ce mode est dupliqué et ignoré. Un
+`DidFail` sans barrière est seulement diagnostiqué.
 
 Une mutation fullscreen locale conserve sa propre `PendingWindowUpdate` jusqu'à
 sa terminaison. Il n'existe ni déduplication ni partage d'`Accepted` entre deux
@@ -101,7 +122,10 @@ snapshot fullscreen effectif.
 
 `PropertyChange.Clear` sur `fullscreen` échoue avec
 `KadreFailure.InvalidRequest("fullscreen")` avant admission native.
-`Set(Exclusive(...))` est rejeté avec `KadreFailure.Unsupported(UpdateWindow)`.
+`Set(Exclusive(...))` est un rejet de champ : il retourne
+`WindowUpdateOutcome.PartiallyApplied` avec
+`RejectedWindowField(Fullscreen, Unsupported(UpdateWindow))`, sans selector,
+révision ni événement.
 Un `Set` vers le dernier état effectif est un no-op : pas de selector, pas
 de révision, pas d'événement.
 
@@ -110,79 +134,113 @@ avec `KadreFailure.InvalidRequest("fullscreen")`. Cette frontière interdit
 une `PartiallyApplied` ambiguë pendant une transition native : l'appelant
 sépare la transition fullscreen des mutations synchrones.
 
-`expectedRevision` est vérifiée avant la détection d'une barrière, puis une
-seconde fois au moment où la commande quitte la file. Une révision incorrecte
-retourne donc toujours `StaleRevision`, y compris si une transition externe est
-en cours ou si une transition locale précédente vient de modifier l'état.
+La précédence d'admission est fixe : fenêtre fermée, puis forme structurelle du
+payload (`Clear`, update mixte ou candidat impossible), puis `expectedRevision`,
+puis capability et barrière, enfin canonisation/no-op ou rejet de champ. Ainsi
+`stale + Clear` reste `InvalidRequest`, alors que `stale + Exclusive`,
+`stale + barrière externe` et `stale + OS indisponible` retournent
+`StaleRevision`. `expectedRevision` est vérifiée une seconde fois au moment où
+la commande quitte la file : une transition locale précédente peut donc la
+rendre stale avant le selector.
 
 ## Commit, completion et échecs
 
-Le port arme l'observation du peer, vérifie une dernière fois l'annulation,
-puis appelle `toggleFullScreen` sur le thread AppKit. Ce selector est la
-frontière de commit :
+Le port arme l'observation du peer, vérifie une dernière fois l'annulation, puis
+passe atomiquement de `PreparedLocal` à `InvokingSelector` avant d'appeler
+`toggleFullScreen` sur le thread AppKit. Cette invocation, ou un `Will`
+réentrant apparié, est la frontière de commit :
 
-- une cancellation avant le selector retire la commande et ne produit aucune
-  transition ;
-- après le selector, elle détache seulement le waiter ; Kadre ne tente aucun
-  toggle compensatoire ;
-- `Window.apply` reste suspendue après le selector ;
-- `DidEnter` ou `DidExit` publie l'état et l'événement ; si la restauration du
-  level réussit, le caller encore actif reçoit
-  `WindowUpdateOutcome.Applied(operationId, state)` ;
+- une cancellation avant `InvokingSelector` retire uniquement cette commande ;
+- dès `InvokingSelector`, la cancellation détache seulement le waiter ; Kadre
+  ne demande aucun retrait au port et ne tente aucun toggle compensatoire ;
+- `Window.apply` reste suspendue jusqu'à une terminaison native ;
 - `WindowUpdateOutcome.Accepted` n'est jamais le résultat d'un update
   fullscreen AppKit.
 
-La notification `Did` appariée est l'autorité du mode fullscreen. Le runtime
-construit l'état terminal à partir de l'état Kadre courant en ne remplaçant que
-`fullscreen`, puis le publie avant son unique
-`WindowEvent.PropertiesChanged({ Fullscreen })`. Il ne fait pas dépendre la
-terminaison de cette transition d'un readback complet d'autres propriétés.
+Une notification `Did` locale appariée établit le mode fullscreen effectif.
+Avant toute publication, le port réapplique le `WindowLevel` persistant puis
+lit son niveau effectif. Le snapshot terminal remplace donc `fullscreen` et,
+si nécessaire, `level` par leurs valeurs natives observées :
 
-Le `WindowLevel` persistant reste inchangé dans cet état. Après la publication
-fullscreen, le port tente de le réappliquer ; une erreur de restauration est
-signalée à l'appel local encore actif par
-`KadreFailure.PlatformFailure(AppKit, "fullscreen", "level-restore-failed")`.
-L'état et l'événement fullscreen déjà publiés restent l'autorité de ce qui est
-effectivement arrivé. Si le caller s'est détaché, ou si la transition était
-externe, la même erreur est rapportée en diagnostic de session. Dans tous les
-cas, un `finally` libère la barrière et relance la file : une erreur de
-restauration ou de publication ne peut jamais laisser la fenêtre bloquée en
-transition.
+- si le level relu est la valeur persistante demandée, le runtime publie un
+  unique état, puis un `PropertiesChanged({ Fullscreen })`, et complète par
+  `WindowUpdateOutcome.Applied(operationId, state)` ;
+- si le level est lisible mais diffère, le runtime publie un unique état et un
+  événement `PropertiesChanged({ Fullscreen, Level })`, puis complète l'appel
+  par `KadreResult.Failure(PlatformFailure(AppKit, "fullscreen",
+  "level-restore-failed"))` ; le snapshot publié reste donc effectif ;
+- si le level ne peut pas être relu ou représenté, Kadre n'expose jamais un
+  `WindowState.Open` inventé. Il terminalise la fenêtre par le chemin natif de
+  fermeture, puis complète par `PlatformFailure(AppKit, "fullscreen",
+  "level-readback-failed")`.
 
-`windowDidFailToEnterFullScreen:` et `windowDidFailToExitFullScreen:` terminent
-une barrière locale par, respectivement,
-`KadreResult.Failure(PlatformFailure(AppKit, "fullscreen", "enter-failed"))`
-ou `"exit-failed"`. Ils conservent le dernier état effectif et ne publient pas
-de faux `PropertiesChanged`. Pour une barrière externe, ils libèrent seulement
-la barrière et reportent la failure en diagnostic, puisqu'aucun appel Kadre ne
-peut être corrélé à cette tentative.
+Les deux dernières branches conservent l'autorité de `Window.state` et de
+`Window.events` malgré la failure de l'appel : un commit natif n'est jamais
+présenté comme rollbacké. Une erreur de publication suit aussi la fermeture
+terminale plutôt que de laisser une fenêtre ouverte avec un snapshot faux.
 
-Une exception synchrone de `toggleFullScreen` termine l'appel local avec
-`PlatformFailure(AppKit, "fullscreen", "selector-threw")`; une exception de
-traitement après un callback terminal utilise le code `"completion-failed"`.
-Les deux chemins libèrent la barrière dans le même `finally`. Un teardown ou
-une fermeture native révoque les observers, libère la barrière et termine une
-commande locale encore pendante par `Closed(Window)` ; un callback ultérieur,
-d'un peer fermé ou d'une autre fenêtre est ignoré.
+Le runtime introduit pour cela deux stimuli **internes** à
+`WindowUpdateCommandStimulus`, sans changement de l'API publique :
+
+- `Failed(operationId, KadreFailure)`, pour une failure terminale sans snapshot
+  committé ;
+- `CommittedFailure(operationId, effectiveState, publicationOperationId,
+  KadreFailure)`, pour publier état puis événement avant de compléter
+  `KadreResult.Failure`. `publicationOperationId` vaut l'ID local, ou `null`
+  lorsqu'une observation externe a terminé l'opération locale en conflit.
+
+`CommittedFailure` détache l'opération, publie dans l'ordre état puis événement
+avec `publicationOperationId`, complète le waiter encore actif avec la failure
+exacte et ne draine la commande suivante qu'ensuite. Un `Failed` ou
+`CommittedFailure` post-commit dont le waiter s'est détaché est rapporté
+exactement une fois au diagnostic de session, avec sa `KadreFailure` exacte.
+
+`windowDidFailToEnterFullScreen:` et `windowDidFailToExitFullScreen:` émettent
+respectivement `Failed(PlatformFailure(AppKit, "fullscreen", "enter-failed"))`
+et `Failed(..., "exit-failed")`. Ils conservent le dernier état effectif et ne
+publient pas de faux `PropertiesChanged`. Pour une barrière externe, ils
+libèrent seulement la barrière et reportent la failure en diagnostic, puisqu'il
+n'existe aucun appel Kadre à corréler.
+
+Une exception synchrone de `toggleFullScreen` sans `Will` apparié émet
+`Failed(PlatformFailure(AppKit, "fullscreen", "selector-threw"))`. Une erreur
+de traitement après un callback terminal utilise le code `"completion-failed"`
+et ferme la fenêtre si aucun snapshot effectif ne peut être publié. Tous les
+chemins terminaux libèrent la barrière dans le même `finally`, puis relancent la
+file. Un teardown ou une fermeture native révoque les observers, libère la
+barrière et termine une commande locale encore pendante par `Closed(Window)` ;
+un callback ultérieur, d'un peer fermé ou d'une autre fenêtre est ignoré.
 
 ## État, événements et stimuli externes
 
-Après `DidEnter` ou `DidExit`, le runtime publie d'abord le
-`WindowState` effectif avec une unique révision supplémentaire, puis un
-`WindowEvent.PropertiesChanged` où
-`changed == { WindowProperty.Fullscreen }`. L'événement porte
-l'`operationId` de la barrière lorsqu'il vient de Kadre, et `null`
-lorsqu'un menu, un raccourci macOS ou un autre stimulus natif a initié la
-transition.
+Après `DidEnter` ou `DidExit`, le runtime publie d'abord un `WindowState`
+effectif avec une unique révision supplémentaire, puis un
+`WindowEvent.PropertiesChanged`. `changed` contient toujours
+`WindowProperty.Fullscreen` et contient aussi `WindowProperty.Level` si le
+readback a observé un level différent. L'événement porte l'`operationId` de la
+barrière lorsqu'il vient de Kadre, et `null` lorsqu'un menu, un raccourci macOS
+ou un autre stimulus natif a initié la transition.
 
 `WillEnter` et `WillExit` ne changent pas l'état public. Ils arment ou
 confirment seulement la barrière. Le type de notification `Did` externe établit
 le mode effectif ; Kadre ne le déduit jamais d'une intention locale. Une failure
 externe ne laisse aucune barrière active.
 
+La même réconciliation de level s'applique à un `Did` externe. Si le niveau
+relisible diffère du niveau persistant, l'état et l'événement externe
+(`operationId = null`) portent aussi `WindowProperty.Level`, puis la failure exacte est
+rapportée une fois au diagnostic. Un level illisible terminalise la fenêtre ;
+aucun `WindowState.Open` ne conserve une valeur de niveau supposée.
+
 Une mutation de level n'est jamais injectée au milieu de l'animation. AppKit
 peut employer un z-order transitoire privé ; ce niveau n'entre jamais dans
 `WindowState` et ne transforme ni `Floating` ni `Modal` en faux `Normal`.
+
+Kadre ne modifie aucune presentation option process-wide. Au teardown, il ferme
+la `NSWindow` et laisse AppKit restaurer l'espace fullscreen qu'il possède ; il
+n'appelle jamais un toggle compensatoire. La CI prouve l'absence de barrière,
+d'observer ou de commande résiduelle ; le harness manuel constate séparément le
+retour visible de l'espace macOS.
 
 ## Capability publique
 
@@ -220,39 +278,52 @@ capability active, ni evidence, ni gate.
 
 `WIN-005` couvrira :
 
-- validation de `Clear`, `Exclusive`, création non corrélable et no-op ;
-- suspension jusqu'à `Did`, succès `Applied` et échec natif terminal corrélé ;
-- révision stale avant barrière puis au dispatch, et sérialisation sans
-  déduplication de caller ;
-- cancellation avant/après `toggleFullScreen`, échec synchrone et fermeture ;
-- état avant `PropertiesChanged`, corrélation et policy discrète.
+- validation de `Clear`, `Exclusive` à l'update et à la création, update mixte
+  et no-op ;
+- matrice de précédence `InvalidRequest`/`StaleRevision`/capability/barrière ;
+- `PreparedLocal`, `InvokingSelector`, `AwaitingLocal` et `External`, dont
+  `Will` externe pré-selector, `Will` réentrant, direction opposée et absence
+  de double toggle ;
+- `Did`, `DidFail`, selector qui lève après callback réentrant, callback
+  terminal dupliqué/sans `Will`/tardif, callback opposé externe sans
+  `operationId`, et reprise de file dans chaque branche ;
+- cancellation avant/après commit, failure exacte et diagnostic unique après
+  détachement du waiter ;
+- `CommittedFailure`, état avant événement, level restauré, level différent
+  lisible, level illisible et fermeture terminale ;
+- corrélation et policy discrète.
 
 Ses sentinelles couvrent l'absence de toggle avant commit, l'absence de double
 toggle, le stale callback, la libération de barrière dans chaque chemin
-terminal, l'isolation inter-fenêtres et le non-contournement de policy.
+terminal, l'état effectif après failure committée, l'isolation inter-fenêtres
+et le non-contournement de policy.
 
 `APK-010` couvrira :
 
 - binding KFFI, observations `Will`/`Did` et callbacks d'échec ;
-- entrée, sortie, notification terminale et level conservé ;
+- entrée, sortie, callback réentrant/externe et terminal, puis level effectif
+  relu dans les deux origines ;
 - activation publique, seuil 10.7 injectable, indisponibilité de version et
-  `Exclusive` refusé ;
-- cancellation, teardown, callbacks tardifs et transitions externes ;
+  `Exclusive` rejeté dans le bon canal ;
+- cancellation, teardown, callbacks tardifs/dupliqués et transitions externes ;
+- absence de presentation option process-wide, de peer ou d'observer résiduel ;
 - chemin de policy et isolation entre peers.
 
-Les tests déterministes prouveront la machine à états, la barrière et les
-callbacks tardifs. Les tests macOS réels prouveront selector, notifications,
-completion, conservation du level et guard de disponibilité. Un harness manuel
-relèvera l'animation visible et le comportement de Space plein écran : il ne
-bloque pas la CI et ne remplace aucune preuve O2/O3.
+Les tests déterministes prouveront la machine à états, les stimuli internes et
+les callbacks tardifs. Les tests macOS réels prouveront selector, notifications,
+completion, readback effectif du level et guard de disponibilité. Un harness
+manuel relèvera l'animation visible et le comportement de Space plein écran :
+il ne bloque pas la CI et ne remplace aucune preuve O2/O3.
 
 ## Découpage de la stack
 
 1. Cette PR ajoute ce design, réserve `WIN-005` et `APK-010`, et actualise
    la roadmap sans activer de capability.
-2. Une PR fille introduit la barrière runtime, l'attente terminale, les
-   callbacks abstraits et les preuves O2, sans exposition AppKit publique.
+2. Une PR fille introduit la barrière runtime, les stimuli internes `Failed` /
+   `CommittedFailure`, l'attente terminale, les callbacks abstraits et les
+   preuves O2, sans exposition AppKit publique.
 3. Une PR fille raccorde peer, port déterministe et KFFI aux notifications
-   fullscreen et aux callbacks d'échec, avec preuves macOS privées.
+   fullscreen, aux callbacks d'échec et au readback de level, avec preuves
+   macOS privées.
 4. La dernière PR active capability, contrats et evidence CI ; elle ajoute le
    harness manuel non bloquant d'observation interactive.
