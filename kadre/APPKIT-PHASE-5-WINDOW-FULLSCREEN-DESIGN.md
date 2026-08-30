@@ -91,10 +91,17 @@ l'`WindowOperationId`, la cible et l'une des phases atomiques suivantes :
 `InvokingSelector` conserve `selectorCallActive = true`. Un `Did` ou `DidFail`
 réentrant est mémorisé mais ne publie ni état ni événement, ne libère pas la
 barrière et ne draine aucune commande avant le retour du selector. Au retour,
-le runtime passe à `AwaitingLocal`, consomme un terminal mémorisé exactement une
-fois, puis seulement alors conclut et draine. Si le selector lève après un
-`Will` ou terminal local mémorisé, cette observation établit la frontière de
-commit et gagne ; `selector-threw` n'est produit qu'en son absence.
+le runtime passe à `AwaitingLocal`, consomme le premier terminal mémorisé dans
+l'ordre d'arrivée, puis seulement alors conclut et draine. C'est une file FIFO
+de terminaux, pas une dernière valeur écrasable : le premier terminal gagne sur
+le selector qui lève et fixe le résultat de la commande locale. Les terminaux
+restants sont ensuite rejoués FIFO avant tout drainage : celui qui correspond à
+la tombstone du gagnant est supprimé ; un terminal d'une cible de conflit déjà
+mémorisée est une nouvelle observation externe et peut donc publier son état.
+Il ne peut jamais modifier le résultat local déjà complété. Si le selector lève
+sans `Will` ni terminal mémorisé, `selector-threw` est produit ; après un
+`Will` local ou de conflit, le selector est déjà committé et attend le premier
+terminal.
 
 Chaque peer conserve aussi une tombstone terminale `{ cible, kind }`, effacée
 par le prochain `Will` ou le prochain selector local. Elle supprime les
@@ -103,15 +110,21 @@ de distinguer un doublon d'un nouvel échec externe identique sans `Will`, et la
 spécification choisit alors le diagnostic au plus une fois.
 
 La matrice de callbacks est fermée. `cible` désigne `Borderless` pour enter et
-`Windowed` pour exit ; un `Did` égal au state courant est toujours un doublon :
+`Windowed` pour exit. Un `Did` est d'abord corrélé à la cible locale, à la
+cible externe armée ou à un conflit mémorisé ; cette corrélation libère toujours
+la barrière à sa résolution (mais jamais avant le retour du selector), même si
+son état est égal au snapshot public. L'égalité au state ne décide qu'une chose
+: un terminal corrélé égal ne crée ni révision ni événement. Elle ne peut jamais
+transformer un terminal corrélé en doublon.
+Un `Did` non corrélé, sans barrière, qui répète le state est le doublon ignoré :
 
-| Phase | `Will` | `Did` égal au state | `Did` différent du state | `DidFail` |
+| Phase | `Will` | `Did` corrélé | `Did` non corrélé | `DidFail` |
 | --- | --- | --- | --- | --- |
-| aucune / tombstone | arme `External` et efface la tombstone | ignoré | completion externe, état/événement avec `operationId = null` | diagnostic une fois, puis tombstone |
-| `PreparedLocal` | arme `External`, retourne `TemporarilyUnavailable`, sans selector | ignoré | même règle externe, puis échec local `TemporarilyUnavailable` | diagnostic une fois ; la commande locale reste préparée |
-| `InvokingSelector` | cible locale : mémorise ; cible opposée : mémorise un conflit externe | ignoré | cible locale : mémorise le succès ; cible opposée : mémorise le conflit externe | cible locale : mémorise l'échec ; cible opposée : diagnostic une fois |
-| `AwaitingLocal` | cible locale : idempotent ; cible opposée : conflit externe | ignoré | cible locale : succès local ; cible opposée : completion externe et `unexpected-transition` local | cible locale : `enter-failed`/`exit-failed` ; cible opposée : diagnostic une fois |
-| `External` | reste externe, dernière cible observée | ignoré | completion externe et libération de barrière | cible attendue : diagnostic et libération ; cible opposée : diagnostic une fois |
+| aucune / tombstone | arme `External` et efface la tombstone | sans objet | égal : ignoré ; différent : completion externe, état/événement avec `operationId = null` | diagnostic une fois, puis tombstone |
+| `PreparedLocal` | arme `External`, retourne `TemporarilyUnavailable`, sans selector | terminal externe : libère la barrière ; publie seulement si le state diffère, puis échec local `TemporarilyUnavailable` | même règle que sans barrière | diagnostic une fois ; la commande locale reste préparée |
+| `InvokingSelector` | cible locale : mémorise ; cible opposée : mémorise un conflit externe | mémorise FIFO le succès local ou la completion du conflit | impossible avec les deux cibles ; traité comme tombstone | cible locale : mémorise FIFO l'échec ; cible opposée : mémorise FIFO le diagnostic du conflit |
+| `AwaitingLocal` | cible locale : idempotent ; cible opposée : conflit externe | cible locale : succès local et libération ; cible de conflit : completion externe, libération et `unexpected-transition` local | impossible avec les deux cibles ; traité comme tombstone | cible locale : `enter-failed`/`exit-failed` et libération ; cible de conflit : diagnostic une fois et libération |
+| `External` | reste externe, dernière cible observée | completion externe et libération ; publication seulement si le state diffère | terminal d'une transition externe contradictoire : libère aussi ; publie seulement si le state diffère, puis diagnostic une fois | cible attendue : diagnostic et libération ; cible opposée : diagnostic une fois et libération |
 
 Un conflit externe après invocation locale termine la commande par
 `PlatformFailure(AppKit, "fullscreen", "unexpected-transition")`, mais publie
@@ -177,10 +190,15 @@ réentrant apparié, est la frontière de commit :
   fullscreen AppKit.
 
 Chaque peer conserve un `desiredLevel` interne. Il est initialisé par le
-`WindowSpec` effectif et ne change qu'après le readback autoritaire d'un
-`Set(level)` Kadre réussi. Une observation native, une failure committée ou un
-readback divergent ne l'écrase jamais ; `WindowState.level` reste, lui, toujours
-la valeur native effective.
+`WindowSpec` effectif. Un `Set(level)` dont le champ level réussit le met à jour
+après son readback autoritaire, y compris dans un `PartiallyApplied` où un autre
+champ est rejeté. Si la valeur demandée égale `WindowState.level` mais diffère
+de `desiredLevel`, c'est une acceptation d'intention seule : aucun setter,
+aucune révision ni événement, mais l'outcome `Applied` porte l'état inchangé et
+un nouvel `operationId`, et `desiredLevel` devient la valeur demandée. Une
+observation native, une failure committée, un rejet du champ level ou un readback
+divergent ne l'écrase jamais ; `WindowState.level` reste, lui, toujours la
+valeur native effective.
 
 Une notification `Did` locale appariée établit le mode fullscreen effectif.
 Avant toute publication, le port réapplique `desiredLevel` puis lit son niveau
@@ -312,14 +330,19 @@ capability active, ni evidence, ni gate.
 - `Will + Did + return` et `Will + Did + throw` réentrants, sans publication ni
   drainage avant le retour du selector ;
 - matrice `Did`/`DidFail` de chaque phase, callback opposé externe sans
-  `operationId`, terminal sans `Will`, tombstone et diagnostic au plus une fois ;
+  `operationId`, terminal sans `Will`, terminal corrélé égal au state,
+  tombstone et diagnostic au plus une fois ;
+- deux terminaux réentrants contradictoires (succès puis échec, et conflit puis
+  terminal local), avec premier terminal FIFO gagnant et aucun drainage avant le
+  retour du selector ;
 - intersections `Exclusive + barrière`, `Exclusive + OS indisponible` et
   `OS indisponible + barrière externe` ;
 - cancellation avant/après commit, failure exacte et diagnostic unique après
   détachement du waiter ;
 - `CommittedFailure`, état avant événement, level restauré, level différent
   lisible, level illisible, fermeture terminale, puis `desiredLevel` préservé
-  pour la transition locale et externe suivante ;
+  pour la transition locale et externe suivante, réalignement explicite de
+  `desiredLevel` sans setter et `PartiallyApplied` dont level a réussi ;
 - corrélation et policy discrète.
 
 Ses sentinelles couvrent l'absence de toggle avant commit, l'absence de double
