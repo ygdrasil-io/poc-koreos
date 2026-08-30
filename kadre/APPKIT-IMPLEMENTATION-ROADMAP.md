@@ -359,11 +359,17 @@ effectif, corrélation d'opération et policy de géométrie. `outerPosition`
 reste reportée à la phase 9 : les coordonnées physiques publiques exigent
 l'inventaire et le repère multi-écran réellement observables.
 
+La sous-tranche titre, définie par
+`APPKIT-PHASE-5-WINDOW-TITLE-DESIGN.md`, est achevée : AppKit prend en charge
+`title` avec le même pipeline corrélé, un readback effectif et la policy de
+livraison des événements de propriétés.
+
 La sous-tranche suivante, définie par
-`APPKIT-PHASE-5-WINDOW-TITLE-DESIGN.md`, réserve la mutation de `title` via le
-même pipeline corrélé. Elle est isolée du chrome AppKit : les sémantiques de
-`Borderless`, décorations et boutons système restent à spécifier avant leur
-activation.
+`APPKIT-PHASE-5-WINDOW-CHROME-DESIGN.md`, spécifie les décorations et boutons
+système. Elle fixe la canonisation de `Borderless`, les bits de style AppKit
+possédés par Kadre, le readback des boutons et la future activation des
+capabilities publiques. Les contrats `WIN-003` et `APK-008` restent réservés
+jusqu'à la dernière carte de la stack.
 
 #### Contenu
 
