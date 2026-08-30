@@ -51,7 +51,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     nativePort: AppKitNativeWindowPort,
     failureReporter: RuntimeFailureReporter,
     publicAppKitCapabilities: Boolean,
-    private val enabledWindowGeometryCapabilities: Set<WindowProperty>,
+    private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
     publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
@@ -61,7 +61,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         nativePort,
         failureReporter,
         beforeCommitDelivery,
-        enabledWindowGeometryCapabilities,
+        enabledWindowUpdateCapabilities,
         surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
         geometryStimulusSink = geometry@{ windowId, snapshot ->
             val state = manager.state.value.windows.firstOrNull { it.id == windowId }?.state?.value
@@ -80,7 +80,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         platform = KadrePlatform.AppKit,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
-        enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
+        enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )
@@ -100,7 +100,7 @@ private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
-    private val enabledWindowGeometryCapabilities: Set<WindowProperty>,
+    private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
     private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
     private val geometryStimulusSink: (WindowId, AppKitWindowGeometrySnapshot) -> Boolean,
     private val windowState: (WindowId) -> WindowState?,
@@ -322,7 +322,7 @@ private class AppKitWindowCommandPort(
                 beforeCommitDelivery(entry.command.spec)
                 entry.command.commit(
                     entry.owner,
-                    appKitEffectiveSpec(entry.command.spec, enabledWindowGeometryCapabilities),
+                    appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities),
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
                     commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
@@ -911,13 +911,13 @@ private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = 
 
 private fun appKitEffectiveSpec(
     requested: WindowSpec,
-    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+    enabledWindowUpdateCapabilities: Set<WindowProperty>,
 ): WindowSpec = requested.copy(
     minimumSize = requested.minimumSize.takeIf {
-        WindowProperty.MinimumSize in enabledWindowGeometryCapabilities
+        WindowProperty.MinimumSize in enabledWindowUpdateCapabilities
     },
     maximumSize = requested.maximumSize.takeIf {
-        WindowProperty.MaximumSize in enabledWindowGeometryCapabilities
+        WindowProperty.MaximumSize in enabledWindowUpdateCapabilities
     },
     outerPosition = null,
     fullscreen = FullscreenMode.Windowed,

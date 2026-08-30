@@ -90,6 +90,7 @@ import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowManager
 import org.graphiks.kadre.window.WindowPhase
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
@@ -404,7 +405,10 @@ class AppKitBackendProviderTest {
 
                 assertEquals(listOf(first, second), windows.state.value.windows)
                 assertSame(first, windows.state.value.primary)
-                assertIs<Capability.Unsupported>(first.capabilities.value.title)
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
+                    first.capabilities.value.title,
+                )
                 assertIs<Capability.Unsupported>(first.surface.capabilities.value.platformAccess)
 
                 first.close()
@@ -611,8 +615,11 @@ class AppKitBackendProviderTest {
                 assertFalse(window.state.value.contentProtection)
 
                 val windowCapabilities = window.capabilities.value
-                listOf<Capability<*>>(
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.title,
+                )
+                listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
                     windowCapabilities.fullscreen,
                     windowCapabilities.decorations,
@@ -1280,11 +1287,15 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesOnlyTheFiveProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
 
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.title,
+            )
             assertEquals(
                 Capability.Supported(range, FeatureAvailability.Available),
                 window.capabilities.value.contentSize,
@@ -1303,7 +1314,6 @@ class AppKitBackendProviderTest {
             )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
-                window.capabilities.value.title,
                 window.capabilities.value.outerPosition,
                 window.capabilities.value.fullscreen,
                 window.capabilities.value.decorations,
@@ -1315,6 +1325,69 @@ class AppKitBackendProviderTest {
                 window.capabilities.value.attention,
                 window.capabilities.value.contentProtection,
             ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowTitleUsesTheGeneratedBindingAndOneCorrelatedUpdateOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("public-title-before")
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
+                    window.capabilities.value.title,
+                )
+
+                val title = "public-title-after"
+                val contentSize = LogicalSize(420.0, 260.0)
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            title = PropertyChange.Set(title),
+                            contentSize = PropertyChange.Set(contentSize),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+
+                assertEquals(title, outcome.state.title)
+                assertEquals(contentSize, outcome.state.contentSize)
+                assertEquals(outcome.state, window.state.value)
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    window.withDesktopHandle { handle ->
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        ObjCRuntime.autoreleasePool {
+                            assertEquals(
+                                title,
+                                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                                    .titleAsString(),
+                            )
+                        }
+                    },
+                )
+
+                val geometry = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                val properties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(outcome.operationId, geometry.operationId)
+                assertEquals(outcome.operationId, properties.operationId)
+                assertEquals(outcome.state, geometry.state)
+                assertEquals(outcome.state, properties.state)
+                assertEquals(setOf(WindowProperty.Title), properties.changed)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
         }
 
     @OptIn(

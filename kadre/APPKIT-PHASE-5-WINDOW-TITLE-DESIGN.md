@@ -50,16 +50,15 @@ Le runtime est l'autorité de `WindowState`, des révisions, de la policy de
 livraison et des outcomes. Le peer conserve seulement les owners natifs et les
 snapshots privés de commande. Il ne possède jamais un second état public.
 
-Le set interne actuel `enabledWindowGeometryCapabilities` autorise les champs
+Le set interne `enabledWindowUpdateCapabilities` autorise les champs
 que le runtime peut router : il est toujours complété par les quatre propriétés
 de géométrie déjà actives et il peut inclure `WindowProperty.Title` dans les
 preuves O2. La capability `title` est toutefois annoncée seulement lorsque
 `publicWindowCapabilities` est actif *et* que le set contient `Title`. Les
 preuves privées gardent donc `publicWindowCapabilities = false` : elles
-exercent le transport sans publier une capability. La carte d'activation
-renomme ce set en `enabledWindowUpdateCapabilities` et passe `Title` depuis le
-backend AppKit public. Cette double condition interdit qu'une preuve interne
-transforme prématurément une fenêtre publique en faux succès.
+exercent le transport sans publier une capability. Le backend AppKit public
+passe `Title` dans ce set. Cette double condition interdit qu'une preuve
+interne transforme prématurément une fenêtre publique en faux succès.
 
 ## Sémantique de WindowUpdate
 
@@ -128,23 +127,21 @@ barrière discrète scelle un agrégat de géométrie antérieur.
 
 ## Capabilities
 
-À l'activation publique, `WindowCapabilities.title` devient
+Avec l'activation publique, `WindowCapabilities.title` devient
 `Capability.Supported(Unit, FeatureAvailability.Available)` pour une fenêtre
 AppKit ouverte. Les quatre capabilities de géométrie restent actives et
 inchangées. Toutes les autres capabilities de mutation restent
 `Unsupported(UpdateWindow)`.
 
-Avant l'activation finale, les capacités publiques ne changent pas. Les étapes
-runtime et AppKit privées exercent le pipeline et les preuves sans annoncer une
-capability que la session publique ne peut pas encore honorer.
+Les drivers privés peuvent toujours exercer le pipeline sans annoncer la
+capability, car `publicWindowCapabilities` reste à `false` dans leurs preuves.
 
 ## Preuves et contrats
 
-`WIN-002` est réservé comme contrat O2 `planned` pour le pipeline runtime de
-titre, et `APK-007` comme contrat O3 `planned` pour son activation AppKit. Ils
-deviennent `active` dans la même PR que `WindowCapabilities.title`, les
-mappings d'evidence et les gates CI. Aucun contrat actif ne peut précéder ses
-preuves exécutables.
+`WIN-002` est le contrat O2 actif du pipeline runtime de titre et `APK-007`
+son contrat O3 d'activation AppKit. Ils sont activés avec
+`WindowCapabilities.title`, les mappings d'evidence et les gates CI. Aucun
+contrat actif ne précède ses preuves exécutables.
 
 `WIN-002` couvre :
 
@@ -184,11 +181,11 @@ déterministe sans phénomène visuel ou matériel inaccessible à ces oracles.
 
 ## Découpage de la stack
 
-1. Cette PR ajoute ce design, réserve `WIN-002` et `APK-007` au registre, et
-   inscrit la sous-tranche dans la roadmap.
+1. La première PR ajoute ce design, réserve `WIN-002` et `APK-007` au registre,
+   et inscrit la sous-tranche dans la roadmap.
 2. La PR fille généralise le runtime à une mutation titre + géométrie et ajoute
    les preuves O2, sans activer `WindowCapabilities.title`.
 3. La PR suivante raccorde le peer, le port déterministe et
    `KffiAppKitWindowPort` au readback de mutation, avec les preuves O3 privées.
-4. La dernière PR active les deux contrats, la capability publique, les
+4. Cette dernière PR active les deux contrats, la capability publique, les
    mappings d'evidence et la gate AppKit dans une même modification.

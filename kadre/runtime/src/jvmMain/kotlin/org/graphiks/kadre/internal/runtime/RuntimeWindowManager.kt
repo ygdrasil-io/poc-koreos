@@ -85,7 +85,7 @@ public class RuntimeWindowManager public constructor(
     private val platform: KadrePlatform,
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
-    private val enabledWindowGeometryCapabilities: Set<WindowProperty> = emptySet(),
+    private val enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
@@ -944,7 +944,7 @@ public class RuntimeWindowManager public constructor(
             surface = surface,
             manager = this,
             publicWindowCapabilities = publicWindowCapabilities,
-            enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
+            enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
             deliveryPolicy = windowDeliveryPolicy,
             eventStampSource = ::nextEventStamp,
@@ -1217,7 +1217,7 @@ internal class RuntimeWindow(
     override val surface: RuntimeWindowSurface,
     private val manager: RuntimeWindowManager,
     publicWindowCapabilities: Boolean,
-    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+    enabledWindowUpdateCapabilities: Set<WindowProperty>,
     eventCollectorGate: RuntimeEventCollectorGate,
     deliveryPolicy: WindowDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
@@ -1227,10 +1227,10 @@ internal class RuntimeWindow(
     private val initialState = initialWindowState(spec)
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(
-        windowCapabilities(publicWindowCapabilities, enabledWindowGeometryCapabilities),
+        windowCapabilities(publicWindowCapabilities, enabledWindowUpdateCapabilities),
     )
     private val supportedWindowUpdateProperties =
-        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + enabledWindowGeometryCapabilities
+        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + enabledWindowUpdateCapabilities
     private val eventFlow = RuntimeWindowEventFlow(
         policy = deliveryPolicy,
         eventCollectorGate = eventCollectorGate,
@@ -1685,27 +1685,27 @@ private fun initialWindowState(spec: WindowSpec): WindowState = WindowState(
 
 private fun windowCapabilities(
     publicWindowCapabilities: Boolean,
-    enabledWindowGeometryCapabilities: Set<WindowProperty>,
+    enabledWindowUpdateCapabilities: Set<WindowProperty>,
 ): WindowCapabilities = WindowCapabilities(
     title = if (publicWindowCapabilities) {
-        enabledWindowGeometryCapabilities.capability(WindowProperty.Title, Unit)
+        enabledWindowUpdateCapabilities.capability(WindowProperty.Title, Unit)
     } else {
         unsupported(KadreOperation.UpdateWindow)
     },
     outerPosition = unsupported(KadreOperation.UpdateWindow),
-    contentSize = enabledWindowGeometryCapabilities.capability(
+    contentSize = enabledWindowUpdateCapabilities.capability(
         WindowProperty.ContentSize,
         LogicalSizeRange(null, null, null),
     ),
-    minimumSize = enabledWindowGeometryCapabilities.capability(
+    minimumSize = enabledWindowUpdateCapabilities.capability(
         WindowProperty.MinimumSize,
         LogicalSizeRange(null, null, null),
     ),
-    maximumSize = enabledWindowGeometryCapabilities.capability(
+    maximumSize = enabledWindowUpdateCapabilities.capability(
         WindowProperty.MaximumSize,
         LogicalSizeRange(null, null, null),
     ),
-    resizable = enabledWindowGeometryCapabilities.capability(WindowProperty.Resizable, Unit),
+    resizable = enabledWindowUpdateCapabilities.capability(WindowProperty.Resizable, Unit),
     fullscreen = unsupported(KadreOperation.UpdateWindow),
     decorations = unsupported(KadreOperation.UpdateWindow),
     systemButtons = unsupported(KadreOperation.UpdateWindow),

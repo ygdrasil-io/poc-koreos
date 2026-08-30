@@ -114,7 +114,7 @@ class AppKitWindowRuntimeDriverTest {
         val port = DeterministicAppKitNativeWindowPort(name = "title-readback")
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             resources = KadrePolicies.Default.resources,
-            enabledWindowGeometryCapabilities = setOf(WindowProperty.Title),
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
         )
 
         try {
@@ -130,6 +130,79 @@ class AppKitWindowRuntimeDriverTest {
 
             assertEquals("requested", outcome.state.title)
             assertEquals("requested", window.state.value.title)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun cancellationWhileOwnerThreadWaitsBeforeFirstTitleSetterWithdrawsTheUpdate() = runBlocking {
+        val beforeFirstSetter = CountDownLatch(1)
+        val allowFirstSetter = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "title-pre-setter-cancellation",
+            beforeGeometrySetter = {
+                beforeFirstSetter.countDown()
+                check(allowFirstSetter.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "before-cancellation"))
+                    .successValue()
+                    .await(),
+            ).window
+            val before = window.state.value
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("must-not-commit")))
+            }
+            assertTrue(beforeFirstSetter.await(2, TimeUnit.SECONDS))
+
+            update.cancel()
+            update.join()
+            allowFirstSetter.countDown()
+
+            assertTrue(update.isCancelled)
+            assertEquals(before, window.state.value)
+        } finally {
+            allowFirstSetter.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun titleUpdatesRemainPeerLocalAfterTheNativeTitleChanges() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "title-peer-isolation")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
+        )
+
+        try {
+            val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "first"))
+                    .successValue()
+                    .await(),
+            ).window
+            val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "second"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                first.apply(WindowUpdate(title = PropertyChange.Set("first-updated"))).successValue(),
+            )
+
+            assertEquals("first-updated", outcome.state.title)
+            assertEquals("first-updated", first.state.value.title)
+            assertEquals("second", second.state.value.title)
+            assertEquals(1, port.mutationTargets.size)
         } finally {
             driver.close()
         }

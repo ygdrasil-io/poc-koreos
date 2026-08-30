@@ -237,7 +237,7 @@ public class AppKitBackendProvider private constructor(
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
-            enabledWindowGeometryCapabilities = APPKIT_PUBLIC_WINDOW_GEOMETRY_CAPABILITIES,
+            enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES,
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
         )
@@ -245,7 +245,8 @@ public class AppKitBackendProvider private constructor(
     }
 }
 
-private val APPKIT_PUBLIC_WINDOW_GEOMETRY_CAPABILITIES: Set<WindowProperty> = setOf(
+private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setOf(
+    WindowProperty.Title,
     WindowProperty.ContentSize,
     WindowProperty.MinimumSize,
     WindowProperty.MaximumSize,
