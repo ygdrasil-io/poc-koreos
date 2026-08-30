@@ -19,6 +19,7 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowSpec
 
@@ -136,6 +137,11 @@ internal data class AppKitWindowChromeTarget(
     val systemButtons: PropertyChange<WindowSystemButtons>,
 )
 
+/** Private, native-address-free window level request forwarded from the runtime command. */
+internal data class AppKitWindowLevelTarget(
+    val level: PropertyChange<WindowLevel>,
+)
+
 /** Private, native-address-free window request forwarded from the runtime command. */
 internal data class AppKitWindowMutationTarget(
     val title: PropertyChange<String>,
@@ -144,6 +150,7 @@ internal data class AppKitWindowMutationTarget(
         decorations = PropertyChange.Unchanged,
         systemButtons = PropertyChange.Unchanged,
     ),
+    val level: AppKitWindowLevelTarget = AppKitWindowLevelTarget(PropertyChange.Unchanged),
 )
 
 /** Native values read together after AppKit has applied a geometry mutation or observation. */
@@ -168,6 +175,7 @@ internal data class AppKitWindowMutationSnapshot(
         decorations = WindowDecorations.System,
         systemButtons = WindowSystemButtons.All,
     ),
+    val level: WindowLevel = WindowLevel.Normal,
 )
 
 /** Callback boundary for native-address-free geometry observations. */

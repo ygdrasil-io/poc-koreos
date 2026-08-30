@@ -34,6 +34,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
@@ -132,6 +133,60 @@ class AppKitWindowRuntimeDriverTest {
 
             assertEquals("requested", outcome.state.title)
             assertEquals("requested", window.state.value.title)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun peerForwardsWindowLevelUpdatesAndReturnsTheEffectiveNativeReadback() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "level-readback",
+            effectiveLevel = WindowLevel.Modal,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "level-readback"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating))).successValue(),
+            )
+
+            assertEquals(WindowLevel.Modal, outcome.state.level)
+            assertEquals(WindowLevel.Modal, window.state.value.level)
+            assertEquals(
+                AppKitWindowLevelTarget(PropertyChange.Set(WindowLevel.Floating)),
+                port.mutationTargets.single().level,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun initialWindowLevelIsForwardedOnlyWhenThePrivateCapabilityIsEnabled() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "initial-level")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+        )
+
+        try {
+            assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(
+                    WindowSpec(title = "initial-level", level = WindowLevel.Floating),
+                ).successValue().await(),
+            )
+
+            assertEquals(listOf(WindowLevel.Floating), port.createdWindowLevels)
         } finally {
             driver.close()
         }
@@ -1152,6 +1207,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val emitGeometryDuringUpdate: Boolean = false,
     private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
+    private val effectiveLevel: WindowLevel? = null,
     private val beforeGeometrySetter: () -> Unit = { },
     private val geometryFailureAfterContentSize: Throwable? = null,
 ) : AppKitNativeWindowPort {
@@ -1166,6 +1222,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val requestedSurfaceRedrawGenerations = CopyOnWriteArrayList<Long>()
     val geometryTargets = CopyOnWriteArrayList<AppKitWindowGeometryTarget>()
     val mutationTargets = CopyOnWriteArrayList<AppKitWindowMutationTarget>()
+    val createdWindowLevels = CopyOnWriteArrayList<WindowLevel>()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
 
     override fun isMainThread(): Boolean = true
@@ -1193,10 +1250,12 @@ internal class DeterministicAppKitNativeWindowPort(
                 decorations = spec.decorations,
                 systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
             ),
+            level = spec.level,
             styleMask = initialStyleMask ?: deterministicStyleMask(spec),
         ).also { window ->
             check(windows.put(spec.title, window) == null) { "$name duplicate test window title" }
             createdWindowTitles += spec.title
+            createdWindowLevels += spec.level
         }
     }
 
@@ -1272,12 +1331,15 @@ internal class DeterministicAppKitNativeWindowPort(
                 recording.geometry.resizable,
             )
         }
-        return AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome)
+        if (target.level.level !is PropertyChange.Unchanged) {
+            recording.level = effectiveLevel ?: target.level.level.resolve(recording.level)
+        }
+        return AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome, recording.level)
     }
 
     override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
         window.recordingWindow().let { recording ->
-            AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome)
+            AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome, recording.level)
         }
 
     override fun observeGeometry(
@@ -1392,6 +1454,7 @@ internal class DeterministicAppKitNativeWindowPort(
         var title: String,
         val initialGeometry: AppKitWindowGeometrySnapshot,
         var chrome: AppKitWindowChromeSnapshot,
+        var level: WindowLevel,
         var styleMask: Long,
     ) : AppKitNativeWindowOwner {
         val nativeClosed = AtomicBoolean(false)

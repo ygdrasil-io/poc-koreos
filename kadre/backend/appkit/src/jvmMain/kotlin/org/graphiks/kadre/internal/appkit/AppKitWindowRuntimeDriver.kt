@@ -924,7 +924,8 @@ private fun appKitEffectiveSpec(
     },
     outerPosition = null,
     fullscreen = FullscreenMode.Windowed,
-    level = WindowLevel.Normal,
+    level = requested.level.takeIf { WindowProperty.Level in enabledWindowUpdateCapabilities }
+        ?: WindowLevel.Normal,
     transparent = false,
     blurBehind = false,
     icon = null,
@@ -949,6 +950,7 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
         decorations = update.decorations,
         systemButtons = update.systemButtons,
     ),
+    level = AppKitWindowLevelTarget(update.level),
 )
 
 private fun WindowUpdateCommand.rejectedMutationFields(
@@ -1008,6 +1010,13 @@ private fun WindowUpdateCommand.rejectedMutationFields(
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.SystemButtons, failure))
         PropertyChange.Unchanged -> Unit
     }
+    when (val change = update.level) {
+        is PropertyChange.Set -> if (snapshot.level != change.value) {
+            add(RejectedWindowField(WindowProperty.Level, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Level, failure))
+        PropertyChange.Unchanged -> Unit
+    }
 }
 
 private fun AppKitWindowMutationSnapshot.withMutationFrom(
@@ -1020,6 +1029,7 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
     resizable = geometry.resizable,
     decorations = chrome.decorations,
     systemButtons = chrome.systemButtons,
+    level = level,
     revision = current.revision,
 )
 
