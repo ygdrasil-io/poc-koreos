@@ -44,6 +44,7 @@ import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
 import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
@@ -146,13 +147,30 @@ class KffiAppKitWindowPortMacOsTest {
                 return true
             }
         }
+        val deferredExitSelector = "kadreRunDeferredFullscreenExit:"
+        val deferredExit = ObjCManagedClass.registerOnce(
+            methods = mapOf(deferredExitSelector to ObjCMethodSignatures.VoidObject),
+        ).createInstance {
+            onVoidObject(deferredExitSelector) {
+                try {
+                    val activePeer = checkNotNull(peer.get())
+                    readbackLevels += activePeer.completeFullscreen(WindowLevel.Floating).level
+                    activePeer.toggleFullscreen(AppKitWindowFullscreenTarget(FullscreenMode.Windowed), commit)
+                } catch (failure: Throwable) {
+                    starterFailure.compareAndSet(null, failure)
+                    nativeApplication.requestStop()
+                }
+            }
+        }
         val callback: (AppKitWindowStimulus) -> Unit = { stimulus ->
             stimuli += stimulus
             when ((stimulus as? AppKitWindowStimulus.FullscreenCallback)?.callback) {
                 AppKitFullscreenCallback.DidEnter -> {
-                    val activePeer = checkNotNull(peer.get())
-                    readbackLevels += activePeer.completeFullscreen(WindowLevel.Floating).level
-                    activePeer.toggleFullscreen(AppKitWindowFullscreenTarget(FullscreenMode.Windowed), commit)
+                    deferredExit.receiver.performSelectorOnMainThread_withObject_waitUntilDone(
+                        ObjCRuntime.sel(deferredExitSelector),
+                        MemorySegment.NULL,
+                        false,
+                    )
                 }
                 AppKitFullscreenCallback.DidExit -> {
                     readbackLevels += checkNotNull(peer.get()).completeFullscreen(WindowLevel.Floating).level
@@ -223,6 +241,7 @@ class KffiAppKitWindowPortMacOsTest {
             watchdog.interrupt()
             watchdog.join(1_000L)
             starter.join(1_000L)
+            deferredExit.close()
             peer.get()?.close()
         }
     }
