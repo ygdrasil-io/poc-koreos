@@ -31,11 +31,13 @@ import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.surface.SurfaceId
 import java.util.concurrent.CountDownLatch
@@ -289,10 +291,11 @@ private class AppKitWindowCommandPort(
             return
         }
 
+        val effectiveSpec = appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities)
         val peer = try {
             AppKitWindowPeer.prepare(
                 id = entry.peerId,
-                spec = entry.command.spec,
+                spec = effectiveSpec,
                 port = nativePort,
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
@@ -319,10 +322,10 @@ private class AppKitWindowCommandPort(
         }
         when (action) {
             PreparationAction.Commit -> {
-                beforeCommitDelivery(entry.command.spec)
+                beforeCommitDelivery(effectiveSpec)
                 entry.command.commit(
                     entry.owner,
-                    appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities),
+                    effectiveSpec,
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
                     commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
@@ -926,7 +929,13 @@ private fun appKitEffectiveSpec(
     blurBehind = false,
     icon = null,
     contentProtection = false,
-)
+).let { effective ->
+    if (effective.decorations == WindowDecorations.Borderless) {
+        effective.copy(systemButtons = WindowSystemButtons.None)
+    } else {
+        effective
+    }
+}
 
 private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget = AppKitWindowMutationTarget(
     title = update.title,
@@ -935,6 +944,10 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
         minimumSize = update.minimumSize,
         maximumSize = update.maximumSize,
         resizable = update.resizable,
+    ),
+    chrome = AppKitWindowChromeTarget(
+        decorations = update.decorations,
+        systemButtons = update.systemButtons,
     ),
 )
 
@@ -981,6 +994,20 @@ private fun WindowUpdateCommand.rejectedMutationFields(
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Resizable, failure))
         PropertyChange.Unchanged -> Unit
     }
+    when (val change = update.decorations) {
+        is PropertyChange.Set -> if (snapshot.chrome.decorations != change.value) {
+            add(RejectedWindowField(WindowProperty.Decorations, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Decorations, failure))
+        PropertyChange.Unchanged -> Unit
+    }
+    when (val change = update.systemButtons) {
+        is PropertyChange.Set -> if (snapshot.chrome.systemButtons != change.value) {
+            add(RejectedWindowField(WindowProperty.SystemButtons, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.SystemButtons, failure))
+        PropertyChange.Unchanged -> Unit
+    }
 }
 
 private fun AppKitWindowMutationSnapshot.withMutationFrom(
@@ -991,6 +1018,8 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
     minimumSize = geometry.minimumSize,
     maximumSize = geometry.maximumSize,
     resizable = geometry.resizable,
+    decorations = chrome.decorations,
+    systemButtons = chrome.systemButtons,
     revision = current.revision,
 )
 

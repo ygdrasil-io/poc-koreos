@@ -16,10 +16,13 @@ import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
@@ -30,6 +33,7 @@ import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
@@ -120,6 +124,172 @@ class KffiAppKitWindowPortMacOsTest {
                 KadreResult.Success("after"),
                 peer.withDesktopHandle(admitCallback = { true }) { handle ->
                     NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).titleAsString()
+                },
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
+    fun generatedKffiWindowAppliesAndReadsBackSystemChromeOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(87L),
+            spec = WindowSpec(
+                title = "chrome",
+                decorations = WindowDecorations.System,
+                systemButtons = WindowSystemButtons.None,
+                resizable = true,
+            ),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.System, WindowSystemButtons.None),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                        ),
+                    ),
+                ).chrome,
+            )
+            val unrelatedStyleBits = assertIs<KadreResult.Success<NativeWindowChrome>>(
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
+                },
+            ).value.unownedStyleBits
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowChrome(
+                        decorations = WindowDecorations.System,
+                        closeHidden = true,
+                        miniaturizeHidden = true,
+                        zoomHidden = true,
+                        unownedStyleBits = unrelatedStyleBits,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
+                },
+            )
+
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.Borderless, WindowSystemButtons.None),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            chrome = AppKitWindowChromeTarget(
+                                decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                                systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                            ),
+                        ),
+                    ),
+                ).chrome,
+            )
+            assertEquals(
+                KadreResult.Success(unrelatedStyleBits),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                        .styleMask()
+                        .rawValue and GENERATED_OWNED_CHROME_STYLE_MASK.inv()
+                },
+            )
+
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.System, WindowSystemButtons.CloseOnly),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            chrome = AppKitWindowChromeTarget(
+                                decorations = PropertyChange.Set(WindowDecorations.System),
+                                systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                            ),
+                        ),
+                    ),
+                ).chrome,
+            )
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowChrome(
+                        decorations = WindowDecorations.System,
+                        closeHidden = false,
+                        miniaturizeHidden = true,
+                        zoomHidden = true,
+                        unownedStyleBits = unrelatedStyleBits,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
+                },
+            )
+
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.System, WindowSystemButtons.All),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            chrome = AppKitWindowChromeTarget(
+                                decorations = PropertyChange.Unchanged,
+                                systemButtons = PropertyChange.Set(WindowSystemButtons.All),
+                            ),
+                        ),
+                    ),
+                ).chrome,
+            )
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowChrome(
+                        decorations = WindowDecorations.System,
+                        closeHidden = false,
+                        miniaturizeHidden = false,
+                        zoomHidden = false,
+                        unownedStyleBits = unrelatedStyleBits,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
+                },
+            )
+
+            val notResizable = checkNotNull(
+                peer.updateWindow(
+                    AppKitWindowMutationTarget(
+                        title = PropertyChange.Unchanged,
+                        geometry = AppKitWindowGeometryTarget(
+                            contentSize = PropertyChange.Unchanged,
+                            minimumSize = PropertyChange.Unchanged,
+                            maximumSize = PropertyChange.Unchanged,
+                            resizable = PropertyChange.Set(false),
+                        ),
+                    ),
+                ),
+            )
+            assertEquals(false, notResizable.geometry.resizable)
+            assertEquals(AppKitWindowChromeSnapshot(WindowDecorations.System, WindowSystemButtons.All), notResizable.chrome)
+            assertEquals(
+                KadreResult.Success(
+                    NativeWindowChrome(
+                        decorations = WindowDecorations.System,
+                        closeHidden = false,
+                        miniaturizeHidden = false,
+                        zoomHidden = true,
+                        unownedStyleBits = unrelatedStyleBits,
+                    ),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
                 },
             )
         } finally {
@@ -977,6 +1147,41 @@ private class CountingWindowOwner : AppKitNativeWindowOwner {
 
 private fun RuntimeDesktopNativeWindowHandle.appKitWindowAddress(): Long =
     assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(this).nsWindowAddress.toLong()
+
+private fun unchangedGeometryTarget(): AppKitWindowGeometryTarget = AppKitWindowGeometryTarget(
+    contentSize = PropertyChange.Unchanged,
+    minimumSize = PropertyChange.Unchanged,
+    maximumSize = PropertyChange.Unchanged,
+    resizable = PropertyChange.Unchanged,
+)
+
+private data class NativeWindowChrome(
+    val decorations: WindowDecorations,
+    val closeHidden: Boolean,
+    val miniaturizeHidden: Boolean,
+    val zoomHidden: Boolean,
+    val unownedStyleBits: Long,
+)
+
+private fun NSWindow.readGeneratedNativeChrome(): NativeWindowChrome {
+    val style = styleMask()
+    check(style.contains(NSWindowStyleMask.NSWindowStyleMaskTitled)) {
+        "this helper reads standard buttons only from a system-decorated window"
+    }
+    return NativeWindowChrome(
+        decorations = WindowDecorations.System,
+        closeHidden = NSButton(standardWindowButton(NSWindowButton.NSWindowCloseButton)).isHidden(),
+        miniaturizeHidden = NSButton(standardWindowButton(NSWindowButton.NSWindowMiniaturizeButton)).isHidden(),
+        zoomHidden = NSButton(standardWindowButton(NSWindowButton.NSWindowZoomButton)).isHidden(),
+        unownedStyleBits = style.rawValue and GENERATED_OWNED_CHROME_STYLE_MASK.inv(),
+    )
+}
+
+private val GENERATED_OWNED_CHROME_STYLE_MASK: Long =
+    NSWindowStyleMask.NSWindowStyleMaskTitled.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskClosable.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskMiniaturizable.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue
 
 private data class NativeWindowGeometry(
     val contentWidth: Double,

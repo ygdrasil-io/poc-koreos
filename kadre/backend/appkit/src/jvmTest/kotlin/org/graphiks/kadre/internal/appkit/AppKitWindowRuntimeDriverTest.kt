@@ -33,11 +33,13 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowCloseOutcome
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.util.concurrent.CountDownLatch
@@ -130,6 +132,121 @@ class AppKitWindowRuntimeDriverTest {
 
             assertEquals("requested", outcome.state.title)
             assertEquals("requested", window.state.value.title)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun peerForwardsCanonicalChromeUpdatesAndReadsBackTheEffectiveSnapshot() = runBlocking {
+        val title = "chrome-readback"
+        val unrelatedBits = 0b1_0000_0000L
+        val port = DeterministicAppKitNativeWindowPort(
+            name = title,
+            initialStyleMask = unrelatedBits or APPKIT_RESIZABLE_STYLE_MASK,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = chromeUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = title)).successValue().await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(
+                    WindowUpdate(
+                        decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                        systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                    ),
+                ).successValue(),
+            )
+
+            assertEquals(WindowDecorations.Borderless, outcome.state.decorations)
+            assertEquals(WindowSystemButtons.None, outcome.state.systemButtons)
+            assertEquals(
+                AppKitWindowChromeTarget(
+                    decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.None),
+                ),
+                port.mutationTargets.single().chrome,
+            )
+            assertEquals(
+                unrelatedBits or APPKIT_RESIZABLE_STYLE_MASK,
+                port.styleMask(title),
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun cancellationBeforeTheFirstChromeSetterLeavesThePeerUntouched() = runBlocking {
+        val beforeFirstSetter = CountDownLatch(1)
+        val allowFirstSetter = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "chrome-pre-setter-cancellation",
+            beforeGeometrySetter = {
+                beforeFirstSetter.countDown()
+                check(allowFirstSetter.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = chromeUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "chrome-pre-setter-cancellation"))
+                    .successValue()
+                    .await(),
+            ).window
+            val before = window.state.value
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(decorations = PropertyChange.Set(WindowDecorations.Borderless)))
+            }
+            assertTrue(beforeFirstSetter.await(2, TimeUnit.SECONDS))
+
+            update.cancel()
+            update.join()
+            allowFirstSetter.countDown()
+
+            assertTrue(update.isCancelled)
+            assertEquals(before, window.state.value)
+            assertEquals(WindowDecorations.System, port.chrome("chrome-pre-setter-cancellation").decorations)
+            assertEquals(WindowSystemButtons.All, port.chrome("chrome-pre-setter-cancellation").systemButtons)
+        } finally {
+            allowFirstSetter.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun initialBorderlessChromeIsCanonicalizedBeforeThePeerIsCreated() = runBlocking {
+        val title = "initial-borderless-chrome"
+        val port = DeterministicAppKitNativeWindowPort(name = title)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(
+                    WindowSpec(
+                        title = title,
+                        decorations = WindowDecorations.Borderless,
+                        systemButtons = WindowSystemButtons.CloseOnly,
+                    ),
+                ).successValue().await(),
+            ).window
+
+            assertEquals(WindowDecorations.Borderless, window.state.value.decorations)
+            assertEquals(WindowSystemButtons.None, window.state.value.systemButtons)
+            assertEquals(
+                AppKitWindowChromeSnapshot(WindowDecorations.Borderless, WindowSystemButtons.None),
+                port.chrome(title),
+            )
         } finally {
             driver.close()
         }
@@ -1030,7 +1147,11 @@ internal class DeterministicAppKitNativeWindowPort(
                 maximumSize = spec.maximumSize,
                 resizable = spec.resizable,
             ),
-            styleMask = initialStyleMask ?: if (spec.resizable) APPKIT_RESIZABLE_STYLE_MASK else 0L,
+            chrome = AppKitWindowChromeSnapshot(
+                decorations = spec.decorations,
+                systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
+            ),
+            styleMask = initialStyleMask ?: deterministicStyleMask(spec),
         ).also { window ->
             check(windows.put(spec.title, window) == null) { "$name duplicate test window title" }
             createdWindowTitles += spec.title
@@ -1102,12 +1223,19 @@ internal class DeterministicAppKitNativeWindowPort(
             if (emitGeometryDuringUpdate) geometryObservers[recording.identity]?.emit(effective)
             reentrantGeometryDuringUpdate?.let { geometryObservers[recording.identity]?.emit(it) }
         }
-        return AppKitWindowMutationSnapshot(recording.title, recording.geometry)
+        if (target.chrome.hasChange()) {
+            recording.chrome = recording.chrome.updateFor(target.chrome).canonical()
+            recording.styleMask = recording.styleMask.withChrome(
+                recording.chrome,
+                recording.geometry.resizable,
+            )
+        }
+        return AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome)
     }
 
     override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
         window.recordingWindow().let { recording ->
-            AppKitWindowMutationSnapshot(recording.title, recording.geometry)
+            AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome)
         }
 
     override fun observeGeometry(
@@ -1188,6 +1316,8 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun styleMask(title: String): Long = checkNotNull(windows[title]).styleMask
 
+    fun chrome(title: String): AppKitWindowChromeSnapshot = checkNotNull(windows[title]).chrome
+
     fun emitSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
         checkNotNull(surfaceObservers[title]).emitMetrics(metrics)
     }
@@ -1219,6 +1349,7 @@ internal class DeterministicAppKitNativeWindowPort(
         val identity: String,
         var title: String,
         val initialGeometry: AppKitWindowGeometrySnapshot,
+        var chrome: AppKitWindowChromeSnapshot,
         var styleMask: Long,
     ) : AppKitNativeWindowOwner {
         val nativeClosed = AtomicBoolean(false)
@@ -1359,6 +1490,24 @@ private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
         maximumSize !is PropertyChange.Unchanged ||
         resizable !is PropertyChange.Unchanged
 
+private fun AppKitWindowChromeTarget.hasChange(): Boolean =
+    decorations !is PropertyChange.Unchanged || systemButtons !is PropertyChange.Unchanged
+
+private fun AppKitWindowChromeSnapshot.updateFor(
+    target: AppKitWindowChromeTarget,
+): AppKitWindowChromeSnapshot = copy(
+    decorations = target.decorations.resolve(decorations),
+    systemButtons = target.systemButtons.resolve(systemButtons),
+)
+
+private fun AppKitWindowChromeSnapshot.canonical(): AppKitWindowChromeSnapshot = if (
+    decorations == WindowDecorations.Borderless
+) {
+    copy(systemButtons = WindowSystemButtons.None)
+} else {
+    this
+}
+
 private fun <T> PropertyChange<T>.resolve(current: T): T = when (this) {
     is PropertyChange.Set -> value
     PropertyChange.Clear,
@@ -1367,6 +1516,59 @@ private fun <T> PropertyChange<T>.resolve(current: T): T = when (this) {
 }
 
 private const val APPKIT_RESIZABLE_STYLE_MASK: Long = 1L shl 3
+private const val APPKIT_TITLED_STYLE_MASK: Long = 1L shl 4
+private const val APPKIT_CLOSABLE_STYLE_MASK: Long = 1L shl 5
+private const val APPKIT_MINIATURIZABLE_STYLE_MASK: Long = 1L shl 6
+private const val APPKIT_OWNED_CHROME_STYLE_MASK: Long =
+    APPKIT_RESIZABLE_STYLE_MASK or
+        APPKIT_TITLED_STYLE_MASK or
+        APPKIT_CLOSABLE_STYLE_MASK or
+        APPKIT_MINIATURIZABLE_STYLE_MASK
+
+private fun deterministicStyleMask(spec: WindowSpec): Long =
+    0L.withChrome(
+        AppKitWindowChromeSnapshot(
+            decorations = spec.decorations,
+            systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
+        ),
+        spec.resizable,
+    )
+
+private fun Long.withChrome(
+    chrome: AppKitWindowChromeSnapshot,
+    resizable: Boolean,
+): Long {
+    var owned = if (resizable) APPKIT_RESIZABLE_STYLE_MASK else 0L
+    if (chrome.decorations == WindowDecorations.System) {
+        owned = owned or APPKIT_TITLED_STYLE_MASK
+        when (chrome.systemButtons) {
+            WindowSystemButtons.All -> {
+                owned = owned or APPKIT_CLOSABLE_STYLE_MASK or APPKIT_MINIATURIZABLE_STYLE_MASK
+            }
+            WindowSystemButtons.CloseOnly -> owned = owned or APPKIT_CLOSABLE_STYLE_MASK
+            WindowSystemButtons.None -> Unit
+        }
+    }
+    return this and APPKIT_OWNED_CHROME_STYLE_MASK.inv() or owned
+}
+
+private fun WindowSystemButtons.canonicalFor(
+    decorations: WindowDecorations,
+): WindowSystemButtons = if (decorations == WindowDecorations.Borderless) {
+    WindowSystemButtons.None
+} else {
+    this
+}
+
+private fun chromeUpdateProperties(): Set<WindowProperty> =
+    setOf(
+        WindowProperty.ContentSize,
+        WindowProperty.MinimumSize,
+        WindowProperty.MaximumSize,
+        WindowProperty.Resizable,
+        WindowProperty.Decorations,
+        WindowProperty.SystemButtons,
+    )
 
 internal class OwnerThreadAppKitNativeWindowPort(
     name: String,
