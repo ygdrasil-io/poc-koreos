@@ -181,7 +181,7 @@ Une session standalone commence `Background + Inactive` tant qu'elle reste headl
 
 ### 6.2 Embedded
 
-**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. `APK-003` active les fenêtres fondamentales dans les sessions AppKit standalone et embedded. Son gate O3 traverse l'API publique jusqu'à une vraie `NSWindow`/`NSView` KFFI, y compris le handle borné et l'interception Reject puis Accept. Les propriétés de fenêtre, les surfaces riches et l'input restent explicitement `Unsupported` jusqu’aux phases correspondantes de la roadmap.
+**État actuel :** `APK-002` est actif pour l’attach, le lifecycle et le teardown embedded. `APK-003` active les fenêtres fondamentales dans les sessions AppKit standalone et embedded. `APK-004` active les snapshots de surface observables et `requestRedraw()` coalescé. Le gate O3 traverse l'API publique jusqu'à une vraie `NSWindow`/`NSView` KFFI, y compris resize, visibilité/focus, redraw, handle borné et interception Reject puis Accept. Les transitions matérielles de backing scale et d'occlusion restent au gate manuel versionné ; leur observation native et leur routage demeurent prouvés sous la frontière O3 publique. Les propriétés de fenêtre, cursor, hit testing, input default behavior et l'input restent explicitement `Unsupported` jusqu’à leurs preuves dédiées.
 
 - `attachKadreDesktop(Embedded(AppKitMainLoop))` exige le main thread et une boucle AppKit existante ;
 - l'attach ne remplace pas le delegate de l'application ;
@@ -194,12 +194,13 @@ Une session embedded sans fenêtre commence `Foreground + Active` tant que son i
 
 ## 7. Frontière fenêtre et input
 
-**État Phase 2 :** `WindowManager.requestWindow` admet `OpenedHere`, publie `primary` et l'ordre stable des fenêtres, puis route les fermetures natives et programmatiques jusqu'au terminal. `stopWhenLastWindowClosed` s'arme seulement après la première fenêtre committée. `Window.withDesktopHandle` expose ses adresses AppKit uniquement dans un callback synchrone exécuté sur le main thread et protégé par une lease de lifetime. Les autres mutations de fenêtre, les propriétés de surface et l'input restent non activés et retournent leurs failures `Unsupported` explicites. `requestRedraw()` conserve le résultat pré-Phase 3 `TemporarilyUnavailable(false)` autorisé par son contrat fermé.
+**État Phases 2–3 :** `WindowManager.requestWindow` admet `OpenedHere`, publie `primary` et l'ordre stable des fenêtres, puis route les fermetures natives et programmatiques jusqu'au terminal. `stopWhenLastWindowClosed` s'arme seulement après la première fenêtre committée. `Window.withDesktopHandle` expose ses adresses AppKit uniquement dans un callback synchrone exécuté sur le main thread et protégé par une lease de lifetime. `Window.surface` publie les métriques et événements AppKit ordonnés, conserve son snapshot terminal et admet un seul redraw natif pour une rafale. Les autres mutations de fenêtre, cursor, hit testing, input default behavior et l'input restent non activés et retournent leurs failures `Unsupported` explicites.
 
-**Préparation Phase 3 :** `APK-004` est `planned`, avec des identifiants O3
-réservés mais aucune capability publique activée. Le protocole de vérification
-manuelle AppKit-only est dans `backend/appkit/manual/phase-3-surface.md` ; il
-complète les futures preuves automatisées sans répéter `APK-003`.
+**Activation Phase 3 :** `APK-004` est `active`. Ses scénarios et sentinelles
+sont reliés aux tests publics et au test AppKit O3 process-owning. Le protocole
+et le harness de vérification manuelle AppKit-only sont dans
+`backend/appkit/manual/` ; la sortie manuelle standard-scale + HiDPI reste un
+gate distinct qui ne doit pas être inféré des preuves automatisées.
 
 Une `WindowRequest` admise marshal sa création vers le main thread. Le commit natif intervient seulement après création cohérente de `NSWindow`, de la content `NSView`, du delegate et des callbacks. Avant le handoff public, Kadre reste owner et ferme toute ressource en cas de cancellation ou failure.
 

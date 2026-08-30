@@ -9,11 +9,15 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSApplicationActivationPolicy
 import org.graphiks.kffi.objc.NSNotificationCenter
+import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kadre.application.KadreApplication
@@ -37,7 +41,19 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.surface.CursorStyle
+import org.graphiks.kadre.surface.HitTestingMode
+import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceProperty
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceUpdate
+import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
@@ -52,13 +68,17 @@ import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -371,6 +391,156 @@ class AppKitBackendProviderTest {
         }
 
     @Test
+    fun publicAppKitSurfacePublishesSnapshotBeforeEventsAndCoalescesRedrawBursts() =
+        kotlinx.coroutines.runBlocking {
+            val initial = deterministicSurfaceSnapshot(
+                logicalSize = LogicalSize(300.0, 200.0),
+                scaleFactor = 2.0,
+            ).copy(
+                focus = SurfaceFocus.Focused,
+                visibility = org.graphiks.kadre.surface.SurfaceVisibility.Hidden,
+                occlusion = SurfaceOcclusion.Occluded,
+                theme = SurfaceTheme.Dark,
+            )
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-surface-ordering",
+                initialSurfaceSnapshot = initial,
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "surface-ordering"))
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                val surface = window.surface
+                val initialState = surface.state.value
+                assertEquals(SurfaceAttachmentState.Attached, initialState.attachment)
+                assertEquals(initial.metrics.logicalSize, initialState.logicalSize)
+                assertEquals(initial.metrics.physicalSize, initialState.physicalSize)
+                assertEquals(initial.metrics.scaleFactor, initialState.scaleFactor)
+                assertEquals(initial.metrics.safeAreaInsets, initialState.safeAreaInsets)
+                assertEquals(initial.focus, initialState.focus)
+                assertEquals(initial.visibility, initialState.visibility)
+                assertEquals(initial.occlusion, initialState.occlusion)
+                assertEquals(initial.theme, initialState.theme)
+
+                val events = Channel<SurfaceEvent>(Channel.UNLIMITED)
+                val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    surface.events.collect(events::send)
+                }
+                try {
+                    val resized = deterministicSurfaceSnapshot(
+                        logicalSize = LogicalSize(420.0, 260.0),
+                        scaleFactor = 1.5,
+                    ).metrics
+                    port.emitSurfaceMetrics("surface-ordering", resized)
+                    val metricsEvent = withTimeout(2.seconds) {
+                        assertIs<SurfaceEvent.MetricsChanged>(events.receive())
+                    }
+                    assertEquals(metricsEvent.state, surface.state.value)
+                    assertEquals(resized.logicalSize, metricsEvent.state.logicalSize)
+                    assertEquals(resized.physicalSize, metricsEvent.state.physicalSize)
+                    assertTrue(metricsEvent.state.revision.value > initialState.revision.value)
+
+                    port.emitSurfaceFocus("surface-ordering", SurfaceFocus.Unfocused)
+                    val focusEvent = withTimeout(2.seconds) {
+                        assertIs<SurfaceEvent.FocusChanged>(events.receive())
+                    }
+                    assertEquals(focusEvent.state, surface.state.value)
+                    assertEquals(SurfaceFocus.Unfocused, focusEvent.state.focus)
+                    assertTrue(focusEvent.state.revision.value > metricsEvent.state.revision.value)
+
+                    repeat(8) {
+                        assertEquals(KadreResult.Success(Unit), surface.requestRedraw())
+                    }
+                    withTimeout(2.seconds) {
+                        while (port.requestedSurfaceRedrawGenerations != listOf(0L)) yield()
+                    }
+                    port.emitSurfaceRedrawConsumed("surface-ordering", 0L)
+                    val redrawEvent = withTimeout(2.seconds) {
+                        assertIs<SurfaceEvent.RedrawRequested>(events.receive())
+                    }
+                    assertEquals(surface.state.value.revision, redrawEvent.stateRevision)
+                    yield()
+                    assertTrue(events.tryReceive().isFailure)
+                } finally {
+                    collector.cancel()
+                }
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-surface-terminal",
+                initialSurfaceSnapshot = deterministicSurfaceSnapshot().copy(
+                    focus = SurfaceFocus.Unfocused,
+                ),
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "surface-terminal"))
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                val surface = window.surface
+                val events = async(start = CoroutineStart.UNDISPATCHED) { surface.events.toList() }
+
+                port.emitSurfaceFocus("surface-terminal", SurfaceFocus.Focused)
+                withTimeout(2.seconds) { surface.state.first { it.focus == SurfaceFocus.Focused } }
+                assertIs<WindowCloseOutcome.Accepted>(window.close().appKitSuccessValue())
+                val terminal = withTimeout(2.seconds) {
+                    surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
+                }
+                val terminalEvents = withTimeout(2.seconds) { events.await() }
+
+                val lateMetrics = deterministicSurfaceSnapshot(
+                    logicalSize = LogicalSize(999.0, 777.0),
+                    scaleFactor = 1.0,
+                ).metrics
+                port.forceLateSurfaceMetrics("surface-terminal", lateMetrics)
+                yield()
+
+                assertEquals(terminal, surface.state.value)
+                assertEquals(1, terminalEvents.size)
+                assertIs<SurfaceEvent.FocusChanged>(terminalEvents.single())
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+                    surface.requestRedraw(),
+                )
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
     fun publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied() =
         kotlinx.coroutines.runBlocking {
             val port = DeterministicAppKitNativeWindowPort("public-effective-state")
@@ -443,8 +613,32 @@ class AppKitBackendProviderTest {
                     surfaceCapabilities.armedInteractions,
                     surfaceCapabilities.platformAccess,
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                val stateBeforeUnsupportedUpdate = window.surface.state.value
+                val unsupportedUpdate = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+                    window.surface.apply(
+                        SurfaceUpdate(
+                            cursor = PropertyChange.Set(CursorStyle.Hidden),
+                            hitTesting = PropertyChange.Set(HitTestingMode.Disabled),
+                            inputDefaultBehavior = PropertyChange.Set(
+                                InputDefaultBehavior.SuppressWhenPossible,
+                            ),
+                        ),
+                    ).appKitSuccessValue(),
+                )
                 assertEquals(
-                    KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = false)),
+                    setOf(SurfaceProperty.Cursor, SurfaceProperty.HitTesting, SurfaceProperty.InputDefaultBehavior),
+                    unsupportedUpdate.rejected.map { it.field }.toSet(),
+                )
+                unsupportedUpdate.rejected.forEach { rejected ->
+                    assertEquals(
+                        KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                        rejected.failure,
+                    )
+                }
+                assertEquals(stateBeforeUnsupportedUpdate, unsupportedUpdate.state)
+                assertEquals(stateBeforeUnsupportedUpdate, window.surface.state.value)
+                assertEquals(
+                    KadreResult.Success(Unit),
                     window.surface.requestRedraw(),
                 )
                 val inputCapabilities = window.surface.input.state.value.capabilities
@@ -1071,6 +1265,13 @@ class AppKitBackendProviderTest {
         val publicHandleObserved = AtomicBoolean(false)
         val nativeRejectObserved = AtomicBoolean(false)
         val terminalCloseObserved = AtomicBoolean(false)
+        val nativeSurfaceResizeObserved = AtomicBoolean(false)
+        val nativeSurfaceFocusObserved = AtomicBoolean(false)
+        val nativeSurfaceVisibilityObserved = AtomicBoolean(false)
+        val nativeSurfaceRedrawObserved = AtomicBoolean(false)
+        val nativeSurfaceTerminalObserved = AtomicBoolean(false)
+        val proofStage = AtomicReference("not-started")
+        val proofFailure = AtomicReference<Throwable?>(null)
 
         val result = provider.run(
             DesktopStandaloneRequest(
@@ -1086,10 +1287,123 @@ class AppKitBackendProviderTest {
                                 .appKitSuccessValue()
                                 .await(),
                         ).window
+                        proofStage.set("surface-resize")
+                        try {
                         val events = Channel<WindowEvent>(Channel.UNLIMITED)
                         val collector = launch(start = CoroutineStart.UNDISPATCHED) {
                             window.events.collect(events::send)
                         }
+                        val surfaceEvents = Channel<SurfaceEvent>(Channel.UNLIMITED)
+                        val surfaceEventCount = AtomicInteger()
+                        val surfaceEventStateWasVisible = AtomicBoolean(true)
+                        val surfaceCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                            window.surface.events.collect { event ->
+                                if (
+                                    window.surface.state.value.revision.value < event.stateRevision.value
+                                ) {
+                                    surfaceEventStateWasVisible.set(false)
+                                }
+                                surfaceEventCount.incrementAndGet()
+                                surfaceEvents.send(event)
+                            }
+                        }
+                        proofStage.set("surface-visibility")
+                        val beforeOrderOutRevision = window.surface.state.value.revision.value
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).orderOut(MemorySegment.NULL)
+                                }
+                            },
+                        )
+                        val hiddenEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.VisibilityChanged> {
+                                it.state.visibility == org.graphiks.kadre.surface.SurfaceVisibility.Hidden &&
+                                    it.state.revision.value > beforeOrderOutRevision
+                            }
+                        }
+                        assertTrue(
+                            window.surface.state.value.revision.value >= hiddenEvent.state.revision.value,
+                        )
+                        nativeSurfaceVisibilityObserved.set(true)
+
+                        proofStage.set("surface-focus")
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    val application = NSApplication(NSApplication.sharedApplication())
+                                    assertTrue(
+                                        application.setActivationPolicy(
+                                            NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
+                                        ),
+                                    )
+                                    application.activateIgnoringOtherApps(true)
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).makeKeyAndOrderFront(MemorySegment.NULL)
+                                }
+                            },
+                        )
+                        val focusEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.FocusChanged> {
+                                it.state.focus == SurfaceFocus.Focused &&
+                                    it.state.revision.value > hiddenEvent.state.revision.value
+                            }
+                        }
+                        assertTrue(
+                            window.surface.state.value.revision.value >= focusEvent.state.revision.value,
+                        )
+                        nativeSurfaceFocusObserved.set(true)
+
+                        proofStage.set("surface-resize")
+                        val resized = LogicalSize(360.0, 220.0)
+                        val beforeResizeRevision = window.surface.state.value.revision.value
+                        assertEquals(
+                            KadreResult.Success(Unit),
+                            window.withDesktopHandle { handle ->
+                                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                                ObjCRuntime.autoreleasePool {
+                                    NSWindow(
+                                        MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()),
+                                    ).setContentSize(NSSize(resized.width, resized.height))
+                                }
+                            },
+                        )
+                        val resizeEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.MetricsChanged> {
+                                it.state.logicalSize == resized &&
+                                    it.state.revision.value > beforeResizeRevision
+                            }
+                        }
+                        assertEquals(resized, resizeEvent.state.logicalSize)
+                        assertTrue(
+                            window.surface.state.value.revision.value >= resizeEvent.state.revision.value,
+                        )
+                        nativeSurfaceResizeObserved.set(true)
+
+                        proofStage.set("surface-redraw")
+                        repeat(8) {
+                            assertEquals(KadreResult.Success(Unit), window.surface.requestRedraw())
+                        }
+                        val redrawEvent = withTimeout(5.seconds) {
+                            surfaceEvents.receiveSurfaceEvent<SurfaceEvent.RedrawRequested>()
+                        }
+                        assertTrue(
+                            window.surface.state.value.revision.value >= redrawEvent.stateRevision.value,
+                        )
+                        assertNull(
+                            withTimeoutOrNull(200.milliseconds) {
+                                surfaceEvents.receiveSurfaceEvent<SurfaceEvent.RedrawRequested>()
+                            },
+                        )
+                        nativeSurfaceRedrawObserved.set(true)
+                        proofStage.set("native-close-reject")
                         val performNativeUserClose: suspend () -> Unit = {
                             assertEquals(
                                 KadreResult.Success(Unit),
@@ -1119,6 +1433,7 @@ class AppKitBackendProviderTest {
                         assertEquals(WindowPhase.Open, window.state.value.phase)
                         nativeRejectObserved.set(true)
 
+                        proofStage.set("native-close-accept")
                         performNativeUserClose()
                         val accepted = withTimeout(5.seconds) {
                             assertIs<WindowEvent.CloseRequested>(events.receive())
@@ -1132,11 +1447,44 @@ class AppKitBackendProviderTest {
                         }
                         assertEquals(closing.operationId, terminal.operationId)
                         withTimeout(5.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+                        val terminalSurface = withTimeout(5.seconds) {
+                            window.surface.state.first {
+                                it.attachment == SurfaceAttachmentState.Detached
+                            }
+                        }
+                        assertEquals(terminalSurface, window.surface.state.value)
+                        withTimeout(5.seconds) { surfaceCollector.join() }
+                        val terminalEventCount = surfaceEventCount.get()
+                        assertNull(
+                            withTimeoutOrNull(200.milliseconds) {
+                                window.surface.state.first {
+                                    it.revision.value > terminalSurface.revision.value
+                                }
+                            },
+                        )
+                        assertEquals(terminalEventCount, surfaceEventCount.get())
+                        assertTrue(surfaceEventStateWasVisible.get())
+                        assertEquals(
+                            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+                            window.surface.requestRedraw(),
+                        )
                         withTimeout(5.seconds) { windows.state.first { it.windows.isEmpty() } }
                         terminalCloseObserved.set(true)
+                        nativeSurfaceTerminalObserved.set(true)
                         collector.cancel()
+                        proofStage.set("session-stop")
                         stopRequestedOffMainThread.set(!native.isMainThread())
                         requestStop()
+                        } catch (failure: Throwable) {
+                            proofFailure.set(failure)
+                            if (window.state.value.phase != WindowPhase.Closed) {
+                                window.close()
+                                withTimeout(5.seconds) {
+                                    window.state.first { it.phase == WindowPhase.Closed }
+                                }
+                            }
+                            throw failure
+                        }
                     }
                 },
                 false,
@@ -1144,6 +1492,9 @@ class AppKitBackendProviderTest {
             ),
         )
 
+        proofFailure.get()?.let { failure ->
+            throw AssertionError("O3 proof stage: ${proofStage.get()}", failure)
+        }
         assertEquals(
             KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
             result,
@@ -1152,6 +1503,83 @@ class AppKitBackendProviderTest {
         assertTrue(publicHandleObserved.get())
         assertTrue(nativeRejectObserved.get())
         assertTrue(terminalCloseObserved.get())
+        assertTrue(nativeSurfaceResizeObserved.get())
+        assertTrue(nativeSurfaceFocusObserved.get())
+        assertTrue(nativeSurfaceVisibilityObserved.get())
+        assertTrue(nativeSurfaceRedrawObserved.get())
+        assertTrue(nativeSurfaceTerminalObserved.get())
+    }
+
+    @Test
+    fun phase3SurfaceHarnessWritesCompleteNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase3-surface-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase3-surface-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase3SurfaceHarnessKt",
+                "--record=$record",
+                "--build-id=automated-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("redraw 8")
+                commands.appendLine("unsupported")
+                commands.appendLine("result M7 not-applicable premature result must be rejected")
+                commands.appendLine("close")
+                commands.appendLine("result M7 not-applicable automated proof does not satisfy manual M7")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "displays=",
+                "initialScaleFactor=",
+                "appearance=",
+                "buildId=automated-harness-proof",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("SNAPSHOT\tinitial\t"), report)
+            assertTrue(report.contains("SNAPSHOT\tupdate\t"), report)
+            assertTrue(report.contains("COMMAND\tredraw\tcount=8"), report)
+            assertTrue(report.contains("EVENT\tRedrawRequested\tstateRevisionVisible=true"), report)
+            assertTrue(report.contains("COMMAND\tunsupported-surface-update\tSuccess(value=PartiallyApplied"), report)
+            assertTrue(report.contains("Unsupported(operation=UpdateSurface)"), report)
+            assertTrue(
+                report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL\tSurfaceState(attachment=Detached"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                report.contains("COMMAND\tresult-rejected\tM7 requires terminal observation before recording"),
+                report,
+            )
+            assertFalse(report.contains("SCENARIO\tM7\tnot-applicable\tpremature result must be rejected"), report)
+            assertTrue(
+                report.contains("SCENARIO\tM7\tnot-applicable\tautomated proof does not satisfy manual M7"),
+                report,
+            )
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
     }
 
     @Test
@@ -1456,5 +1884,14 @@ private fun NSNotificationCenter.postAppKitNotification(name: String, applicatio
             ObjCRuntime.newNSString(Arena.global(), name),
             application.ptr,
         )
+    }
+}
+
+private suspend inline fun <reified T : SurfaceEvent> Channel<SurfaceEvent>.receiveSurfaceEvent(
+    predicate: (T) -> Boolean = { true },
+): T {
+    while (true) {
+        val event = receive()
+        if (event is T && predicate(event)) return event
     }
 }

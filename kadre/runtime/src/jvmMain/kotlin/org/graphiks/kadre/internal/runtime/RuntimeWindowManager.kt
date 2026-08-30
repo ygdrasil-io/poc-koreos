@@ -31,7 +31,11 @@ import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.Window
@@ -127,10 +131,11 @@ public class RuntimeWindowManager public constructor(
             requestId: WindowRequestId,
             windowId: WindowId,
             effectiveSpec: WindowSpec,
-            initialSurfaceMetrics: SurfaceMetrics?,
+            initialSurfaceSnapshot: SurfaceInitialSnapshot?,
             owner: WindowPeerOwner,
+            onSurfaceReady: () -> Unit,
         ) {
-            acceptCommit(requestId, windowId, effectiveSpec, initialSurfaceMetrics, owner)
+            acceptCommit(requestId, windowId, effectiveSpec, initialSurfaceSnapshot, owner, onSurfaceReady)
         }
 
         override fun fail(requestId: WindowRequestId, failure: KadreFailure) {
@@ -592,8 +597,9 @@ public class RuntimeWindowManager public constructor(
         requestId: WindowRequestId,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
-        initialSurfaceMetrics: SurfaceMetrics?,
+        initialSurfaceSnapshot: SurfaceInitialSnapshot?,
         owner: WindowPeerOwner,
+        onSurfaceReady: () -> Unit,
     ) {
         try {
             var closeOwner: WindowPeerOwner? = null
@@ -607,13 +613,21 @@ public class RuntimeWindowManager public constructor(
                     if (record.preparedOwner == null) {
                         record.preparedOwner = owner
                         record.preparedEffectiveSpec = effectiveSpec
-                        record.preparedInitialSurfaceMetrics = initialSurfaceMetrics
+                        record.preparedInitialSurfaceSnapshot = initialSurfaceSnapshot
+                        record.preparedSurfaceReady = onSurfaceReady
                     } else if (record.preparedOwner !== owner) {
                         closeOwner = owner
                     }
                     return@synchronized
                 }
-                commitPendingLocked(record, windowId, effectiveSpec, initialSurfaceMetrics, owner)
+                commitPendingLocked(
+                    record,
+                    windowId,
+                    effectiveSpec,
+                    initialSurfaceSnapshot,
+                    owner,
+                    onSurfaceReady,
+                )
             }
             closeOwner?.let(::safeCloseOwner)
         } catch (cause: Exception) {
@@ -797,11 +811,20 @@ public class RuntimeWindowManager public constructor(
         record.openDispatching = false
         val owner = record.preparedOwner ?: return
         val effectiveSpec = checkNotNull(record.preparedEffectiveSpec)
-        val initialSurfaceMetrics = record.preparedInitialSurfaceMetrics
+        val initialSurfaceSnapshot = record.preparedInitialSurfaceSnapshot
+        val onSurfaceReady = checkNotNull(record.preparedSurfaceReady)
         record.preparedOwner = null
         record.preparedEffectiveSpec = null
-        record.preparedInitialSurfaceMetrics = null
-        commitPendingLocked(record, record.request.windowId, effectiveSpec, initialSurfaceMetrics, owner)
+        record.preparedInitialSurfaceSnapshot = null
+        record.preparedSurfaceReady = null
+        commitPendingLocked(
+            record,
+            record.request.windowId,
+            effectiveSpec,
+            initialSurfaceSnapshot,
+            owner,
+            onSurfaceReady,
+        )
     }
 
     private fun terminaliseOpenDispatchFailureLocked(
@@ -820,13 +843,14 @@ public class RuntimeWindowManager public constructor(
         record: PendingWindow,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
-        initialSurfaceMetrics: SurfaceMetrics?,
+        initialSurfaceSnapshot: SurfaceInitialSnapshot?,
         owner: WindowPeerOwner,
+        onSurfaceReady: () -> Unit,
     ) {
-        if (publicSurfaceCapabilities && initialSurfaceMetrics == null) {
+        if (publicSurfaceCapabilities && initialSurfaceSnapshot == null) {
             removePendingLocked(record)
             safeCloseOwner(owner)
-            val failure = platformFailure("missing-initial-surface-metrics")
+            val failure = platformFailure("missing-initial-surface-snapshot")
             safeReport(KadreException(failure))
             record.request.terminate(WindowRequestOutcome.Rejected(failure))
             return
@@ -838,7 +862,7 @@ public class RuntimeWindowManager public constructor(
         val collectorAllocator = sessionEventCollectorAllocator ?: isolatedEventCollectorAllocator.value
         val surface = RuntimeWindowSurface(
             id = record.surfaceId,
-            initialMetrics = initialSurfaceMetrics ?: fallbackSurfaceMetrics(effectiveSpec),
+            initialSnapshot = initialSurfaceSnapshot ?: fallbackSurfaceSnapshot(effectiveSpec),
             commandPort = surfaceCommandPort,
             commandsEnabled = publicSurfaceCapabilities,
             enabledCapabilities = enabledSurfaceCapabilities,
@@ -868,6 +892,7 @@ public class RuntimeWindowManager public constructor(
         check(surfaces.put(surface.id, surface) == null) { "duplicate runtime surface" }
         publishMembershipLocked()
         record.request.terminate(WindowRequestOutcome.OpenedHere(window))
+        onSurfaceReady()
     }
 
     private fun recoverCallbackFailure(
@@ -1018,7 +1043,8 @@ public class RuntimeWindowManager public constructor(
         var openDispatching: Boolean = true,
         var preparedOwner: WindowPeerOwner? = null,
         var preparedEffectiveSpec: WindowSpec? = null,
-        var preparedInitialSurfaceMetrics: SurfaceMetrics? = null,
+        var preparedInitialSurfaceSnapshot: SurfaceInitialSnapshot? = null,
+        var preparedSurfaceReady: (() -> Unit)? = null,
     )
 
     private data class CommittedWindow(
@@ -1038,11 +1064,17 @@ public class RuntimeWindowManager public constructor(
     }
 }
 
-private fun fallbackSurfaceMetrics(effectiveSpec: WindowSpec): SurfaceMetrics = SurfaceMetrics(
-    logicalSize = effectiveSpec.contentSize,
-    physicalSize = effectiveSpec.contentSize.toPhysical(1.0),
-    scaleFactor = 1.0,
-    safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+private fun fallbackSurfaceSnapshot(effectiveSpec: WindowSpec): SurfaceInitialSnapshot = SurfaceInitialSnapshot(
+    metrics = SurfaceMetrics(
+        logicalSize = effectiveSpec.contentSize,
+        physicalSize = effectiveSpec.contentSize.toPhysical(1.0),
+        scaleFactor = 1.0,
+        safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+    ),
+    focus = SurfaceFocus.Unfocused,
+    visibility = SurfaceVisibility.Visible,
+    occlusion = SurfaceOcclusion.Unknown,
+    theme = SurfaceTheme.Unknown,
 )
 
 internal class RuntimeWindowRequest(

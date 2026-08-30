@@ -1,6 +1,11 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
 
 /**
@@ -38,6 +43,13 @@ internal interface AppKitNativeWindowPort {
 
     fun present(window: AppKitNativeWindowOwner)
 
+    /** Installs one peer-local observer after the complete native window has been presented. */
+    fun observeSurface(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitSurfaceCallbacks,
+    ): AppKitNativeSurfaceObserverOwner? = null
+
     /** Returns only when the native window is known not to reference its delegate. */
     fun detachDelegate(window: AppKitNativeWindowOwner)
 
@@ -56,6 +68,35 @@ internal interface AppKitNativeWindowOwner : AutoCloseable {
 }
 
 internal interface AppKitNativeViewOwner : AutoCloseable {
+    override fun close()
+}
+
+/** Immutable effective values captured together on the AppKit owner thread. */
+internal data class AppKitSurfaceSnapshot(
+    val metrics: SurfaceMetrics,
+    val focus: SurfaceFocus,
+    val visibility: SurfaceVisibility,
+    val occlusion: SurfaceOcclusion,
+    val theme: SurfaceTheme,
+)
+
+/** Callback boundary used only with already-frozen, native-address-free values. */
+internal class AppKitSurfaceCallbacks(
+    val metricsChanged: (SurfaceMetrics) -> Unit,
+    val focusChanged: (SurfaceFocus) -> Unit,
+    val visibilityChanged: (SurfaceVisibility, SurfaceOcclusion) -> Unit,
+    val themeChanged: (SurfaceTheme) -> Unit,
+    val redrawConsumed: (Long) -> Unit,
+)
+
+/** Owns all notification receivers and redraw callback admission for one native surface. */
+internal interface AppKitNativeSurfaceObserverOwner : AutoCloseable {
+    val initialSnapshot: AppKitSurfaceSnapshot
+
+    fun requestRedraw(generation: Long)
+
+    fun revokeCallbacks()
+
     override fun close()
 }
 

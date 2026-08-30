@@ -31,7 +31,10 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceRevision
+import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCancellationOutcome
@@ -226,13 +229,26 @@ class RuntimeWindowManagerTest {
                 SurfaceStimulus.MetricsChanged(command.surfaceId, preCommitMetrics),
             ),
         )
-        command.commit(CountingWindowPeerOwner(), initialSurfaceMetrics = committedMetrics)
+        command.commit(
+            CountingWindowPeerOwner(),
+            initialSurfaceSnapshot = SurfaceInitialSnapshot(
+                metrics = committedMetrics,
+                focus = SurfaceFocus.Focused,
+                visibility = SurfaceVisibility.Hidden,
+                occlusion = SurfaceOcclusion.Occluded,
+                theme = SurfaceTheme.Dark,
+            ),
+        )
         val window = assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
 
         assertEquals(committedMetrics.logicalSize, window.surface.state.value.logicalSize)
         assertEquals(committedMetrics.physicalSize, window.surface.state.value.physicalSize)
         assertEquals(committedMetrics.scaleFactor, window.surface.state.value.scaleFactor)
         assertEquals(committedMetrics.safeAreaInsets, window.surface.state.value.safeAreaInsets)
+        assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
+        assertEquals(SurfaceVisibility.Hidden, window.surface.state.value.visibility)
+        assertEquals(SurfaceOcclusion.Occluded, window.surface.state.value.occlusion)
+        assertEquals(SurfaceTheme.Dark, window.surface.state.value.theme)
         assertEquals(SurfaceRevision(0), window.surface.state.value.revision)
 
         assertTrue(
@@ -246,7 +262,7 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
-    fun phaseThreeCommitWithoutNativeInitialMetricsCannotExposeAnOpenedWindow() = runTest {
+    fun phaseThreeCommitWithoutNativeInitialSnapshotCannotExposeAnOpenedWindow() = runTest {
         val reported = mutableListOf<Throwable>()
         val port = DeterministicWindowCommandPort()
         val manager = manager(
@@ -264,7 +280,7 @@ class RuntimeWindowManagerTest {
             KadreFailure.PlatformFailure(
                 KadrePlatform.Fake,
                 "window-command-port",
-                "missing-initial-surface-metrics",
+                "missing-initial-surface-snapshot",
             ),
             rejected.failure,
         )

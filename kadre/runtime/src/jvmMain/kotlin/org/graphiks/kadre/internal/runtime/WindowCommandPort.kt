@@ -74,20 +74,30 @@ public class WindowOpenCommand internal constructor(
     private val owners = IdentityHashMap<WindowPeerOwner, ManagedWindowPeerOwner>()
 
     /**
-     * Commits one fully prepared peer and its atomic initial content metrics.
+     * Commits one fully prepared peer and its atomic initial surface snapshot.
      *
-     * A null [initialSurfaceMetrics] exists only for pre-surface bootstrap compositions. A
-     * manager exposing surface commands rejects it instead of publishing synthetic metrics.
+     * A null [initialSurfaceSnapshot] exists only for pre-surface bootstrap compositions. A
+     * manager exposing surface commands rejects it instead of publishing synthetic state.
+     * [onSurfaceReady] runs only after the runtime has installed the surface and can accept
+     * observations for its [surfaceId].
      */
     public fun commit(
         owner: WindowPeerOwner,
         effectiveSpec: WindowSpec = spec,
-        initialSurfaceMetrics: SurfaceMetrics? = null,
+        initialSurfaceSnapshot: SurfaceInitialSnapshot? = null,
+        onSurfaceReady: () -> Unit = {},
     ) {
         val managedOwner = synchronized(ownerLock) {
             owners.getOrPut(owner) { ManagedWindowPeerOwner(owner) }
         }
-        stimulusSink.commit(requestId, windowId, effectiveSpec, initialSurfaceMetrics, managedOwner)
+        stimulusSink.commit(
+            requestId,
+            windowId,
+            effectiveSpec,
+            initialSurfaceSnapshot,
+            managedOwner,
+            onSurfaceReady,
+        )
     }
 
     public fun fail(failure: KadreFailure) {
@@ -147,8 +157,9 @@ internal interface WindowCommandStimulusSink {
         requestId: WindowRequestId,
         windowId: WindowId,
         effectiveSpec: WindowSpec,
-        initialSurfaceMetrics: SurfaceMetrics?,
+        initialSurfaceSnapshot: SurfaceInitialSnapshot?,
         owner: WindowPeerOwner,
+        onSurfaceReady: () -> Unit,
     )
     fun fail(requestId: WindowRequestId, failure: KadreFailure)
     fun nativeClosed(requestId: WindowRequestId)

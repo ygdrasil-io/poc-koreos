@@ -15,9 +15,12 @@ kotlin {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.objc)
         }
-        jvmTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(project(":kadre:platform:desktop"))
+        val jvmTest by getting {
+            kotlin.srcDir("manual")
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(project(":kadre:platform:desktop"))
+            }
         }
     }
 }
@@ -57,6 +60,19 @@ if (System.getProperty("os.name", "").let { name ->
         group = "verification"
         description = "Runs the AppKit unit suite and its process-owning standalone-loop proof."
         dependsOn(jvmTest, appKitStandaloneLoopTest)
+    }
+    tasks.register<JavaExec>("phase3SurfaceHarness") {
+        group = "verification"
+        description = "Runs the external interactive AppKit Phase 3 surface harness."
+        dependsOn(tasks.named("jvmTestClasses"))
+        classpath = jvmTest.get().classpath
+        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase3SurfaceHarnessKt")
+        workingDir(rootProject.projectDir)
+        jvmArgs(
+            "-XstartOnFirstThread",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+        standardInput = System.`in`
     }
     tasks.named("check") {
         dependsOn(appKitNativeTests)

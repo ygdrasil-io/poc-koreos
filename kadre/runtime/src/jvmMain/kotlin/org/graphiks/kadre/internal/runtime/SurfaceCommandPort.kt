@@ -45,6 +45,11 @@ public value class SurfaceRedrawGeneration internal constructor(public val value
     init {
         require(value >= 0L) { "value must be non-negative" }
     }
+
+    public companion object {
+        /** Reconstructs the opaque generation echoed by a native backend. */
+        public fun fromNative(value: Long): SurfaceRedrawGeneration = SurfaceRedrawGeneration(value)
+    }
 }
 
 /** Immutable effective metrics captured together by the native backend. */
@@ -63,6 +68,15 @@ public data class SurfaceMetrics(
         }
     }
 }
+
+/** Complete immutable native snapshot used to initialise one portable runtime surface. */
+public data class SurfaceInitialSnapshot(
+    public val metrics: SurfaceMetrics,
+    public val focus: SurfaceFocus,
+    public val visibility: SurfaceVisibility,
+    public val occlusion: SurfaceOcclusion,
+    public val theme: SurfaceTheme,
+)
 
 /**
  * Complete immutable ingress understood by the runtime.

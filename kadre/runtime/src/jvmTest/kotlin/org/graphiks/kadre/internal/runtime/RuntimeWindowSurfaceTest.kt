@@ -1131,7 +1131,13 @@ class RuntimeWindowSurfaceTest {
         sessionFailureHandler: (KadreFailure) -> Unit = {},
     ): RuntimeWindowSurface = RuntimeWindowSurface(
         id = id,
-        initialMetrics = metrics,
+        initialSnapshot = SurfaceInitialSnapshot(
+            metrics = metrics,
+            focus = SurfaceFocus.Unfocused,
+            visibility = SurfaceVisibility.Visible,
+            occlusion = SurfaceOcclusion.Unknown,
+            theme = SurfaceTheme.Unknown,
+        ),
         commandPort = port,
         commandsEnabled = commandsEnabled,
         enabledCapabilities = capabilities,

@@ -58,7 +58,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 
 internal class RuntimeWindowSurface(
     override val id: SurfaceId,
-    initialMetrics: SurfaceMetrics,
+    initialSnapshot: SurfaceInitialSnapshot,
     private val commandPort: SurfaceCommandPort,
     private val commandsEnabled: Boolean,
     enabledCapabilities: SurfaceCapabilities,
@@ -74,7 +74,7 @@ internal class RuntimeWindowSurface(
 ) : HostSurface {
     private val lock = Any()
     private val updateMutex = Mutex()
-    private var currentState = initialState(initialMetrics)
+    private var currentState = initialState(initialSnapshot)
     private var redrawTicket: SurfaceRedrawGeneration? = null
     private var nextRedrawTicket = 0L
     private val publications = BoundedSurfaceScheduler(
@@ -1071,16 +1071,16 @@ private sealed interface InputCollectorRegistration {
     data class Failed(val failure: KadreFailure) : InputCollectorRegistration
 }
 
-private fun initialState(metrics: SurfaceMetrics): SurfaceState = SurfaceState(
+private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = SurfaceState(
     attachment = SurfaceAttachmentState.Attached,
-    logicalSize = metrics.logicalSize,
-    physicalSize = metrics.physicalSize,
-    scaleFactor = metrics.scaleFactor,
-    safeAreaInsets = metrics.safeAreaInsets,
-    visibility = SurfaceVisibility.Visible,
-    occlusion = SurfaceOcclusion.Unknown,
-    focus = SurfaceFocus.Unfocused,
-    theme = SurfaceTheme.Unknown,
+    logicalSize = snapshot.metrics.logicalSize,
+    physicalSize = snapshot.metrics.physicalSize,
+    scaleFactor = snapshot.metrics.scaleFactor,
+    safeAreaInsets = snapshot.metrics.safeAreaInsets,
+    visibility = snapshot.visibility,
+    occlusion = snapshot.occlusion,
+    focus = snapshot.focus,
+    theme = snapshot.theme,
     cursor = CursorStyle.System(CursorIcon.Default),
     pointerCapture = PointerCaptureMode.None,
     hitTesting = HitTestingMode.Enabled,
