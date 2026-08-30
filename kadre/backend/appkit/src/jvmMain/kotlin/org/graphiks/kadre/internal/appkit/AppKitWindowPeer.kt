@@ -61,6 +61,22 @@ internal sealed interface AppKitSurfaceStimulus {
             require(generation >= 0L) { "generation must be non-negative" }
         }
     }
+
+    data class InputObservationChanged(
+        override val peerId: AppKitWindowPeerId,
+        val keyboardInstalled: Boolean,
+        val pointerInstalled: Boolean,
+    ) : AppKitSurfaceStimulus
+
+    data class KeyChanged(
+        override val peerId: AppKitWindowPeerId,
+        val input: AppKitInput.KeyChanged,
+    ) : AppKitSurfaceStimulus
+
+    data class PointerInput(
+        override val peerId: AppKitWindowPeerId,
+        val input: AppKitInput,
+    ) : AppKitSurfaceStimulus
 }
 
 /** One completely prepared AppKit window and the full reverse-order ownership chain it requires. */
@@ -71,6 +87,7 @@ internal class AppKitWindowPeer private constructor(
     private val contentView: AppKitNativeViewOwner,
     private val delegate: AppKitNativeDelegateOwner,
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
+    private val inputObserver: AppKitNativeInputObserverOwner?,
     private val callbackGate: AppKitWindowCallbackGate,
 ) : WindowPeerOwner {
     internal val initialSurfaceSnapshot: AppKitSurfaceSnapshot?
@@ -88,6 +105,10 @@ internal class AppKitWindowPeer private constructor(
         callbackGate.revoke()
         port.onMainThread {
             var failure: Throwable? = null
+            inputObserver?.let { observer ->
+                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = closeSuppressing(failure, observer)
+            }
             surfaceObserver?.let { observer ->
                 failure = runSuppressing(failure, observer::revokeCallbacks)
                 failure = closeSuppressing(failure, observer)
@@ -191,6 +212,7 @@ internal class AppKitWindowPeer private constructor(
                 var contentView: AppKitNativeViewOwner? = null
                 var delegate: AppKitNativeDelegateOwner? = null
                 var surfaceObserver: AppKitNativeSurfaceObserverOwner? = null
+                var inputObserver: AppKitNativeInputObserverOwner? = null
                 var contentAttached = false
                 var delegateMayBeAttached = false
                 try {
@@ -220,6 +242,17 @@ internal class AppKitWindowPeer private constructor(
                         ),
                     )
                     surfaceObserver?.let { callbackGate.activateSurface(it.initialSnapshot) }
+                    inputObserver = port.observeInput(
+                        window,
+                        contentView,
+                        AppKitInputCallbacks(callbackGate::input),
+                    )
+                    inputObserver?.let { observer ->
+                        callbackGate.inputObservationChanged(
+                            keyboardInstalled = observer.keyboardInstalled,
+                            pointerInstalled = observer.pointerInstalled,
+                        )
+                    }
                     AppKitWindowPeer(
                         id,
                         port,
@@ -227,11 +260,16 @@ internal class AppKitWindowPeer private constructor(
                         contentView,
                         delegate,
                         surfaceObserver,
+                        inputObserver,
                         callbackGate,
                     )
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
                     var cleanupFailure: Throwable? = failure
+                    inputObserver?.let { observer ->
+                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
+                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
+                    }
                     surfaceObserver?.let { observer ->
                         cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
                         cleanupFailure = closeSuppressing(cleanupFailure, observer)
@@ -347,6 +385,29 @@ private class AppKitWindowCallbackGate(
             } else {
                 lastRedrawGeneration = generation
                 AppKitSurfaceStimulus.RedrawConsumed(peerId, generation)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun input(input: AppKitInput) {
+        val stimulus = synchronized(lock) {
+            if (!surfaceAccepting) {
+                null
+            } else when (input) {
+                is AppKitInput.KeyChanged -> AppKitSurfaceStimulus.KeyChanged(peerId, input)
+                else -> AppKitSurfaceStimulus.PointerInput(peerId, input)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun inputObservationChanged(keyboardInstalled: Boolean, pointerInstalled: Boolean) {
+        val stimulus = synchronized(lock) {
+            if (surfaceAccepting) {
+                AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled, pointerInstalled)
+            } else {
+                null
             }
         }
         stimulus?.let(::publishSurface)

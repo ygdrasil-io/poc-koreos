@@ -2,6 +2,14 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.SurfaceFocus
@@ -142,6 +150,7 @@ class AppKitSurfacePeerTest {
             acceptSurfaceStimulus = stimuli::add,
         )
         port.trace.clear()
+        stimuli.clear()
 
         peer.close()
         port.forceLateFocus(SurfaceFocus.Unfocused)
@@ -165,14 +174,94 @@ class AppKitSurfacePeerTest {
         assertEquals(emptyList(), stimuli)
     }
 
+    @Test
+    fun inputCallbacksFreezeUnknownKeysAndPointerValuesBeforeTheyLeaveTheNativePeer() {
+        val port = RecordingSurfacePort(installInput = true)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(),
+            port,
+            acceptSurfaceStimulus = stimuli::add,
+        )
+
+        port.emitKey(
+            AppKitInput.KeyChanged(
+                physicalKey = PhysicalKey.Unidentified("mac:65535"),
+                logicalKey = LogicalKey.Unidentified(null),
+                location = KeyLocation.Standard,
+                keyState = KeyState.Pressed,
+                repeat = false,
+                modifiers = KeyboardModifiers(emptySet()),
+            ),
+        )
+        port.emitPointerMoved(
+            AppKitInput.PointerMoved(
+                position = LogicalPoint(12.5, 24.0),
+                delta = LogicalDelta(-1.5, 3.0),
+                pressure = null,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                AppKitSurfaceStimulus.InputObservationChanged(PEER_ID, true, true),
+                AppKitSurfaceStimulus.KeyChanged(
+                    PEER_ID,
+                    AppKitInput.KeyChanged(
+                        PhysicalKey.Unidentified("mac:65535"),
+                        LogicalKey.Unidentified(null),
+                        KeyLocation.Standard,
+                        KeyState.Pressed,
+                        false,
+                        KeyboardModifiers(emptySet()),
+                    ),
+                ),
+                AppKitSurfaceStimulus.PointerInput(
+                    PEER_ID,
+                    AppKitInput.PointerMoved(
+                        LogicalPoint(12.5, 24.0),
+                        LogicalDelta(-1.5, 3.0),
+                        null,
+                    ),
+                ),
+            ),
+            stimuli,
+        )
+    }
+
+    @Test
+    fun inputCallbacksAreRevokedBeforeTheViewIsReleased() {
+        val port = RecordingSurfacePort(installInput = true)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val peer = AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(),
+            port,
+            acceptSurfaceStimulus = stimuli::add,
+        )
+        port.trace.clear()
+        stimuli.clear()
+
+        peer.close()
+        port.forceLateInputObservation()
+
+        assertEquals("revoke:input", port.trace.first())
+        assertTrue(port.trace.indexOf("revoke:input") < port.trace.indexOf("release:view"))
+        assertEquals(emptyList(), stimuli)
+    }
+
     private companion object {
         val PEER_ID = AppKitWindowPeerId(211L)
     }
 }
 
-private class RecordingSurfacePort : AppKitNativeWindowPort {
+private class RecordingSurfacePort(
+    private val installInput: Boolean = false,
+) : AppKitNativeWindowPort {
     val trace = mutableListOf<String>()
     lateinit var surface: RecordingSurfaceOwner
+    private var input: RecordingInputOwner? = null
     private lateinit var delegate: RecordingSurfaceDelegateOwner
     private val mainThread = ThreadLocal.withInitial { false }
 
@@ -223,6 +312,16 @@ private class RecordingSurfacePort : AppKitNativeWindowPort {
         surface = it
     }
 
+    override fun observeInput(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitInputCallbacks,
+    ): AppKitNativeInputObserverOwner? = if (installInput) {
+        RecordingInputOwner(trace, callbacks).also { input = it }
+    } else {
+        null
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         trace += "detach:delegate"
     }
@@ -257,6 +356,36 @@ private class RecordingSurfacePort : AppKitNativeWindowPort {
     fun forceLateTheme(value: SurfaceTheme) = onMainThread { surface.forceThemeCallback(value) }
 
     fun forceLateRedraw(generation: Long) = onMainThread { surface.forceRedrawCallback(generation) }
+
+    fun emitKey(value: AppKitInput.KeyChanged) = onMainThread { checkNotNull(input).emit(value) }
+
+    fun emitPointerMoved(value: AppKitInput.PointerMoved) = onMainThread { checkNotNull(input).emit(value) }
+
+    fun forceLateInputObservation() = checkNotNull(input).forceObservation()
+}
+
+private class RecordingInputOwner(
+    private val trace: MutableList<String>,
+    private val callbacks: AppKitInputCallbacks,
+) : AppKitNativeInputObserverOwner {
+    private var accepting = true
+    override val keyboardInstalled: Boolean = true
+    override val pointerInstalled: Boolean = true
+
+    fun emit(value: AppKitInput) {
+        if (accepting) callbacks.input(value)
+    }
+
+    fun forceObservation() = callbacks.input(AppKitInput.PointerEntered(LogicalPoint(0.0, 0.0)))
+
+    override fun revokeCallbacks() {
+        trace += "revoke:input"
+        accepting = false
+    }
+
+    override fun close() {
+        trace += "release:input"
+    }
 }
 
 private class RecordingSurfaceOwner(

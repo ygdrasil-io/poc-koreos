@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -15,8 +16,14 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -44,6 +51,106 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun inputForOneLivePeerDoesNotCrossIntoAnotherSurfaceOfTheSameDriver() = runBlocking {
+        val firstPhysical = PhysicalKey.Unidentified("first-native-key")
+        val firstPosition = LogicalPoint(7.0, 11.0)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "multi-window-input-isolation",
+            inputObservationInstalledFor = setOf("first"),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "first")).successValue().await(),
+            ).window
+            val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "second")).successValue().await(),
+            ).window
+
+            assertEquals(1L, first.surface.input.state.value.revision.value)
+            assertEquals(0L, second.surface.input.state.value.revision.value)
+
+            port.emitInput(
+                "first",
+                AppKitInput.KeyChanged(
+                    firstPhysical,
+                    LogicalKey.Unidentified("first-native-key"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            )
+            port.emitInput("first", AppKitInput.PointerEntered(firstPosition))
+
+            val firstInput = withTimeout(2.seconds) {
+                first.surface.input.state.first { it.revision.value == 3L }
+            }
+
+            assertEquals(FeatureAvailability.Available, firstInput.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Available, firstInput.capabilities.pointer)
+            assertEquals(setOf(firstPhysical), firstInput.keyboard.pressedKeys)
+            assertEquals(firstPosition, firstInput.pointers.single().position)
+
+            val secondInput = second.surface.input.state.value
+            assertEquals(0L, secondInput.revision.value)
+            assertEquals(FeatureAvailability.Unsupported, secondInput.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Unsupported, secondInput.capabilities.pointer)
+            assertEquals(emptySet(), secondInput.keyboard.pressedKeys)
+            assertEquals(emptyList(), secondInput.pointers)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun inputCallbacksBeforeCommitDrainInOrderAfterTheInitialSnapshot() = runBlocking {
+        val physical = PhysicalKey.Unidentified("native-key-91")
+        val logical = LogicalKey.Unidentified("native-key-91")
+        val enteredAt = LogicalPoint(17.0, 23.0)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "pre-commit-input-callback",
+            inputObservationInstalled = true,
+            afterInputObservationBeforeCommit = { native ->
+                native.emitInput(
+                    "pre-commit",
+                    AppKitInput.KeyChanged(
+                        physical,
+                        logical,
+                        KeyLocation.Standard,
+                        KeyState.Pressed,
+                        repeat = false,
+                        KeyboardModifiers(emptySet()),
+                    ),
+                )
+                native.emitInput("pre-commit", AppKitInput.PointerEntered(enteredAt))
+                native.emitSurfaceFocus("pre-commit", SurfaceFocus.Unfocused)
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "pre-commit"))
+                    .successValue()
+                    .await(),
+            ).window
+            val input = withTimeout(2.seconds) {
+                window.surface.input.state.first { it.revision.value == 4L }
+            }
+
+            assertEquals(SurfaceFocus.Unfocused, window.surface.state.value.focus)
+            assertEquals(FeatureAvailability.Available, input.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Available, input.capabilities.pointer)
+            assertEquals(emptySet(), input.keyboard.pressedKeys)
+            assertEquals(emptyList(), input.pointers)
+        } finally {
+            driver.close()
+        }
+    }
+
     @Test
     fun surfaceCallbacksAfterPeerActivationAndBeforeCommitAreDrainedSequentiallyAfterInitialSnapshot() = runBlocking {
         val initial = deterministicSurfaceSnapshot().copy(focus = SurfaceFocus.Unfocused)
@@ -478,9 +585,13 @@ internal class DeterministicAppKitNativeWindowPort(
     private val beforeCloseWindow: (String) -> Unit = { },
     private val initialSurfaceSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot(),
     private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
+    private val inputObservationInstalled: Boolean = false,
+    private val inputObservationInstalledFor: Set<String> = emptySet(),
+    private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
 ) : AppKitNativeWindowPort {
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
+    private val inputObservers = linkedMapOf<String, RecordingNativeInputObserver>()
     val createdWindowTitles = CopyOnWriteArrayList<String>()
     val closedWindowTitles = CopyOnWriteArrayList<String>()
     val windowWillCloseTitles = CopyOnWriteArrayList<String>()
@@ -552,6 +663,22 @@ internal class DeterministicAppKitNativeWindowPort(
         }
     }
 
+    override fun observeInput(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitInputCallbacks,
+    ): AppKitNativeInputObserverOwner? = if (
+        inputObservationInstalled || window.recordingWindow().title in inputObservationInstalledFor
+    ) {
+        RecordingNativeInputObserver(callbacks).also { observer ->
+        val title = window.recordingWindow().title
+        check(inputObservers.put(title, observer) == null) { "$name duplicate test input observer" }
+        afterInputObservationBeforeCommit(this)
+        }
+    } else {
+        null
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         window.recordingWindow().delegateAttached = false
     }
@@ -589,6 +716,10 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
         checkNotNull(surfaceObservers[title]).emitRedrawConsumed(generation)
+    }
+
+    fun emitInput(title: String, input: AppKitInput) {
+        checkNotNull(inputObservers[title]).emit(input)
     }
 
     fun forceLateSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
@@ -674,6 +805,24 @@ internal class DeterministicAppKitNativeWindowPort(
 
         override fun requestRedraw(generation: Long) {
             recordRedrawRequest(generation)
+        }
+
+        override fun revokeCallbacks() {
+            accepting.set(false)
+        }
+
+        override fun close() = Unit
+    }
+
+    private class RecordingNativeInputObserver(
+        private val callbacks: AppKitInputCallbacks,
+    ) : AppKitNativeInputObserverOwner {
+        private val accepting = AtomicBoolean(true)
+        override val keyboardInstalled: Boolean = true
+        override val pointerInstalled: Boolean = true
+
+        fun emit(input: AppKitInput) {
+            if (accepting.get()) callbacks.input(input)
         }
 
         override fun revokeCallbacks() {

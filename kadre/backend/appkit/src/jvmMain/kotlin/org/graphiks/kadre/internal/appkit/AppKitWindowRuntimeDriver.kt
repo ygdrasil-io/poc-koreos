@@ -643,6 +643,49 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
         surfaceId,
         SurfaceRedrawGeneration.fromNative(generation),
     )
+    is AppKitSurfaceStimulus.InputObservationChanged -> SurfaceStimulus.InputObservationChanged(
+        surfaceId,
+        keyboardInstalled,
+        pointerInstalled,
+    )
+    is AppKitSurfaceStimulus.KeyChanged -> SurfaceStimulus.KeyChanged(
+        surfaceId,
+        input.physicalKey,
+        input.logicalKey,
+        input.location,
+        input.keyState,
+        input.repeat,
+        input.modifiers,
+    )
+    is AppKitSurfaceStimulus.PointerInput -> when (val input = input) {
+        is AppKitInput.PointerEntered -> SurfaceStimulus.PointerEntered(
+            surfaceId,
+            org.graphiks.kadre.input.PointerKind.Mouse,
+            input.position,
+        )
+        is AppKitInput.PointerMoved -> SurfaceStimulus.PointerMoved(
+            surfaceId,
+            org.graphiks.kadre.input.PointerKind.Mouse,
+            input.position,
+            input.delta,
+            input.pressure,
+            null,
+        )
+        is AppKitInput.PointerButtonChanged -> SurfaceStimulus.PointerButtonChanged(
+            surfaceId,
+            org.graphiks.kadre.input.PointerKind.Mouse,
+            input.button,
+            input.buttonState,
+            input.position,
+            input.pressure,
+            null,
+        )
+        AppKitInput.PointerLeft -> SurfaceStimulus.PointerLeft(
+            surfaceId,
+            org.graphiks.kadre.input.PointerKind.Mouse,
+        )
+        is AppKitInput.KeyChanged -> error("key input must not use a pointer stimulus")
+    }
 }
 
 private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = SurfaceInitialSnapshot(
