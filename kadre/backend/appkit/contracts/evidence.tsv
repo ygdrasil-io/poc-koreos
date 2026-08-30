@@ -102,7 +102,6 @@ APK-010	scenario	appkit-window-fullscreen-generated-delegate	org.graphiks.kadre.
 APK-010	scenario	appkit-window-fullscreen-terminal-callback	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	fullscreenToggleWaitsForTheDelegateTerminalAndRestoresTheDesiredLevel[jvm]
 APK-010	scenario	appkit-window-fullscreen-external-transition	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	externalFullscreenWillAndDidPublishAnUncorrelatedEffectiveObservation[jvm]
 APK-010	scenario	appkit-window-fullscreen-level-readback	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	fullscreenToggleWaitsForTheDelegateTerminalAndRestoresTheDesiredLevel[jvm]
-APK-010	scenario	appkit-window-fullscreen-policy	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	externalFullscreenWillAndDidPublishAnUncorrelatedEffectiveObservation[jvm]
 APK-010	sentinel	appkit-window-fullscreen-kffi-selector	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	generatedKffiFullscreenSelectorDeliversTerminalCallbacksAndLevelReadbackOnMacOs[jvm]
 APK-010	sentinel	appkit-window-fullscreen-os-version-guard	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	fullscreenAvailabilityUsesNumericMacOsVersionOrdering[jvm]
 APK-010	sentinel	appkit-window-fullscreen-selector-failure	org.graphiks.kadre.internal.appkit.AppKitWindowRuntimeDriverTest	fullscreenSelectorThrowBeforeWillFailsWithoutPublishingAFalseState[jvm]

@@ -556,6 +556,7 @@ private class AppKitWindowCommandPort(
         }
         val fullscreen = (pending.command.update.fullscreen as? PropertyChange.Set)?.value
         if (fullscreen == FullscreenMode.Borderless || fullscreen == FullscreenMode.Windowed) {
+            if (!applyOrdinaryMutationBeforeFullscreen(pending, admission.peer)) return
             applyFullscreenMutation(pending, admission.peer, fullscreen)
             return
         }
@@ -606,6 +607,41 @@ private class AppKitWindowCommandPort(
         } else {
             pending.command.partiallyApplied(effective, rejected)
         }
+    }
+
+    private fun applyOrdinaryMutationBeforeFullscreen(
+        pending: PendingWindowMutationCommand,
+        peer: AppKitWindowPeer,
+    ): Boolean {
+        val target = pending.command.toMutationTarget()
+        if (!target.hasChange()) return true
+        val mutation = try {
+            peer.updateWindow(target, pending)
+        } catch (cause: Throwable) {
+            val reject = synchronized(lock) {
+                mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
+            }
+            if (reject) pending.command.rejected(cause)
+            return false
+        }
+        if (mutation == null) {
+            val reject = synchronized(lock) {
+                mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
+            }
+            if (reject) {
+                pending.command.rejected(IllegalStateException("AppKit window mutation peer closed before commit"))
+            }
+            return false
+        }
+        synchronized(lock) {
+            pending.entry.managedGeometryGeneration = maxOf(
+                pending.entry.managedGeometryGeneration,
+                mutation.generation,
+            )
+        }
+        updateDesiredLevelAfterMutation(pending, mutation.snapshot)
+        mutation.failure?.let(::reportFailure)
+        return true
     }
 
     private fun applyFullscreenMutation(
@@ -1146,6 +1182,16 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
     ),
     level = AppKitWindowLevelTarget(update.level),
 )
+
+private fun AppKitWindowMutationTarget.hasChange(): Boolean =
+    title !is PropertyChange.Unchanged ||
+        geometry.contentSize !is PropertyChange.Unchanged ||
+        geometry.minimumSize !is PropertyChange.Unchanged ||
+        geometry.maximumSize !is PropertyChange.Unchanged ||
+        geometry.resizable !is PropertyChange.Unchanged ||
+        chrome.decorations !is PropertyChange.Unchanged ||
+        chrome.systemButtons !is PropertyChange.Unchanged ||
+        level.level !is PropertyChange.Unchanged
 
 private fun WindowUpdateCommand.rejectedMutationFields(
     snapshot: AppKitWindowMutationSnapshot,

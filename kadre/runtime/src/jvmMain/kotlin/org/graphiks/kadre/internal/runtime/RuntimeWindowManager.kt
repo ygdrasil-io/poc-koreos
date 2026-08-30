@@ -1383,13 +1383,6 @@ internal class RuntimeWindow(
             invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
-            if (
-                WindowProperty.Fullscreen in supportedWindowUpdateProperties &&
-                update.fullscreen !is PropertyChange.Unchanged &&
-                changedProperties(update).size != 1
-            ) {
-                return KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
-            }
             if (update.fullscreen !is PropertyChange.Unchanged) {
                 update.expectedRevision?.let { expected ->
                     if (expected != current.revision) {
@@ -1855,7 +1848,7 @@ internal class RuntimeWindow(
     ): WindowStatePublication? {
         val lifecycle = mutableState.value
         if (lifecycle.phase != WindowPhase.Open) return null
-        val candidate = lifecycle.copy(fullscreen = state.fullscreen, level = state.level)
+        val candidate = state.copy(phase = lifecycle.phase, revision = lifecycle.revision)
         if (candidate == lifecycle) return null
         val effective = candidate.copy(revision = WindowRevision(lifecycle.revision.value + 1L))
         mutableState.value = effective

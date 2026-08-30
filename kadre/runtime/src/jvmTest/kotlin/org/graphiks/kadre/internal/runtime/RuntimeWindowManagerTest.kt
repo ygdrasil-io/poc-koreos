@@ -952,7 +952,7 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
-    fun fullscreenRejectsClearMixedUpdatesAndExclusiveBeforeNativeDispatch() = runTest {
+    fun fullscreenRejectsClearAndExclusiveBeforeNativeDispatch() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
         val window = openFullscreenWindow(manager, port)
@@ -960,15 +960,6 @@ class RuntimeWindowManagerTest {
         assertEquals(
             KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
             window.apply(WindowUpdate(fullscreen = PropertyChange.Clear)),
-        )
-        assertEquals(
-            KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
-            window.apply(
-                WindowUpdate(
-                    fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
-                    title = PropertyChange.Set("mixed"),
-                ),
-            ),
         )
         val exclusive = assertIs<WindowUpdateOutcome.PartiallyApplied>(
             window.apply(

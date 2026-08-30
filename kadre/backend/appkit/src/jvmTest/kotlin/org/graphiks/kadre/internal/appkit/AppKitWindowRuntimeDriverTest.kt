@@ -100,6 +100,41 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun fullscreenTerminalIncludesOrdinaryMutationReadback() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-with-title")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "before-fullscreen"))
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(
+                    WindowUpdate(
+                        title = PropertyChange.Set("after-fullscreen"),
+                        fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
+                    ),
+                )
+            }
+
+            awaitFullscreenToggle(port)
+            assertFalse(update.isCompleted)
+            port.emitDidEnter("before-fullscreen")
+
+            val state = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue()).state
+            assertEquals("after-fullscreen", state.title)
+            assertEquals(FullscreenMode.Borderless, state.fullscreen)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun fullscreenDidFailEnterPreservesTheLastEffectiveWindowedState() = runBlocking {
         val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-failure")
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(

@@ -168,10 +168,6 @@ internal sealed interface AppKitFullscreenCallback {
     data object DidFailExit : AppKitFullscreenCallback
 }
 
-internal fun interface AppKitFullscreenCallbackSink {
-    fun accept(callback: AppKitFullscreenCallback)
-}
-
 /** Private, native-address-free window request forwarded from the runtime command. */
 internal data class AppKitWindowMutationTarget(
     val title: PropertyChange<String>,
