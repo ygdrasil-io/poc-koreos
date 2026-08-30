@@ -777,9 +777,17 @@ class AppKitWindowRuntimeDriverTest {
     @Test
     fun pendingCleanupFailureDuringDriverCloseDetachesInsteadOfReportingFalseCancellation() = runBlocking {
         val cleanupFailure = IllegalStateException("pending native close failed")
+        val preparationStarted = CountDownLatch(1)
+        val allowPreparation = CountDownLatch(1)
         val port = DeterministicAppKitNativeWindowPort(
             name = "pending-cleanup-failure",
             closeFailures = mapOf("pending" to cleanupFailure),
+            beforeCreateWindow = { spec ->
+                if (spec.title == "pending") {
+                    preparationStarted.countDown()
+                    check(allowPreparation.await(2, TimeUnit.SECONDS))
+                }
+            },
         )
         val reported = CopyOnWriteArrayList<Throwable>()
         val cleanupReported = CompletableDeferred<Unit>()
@@ -794,12 +802,19 @@ class AppKitWindowRuntimeDriverTest {
             driver.manager.requestWindow(WindowSpec(title = "pending"))
         }
 
-        driver.close()
+        try {
+            assertTrue(preparationStarted.await(2, TimeUnit.SECONDS))
+            driver.close()
+            allowPreparation.countDown()
 
-        assertEquals(WindowRequestOutcome.RequesterDetached, pending.await().successValue().await())
-        withTimeout(2.seconds) { cleanupReported.await() }
-        assertTrue(reported.contains(cleanupFailure))
-        assertEquals(emptyList(), driver.manager.state.value.windows)
+            assertEquals(WindowRequestOutcome.RequesterDetached, pending.await().successValue().await())
+            withTimeout(2.seconds) { cleanupReported.await() }
+            assertTrue(reported.contains(cleanupFailure))
+            assertEquals(emptyList(), driver.manager.state.value.windows)
+        } finally {
+            allowPreparation.countDown()
+            driver.close()
+        }
     }
 
     @Test
