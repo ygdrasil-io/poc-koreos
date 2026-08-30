@@ -382,10 +382,12 @@ contrat porte sur une valeur native lisible et entièrement testable en CI.
 
 La sous-tranche suivante, définie par
 `APPKIT-PHASE-5-WINDOW-FULLSCREEN-DESIGN.md`, réserve le fullscreen natif
-`Borderless` corrélé aux notifications AppKit. Elle garde `Exclusive` hors
-scope jusqu'à la phase Display, refuse l'initialisation fullscreen non
-corrélable et réserve `WIN-005` et `APK-010` en statut `planned` jusqu'à
-l'activation publique et à ses preuves.
+`Borderless` corrélé aux notifications AppKit. `Window.apply` attend la
+completion terminale et retourne `Applied` ou une failure corrélée, jamais un
+`Accepted` intermédiaire. La sous-tranche garde `Exclusive` hors scope jusqu'à
+la phase Display, refuse l'initialisation `Borderless` non corrélable, rejette
+l'initialisation `Exclusive` par `RequestWindow`, et réserve `WIN-005` et
+`APK-010` en statut `planned` jusqu'à l'activation publique et à ses preuves.
 
 #### Contenu
 
@@ -402,7 +404,8 @@ l'activation publique et à ses preuves.
 - chaque champ de `WindowSpec` et `WindowUpdate` est supporté ou refusé explicitement ;
 - aucun commit asynchrone n’est présenté comme immédiatement appliqué ;
 - fullscreen et options process-wide sont restaurés au teardown ;
-- chaque branche `Applied`, `PartiallyApplied`, `Accepted` ou failure est couverte.
+- chaque branche `Applied`, `PartiallyApplied`, `Accepted` lorsqu'elle est
+  terminale, ou failure est couverte.
 
 ### Phase 6 — IME, touch et gestures
 
