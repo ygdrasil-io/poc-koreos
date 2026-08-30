@@ -42,6 +42,7 @@ import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
+import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
@@ -103,6 +104,8 @@ internal class KffiAppKitWindowPort(
     private val configureWindow: (AppKitNativeWindowOwner, WindowSpec) -> Unit =
         ::configureKffiWindow,
     private val fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
+    private val collectionBehaviorWindow: (AppKitNativeWindowOwner) -> NSWindow =
+        AppKitNativeWindowOwner::kffiWindow,
 ) : AppKitNativeWindowPort {
     fun prepare(
         id: AppKitWindowPeerId,
@@ -126,6 +129,13 @@ internal class KffiAppKitWindowPort(
         val owner = createUnconfiguredWindow(spec)
         return try {
             configureWindow(owner, spec)
+            if (fullscreenAvailability.isAvailable) {
+                val window = collectionBehaviorWindow(owner)
+                window.setCollectionBehavior(
+                    window.collectionBehavior() +
+                        NSWindowCollectionBehavior.NSWindowCollectionBehaviorFullScreenPrimary,
+                )
+            }
             owner
         } catch (failure: Throwable) {
             try {

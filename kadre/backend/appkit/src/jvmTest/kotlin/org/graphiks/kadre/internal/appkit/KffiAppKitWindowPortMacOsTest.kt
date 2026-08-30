@@ -40,6 +40,7 @@ import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
+import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
@@ -69,6 +70,54 @@ class KffiAppKitWindowPortMacOsTest {
         assertTrue(AppKitFullscreenAvailability("10.7.0").isAvailable)
         assertTrue(AppKitFullscreenAvailability("11.0").isAvailable)
         assertTrue(AppKitFullscreenAvailability("26.0").isAvailable)
+    }
+
+    @Test
+    fun createWindowAddsFullscreenPrimaryWithoutReplacingExistingCollectionBehavior() {
+        val owner = CountingWindowOwner()
+        val calls = mutableListOf<String>()
+        val nativeWindow = RecordingCollectionBehaviorWindow(
+            initialBehavior = NSWindowCollectionBehavior(1L),
+            calls = calls,
+        )
+        val port = KffiAppKitWindowPort(
+            createUnconfiguredWindow = {
+                calls += "create"
+                owner
+            },
+            configureWindow = { actualOwner, _ ->
+                assertSame(owner, actualOwner)
+                calls += "configure"
+            },
+            fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+            collectionBehaviorWindow = { actualOwner ->
+                assertSame(owner, actualOwner)
+                nativeWindow
+            },
+        )
+
+        assertSame(owner, port.createWindow(WindowSpec()))
+
+        assertEquals(129L, nativeWindow.behavior.rawValue)
+        assertEquals(listOf("create", "configure", "read", "write:129"), calls)
+    }
+
+    @Test
+    fun createWindowDoesNotAccessFullscreenCollectionBehaviorWhenUnavailable() {
+        val owner = CountingWindowOwner()
+        var collectionBehaviorAccessed = false
+        val port = KffiAppKitWindowPort(
+            createUnconfiguredWindow = { owner },
+            configureWindow = { actualOwner, _ -> assertSame(owner, actualOwner) },
+            fullscreenAvailability = AppKitFullscreenAvailability("10.6.8"),
+            collectionBehaviorWindow = {
+                collectionBehaviorAccessed = true
+                error("fullscreen collection behavior must remain unavailable")
+            },
+        )
+
+        assertSame(owner, port.createWindow(WindowSpec()))
+        assertFalse(collectionBehaviorAccessed)
     }
 
     @Test
@@ -127,13 +176,24 @@ class KffiAppKitWindowPortMacOsTest {
             try {
                 val deadline = System.nanoTime() + 5_000_000_000L
                 while (!nativeApplication.isRunning() && System.nanoTime() < deadline) Thread.onSpinWait()
-                val prepared = KffiAppKitWindowPort().prepare(
+                val port = KffiAppKitWindowPort()
+                val prepared = port.prepare(
                     id = AppKitWindowPeerId(90L),
                     spec = WindowSpec(title = "fullscreen-native", level = WindowLevel.Floating),
                     acceptSurfaceStimulus = { },
                     acceptStimulus = callback,
                 )
                 peer.set(prepared)
+                assertTrue(
+                    assertIs<KadreResult.Success<Boolean>>(
+                        prepared.withDesktopHandle(admitCallback = { true }) { handle ->
+                            val behavior = NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                                .collectionBehavior()
+                            NSWindowCollectionBehavior.NSWindowCollectionBehaviorFullScreenPrimary in behavior
+                        },
+                    ).value,
+                    "created AppKit window is missing FullScreenPrimary collection behavior",
+                )
                 prepared.toggleFullscreen(
                     AppKitWindowFullscreenTarget(FullscreenMode.Borderless),
                     commit,
@@ -147,15 +207,16 @@ class KffiAppKitWindowPortMacOsTest {
         try {
             nativeApplication.run()
             starterFailure.get()?.let { throw IllegalStateException("native fullscreen starter failed", it) }
-            assertTrue(
+            assertEquals(
+                listOf(
+                    AppKitFullscreenCallback.WillEnter,
+                    AppKitFullscreenCallback.DidEnter,
+                    AppKitFullscreenCallback.WillExit,
+                    AppKitFullscreenCallback.DidExit,
+                ),
                 stimuli.filterIsInstance<AppKitWindowStimulus.FullscreenCallback>()
-                    .any { it.callback == AppKitFullscreenCallback.DidEnter },
-                "generated delegate did not complete fullscreen entry: $stimuli",
-            )
-            assertTrue(
-                stimuli.filterIsInstance<AppKitWindowStimulus.FullscreenCallback>()
-                    .any { it.callback == AppKitFullscreenCallback.DidExit },
-                "generated delegate did not complete fullscreen exit: $stimuli",
+                    .map(AppKitWindowStimulus.FullscreenCallback::callback),
+                "generated delegate did not deliver the fullscreen entry/exit callback sequence",
             )
             assertEquals(listOf(WindowLevel.Floating, WindowLevel.Floating), readbackLevels)
         } finally {
@@ -1312,6 +1373,24 @@ private class CountingWindowOwner : AppKitNativeWindowOwner {
 
     override fun close() {
         closeCount += 1
+    }
+}
+
+private class RecordingCollectionBehaviorWindow(
+    initialBehavior: NSWindowCollectionBehavior,
+    private val calls: MutableList<String>,
+) : NSWindow(MemorySegment.NULL) {
+    var behavior: NSWindowCollectionBehavior = initialBehavior
+        private set
+
+    override fun collectionBehavior(): NSWindowCollectionBehavior {
+        calls += "read"
+        return behavior
+    }
+
+    override fun setCollectionBehavior(value: NSWindowCollectionBehavior) {
+        calls += "write:${value.rawValue}"
+        behavior = value
     }
 }
 
