@@ -1229,6 +1229,8 @@ internal class RuntimeWindow(
     private val mutableCapabilities = MutableStateFlow(
         windowCapabilities(publicWindowCapabilities, enabledWindowGeometryCapabilities),
     )
+    private val supportedWindowUpdateProperties =
+        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + enabledWindowGeometryCapabilities
     private val eventFlow = RuntimeWindowEventFlow(
         policy = deliveryPolicy,
         eventCollectorGate = eventCollectorGate,
@@ -1279,30 +1281,31 @@ internal class RuntimeWindow(
             if (current.phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
-            invalidGeometryClearField(update)?.let { field ->
+            invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
-            val candidate = candidateFor(update, current)
+            val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties)
+            val candidate = candidateFor(supportedUpdate, current)
                 ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             val rejected = changedProperties(update)
-                .filterNot(::isRuntimeGeometryProperty)
+                .filterNot(supportedWindowUpdateProperties::contains)
                 .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
-            val geometryChanged = geometryChanged(current, candidate)
-            if (!geometryChanged) {
+            val mutationChanged = mutationChanged(current, candidate)
+            if (!mutationChanged) {
                 update.expectedRevision?.let { expected ->
                     if (expected != current.revision) {
                         return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
                     }
                 }
                 immediate = KadreResult.Success(updateOutcome(operationId, current, rejected))
-                pending = PendingWindowUpdate(operationId, null, update, rejected)
+                pending = PendingWindowUpdate(operationId, null, supportedUpdate, rejected)
             } else {
                 immediate = null
                 pending = PendingWindowUpdate(
                     operationId = operationId,
                     expectedRevision = update.expectedRevision,
-                    update = geometryOnly(update),
+                    update = supportedUpdate,
                     rejected = rejected,
                 )
                 pendingUpdates.addLast(pending)
@@ -1435,7 +1438,7 @@ internal class RuntimeWindow(
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
                     continue
                 }
-                if (!geometryChanged(current, effectiveCandidate)) {
+                if (!mutationChanged(current, effectiveCandidate)) {
                     candidate.result.complete(KadreResult.Success(updateOutcome(candidate.operationId, current, candidate.rejected)))
                     continue
                 }
@@ -1616,11 +1619,15 @@ internal class RuntimeWindow(
                 ),
             )
         }
-        if (before.resizable != effective.resizable) {
+        val changedProperties = buildSet {
+            if (before.title != effective.title) add(WindowProperty.Title)
+            if (before.resizable != effective.resizable) add(WindowProperty.Resizable)
+        }
+        if (changedProperties.isNotEmpty()) {
             publish(
                 WindowEvent.PropertiesChanged(
                     state = effective,
-                    changed = setOf(WindowProperty.Resizable),
+                    changed = changedProperties,
                     operationId = publication.operationId,
                     stamp = eventStampSource(),
                 ),
@@ -1680,7 +1687,11 @@ private fun windowCapabilities(
     publicWindowCapabilities: Boolean,
     enabledWindowGeometryCapabilities: Set<WindowProperty>,
 ): WindowCapabilities = WindowCapabilities(
-    title = unsupported(KadreOperation.UpdateWindow),
+    title = if (publicWindowCapabilities) {
+        enabledWindowGeometryCapabilities.capability(WindowProperty.Title, Unit)
+    } else {
+        unsupported(KadreOperation.UpdateWindow)
+    },
     outerPosition = unsupported(KadreOperation.UpdateWindow),
     contentSize = enabledWindowGeometryCapabilities.capability(
         WindowProperty.ContentSize,
@@ -1742,7 +1753,7 @@ private fun changedProperties(update: WindowUpdate): List<WindowProperty> = buil
     if (update.contentProtection !is PropertyChange.Unchanged) add(WindowProperty.ContentProtection)
 }
 
-private fun isRuntimeGeometryProperty(property: WindowProperty): Boolean = property in setOf(
+internal val DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES: Set<WindowProperty> = setOf(
     WindowProperty.ContentSize,
     WindowProperty.MinimumSize,
     WindowProperty.MaximumSize,
@@ -1754,6 +1765,7 @@ private fun candidateFor(
     current: WindowState,
 ): WindowState? = try {
     current.copy(
+        title = resolveTitle(update.title, current.title),
         contentSize = resolveContentSize(update.contentSize, current.contentSize),
         minimumSize = resolveOptionalSize(update.minimumSize, current.minimumSize),
         maximumSize = resolveOptionalSize(update.maximumSize, current.maximumSize),
@@ -1770,6 +1782,16 @@ private fun resolveContentSize(
     is PropertyChange.Set -> change.value
     PropertyChange.Clear -> current
     PropertyChange.Unchanged -> current
+}
+
+private fun resolveTitle(
+    change: PropertyChange<String>,
+    current: String,
+): String = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear,
+    PropertyChange.Unchanged,
+    -> current
 }
 
 private fun resolveOptionalSize(
@@ -1790,25 +1812,39 @@ private fun resolveResizable(
     PropertyChange.Unchanged -> current
 }
 
-private fun invalidGeometryClearField(update: WindowUpdate): String? = when {
-    update.contentSize is PropertyChange.Clear -> "contentSize"
-    update.resizable is PropertyChange.Clear -> "resizable"
+private fun invalidRequiredClearField(
+    update: WindowUpdate,
+    supportedProperties: Set<WindowProperty>,
+): String? = when {
+    WindowProperty.Title in supportedProperties && update.title is PropertyChange.Clear -> "title"
+    WindowProperty.ContentSize in supportedProperties && update.contentSize is PropertyChange.Clear -> "contentSize"
+    WindowProperty.Resizable in supportedProperties && update.resizable is PropertyChange.Clear -> "resizable"
     else -> null
 }
 
-private fun geometryChanged(current: WindowState, candidate: WindowState): Boolean =
-    current.contentSize != candidate.contentSize ||
+private fun mutationChanged(current: WindowState, candidate: WindowState): Boolean =
+    current.title != candidate.title ||
+        current.contentSize != candidate.contentSize ||
         current.minimumSize != candidate.minimumSize ||
         current.maximumSize != candidate.maximumSize ||
         current.resizable != candidate.resizable
 
-private fun geometryOnly(update: WindowUpdate): WindowUpdate = WindowUpdate(
-    contentSize = update.contentSize,
-    minimumSize = update.minimumSize,
-    maximumSize = update.maximumSize,
-    resizable = update.resizable,
+private fun supportedMutationOnly(
+    update: WindowUpdate,
+    supportedProperties: Set<WindowProperty>,
+): WindowUpdate = WindowUpdate(
+    title = update.title.whenSupported(WindowProperty.Title, supportedProperties),
+    contentSize = update.contentSize.whenSupported(WindowProperty.ContentSize, supportedProperties),
+    minimumSize = update.minimumSize.whenSupported(WindowProperty.MinimumSize, supportedProperties),
+    maximumSize = update.maximumSize.whenSupported(WindowProperty.MaximumSize, supportedProperties),
+    resizable = update.resizable.whenSupported(WindowProperty.Resizable, supportedProperties),
     expectedRevision = update.expectedRevision,
 )
+
+private fun <T> PropertyChange<T>.whenSupported(
+    property: WindowProperty,
+    supportedProperties: Set<WindowProperty>,
+): PropertyChange<T> = if (property in supportedProperties) this else PropertyChange.Unchanged
 
 private fun updateOutcome(
     operationId: WindowOperationId,

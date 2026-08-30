@@ -116,11 +116,15 @@
 
   Expected: échec parce que `Title` est rejeté ou supprimé avant le port.
 
-- [ ] **Step 3: généraliser le candidat supporté.**
+- [ ] **Step 3: dissocier le routage de l'annonce publique.**
 
-  Renommer le paramètre interne `enabledWindowGeometryCapabilities` en
-  `enabledWindowUpdateCapabilities` à travers `RuntimeWindowManager`,
-  `RuntimeWindow` et leurs appels. Étendre `candidateFor` :
+  Garder `enabledWindowGeometryCapabilities` comme configuration de routage :
+  compléter ce set par les quatre propriétés de géométrie déjà routées et
+  ajouter `WindowProperty.Title` dans les preuves titre. `WindowCapabilities.title`
+  devient `Supported` seulement si ce set contient `Title` *et* que
+  `publicWindowCapabilities` vaut `true`; les preuves O2 le laissent à `false`.
+  Étendre `candidateFor` après avoir filtré l'update vers les seules propriétés
+  de ce set :
 
   ```kotlin
   title = resolveTitle(update.title, current.title)
@@ -137,9 +141,9 @@
   ```
 
   Étendre `invalidGeometryClearField` en validation non nullable incluant
-  `title`, conserver les validations de taille, et remplacer le filtre
-  `isRuntimeGeometryProperty` par un prédicat couvrant `Title` et les quatre
-  propriétés de géométrie.
+  `title` seulement lorsque le champ est routé, conserver les validations de
+  taille, et rejeter explicitement comme `Unsupported(UpdateWindow)` les champs
+  absents du set. Une fenêtre minimale garde donc `title` indisponible.
 
 - [ ] **Step 4: conserver l'update complet supporté jusqu'au port.**
 
@@ -324,9 +328,9 @@ un readback natif commun titre + géométrie, sans activation de capability.
   les messages de diagnostic par des noms de mutation. Construire le target à
   partir de `WindowUpdate.title` et de la cible géométrique existante. Mapper le
   snapshot en `WindowState` en remplaçant titre et géométrie, mais préserver les
-  autres propriétés du state courant. Renommer la configuration interne en
-  `enabledWindowUpdateCapabilities` sans modifier l'ensemble de propriétés
-  activées dans cette PR.
+  autres propriétés du state courant. Passer `WindowProperty.Title` seulement
+  dans le set de routage du driver ; garder `publicWindowCapabilities` à sa
+  valeur privée et ne modifier aucune capability publique dans cette PR.
 
 - [ ] **Step 6: exécuter les tests GREEN privés.**
 

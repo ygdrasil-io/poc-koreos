@@ -50,11 +50,16 @@ Le runtime est l'autorité de `WindowState`, des révisions, de la policy de
 livraison et des outcomes. Le peer conserve seulement les owners natifs et les
 snapshots privés de commande. Il ne possède jamais un second état public.
 
-Le nom interne `enabledWindowGeometryCapabilities` devient
-`enabledWindowUpdateCapabilities`, car la même configuration porte désormais
-les quatre propriétés de géométrie déjà actives et `WindowProperty.Title`. Ce
-set contrôle l'annonce de capability et la normalisation de `WindowSpec` par
-le backend ; il ne crée pas de nouvelle API publique.
+Le set interne actuel `enabledWindowGeometryCapabilities` autorise les champs
+que le runtime peut router : il est toujours complété par les quatre propriétés
+de géométrie déjà actives et il peut inclure `WindowProperty.Title` dans les
+preuves O2. La capability `title` est toutefois annoncée seulement lorsque
+`publicWindowCapabilities` est actif *et* que le set contient `Title`. Les
+preuves privées gardent donc `publicWindowCapabilities = false` : elles
+exercent le transport sans publier une capability. La carte d'activation
+renomme ce set en `enabledWindowUpdateCapabilities` et passe `Title` depuis le
+backend AppKit public. Cette double condition interdit qu'une preuve interne
+transforme prématurément une fenêtre publique en faux succès.
 
 ## Sémantique de WindowUpdate
 
