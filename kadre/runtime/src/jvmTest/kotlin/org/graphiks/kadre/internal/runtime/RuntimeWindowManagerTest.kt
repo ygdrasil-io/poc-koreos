@@ -64,6 +64,7 @@ import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowEvent
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
@@ -938,6 +939,144 @@ class RuntimeWindowManagerTest {
                 systemButtons = WindowSystemButtons.None,
             ),
         )
+
+        assertIs<WindowUpdateOutcome.Applied>(committed.await().successValue())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            stale.await(),
+        )
+        assertEquals(2, port.updateCommands.size)
+    }
+
+    @Test
+    fun windowLevelClearFailsBeforeDispatchOrPublication() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = levelUpdateProperties())
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("level")),
+            window.apply(WindowUpdate(level = PropertyChange.Clear)),
+        )
+        assertTrue(port.updateCommands.isEmpty())
+        assertEquals(WindowLevel.Normal, window.state.value.level)
+        assertIs<Capability.Unsupported>(window.capabilities.value.level)
+    }
+
+    @Test
+    fun windowLevelSharesTheCorrelatedCommandAndPublishesStateBeforeProperties() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = levelCompositionUpdateProperties())
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "before", contentSize = LogicalSize(100.0, 100.0)))
+                .successValue(),
+            port.openCommands.single(),
+        )
+        val observedStates = mutableListOf<WindowState>()
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.onEach { event ->
+                observedStates += window.state.value
+                events += event
+            }.collect()
+        }
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("after"),
+                    contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0)),
+                    decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.All),
+                    level = PropertyChange.Set(WindowLevel.Floating),
+                ),
+            )
+        }
+
+        val command = port.updateCommands.single()
+        assertEquals(PropertyChange.Set(WindowLevel.Floating), command.update.level)
+        assertEquals(PropertyChange.Set(WindowSystemButtons.None), command.update.systemButtons)
+        command.applied(
+            window.state.value.copy(
+                title = "after",
+                contentSize = LogicalSize(120.0, 100.0),
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+                level = WindowLevel.Floating,
+            ),
+        )
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals(listOf(outcome.state, outcome.state), observedStates)
+        val geometry = assertIs<WindowEvent.GeometryChanged>(events[0])
+        val properties = assertIs<WindowEvent.PropertiesChanged>(events[1])
+        assertEquals(command.operationId, geometry.operationId)
+        assertEquals(command.operationId, properties.operationId)
+        assertEquals(
+            setOf(
+                WindowProperty.Title,
+                WindowProperty.Decorations,
+                WindowProperty.SystemButtons,
+                WindowProperty.Level,
+            ),
+            properties.changed,
+        )
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowLevelNoOpDoesNotDispatchOrReviseStateAfterItsFirstNativeCommit() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = levelUpdateProperties())
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        val changed = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+        }
+        val command = port.updateCommands.single()
+        command.applied(window.state.value.copy(level = WindowLevel.Floating))
+        val committed = assertIs<WindowUpdateOutcome.Applied>(changed.await().successValue())
+        val beforeNoOp = window.state.value
+
+        val noOp = assertIs<WindowUpdateOutcome.Applied>(
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating))).successValue(),
+        )
+
+        assertEquals(committed.state, beforeNoOp)
+        assertEquals(beforeNoOp, noOp.state)
+        assertEquals(1, port.updateCommands.size)
+    }
+
+    @Test
+    fun windowLevelCancellationAndQueuedRevisionRespectTheNativeCommitBoundary() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = levelUpdateProperties())
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+        val withdrawn = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+        }
+        val withdrawnCommand = port.updateCommands.single()
+        withdrawn.cancelAndJoin()
+        withdrawnCommand.applied(window.state.value.copy(level = WindowLevel.Floating))
+        assertTrue(withdrawn.isCancelled)
+        assertEquals(WindowLevel.Normal, window.state.value.level)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        val committed = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+        }
+        val stale = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    level = PropertyChange.Set(WindowLevel.Modal),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val committedCommand = port.updateCommands.last()
+        committedCommand.applied(window.state.value.copy(level = WindowLevel.Floating))
 
         assertIs<WindowUpdateOutcome.Applied>(committed.await().successValue())
         assertEquals(
@@ -2499,6 +2638,13 @@ class RuntimeWindowManagerTest {
 
     private fun chromeAndTitleUpdateProperties(): Set<WindowProperty> =
         chromeUpdateProperties() + WindowProperty.Title
+
+    private fun levelUpdateProperties(): Set<WindowProperty> =
+        DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + WindowProperty.Level
+
+    private fun levelCompositionUpdateProperties(): Set<WindowProperty> =
+        levelUpdateProperties() +
+            setOf(WindowProperty.Title, WindowProperty.Decorations, WindowProperty.SystemButtons)
 
     private suspend fun kotlinx.coroutines.test.TestScope.applyContentSize(
         window: Window,
