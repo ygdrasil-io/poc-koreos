@@ -1738,7 +1738,14 @@ private fun windowCapabilities(
     } else {
         unsupported(KadreOperation.UpdateWindow)
     },
-    level = unsupported(KadreOperation.UpdateWindow),
+    level = if (publicWindowCapabilities) {
+        enabledWindowUpdateCapabilities.capability(
+            WindowProperty.Level,
+            setOf(WindowLevel.Normal, WindowLevel.Floating, WindowLevel.Modal),
+        )
+    } else {
+        unsupported(KadreOperation.UpdateWindow)
+    },
     transparency = unsupported(KadreOperation.UpdateWindow),
     blurBehind = unsupported(KadreOperation.UpdateWindow),
     icon = unsupported(KadreOperation.UpdateWindow),

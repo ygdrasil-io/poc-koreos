@@ -193,6 +193,81 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun cancellationBeforeTheFirstLevelSetterLeavesThePeerUntouched() = runBlocking {
+        val beforeFirstSetter = CountDownLatch(1)
+        val allowFirstSetter = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "level-pre-setter-cancellation",
+            beforeGeometrySetter = {
+                beforeFirstSetter.countDown()
+                check(allowFirstSetter.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "level-pre-setter-cancellation"))
+                    .successValue()
+                    .await(),
+            ).window
+            val before = window.state.value
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+            }
+            assertTrue(beforeFirstSetter.await(2, TimeUnit.SECONDS))
+
+            update.cancel()
+            update.join()
+            allowFirstSetter.countDown()
+
+            assertTrue(update.isCancelled)
+            assertEquals(before, window.state.value)
+            assertEquals(WindowLevel.Normal, port.level("level-pre-setter-cancellation"))
+        } finally {
+            allowFirstSetter.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun levelUpdatesRemainPeerLocalAfterTheNativeLevelChanges() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "level-peer-isolation")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+        )
+
+        try {
+            val first = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "level-first"))
+                    .successValue()
+                    .await(),
+            ).window
+            val second = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "level-second"))
+                    .successValue()
+                    .await(),
+            ).window
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                first.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Modal))).successValue(),
+            )
+
+            assertEquals(WindowLevel.Modal, outcome.state.level)
+            assertEquals(WindowLevel.Modal, first.state.value.level)
+            assertEquals(WindowLevel.Normal, second.state.value.level)
+            assertEquals(WindowLevel.Modal, port.level("level-first"))
+            assertEquals(WindowLevel.Normal, port.level("level-second"))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun peerForwardsCanonicalChromeUpdatesAndReadsBackTheEffectiveSnapshot() = runBlocking {
         val title = "chrome-readback"
         val unrelatedBits = 0b1_0000_0000L
@@ -1421,6 +1496,8 @@ internal class DeterministicAppKitNativeWindowPort(
     fun styleMask(title: String): Long = checkNotNull(windows[title]).styleMask
 
     fun chrome(title: String): AppKitWindowChromeSnapshot = checkNotNull(windows[title]).chrome
+
+    fun level(title: String): WindowLevel = checkNotNull(windows[title]).level
 
     fun emitSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
         checkNotNull(surfaceObservers[title]).emitMetrics(metrics)
