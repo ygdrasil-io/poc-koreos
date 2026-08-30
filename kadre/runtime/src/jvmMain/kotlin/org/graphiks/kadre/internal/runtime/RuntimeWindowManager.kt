@@ -39,9 +39,10 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
-import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.LogicalSizeRange
+import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCancellationOutcome
@@ -1322,7 +1323,11 @@ internal class RuntimeWindow(
     private val initialState = initialWindowState(spec)
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(
-        windowCapabilities(publicWindowCapabilities, enabledWindowUpdateCapabilities),
+        windowCapabilities(
+            publicWindowCapabilities,
+            enabledWindowUpdateCapabilities,
+            fullscreenAvailabilityFailure,
+        ),
     )
     private val supportedWindowUpdateProperties =
         DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES + enabledWindowUpdateCapabilities
@@ -2349,6 +2354,7 @@ private fun initialWindowState(spec: WindowSpec): WindowState = WindowState(
 private fun windowCapabilities(
     publicWindowCapabilities: Boolean,
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
+    fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
 ): WindowCapabilities = WindowCapabilities(
     title = if (publicWindowCapabilities) {
         enabledWindowUpdateCapabilities.capability(WindowProperty.Title, Unit)
@@ -2369,7 +2375,20 @@ private fun windowCapabilities(
         LogicalSizeRange(null, null, null),
     ),
     resizable = enabledWindowUpdateCapabilities.capability(WindowProperty.Resizable, Unit),
-    fullscreen = unsupported(KadreOperation.UpdateWindow),
+    fullscreen = if (publicWindowCapabilities) {
+        if (WindowProperty.Fullscreen in enabledWindowUpdateCapabilities) {
+            Capability.Supported(
+                setOf(FullscreenKind.Borderless),
+                fullscreenAvailabilityFailure
+                    ?.let(FeatureAvailability::Unavailable)
+                    ?: FeatureAvailability.Available,
+            )
+        } else {
+            unsupported(KadreOperation.UpdateWindow)
+        }
+    } else {
+        unsupported(KadreOperation.UpdateWindow)
+    },
     decorations = if (publicWindowCapabilities) {
         enabledWindowUpdateCapabilities.capability(
             WindowProperty.Decorations,

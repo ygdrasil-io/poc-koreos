@@ -57,6 +57,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     failureReporter: RuntimeFailureReporter,
     publicAppKitCapabilities: Boolean,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
+    fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
     publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
@@ -88,6 +89,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     ).also(fullscreenObservationSink::install)

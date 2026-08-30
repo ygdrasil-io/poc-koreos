@@ -65,6 +65,7 @@ import org.graphiks.kadre.window.WindowCloseRequestId
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
@@ -968,6 +969,57 @@ class RuntimeWindowManagerTest {
         )
         assertEquals(setOf(WindowProperty.Fullscreen), exclusive.rejected.map { it.field }.toSet())
         assertTrue(port.updateCommands.isEmpty())
+    }
+
+    @Test
+    fun fullscreenCapabilityPublishesOnlyTheBorderlessDomainWhenOptedIn() = runTest {
+        val nonOptedInPort = DeterministicWindowCommandPort()
+        val nonOptedInWindow = openFullscreenWindow(
+            manager(nonOptedInPort, publicWindowCapabilities = true),
+            nonOptedInPort,
+        )
+        assertIs<Capability.Unsupported>(nonOptedInWindow.capabilities.value.fullscreen)
+
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+        )
+        val window = openFullscreenWindow(manager, port)
+
+        assertEquals(
+            Capability.Supported(
+                setOf(FullscreenKind.Borderless),
+                FeatureAvailability.Available,
+            ),
+            window.capabilities.value.fullscreen,
+        )
+    }
+
+    @Test
+    fun fullscreenCapabilityPreservesItsBorderlessDomainWhenAvailabilityIsUnavailable() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val unavailable = KadreFailure.PlatformFailure(
+            KadrePlatform.Fake,
+            "fullscreen",
+            "os-version-unavailable",
+        )
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            fullscreenAvailabilityFailure = unavailable,
+        )
+        val window = openFullscreenWindow(manager, port)
+
+        assertEquals(
+            Capability.Supported(
+                setOf(FullscreenKind.Borderless),
+                FeatureAvailability.Unavailable(unavailable),
+            ),
+            window.capabilities.value.fullscreen,
+        )
     }
 
     @Test

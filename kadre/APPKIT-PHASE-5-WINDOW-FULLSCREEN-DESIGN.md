@@ -17,8 +17,9 @@ Le périmètre public est fermé :
 | `FullscreenMode.Borderless` | `NSWindow.toggleFullScreen` | supportée |
 | `FullscreenMode.Exclusive` | display et mode exclusifs | update : `PartiallyApplied(Fullscreen = Unsupported(UpdateWindow))` ; création : `Rejected(Unsupported(RequestWindow))` |
 
-`Borderless` désigne le fullscreen géré par l'espace macOS. Kadre ne modifie
-pas `collectionBehavior`, ne choisit pas d'écran, ne personnalise pas
+`Borderless` désigne le fullscreen géré par l'espace macOS. Kadre ajoute
+`NSWindowCollectionBehaviorFullScreenPrimary` en préservant les autres bits de
+`collectionBehavior` ; il ne choisit pas d'écran, ne personnalise pas
 l'animation et ne touche pas aux presentation options process-wide.
 `Exclusive` reste hors scope jusqu'à la phase 9, qui fournira l'inventaire de
 displays, les modes et la restauration nécessaires.
@@ -45,8 +46,8 @@ hors de leur coordination explicitement définie ci-dessous.
 
 ## Précondition KFFI et disponibilité
 
-Le snapshot KFFI publié expose les bindings générés nécessaires, avec leurs
-annotations de disponibilité macOS 10.7 :
+KFFI expose les bindings générés nécessaires, avec leurs annotations de
+disponibilité macOS 10.7 :
 
 - `NSWindow.toggleFullScreen(sender)` ;
 - `NSWindowWillEnterFullScreenNotification`,
@@ -60,6 +61,13 @@ Le port utilise uniquement ces bindings et les observations Objective-C managed
 de KFFI. Kadre ne construit ni selector Panama, ni downcall, ni wrapper FFI
 local. Une lacune de génération remonte à Kextract, puis à une régénération et
 une publication KFFI, avant toute modification Kadre.
+
+La preuve native locale de cette activation utilise le composite KFFI propre au
+commit `4eb87e2`, qui contient le correctif généré de lookup CoreGraphics. Le
+snapshot Maven courant ne contient pas encore ce correctif : la CI distante
+doit attendre sa publication avant de pouvoir reproduire `APK-010`. Cette
+limite de distribution ne désactive ni la capability ni les contrats, dont les
+preuves locales complètes utilisent exclusivement les bindings générés.
 
 `AppKitFullscreenAvailability` est une dépendance interne injectable. Elle
 compare la version système à `10.7.0`, sans charger de symbole Objective-C ni
@@ -287,7 +295,7 @@ retour visible de l'espace macOS.
 
 ## Capability publique
 
-Après activation publique, lorsque `AppKitFullscreenAvailability` est vraie,
+Lorsque `AppKitFullscreenAvailability` est vraie,
 AppKit expose :
 
 ```text
@@ -314,12 +322,11 @@ capabilities actives ne changent pas.
 
 ## Preuves et contrats
 
-`WIN-005` réserve le contrat O2 de la machine à états runtime fullscreen.
-`APK-010` réserve le contrat O3 de l'activation AppKit. Ils restent
-`planned` jusqu'à la dernière PR de la stack ; cette carte ne modifie ni
-capability active, ni evidence, ni gate.
+`WIN-005` est le contrat O2 actif de la machine à états runtime fullscreen.
+`APK-010` est le contrat O3 actif de l'activation AppKit. Leurs mappings JUnit
+et leurs evidence JSON sont exigés par les gates runtime et AppKit.
 
-`WIN-005` couvrira :
+`WIN-005` couvre :
 
 - validation de `Clear`, `Exclusive` à l'update et à la création, update mixte
   et no-op ;
@@ -350,7 +357,7 @@ toggle, le stale callback, la libération de barrière dans chaque chemin
 terminal, l'état effectif après failure committée, l'isolation inter-fenêtres
 et le non-contournement de policy.
 
-`APK-010` couvrira :
+`APK-010` couvre :
 
 - binding KFFI, observations `Will`/`Did` et callbacks d'échec ;
 - entrée, sortie, callback réentrant/externe et terminal, puis level effectif
@@ -359,23 +366,24 @@ et le non-contournement de policy.
   `Exclusive` rejeté dans le bon canal ;
 - cancellation, teardown, callbacks tardifs/dupliqués et transitions externes ;
 - absence de presentation option process-wide, de peer ou d'observer résiduel ;
-- chemin de policy et isolation entre peers.
+- isolation entre peers ; la policy discrète appartient à `WIN-005`.
 
-Les tests déterministes prouveront la machine à états, les stimuli internes et
-les callbacks tardifs. Les tests macOS réels prouveront selector, notifications,
-completion, readback effectif du level et guard de disponibilité. Un harness
-manuel relèvera l'animation visible et le comportement de Space plein écran :
-il ne bloque pas la CI et ne remplace aucune preuve O2/O3.
+Les tests déterministes prouvent la machine à états, les stimuli internes et
+les callbacks tardifs. Les tests macOS réels prouvent selector, notifications,
+completion, readback effectif du level et guard de disponibilité. Le cahier
+`backend/appkit/manual/phase-5-fullscreen.md` relève séparément l'animation
+visible et le comportement de Space plein écran : il ne bloque pas la CI et ne
+remplace aucune preuve O2/O3.
 
 ## Découpage de la stack
 
-1. Cette PR ajoute ce design, réserve `WIN-005` et `APK-010`, et actualise
-   la roadmap sans activer de capability.
-2. Une PR fille introduit la barrière runtime, les stimuli internes `Failed` /
+1. La première PR a ajouté ce design et réservé `WIN-005` et `APK-010` sans
+   activer de capability.
+2. La deuxième PR a introduit la barrière runtime, les stimuli internes `Failed` /
    `CommittedFailure`, la tombstone, `desiredLevel`, l'attente terminale, les
    callbacks abstraits et les preuves O2, sans exposition AppKit publique.
-3. Une PR fille raccorde peer, port déterministe et KFFI aux notifications
+3. La troisième PR a raccordé peer, port déterministe et KFFI aux notifications
    fullscreen, aux callbacks d'échec et au readback de level, avec preuves
    macOS privées.
-4. La dernière PR active capability, contrats et evidence CI ; elle ajoute le
-   harness manuel non bloquant d'observation interactive.
+4. La dernière PR a activé capability, contrats et evidence CI ; elle a ajouté
+   le harness manuel non bloquant d'observation interactive.

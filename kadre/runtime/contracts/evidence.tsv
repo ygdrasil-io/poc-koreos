@@ -60,3 +60,5 @@ WIN-005	sentinel	runtime-window-fullscreen-policy-bypass	org.graphiks.kadre.inte
 WIN-005	sentinel	runtime-window-fullscreen-local-did-drain	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenLocalDidDrainsTheQueuedOppositeTransition[jvm]
 WIN-005	sentinel	runtime-window-fullscreen-borderless-creation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenBorderlessCreationFailsBeforeNativeOpenAdmission[jvm]
 WIN-005	sentinel	runtime-window-fullscreen-exclusive-creation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenExclusiveCreationRejectsTheRequestBeforeNativeOpenAdmission[jvm]
+WIN-005	sentinel	runtime-window-fullscreen-capability-domain	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenCapabilityPublishesOnlyTheBorderlessDomainWhenOptedIn[jvm]
+WIN-005	sentinel	runtime-window-fullscreen-capability-unavailable	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	fullscreenCapabilityPreservesItsBorderlessDomainWhenAvailabilityIsUnavailable[jvm]

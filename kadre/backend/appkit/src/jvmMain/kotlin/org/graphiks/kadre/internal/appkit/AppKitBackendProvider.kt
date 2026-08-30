@@ -34,12 +34,14 @@ public class AppKitBackendProvider private constructor(
     private val nativeApplication: AppKitNativeApplication,
     private val broker: AppKitProcessBroker,
     private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
+    private val fullscreenAvailability: AppKitFullscreenAvailability,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
         KffiAppKitNativeApplication(),
         ProcessAppKitProcessBroker.value,
         AppKitWindowRuntimeDriverFactory(),
+        AppKitFullscreenAvailability(),
         ::isMacOs,
     )
 
@@ -199,11 +201,13 @@ public class AppKitBackendProvider private constructor(
             nativeApplication: AppKitNativeApplication,
             broker: AppKitProcessBroker,
             windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
+            fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
             broker,
             windowDriverFactory,
+            fullscreenAvailability,
             availability,
         )
 
@@ -228,6 +232,13 @@ public class AppKitBackendProvider private constructor(
             "appkit-host",
             "lifecycle-observation-exception",
         )
+
+        private fun fullscreenAvailabilityFailure(): KadreFailure.PlatformFailure =
+            KadreFailure.PlatformFailure(
+                KadrePlatform.AppKit,
+                "fullscreen",
+                "os-version-unavailable",
+            )
     }
 
     private fun windowComponentsFactory(
@@ -238,6 +249,11 @@ public class AppKitBackendProvider private constructor(
             resources = resources,
             publicAppKitCapabilities = true,
             enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES,
+            fullscreenAvailabilityFailure = if (fullscreenAvailability.isAvailable) {
+                null
+            } else {
+                fullscreenAvailabilityFailure()
+            },
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
         )
@@ -254,6 +270,7 @@ private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setO
     WindowProperty.Decorations,
     WindowProperty.SystemButtons,
     WindowProperty.Level,
+    WindowProperty.Fullscreen,
 )
 
 private class AppKitLastWindowStopBridge {
