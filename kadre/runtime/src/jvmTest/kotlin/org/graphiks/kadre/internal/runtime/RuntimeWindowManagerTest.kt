@@ -479,7 +479,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun windowTitleStatePrecedesOneCorrelatedPropertiesEvent() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         installWindowEventPolicy(manager, KadrePolicies.Default.window)
         val window = commit(
             manager.requestWindow(WindowSpec(title = "original")).successValue(),
@@ -607,7 +607,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun windowTitleClearFailsBeforeDispatchOrPublication() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         installWindowEventPolicy(manager, KadrePolicies.Default.window)
         val window = commit(
             manager.requestWindow(WindowSpec(title = "original")).successValue(),
@@ -632,7 +632,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun windowTitleAndGeometryShareOneCorrelatedCommand() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         val window = commit(
             manager.requestWindow(
                 WindowSpec(
@@ -670,7 +670,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun windowTitleNoOpDoesNotDispatchOrReviseState() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         val window = commit(
             manager.requestWindow(WindowSpec(title = "unchanged")).successValue(),
             port.openCommands.single(),
@@ -689,7 +689,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun windowTitleCancellationRespectsTheNativeCommitBoundary() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         val window = commit(
             manager.requestWindow(WindowSpec(title = "original")).successValue(),
             port.openCommands.single(),
@@ -720,7 +720,7 @@ class RuntimeWindowManagerTest {
     @Test
     fun queuedWindowTitleRevalidatesExpectedRevisionAtDispatch() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, enabledWindowGeometryCapabilities = titleUpdateProperties())
+        val manager = manager(port, enabledWindowUpdateCapabilities = titleUpdateProperties())
         val window = commit(
             manager.requestWindow(WindowSpec(title = "original")).successValue(),
             port.openCommands.single(),
@@ -2252,7 +2252,7 @@ class RuntimeWindowManagerTest {
         maxPending: Int = 4,
         reported: MutableList<Throwable> = mutableListOf(),
         publicWindowCapabilities: Boolean = false,
-        enabledWindowGeometryCapabilities: Set<WindowProperty> = emptySet(),
+        enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
         publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: () -> Unit = {},
     ): RuntimeWindowManager = RuntimeWindowManager(
@@ -2264,7 +2264,7 @@ class RuntimeWindowManagerTest {
         platform = KadrePlatform.Fake,
         failureReporter = RuntimeFailureReporter(reported::add),
         publicWindowCapabilities = publicWindowCapabilities,
-        enabledWindowGeometryCapabilities = enabledWindowGeometryCapabilities,
+        enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
     )

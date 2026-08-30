@@ -118,7 +118,7 @@
 
 - [ ] **Step 3: dissocier le routage de l'annonce publique.**
 
-  Garder `enabledWindowGeometryCapabilities` comme configuration de routage :
+  Garder `enabledWindowUpdateCapabilities` comme configuration de routage :
   compléter ce set par les quatre propriétés de géométrie déjà routées et
   ajouter `WindowProperty.Title` dans les preuves titre. `WindowCapabilities.title`
   devient `Supported` seulement si ce set contient `Title` *et* que
@@ -173,7 +173,7 @@
 
   Expected: PASS, y compris les scénarios géométrie existants.
 
-- [ ] **Step 7: commit.**
+- [x] **Step 7: commit.**
 
   ```text
   feat(runtime): serialize window title updates
@@ -420,29 +420,30 @@ planned jusqu'à la PR suivante.
 **Produces:** `WIN-002` et `APK-007` actifs, `WindowCapabilities.title`
 supportée sur AppKit, evidence JSON `APK-007` exigée par la CI.
 
-- [ ] **Step 1: écrire les tests RED d'activation.**
+- [x] **Step 1: écrire les tests RED d'activation.**
 
-  Ajouter à `AppKitBackendProviderTest` :
+  Ajouter aux tests AppKit :
 
   ```kotlin
-  @Test fun publicAppKitWindowTitleCapabilityUsesGeneratedReadbackOnMacOs()
-  @Test fun publicAppKitWindowTitleEventsFollowSessionPolicyOnMacOs()
-  @Test fun publicAppKitWindowTitleDoesNotCrossBetweenTwoWindowsOnMacOs()
+  @Test fun publicAppKitWindowActivatesOnlyTheFiveProvenUpdateCapabilitiesOnMacOs()
+  @Test fun publicAppKitWindowTitleUsesTheGeneratedBindingAndOneCorrelatedUpdateOnMacOs()
+  @Test fun cancellationWhileOwnerThreadWaitsBeforeFirstTitleSetterWithdrawsTheUpdate()
+  @Test fun titleUpdatesRemainPeerLocalAfterTheNativeTitleChanges()
   ```
 
-  Le premier exige `Capability.Supported(Unit, FeatureAvailability.Available)`,
-  applique un titre et vérifie l'outcome, le state et le getter KFFI. Le second
-  vérifie state avant `PropertiesChanged` et le passage par la policy. Le
-  troisième ouvre deux fenêtres, mute une seule et vérifie l'isolation des deux
-  états et titres natifs.
+  Les deux premiers vérifient la capability, une mutation combinée, l'outcome,
+  le state, les événements corrélés et le getter KFFI réel. Les deux derniers
+  vérifient la frontière d'annulation et l'isolation de peers avec le port
+  déterministe, qui permet de reproduire ces courses sans dépendre du timing
+  d'une fenêtre interactive.
 
-- [ ] **Step 2: exécuter les tests RED.**
+- [x] **Step 2: exécuter les tests RED.**
 
   Run: `./gradlew :kadre:backend:appkit:jvmTest --tests org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest --console=plain`
 
   Expected: échec parce que `WindowCapabilities.title` est encore `Unsupported`.
 
-- [ ] **Step 3: activer seulement le titre.**
+- [x] **Step 3: activer seulement le titre.**
 
   Ajouter `WindowProperty.Title` à `APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES`
   (renommé depuis le set geometry) transmis par le provider. Dans
@@ -450,7 +451,7 @@ supportée sur AppKit, evidence JSON `APK-007` exigée par la CI.
   Ne modifier aucune autre propriété ni l'initialisation effective des
   décorations/boutons.
 
-- [ ] **Step 4: passer les contrats de planned à active.**
+- [x] **Step 4: passer les contrats de planned à active.**
 
   Remplacer les deux lignes par des lignes actives complètes :
 
@@ -462,14 +463,14 @@ supportée sur AppKit, evidence JSON `APK-007` exigée par la CI.
   Compléter les mappings manquants afin que chaque scénario et sentinelle soit
   représenté exactement une fois.
 
-- [ ] **Step 5: étendre la gate AppKit.**
+- [x] **Step 5: étendre la gate AppKit.**
 
   Ajouter `APK-007.json` aux listes de `EVIDENCE_FILES` dans les deux scripts,
   intégrer `APK-007` à la boucle du fake Gradle et ajouter un cas négatif qui
   échoue quand ce JSON manque. Aucun gate ne doit accepter une activation sans
   evidence produite par `generateAppKitContractEvidence`.
 
-- [ ] **Step 6: exécuter les tests GREEN et les gates.**
+- [x] **Step 6: exécuter les tests GREEN et les gates.**
 
   Run: `./gradlew :kadre:foundation:allTests :kadre:runtime:jvmTest :kadre:backend:appkit:jvmTest :kadre:backend:appkit:appKitNativeTests :kadre:contracts:validator:validateContractRegistry --refresh-dependencies --rerun-tasks --no-daemon --console=plain`
 
@@ -494,7 +495,7 @@ supportée sur AppKit, evidence JSON `APK-007` exigée par la CI.
 **Produces:** une stack prête à reviewer, où chaque base est explicite et où
 les invariants de titre ne dégradent pas les contrats actifs précédents.
 
-- [ ] **Step 1: vérifier le diff de chaque carte.**
+- [x] **Step 1: vérifier le diff de chaque carte.**
 
   Run: `git diff --check <base-runtime>...<head-runtime>`
 
@@ -504,7 +505,7 @@ les invariants de titre ne dégradent pas les contrats actifs précédents.
 
   Expected: aucune erreur d'espaces et aucun changement hors périmètre.
 
-- [ ] **Step 2: rejouer les gates depuis la tête.**
+- [x] **Step 2: rejouer les gates depuis la tête.**
 
   Run: `./gradlew :kadre:foundation:allTests :kadre:runtime:jvmTest :kadre:backend:appkit:jvmTest :kadre:backend:appkit:appKitNativeTests :kadre:contracts:validator:validateContractRegistry --refresh-dependencies --rerun-tasks --no-daemon --console=plain`
 
@@ -512,7 +513,7 @@ les invariants de titre ne dégradent pas les contrats actifs précédents.
 
   Expected: PASS pour les deux commandes.
 
-- [ ] **Step 3: inspecter l'état Git avant publication.**
+- [x] **Step 3: inspecter l'état Git avant publication.**
 
   Run: `git status --short --branch`
 
