@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSApplicationActivationPolicy
+import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSDefaultRunLoopMode
 import org.graphiks.kffi.objc.NSDate_distantFuture
 import org.graphiks.kffi.objc.NSDate_date
@@ -32,6 +33,7 @@ import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.appkit.AppKitScrollWheelEvent
@@ -86,6 +88,7 @@ import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowManager
@@ -94,6 +97,7 @@ import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import java.lang.foreign.Arena
@@ -609,6 +613,8 @@ class AppKitBackendProviderTest {
                 assertEquals(LogicalSize(100.0, 80.0), window.state.value.minimumSize)
                 assertEquals(LogicalSize(640.0, 360.0), window.state.value.maximumSize)
                 assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+                assertEquals(WindowDecorations.System, window.state.value.decorations)
+                assertEquals(WindowSystemButtons.All, window.state.value.systemButtons)
                 assertEquals(WindowLevel.Normal, window.state.value.level)
                 assertFalse(window.state.value.transparent)
                 assertFalse(window.state.value.blurBehind)
@@ -619,11 +625,27 @@ class AppKitBackendProviderTest {
                     Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.title,
                 )
+                assertEquals(
+                    Capability.Supported(
+                        setOf(WindowDecorations.System, WindowDecorations.Borderless),
+                        FeatureAvailability.Available,
+                    ),
+                    windowCapabilities.decorations,
+                )
+                assertEquals(
+                    Capability.Supported(
+                        setOf(
+                            WindowSystemButtons.All,
+                            WindowSystemButtons.CloseOnly,
+                            WindowSystemButtons.None,
+                        ),
+                        FeatureAvailability.Available,
+                    ),
+                    windowCapabilities.systemButtons,
+                )
                 listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
                     windowCapabilities.fullscreen,
-                    windowCapabilities.decorations,
-                    windowCapabilities.systemButtons,
                     windowCapabilities.level,
                     windowCapabilities.transparency,
                     windowCapabilities.blurBehind,
@@ -1287,7 +1309,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesOnlyTheFiveProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesOnlyTheSevenProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1312,12 +1334,28 @@ class AppKitBackendProviderTest {
                 Capability.Supported(Unit, FeatureAvailability.Available),
                 window.capabilities.value.resizable,
             )
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowDecorations.System, WindowDecorations.Borderless),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.decorations,
+            )
+            assertEquals(
+                Capability.Supported(
+                    setOf(
+                        WindowSystemButtons.All,
+                        WindowSystemButtons.CloseOnly,
+                        WindowSystemButtons.None,
+                    ),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.systemButtons,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
                 window.capabilities.value.fullscreen,
-                window.capabilities.value.decorations,
-                window.capabilities.value.systemButtons,
                 window.capabilities.value.level,
                 window.capabilities.value.transparency,
                 window.capabilities.value.blurBehind,
@@ -1325,6 +1363,112 @@ class AppKitBackendProviderTest {
                 window.capabilities.value.attention,
                 window.capabilities.value.contentProtection,
             ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowChromeUsesGeneratedBindingsAndOneCorrelatedUpdateOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow(
+                WindowSpec(
+                    title = "public-chrome-before",
+                    decorations = WindowDecorations.System,
+                    systemButtons = WindowSystemButtons.All,
+                ),
+            )
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                assertEquals(WindowSystemButtons.All, window.state.value.systemButtons)
+                assertEquals(
+                    NativePublicWindowChrome(
+                        decorations = WindowDecorations.System,
+                        resizable = true,
+                        closeHidden = false,
+                        miniaturizeHidden = false,
+                        zoomHidden = false,
+                    ),
+                    readNativeWindowChrome(window),
+                )
+
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            title = PropertyChange.Set("public-chrome-borderless"),
+                            contentSize = PropertyChange.Set(LogicalSize(420.0, 260.0)),
+                            decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                            systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                assertEquals(WindowDecorations.Borderless, outcome.state.decorations)
+                assertEquals(WindowSystemButtons.None, outcome.state.systemButtons)
+                assertEquals(outcome.state, window.state.value)
+                assertEquals(
+                    NativePublicWindowChrome(
+                        decorations = WindowDecorations.Borderless,
+                        resizable = true,
+                        closeHidden = null,
+                        miniaturizeHidden = null,
+                        zoomHidden = null,
+                    ),
+                    readNativeWindowChrome(window),
+                )
+                val geometry = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                val properties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(outcome.operationId, geometry.operationId)
+                assertEquals(outcome.operationId, properties.operationId)
+                assertEquals(outcome.state, geometry.state)
+                assertEquals(outcome.state, properties.state)
+                assertEquals(
+                    setOf(WindowProperty.Title, WindowProperty.Decorations, WindowProperty.SystemButtons),
+                    properties.changed,
+                )
+
+                val systemOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            decorations = PropertyChange.Set(WindowDecorations.System),
+                            systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                            resizable = PropertyChange.Set(false),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                assertEquals(WindowDecorations.System, systemOutcome.state.decorations)
+                assertEquals(WindowSystemButtons.CloseOnly, systemOutcome.state.systemButtons)
+                assertFalse(systemOutcome.state.resizable)
+                assertEquals(
+                    NativePublicWindowChrome(
+                        decorations = WindowDecorations.System,
+                        resizable = false,
+                        closeHidden = false,
+                        miniaturizeHidden = true,
+                        zoomHidden = true,
+                    ),
+                    readNativeWindowChrome(window),
+                )
+                val systemProperties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(systemOutcome.operationId, systemProperties.operationId)
+                assertEquals(systemOutcome.state, systemProperties.state)
+                assertEquals(
+                    setOf(WindowProperty.Decorations, WindowProperty.SystemButtons, WindowProperty.Resizable),
+                    systemProperties.changed,
+                )
+            } finally {
+                collector.cancel()
+                events.close()
+            }
         }
 
     @OptIn(
@@ -2192,6 +2336,82 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun phase5WindowChromeHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase5-window-chrome-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase5-window-chrome-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase5WindowChromeHarnessKt",
+                "--record=$record",
+                "--build-id=automated-chrome-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("system-close-only")
+                commands.appendLine("system-none")
+                commands.appendLine("borderless")
+                commands.appendLine("system-all")
+                (1..4).forEach { scenario ->
+                    commands.appendLine(
+                        "result M$scenario not-applicable automated proof does not satisfy manual M$scenario",
+                    )
+                }
+                commands.appendLine("close")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "displays=",
+                "buildId=automated-chrome-harness-proof",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("SNAPSHOT\tinitial\tWindowState("), report)
+            assertTrue(report.contains("CAPABILITIES\tWindowCapabilities("), report)
+            listOf("system-close-only", "system-none", "borderless", "system-all").forEach { command ->
+                assertTrue(report.contains("COMMAND\t$command\tSuccess(value="), report)
+                assertTrue(report.contains("SNAPSHOT\tcommand-$command\tWindowState("), report)
+            }
+            assertTrue(report.contains("EVENT\tPropertiesChanged\tstateRevisionVisible=true"), report)
+            assertTrue(
+                report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL\tWindowState(phase=Closed"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            (1..4).forEach { scenario ->
+                assertTrue(
+                    report.contains(
+                        "SCENARIO\tM$scenario\tnot-applicable\t" +
+                            "automated proof does not satisfy manual M$scenario",
+                    ),
+                    report,
+                )
+            }
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
     fun publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs() {
         if (!isMacOs()) return
 
@@ -2647,6 +2867,57 @@ private suspend fun KadreScope.openPublicGeometryWindow(spec: WindowSpec): Windo
     assertIs<WindowRequestOutcome.OpenedHere>(
         windows.requestWindow(spec).appKitSuccessValue().await(),
     ).window
+
+private data class NativePublicWindowChrome(
+    val decorations: WindowDecorations,
+    val resizable: Boolean,
+    val closeHidden: Boolean?,
+    val miniaturizeHidden: Boolean?,
+    val zoomHidden: Boolean?,
+)
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeWindowChrome(window: Window): NativePublicWindowChrome =
+    assertIs<KadreResult.Success<NativePublicWindowChrome>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                val native = NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong()))
+                val style = native.styleMask()
+                val decorations = if (style.contains(NSWindowStyleMask.NSWindowStyleMaskTitled)) {
+                    WindowDecorations.System
+                } else {
+                    WindowDecorations.Borderless
+                }
+                if (decorations == WindowDecorations.Borderless) {
+                    NativePublicWindowChrome(
+                        decorations = decorations,
+                        resizable = style.contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+                        closeHidden = null,
+                        miniaturizeHidden = null,
+                        zoomHidden = null,
+                    )
+                } else {
+                    NativePublicWindowChrome(
+                        decorations = decorations,
+                        resizable = style.contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+                        closeHidden = NSButton(
+                            native.standardWindowButton(NSWindowButton.NSWindowCloseButton),
+                        ).isHidden(),
+                        miniaturizeHidden = NSButton(
+                            native.standardWindowButton(NSWindowButton.NSWindowMiniaturizeButton),
+                        ).isHidden(),
+                        zoomHidden = NSButton(
+                            native.standardWindowButton(NSWindowButton.NSWindowZoomButton),
+                        ).isHidden(),
+                    )
+                }
+            }
+        },
+    ).value
 
 @OptIn(
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,

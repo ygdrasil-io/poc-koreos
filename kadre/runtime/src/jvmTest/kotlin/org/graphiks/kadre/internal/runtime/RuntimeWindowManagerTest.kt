@@ -822,6 +822,12 @@ class RuntimeWindowManagerTest {
         assertIs<WindowUpdateOutcome.Applied>(first.await().successValue())
         val before = window.state.value
 
+        val canonicalNoOp = assertIs<WindowUpdateOutcome.Applied>(
+            window.apply(WindowUpdate(systemButtons = PropertyChange.Set(WindowSystemButtons.None))).successValue(),
+        )
+        assertEquals(before, canonicalNoOp.state)
+        assertEquals(1, port.updateCommands.size)
+
         assertEquals(
             KadreResult.Failure(KadreFailure.InvalidRequest("systemButtons")),
             window.apply(WindowUpdate(systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly))),

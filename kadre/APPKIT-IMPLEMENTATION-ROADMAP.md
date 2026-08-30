@@ -364,12 +364,13 @@ La sous-tranche titre, définie par
 `title` avec le même pipeline corrélé, un readback effectif et la policy de
 livraison des événements de propriétés.
 
-La sous-tranche suivante, définie par
-`APPKIT-PHASE-5-WINDOW-CHROME-DESIGN.md`, spécifie les décorations et boutons
-système. Elle fixe la canonisation de `Borderless`, les bits de style AppKit
-possédés par Kadre, le readback des boutons et la future activation des
-capabilities publiques. Les contrats `WIN-003` et `APK-008` restent réservés
-jusqu'à la dernière carte de la stack.
+La sous-tranche chrome, définie par
+`APPKIT-PHASE-5-WINDOW-CHROME-DESIGN.md`, est achevée : AppKit prend en
+charge `decorations` et `systemButtons` avec canonisation de `Borderless`,
+préservation des bits de style non possédés, readback des boutons natifs et
+capabilities publiques. Les contrats `WIN-003` et `APK-008` sont actifs ;
+le harness `phase5WindowChromeHarness` consigne séparément les quatre
+observations visuelles, sans les faire passer artificiellement en CI.
 
 #### Contenu
 

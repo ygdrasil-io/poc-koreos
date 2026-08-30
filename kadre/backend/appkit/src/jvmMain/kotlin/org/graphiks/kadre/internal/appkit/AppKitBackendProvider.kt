@@ -251,6 +251,8 @@ private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setO
     WindowProperty.MinimumSize,
     WindowProperty.MaximumSize,
     WindowProperty.Resizable,
+    WindowProperty.Decorations,
+    WindowProperty.SystemButtons,
 )
 
 private class AppKitLastWindowStopBridge {
