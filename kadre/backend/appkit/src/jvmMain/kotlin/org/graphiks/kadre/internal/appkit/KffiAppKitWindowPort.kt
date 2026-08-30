@@ -304,8 +304,11 @@ internal fun NSEventObservation.toAppKitInput(): AppKitInput? = when (type) {
     NSEventType.NSEventTypeFlagsChanged,
     -> keyboardInput(details as? NSEventObservation.Details.Keyboard ?: return null)
 
-    NSEventType.NSEventTypeMouseEntered,
-    NSEventType.NSEventTypeMouseExited,
+    NSEventType.NSEventTypeMouseEntered ->
+        position.toLogicalPointOrNull()?.let(AppKitInput::PointerEntered)
+
+    NSEventType.NSEventTypeMouseExited -> AppKitInput.PointerLeft
+
     NSEventType.NSEventTypeMouseCancelled,
     NSEventType.NSEventTypeMouseMoved,
     NSEventType.NSEventTypeLeftMouseDragged,
@@ -348,11 +351,7 @@ private fun NSEventObservation.keyboardInput(
 private fun NSEventObservation.pointerInput(
     pointer: NSEventObservation.Details.Pointer,
 ): AppKitInput? = when (type) {
-    NSEventType.NSEventTypeMouseExited,
-    NSEventType.NSEventTypeMouseCancelled,
-    -> AppKitInput.PointerLeft
-
-    NSEventType.NSEventTypeMouseEntered -> position.toLogicalPointOrNull()?.let(AppKitInput::PointerEntered)
+    NSEventType.NSEventTypeMouseCancelled -> AppKitInput.PointerLeft
 
     NSEventType.NSEventTypeMouseMoved,
     NSEventType.NSEventTypeLeftMouseDragged,
