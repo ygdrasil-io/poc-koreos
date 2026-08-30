@@ -640,7 +640,13 @@ private class AppKitWindowCommandPort(
             )
         }
         updateDesiredLevelAfterMutation(pending, mutation.snapshot)
-        mutation.failure?.let(::reportFailure)
+        mutation.failure?.let { failure ->
+            reportFailure(failure)
+            pending.ordinaryRejected = pending.command.rejectedMutationFields(
+                mutation.snapshot,
+                platformFailure("window-update-rejected"),
+            )
+        }
         return true
     }
 
@@ -651,17 +657,13 @@ private class AppKitWindowCommandPort(
     ) {
         synchronized(lock) {
             pending.entry.fullscreenPending = pending
-            pending.entry.desiredLevel = pending.command.desiredLevel
+            pending.entry.desiredLevel = pending.fullscreenDesiredLevel
         }
         val toggled = try {
             peer.toggleFullscreen(AppKitWindowFullscreenTarget(target), pending)
         } catch (failure: Throwable) {
             if (peer.fullscreenWillObservedSinceToggle()) return
-            val terminal = synchronized(lock) {
-                pending.entry.fullscreenPending = null
-                mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
-            }
-            if (terminal) pending.command.failed(fullscreenFailure("selector-threw"))
+            completeSelectorFailure(pending.entry, pending)
             return
         }
         if (toggled == true) return
@@ -706,8 +708,7 @@ private class AppKitWindowCommandPort(
             AppKitFullscreenCallback.DidFailExit,
             -> {
                 if (pending != null) {
-                    finishFullscreenPending(entry, pending)
-                    pending.command.fullscreenDidFail(target)
+                    completeFullscreenFailure(entry, pending, target)
                 } else {
                     fullscreenObservationSink.accept(
                         entry.command.windowId,
@@ -724,7 +725,7 @@ private class AppKitWindowCommandPort(
         target: FullscreenMode,
     ) {
         val peer = synchronized(lock) { entry.peer } ?: return
-        val desiredLevel = pending?.command?.desiredLevel ?: synchronized(lock) { entry.desiredLevel }
+        val desiredLevel = pending?.fullscreenDesiredLevel ?: synchronized(lock) { entry.desiredLevel }
         val snapshot = try {
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
@@ -741,7 +742,7 @@ private class AppKitWindowCommandPort(
         if (pending != null) {
             finishFullscreenPending(entry, pending)
             if (snapshot.level == desiredLevel) {
-                pending.command.fullscreenDid(effective)
+                pending.command.fullscreenDid(effective, pending.ordinaryRejected)
             } else {
                 pending.command.committedFailure(
                     effectiveState = effective,
@@ -749,6 +750,7 @@ private class AppKitWindowCommandPort(
                         (pending.command.update.fullscreen as? PropertyChange.Set)?.value == target
                     ) pending.command.operationId else null,
                     failure = fullscreenFailure("level-restore-failed"),
+                    rejected = pending.ordinaryRejected,
                 )
             }
         } else {
@@ -760,6 +762,52 @@ private class AppKitWindowCommandPort(
                 reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
             }
         }
+    }
+
+    private fun completeFullscreenFailure(
+        entry: PeerEntry,
+        pending: PendingWindowMutationCommand,
+        target: FullscreenMode,
+    ) {
+        val effective = readFullscreenFailureState(entry, pending) ?: return
+        finishFullscreenPending(entry, pending)
+        pending.command.fullscreenDidFail(target, effective, pending.ordinaryRejected)
+    }
+
+    private fun completeSelectorFailure(
+        entry: PeerEntry,
+        pending: PendingWindowMutationCommand,
+    ) {
+        val effective = readFullscreenFailureState(entry, pending) ?: return
+        finishFullscreenPending(entry, pending)
+        pending.command.committedFailure(
+            effectiveState = effective,
+            publicationOperationId = pending.command.operationId,
+            failure = fullscreenFailure("selector-threw"),
+            rejected = pending.ordinaryRejected,
+        )
+    }
+
+    private fun readFullscreenFailureState(
+        entry: PeerEntry,
+        pending: PendingWindowMutationCommand,
+    ): WindowState? {
+        val peer = synchronized(lock) { entry.peer } ?: return null
+        val desiredLevel = pending.fullscreenDesiredLevel
+        val snapshot = try {
+            peer.completeFullscreen(desiredLevel)
+        } catch (failure: Throwable) {
+            reportFailure(failure)
+            finishFullscreenPending(entry, pending)
+            pending.command.failed(fullscreenFailure("level-readback-failed"))
+            scheduleNativeClose(entry)
+            return null
+        }
+        val current = windowState(entry.command.windowId) ?: return null
+        if (snapshot.level != desiredLevel) {
+            reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
+        }
+        return snapshot.withMutationFrom(current)
     }
 
     private fun finishFullscreenPending(entry: PeerEntry, pending: PendingWindowMutationCommand) {
@@ -774,7 +822,10 @@ private class AppKitWindowCommandPort(
         snapshot: AppKitWindowMutationSnapshot,
     ) {
         val requested = (pending.command.update.level as? PropertyChange.Set)?.value ?: return
-        if (snapshot.level == requested) synchronized(lock) { pending.entry.desiredLevel = requested }
+        if (snapshot.level == requested) synchronized(lock) {
+            pending.fullscreenDesiredLevel = requested
+            pending.entry.desiredLevel = requested
+        }
     }
 
     private fun scheduleNativeClose(entry: PeerEntry) {
@@ -1025,6 +1076,8 @@ private class AppKitWindowCommandPort(
         val command: WindowUpdateCommand,
         var cancelled: Boolean = false,
         var nativeCommitStarted: Boolean = false,
+        var fullscreenDesiredLevel: WindowLevel = command.desiredLevel,
+        var ordinaryRejected: List<RejectedWindowField> = emptyList(),
     ) : AppKitWindowMutationCommit {
         override val started: Boolean
             get() = synchronized(lock) { nativeCommitStarted }

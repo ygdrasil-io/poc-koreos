@@ -163,7 +163,12 @@ internal class KffiAppKitWindowPort(
             "AppKit supports only borderless fullscreen transitions"
         }
         if (!commit.beforeFirstSetter()) return false
-        window.kffiWindow().toggleFullScreen(MemorySegment.NULL)
+        val owner = window.kffiWindowOwner()
+        owner.restoreLevel(WindowLevel.Normal)
+        check(appKitWindowLevel(owner.window.level()) == WindowLevel.Normal) {
+            "AppKit fullscreen requires a normal window level before toggle"
+        }
+        owner.window.toggleFullScreen(MemorySegment.NULL)
         return true
     }
 

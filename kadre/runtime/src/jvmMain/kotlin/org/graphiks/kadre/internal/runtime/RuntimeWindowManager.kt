@@ -501,6 +501,7 @@ public class RuntimeWindowManager public constructor(
                 stimulus.effectiveState,
                 stimulus.publicationOperationId,
                 stimulus.failure,
+                stimulus.rejected,
             )
             is WindowUpdateCommandStimulus.Failed -> window.rejectDispatchedUpdate(
                 stimulus.operationId,
@@ -1519,6 +1520,7 @@ internal class RuntimeWindow(
         state: WindowState,
         publicationOperationId: WindowOperationId?,
         failure: KadreFailure,
+        backendRejected: List<RejectedWindowField> = emptyList(),
     ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
@@ -1539,6 +1541,7 @@ internal class RuntimeWindow(
                 eventPublicationsInFlight += 1
                 publication = WindowStatePublication(lifecycle, effective, publicationOperationId)
             }
+            updateDesiredLevelAfterReadback(pending, candidate, backendRejected)
             completion = pending
         }
         try {
@@ -1619,11 +1622,14 @@ internal class RuntimeWindow(
                     currentBarrier,
                     observation.effectiveState,
                     operationId,
+                    observation.rejected,
                 )
                 is WindowFullscreenObservation.DidFail -> acceptFullscreenDidFailLocked(
                     currentBarrier,
                     observation.target,
                     operationId,
+                    observation.effectiveState,
+                    observation.rejected,
                 )
             }
         }
@@ -1731,6 +1737,7 @@ internal class RuntimeWindow(
         barrier: FullscreenBarrier?,
         effectiveState: WindowState,
         operationId: WindowOperationId?,
+        backendRejected: List<RejectedWindowField>,
     ): FullscreenResolution {
         val target = effectiveState.fullscreen
         if (!target.isNativeFullscreenTarget()) return FullscreenResolution.Rejected
@@ -1776,11 +1783,14 @@ internal class RuntimeWindow(
         val publicationOperationId = if (localSuccess) barrier.operationId else null
         val publication = prepareFullscreenPublicationLocked(effectiveState, publicationOperationId)
         val effective = publication?.effective ?: mutableState.value
+        updateDesiredLevelAfterReadback(pending, effective, backendRejected)
         return FullscreenResolution(
             publication = publication,
             completion = pending,
             result = if (localSuccess) {
-                KadreResult.Success(updateOutcome(pending.operationId, effective, pending.rejected))
+                KadreResult.Success(
+                    updateOutcome(pending.operationId, effective, pending.rejected + backendRejected),
+                )
             } else {
                 KadreResult.Failure(unexpectedFullscreenFailure())
             },
@@ -1793,6 +1803,8 @@ internal class RuntimeWindow(
         barrier: FullscreenBarrier?,
         target: FullscreenMode,
         operationId: WindowOperationId?,
+        effectiveState: WindowState?,
+        backendRejected: List<RejectedWindowField>,
     ): FullscreenResolution {
         if (!target.isNativeFullscreenTarget()) return FullscreenResolution.Rejected
         if (barrier == null) {
@@ -1820,13 +1832,21 @@ internal class RuntimeWindow(
         } else {
             unexpectedFullscreenFailure()
         }
-        return failLocalFullscreenLocked(barrier, failure, target) ?: FullscreenResolution.Rejected
+        return failLocalFullscreenLocked(
+            barrier,
+            failure,
+            target,
+            effectiveState,
+            backendRejected,
+        ) ?: FullscreenResolution.Rejected
     }
 
     private fun failLocalFullscreenLocked(
         barrier: FullscreenBarrier,
         failure: KadreFailure,
         tombstoneTarget: FullscreenMode = barrier.target,
+        effectiveState: WindowState? = null,
+        backendRejected: List<RejectedWindowField> = emptyList(),
     ): FullscreenResolution? {
         val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId } ?: return null
         dispatchedUpdate = null
@@ -1834,7 +1854,19 @@ internal class RuntimeWindow(
             barrier,
             FullscreenTombstone(tombstoneTarget, FullscreenTerminalKind.DidFail),
         )
+        val publicationOperationId = if (tombstoneTarget == barrier.target) barrier.operationId else null
+        val publication = effectiveState?.let {
+            prepareFullscreenPublicationLocked(it, publicationOperationId)
+        }
+        if (effectiveState != null) {
+            updateDesiredLevelAfterReadback(
+                pending,
+                publication?.effective ?: mutableState.value,
+                backendRejected,
+            )
+        }
         return FullscreenResolution(
+            publication = publication,
             completion = pending,
             result = KadreResult.Failure(failure),
             terminalOperationId = barrier.operationId,

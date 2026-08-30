@@ -90,6 +90,7 @@ public data class WindowUpdateCommand internal constructor(
         effectiveState: WindowState,
         publicationOperationId: WindowOperationId?,
         failure: KadreFailure,
+        rejected: List<RejectedWindowField> = emptyList(),
     ) {
         stimulusSink.accept(
             WindowUpdateCommandStimulus.CommittedFailure(
@@ -97,6 +98,7 @@ public data class WindowUpdateCommand internal constructor(
                 effectiveState,
                 publicationOperationId,
                 failure,
+                rejected,
             ),
         )
     }
@@ -105,12 +107,27 @@ public data class WindowUpdateCommand internal constructor(
         fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Will(target))
     }
 
-    public fun fullscreenDid(effectiveState: WindowState) {
-        fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Did(effectiveState))
+    public fun fullscreenDid(
+        effectiveState: WindowState,
+        rejected: List<RejectedWindowField> = emptyList(),
+    ) {
+        fullscreenObservationSink.accept(
+            windowId,
+            operationId,
+            WindowFullscreenObservation.Did(effectiveState, rejected),
+        )
     }
 
-    public fun fullscreenDidFail(target: FullscreenMode) {
-        fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.DidFail(target))
+    public fun fullscreenDidFail(
+        target: FullscreenMode,
+        effectiveState: WindowState? = null,
+        rejected: List<RejectedWindowField> = emptyList(),
+    ) {
+        fullscreenObservationSink.accept(
+            windowId,
+            operationId,
+            WindowFullscreenObservation.DidFail(target, effectiveState, rejected),
+        )
     }
 }
 
@@ -136,6 +153,7 @@ public sealed interface WindowUpdateCommandStimulus {
         public val effectiveState: WindowState,
         public val publicationOperationId: WindowOperationId?,
         public val failure: KadreFailure,
+        public val rejected: List<RejectedWindowField> = emptyList(),
     ) : WindowUpdateCommandStimulus
 
     public data class PartiallyApplied(
@@ -151,8 +169,16 @@ public sealed interface WindowUpdateCommandStimulus {
 
 internal sealed interface WindowFullscreenObservation {
     data class Will(val target: FullscreenMode) : WindowFullscreenObservation
-    data class Did(val effectiveState: WindowState) : WindowFullscreenObservation
-    data class DidFail(val target: FullscreenMode) : WindowFullscreenObservation
+    data class Did(
+        val effectiveState: WindowState,
+        val rejected: List<RejectedWindowField> = emptyList(),
+    ) : WindowFullscreenObservation
+
+    data class DidFail(
+        val target: FullscreenMode,
+        val effectiveState: WindowState? = null,
+        val rejected: List<RejectedWindowField> = emptyList(),
+    ) : WindowFullscreenObservation
 }
 
 /** Unstable backend SPI for one uncorrelated native fullscreen observation. */
