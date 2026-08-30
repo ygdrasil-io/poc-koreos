@@ -663,7 +663,7 @@ private class AppKitWindowCommandPort(
             peer.toggleFullscreen(AppKitWindowFullscreenTarget(target), pending)
         } catch (failure: Throwable) {
             if (peer.fullscreenWillObservedSinceToggle()) return
-            completeSelectorFailure(pending.entry, pending)
+            completeSelectorFailure(pending.entry, pending, target)
             return
         }
         if (toggled == true) return
@@ -777,14 +777,15 @@ private class AppKitWindowCommandPort(
     private fun completeSelectorFailure(
         entry: PeerEntry,
         pending: PendingWindowMutationCommand,
+        target: FullscreenMode,
     ) {
         val effective = readFullscreenFailureState(entry, pending) ?: return
         finishFullscreenPending(entry, pending)
-        pending.command.committedFailure(
+        pending.command.fullscreenDidFail(
+            target = target,
             effectiveState = effective,
-            publicationOperationId = pending.command.operationId,
-            failure = fullscreenFailure("selector-threw"),
             rejected = pending.ordinaryRejected,
+            terminalFailure = fullscreenFailure("selector-threw"),
         )
     }
 

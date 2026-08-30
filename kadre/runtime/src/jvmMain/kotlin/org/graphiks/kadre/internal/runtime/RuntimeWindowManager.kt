@@ -1630,6 +1630,7 @@ internal class RuntimeWindow(
                     operationId,
                     observation.effectiveState,
                     observation.rejected,
+                    observation.terminalFailure,
                 )
             }
         }
@@ -1805,6 +1806,7 @@ internal class RuntimeWindow(
         operationId: WindowOperationId?,
         effectiveState: WindowState?,
         backendRejected: List<RejectedWindowField>,
+        terminalFailure: KadreFailure?,
     ): FullscreenResolution {
         if (!target.isNativeFullscreenTarget()) return FullscreenResolution.Rejected
         if (barrier == null) {
@@ -1828,7 +1830,7 @@ internal class RuntimeWindow(
             return FullscreenResolution(diagnostics = listOf(fullscreenCallbackFailure(target)))
         }
         val failure = if (target == barrier.target) {
-            fullscreenCallbackFailure(target)
+            terminalFailure ?: fullscreenCallbackFailure(target)
         } else {
             unexpectedFullscreenFailure()
         }

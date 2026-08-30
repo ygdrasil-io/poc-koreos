@@ -122,11 +122,12 @@ public data class WindowUpdateCommand internal constructor(
         target: FullscreenMode,
         effectiveState: WindowState? = null,
         rejected: List<RejectedWindowField> = emptyList(),
+        terminalFailure: KadreFailure? = null,
     ) {
         fullscreenObservationSink.accept(
             windowId,
             operationId,
-            WindowFullscreenObservation.DidFail(target, effectiveState, rejected),
+            WindowFullscreenObservation.DidFail(target, effectiveState, rejected, terminalFailure),
         )
     }
 }
@@ -178,6 +179,7 @@ internal sealed interface WindowFullscreenObservation {
         val target: FullscreenMode,
         val effectiveState: WindowState? = null,
         val rejected: List<RejectedWindowField> = emptyList(),
+        val terminalFailure: KadreFailure? = null,
     ) : WindowFullscreenObservation
 }
 

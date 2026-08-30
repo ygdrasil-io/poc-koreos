@@ -245,6 +245,48 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun selectorFailureDeduplicatesLateDidFailAndKeepsLateDidExternal() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "fullscreen-selector-terminal",
+            fullscreenToggleFailure = IllegalStateException("selector"),
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-selector-terminal"))
+            val events = CopyOnWriteArrayList<WindowEvent>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+
+            val failure = assertIs<KadreResult.Failure>(
+                window.apply(
+                    WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)),
+                ),
+            ).reason
+            assertEquals(fullscreenFailureFixture("selector-threw"), failure)
+
+            port.emitDidFailEnter("fullscreen-selector-terminal")
+            port.emitDidEnter("fullscreen-selector-terminal")
+            withTimeout(2.seconds) {
+                window.state.first { it.fullscreen == FullscreenMode.Borderless }
+                while (events.isEmpty()) yield()
+            }
+
+            assertTrue(reported.isEmpty())
+            val event = assertIs<WindowEvent.PropertiesChanged>(events.single())
+            assertEquals(setOf(WindowProperty.Fullscreen), event.changed)
+            assertEquals(null, event.operationId)
+            collector.cancelAndJoin()
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun didFailPublishesOrdinaryReadbackBeforeFailingFullscreen() = runBlocking {
         val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-did-fail-readback")
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
