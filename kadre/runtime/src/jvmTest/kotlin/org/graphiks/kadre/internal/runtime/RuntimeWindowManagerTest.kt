@@ -3,6 +3,7 @@ package org.graphiks.kadre.internal.runtime
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionInstant
@@ -36,10 +38,15 @@ import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.IngressOverflowAction
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -56,10 +63,13 @@ import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowCreationMode
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowPhase
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
+import org.graphiks.kadre.window.WindowRevision
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import kotlin.coroutines.CoroutineContext
@@ -71,9 +81,606 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import java.util.concurrent.CountDownLatch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowManagerTest {
+    @Test
+    fun windowIngressSerializesConcurrentPublicationsAndEnforcesDiscreteAdmission() = runTest {
+        val policy = KadrePolicies.Default.window.copy(
+            geometryChanges = ContinuousDelivery.Coalesced,
+            discreteEvents = KadrePolicies.Default.window.discreteEvents.copy(
+                ingressCapacity = 2,
+                collectorCapacity = 4,
+                ingressOverflow = IngressOverflowAction.CloseSource,
+            ),
+        )
+        val statePort = DeterministicWindowCommandPort()
+        val stateManager = manager(statePort)
+        val base = commit(
+            stateManager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            statePort.openCommands.single(),
+        ).state.value
+        val ordered = RuntimeWindowEventFlow(
+            policy = policy,
+            eventCollectorGate = RuntimeEventCollectorAllocator(4).newGate(4),
+            failureReporter = RuntimeFailureReporter { },
+            sessionFailureHandler = {},
+            closeWindow = {},
+        )
+        val received = mutableListOf<WindowEvent>()
+        val collector = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            ordered.events.onEach { event ->
+                received += event
+                if (event.stamp.sequence == SessionSequence(1L)) {
+                    val geometryReady = CountDownLatch(1)
+                    val barrierPublished = CountDownLatch(1)
+                    val geometryBeforeBarrier = Thread {
+                        geometryReady.countDown()
+                        barrierPublished.await()
+                        ordered.publish(
+                            WindowEvent.GeometryChanged(
+                                base.copy(
+                                    contentSize = LogicalSize(120.0, 100.0),
+                                    revision = WindowRevision(2L),
+                                ),
+                                operationId = null,
+                                stamp = EventStamp(SessionSequence(2L), SessionInstant(2.nanoseconds), null),
+                            ),
+                        )
+                    }
+                    val barrierThenGeometry = Thread {
+                        geometryReady.await()
+                        ordered.publish(
+                            WindowEvent.PropertiesChanged(
+                                base.copy(revision = WindowRevision(3L)),
+                                changed = setOf(WindowProperty.Resizable),
+                                operationId = null,
+                                stamp = EventStamp(SessionSequence(3L), SessionInstant(3.nanoseconds), null),
+                            ),
+                        )
+                        barrierPublished.countDown()
+                        ordered.publish(
+                            WindowEvent.GeometryChanged(
+                                base.copy(
+                                    contentSize = LogicalSize(140.0, 100.0),
+                                    revision = WindowRevision(4L),
+                                ),
+                                operationId = null,
+                                stamp = EventStamp(SessionSequence(4L), SessionInstant(4.nanoseconds), null),
+                            ),
+                        )
+                    }
+                    geometryBeforeBarrier.start()
+                    barrierThenGeometry.start()
+                    geometryBeforeBarrier.join()
+                    barrierThenGeometry.join()
+                }
+            }.toList()
+        }
+
+        ordered.publish(
+            WindowEvent.GeometryChanged(
+                base.copy(revision = WindowRevision(1L)),
+                operationId = null,
+                stamp = EventStamp(SessionSequence(1L), SessionInstant(1.nanoseconds), null),
+            ),
+        )
+        advanceUntilIdle()
+        ordered.close()
+        collector.await()
+
+        assertEquals(listOf(1L, 2L, 3L, 4L), received.map { it.stamp.sequence.value })
+        assertEquals(
+            listOf(
+                LogicalSize(100.0, 100.0),
+                LogicalSize(120.0, 100.0),
+                null,
+                LogicalSize(140.0, 100.0),
+            ),
+            received.map { (it as? WindowEvent.GeometryChanged)?.state?.contentSize },
+        )
+
+        var closedWindows = 0
+        val overflow = RuntimeWindowEventFlow(
+            policy = policy.copy(
+                discreteEvents = policy.discreteEvents.copy(ingressCapacity = 1),
+            ),
+            eventCollectorGate = RuntimeEventCollectorAllocator(4).newGate(4),
+            failureReporter = RuntimeFailureReporter { },
+            sessionFailureHandler = {},
+            closeWindow = { closedWindows += 1 },
+        )
+        val overflowCollector = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                overflow.events.onEach { event ->
+                    if (event is WindowEvent.GeometryChanged) {
+                        overflow.publish(
+                            WindowEvent.PropertiesChanged(
+                                base.copy(revision = WindowRevision(2L)),
+                                changed = setOf(WindowProperty.Resizable),
+                                operationId = null,
+                                stamp = EventStamp(SessionSequence(2L), SessionInstant(2.nanoseconds), null),
+                            ),
+                        )
+                        overflow.publish(
+                            WindowEvent.PropertiesChanged(
+                                base.copy(revision = WindowRevision(3L)),
+                                changed = setOf(WindowProperty.Resizable),
+                                operationId = null,
+                                stamp = EventStamp(SessionSequence(3L), SessionInstant(3.nanoseconds), null),
+                            ),
+                        )
+                    }
+                }.toList()
+            }.exceptionOrNull()
+        }
+        overflow.publish(
+            WindowEvent.GeometryChanged(
+                base.copy(revision = WindowRevision(1L)),
+                operationId = null,
+                stamp = EventStamp(SessionSequence(1L), SessionInstant(1.nanoseconds), null),
+            ),
+        )
+        advanceUntilIdle()
+        overflow.close()
+
+        assertEquals(1, closedWindows)
+        assertEquals(
+            KadreFailure.SourceOverflow(KadreResourceKind.Window),
+            assertIs<KadreException>(overflowCollector.await()).failure,
+        )
+    }
+
+    @Test
+    fun externalWindowObservationSanitizesUnsupportedFieldsAndOwnsItsRevision() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(
+                WindowSpec(
+                    title = "runtime-title",
+                    contentSize = LogicalSize(100.0, 100.0),
+                    minimumSize = LogicalSize(50.0, 50.0),
+                    maximumSize = LogicalSize(200.0, 200.0),
+                ),
+            ).successValue(),
+            port.openCommands.single(),
+        ) as RuntimeWindow
+        val before = window.state.value
+        val native = before.copy(
+            title = "native-title",
+            outerBounds = PhysicalRect(PhysicalPoint(9, 11), PhysicalSize(300, 240)),
+            contentSize = LogicalSize(120.0, 100.0),
+            minimumSize = LogicalSize(60.0, 50.0),
+            maximumSize = LogicalSize(180.0, 200.0),
+            resizable = false,
+            revision = WindowRevision(900L),
+        )
+
+        assertTrue(window.observeNativeUpdate(native))
+
+        assertEquals(
+            before.copy(
+                contentSize = LogicalSize(120.0, 100.0),
+                minimumSize = LogicalSize(60.0, 50.0),
+                maximumSize = LogicalSize(180.0, 200.0),
+                resizable = false,
+                revision = WindowRevision(1L),
+            ),
+            window.state.value,
+        )
+    }
+
+    @Test
+    fun repeatedExternalWindowObservationIsANoOp() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.single(),
+        ) as RuntimeWindow
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+        val before = window.state.value
+        val repeatedNativeSnapshot = before.copy(
+            title = "ignored-native-title",
+            outerBounds = PhysicalRect(PhysicalPoint(4, 6), PhysicalSize(240, 180)),
+            revision = WindowRevision(700L),
+        )
+
+        assertFalse(window.observeNativeUpdate(repeatedNativeSnapshot))
+        advanceUntilIdle()
+
+        assertEquals(before, window.state.value)
+        assertEquals(emptyList(), events)
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowGeometryEventsFollowConfiguredDeliveryPolicy() = runTest {
+        val coalescedPort = DeterministicWindowCommandPort()
+        val coalescedManager = manager(coalescedPort)
+        val coalescedPolicy = KadrePolicies.Default.window.copy(
+            geometryChanges = ContinuousDelivery.Coalesced,
+        )
+        installWindowEventPolicy(coalescedManager, coalescedPolicy)
+        val coalescedWindow = commit(
+            coalescedManager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            coalescedPort.openCommands.single(),
+        )
+        val firstGeometryDelivered = CompletableDeferred<Unit>()
+        val releaseCollector = CompletableDeferred<Unit>()
+        val coalescedEvents = mutableListOf<WindowEvent.GeometryChanged>()
+        val coalescedCollector = async(start = CoroutineStart.UNDISPATCHED) {
+            coalescedWindow.events
+                .filterIsInstance<WindowEvent.GeometryChanged>()
+                .onEach { event ->
+                    coalescedEvents += event
+                    if (!firstGeometryDelivered.isCompleted) {
+                        firstGeometryDelivered.complete(Unit)
+                        releaseCollector.await()
+                    }
+                }
+                .toList()
+        }
+
+        applyContentSize(coalescedWindow, coalescedPort, LogicalSize(110.0, 100.0))
+        firstGeometryDelivered.await()
+        applyContentSize(coalescedWindow, coalescedPort, LogicalSize(120.0, 100.0))
+        applyContentSize(coalescedWindow, coalescedPort, LogicalSize(130.0, 100.0))
+        releaseCollector.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(LogicalSize(110.0, 100.0), LogicalSize(130.0, 100.0)),
+            coalescedEvents.map { it.state.contentSize },
+        )
+        coalescedCollector.cancelAndJoin()
+
+        val failWindowPort = DeterministicWindowCommandPort()
+        val failWindowManager = manager(failWindowPort)
+        val failWindowPolicy = KadrePolicies.Default.window.copy(
+            geometryChanges = ContinuousDelivery.Buffered(1, ContinuousOverflowAction.CloseSource),
+        )
+        installWindowEventPolicy(failWindowManager, failWindowPolicy)
+        val failWindow = commit(
+            failWindowManager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            failWindowPort.openCommands.single(),
+        )
+        val failWindowEntered = CompletableDeferred<Unit>()
+        val failWindowRelease = CompletableDeferred<Unit>()
+        val failWindowCollector = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                failWindow.events
+                    .filterIsInstance<WindowEvent.GeometryChanged>()
+                    .onEach {
+                        if (!failWindowEntered.isCompleted) {
+                            failWindowEntered.complete(Unit)
+                            failWindowRelease.await()
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        applyContentSize(failWindow, failWindowPort, LogicalSize(110.0, 100.0))
+        failWindowEntered.await()
+        applyContentSize(failWindow, failWindowPort, LogicalSize(120.0, 100.0))
+        applyContentSize(failWindow, failWindowPort, LogicalSize(130.0, 100.0))
+        failWindowRelease.complete(Unit)
+
+        assertEquals(WindowPhase.Closed, failWindow.state.value.phase)
+        assertEquals(
+            KadreFailure.SourceOverflow(KadreResourceKind.Window),
+            assertIs<KadreException>(failWindowCollector.await()).failure,
+        )
+
+        val failSessionPort = DeterministicWindowCommandPort()
+        val failSessionManager = manager(failSessionPort)
+        val sessionFailures = mutableListOf<KadreFailure>()
+        val failSessionPolicy = KadrePolicies.Default.window.copy(
+            geometryChanges = ContinuousDelivery.Buffered(1, ContinuousOverflowAction.FailSession),
+        )
+        installWindowEventPolicy(failSessionManager, failSessionPolicy, sessionFailures::add)
+        val failSessionWindow = commit(
+            failSessionManager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            failSessionPort.openCommands.single(),
+        )
+        val failSessionEntered = CompletableDeferred<Unit>()
+        val failSessionRelease = CompletableDeferred<Unit>()
+        val failSessionCollector = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching {
+                failSessionWindow.events
+                    .filterIsInstance<WindowEvent.GeometryChanged>()
+                    .onEach {
+                        if (!failSessionEntered.isCompleted) {
+                            failSessionEntered.complete(Unit)
+                            failSessionRelease.await()
+                        }
+                    }
+                    .toList()
+            }.exceptionOrNull()
+        }
+
+        applyContentSize(failSessionWindow, failSessionPort, LogicalSize(110.0, 100.0))
+        failSessionEntered.await()
+        applyContentSize(failSessionWindow, failSessionPort, LogicalSize(120.0, 100.0))
+        applyContentSize(failSessionWindow, failSessionPort, LogicalSize(130.0, 100.0))
+        failSessionRelease.complete(Unit)
+
+        val expected: KadreFailure = KadreFailure.SourceOverflow(KadreResourceKind.Window)
+        assertEquals(listOf(expected), sessionFailures)
+        assertEquals(expected, assertIs<KadreException>(failSessionCollector.await()).failure)
+    }
+
+    @Test
+    fun windowUpdatePublishesStateBeforeCorrelatedGeometryAndPropertiesEvents() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.single(),
+        )
+        val observedStates = mutableListOf<WindowState>()
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.onEach { event ->
+                observedStates += window.state.value
+                events += event
+            }.collect()
+        }
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0)),
+                    resizable = PropertyChange.Set(false),
+                ),
+            )
+        }
+        val command = port.updateCommands.single()
+        val effective = window.state.value.copy(
+            contentSize = LogicalSize(120.0, 100.0),
+            resizable = false,
+            revision = WindowRevision(1L),
+        )
+
+        command.applied(effective)
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertEquals(effective, outcome.state)
+        assertEquals(effective, window.state.value)
+        assertEquals(listOf(effective, effective), observedStates)
+        val geometry = assertIs<WindowEvent.GeometryChanged>(events[0])
+        val properties = assertIs<WindowEvent.PropertiesChanged>(events[1])
+        assertEquals(command.operationId, geometry.operationId)
+        assertEquals(command.operationId, properties.operationId)
+        assertEquals(effective.revision, geometry.stateRevision)
+        assertEquals(effective.revision, properties.stateRevision)
+        assertTrue(geometry.stamp.sequence.value < properties.stamp.sequence.value)
+
+        val external = effective.copy(
+            contentSize = LogicalSize(140.0, 100.0),
+            revision = WindowRevision(2L),
+        )
+        assertTrue((window as RuntimeWindow).observeNativeUpdate(external))
+        advanceUntilIdle()
+        val externalGeometry = assertIs<WindowEvent.GeometryChanged>(events[2])
+        assertEquals(external, observedStates[2])
+        assertEquals(null, externalGeometry.operationId)
+        assertEquals(external, externalGeometry.state)
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowUpdateValidatesCombinedSizeConstraintsBeforeDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(
+            WindowSpec(
+                contentSize = LogicalSize(100.0, 100.0),
+                minimumSize = LogicalSize(50.0, 50.0),
+                maximumSize = LogicalSize(200.0, 200.0),
+            ),
+        ).successValue()
+        val window = commit(request, port.openCommands.single())
+        val initial = window.state.value
+        val events = mutableListOf<WindowEvent>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { window.events.collect(events::add) }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(40.0, 100.0)))),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(minimumSize = PropertyChange.Set(LogicalSize(150.0, 50.0)))),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(WindowUpdate(maximumSize = PropertyChange.Set(LogicalSize(40.0, 200.0)))),
+        )
+
+        assertEquals(emptyList<WindowUpdateCommand>(), port.updateCommands)
+        assertEquals(initial, window.state.value)
+        assertEquals(emptyList(), events)
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun windowUpdatesSerializePerWindowAndRevalidateExpectedRevisionAtDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val first = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.single(),
+        )
+        val second = commit(
+            manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue(),
+            port.openCommands.last(),
+        )
+
+        val firstUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            first.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val staleUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            first.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(130.0, 100.0)),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val otherWindowUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            second.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(140.0, 100.0))))
+        }
+
+        assertEquals(2, port.updateCommands.size)
+        val firstCommand = port.updateCommands.single { it.windowId == first.id }
+        firstCommand.applied(first.state.value.copy(
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(firstUpdate.await())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            staleUpdate.await(),
+        )
+        assertEquals(2, port.updateCommands.size)
+        port.updateCommands.single { it.windowId == second.id }.applied(second.state.value.copy(
+            contentSize = LogicalSize(140.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(otherWindowUpdate.await())
+    }
+
+    @Test
+    fun queuedWindowUpdateRevalidatesCombinedConstraintsAgainstTheDispatchedState() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(
+            WindowSpec(
+                contentSize = LogicalSize(100.0, 100.0),
+                minimumSize = LogicalSize(50.0, 50.0),
+                maximumSize = LogicalSize(200.0, 200.0),
+            ),
+        ).successValue()
+        val window = commit(request, port.openCommands.single())
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(150.0, 100.0)),
+                    minimumSize = PropertyChange.Set(LogicalSize(150.0, 50.0)),
+                ),
+            )
+        }
+        val laterInvalid = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(maximumSize = PropertyChange.Set(LogicalSize(120.0, 200.0))))
+        }
+
+        assertEquals(1, port.updateCommands.size)
+        port.updateCommands.single().applied(window.state.value.copy(
+            contentSize = LogicalSize(150.0, 100.0),
+            minimumSize = LogicalSize(150.0, 50.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(first.await())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            laterInvalid.await(),
+        )
+        assertEquals(1, port.updateCommands.size)
+    }
+
+    @Test
+    fun delayedNativeUpdateCannotRollbackTheWindowLifecyclePhase() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue()
+        val openCommand = port.openCommands.single()
+        val window = commit(request, openCommand)
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val updateCommand = port.updateCommands.single()
+
+        assertIs<KadreResult.Success<WindowCloseOutcome.Accepted>>(window.close())
+        openCommand.nativeClosed()
+        updateCommand.applied(window.state.value.copy(
+            phase = WindowPhase.Open,
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(LogicalSize(120.0, 100.0), window.state.value.contentSize)
+        assertEquals(WindowPhase.Closed, assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(update.await()).value.state.phase)
+    }
+
+    @Test
+    fun windowUpdateCancellationAndCloseRespectTheNativeCommitBoundary() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec(contentSize = LogicalSize(100.0, 100.0))).successValue()
+        val openCommand = port.openCommands.single()
+        val window = commit(request, openCommand)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+        val preCommitCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(110.0, 100.0))))
+        }
+        val preCommitCommand = port.updateCommands.single()
+        preCommitCaller.cancelAndJoin()
+        assertEquals(1, port.updateCancellationCommands.size)
+        preCommitCommand.applied(window.state.value.copy(
+            contentSize = LogicalSize(110.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertEquals(LogicalSize(100.0, 100.0), window.state.value.contentSize)
+
+        port.updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        val committedCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(120.0, 100.0))))
+        }
+        val committedCommand = port.updateCommands.last()
+        committedCaller.cancel()
+        committedCommand.applied(window.state.value.copy(
+            contentSize = LogicalSize(120.0, 100.0),
+            revision = WindowRevision(1L),
+        ))
+        assertTrue(committedCaller.isCancelled)
+        assertEquals(LogicalSize(120.0, 100.0), window.state.value.contentSize)
+
+        val blockingCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(130.0, 100.0))))
+        }
+        val withdrawnCaller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(140.0, 100.0))))
+        }
+        assertEquals(3, port.updateCommands.size)
+        withdrawnCaller.cancelAndJoin()
+        port.updateCommands.last().applied(window.state.value.copy(
+            contentSize = LogicalSize(130.0, 100.0),
+            revision = WindowRevision(2L),
+        ))
+        assertIs<KadreResult.Success<WindowUpdateOutcome.Applied>>(blockingCaller.await())
+        assertTrue(withdrawnCaller.isCancelled)
+        assertEquals(3, port.updateCommands.size)
+
+        assertIs<KadreResult.Success<WindowCloseOutcome.Accepted>>(window.close())
+        openCommand.nativeClosed()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(150.0, 100.0)))),
+        )
+    }
+
     @Test
     fun pendingRequestConsumesOnlyThePendingBudgetAndStaysOutOfTheWindowSnapshot() = runTest {
         val port = DeterministicWindowCommandPort()
@@ -1226,6 +1833,45 @@ class RuntimeWindowManagerTest {
         onLastWindowClosed = onLastWindowClosed,
     )
 
+    private fun installWindowEventPolicy(
+        manager: RuntimeWindowManager,
+        policy: org.graphiks.kadre.policy.WindowDeliveryPolicy,
+        sessionFailureHandler: (KadreFailure) -> Unit = {},
+    ) {
+        var sequence = 0L
+        manager.installSessionConfiguration(
+            deliveryPolicy = policy,
+            inputDeliveryPolicy = KadrePolicies.Default.input,
+            source = {
+                EventStamp(
+                    SessionSequence(sequence),
+                    SessionInstant((sequence++).nanoseconds),
+                    deliverySpan = null,
+                )
+            },
+            sessionFailureHandler = sessionFailureHandler,
+            collectorAllocator = RuntimeEventCollectorAllocator(16),
+            maxCollectorsPerFlow = 16,
+        )
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.applyContentSize(
+        window: Window,
+        port: DeterministicWindowCommandPort,
+        contentSize: LogicalSize,
+    ) {
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(contentSize = PropertyChange.Set(contentSize)))
+        }
+        port.updateCommands.last().applied(
+            window.state.value.copy(
+                contentSize = contentSize,
+                revision = WindowRevision(window.state.value.revision.value + 1L),
+            ),
+        )
+        assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+    }
+
     private suspend fun commit(
         request: WindowRequest,
         command: WindowOpenCommand,
@@ -1276,12 +1922,15 @@ class RuntimeWindowManagerTest {
 
     private class DeterministicWindowCommandPort : WindowCommandPort {
         val openCommands = mutableListOf<WindowOpenCommand>()
+        val updateCommands = mutableListOf<WindowUpdateCommand>()
+        val updateCancellationCommands = mutableListOf<WindowUpdateCancellationCommand>()
         val pendingCancellationCommands = mutableListOf<PendingWindowCancellationCommand>()
         val openedCloseCommands = mutableListOf<OpenedWindowCloseCommand>()
         val closeEvents = mutableListOf<PortCloseEvent>()
         var pendingCancellationOutcome: PendingWindowCancellationOutcome =
             PendingWindowCancellationOutcome.CancelledBeforeCommit
         var openedCloseOutcome: OpenedWindowCloseOutcome = OpenedWindowCloseOutcome.Accepted
+        var updateCancellationOutcome: WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
         var onOpen: (WindowOpenCommand) -> Unit = {}
         var onPendingCancellation: (PendingWindowCancellationCommand) -> Unit = {}
         var onOpenedClose: (OpenedWindowCloseCommand) -> Unit = {}
@@ -1289,6 +1938,17 @@ class RuntimeWindowManagerTest {
         override fun requestOpen(command: WindowOpenCommand) {
             openCommands += command
             onOpen(command)
+        }
+
+        override fun requestUpdate(command: WindowUpdateCommand) {
+            updateCommands += command
+        }
+
+        override fun requestUpdateCancellation(
+            command: WindowUpdateCancellationCommand,
+        ): WindowUpdateCancellationOutcome {
+            updateCancellationCommands += command
+            return updateCancellationOutcome
         }
 
         override fun requestPendingCancellation(
