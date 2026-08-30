@@ -312,7 +312,7 @@ entre écrans et l'occlusion physique, sans réexécuter les preuves de fenêtre
 fondamentales déjà couvertes par `APK-003`. La sortie complète de phase reste
 conditionnée aux observations standard-scale et HiDPI consignées dans le cahier.
 
-### Phase 4 — Clavier, pointeur et scroll — planned, prérequis KFFI ouverts
+### Phase 4 — Clavier, pointeur et scroll — active ; complément manuel versionné
 
 #### Objectif
 
@@ -328,18 +328,23 @@ Livrer l’input essentiel d’une application interactive macOS.
 - backpressure et coalescing selon la policy ;
 - mappers purs séparés de l’admission runtime.
 
-La phase est détaillée par `APPKIT-PHASE-4-INPUT-DESIGN.md`. Elle conserve le
-catalogue public fermé : phase et momentum de scroll sont des frontières
-d’ordonnancement internes tant qu’aucun champ public ne les expose. Son
-activation est précédée des gaps `KFFI-OBJC-004` (first responder managé) et
-`KFFI-OBJC-005` (injection scroll O3), sans workaround FFI Kadre.
+La phase est détaillée par `APPKIT-PHASE-4-INPUT-DESIGN.md`. Les prérequis
+`KFFI-OBJC-004` (first responder managé) et `KFFI-OBJC-005` (injection scroll
+O3) sont fermés et publiés ; Kadre n'ajoute aucun workaround FFI. `INP-001` et
+`APK-005` sont actifs : clavier et pointeur sont `Available` après installation
+de l'observation native, tandis que les autres capacités input restent
+explicitement `Unsupported`. Le catalogue public fermé demeure inchangé : phase
+et momentum de scroll sont des frontières d’ordonnancement internes tant
+qu’aucun champ public ne les expose.
 
 #### Gate de sortie
 
 - événements injectés par la file AppKit plutôt que par appel direct aux mappers ;
 - aucune touche ni bouton ne reste actif après perte de focus ;
 - ordre input/state et budgets prouvés ;
-- sample standalone interactif utilisable avec un renderer externe.
+- le harness interactif `phase4InputHarness` consigne séparément le routing réel
+  des périphériques et du responder, que l'injection synthétique sans fenêtre ne
+  peut pas prouver en CI.
 
 ### Phase 5 — Fenêtres avancées et interactions transitoires
 
