@@ -227,18 +227,33 @@ internal class AppKitWindowPeer private constructor(
         }
     }
 
+    internal fun beginFullscreenToggleArbitration() {
+        callbackGate.beginFullscreenToggle()
+    }
+
     /** Invokes the generated fullscreen selector but leaves completion to delegate callbacks. */
     internal fun toggleFullscreen(
         target: AppKitWindowFullscreenTarget,
         commit: AppKitWindowMutationCommit,
+        arbitrationAlreadyStarted: Boolean = false,
     ): Boolean? {
         if (closed.get()) return null
         return port.onMainThread {
             if (closed.get()) {
                 null
             } else {
-                callbackGate.beginFullscreenToggle()
-                port.toggleFullscreen(window, target, commit)
+                if (!arbitrationAlreadyStarted) callbackGate.beginFullscreenToggle()
+                port.toggleFullscreen(
+                    window,
+                    target,
+                    object : AppKitWindowMutationCommit {
+                        override val started: Boolean
+                            get() = commit.started
+
+                        override fun beforeFirstSetter(): Boolean =
+                            callbackGate.beforeFullscreenSelectorInvocation(commit::beforeFirstSetter)
+                    },
+                )
             }
         }
     }
@@ -653,6 +668,10 @@ private class AppKitWindowCallbackGate(
 
     fun fullscreenWillObservedSinceToggle(): Boolean =
         synchronized(lock) { fullscreenWillObservedSinceToggle }
+
+    fun beforeFullscreenSelectorInvocation(invoke: () -> Boolean): Boolean = synchronized(lock) {
+        if (fullscreenWillObservedSinceToggle) false else invoke()
+    }
 
     fun windowWillEnterFullscreen() = fullscreen(AppKitFullscreenCallback.WillEnter)
 

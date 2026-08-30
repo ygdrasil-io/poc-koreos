@@ -2141,7 +2141,13 @@ internal class RuntimeWindow(
         val barrier = fullscreenBarrier?.takeIf {
             it.operationId == operationId && it.phase == FullscreenPhase.PreparedLocal
         } ?: return@synchronized false
-        if (mutableState.value.phase != WindowPhase.Open || pending.cancelled) return@synchronized false
+        if (
+            mutableState.value.phase != WindowPhase.Open ||
+            pending.cancelled ||
+            pending.cancellationRequested
+        ) {
+            return@synchronized false
+        }
         pending.nativeDispatchStarted = true
         barrier.phase = FullscreenPhase.InvokingSelector
         true

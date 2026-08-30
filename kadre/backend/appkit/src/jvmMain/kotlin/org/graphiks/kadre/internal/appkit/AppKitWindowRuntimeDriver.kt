@@ -186,11 +186,12 @@ private class AppKitWindowCommandPort(
         command: WindowUpdateCancellationCommand,
     ): WindowUpdateCancellationOutcome = synchronized(lock) {
         val pending = mutationCommands[command.operationId] ?: return@synchronized WindowUpdateCancellationOutcome.TooLate
-        if (pending.nativeCommitStarted) {
+        if (!pending.cancelBeforeCommitLocked()) {
             WindowUpdateCancellationOutcome.TooLate
         } else {
-            pending.cancelled = true
-            mutationCommands.remove(command.operationId)
+            if (mutationCommands[command.operationId] === pending) {
+                mutationCommands.remove(command.operationId)
+            }
             if (pending.entry.fullscreenPending === pending) pending.entry.fullscreenPending = null
             WindowUpdateCancellationOutcome.CancelledBeforeCommit
         }
@@ -407,6 +408,14 @@ private class AppKitWindowCommandPort(
                 ) {
                     false
                 } else {
+                    if (
+                        stimulus.callback == AppKitFullscreenCallback.WillEnter ||
+                        stimulus.callback == AppKitFullscreenCallback.WillExit
+                    ) {
+                        entry.fullscreenPending
+                            ?.takeUnless { it.nativeCommitStarted }
+                            ?.cancelBeforeCommitLocked()
+                    }
                     if (entry.runtimeWindowReady) {
                         true
                     } else {
@@ -558,7 +567,15 @@ private class AppKitWindowCommandPort(
             }
         }
         when (admission) {
-            WindowMutationCommandAdmission.Cancelled -> return
+            WindowMutationCommandAdmission.Cancelled -> {
+                synchronized(lock) {
+                    if (pending.entry.fullscreenPending === pending) pending.entry.fullscreenPending = null
+                    if (mutationCommands[pending.command.operationId] === pending) {
+                        mutationCommands.remove(pending.command.operationId)
+                    }
+                }
+                return
+            }
             WindowMutationCommandAdmission.Rejected -> {
                 pending.command.rejected(IllegalStateException("AppKit window mutation command closed before native commit"))
                 return
@@ -624,8 +641,22 @@ private class AppKitWindowCommandPort(
         peer: AppKitWindowPeer,
         target: FullscreenMode,
     ) {
+        peer.beginFullscreenToggleArbitration()
+        if (!pending.beginFullscreenCommitArbitration()) {
+            synchronized(lock) {
+                if (pending.entry.fullscreenPending === pending) pending.entry.fullscreenPending = null
+                if (mutationCommands[pending.command.operationId] === pending) {
+                    mutationCommands.remove(pending.command.operationId)
+                }
+            }
+            return
+        }
         val toggled = try {
-            peer.toggleFullscreen(AppKitWindowFullscreenTarget(target), pending)
+            peer.toggleFullscreen(
+                AppKitWindowFullscreenTarget(target),
+                pending,
+                arbitrationAlreadyStarted = true,
+            )
         } catch (failure: Throwable) {
             commands.submitFollowUp {
                 finishFullscreenSelectorInvocation(
@@ -644,9 +675,15 @@ private class AppKitWindowCommandPort(
             }
             return
         }
+        if (pending.cancelled || peer.fullscreenWillObservedSinceToggle()) return
         val reject = synchronized(lock) {
-            pending.entry.fullscreenPending = null
-            mutationCommands.remove(pending.command.operationId, pending) && !pending.cancelled
+            if (pending.entry.fullscreenPending === pending) pending.entry.fullscreenPending = null
+            if (mutationCommands[pending.command.operationId] === pending) {
+                mutationCommands.remove(pending.command.operationId)
+                true
+            } else {
+                false
+            }
         }
         if (reject) {
             pending.command.rejected(IllegalStateException("AppKit fullscreen peer closed before native commit"))
@@ -698,9 +735,11 @@ private class AppKitWindowCommandPort(
                     callback != AppKitFullscreenCallback.DidFailEnter &&
                     callback != AppKitFullscreenCallback.DidFailExit
                 ) {
-                    pending.cancelled = true
-                    mutationCommands.remove(pending.command.operationId, pending)
-                    entry.fullscreenPending = null
+                    pending.cancelBeforeCommitLocked()
+                    if (mutationCommands[pending.command.operationId] === pending) {
+                        mutationCommands.remove(pending.command.operationId)
+                    }
+                    if (entry.fullscreenPending === pending) entry.fullscreenPending = null
                 }
                 null
             }
@@ -1085,40 +1124,107 @@ private class AppKitWindowCommandPort(
     private inner class PendingWindowMutationCommand(
         val entry: PeerEntry,
         val command: WindowUpdateCommand,
-        var cancelled: Boolean = false,
-        var nativeCommitStarted: Boolean = false,
         val fullscreenDesiredLevel: WindowLevel = command.desiredLevel,
     ) : AppKitWindowMutationCommit {
+        private var commitState: WindowMutationCommitState = WindowMutationCommitState.Queued
+
+        val cancelled: Boolean
+            get() = synchronized(lock) { commitState == WindowMutationCommitState.Cancelled }
+
+        val nativeCommitStarted: Boolean
+            get() = synchronized(lock) { commitState == WindowMutationCommitState.Committed }
+
         override val started: Boolean
-            get() = synchronized(lock) { nativeCommitStarted }
+            get() = nativeCommitStarted
+
+        fun beginFullscreenCommitArbitration(): Boolean = synchronized(lock) {
+            when {
+                commitState == WindowMutationCommitState.Committed -> true
+                commitState == WindowMutationCommitState.Cancelled -> false
+                mutationCommands[command.operationId] !== this || entry.fullscreenPending !== this -> {
+                    commitState = WindowMutationCommitState.Cancelled
+                    false
+                }
+                closed || entry.removed || entry.closeAdmitted || entry.peer == null -> {
+                    commitState = WindowMutationCommitState.Cancelled
+                    false
+                }
+                else -> {
+                    check(commitState == WindowMutationCommitState.Queued) {
+                        "AppKit fullscreen commit arbitration is already in progress"
+                    }
+                    commitState = WindowMutationCommitState.Arbitrating
+                    true
+                }
+            }
+        }
+
+        fun cancelBeforeCommitLocked(): Boolean = when (commitState) {
+            WindowMutationCommitState.Committed -> false
+            WindowMutationCommitState.Cancelled -> true
+            WindowMutationCommitState.Queued,
+            WindowMutationCommitState.Arbitrating,
+            -> {
+                commitState = WindowMutationCommitState.Cancelled
+                true
+            }
+        }
 
         override fun beforeFirstSetter(): Boolean {
-            val admitted = synchronized(lock) {
+            if (!isFullscreenMutation()) {
+                return synchronized(lock) {
+                    when {
+                        commitState == WindowMutationCommitState.Committed -> true
+                        commitState == WindowMutationCommitState.Cancelled -> false
+                        mutationCommands[command.operationId] !== this -> false
+                        closed || entry.removed || entry.closeAdmitted || entry.peer == null -> false
+                        else -> {
+                            commitState = WindowMutationCommitState.Committed
+                            true
+                        }
+                    }
+                }
+            }
+            val arbitrate = synchronized(lock) {
                 when {
-                    nativeCommitStarted -> true
-                    cancelled || mutationCommands[command.operationId] !== this -> false
+                    commitState == WindowMutationCommitState.Committed -> return true
+                    commitState == WindowMutationCommitState.Cancelled -> false
+                    mutationCommands[command.operationId] !== this -> false
                     closed || entry.removed || entry.closeAdmitted || entry.peer == null -> false
                     else -> {
-                        nativeCommitStarted = true
+                        check(commitState == WindowMutationCommitState.Arbitrating) {
+                            "AppKit fullscreen setter reached before commit arbitration"
+                        }
                         true
                     }
                 }
             }
-            if (!admitted || !isFullscreenMutation()) return admitted
-            if (command.fullscreenSelectorInvoking()) return true
-            synchronized(lock) {
-                nativeCommitStarted = false
-                cancelled = true
-                mutationCommands.remove(command.operationId, this)
-                if (entry.fullscreenPending === this) entry.fullscreenPending = null
+            if (!arbitrate) return false
+            val admitted = command.fullscreenSelectorInvoking()
+            return synchronized(lock) {
+                if (admitted) {
+                    commitState = WindowMutationCommitState.Committed
+                    true
+                } else {
+                    if (commitState == WindowMutationCommitState.Arbitrating) {
+                        commitState = WindowMutationCommitState.Cancelled
+                    }
+                    false
+                }
             }
-            return false
         }
 
         fun isFullscreenMutation(): Boolean =
             (command.update.fullscreen as? PropertyChange.Set)?.value.let { target ->
                 target == FullscreenMode.Borderless || target == FullscreenMode.Windowed
             }
+    }
+
+    private enum class WindowMutationCommitState {
+        Queued,
+        Arbitrating,
+        Committed,
+        Cancelled,
     }
 
     private sealed interface WindowMutationCommandAdmission {

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -634,6 +635,93 @@ class AppKitWindowRuntimeDriverTest {
             assertTrue(port.fullscreenToggleLevels.isEmpty())
         } finally {
             allowFirstSetter.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun cancellationWinningBeforeRuntimeSelectorAdmissionDoesNotToggle() = runBlocking {
+        val port = pausingFullscreenPort("commit-cancellation")
+        val driver = fullscreenDriver(port)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "commit-cancellation"))
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+
+            port.awaitCommitArbitration()
+            update.cancelAndJoin()
+            port.releaseCommitArbitration()
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+
+            assertTrue(port.fullscreenToggleTargets.isEmpty())
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        } finally {
+            port.releaseCommitArbitration()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun cancelledFullscreenJobCannotClearTheNextPendingCommand() = runBlocking {
+        val port = pausingFullscreenPort("commit-cancellation-next")
+        val driver = fullscreenDriver(port)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "commit-cancellation-next"))
+            val first = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            port.awaitCommitArbitration()
+            first.cancelAndJoin()
+
+            val second = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            port.releaseCommitArbitration()
+            awaitFullscreenToggle(port)
+            port.emitDidEnter("commit-cancellation-next")
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { second.await() }.successValue(),
+            )
+            assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+            assertEquals(listOf<FullscreenMode>(FullscreenMode.Borderless), port.fullscreenToggleTargets)
+        } finally {
+            port.releaseCommitArbitration()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalWillDuringCommitArbitrationWinsWithoutToggle() = runBlocking {
+        val port = pausingFullscreenPort("commit-external-will")
+        val driver = fullscreenDriver(port)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "commit-external-will"))
+            val event = async(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.PropertiesChanged>().first()
+            }
+            val update = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+
+            port.awaitCommitArbitration()
+            port.emitWillEnter("commit-external-will")
+            port.releaseCommitArbitration()
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            port.emitDidEnter("commit-external-will")
+
+            assertEquals(
+                KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
+                withTimeout(2.seconds) { update.await() },
+            )
+            assertEquals(null, withTimeout(2.seconds) { event.await() }.operationId)
+            assertTrue(port.fullscreenToggleTargets.isEmpty())
+        } finally {
+            port.releaseCommitArbitration()
             driver.close()
         }
     }
@@ -1979,6 +2067,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val fullscreenRestoreFailure: Throwable? = null,
     private val fullscreenReadbackFailure: Throwable? = null,
     private val beforeFullscreenSetter: () -> Unit = { },
+    private val pauseFullscreenCommitArbitration: Boolean = false,
     private val beforeGeometrySetter: () -> Unit = { },
     private val geometryFailureAfterContentSize: Throwable? = null,
 ) : AppKitNativeWindowPort {
@@ -2001,6 +2090,9 @@ internal class DeterministicAppKitNativeWindowPort(
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenReadbackTitles = CopyOnWriteArrayList<String>()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
+    private val fullscreenCommitArbitrationPaused = AtomicBoolean(false)
+    private val fullscreenCommitArbitrationStarted = CountDownLatch(1)
+    private val fullscreenCommitArbitrationRelease = CountDownLatch(1)
 
     override fun isMainThread(): Boolean = true
 
@@ -2130,6 +2222,13 @@ internal class DeterministicAppKitNativeWindowPort(
         commit: AppKitWindowMutationCommit,
     ): Boolean {
         beforeFullscreenSetter()
+        if (
+            pauseFullscreenCommitArbitration &&
+            fullscreenCommitArbitrationPaused.compareAndSet(false, true)
+        ) {
+            fullscreenCommitArbitrationStarted.countDown()
+            check(fullscreenCommitArbitrationRelease.await(2, TimeUnit.SECONDS))
+        }
         if (!commit.beforeFirstSetter()) return false
         val recording = window.recordingWindow()
         recording.level = WindowLevel.Normal
@@ -2146,6 +2245,14 @@ internal class DeterministicAppKitNativeWindowPort(
         fullscreenToggleFailure?.let { throw it }
         fullscreenToggleTargets += target.mode
         return true
+    }
+
+    fun awaitCommitArbitration() {
+        check(fullscreenCommitArbitrationStarted.await(2, TimeUnit.SECONDS))
+    }
+
+    fun releaseCommitArbitration() {
+        fullscreenCommitArbitrationRelease.countDown()
     }
 
     override fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
@@ -2644,6 +2751,20 @@ private suspend fun openedWindow(
 ): Window = assertIs<WindowRequestOutcome.OpenedHere>(
     driver.manager.requestWindow(spec).successValue().await(),
 ).window
+
+private fun fullscreenDriver(
+    port: DeterministicAppKitNativeWindowPort,
+): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriverFactory { port }.create(
+    KadrePolicies.Default.resources,
+    publicAppKitCapabilities = true,
+    enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+)
+
+private fun pausingFullscreenPort(name: String): DeterministicAppKitNativeWindowPort =
+    DeterministicAppKitNativeWindowPort(
+        name = name,
+        pauseFullscreenCommitArbitration = true,
+    )
 
 private suspend fun awaitFullscreenToggle(port: DeterministicAppKitNativeWindowPort) {
     withTimeout(2.seconds) {

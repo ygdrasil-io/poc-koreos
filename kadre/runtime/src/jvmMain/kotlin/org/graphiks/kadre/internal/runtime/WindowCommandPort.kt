@@ -107,7 +107,12 @@ public data class WindowUpdateCommand internal constructor(
         fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Will(target))
     }
 
-    /** Atomically commits a prepared fullscreen command immediately before its first native setter. */
+    /**
+     * Requests the runtime-authoritative transition from prepared to selector invocation.
+     *
+     * A false result is terminal for this native setter attempt: the backend must not invoke the
+     * selector, because cancellation or an external fullscreen observation won the arbitration.
+     */
     public fun fullscreenSelectorInvoking(): Boolean =
         fullscreenObservationSink.beginSelectorInvocation(windowId, operationId)
 

@@ -1573,6 +1573,30 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun fullscreenCancellationRequestedBeforeSelectorInvocationRejectsRuntimeAdmission() = runTest {
+        val port = DeterministicWindowCommandPort().apply {
+            autoAdmitFullscreenSelector = false
+            updateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        }
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+        val window = openFullscreenWindow(manager, port)
+
+        try {
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            val command = port.updateCommands.single()
+
+            update.cancelAndJoin()
+
+            assertFalse(command.fullscreenSelectorInvoking())
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        } finally {
+            manager.close()
+        }
+    }
+
+    @Test
     fun fullscreenCloseReleasesTheBarrierAndIgnoresLateCommandCallbacks() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
@@ -3410,6 +3434,7 @@ class RuntimeWindowManagerTest {
             PendingWindowCancellationOutcome.CancelledBeforeCommit
         var openedCloseOutcome: OpenedWindowCloseOutcome = OpenedWindowCloseOutcome.Accepted
         var updateCancellationOutcome: WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        var autoAdmitFullscreenSelector: Boolean = true
         var onOpen: (WindowOpenCommand) -> Unit = {}
         var onUpdate: (WindowUpdateCommand) -> Unit = {}
         var onPendingCancellation: (PendingWindowCancellationCommand) -> Unit = {}
@@ -3423,6 +3448,10 @@ class RuntimeWindowManagerTest {
         override fun requestUpdate(command: WindowUpdateCommand) {
             updateCommands += command
             val fullscreen = command.update.fullscreen is PropertyChange.Set
+            if (fullscreen && !autoAdmitFullscreenSelector) {
+                onUpdate(command)
+                return
+            }
             if (!fullscreen || command.fullscreenSelectorInvoking()) {
                 onUpdate(command)
                 if (fullscreen) command.fullscreenSelectorReturned()
