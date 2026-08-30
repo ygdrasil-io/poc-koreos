@@ -18,6 +18,8 @@ import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
+import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowSpec
 
 /**
@@ -128,10 +130,20 @@ internal data class AppKitWindowGeometryTarget(
     val resizable: PropertyChange<Boolean>,
 )
 
+/** Private, native-address-free chrome request forwarded from the runtime command. */
+internal data class AppKitWindowChromeTarget(
+    val decorations: PropertyChange<WindowDecorations>,
+    val systemButtons: PropertyChange<WindowSystemButtons>,
+)
+
 /** Private, native-address-free window request forwarded from the runtime command. */
 internal data class AppKitWindowMutationTarget(
     val title: PropertyChange<String>,
     val geometry: AppKitWindowGeometryTarget,
+    val chrome: AppKitWindowChromeTarget = AppKitWindowChromeTarget(
+        decorations = PropertyChange.Unchanged,
+        systemButtons = PropertyChange.Unchanged,
+    ),
 )
 
 /** Native values read together after AppKit has applied a geometry mutation or observation. */
@@ -142,10 +154,20 @@ internal data class AppKitWindowGeometrySnapshot(
     val resizable: Boolean,
 )
 
+/** Native chrome values read together with the rest of an effective window mutation. */
+internal data class AppKitWindowChromeSnapshot(
+    val decorations: WindowDecorations,
+    val systemButtons: WindowSystemButtons,
+)
+
 /** Native values read together after AppKit has applied one window mutation. */
 internal data class AppKitWindowMutationSnapshot(
     val title: String,
     val geometry: AppKitWindowGeometrySnapshot,
+    val chrome: AppKitWindowChromeSnapshot = AppKitWindowChromeSnapshot(
+        decorations = WindowDecorations.System,
+        systemButtons = WindowSystemButtons.All,
+    ),
 )
 
 /** Callback boundary for native-address-free geometry observations. */

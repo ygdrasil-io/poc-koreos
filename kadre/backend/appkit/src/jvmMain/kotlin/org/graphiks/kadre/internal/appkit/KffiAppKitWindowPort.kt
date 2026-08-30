@@ -27,6 +27,7 @@ import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
+import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEventModifierFlags
 import org.graphiks.kffi.objc.NSEventType
@@ -37,6 +38,7 @@ import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
+import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
@@ -499,24 +501,16 @@ private fun contentRect(spec: WindowSpec): NSRect = NSRect(
 )
 
 private fun styleMask(spec: WindowSpec): NSWindowStyleMask {
-    var style = when (spec.decorations) {
-        WindowDecorations.System -> NSWindowStyleMask.NSWindowStyleMaskTitled
-        WindowDecorations.Borderless -> NSWindowStyleMask.NSWindowStyleMaskBorderless
-    }
-    if (spec.decorations == WindowDecorations.System) {
-        style += when (spec.systemButtons) {
-            WindowSystemButtons.All -> NSWindowStyleMask.NSWindowStyleMaskClosable +
-                NSWindowStyleMask.NSWindowStyleMaskMiniaturizable
-            WindowSystemButtons.CloseOnly -> NSWindowStyleMask.NSWindowStyleMaskClosable
-            WindowSystemButtons.None -> NSWindowStyleMask.NSWindowStyleMaskBorderless
-        }
-    }
-    if (spec.resizable) style += NSWindowStyleMask.NSWindowStyleMaskResizable
-    return style
+    return NSWindowStyleMask(0L).withAppKitChrome(
+        decorations = spec.decorations,
+        systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
+        resizable = spec.resizable,
+    )
 }
 
 private fun configureKffiWindow(owner: AppKitNativeWindowOwner, spec: WindowSpec) {
     owner.kffiWindowOwner().applyInitialGeometry(spec)
+    owner.kffiWindowOwner().applyInitialChrome(spec)
     owner.kffiWindow().apply {
         setReleasedWhenClosed(false)
         setTitle(spec.title)
@@ -542,6 +536,14 @@ private class KffiWindowOwner(
         window.setStyleMask(window.styleMask().withResizable(spec.resizable))
     }
 
+    fun applyInitialChrome(spec: WindowSpec) {
+        applyChrome(
+            decorations = spec.decorations,
+            systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
+            resizable = spec.resizable,
+        )
+    }
+
     fun updateWindow(
         target: AppKitWindowMutationTarget,
         commit: AppKitWindowMutationCommit,
@@ -553,6 +555,14 @@ private class KffiWindowOwner(
             PropertyChange.Unchanged -> Unit
         }
         if (target.geometry.hasChange()) applyGeometry(target.geometry)
+        if (target.chrome.hasChange()) {
+            val current = readChrome()
+            applyChrome(
+                decorations = target.chrome.decorations.resolveValue(current.decorations),
+                systemButtons = target.chrome.systemButtons.resolveValue(current.systemButtons),
+                resizable = window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
+            )
+        }
         return readWindow()
     }
 
@@ -592,6 +602,8 @@ private class KffiWindowOwner(
             window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
         )
         window.setStyleMask(window.styleMask().withResizable(resizable))
+        val chrome = readChrome()
+        applyChrome(chrome.decorations, chrome.systemButtons, resizable)
     }
 
     fun readGeometry(): AppKitWindowGeometrySnapshot =
@@ -600,7 +612,54 @@ private class KffiWindowOwner(
     fun readWindow(): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
         title = window.titleAsString(),
         geometry = readGeometry(),
+        chrome = readChrome(),
     )
+
+    private fun applyChrome(
+        decorations: WindowDecorations,
+        systemButtons: WindowSystemButtons,
+        resizable: Boolean,
+    ) {
+        val effectiveButtons = systemButtons.canonicalFor(decorations)
+        window.setStyleMask(
+            window.styleMask().withAppKitChrome(decorations, effectiveButtons, resizable),
+        )
+        if (decorations == WindowDecorations.System) {
+            window.setStandardButtonHidden(
+                NSWindowButton.NSWindowCloseButton,
+                hidden = effectiveButtons == WindowSystemButtons.None,
+            )
+            window.setStandardButtonHidden(
+                NSWindowButton.NSWindowMiniaturizeButton,
+                hidden = effectiveButtons != WindowSystemButtons.All,
+            )
+            window.setStandardButtonHidden(
+                NSWindowButton.NSWindowZoomButton,
+                hidden = effectiveButtons != WindowSystemButtons.All || !resizable,
+            )
+        }
+    }
+
+    private fun readChrome(): AppKitWindowChromeSnapshot {
+        val style = window.styleMask()
+        if (!style.contains(NSWindowStyleMask.NSWindowStyleMaskTitled)) {
+            return AppKitWindowChromeSnapshot(
+                decorations = WindowDecorations.Borderless,
+                systemButtons = WindowSystemButtons.None,
+            )
+        }
+        val closeHidden = window.standardButtonHidden(NSWindowButton.NSWindowCloseButton)
+        val miniaturizeHidden = window.standardButtonHidden(NSWindowButton.NSWindowMiniaturizeButton)
+        val zoomHidden = window.standardButtonHidden(NSWindowButton.NSWindowZoomButton)
+        val resizable = style.contains(NSWindowStyleMask.NSWindowStyleMaskResizable)
+        val buttons = when {
+            closeHidden && miniaturizeHidden && zoomHidden -> WindowSystemButtons.None
+            !closeHidden && miniaturizeHidden && zoomHidden -> WindowSystemButtons.CloseOnly
+            !closeHidden && !miniaturizeHidden && (!resizable || !zoomHidden) -> WindowSystemButtons.All
+            else -> error("AppKit returned an unsupported standard-window-button combination")
+        }
+        return AppKitWindowChromeSnapshot(WindowDecorations.System, buttons)
+    }
 
     fun installGeometryObserver(callbacks: AppKitWindowGeometryCallbacks): KffiGeometryObserverOwner {
         check(geometryObserver == null) { "AppKit window geometry is already observed" }
@@ -632,6 +691,59 @@ private fun NSWindowStyleMask.withResizable(resizable: Boolean): NSWindowStyleMa
     }
     return NSWindowStyleMask(rawValue)
 }
+
+private fun NSWindowStyleMask.withAppKitChrome(
+    decorations: WindowDecorations,
+    systemButtons: WindowSystemButtons,
+    resizable: Boolean,
+): NSWindowStyleMask {
+    val effectiveButtons = systemButtons.canonicalFor(decorations)
+    var owned = 0L
+    if (decorations == WindowDecorations.System) {
+        owned = owned or NSWindowStyleMask.NSWindowStyleMaskTitled.rawValue
+        when (effectiveButtons) {
+            WindowSystemButtons.All -> {
+                owned = owned or NSWindowStyleMask.NSWindowStyleMaskClosable.rawValue
+                owned = owned or NSWindowStyleMask.NSWindowStyleMaskMiniaturizable.rawValue
+            }
+            WindowSystemButtons.CloseOnly -> {
+                owned = owned or NSWindowStyleMask.NSWindowStyleMaskClosable.rawValue
+            }
+            WindowSystemButtons.None -> Unit
+        }
+    }
+    if (resizable) owned = owned or NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue
+    return NSWindowStyleMask(rawValue and APPKIT_OWNED_STYLE_MASK.inv() or owned)
+}
+
+private fun WindowSystemButtons.canonicalFor(
+    decorations: WindowDecorations,
+): WindowSystemButtons = if (decorations == WindowDecorations.Borderless) {
+    WindowSystemButtons.None
+} else {
+    this
+}
+
+private fun NSWindow.setStandardButtonHidden(button: NSWindowButton, hidden: Boolean) {
+    val nativeButton = standardWindowButton(button)
+    check(nativeButton != MemorySegment.NULL) { "AppKit did not provide the requested standard window button" }
+    NSButton(nativeButton).setHidden(hidden)
+}
+
+private fun NSWindow.standardButtonHidden(button: NSWindowButton): Boolean {
+    val nativeButton = standardWindowButton(button)
+    check(nativeButton != MemorySegment.NULL) { "AppKit did not provide the requested standard window button" }
+    return NSButton(nativeButton).isHidden()
+}
+
+private fun AppKitWindowChromeTarget.hasChange(): Boolean =
+    decorations !is PropertyChange.Unchanged || systemButtons !is PropertyChange.Unchanged
+
+private val APPKIT_OWNED_STYLE_MASK: Long =
+    NSWindowStyleMask.NSWindowStyleMaskTitled.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskClosable.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskMiniaturizable.rawValue or
+        NSWindowStyleMask.NSWindowStyleMaskResizable.rawValue
 
 private fun readGeometrySnapshot(
     window: NSWindow,
