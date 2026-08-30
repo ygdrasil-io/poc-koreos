@@ -59,6 +59,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.ContinuousDelivery
@@ -1734,6 +1735,7 @@ class AppKitBackendProviderTest {
                         )
                         nativeSurfaceFocusObserved.set(true)
 
+                        val injectedPhysicalKey = PhysicalKey.Code(usagePage = 0x07, usageId = 0x04)
                         val inputEvents = Channel<InputEvent>(Channel.UNLIMITED)
                         val inputEventStateWasVisible = AtomicBoolean(true)
                         val inputCollector = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -1757,13 +1759,19 @@ class AppKitBackendProviderTest {
                             },
                         )
                         val keyEvent = withTimeout(5.seconds) {
-                            inputEvents.receiveInputEvent<InputEvent.Key>()
+                            inputEvents.receiveInputEvent<InputEvent.Key> {
+                                it.keyState == KeyState.Pressed && it.physicalKey == injectedPhysicalKey
+                            }
                         }
                         assertEquals(KeyState.Pressed, keyEvent.keyState)
-                        assertEquals(keyEvent.stateRevision, window.surface.input.state.value.revision)
-                        assertEquals(
-                            setOf(keyEvent.physicalKey),
-                            window.surface.input.state.value.keyboard.pressedKeys,
+                        assertEquals(injectedPhysicalKey, keyEvent.physicalKey)
+                        assertTrue(
+                            window.surface.input.state.value.revision.value >= keyEvent.stateRevision.value,
+                            "physical host input may advance the state after the key is delivered",
+                        )
+                        assertTrue(
+                            injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys,
+                            "the injected key must be represented in the source window state",
                         )
                         assertTrue(inputEventStateWasVisible.get())
                         nativeInputEventStateObserved.set(true)
@@ -1785,23 +1793,27 @@ class AppKitBackendProviderTest {
                             while (observed == null) {
                                 when (val event = inputEvents.receive()) {
                                     is InputEvent.StateReset -> observed = event
-                                    is InputEvent.Key -> assertFalse(
-                                        event.keyState == KeyState.Released,
-                                        "focus reset must not be preceded by a synthetic key release: $event",
-                                    )
-                                    else -> Unit // Physical pointer motion may arrive from the host desktop.
+                                    is InputEvent.Key -> if (event.physicalKey == injectedPhysicalKey) {
+                                        assertFalse(
+                                            event.keyState == KeyState.Released,
+                                            "focus reset must not be preceded by a synthetic key release: $event",
+                                        )
+                                    }
+                                    else -> Unit // Unrelated physical host input may arrive concurrently.
                                 }
                             }
                             checkNotNull(observed)
                         }
                         assertEquals(InputStateResetReason.FocusLost, reset.reason)
-                        assertEquals(reset.stateRevision, window.surface.input.state.value.revision)
-                        assertEquals(emptySet(), window.surface.input.state.value.keyboard.pressedKeys)
-                        assertEquals(emptyList(), window.surface.input.state.value.pointers)
+                        assertTrue(
+                            window.surface.input.state.value.revision.value >= reset.stateRevision.value,
+                            "physical host input may advance the state after the reset is delivered",
+                        )
+                        assertFalse(injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys)
                         assertNull(
                             withTimeoutOrNull(200.milliseconds) {
                                 inputEvents.receiveInputEvent<InputEvent.Key> {
-                                    it.keyState == KeyState.Released
+                                    it.keyState == KeyState.Released && it.physicalKey == injectedPhysicalKey
                                 }
                             },
                         )
@@ -1829,19 +1841,29 @@ class AppKitBackendProviderTest {
                                     }
                                 },
                             )
-                            val isolatedKeyEvent = withTimeout(5.seconds) {
-                                inputEvents.receiveInputEvent<InputEvent.Key>()
+                            val sourceKeyEvent = withTimeout(5.seconds) {
+                                inputEvents.receiveInputEvent<InputEvent.Key> {
+                                    it.keyState == KeyState.Pressed && it.physicalKey == injectedPhysicalKey
+                                }
                             }
-                            assertEquals(
-                                setOf(isolatedKeyEvent.physicalKey),
-                                window.surface.input.state.value.keyboard.pressedKeys,
+                            assertEquals(injectedPhysicalKey, sourceKeyEvent.physicalKey)
+                            assertTrue(
+                                injectedPhysicalKey in window.surface.input.state.value.keyboard.pressedKeys,
+                                "the injected key must remain attached to the source window",
                             )
-                            assertEquals(
-                                emptySet(),
-                                isolatedWindow.surface.input.state.value.keyboard.pressedKeys,
+                            assertFalse(
+                                injectedPhysicalKey in isolatedWindow.surface.input.state.value.keyboard.pressedKeys,
+                                "the injected key must not cross to the isolated window",
                             )
+                            // Pointer motion belongs to the physical host desktop and may legitimately
+                            // reach the newly opened window. The synthetic key dispatched to `window`
+                            // must not cross to `isolatedWindow`.
                             assertNull(
-                                withTimeoutOrNull(200.milliseconds) { isolatedInputEvents.receive() },
+                                withTimeoutOrNull(200.milliseconds) {
+                                    isolatedInputEvents.receiveInputEvent<InputEvent.Key> {
+                                        it.physicalKey == injectedPhysicalKey
+                                    }
+                                },
                             )
                             nativeInputIsolationObserved.set(true)
                         } finally {
