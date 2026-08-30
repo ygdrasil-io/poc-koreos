@@ -6,7 +6,9 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowId
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
@@ -63,7 +65,9 @@ public data class WindowUpdateCommand internal constructor(
     public val operationId: WindowOperationId,
     public val expectedRevision: WindowRevision?,
     public val update: WindowUpdate,
+    public val desiredLevel: WindowLevel,
     private val stimulusSink: WindowUpdateCommandStimulusSink,
+    private val fullscreenObservationSink: WindowFullscreenObservationSink,
 ) {
     public fun applied(state: WindowState) {
         stimulusSink.accept(WindowUpdateCommandStimulus.Applied(operationId, state))
@@ -76,6 +80,37 @@ public data class WindowUpdateCommand internal constructor(
 
     public fun rejected(error: Throwable) {
         stimulusSink.accept(WindowUpdateCommandStimulus.Rejected(operationId, error))
+    }
+
+    public fun failed(failure: KadreFailure) {
+        stimulusSink.accept(WindowUpdateCommandStimulus.Failed(operationId, failure))
+    }
+
+    public fun committedFailure(
+        effectiveState: WindowState,
+        publicationOperationId: WindowOperationId?,
+        failure: KadreFailure,
+    ) {
+        stimulusSink.accept(
+            WindowUpdateCommandStimulus.CommittedFailure(
+                operationId,
+                effectiveState,
+                publicationOperationId,
+                failure,
+            ),
+        )
+    }
+
+    public fun fullscreenWill(target: FullscreenMode) {
+        fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Will(target))
+    }
+
+    public fun fullscreenDid(effectiveState: WindowState) {
+        fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.Did(effectiveState))
+    }
+
+    public fun fullscreenDidFail(target: FullscreenMode) {
+        fullscreenObservationSink.accept(windowId, operationId, WindowFullscreenObservation.DidFail(target))
     }
 }
 
@@ -91,6 +126,18 @@ public sealed interface WindowUpdateCommandStimulus {
         public val error: Throwable,
     ) : WindowUpdateCommandStimulus
 
+    public data class Failed(
+        public val operationId: WindowOperationId,
+        public val failure: KadreFailure,
+    ) : WindowUpdateCommandStimulus
+
+    public data class CommittedFailure(
+        public val operationId: WindowOperationId,
+        public val effectiveState: WindowState,
+        public val publicationOperationId: WindowOperationId?,
+        public val failure: KadreFailure,
+    ) : WindowUpdateCommandStimulus
+
     public data class PartiallyApplied(
         public val operationId: WindowOperationId,
         public val state: WindowState,
@@ -100,6 +147,12 @@ public sealed interface WindowUpdateCommandStimulus {
             require(rejected.isNotEmpty()) { "rejected must not be empty" }
         }
     }
+}
+
+internal sealed interface WindowFullscreenObservation {
+    data class Will(val target: FullscreenMode) : WindowFullscreenObservation
+    data class Did(val effectiveState: WindowState) : WindowFullscreenObservation
+    data class DidFail(val target: FullscreenMode) : WindowFullscreenObservation
 }
 
 /** A correlated request to withdraw a not-yet-committed [WindowUpdateCommand]. */
@@ -250,6 +303,10 @@ internal interface WindowCommandStimulusSink {
 
 internal fun interface WindowUpdateCommandStimulusSink {
     fun accept(stimulus: WindowUpdateCommandStimulus)
+}
+
+internal fun interface WindowFullscreenObservationSink {
+    fun accept(windowId: WindowId, operationId: WindowOperationId, observation: WindowFullscreenObservation)
 }
 
 internal class ManagedWindowPeerOwner(
