@@ -102,9 +102,17 @@ that cannot be made effective rejects only `WindowProperty.Transparency`.
 
 ### Content protection
 
-`contentProtection = true` maps to `NSWindowSharingNone`; `false` maps to
-`NSWindowSharingReadWrite`. The AppKit port reads the sharing type after every
-write and projects the effective boolean into `WindowState`.
+`contentProtection = true` maps to `NSWindowSharingNone`; `false` restores
+`NSWindowSharingReadOnly`, the supported AppKit default. `ReadOnly` permits
+another process to read or capture the window content but not to modify it, so
+it is the correct unprotected state. Kadre must not use the legacy
+`NSWindowSharingReadWrite` static constant: AppKit deprecates it in macOS 15.0
+with the explicit replacement `NSWindowSharingReadOnly`.
+
+The AppKit port reads the native sharing type after every write and requires it
+to equal the requested native value before projecting the effective boolean
+into `WindowState`; a merely false boolean projection is not enough to hide a
+failed restore.
 
 This feature limits the sharing of window content with other processes. It is
 not documented or represented as a guarantee against every screenshot,

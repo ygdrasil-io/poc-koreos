@@ -175,8 +175,12 @@ internal data class AppKitWindowMutationSnapshot(
 - [ ] In `KffiAppKitWindowPort`, execute the following on the AppKit main thread:
   - `true` transparency: `NSWindow.setOpaque(false)` then set a transparent `NSColor` background;
   - `false` transparency: `NSWindow.setOpaque(true)` then restore `NSColor.windowBackgroundColor()`;
-  - content protection true/false: `setSharingType(NSWindowSharingNone/NSWindowSharingReadWrite)`.
-  Read `isOpaque` and `sharingType` after the setters and project them to the two booleans. Do not add, remove, replace, wrap, or configure the content view.
+  - content protection true/false: `setSharingType(NSWindowSharingNone/NSWindowSharingReadOnly)`.
+  `NSWindowSharingReadOnly` is AppKit's supported default; do not generate or use
+  the deprecated legacy `NSWindowSharingReadWrite` static constant. Read
+  `isOpaque` and `sharingType` after the setters; require the raw sharing-type
+  readback to match the requested native value before projecting the two
+  booleans. Do not add, remove, replace, wrap, or configure the content view.
 - [ ] Extend `APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES` with `Transparency` and `ContentProtection`, and configure the generic runtime appearance capabilities from that set.
 - [ ] Extend the real macOS port test to read actual opacity/sharing state after initial creation and after each update. It proves native state, not visible transparency or screenshot prevention.
 - [ ] Run `./gradlew :kadre:backend:appkit:jvmTest :kadre:runtime:jvmTest --refresh-dependencies`; commit and open slice D stacked on A.
