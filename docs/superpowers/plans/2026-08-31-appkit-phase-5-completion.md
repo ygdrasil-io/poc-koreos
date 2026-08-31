@@ -130,8 +130,10 @@ NSWindow.performWindowDragWithEvent(MemorySegment)
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowRuntimeDriverFactory.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitBackendProvider.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/KffiAppKitWindowPort.kt`
+- Modify: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/RuntimeWindowManager.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowRuntimeDriverTest.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/KffiAppKitWindowPortMacOsTest.kt`
+- Modify: `kadre/runtime/src/jvmTest/kotlin/org/graphiks/kadre/internal/runtime/RuntimeWindowManagerTest.kt`
 
 **Interfaces:**
 
@@ -172,6 +174,7 @@ internal data class AppKitWindowMutationSnapshot(
 - [ ] Extend the mutation target and snapshot with `appearance`; make unchanged properties no-op at the port boundary and include both effective values in all snapshots used for commit, update, external observation, and failure recovery.
 - [ ] Change `appKitEffectiveSpec` only for supported initial fields: preserve requested transparency and content protection when their capabilities are enabled. Do not use it to erase unsupported values; Task 1 must have rejected those before peer creation.
 - [ ] Map `WindowUpdate.transparency` and `WindowUpdate.contentProtection` into the AppKit target and add both comparisons to `rejectedMutationFields`. Maintain the existing property ordering and single native commit boundary.
+- [ ] Complete the generic mutation plumbing for these already capability-advertised fields: retain both changes in `supportedMutationOnly`, resolve them in `candidateFor`, and include them in `mutationChanged`. Add a focused runtime regression test that proves enabled appearance fields reach the `WindowCommandPort`; this is shared contract plumbing, not an AppKit-specific fallback.
 - [ ] In `KffiAppKitWindowPort`, execute the following on the AppKit main thread:
   - `true` transparency: `NSWindow.setOpaque(false)` then set a transparent `NSColor` background;
   - `false` transparency: `NSWindow.setOpaque(true)` then restore `NSColor.windowBackgroundColor()`;
