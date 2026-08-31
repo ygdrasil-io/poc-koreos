@@ -191,6 +191,7 @@ internal data class AppKitWindowMutationSnapshot(
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitBackendProvider.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowRuntimeDriver.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowRuntimeDriverFactory.kt`
+- Modify: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/WindowCommandPort.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitProcessBrokerTest.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitBackendProviderTest.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowRuntimeDriverTest.kt`
@@ -207,6 +208,11 @@ internal interface AppKitWindowAttentionPort : WindowAttentionPort
 ```
 
 The broker owns `WindowId -> native attention token`; the runtime owns only window-phase and capability validation.
+
+`WindowAttentionPort` is a public type in the `org.graphiks.kadre.internal.runtime`
+backend SPI, like `WindowCommandPort`: AppKit is a distinct Gradle module and
+cannot implement a Kotlin `internal` type. It is not a foundation/application
+API and does not create a new public application entry point.
 
 - [ ] Add broker tests first, using a recording native application:
   - informational/critical attention creates one token for the requesting window;
