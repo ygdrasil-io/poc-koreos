@@ -58,6 +58,7 @@ import org.graphiks.kadre.window.WindowManager
 import org.graphiks.kadre.window.WindowManagerCapabilities
 import org.graphiks.kadre.window.WindowManagerRevision
 import org.graphiks.kadre.window.WindowManagerState
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
@@ -1635,6 +1636,7 @@ internal class RuntimeWindow(
             if (before.resizable != effective.resizable) add(WindowProperty.Resizable)
             if (before.decorations != effective.decorations) add(WindowProperty.Decorations)
             if (before.systemButtons != effective.systemButtons) add(WindowProperty.SystemButtons)
+            if (before.level != effective.level) add(WindowProperty.Level)
         }
         if (changedProperties.isNotEmpty()) {
             publish(
@@ -1799,6 +1801,7 @@ private fun candidateFor(
         resizable = resolveResizable(update.resizable, current.resizable),
         decorations = resolveDecorations(update.decorations, current.decorations),
         systemButtons = resolveSystemButtons(update.systemButtons, current.systemButtons),
+        level = resolveLevel(update.level, current.level),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -1861,6 +1864,16 @@ private fun resolveSystemButtons(
     -> current
 }
 
+private fun resolveLevel(
+    change: PropertyChange<WindowLevel>,
+    current: WindowLevel,
+): WindowLevel = when (change) {
+    is PropertyChange.Set -> change.value
+    PropertyChange.Clear,
+    PropertyChange.Unchanged,
+    -> current
+}
+
 private fun invalidRequiredClearField(
     update: WindowUpdate,
     supportedProperties: Set<WindowProperty>,
@@ -1870,6 +1883,7 @@ private fun invalidRequiredClearField(
     WindowProperty.Resizable in supportedProperties && update.resizable is PropertyChange.Clear -> "resizable"
     WindowProperty.Decorations in supportedProperties && update.decorations is PropertyChange.Clear -> "decorations"
     WindowProperty.SystemButtons in supportedProperties && update.systemButtons is PropertyChange.Clear -> "systemButtons"
+    WindowProperty.Level in supportedProperties && update.level is PropertyChange.Clear -> "level"
     else -> null
 }
 
@@ -1928,7 +1942,8 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.maximumSize != candidate.maximumSize ||
         current.resizable != candidate.resizable ||
         current.decorations != candidate.decorations ||
-        current.systemButtons != candidate.systemButtons
+        current.systemButtons != candidate.systemButtons ||
+        current.level != candidate.level
 
 private fun supportedMutationOnly(
     update: WindowUpdate,
@@ -1941,6 +1956,7 @@ private fun supportedMutationOnly(
     resizable = update.resizable.whenSupported(WindowProperty.Resizable, supportedProperties),
     decorations = update.decorations.whenSupported(WindowProperty.Decorations, supportedProperties),
     systemButtons = update.systemButtons.whenSupported(WindowProperty.SystemButtons, supportedProperties),
+    level = update.level.whenSupported(WindowProperty.Level, supportedProperties),
     expectedRevision = update.expectedRevision,
 )
 
