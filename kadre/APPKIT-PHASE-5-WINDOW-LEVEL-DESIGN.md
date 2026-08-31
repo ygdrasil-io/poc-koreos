@@ -25,7 +25,8 @@ autoritaire.
 
 ## Précondition KFFI
 
-Le snapshot KFFI publié expose déjà les bindings générés nécessaires :
+Le snapshot KFFI publié expose les bindings générés nécessaires et charge le
+framework CoreGraphics pour les downcalls de niveau :
 
 - NSWindow.level() et NSWindow.setLevel(NSWindowLevel) ;
 - CGWindowLevelForKey(CGWindowLevelKey) ;
@@ -35,8 +36,9 @@ Le snapshot KFFI publié expose déjà les bindings générés nécessaires :
 Le port convertit les valeurs avec CGWindowLevelForKey au lieu de recopier des
 constantes numériques. Kadre appelle seulement ces bindings générés sur le
 thread propriétaire AppKit ; il ne construit ni selector, ni downcall Panama,
-ni wrapper FFI local. Aucun changement Kextract ou KFFI n'est requis pour cette
-tranche.
+ni wrapper FFI local. La génération Kextract/KFFI doit donc conserver le lookup
+CoreGraphics partagé par les sources Objective-C séparées ; Kadre ne compense
+jamais un binding incomplet par une implémentation FFI locale.
 
 ## Modèle effectif
 
@@ -96,10 +98,9 @@ Window.requestAttention reste Unsupported(RequestWindowAttention).
 
 ## Preuves et contrats
 
-WIN-004 réserve le contrat O2 du pipeline runtime de niveau. APK-009 réserve
-le contrat O3 de l'activation publique AppKit. Ils restent planned jusqu'à la
-dernière carte de la stack, qui active simultanément capability, mappings,
-evidence et gates.
+WIN-004 est le contrat O2 du pipeline runtime de niveau. APK-009 est le
+contrat O3 de l'activation publique AppKit. Ils sont activés avec la capability,
+les mappings, l'evidence et les gates de la dernière carte de la stack.
 
 WIN-004 couvrira :
 

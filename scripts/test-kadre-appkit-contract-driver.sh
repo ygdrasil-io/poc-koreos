@@ -7,7 +7,7 @@ DRIVER="$SCRIPT_DIR/test-kadre-appkit-contracts.sh"
 FAKE_GRADLE="$SCRIPT_DIR/fixtures/fake-gradlew.sh"
 TEMP_DIR="$(mktemp -d /tmp/kadre-appkit-driver.XXXXXX)"
 EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
-EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json")
+EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json")
 
 cleanup() {
     local status="$?"
@@ -55,17 +55,17 @@ for evidence_file in "${EVIDENCE_FILES[@]}"; do
 done
 
 rm -rf "$EVIDENCE_DIRECTORY"
-TRACE="$TEMP_DIR/missing-apk008.trace"
+TRACE="$TEMP_DIR/missing-apk009.trace"
 capture_status observed_status env \
     KADRE_GRADLEW="$FAKE_GRADLE" \
     KADRE_FAKE_GRADLE_TRACE="$TRACE" \
     KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
-    KADRE_FAKE_MISSING_EVIDENCE=APK-008 \
+    KADRE_FAKE_MISSING_EVIDENCE=APK-009 \
     GITHUB_SHA="0123456789abcdef" \
     bash "$DRIVER"
 
-[[ "$observed_status" != "0" ]] || fail "missing APK-008 evidence passed the AppKit contract gate"
-[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-008 evidence did not run both Gradle phases"
+[[ "$observed_status" != "0" ]] || fail "missing APK-009 evidence passed the AppKit contract gate"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-009 evidence did not run both Gradle phases"
 
 rm -rf "$EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/failure.trace"

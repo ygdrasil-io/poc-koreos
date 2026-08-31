@@ -9,6 +9,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -28,6 +29,8 @@ import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.CGMomentumScrollPhase
 import org.graphiks.kffi.objc.CGScrollEventUnit
 import org.graphiks.kffi.objc.CGScrollPhase
+import org.graphiks.kffi.objc.CGWindowLevelForKey
+import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSSize
@@ -66,8 +69,10 @@ import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
@@ -615,7 +620,7 @@ class AppKitBackendProviderTest {
                 assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
                 assertEquals(WindowDecorations.System, window.state.value.decorations)
                 assertEquals(WindowSystemButtons.All, window.state.value.systemButtons)
-                assertEquals(WindowLevel.Normal, window.state.value.level)
+                assertEquals(WindowLevel.Floating, window.state.value.level)
                 assertFalse(window.state.value.transparent)
                 assertFalse(window.state.value.blurBehind)
                 assertFalse(window.state.value.contentProtection)
@@ -643,10 +648,16 @@ class AppKitBackendProviderTest {
                     ),
                     windowCapabilities.systemButtons,
                 )
+                assertEquals(
+                    Capability.Supported(
+                        setOf(WindowLevel.Normal, WindowLevel.Floating, WindowLevel.Modal),
+                        FeatureAvailability.Available,
+                    ),
+                    windowCapabilities.level,
+                )
                 listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
                     windowCapabilities.fullscreen,
-                    windowCapabilities.level,
                     windowCapabilities.transparency,
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
@@ -1309,7 +1320,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesOnlyTheSevenProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesOnlyTheEightProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1352,11 +1363,17 @@ class AppKitBackendProviderTest {
                 ),
                 window.capabilities.value.systemButtons,
             )
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowLevel.Normal, WindowLevel.Floating, WindowLevel.Modal),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.level,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
                 window.capabilities.value.fullscreen,
-                window.capabilities.value.level,
                 window.capabilities.value.transparency,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
@@ -1470,6 +1487,144 @@ class AppKitBackendProviderTest {
                 events.close()
             }
         }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowLevelUsesTheGeneratedBindingAndOneCorrelatedUpdateOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow(
+                WindowSpec(
+                    title = "public-level-before",
+                    contentSize = LogicalSize(320.0, 180.0),
+                    decorations = WindowDecorations.System,
+                    systemButtons = WindowSystemButtons.All,
+                    level = WindowLevel.Floating,
+                ),
+            )
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                assertEquals(
+                    Capability.Supported(
+                        setOf(WindowLevel.Normal, WindowLevel.Floating, WindowLevel.Modal),
+                        FeatureAvailability.Available,
+                    ),
+                    window.capabilities.value.level,
+                )
+                assertEquals(WindowLevel.Floating, window.state.value.level)
+                assertEquals(
+                    CGWindowLevelForKey(CGWindowLevelKey.kCGFloatingWindowLevelKey).toLong(),
+                    readNativeWindowLevel(window),
+                )
+
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            title = PropertyChange.Set("public-level-after"),
+                            contentSize = PropertyChange.Set(LogicalSize(420.0, 260.0)),
+                            systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                            level = PropertyChange.Set(WindowLevel.Modal),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+                assertEquals("public-level-after", outcome.state.title)
+                assertEquals(LogicalSize(420.0, 260.0), outcome.state.contentSize)
+                assertEquals(WindowSystemButtons.CloseOnly, outcome.state.systemButtons)
+                assertEquals(WindowLevel.Modal, outcome.state.level)
+                assertEquals(outcome.state, window.state.value)
+                assertEquals(
+                    CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
+                    readNativeWindowLevel(window),
+                )
+
+                val geometry = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.GeometryChanged>(events.receive())
+                }
+                val properties = withTimeout(5.seconds) {
+                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                }
+                assertEquals(outcome.operationId, geometry.operationId)
+                assertEquals(outcome.operationId, properties.operationId)
+                assertEquals(outcome.state, geometry.state)
+                assertEquals(outcome.state, properties.state)
+                assertEquals(
+                    setOf(WindowProperty.Title, WindowProperty.SystemButtons, WindowProperty.Level),
+                    properties.changed,
+                )
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitWindowLevelPropertiesFollowTheSuppliedDiscretePolicyOnMacOs() {
+        runPublicAppKitGeometrySession(
+            KadrePolicies.Default.copy(
+                window = KadrePolicies.Default.window.copy(
+                    discreteEvents = KadrePolicies.Default.window.discreteEvents.copy(
+                        collectorCapacity = 1,
+                        collectorOverflow = CollectorOverflowAction.CancelSlowCollector,
+                    ),
+                ),
+            ),
+        ) {
+            val window = openPublicGeometryWindow("public-level-policy")
+            val enteredFirstPropertiesEvent = CompletableDeferred<Unit>()
+            val releaseCollector = CompletableDeferred<Unit>()
+            val collection = async(start = CoroutineStart.UNDISPATCHED) {
+                runCatching {
+                    window.events
+                        .onEach { event ->
+                            if (
+                                event is WindowEvent.PropertiesChanged &&
+                                !enteredFirstPropertiesEvent.isCompleted
+                            ) {
+                                enteredFirstPropertiesEvent.complete(Unit)
+                                releaseCollector.await()
+                            }
+                        }
+                        .toList()
+                }.exceptionOrNull()
+            }
+            try {
+                withTimeout(5.seconds) {
+                    window.apply(
+                        WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)),
+                    ).appKitSuccessValue()
+                }
+                withTimeout(5.seconds) { enteredFirstPropertiesEvent.await() }
+                withTimeout(5.seconds) {
+                    window.apply(
+                        WindowUpdate(level = PropertyChange.Set(WindowLevel.Modal)),
+                    ).appKitSuccessValue()
+                }
+                withTimeout(5.seconds) {
+                    window.apply(
+                        WindowUpdate(level = PropertyChange.Set(WindowLevel.Normal)),
+                    ).appKitSuccessValue()
+                }
+
+                releaseCollector.complete(Unit)
+                assertIs<SlowCollectorCancellationException>(
+                    withTimeout(5.seconds) { collection.await() },
+                )
+                assertEquals(WindowLevel.Normal, window.state.value.level)
+            } finally {
+                releaseCollector.complete(Unit)
+                collection.cancel()
+            }
+        }
+    }
 
     @OptIn(
         org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
@@ -2915,6 +3070,20 @@ private suspend fun readNativeWindowChrome(window: Window): NativePublicWindowCh
                         ).isHidden(),
                     )
                 }
+            }
+        },
+    ).value
+
+@OptIn(
+    org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+    org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+)
+private suspend fun readNativeWindowLevel(window: Window): Long =
+    assertIs<KadreResult.Success<Long>>(
+        window.withDesktopHandle { handle ->
+            val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+            ObjCRuntime.autoreleasePool {
+                NSWindow(MemorySegment.ofAddress(appKit.nsWindowAddress.toLong())).level()
             }
         },
     ).value
