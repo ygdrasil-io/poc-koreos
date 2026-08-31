@@ -3635,6 +3635,13 @@ class AppKitWindowRuntimeDriverTest {
 
     @Test
     fun readinessHandoffDrainsPreCommitObservationBeforeLivePointerDown() = runBlocking {
+        data class HandlerInputSnapshot(
+            val revision: Long,
+            val keyboard: FeatureAvailability,
+            val pointer: FeatureAvailability,
+            val position: LogicalPoint?,
+        )
+
         val handoffPaused = CountDownLatch(1)
         val releaseHandoff = CountDownLatch(1)
         val position = LogicalPoint(43.0, 47.0)
@@ -3647,6 +3654,9 @@ class AppKitWindowRuntimeDriverTest {
         val port = DeterministicAppKitNativeWindowPort(
             name = "readiness-input-order",
             inputObservationInstalled = true,
+            afterSurfaceActivationBeforeCommit = { native ->
+                native.emitInput("readiness-input-order", AppKitInput.PointerEntered(position))
+            },
         )
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             resources = KadrePolicies.Default.resources,
@@ -3668,7 +3678,17 @@ class AppKitWindowRuntimeDriverTest {
             ).window
             val trace = CopyOnWriteArrayList<String>()
             val interactionStamp = AtomicReference<EventStamp?>()
+            val handlerInputSnapshot = AtomicReference<HandlerInputSnapshot?>()
             window.surface.installInteractionHandler(InteractionHandler { _, event ->
+                val input = window.surface.input.state.value
+                handlerInputSnapshot.set(
+                    HandlerInputSnapshot(
+                        revision = input.revision.value,
+                        keyboard = input.capabilities.keyboard,
+                        pointer = input.capabilities.pointer,
+                        position = input.pointers.singleOrNull()?.position,
+                    ),
+                )
                 interactionStamp.set(event.stamp)
                 trace += "handler"
             }).appKitSuccessValue()
@@ -3685,15 +3705,20 @@ class AppKitWindowRuntimeDriverTest {
                     .toList()
             }
 
-            port.emitInput("readiness-input-order", AppKitInput.PointerEntered(position))
             port.emitPointerDown("readiness-input-order", pointerDown) { }
+            assertEquals(1L, releaseHandoff.count)
             releaseHandoff.countDown()
 
             val events = withTimeout(2.seconds) { delivered.await() }
             val entered = assertIs<InputEvent.PointerEntered>(events[0])
             val pressed = assertIs<InputEvent.PointerButtonChanged>(events[1])
             val handlerStamp = checkNotNull(interactionStamp.get())
+            val atHandler = checkNotNull(handlerInputSnapshot.get())
             assertTrue(trace.indexOf("handler") < trace.indexOf("pressed"))
+            assertEquals(2L, atHandler.revision)
+            assertEquals(FeatureAvailability.Available, atHandler.keyboard)
+            assertEquals(FeatureAvailability.Available, atHandler.pointer)
+            assertEquals(position, atHandler.position)
             assertEquals(2L, entered.stateRevision.value)
             assertEquals(3L, pressed.stateRevision.value)
             assertTrue(entered.stamp.sequence.value < handlerStamp.sequence.value)
