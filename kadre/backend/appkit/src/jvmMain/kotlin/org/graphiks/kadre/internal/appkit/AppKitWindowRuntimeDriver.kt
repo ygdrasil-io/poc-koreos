@@ -138,7 +138,15 @@ private class BrokeredAppKitWindowAttentionPort(
                         KadreFailure.Closed(KadreResourceKind.Host),
                     )
                     else -> try {
-                        commandPort.onMainThread { broker.requestUserAttention(owner, windowId, attention) }
+                        commandPort.onMainThread {
+                            when {
+                                cancelled.get() -> null
+                                closed.get() -> org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                                    KadreFailure.Closed(KadreResourceKind.Host),
+                                )
+                                else -> broker.requestUserAttention(owner, windowId, attention)
+                            }
+                        }
                     } catch (cause: Exception) {
                         commandPort.reportAttentionFailure(cause)
                         org.graphiks.kadre.diagnostics.KadreResult.Failure(

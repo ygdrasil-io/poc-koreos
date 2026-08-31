@@ -12,6 +12,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.FeatureAvailability
@@ -23,6 +27,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -53,6 +58,7 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
@@ -70,6 +76,254 @@ import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
     @Test
+    fun standaloneAttentionRunsAndReleasesOnTheAppKitOwnerThread() {
+        val port = OwnerThreadAppKitNativeWindowPort("attention-owner-thread")
+        val native = DriverAttentionNative(port::isMainThread)
+        val standaloneExecutor = newDaemonSingleThreadExecutor("attention-standalone-test")
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            availability = { true },
+        )
+
+        try {
+            val result = standaloneExecutor.submit(Callable {
+                provider.run(
+                    DesktopStandaloneRequest(
+                        KadreApplicationFactory {
+                            KadreApplication {
+                                withTimeout(2.seconds) {
+                                    val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                                        windows.requestWindow(WindowSpec(title = "attention-owner-thread"))
+                                            .appKitSuccessValue()
+                                            .await(),
+                                    ).window
+
+                                    assertEquals(
+                                        KadreResult.Success(Unit),
+                                        window.requestAttention(WindowAttention.Critical),
+                                    )
+                                }
+                                requestStop()
+                            }
+                        },
+                        stopWhenLastWindowClosed = false,
+                        policy = KadrePolicies.Default,
+                    ),
+                )
+            }).get(2, TimeUnit.SECONDS)
+
+            assertEquals(
+                KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+                result,
+            )
+            assertEquals(listOf(WindowAttention.Critical), native.requests)
+            assertEquals(listOf(true), native.requestsOnOwnerThread)
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(listOf(true), native.cancellationsOnOwnerThread)
+        } finally {
+            standaloneExecutor.shutdownNow()
+            port.close()
+        }
+    }
+
+    @Test
+    fun driverCloseBeforeQueuedAttentionOwnerExecutionReturnsClosedWithoutNativeRequest() = runBlocking {
+        val ownerThreadEntered = CountDownLatch(1)
+        val releaseOwnerThread = CountDownLatch(1)
+        val port = OwnerThreadAppKitNativeWindowPort("attention-queued-close")
+        val native = DriverAttentionNative(port::isMainThread)
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+        val closeExecutor = newDaemonSingleThreadExecutor("attention-queued-close-test")
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-queued-close"))
+            }
+            val ownerThreadBlocker = port.submitOnOwnerThread {
+                ownerThreadEntered.countDown()
+                check(releaseOwnerThread.await(2, TimeUnit.SECONDS))
+            }
+            assertTrue(ownerThreadEntered.await(2, TimeUnit.SECONDS))
+            val attentionReachedMainThread = port.observeNextForeignMainThreadCall()
+            val request = async(start = CoroutineStart.UNDISPATCHED) {
+                window.requestAttention(WindowAttention.Informational)
+            }
+            assertTrue(attentionReachedMainThread.await(2, TimeUnit.SECONDS))
+
+            val close = closeExecutor.submit(driver::close)
+            awaitAttentionPortClosed(driver)
+            releaseOwnerThread.countDown()
+
+            assertEquals(
+                KadreFailure.Closed(KadreResourceKind.Host),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { request.await() }).reason,
+            )
+            close.get(2, TimeUnit.SECONDS)
+            ownerThreadBlocker.get(2, TimeUnit.SECONDS)
+            assertTrue(native.requests.isEmpty())
+            assertTrue(native.cancelled.isEmpty())
+        } finally {
+            releaseOwnerThread.countDown()
+            driver.closeWithinTimeout()
+            owner.close()
+            closeExecutor.shutdownNow()
+            port.close()
+        }
+    }
+
+    @Test
+    fun attentionMainThreadFailureReturnsTypedFailureAndReportsItsCauseOnce() = runBlocking {
+        val port = OwnerThreadAppKitNativeWindowPort("attention-main-thread-failure")
+        val native = DriverAttentionNative(port::isMainThread)
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-main-thread-failure"))
+            }
+            val failure = IllegalStateException("main-thread")
+            port.failNextMainThreadCall(failure)
+
+            val result = withTimeout(2.seconds) {
+                window.requestAttention(WindowAttention.Informational)
+            }
+
+            assertEquals(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "main-thread-exception"),
+                assertIs<KadreResult.Failure>(result).reason,
+            )
+            assertTrue(reported.single() === failure)
+            assertTrue(native.requests.isEmpty())
+            assertTrue(native.cancelled.isEmpty())
+            driver.closeWithinTimeout()
+            assertEquals(1, reported.size)
+        } finally {
+            driver.closeWithinTimeout()
+            owner.close()
+            port.close()
+        }
+    }
+
+    @Test
+    fun ownerCloseDuringNativeAttentionRequestCompensatesExactlyOnce() = runBlocking {
+        val nativeRequestEntered = CountDownLatch(1)
+        val releaseNativeRequest = CountDownLatch(1)
+        val port = OwnerThreadAppKitNativeWindowPort("attention-owner-close")
+        val native = DriverAttentionNative(
+            isOwnerThread = port::isMainThread,
+            requestEntered = nativeRequestEntered,
+            releaseRequest = releaseNativeRequest,
+        )
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-owner-close"))
+            }
+            val request = async(start = CoroutineStart.UNDISPATCHED) {
+                window.requestAttention(WindowAttention.Critical)
+            }
+            assertTrue(nativeRequestEntered.await(2, TimeUnit.SECONDS))
+
+            owner.close()
+            releaseNativeRequest.countDown()
+
+            assertEquals(
+                KadreFailure.Closed(KadreResourceKind.Host),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { request.await() }).reason,
+            )
+            assertEquals(listOf(WindowAttention.Critical), native.requests)
+            assertEquals(listOf(true), native.requestsOnOwnerThread)
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(listOf(true), native.cancellationsOnOwnerThread)
+
+            driver.closeWithinTimeout()
+            assertEquals(listOf(1L), native.cancelled)
+        } finally {
+            releaseNativeRequest.countDown()
+            driver.closeWithinTimeout()
+            owner.close()
+            port.close()
+        }
+    }
+
+    @Test
+    fun driverCloseReportsAttentionCancellationFailureOnceWithoutRestoringTheToken() = runBlocking {
+        val port = OwnerThreadAppKitNativeWindowPort("attention-cancel-failure")
+        val native = DriverAttentionNative(
+            isOwnerThread = port::isMainThread,
+            cancelFailure = IllegalStateException("cancel"),
+        )
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-cancel-failure"))
+            }
+            assertEquals(
+                KadreResult.Success(Unit),
+                withTimeout(2.seconds) { window.requestAttention(WindowAttention.Informational) },
+            )
+
+            driver.closeWithinTimeout()
+
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(listOf(true), native.cancellationsOnOwnerThread)
+            assertEquals(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "cancel-exception"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+
+            owner.close()
+            driver.closeWithinTimeout()
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(1, reported.size)
+        } finally {
+            driver.closeWithinTimeout()
+            owner.close()
+            port.close()
+        }
+    }
+
+    @Test
     fun externalNativeCloseReleasesBrokeredAttentionExactlyOnce() = runBlocking {
         val native = DriverAttentionNative()
         val broker = AppKitProcessBroker()
@@ -83,16 +337,25 @@ class AppKitWindowRuntimeDriverTest {
             attentionOwner = owner,
         )
         try {
-            val window = openedWindow(driver, WindowSpec(title = "attention-native-close"))
-            assertEquals(KadreResult.Success(Unit), window.requestAttention(WindowAttention.Informational))
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-native-close"))
+            }
+            assertEquals(
+                KadreResult.Success(Unit),
+                withTimeout(2.seconds) { window.requestAttention(WindowAttention.Informational) },
+            )
             withTimeout(2.seconds) { while (native.requests.isEmpty()) yield() }
             port.emitNativeClosed("attention-native-close")
             withTimeout(2.seconds) { while (native.cancelled.isEmpty()) yield() }
             assertEquals(listOf(1L), native.cancelled)
         } finally {
-            driver.close()
+            driver.closeWithinTimeout()
         }
+        assertEquals(listOf(1L), native.cancelled)
+        owner.close()
+        assertEquals(listOf(1L), native.cancelled)
     }
+
     @Test
     fun fullscreenToggleWaitsForTheDelegateTerminalAndRestoresTheDesiredLevel() = runBlocking {
         val port = DeterministicAppKitNativeWindowPort(
@@ -4246,12 +4509,14 @@ internal class OwnerThreadAppKitNativeWindowPort(
         }
     }
     private val nextForeignCall = AtomicReference<CountDownLatch?>()
+    private val nextMainThreadFailure = AtomicReference<Throwable?>()
 
     override fun isMainThread(): Boolean = Thread.currentThread() === ownerThread.get()
 
     override fun <T> onMainThread(block: () -> T): T {
         if (Thread.currentThread() === ownerThread.get()) return block()
         nextForeignCall.getAndSet(null)?.countDown()
+        nextMainThreadFailure.getAndSet(null)?.let { throw it }
         return executor.submit<T> { block() }.get()
     }
 
@@ -4306,6 +4571,10 @@ internal class OwnerThreadAppKitNativeWindowPort(
 
     fun observeNextForeignMainThreadCall(): CountDownLatch = CountDownLatch(1).also { latch ->
         check(nextForeignCall.compareAndSet(null, latch))
+    }
+
+    fun failNextMainThreadCall(failure: Throwable) {
+        check(nextMainThreadFailure.compareAndSet(null, failure))
     }
 
     fun emitNativeClosed(title: String) {
@@ -4449,20 +4718,60 @@ private fun AppKitWindowRuntimeDriver.backendCommandInspection(
 
 private fun Any.privateField(name: String) = javaClass.getDeclaredField(name).apply { isAccessible = true }
 
+private suspend fun awaitAttentionPortClosed(driver: AppKitWindowRuntimeDriver) {
+    val attentionPort = checkNotNull(driver.privateField("attentionPort").get(driver))
+    val closed = attentionPort.privateField("closed").get(attentionPort) as AtomicBoolean
+    withTimeout(2.seconds) {
+        while (!closed.get()) yield()
+    }
+}
+
+private fun AppKitWindowRuntimeDriver.closeWithinTimeout() {
+    val executor = newDaemonSingleThreadExecutor("appkit-driver-close-test")
+    try {
+        executor.submit(::close).get(2, TimeUnit.SECONDS)
+    } finally {
+        executor.shutdownNow()
+    }
+}
+
 private suspend fun WindowRequest.awaitOpened() {
     check(await() is WindowRequestOutcome.OpenedHere) { "expected an AppKit window to open" }
 }
 
-private class DriverAttentionNative : AppKitNativeApplication {
+private class DriverAttentionNative(
+    private val isOwnerThread: () -> Boolean = { true },
+    private val requestEntered: CountDownLatch? = null,
+    private val releaseRequest: CountDownLatch? = null,
+    private val cancelFailure: Throwable? = null,
+) : AppKitNativeApplication {
+    private val stopRun = CountDownLatch(1)
     val requests = CopyOnWriteArrayList<WindowAttention>()
+    val requestsOnOwnerThread = CopyOnWriteArrayList<Boolean>()
     val cancelled = CopyOnWriteArrayList<Long>()
+    val cancellationsOnOwnerThread = CopyOnWriteArrayList<Boolean>()
     private var token = 1L
     override fun isMainThread() = true
     override fun isRunning() = true
     override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit) = AutoCloseable { }
-    override fun requestUserAttention(attention: WindowAttention): Long = token++.also { requests += attention }
-    override fun cancelUserAttentionRequest(token: Long) { cancelled += token }
-    override fun run() = Unit
-    override fun requestStop() = AppKitStopRequest { AppKitStopResult.Accepted }
+    override fun requestUserAttention(attention: WindowAttention): Long {
+        requests += attention
+        requestsOnOwnerThread += isOwnerThread()
+        requestEntered?.countDown()
+        check(releaseRequest?.await(2, TimeUnit.SECONDS) != false)
+        return token++
+    }
+    override fun cancelUserAttentionRequest(token: Long) {
+        cancelled += token
+        cancellationsOnOwnerThread += isOwnerThread()
+        cancelFailure?.let { throw it }
+    }
+    override fun run() {
+        check(stopRun.await(2, TimeUnit.SECONDS))
+    }
+    override fun requestStop() = AppKitStopRequest {
+        stopRun.countDown()
+        AppKitStopResult.Accepted
+    }
     override fun emergencyStop() = Unit
 }
