@@ -3938,6 +3938,42 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun closeAtAttentionPortBoundaryReturnsClosedAndCompensatesLateNativeToken() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val attentionPort = SuspendingNativeAttentionPort()
+        val manager = manager(
+            port,
+            attentionPort = attentionPort,
+            acceptedAttention = setOf(
+                WindowAttention.None,
+                WindowAttention.Informational,
+                WindowAttention.Critical,
+            ),
+        )
+        val request = manager.requestWindow(WindowSpec()).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+        val attention = async(start = CoroutineStart.UNDISPATCHED) {
+            window.requestAttention(WindowAttention.Critical)
+        }
+        attentionPort.requestEntered.await()
+
+        command.nativeClosed()
+        attentionPort.resumeRequest.complete(Unit)
+
+        assertEquals(
+            listOf(
+                KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                false,
+            ),
+            listOf(
+                attention.await(),
+                attentionPort.hasNativeAttention(window.id),
+            ),
+        )
+    }
+
+    @Test
     fun attentionPortRequiresTheFullStandardAttentionDomain() {
         assertFailsWith<IllegalArgumentException> {
             manager(
@@ -4295,6 +4331,28 @@ class RuntimeWindowManagerTest {
         override fun close() {
             closeCount += 1
         }
+    }
+
+    private class SuspendingNativeAttentionPort : WindowAttentionPort {
+        val requestEntered = CompletableDeferred<Unit>()
+        val resumeRequest = CompletableDeferred<Unit>()
+        private val nativeAttention = mutableSetOf<WindowId>()
+
+        override suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit> {
+            requestEntered.complete(Unit)
+            resumeRequest.await()
+            synchronized(nativeAttention) { nativeAttention += windowId }
+            return KadreResult.Success(Unit)
+        }
+
+        override fun release(windowId: WindowId) {
+            synchronized(nativeAttention) { nativeAttention -= windowId }
+        }
+
+        override fun close() = Unit
+
+        fun hasNativeAttention(windowId: WindowId): Boolean =
+            synchronized(nativeAttention) { windowId in nativeAttention }
     }
 
     private sealed interface PortCloseEvent {

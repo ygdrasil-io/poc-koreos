@@ -675,7 +675,7 @@ public class RuntimeWindowManager public constructor(
             }
             configuredPort
         }
-        return try {
+        val result = try {
             port.request(window.id, attention)
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -686,6 +686,18 @@ public class RuntimeWindowManager public constructor(
             safeReport(cause)
             KadreResult.Failure(platformFailure("window-attention-exception"))
         }
+        val closedResource = synchronized(lock) {
+            val stillOpen =
+                committed[window.requestId]?.window === window &&
+                    window.currentState().phase == WindowPhase.Open
+            if (!stillOpen) pendingAttentionReleases += window.id
+            if (stillOpen) null else if (closed) KadreResourceKind.Host else KadreResourceKind.Window
+        }
+        if (closedResource != null) {
+            drainAttentionReleases()
+            return KadreResult.Failure(KadreFailure.Closed(closedResource))
+        }
+        return result
     }
 
     internal suspend fun respondToCloseRequest(
