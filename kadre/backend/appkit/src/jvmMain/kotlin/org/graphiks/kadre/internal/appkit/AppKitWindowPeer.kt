@@ -120,6 +120,7 @@ internal class AppKitWindowPeer private constructor(
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val inputObserver: AppKitNativeInputObserverOwner?,
     private val callbackGate: AppKitWindowCallbackGate,
+    internal val initialWindowSnapshot: AppKitWindowMutationSnapshot?,
 ) : WindowPeerOwner {
     internal val initialSurfaceSnapshot: AppKitSurfaceSnapshot?
         get() = surfaceObserver?.initialSnapshot
@@ -345,6 +346,7 @@ internal class AppKitWindowPeer private constructor(
             port: AppKitNativeWindowPort,
             acceptStimulus: (AppKitWindowStimulus) -> Unit = {},
             acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
+            readInitialWindowSnapshot: Boolean = false,
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
             val callbackGate = AppKitWindowCallbackGate(
@@ -382,6 +384,16 @@ internal class AppKitWindowPeer private constructor(
                     contentAttached = true
                     delegateMayBeAttached = true
                     port.attachDelegate(window, delegate)
+                    val initialWindowSnapshot = if (readInitialWindowSnapshot) {
+                        port.readWindow(window).also { snapshot ->
+                            check(snapshot.level == spec.level) {
+                                "AppKit initial window level readback diverged: " +
+                                    "requested=${spec.level}, effective=${snapshot.level}"
+                            }
+                        }
+                    } else {
+                        null
+                    }
                     port.present(window)
                     geometryObserver = port.observeGeometry(
                         window,
@@ -420,6 +432,7 @@ internal class AppKitWindowPeer private constructor(
                         surfaceObserver,
                         inputObserver,
                         callbackGate,
+                        initialWindowSnapshot,
                     )
                 } catch (failure: Throwable) {
                     callbackGate.revoke()

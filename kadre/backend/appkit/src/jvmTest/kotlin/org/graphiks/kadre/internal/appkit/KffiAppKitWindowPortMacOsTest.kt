@@ -492,58 +492,59 @@ class KffiAppKitWindowPortMacOsTest {
     fun generatedKffiWindowAppliesAndReadsBackWindowLevelsOnMacOs() {
         if (!isMacOsHost()) return
 
-        val peer = KffiAppKitWindowPort().prepare(
-            id = AppKitWindowPeerId(88L),
-            spec = WindowSpec(level = WindowLevel.Floating),
-            acceptSurfaceStimulus = { },
-            acceptStimulus = { },
+        val port = KffiAppKitWindowPort()
+        val initialLevels = listOf(
+            WindowLevel.Normal to CGWindowLevelKey.kCGNormalWindowLevelKey,
+            WindowLevel.Floating to CGWindowLevelKey.kCGFloatingWindowLevelKey,
+            WindowLevel.Modal to CGWindowLevelKey.kCGModalPanelWindowLevelKey,
         )
 
-        try {
-            assertEquals(
-                WindowLevel.Floating,
-                checkNotNull(
-                    peer.updateWindow(
-                        AppKitWindowMutationTarget(
-                            title = PropertyChange.Unchanged,
-                            geometry = unchangedGeometryTarget(),
-                        ),
-                    ),
-                ).level,
-            )
-            assertEquals(
-                KadreResult.Success(
-                    CGWindowLevelForKey(CGWindowLevelKey.kCGFloatingWindowLevelKey).toLong(),
-                ),
-                peer.withDesktopHandle(admitCallback = { true }) { handle ->
-                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
-                },
+        initialLevels.forEachIndexed { index, (level, nativeKey) ->
+            val peer = AppKitWindowPeer.prepare(
+                id = AppKitWindowPeerId(88L + index),
+                spec = WindowSpec(level = level),
+                port = port,
+                acceptSurfaceStimulus = { },
+                acceptStimulus = { },
+                readInitialWindowSnapshot = true,
             )
 
-            assertEquals(
-                WindowLevel.Modal,
-                checkNotNull(
-                    peer.updateWindow(
-                        AppKitWindowMutationTarget(
-                            title = PropertyChange.Unchanged,
-                            geometry = unchangedGeometryTarget(),
-                            level = AppKitWindowLevelTarget(
-                                PropertyChange.Set(WindowLevel.Modal),
+            try {
+                assertEquals(level, checkNotNull(peer.initialWindowSnapshot).level)
+                assertEquals(
+                    KadreResult.Success(CGWindowLevelForKey(nativeKey).toLong()),
+                    peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                        NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
+                    },
+                )
+
+                if (level == WindowLevel.Floating) {
+                    assertEquals(
+                        WindowLevel.Modal,
+                        checkNotNull(
+                            peer.updateWindow(
+                                AppKitWindowMutationTarget(
+                                    title = PropertyChange.Unchanged,
+                                    geometry = unchangedGeometryTarget(),
+                                    level = AppKitWindowLevelTarget(
+                                        PropertyChange.Set(WindowLevel.Modal),
+                                    ),
+                                ),
                             ),
+                        ).level,
+                    )
+                    assertEquals(
+                        KadreResult.Success(
+                            CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
                         ),
-                    ),
-                ).level,
-            )
-            assertEquals(
-                KadreResult.Success(
-                    CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
-                ),
-                peer.withDesktopHandle(admitCallback = { true }) { handle ->
-                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
-                },
-            )
-        } finally {
-            peer.close()
+                        peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                            NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
+                        },
+                    )
+                }
+            } finally {
+                peer.close()
+            }
         }
     }
 

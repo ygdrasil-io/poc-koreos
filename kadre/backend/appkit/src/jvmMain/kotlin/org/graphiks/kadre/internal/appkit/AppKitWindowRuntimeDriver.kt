@@ -316,6 +316,7 @@ private class AppKitWindowCommandPort(
         }
 
         val effectiveSpec = appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities)
+        val initialLevelReadbackRequired = WindowProperty.Level in enabledWindowUpdateCapabilities
         val peer = try {
             AppKitWindowPeer.prepare(
                 id = entry.peerId,
@@ -324,6 +325,7 @@ private class AppKitWindowCommandPort(
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
                 reportCallbackFailure = ::reportFailure,
+                readInitialWindowSnapshot = initialLevelReadbackRequired,
             )
         } catch (cause: Exception) {
             rejectPreparation(entry, cause)
@@ -331,6 +333,11 @@ private class AppKitWindowCommandPort(
         } catch (cause: LinkageError) {
             rejectPreparation(entry, cause)
             return
+        }
+        val openingSpec = if (initialLevelReadbackRequired) {
+            effectiveSpec.copy(level = checkNotNull(peer.initialWindowSnapshot).level)
+        } else {
+            effectiveSpec
         }
 
         val action = synchronized(lock) {
@@ -346,10 +353,10 @@ private class AppKitWindowCommandPort(
         }
         when (action) {
             PreparationAction.Commit -> {
-                beforeCommitDelivery(effectiveSpec)
+                beforeCommitDelivery(openingSpec)
                 entry.command.commit(
                     entry.owner,
-                    effectiveSpec,
+                    openingSpec,
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
                     commands.submitFollowUp { markRuntimeSurfaceReady(entry) }

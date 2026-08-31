@@ -1788,6 +1788,80 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun initialSupportedLevelDivergenceRejectsBeforePresentationOrPublicCommit() = runBlocking {
+        val title = "initial-supported-level-divergence"
+        val committedSpecs = mutableListOf<WindowSpec>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = title,
+            initialLevelReadback = WindowLevel.Modal,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+            beforeCommitDelivery = committedSpecs::add,
+        )
+
+        try {
+            val outcome = driver.manager.requestWindow(
+                WindowSpec(title = title, level = WindowLevel.Floating),
+            ).successValue().await()
+
+            assertEquals(
+                WindowRequestOutcome.Rejected(
+                    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "appkit-window", "open-exception"),
+                ),
+                outcome,
+            )
+            assertEquals(listOf(title), port.initialReadbackTitles)
+            assertEquals(emptyList(), port.presentedWindowTitles)
+            assertEquals(emptyList(), committedSpecs)
+            assertEquals(emptyList(), driver.manager.state.value.windows)
+            assertEquals(listOf(title), port.closedWindowTitles)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun initialUnmappableLevelReadbackRejectsBeforePresentationOrPublicCommit() = runBlocking {
+        val title = "initial-unmappable-level"
+        val readbackFailure = IllegalStateException("unsupported native window level")
+        val committedSpecs = mutableListOf<WindowSpec>()
+        val reported = mutableListOf<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = title,
+            initialReadbackFailure = readbackFailure,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Level),
+            beforeCommitDelivery = committedSpecs::add,
+        )
+
+        try {
+            val outcome = driver.manager.requestWindow(
+                WindowSpec(title = title, level = WindowLevel.Modal),
+            ).successValue().await()
+
+            assertEquals(
+                WindowRequestOutcome.Rejected(
+                    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "appkit-window", "open-exception"),
+                ),
+                outcome,
+            )
+            assertEquals(listOf(title), port.initialReadbackTitles)
+            assertEquals(emptyList(), port.presentedWindowTitles)
+            assertEquals(emptyList(), committedSpecs)
+            assertEquals(emptyList(), driver.manager.state.value.windows)
+            assertEquals(listOf(title), port.closedWindowTitles)
+            assertEquals(listOf<Throwable>(readbackFailure), reported)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun cancellationBeforeTheFirstLevelSetterLeavesThePeerUntouched() = runBlocking {
         val beforeFirstSetter = CountDownLatch(1)
         val allowFirstSetter = CountDownLatch(1)
@@ -2879,6 +2953,8 @@ internal class DeterministicAppKitNativeWindowPort(
     private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
     effectiveLevel: WindowLevel? = null,
+    private val initialLevelReadback: WindowLevel? = null,
+    private val initialReadbackFailure: Throwable? = null,
     private val fullscreenToggleFailure: Throwable? = null,
     private val reentrantFullscreenCallback: AppKitFullscreenCallback? = null,
     fullscreenRestoreFailure: Throwable? = null,
@@ -2904,6 +2980,8 @@ internal class DeterministicAppKitNativeWindowPort(
     val geometryTargets = CopyOnWriteArrayList<AppKitWindowGeometryTarget>()
     val mutationTargets = CopyOnWriteArrayList<AppKitWindowMutationTarget>()
     val createdWindowLevels = CopyOnWriteArrayList<WindowLevel>()
+    val initialReadbackTitles = CopyOnWriteArrayList<String>()
+    val presentedWindowTitles = CopyOnWriteArrayList<String>()
     val fullscreenToggleTargets = CopyOnWriteArrayList<FullscreenMode>()
     val fullscreenToggleLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
@@ -2977,7 +3055,9 @@ internal class DeterministicAppKitNativeWindowPort(
     }
 
     override fun present(window: AppKitNativeWindowOwner) {
-        window.recordingWindow().presented = true
+        val recording = window.recordingWindow()
+        recording.presented = true
+        presentedWindowTitles += recording.identity
     }
 
     override fun updateWindow(
@@ -3028,11 +3108,20 @@ internal class DeterministicAppKitNativeWindowPort(
 
     override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
         window.recordingWindow().let { recording ->
+            if (!recording.presented) {
+                initialReadbackTitles += recording.identity
+                initialReadbackFailure?.let { throw it }
+            }
             if (fullscreenRestoreLevels.isNotEmpty()) {
                 fullscreenReadbackTitles += recording.identity
                 fullscreenReadbackFailure?.let { throw it }
             }
-            AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome, recording.level)
+            AppKitWindowMutationSnapshot(
+                recording.title,
+                recording.geometry,
+                recording.chrome,
+                initialLevelReadback.takeIf { !recording.presented } ?: recording.level,
+            )
         }
 
     override fun toggleFullscreen(
@@ -3491,6 +3580,9 @@ internal class OwnerThreadAppKitNativeWindowPort(
     override fun present(window: AppKitNativeWindowOwner) {
         delegate.present(window)
     }
+
+    override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
+        delegate.readWindow(window)
 
     override fun observeSurface(
         window: AppKitNativeWindowOwner,
