@@ -100,6 +100,14 @@ public class RuntimeWindowManager public constructor(
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
 ) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink {
+    init {
+        if (attentionPort != null) {
+            require(acceptedAttention == STANDARD_WINDOW_ATTENTION) {
+                "attentionPort requires the standard attention domain"
+            }
+        }
+    }
+
     private val lock = Any()
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
@@ -1277,6 +1285,11 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun unsupportedInitialWindowProperty(spec: WindowSpec): WindowProperty? {
+        when {
+            spec.outerPosition != null -> return WindowProperty.OuterPosition
+            spec.blurBehind -> return WindowProperty.Blur
+            spec.icon != null -> return WindowProperty.Icon
+        }
         if (!publicWindowCapabilities) return null
         fun unsupported(property: WindowProperty): Boolean = property !in enabledWindowUpdateCapabilities
         return when {
@@ -1284,7 +1297,6 @@ public class RuntimeWindowManager public constructor(
             spec.contentSize != DEFAULT_WINDOW_CONTENT_SIZE && unsupported(WindowProperty.ContentSize) -> WindowProperty.ContentSize
             spec.minimumSize != null && unsupported(WindowProperty.MinimumSize) -> WindowProperty.MinimumSize
             spec.maximumSize != null && unsupported(WindowProperty.MaximumSize) -> WindowProperty.MaximumSize
-            spec.outerPosition != null && unsupported(WindowProperty.OuterPosition) -> WindowProperty.OuterPosition
             !spec.resizable && unsupported(WindowProperty.Resizable) -> WindowProperty.Resizable
             spec.fullscreen is FullscreenMode.Exclusive -> WindowProperty.Fullscreen
             spec.fullscreen is FullscreenMode.Borderless && unsupported(WindowProperty.Fullscreen) -> WindowProperty.Fullscreen
@@ -1292,8 +1304,6 @@ public class RuntimeWindowManager public constructor(
             spec.systemButtons != WindowSystemButtons.All && unsupported(WindowProperty.SystemButtons) -> WindowProperty.SystemButtons
             spec.level != WindowLevel.Normal && unsupported(WindowProperty.Level) -> WindowProperty.Level
             spec.transparent && unsupported(WindowProperty.Transparency) -> WindowProperty.Transparency
-            spec.blurBehind && unsupported(WindowProperty.Blur) -> WindowProperty.Blur
-            spec.icon != null && unsupported(WindowProperty.Icon) -> WindowProperty.Icon
             spec.contentProtection && unsupported(WindowProperty.ContentProtection) -> WindowProperty.ContentProtection
             else -> null
         }
@@ -2730,6 +2740,12 @@ internal val DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES: Set<WindowProperty> = set
 )
 
 private val DEFAULT_WINDOW_CONTENT_SIZE: LogicalSize = LogicalSize(800.0, 600.0)
+
+private val STANDARD_WINDOW_ATTENTION: Set<WindowAttention> = setOf(
+    WindowAttention.None,
+    WindowAttention.Informational,
+    WindowAttention.Critical,
+)
 
 private fun candidateFor(
     update: WindowUpdate,

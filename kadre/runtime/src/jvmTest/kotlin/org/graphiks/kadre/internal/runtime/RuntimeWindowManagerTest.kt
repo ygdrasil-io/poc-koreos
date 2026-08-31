@@ -92,6 +92,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -3878,7 +3879,11 @@ class RuntimeWindowManagerTest {
         val manager = manager(
             port,
             attentionPort = attentionPort,
-            acceptedAttention = setOf(WindowAttention.Critical),
+            acceptedAttention = setOf(
+                WindowAttention.None,
+                WindowAttention.Informational,
+                WindowAttention.Critical,
+            ),
         )
         val request = manager.requestWindow(WindowSpec()).successValue()
         val command = port.openCommands.single()
@@ -3892,6 +3897,17 @@ class RuntimeWindowManagerTest {
         )
         assertTrue(attentionPort.requests.isEmpty())
         assertEquals(listOf(window.id), attentionPort.releasedWindowIds)
+    }
+
+    @Test
+    fun attentionPortRequiresTheFullStandardAttentionDomain() {
+        assertFailsWith<IllegalArgumentException> {
+            manager(
+                DeterministicWindowCommandPort(),
+                attentionPort = RecordingAttentionPort(),
+                acceptedAttention = setOf(WindowAttention.Critical),
+            )
+        }
     }
 
     @Test
@@ -3937,6 +3953,34 @@ class RuntimeWindowManagerTest {
     @Test
     fun unsupportedInitialOuterPositionIsRejectedBeforeNativeOpen() = runTest {
         assertUnsupportedInitialSpec(WindowSpec(outerPosition = PhysicalPoint(1, 2)))
+    }
+
+    @Test
+    fun structurallyUnsupportedInitialFieldsRejectEvenWhenCapabilityPublicationIsDisabled() = runTest {
+        listOf(
+            WindowSpec(blurBehind = true),
+            WindowSpec(icon = BinaryImage(byteArrayOf(), ImageFormat.Png)),
+            WindowSpec(outerPosition = PhysicalPoint(1, 2)),
+        ).forEach { spec ->
+            val port = DeterministicWindowCommandPort()
+            val manager = manager(
+                port,
+                enabledWindowUpdateCapabilities = setOf(
+                    WindowProperty.Blur,
+                    WindowProperty.Icon,
+                    WindowProperty.OuterPosition,
+                ),
+            )
+
+            val request = manager.requestWindow(spec).successValue()
+            request.cancel()
+
+            assertEquals(
+                WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+                request.await(),
+            )
+            assertTrue(port.openCommands.isEmpty())
+        }
     }
 
     @Test
