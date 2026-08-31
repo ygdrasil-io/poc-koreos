@@ -130,8 +130,8 @@ internal class AppKitProcessBroker {
         else KadreResult.Failure(userAttentionFailure("cancel-exception"))
     }
 
-    fun releaseAllUserAttention(owner: AppKitUserAttentionOwner) {
-        releaseUserAttentionOwner(owner)
+    fun releaseAllUserAttention(owner: AppKitUserAttentionOwner): List<KadreFailure.PlatformFailure> {
+        return releaseUserAttentionOwner(owner)
     }
 
     fun hasUserAttention(owner: AppKitUserAttentionOwner, windowId: WindowId? = null): Boolean =
@@ -143,7 +143,7 @@ internal class AppKitProcessBroker {
             }
         }
 
-    private fun releaseUserAttentionOwner(owner: AppKitUserAttentionOwner) {
+    private fun releaseUserAttentionOwner(owner: AppKitUserAttentionOwner): List<KadreFailure.PlatformFailure> {
         val tokens = synchronized(lock) {
             attentionTokens.entries
                 .filter { (_, token) -> token.ownerId == owner.id }
@@ -152,7 +152,9 @@ internal class AppKitProcessBroker {
                     token.token
                 }
         }
-        tokens.forEach { token -> cancelUserAttention(owner.nativeApplication, token) }
+        return tokens.mapNotNull { token ->
+            if (cancelUserAttention(owner.nativeApplication, token)) null else userAttentionFailure("cancel-exception")
+        }
     }
 
     fun accept(signal: AppKitLifecycleSignal) {

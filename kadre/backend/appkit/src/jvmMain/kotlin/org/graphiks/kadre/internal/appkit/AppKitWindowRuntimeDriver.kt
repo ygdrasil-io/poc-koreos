@@ -165,7 +165,10 @@ private class BrokeredAppKitWindowAttentionPort(
     override fun release(windowId: WindowId) {
         commandPort.submitAttentionCleanup {
             if (broker.hasUserAttention(owner, windowId)) {
-                commandPort.onMainThread { broker.releaseUserAttention(owner, windowId) }
+                val result = commandPort.onMainThread { broker.releaseUserAttention(owner, windowId) }
+                if (result is org.graphiks.kadre.diagnostics.KadreResult.Failure) {
+                    commandPort.reportAttentionFailure(KadreException(result.reason))
+                }
             }
         }
     }
@@ -175,6 +178,7 @@ private class BrokeredAppKitWindowAttentionPort(
         commandPort.submitAttentionCleanup {
             if (broker.hasUserAttention(owner)) {
                 commandPort.onMainThread { broker.releaseAllUserAttention(owner) }
+                    .forEach { failure -> commandPort.reportAttentionFailure(KadreException(failure)) }
             }
         }
     }
