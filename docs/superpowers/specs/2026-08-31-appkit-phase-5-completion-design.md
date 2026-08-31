@@ -18,8 +18,6 @@ that it cannot make effective.
 ### Supported by AppKit in this phase
 
 - `WindowUpdate.transparency` and the equivalent initial `WindowSpec` value;
-- `WindowUpdate.contentProtection` and the equivalent initial `WindowSpec`
-  value;
 - `Window.requestAttention` in standalone sessions;
 - `Window.requestAttention` in embedded sessions only when the host has opted
   in explicitly;
@@ -30,6 +28,10 @@ that it cannot make effective.
 
 - `blurBehind`: implementing it would require Kadre to install and own an
   `NSVisualEffectView` in application content;
+- `contentProtection`: the current AppKit documentation marks
+  `NSWindowSharingNone` as legacy and unused by macOS, and explicitly says not
+  to use it to hide or omit captured content. It cannot honestly implement the
+  common security-named field;
 - `Window.icon`: AppKit's icon is an application/Dock property, not a window
   property;
 - `InteractionAction.BeginWindowResize`: no verified public AppKit path is
@@ -61,7 +63,7 @@ For a live AppKit `Window`, capabilities are:
 | Capability | AppKit value |
 |---|---|
 | `transparency` | `Supported(Unit, Available)` |
-| `contentProtection` | `Supported(Unit, Available)` |
+| `contentProtection` | `Unsupported(UpdateWindow)` |
 | `blurBehind` | `Unsupported(UpdateWindow)` |
 | `icon` | `Unsupported(UpdateWindow)` |
 | `attention` standalone | `Supported({None, Informational, Critical}, Available)` |
@@ -102,22 +104,20 @@ that cannot be made effective rejects only `WindowProperty.Transparency`.
 
 ### Content protection
 
-`contentProtection = true` maps to `NSWindowSharingNone`; `false` restores
-`NSWindowSharingReadOnly`, the supported AppKit default. `ReadOnly` permits
-another process to read or capture the window content but not to modify it, so
-it is the correct unprotected state. Kadre must not use the legacy
-`NSWindowSharingReadWrite` static constant: AppKit deprecates it in macOS 15.0
-with the explicit replacement `NSWindowSharingReadOnly`.
+`contentProtection` remains `Unsupported(UpdateWindow)` on AppKit. Apple
+documents `NSWindowSharingNone` as a legacy value that macOS no longer uses and
+explicitly advises against treating it as a capture-hiding mechanism. Direct
+native observation on the Phase 5 baseline also shows that a window can change
+from `NSWindowSharingReadOnly` to `NSWindowSharingNone`, but not back to
+`ReadOnly` during the peer lifetime. A raw sharing-type value is therefore not
+an effective, reversible content-protection control.
 
-The AppKit port reads the native sharing type after every write and requires it
-to equal the requested native value before projecting the effective boolean
-into `WindowState`; a merely false boolean projection is not enough to hide a
-failed restore.
-
-This feature limits the sharing of window content with other processes. It is
-not documented or represented as a guarantee against every screenshot,
-recording, camera, privileged process, or physical observation. Kadre owns this
-specific property for the windows it creates.
+The AppKit adapter must reject a non-default initial `contentProtection` before
+creating a peer and report an update to this field through normal
+`PartiallyApplied` unsupported-field semantics. Applications needing a
+platform-specific sharing-type experiment may use an admitted desktop handle at
+their own responsibility; Kadre neither configures it nor represents it as
+content protection.
 
 ## Attention broker
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete the remaining meaningful AppKit window scope: effective transparency and content protection, brokered user attention, and a synchronous native window-move interaction, while keeping unsupported features explicit and leaving Kadre outside rendering and widgets.
+**Goal:** Complete the remaining meaningful AppKit window scope: effective transparency, brokered user attention, and a synchronous native window-move interaction, while keeping unsupported features explicit and leaving Kadre outside rendering and widgets.
 
 **Architecture:** Keep the common public model capability-driven. `RuntimeWindowManager` owns validation, capability publication, effective state, and teardown; narrow ports carry the two process/native effects that do not belong in `WindowUpdate`. The AppKit driver maps those ports to AppKit on the main thread. `AppKitProcessBroker` owns process-wide attention requests. The existing desktop-handle lease remains the deliberately low-level composition escape hatch for `NSVisualEffectView`.
 
@@ -13,7 +13,7 @@
 ## Global constraints and delivery order
 
 - Kadre owns windows, lifecycle and peripherals only. Do not add a renderer, widget API, or a typed blur/composition API.
-- `blurBehind`, `Window.icon`, `BeginWindowResize`, armed interactions, outer position and exclusive fullscreen stay explicitly unsupported by AppKit in this phase.
+- `blurBehind`, `contentProtection`, `Window.icon`, `BeginWindowResize`, armed interactions, outer position and exclusive fullscreen stay explicitly unsupported by AppKit in this phase. `NSWindowSharingNone` is legacy/unused according to current AppKit documentation and must not be presented as content protection.
 - An unsupported non-default `WindowSpec` field rejects creation before a native peer exists. `Window.apply` remains non-transactional and reports rejected fields through `PartiallyApplied`.
 - Never hand-edit generated KFFI bindings. If a required Objective-C declaration is genuinely absent, make and test the Kextract generator change first, regenerate KFFI from it, and only then consume the generated symbol in Kadre.
 - The checked-in KFFI audit already finds generated APIs for `NSWindow.setOpaque`, `backgroundColor`/`setBackgroundColor`, `sharingType`/`setSharingType`, `NSApplication.requestUserAttention`/`cancelUserAttentionRequest`, and `NSWindow.performWindowDragWithEvent`. Therefore this plan starts with KFFI consumer proof, not an invented Kextract/KFFI change.
@@ -140,12 +140,10 @@ NSWindow.performWindowDragWithEvent(MemorySegment)
 ```kotlin
 internal data class AppKitWindowAppearanceTarget(
     val transparency: PropertyChange<Boolean>,
-    val contentProtection: PropertyChange<Boolean>,
 )
 
 internal data class AppKitWindowAppearanceSnapshot(
     val transparency: Boolean,
-    val contentProtection: Boolean,
 )
 
 internal data class AppKitWindowMutationTarget(
@@ -166,26 +164,22 @@ internal data class AppKitWindowMutationSnapshot(
 ```
 
 - [ ] Add deterministic driver tests before production changes:
-  - a valid initial `transparent = true` and `contentProtection = true` reaches the native target before commit and the committed `WindowState` is native readback;
-  - setting either field succeeds only when readback agrees;
-  - a divergent transparency readback rejects only `Transparency`, a divergent sharing readback rejects only `ContentProtection`, and the other fields in the same update remain effective through `PartiallyApplied`;
+  - a valid initial `transparent = true` reaches the native target before commit and the committed `WindowState` is native readback;
+  - setting transparency succeeds only when readback agrees;
+  - a divergent transparency readback rejects only `Transparency` and the other fields in the same update remain effective through `PartiallyApplied`;
   - a native setter/readback exception maps to the existing platform failure route without leaving a peer or mutation pending;
-  - the AppKit provider exposes exactly the two new update capabilities while blur and icon remain unsupported.
-- [ ] Extend the mutation target and snapshot with `appearance`; make unchanged properties no-op at the port boundary and include both effective values in all snapshots used for commit, update, external observation, and failure recovery.
-- [ ] Change `appKitEffectiveSpec` only for supported initial fields: preserve requested transparency and content protection when their capabilities are enabled. Do not use it to erase unsupported values; Task 1 must have rejected those before peer creation.
-- [ ] Map `WindowUpdate.transparency` and `WindowUpdate.contentProtection` into the AppKit target and add both comparisons to `rejectedMutationFields`. Maintain the existing property ordering and single native commit boundary.
+  - the AppKit provider exposes exactly the transparency capability; content protection, blur and icon remain unsupported.
+- [ ] Extend the mutation target and snapshot with `appearance`; make unchanged transparency no-op at the port boundary and include its effective value in all snapshots used for commit, update, external observation, and failure recovery.
+- [ ] Change `appKitEffectiveSpec` only for supported initial fields: preserve requested transparency when its capability is enabled. Do not use it to erase unsupported values; Task 1 must have rejected those before peer creation.
+- [ ] Map `WindowUpdate.transparency` into the AppKit target and add its comparison to `rejectedMutationFields`. Maintain the existing property ordering and single native commit boundary.
 - [ ] Complete the generic mutation plumbing for these already capability-advertised fields: retain both changes in `supportedMutationOnly`, resolve them in `candidateFor`, and include them in `mutationChanged`. Add a focused runtime regression test that proves enabled appearance fields reach the `WindowCommandPort`; this is shared contract plumbing, not an AppKit-specific fallback.
 - [ ] In `KffiAppKitWindowPort`, execute the following on the AppKit main thread:
   - `true` transparency: `NSWindow.setOpaque(false)` then set a transparent `NSColor` background;
   - `false` transparency: `NSWindow.setOpaque(true)` then restore `NSColor.windowBackgroundColor()`;
-  - content protection true/false: `setSharingType(NSWindowSharingNone/NSWindowSharingReadOnly)`.
-  `NSWindowSharingReadOnly` is AppKit's supported default; do not generate or use
-  the deprecated legacy `NSWindowSharingReadWrite` static constant. Read
-  `isOpaque` and `sharingType` after the setters; require the raw sharing-type
-  readback to match the requested native value before projecting the two
-  booleans. Do not add, remove, replace, wrap, or configure the content view.
-- [ ] Extend `APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES` with `Transparency` and `ContentProtection`, and configure the generic runtime appearance capabilities from that set.
-- [ ] Extend the real macOS port test to read actual opacity/sharing state after initial creation and after each update. It proves native state, not visible transparency or screenshot prevention.
+  Read `isOpaque` after the setter and project it to the boolean. Do not add,
+  remove, replace, wrap, or configure the content view.
+- [ ] Extend `APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES` with `Transparency` only. Content protection remains unsupported because AppKit's legacy sharing type cannot make the common field effective.
+- [ ] Extend the real macOS port test to read actual opacity after initial creation and after each update. It proves native state, not visible transparency or screenshot prevention.
 - [ ] Run `./gradlew :kadre:backend:appkit:jvmTest :kadre:runtime:jvmTest --refresh-dependencies`; commit and open slice D stacked on A.
 
 ## Task 4: Broker AppKit user attention and enforce embedded host ownership
@@ -345,10 +339,10 @@ The native event is a private, callback-scoped KFFI value. It never becomes a pu
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitWindowPeerTest.kt`
 
 - [ ] Reuse the active `APK-003` desktop-handle lease proof; do not add a duplicate test. Link the new composition guidance to its established guarantees: non-zero AppKit addresses only inside the admitted callback, close waiting for an admitted lease, and post-close access returning `Closed(Window)`.
-- [ ] Add the advanced manual harness with commands for transparent/opaque, protected/unprotected, informational/critical/none attention, and a pointer-down window move. Reuse the repository's existing TSV metadata, `pass|fail|not-applicable`, and controlled-close conventions.
+- [ ] Add the advanced manual harness with commands for transparent/opaque, informational/critical/none attention, and a pointer-down window move. Reuse the repository's existing TSV metadata, `pass|fail|not-applicable`, and controlled-close conventions.
 - [ ] Write the manual checklist to explicitly state:
   - transparency requires application-drawn alpha and is not proof of compositing by Kadre;
-  - content protection is `NSWindowSharingType`, not an anti-capture guarantee;
+  - AppKit content protection remains unsupported: `NSWindowSharingNone` is a legacy sharing value, not an anti-capture mechanism;
   - attention visibility is host/user-policy dependent;
   - system move must be observed through a real pointer gesture;
   - a Kotlin AppKit application may install and own `NSVisualEffectView` through `withDesktopHandle` plus KFFI, with no Kadre ownership transfer.
@@ -388,7 +382,7 @@ The native event is a private, callback-scoped KFFI value. It never becomes a pu
 
 ## Final acceptance checklist
 
-- [ ] AppKit advertises and effectively supports transparency and content protection through native readback.
+- [ ] AppKit advertises and effectively supports transparency through native readback; content protection remains explicit `Unsupported(UpdateWindow)`.
 - [ ] Unsupported initial fields reject before native peer creation; unsupported update fields are explicit partial rejections.
 - [ ] AppKit user attention is process-brokered, window-owned, released on all terminal paths, and opt-in for embedded hosts.
 - [ ] A valid synchronous handler can start a native AppKit window move with the original pointer-down event while ordinary input delivery remains intact.
