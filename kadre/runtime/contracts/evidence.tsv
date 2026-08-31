@@ -33,7 +33,7 @@ WIN-003	scenario	runtime-window-chrome-cancellation	org.graphiks.kadre.internal.
 WIN-003	scenario	runtime-window-chrome-event-order	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeSharesTheCorrelatedCommandAndPublishesStateBeforeProperties[jvm]
 WIN-003	sentinel	runtime-window-chrome-borderless-buttons	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeRejectsBorderlessButtonsAndClearBeforeNativeAdmission[jvm]
 WIN-003	sentinel	runtime-window-chrome-noop	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeRejectsBorderlessButtonsAndClearBeforeNativeAdmission[jvm]
-WIN-003	sentinel	runtime-window-chrome-stale-dispatch	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeCancellationAndQueuedRevisionRespectNativeCommitAndStructuralPrecedence[jvm]
+WIN-003	sentinel	runtime-window-chrome-stale-dispatch	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	queuedWindowChromeUpdateBecomesStaleAfterPriorNativeCommit[jvm]
 WIN-003	sentinel	runtime-window-chrome-operation-correlation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeSharesTheCorrelatedCommandAndPublishesStateBeforeProperties[jvm]
 WIN-003	sentinel	runtime-window-chrome-policy-bypass	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowChromeSharesTheCorrelatedCommandAndPublishesStateBeforeProperties[jvm]
 WIN-004	scenario	runtime-window-level-validation	org.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest	windowLevelClearFailsBeforeDispatchOrPublication[jvm]

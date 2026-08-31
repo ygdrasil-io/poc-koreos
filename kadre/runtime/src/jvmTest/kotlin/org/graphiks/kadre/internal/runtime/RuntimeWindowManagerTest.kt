@@ -1010,6 +1010,34 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun queuedWindowChromeUpdateBecomesStaleAfterPriorNativeCommit() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, enabledWindowUpdateCapabilities = chromeUpdateProperties())
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        val committed = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly)))
+        }
+        val stale = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    decorations = PropertyChange.Set(WindowDecorations.Borderless),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
+        }
+        val committedCommand = port.updateCommands.single()
+        committedCommand.applied(window.state.value.copy(systemButtons = WindowSystemButtons.CloseOnly))
+
+        assertIs<WindowUpdateOutcome.Applied>(committed.await().successValue())
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            stale.await(),
+        )
+        assertEquals(1, port.updateCommands.size)
+    }
+
+    @Test
     fun fullscreenRejectsClearAndExclusiveBeforeNativeDispatch() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())

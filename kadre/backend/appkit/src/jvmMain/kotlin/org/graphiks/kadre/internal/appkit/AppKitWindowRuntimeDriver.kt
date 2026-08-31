@@ -880,7 +880,10 @@ private class AppKitWindowCommandPort(
         } catch (failure: Throwable) {
             if (pending != null) {
                 finishFullscreenPending(entry, pending)
-                pending.command.failed(fullscreenFailure("level-readback-failed"))
+                pending.command.failed(
+                    fullscreenFailure("level-readback-failed"),
+                    diagnosticCause = failure,
+                )
             } else {
                 reportFullscreenTerminalFailure("level-readback-failed", failure)
             }
@@ -896,7 +899,7 @@ private class AppKitWindowCommandPort(
             if (target != requestedTarget) {
                 pending.command.fullscreenDid(effective)
                 if (completion.restoreFailure != null || snapshot.level != desiredLevel) {
-                    reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
+                    reportFullscreenTerminalFailure("level-restore-failed", completion.restoreFailure)
                 }
             } else if (completion.restoreFailure == null && snapshot.level == desiredLevel) {
                 pending.command.fullscreenDid(effective)
@@ -905,6 +908,7 @@ private class AppKitWindowCommandPort(
                     effectiveState = effective,
                     publicationOperationId = pending.command.operationId,
                     failure = fullscreenFailure("level-restore-failed"),
+                    diagnosticCause = completion.restoreFailure,
                 )
             }
         } else {
@@ -953,7 +957,10 @@ private class AppKitWindowCommandPort(
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
             finishFullscreenPending(entry, pending)
-            pending.command.failed(fullscreenFailure("level-readback-failed"))
+            pending.command.failed(
+                fullscreenFailure("level-readback-failed"),
+                diagnosticCause = failure,
+            )
             scheduleNativeClose(entry)
             return null
         }

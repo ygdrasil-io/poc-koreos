@@ -82,8 +82,11 @@ public data class WindowUpdateCommand internal constructor(
         stimulusSink.accept(WindowUpdateCommandStimulus.Rejected(operationId, error))
     }
 
-    public fun failed(failure: KadreFailure) {
-        stimulusSink.accept(WindowUpdateCommandStimulus.Failed(operationId, failure))
+    public fun failed(
+        failure: KadreFailure,
+        diagnosticCause: Throwable? = null,
+    ) {
+        stimulusSink.accept(WindowUpdateCommandStimulus.Failed(operationId, failure, diagnosticCause))
     }
 
     public fun committedFailure(
@@ -91,6 +94,7 @@ public data class WindowUpdateCommand internal constructor(
         publicationOperationId: WindowOperationId?,
         failure: KadreFailure,
         rejected: List<RejectedWindowField> = emptyList(),
+        diagnosticCause: Throwable? = null,
     ) {
         stimulusSink.accept(
             WindowUpdateCommandStimulus.CommittedFailure(
@@ -99,6 +103,7 @@ public data class WindowUpdateCommand internal constructor(
                 publicationOperationId,
                 failure,
                 rejected,
+                diagnosticCause,
             ),
         )
     }
@@ -161,6 +166,7 @@ public sealed interface WindowUpdateCommandStimulus {
     public data class Failed(
         public val operationId: WindowOperationId,
         public val failure: KadreFailure,
+        public val diagnosticCause: Throwable? = null,
     ) : WindowUpdateCommandStimulus
 
     public data class CommittedFailure(
@@ -169,6 +175,7 @@ public sealed interface WindowUpdateCommandStimulus {
         public val publicationOperationId: WindowOperationId?,
         public val failure: KadreFailure,
         public val rejected: List<RejectedWindowField> = emptyList(),
+        public val diagnosticCause: Throwable? = null,
     ) : WindowUpdateCommandStimulus
 
     public data class PartiallyApplied(

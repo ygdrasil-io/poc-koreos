@@ -532,10 +532,12 @@ public class RuntimeWindowManager public constructor(
                 stimulus.publicationOperationId,
                 stimulus.failure,
                 stimulus.rejected,
+                stimulus.diagnosticCause,
             )
             is WindowUpdateCommandStimulus.Failed -> window.rejectDispatchedUpdate(
                 stimulus.operationId,
                 stimulus.failure,
+                stimulus.diagnosticCause,
             )
             is WindowUpdateCommandStimulus.PartiallyApplied -> window.applyNativeUpdate(
                 stimulus.operationId,
@@ -612,8 +614,13 @@ public class RuntimeWindowManager public constructor(
         }
     }
 
-    internal fun reportDetachedWindowUpdateFailure(failure: KadreFailure) {
-        safeReport(KadreException(failure))
+    internal fun reportDetachedWindowUpdateFailure(
+        failure: KadreFailure,
+        diagnosticCause: Throwable? = null,
+    ) {
+        val diagnostic = KadreException(failure)
+        diagnosticCause?.let(diagnostic::addSuppressed)
+        safeReport(diagnostic)
     }
 
     internal suspend fun requestAttention(window: RuntimeWindow): KadreResult<Unit> = synchronized(lock) {
@@ -1585,6 +1592,7 @@ internal class RuntimeWindow(
         publicationOperationId: WindowOperationId?,
         failure: KadreFailure,
         backendRejected: List<RejectedWindowField> = emptyList(),
+        diagnosticCause: Throwable? = null,
     ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
@@ -1622,7 +1630,9 @@ internal class RuntimeWindow(
         } finally {
             val pending = checkNotNull(completion)
             pending.result.complete(KadreResult.Failure(failure))
-            if (pending.waiterDetached) manager.reportDetachedWindowUpdateFailure(failure)
+            if (pending.waiterDetached) {
+                manager.reportDetachedWindowUpdateFailure(failure, diagnosticCause)
+            }
             val closeEventDelivery = synchronized(updateLock) {
                 if (publication != null) eventPublicationsInFlight -= 1
                 takePendingEventDeliveryCloseLocked()
@@ -2072,7 +2082,11 @@ internal class RuntimeWindow(
         return true
     }
 
-    fun rejectDispatchedUpdate(operationId: WindowOperationId, failure: KadreFailure) {
+    fun rejectDispatchedUpdate(
+        operationId: WindowOperationId,
+        failure: KadreFailure,
+        diagnosticCause: Throwable? = null,
+    ) {
         var closeEventDelivery = false
         var reportDetached = false
         synchronized(updateLock) {
@@ -2088,7 +2102,7 @@ internal class RuntimeWindow(
             reportDetached = pending.waiterDetached
             closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
-        if (reportDetached) manager.reportDetachedWindowUpdateFailure(failure)
+        if (reportDetached) manager.reportDetachedWindowUpdateFailure(failure, diagnosticCause)
         if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
     }
