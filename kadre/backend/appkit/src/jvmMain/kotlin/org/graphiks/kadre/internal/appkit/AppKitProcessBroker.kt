@@ -83,9 +83,9 @@ internal class AppKitProcessBroker {
         attention: WindowAttention,
     ): KadreResult<Unit> {
         if (attention == WindowAttention.None) {
-            releaseUserAttention(owner, windowId)
-            return KadreResult.Success(Unit)
+            return releaseUserAttention(owner, windowId)
         }
+        if (!owner.isOpen()) return KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host))
         val replaced = synchronized(lock) {
             val previous = attentionTokens[windowId]
             when {
@@ -104,17 +104,28 @@ internal class AppKitProcessBroker {
         } catch (_: LinkageError) {
             return KadreResult.Failure(userAttentionFailure("request-exception"))
         }
-        synchronized(lock) {
-            attentionTokens[windowId] = AppKitUserAttentionToken(owner.id, token)
+        val admitted = synchronized(lock) {
+            if (owner.isOpen()) {
+                attentionTokens[windowId] = AppKitUserAttentionToken(owner.id, token)
+                true
+            } else {
+                false
+            }
         }
-        return KadreResult.Success(Unit)
+        if (admitted) return KadreResult.Success(Unit)
+        return if (cancelUserAttention(owner.nativeApplication, token)) {
+            KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host))
+        } else {
+            KadreResult.Failure(userAttentionFailure("cancel-exception"))
+        }
     }
 
-    fun releaseUserAttention(owner: AppKitUserAttentionOwner, windowId: WindowId) {
+    fun releaseUserAttention(owner: AppKitUserAttentionOwner, windowId: WindowId): KadreResult<Unit> {
         val token = synchronized(lock) {
             attentionTokens[windowId]?.takeIf { it.ownerId == owner.id }?.also { attentionTokens.remove(windowId) }
-        } ?: return
-        cancelUserAttention(owner.nativeApplication, token.token)
+        } ?: return KadreResult.Success(Unit)
+        return if (cancelUserAttention(owner.nativeApplication, token.token)) KadreResult.Success(Unit)
+        else KadreResult.Failure(userAttentionFailure("cancel-exception"))
     }
 
     fun releaseAllUserAttention(owner: AppKitUserAttentionOwner) {
@@ -227,6 +238,8 @@ internal class AppKitProcessBroker {
         internal val id: Long,
     ) : AutoCloseable {
         private val closed = AtomicBoolean(false)
+
+        fun isOpen(): Boolean = !closed.get()
 
         override fun close() {
             if (closed.compareAndSet(false, true)) broker.releaseUserAttentionOwner(this)

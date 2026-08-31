@@ -132,11 +132,26 @@ private class BrokeredAppKitWindowAttentionPort(
             val cancelled = AtomicBoolean(false)
             continuation.invokeOnCancellation { cancelled.set(true) }
             val submitted = commandPort.submitAttention {
-                if (cancelled.get() || closed.get()) return@submitAttention
-                val result = commandPort.onMainThread {
-                    broker.requestUserAttention(owner, windowId, attention)
+                val result = when {
+                    cancelled.get() -> null
+                    closed.get() -> org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                        KadreFailure.Closed(KadreResourceKind.Host),
+                    )
+                    else -> try {
+                        commandPort.onMainThread { broker.requestUserAttention(owner, windowId, attention) }
+                    } catch (cause: Exception) {
+                        commandPort.reportAttentionFailure(cause)
+                        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "main-thread-exception"),
+                        )
+                    } catch (cause: LinkageError) {
+                        commandPort.reportAttentionFailure(cause)
+                        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "main-thread-exception"),
+                        )
+                    }
                 }
-                if (continuation.isActive) continuation.resume(result) { _, _, _ -> }
+                if (result != null && continuation.isActive) continuation.resume(result) { _, _, _ -> }
             }
             if (!submitted && continuation.isActive) {
                 continuation.resume(
@@ -191,6 +206,8 @@ private class AppKitWindowCommandPort(
     fun submitAttentionCleanup(task: () -> Unit): Boolean = commands.submitFollowUp(task)
 
     fun <T> onMainThread(block: () -> T): T = nativePort.onMainThread(block)
+
+    fun reportAttentionFailure(cause: Throwable) = reportFailure(cause)
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))

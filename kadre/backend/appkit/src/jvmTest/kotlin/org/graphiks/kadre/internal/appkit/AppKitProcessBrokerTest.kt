@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -109,6 +110,25 @@ class AppKitProcessBrokerTest {
         firstOwner.close()
 
         assertEquals(listOf("request:Informational:1", "cancel:1"), native.trace)
+    }
+
+    @Test
+    fun noneAndRequestsAfterOwnerCloseReturnTypedFailuresWithoutRetainingTokens() {
+        val broker = AppKitProcessBroker()
+        val native = RecordingAttentionNativeApplication()
+        val owner = broker.newUserAttentionOwner(native)
+        val window = attentionWindowId(31L)
+        assertEquals(KadreResult.Success(Unit), broker.requestUserAttention(owner, window, WindowAttention.Informational))
+        native.cancelFailure = IllegalStateException("cancel")
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "cancel-exception"),
+            assertIs<KadreResult.Failure>(broker.requestUserAttention(owner, window, WindowAttention.None)).reason,
+        )
+        owner.close()
+        assertEquals(
+            KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host),
+            assertIs<KadreResult.Failure>(broker.requestUserAttention(owner, attentionWindowId(32L), WindowAttention.Critical)).reason,
+        )
     }
 
     @Test
@@ -366,6 +386,7 @@ private class BlockingLifecycleTarget : AppKitLifecycleTarget {
 private class RecordingAttentionNativeApplication : AppKitNativeApplication {
     val trace = mutableListOf<String>()
     var requestFailure: Throwable? = null
+    var cancelFailure: Throwable? = null
     private var nextToken = 1L
 
     override fun isMainThread(): Boolean = true
@@ -381,6 +402,7 @@ private class RecordingAttentionNativeApplication : AppKitNativeApplication {
     }
 
     override fun cancelUserAttentionRequest(token: Long) {
+        cancelFailure?.let { throw it }
         trace += "cancel:$token"
     }
 
