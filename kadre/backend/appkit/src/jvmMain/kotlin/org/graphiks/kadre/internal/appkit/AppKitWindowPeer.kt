@@ -13,6 +13,7 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
 
 @JvmInline
@@ -46,6 +47,7 @@ internal data class AppKitWindowMutation(
     val snapshot: AppKitWindowMutationSnapshot,
     val generation: Long,
     val failure: Throwable?,
+    val failureFields: Set<WindowProperty>,
 )
 
 internal data class AppKitFullscreenCompletion(
@@ -56,6 +58,7 @@ internal data class AppKitFullscreenCompletion(
 private data class NativeWindowMutationResult(
     val snapshot: AppKitWindowMutationSnapshot,
     val failure: Throwable?,
+    val failureFields: Set<WindowProperty>,
 )
 
 /** Native-address-free surface observation emitted by one AppKit window peer. */
@@ -211,7 +214,7 @@ internal class AppKitWindowPeer private constructor(
                 callbackGate.duringManagedGeometryMutation {
                     try {
                         port.updateWindow(window, target, commit)?.let { snapshot ->
-                            NativeWindowMutationResult(snapshot, failure = null)
+                            NativeWindowMutationResult(snapshot, failure = null, failureFields = emptySet())
                         }
                     } catch (failure: Throwable) {
                         if (!commit.started) throw failure
@@ -221,7 +224,11 @@ internal class AppKitWindowPeer private constructor(
                             if (readbackFailure !== failure) failure.addSuppressed(readbackFailure)
                             throw failure
                         }
-                        NativeWindowMutationResult(snapshot, failure)
+                        NativeWindowMutationResult(
+                            snapshot = snapshot,
+                            failure = failure,
+                            failureFields = target.failureFields(),
+                        )
                     }
                 }
             }
@@ -390,6 +397,11 @@ internal class AppKitWindowPeer private constructor(
                                 "AppKit initial window level readback diverged: " +
                                     "requested=${spec.level}, effective=${snapshot.level}"
                             }
+                            check(snapshot.appearance.transparency == spec.transparent) {
+                                "AppKit initial window transparency readback diverged: " +
+                                    "requested=${spec.transparent}, " +
+                                    "effective=${snapshot.appearance.transparency}"
+                            }
                         }
                     } else {
                         null
@@ -476,6 +488,12 @@ internal class AppKitWindowPeer private constructor(
     }
 }
 
+private fun AppKitWindowMutationTarget.failureFields(): Set<WindowProperty> = buildSet {
+    if (appearance.transparency !is PropertyChange.Unchanged) {
+        add(WindowProperty.Transparency)
+    }
+}
+
 private class AppKitWindowCallbackGate(
     private val peerId: AppKitWindowPeerId,
     private val acceptWindowStimulus: (AppKitWindowStimulus) -> Unit,
@@ -515,6 +533,7 @@ private class AppKitWindowCallbackGate(
                 snapshot = mutation.snapshot,
                 generation = checkNotNull(generation),
                 failure = mutation.failure,
+                failureFields = mutation.failureFields,
             )
         }
     }

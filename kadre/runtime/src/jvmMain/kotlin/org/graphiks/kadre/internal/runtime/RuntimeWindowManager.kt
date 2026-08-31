@@ -2916,11 +2916,11 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.maximumSize != candidate.maximumSize ||
         current.resizable != candidate.resizable ||
         current.fullscreen != candidate.fullscreen ||
-    current.decorations != candidate.decorations ||
-    current.systemButtons != candidate.systemButtons ||
-    current.level != candidate.level ||
-    current.transparent != candidate.transparent ||
-    current.contentProtection != candidate.contentProtection
+        current.decorations != candidate.decorations ||
+        current.systemButtons != candidate.systemButtons ||
+        current.level != candidate.level ||
+        current.transparent != candidate.transparent ||
+        current.contentProtection != candidate.contentProtection
 
 private fun supportedMutationOnly(
     update: WindowUpdate,

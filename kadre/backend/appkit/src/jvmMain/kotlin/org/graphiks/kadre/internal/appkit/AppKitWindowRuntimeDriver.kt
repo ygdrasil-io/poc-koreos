@@ -694,6 +694,7 @@ private class AppKitWindowCommandPort(
         val rejected = pending.command.rejectedMutationFields(
             mutation.snapshot,
             platformFailure("window-update-rejected"),
+            forcedFields = mutation.failureFields,
         )
         if (rejected.isEmpty()) {
             pending.command.applied(effective)
@@ -1644,6 +1645,7 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
 private fun WindowUpdateCommand.rejectedMutationFields(
     snapshot: AppKitWindowMutationSnapshot,
     failure: KadreFailure,
+    forcedFields: Set<WindowProperty> = emptySet(),
 ): List<RejectedWindowField> = buildList {
     when (val change = update.title) {
         is PropertyChange.Set -> if (snapshot.title != change.value) {
@@ -1706,7 +1708,10 @@ private fun WindowUpdateCommand.rejectedMutationFields(
         PropertyChange.Unchanged -> Unit
     }
     when (val change = update.transparency) {
-        is PropertyChange.Set -> if (snapshot.appearance.transparency != change.value) {
+        is PropertyChange.Set -> if (
+            WindowProperty.Transparency in forcedFields ||
+            snapshot.appearance.transparency != change.value
+        ) {
             add(RejectedWindowField(WindowProperty.Transparency, failure))
         }
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Transparency, failure))
