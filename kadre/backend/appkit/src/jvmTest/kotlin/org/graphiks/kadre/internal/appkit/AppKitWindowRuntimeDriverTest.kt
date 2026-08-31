@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreException
@@ -38,6 +40,7 @@ import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.interaction.InteractionAction
@@ -3620,6 +3623,169 @@ class AppKitWindowRuntimeDriverTest {
             assertFalse(blockingUpdate.isCompleted)
 
             releaseQueue.countDown()
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            Unit
+        } finally {
+            releaseQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun readinessHandoffDrainsPreCommitObservationBeforeLivePointerDown() = runBlocking {
+        val handoffPaused = CountDownLatch(1)
+        val releaseHandoff = CountDownLatch(1)
+        val position = LogicalPoint(43.0, 47.0)
+        val pointerDown = AppKitInput.PointerButtonChanged(
+            button = PointerButton.Primary,
+            buttonState = PointerButtonState.Pressed,
+            position = position,
+            pressure = 0.5,
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "readiness-input-order",
+            inputObservationInstalled = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            beforeRuntimeSurfaceReadyDrain = {
+                handoffPaused.countDown()
+                check(releaseHandoff.await(2, TimeUnit.SECONDS))
+            },
+        )
+
+        try {
+            val request = driver.manager.requestWindow(WindowSpec(title = "readiness-input-order"))
+                .appKitSuccessValue()
+            assertTrue(handoffPaused.await(2, TimeUnit.SECONDS))
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                withTimeout(2.seconds) { request.await() },
+            ).window
+            val trace = CopyOnWriteArrayList<String>()
+            val interactionStamp = AtomicReference<EventStamp?>()
+            window.surface.installInteractionHandler(InteractionHandler { _, event ->
+                interactionStamp.set(event.stamp)
+                trace += "handler"
+            }).appKitSuccessValue()
+            val delivered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events
+                    .onEach { event ->
+                        trace += when (event) {
+                            is InputEvent.PointerEntered -> "entered"
+                            is InputEvent.PointerButtonChanged -> "pressed"
+                            else -> "unexpected"
+                        }
+                    }
+                    .take(2)
+                    .toList()
+            }
+
+            port.emitInput("readiness-input-order", AppKitInput.PointerEntered(position))
+            port.emitPointerDown("readiness-input-order", pointerDown) { }
+            releaseHandoff.countDown()
+
+            val events = withTimeout(2.seconds) { delivered.await() }
+            val entered = assertIs<InputEvent.PointerEntered>(events[0])
+            val pressed = assertIs<InputEvent.PointerButtonChanged>(events[1])
+            val handlerStamp = checkNotNull(interactionStamp.get())
+            assertTrue(trace.indexOf("handler") < trace.indexOf("pressed"))
+            assertEquals(2L, entered.stateRevision.value)
+            assertEquals(3L, pressed.stateRevision.value)
+            assertTrue(entered.stamp.sequence.value < handlerStamp.sequence.value)
+            assertEquals(handlerStamp, pressed.stamp)
+        } finally {
+            releaseHandoff.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun focusLossResetsInputBeforeLaterLiveKeyAndPointerCallbacks() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val releaseQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val firstKey = PhysicalKey.Unidentified("focus-first-key")
+        val laterKey = PhysicalKey.Unidentified("focus-later-key")
+        val position = LogicalPoint(53.0, 59.0)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "focus-input-order",
+            initialSurfaceSnapshot = deterministicSurfaceSnapshot().copy(focus = SurfaceFocus.Focused),
+            inputObservationInstalled = true,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(releaseQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "focus-input-order"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            withTimeout(2.seconds) { window.surface.input.state.first { it.revision.value == 1L } }
+            val delivered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.take(4).toList()
+            }
+
+            port.emitInput(
+                "focus-input-order",
+                AppKitInput.KeyChanged(
+                    firstKey,
+                    LogicalKey.Unidentified("focus-first-key"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            )
+            val blockingUpdate = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("queue-blocked")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            port.emitSurfaceFocus("focus-input-order", SurfaceFocus.Unfocused)
+            port.emitInput(
+                "focus-input-order",
+                AppKitInput.KeyChanged(
+                    laterKey,
+                    LogicalKey.Unidentified("focus-later-key"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            )
+            port.emitInput("focus-input-order", AppKitInput.PointerEntered(position))
+            releaseQueue.countDown()
+
+            val events = withTimeout(2.seconds) { delivered.await() }
+            val first = assertIs<InputEvent.Key>(events[0])
+            val reset = assertIs<InputEvent.StateReset>(events[1])
+            val later = assertIs<InputEvent.Key>(events[2])
+            val entered = assertIs<InputEvent.PointerEntered>(events[3])
+            assertEquals(firstKey, first.physicalKey)
+            assertEquals(InputStateResetReason.FocusLost, reset.reason)
+            assertEquals(laterKey, later.physicalKey)
+            assertEquals(position, entered.position)
+            assertEquals(listOf(2L, 3L, 4L, 5L), events.map { it.stateRevision.value })
+            assertEquals(emptyList(), events.filterIsInstance<InputEvent.Key>().filter { it.keyState == KeyState.Released })
+            assertTrue(events.zipWithNext().all { (before, after) ->
+                before.stamp.sequence.value < after.stamp.sequence.value
+            })
             assertIs<WindowUpdateOutcome.Applied>(
                 withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
             )

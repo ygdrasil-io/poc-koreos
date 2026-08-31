@@ -70,6 +70,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
+    beforeRuntimeSurfaceReadyDrain: () -> Unit,
     beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
     broker: AppKitProcessBroker?,
     attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner?,
@@ -80,6 +81,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         nativePort,
         failureReporter,
         beforeCommitDelivery,
+        beforeRuntimeSurfaceReadyDrain,
         enabledWindowUpdateCapabilities,
         surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
         geometryStimulusSink = geometry@{ windowId, snapshot ->
@@ -233,6 +235,7 @@ private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
+    private val beforeRuntimeSurfaceReadyDrain: () -> Unit,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
     private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
     private val geometryStimulusSink: (WindowId, AppKitWindowGeometrySnapshot) -> Boolean,
@@ -464,12 +467,7 @@ private class AppKitWindowCommandPort(
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
                 dispatchSynchronousInteraction = { event, invokeNative ->
-                    synchronousInteractionSink(
-                        entry.surfaceId,
-                        event,
-                        APPKIT_HANDLER_INTERACTIONS,
-                        invokeNative,
-                    )
+                    dispatchSynchronousInteraction(entry, event, invokeNative)
                 },
                 reportCallbackFailure = ::reportFailure,
                 readInitialWindowSnapshot = initialWindowReadbackRequired,
@@ -518,7 +516,11 @@ private class AppKitWindowCommandPort(
                     openingSpec,
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
-                    commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
+                    if (beginRuntimeSurfaceReadiness(entry)) {
+                        commands.submitFollowUp {
+                            nativePort.onMainThread { markRuntimeSurfaceReady(entry) }
+                        }
+                    }
                     commands.submitFollowUp { markRuntimeGeometryReady(entry) }
                     commands.submitFollowUp { markRuntimeWindowReady(entry) }
                 }
@@ -613,7 +615,9 @@ private class AppKitWindowCommandPort(
 
     private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
         var deliverThroughSerializer = false
-        var deliverLiveInputInline = false
+        var deliverInputInline = false
+        var drainBufferedInputInline = false
+        var entryToDrain: PeerEntry? = null
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
             if (
@@ -623,14 +627,24 @@ private class AppKitWindowCommandPort(
                 !entry.surfaceCleanupReserved &&
                 !entry.closeAdmitted
             ) {
-                if (entry.runtimeSurfaceReady) {
-                    if (stimulus.isLiveInput()) {
-                        deliverLiveInputInline = true
+                when (entry.surfaceReadiness) {
+                    RuntimeSurfaceReadiness.Buffering -> entry.bufferedSurfaceStimuli.addLast(stimulus)
+                    RuntimeSurfaceReadiness.Draining -> {
+                        entry.bufferedSurfaceStimuli.addLast(stimulus)
+                        if (
+                            stimulus.affectsSurfaceInput() &&
+                            (entry.surfaceDrainOwner == null || entry.surfaceDrainOwner === Thread.currentThread())
+                        ) {
+                            drainBufferedInputInline = true
+                            entryToDrain = entry
+                        }
+                    }
+                    RuntimeSurfaceReadiness.Live -> if (stimulus.affectsSurfaceInput()) {
+                        deliverInputInline = true
                     } else {
                         deliverThroughSerializer = true
                     }
-                } else {
-                    entry.bufferedSurfaceStimuli.addLast(stimulus)
+                    RuntimeSurfaceReadiness.Closed -> return@synchronized false
                 }
                 true
             } else {
@@ -640,7 +654,10 @@ private class AppKitWindowCommandPort(
         if (accepted && deliverThroughSerializer) {
             commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
         }
-        if (accepted && deliverLiveInputInline) {
+        if (accepted && drainBufferedInputInline) {
+            drainBufferedSurfaceStimuli(entryToDrain)
+        }
+        if (accepted && deliverInputInline) {
             // A pointer-down interaction enters the runtime synchronously. Deliver its preceding
             // live input callback inline, rather than waiting on this queue, to preserve AppKit order.
             acceptSurfaceStimulus(stimulus)
@@ -648,25 +665,100 @@ private class AppKitWindowCommandPort(
     }
 
     private fun markRuntimeSurfaceReady(entry: PeerEntry) {
-        val bufferedSurfaceStimuli = synchronized(lock) {
+        val completeDrain = synchronized(lock) {
             if (
                 entry.removed ||
                 entry.surfaceCleanupReserved ||
                 entry.closeAdmitted ||
                 closed
             ) {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                entry.surfaceDrainOwner = null
                 entry.bufferedSurfaceStimuli.clear()
-                emptyList()
+                false
             } else {
-                entry.runtimeSurfaceReady = true
-                entry.bufferedSurfaceStimuli.toList().also {
-                    entry.bufferedSurfaceStimuli.clear()
-                }
+                entry.surfaceReadiness == RuntimeSurfaceReadiness.Draining
             }
         }
-        // This callback itself runs on the command queue, so the FIFO drain is serialized with
-        // every later surface callback admitted through submitFollowUp().
-        bufferedSurfaceStimuli.forEach(::acceptSurfaceStimulus)
+        if (!completeDrain) return
+        beforeRuntimeSurfaceReadyDrain()
+        drainBufferedSurfaceStimuli(entry)
+    }
+
+    private fun beginRuntimeSurfaceReadiness(entry: PeerEntry): Boolean = synchronized(lock) {
+        when {
+            closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                entry.surfaceDrainOwner = null
+                entry.bufferedSurfaceStimuli.clear()
+                false
+            }
+            entry.surfaceReadiness == RuntimeSurfaceReadiness.Buffering -> {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Draining
+                true
+            }
+            else -> false
+        }
+    }
+
+    /**
+     * Completes the pre-commit to live handoff without exposing a ready flag before its FIFO.
+     *
+     * AppKit invokes surface and input callbacks on its main thread. Readiness is marshalled to
+     * that same owner thread, so a synchronous pointer-down can take over an unowned drain
+     * reentrantly without waiting for the command queue. No runtime or application code runs
+     * while [lock] is held.
+     */
+    private fun drainBufferedSurfaceStimuli(entry: PeerEntry?): Boolean {
+        entry ?: return false
+        val owner = Thread.currentThread()
+        val claimed = synchronized(lock) {
+            when {
+                closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                    entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                    entry.surfaceDrainOwner = null
+                    entry.bufferedSurfaceStimuli.clear()
+                    false
+                }
+                entry.surfaceReadiness == RuntimeSurfaceReadiness.Live -> true
+                entry.surfaceReadiness != RuntimeSurfaceReadiness.Draining -> false
+                entry.surfaceDrainOwner == null || entry.surfaceDrainOwner === owner -> {
+                    entry.surfaceDrainOwner = owner
+                    true
+                }
+                else -> false
+            }
+        }
+        if (!claimed) return false
+
+        while (true) {
+            var live = false
+            val stimulus = synchronized(lock) {
+                when {
+                    closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                        entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                        entry.surfaceDrainOwner = null
+                        entry.bufferedSurfaceStimuli.clear()
+                        null
+                    }
+                    entry.surfaceReadiness == RuntimeSurfaceReadiness.Live -> {
+                        live = true
+                        null
+                    }
+                    entry.surfaceReadiness != RuntimeSurfaceReadiness.Draining ||
+                        entry.surfaceDrainOwner !== owner -> null
+                    entry.bufferedSurfaceStimuli.isEmpty() -> {
+                        entry.surfaceReadiness = RuntimeSurfaceReadiness.Live
+                        entry.surfaceDrainOwner = null
+                        live = true
+                        null
+                    }
+                    else -> entry.bufferedSurfaceStimuli.removeFirst()
+                }
+            }
+            if (stimulus == null) return live
+            acceptSurfaceStimulus(stimulus)
+        }
     }
 
     private fun markRuntimeGeometryReady(entry: PeerEntry) {
@@ -704,13 +796,47 @@ private class AppKitWindowCommandPort(
         surfaceStimulusSink(stimulus.toRuntime(surfaceId))
     }
 
-    private fun AppKitSurfaceStimulus.isLiveInput(): Boolean = when (this) {
+    private fun AppKitSurfaceStimulus.affectsSurfaceInput(): Boolean = when (this) {
+        is AppKitSurfaceStimulus.FocusChanged,
         is AppKitSurfaceStimulus.InputObservationChanged,
         is AppKitSurfaceStimulus.KeyChanged,
         is AppKitSurfaceStimulus.PointerInput,
         -> true
 
         else -> false
+    }
+
+    private fun dispatchSynchronousInteraction(
+        entry: PeerEntry,
+        event: RuntimeSynchronousInteraction,
+        invokeNative: (InteractionAction) -> org.graphiks.kadre.diagnostics.KadreResult<Unit>,
+    ): Boolean {
+        val readiness = synchronized(lock) {
+            when {
+                closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted ->
+                    RuntimeSurfaceReadiness.Closed
+                else -> entry.surfaceReadiness
+            }
+        }
+        val ready = when (readiness) {
+            RuntimeSurfaceReadiness.Buffering,
+            RuntimeSurfaceReadiness.Closed,
+            -> false
+            RuntimeSurfaceReadiness.Draining -> drainBufferedSurfaceStimuli(entry)
+            RuntimeSurfaceReadiness.Live -> true
+        }
+        if (!ready) return false
+        val surfaceId = synchronized(lock) {
+            byPeer[entry.peerId]?.takeIf {
+                it === entry &&
+                    !closed &&
+                    !it.removed &&
+                    !it.surfaceCleanupReserved &&
+                    !it.closeAdmitted &&
+                    it.surfaceReadiness == RuntimeSurfaceReadiness.Live
+            }?.surfaceId
+        } ?: return false
+        return synchronousInteractionSink(surfaceId, event, APPKIT_HANDLER_INTERACTIONS, invokeNative)
     }
 
     private fun acceptStimulus(stimulus: AppKitWindowStimulus) {
@@ -1346,6 +1472,8 @@ private class AppKitWindowCommandPort(
 
     private fun removeEntryLocked(entry: PeerEntry): List<PendingWindowMutationCommand> {
         entry.removed = true
+        entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+        entry.surfaceDrainOwner = null
         entry.bufferedSurfaceStimuli.clear()
         entry.bufferedGeometryStimuli.clear()
         entry.bufferedFullscreenStimuli.clear()
@@ -1397,7 +1525,8 @@ private class AppKitWindowCommandPort(
         var peer: AppKitWindowPeer? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
-        var runtimeSurfaceReady: Boolean = false
+        var surfaceReadiness: RuntimeSurfaceReadiness = RuntimeSurfaceReadiness.Buffering
+        var surfaceDrainOwner: Thread? = null
         val bufferedSurfaceStimuli = ArrayDeque<AppKitSurfaceStimulus>()
         var runtimeGeometryReady: Boolean = false
         var managedGeometryGeneration: Long = 0L
@@ -1434,6 +1563,13 @@ private class AppKitWindowCommandPort(
         Commit,
         Cancel,
         Cleanup,
+    }
+
+    private enum class RuntimeSurfaceReadiness {
+        Buffering,
+        Draining,
+        Live,
+        Closed,
     }
 
     private enum class CleanupCompletion {
