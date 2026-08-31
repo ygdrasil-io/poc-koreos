@@ -324,6 +324,57 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun hostTerminationOwnerFallbackReportsCancellationFailureExactlyOnce() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort("attention-host-terminated")
+        val native = DriverAttentionNative(cancelFailure = IllegalStateException("cancel"))
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val target = object : AppKitLifecycleTarget {
+            override fun updateLifecycle(state: org.graphiks.kadre.application.LifecycleState) = Unit
+            override fun detach() = Unit
+        }
+        val registration = checkNotNull(broker.createEmbeddedHost(owner) { target })
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-host-terminated"))
+            }
+            assertEquals(
+                KadreResult.Success(Unit),
+                withTimeout(2.seconds) { window.requestAttention(WindowAttention.Informational) },
+            )
+
+            broker.accept(AppKitLifecycleSignal.HostTerminated)
+
+            assertEquals(listOf(1L), native.cancelled)
+            assertFalse(broker.hasUserAttention(owner))
+            assertEquals(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "cancel-exception"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+
+            driver.closeWithinTimeout()
+            registration.close()
+            owner.close()
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(1, reported.size)
+        } finally {
+            driver.closeWithinTimeout()
+            registration.close()
+            owner.close()
+        }
+    }
+
+    @Test
     fun externalNativeCloseReleasesBrokeredAttentionExactlyOnce() = runBlocking {
         val native = DriverAttentionNative()
         val broker = AppKitProcessBroker()

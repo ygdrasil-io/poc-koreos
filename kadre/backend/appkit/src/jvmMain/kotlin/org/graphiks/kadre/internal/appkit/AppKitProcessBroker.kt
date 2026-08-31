@@ -12,6 +12,7 @@ import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowId
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 internal interface AppKitLifecycleTarget {
     fun updateLifecycle(state: LifecycleState)
@@ -242,11 +243,27 @@ internal class AppKitProcessBroker {
         internal val id: Long,
     ) : AutoCloseable {
         private val closed = AtomicBoolean(false)
+        private val failureReporter = AtomicReference<((KadreFailure.PlatformFailure) -> Unit)?>(null)
 
         fun isOpen(): Boolean = !closed.get()
 
+        fun installFailureReporter(reporter: (KadreFailure.PlatformFailure) -> Unit) {
+            check(failureReporter.compareAndSet(null, reporter)) {
+                "AppKit user-attention failure reporter is already installed"
+            }
+        }
+
         override fun close() {
-            if (closed.compareAndSet(false, true)) broker.releaseUserAttentionOwner(this)
+            if (!closed.compareAndSet(false, true)) return
+            broker.releaseUserAttentionOwner(this).forEach { failure ->
+                try {
+                    failureReporter.get()?.invoke(failure)
+                } catch (_: Exception) {
+                    // Diagnostics cannot destabilise AppKit ownership cleanup.
+                } catch (_: LinkageError) {
+                    // Diagnostics cannot destabilise AppKit ownership cleanup.
+                }
+            }
         }
     }
 

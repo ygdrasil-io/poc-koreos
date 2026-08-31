@@ -127,6 +127,12 @@ private class BrokeredAppKitWindowAttentionPort(
 ) : AppKitWindowAttentionPort {
     private val closed = AtomicBoolean(false)
 
+    init {
+        owner.installFailureReporter { failure ->
+            commandPort.reportAttentionFailure(KadreException(failure))
+        }
+    }
+
     override suspend fun request(windowId: WindowId, attention: WindowAttention) =
         suspendCancellableCoroutine { continuation ->
             val cancelled = AtomicBoolean(false)
