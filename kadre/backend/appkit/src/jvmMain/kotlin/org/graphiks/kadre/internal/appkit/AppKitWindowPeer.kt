@@ -807,6 +807,7 @@ private class AppKitWindowCallbackGate(
      * finally block, after the borrowed move closure was revoked.
      */
     fun revokeAndRunAfterPointerCallbacks(cleanup: () -> Unit) {
+        var interrupted = false
         val runNow = synchronized(lock) {
             accepting = false
             surfaceAccepting = false
@@ -816,11 +817,21 @@ private class AppKitWindowCallbackGate(
                 deferredPointerCallbackCleanup += cleanup
                 false
             } else {
-                while (activePointerCallbacks > 0) lock.wait()
+                while (activePointerCallbacks > 0) {
+                    try {
+                        lock.wait()
+                    } catch (_: InterruptedException) {
+                        interrupted = true
+                    }
+                }
                 true
             }
         }
-        if (runNow) cleanup()
+        try {
+            if (runNow) cleanup()
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
+        }
     }
 
     private fun completePointerCallback() {
@@ -838,7 +849,17 @@ private class AppKitWindowCallbackGate(
                 emptyList()
             }
         }
-        deferredCleanup.forEach { cleanup -> cleanup() }
+        deferredCleanup.forEach { cleanup ->
+            try {
+                cleanup()
+            } catch (failure: Throwable) {
+                try {
+                    reportFailure(failure)
+                } catch (_: Throwable) {
+                    // Diagnostics must not escape the Objective-C pointer callback boundary.
+                }
+            }
+        }
     }
 
     private fun publishWindow(stimulus: AppKitWindowStimulus) {

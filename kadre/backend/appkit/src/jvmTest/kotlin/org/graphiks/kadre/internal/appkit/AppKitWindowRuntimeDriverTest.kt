@@ -3498,30 +3498,53 @@ class AppKitWindowRuntimeDriverTest {
                     window.surface.capabilities.value.handlerInteractions,
                 ).constraints,
             )
-            val trace = mutableListOf<String>()
+            val trace = CopyOnWriteArrayList<String>()
             val registration = window.surface.installInteractionHandler(InteractionHandler { context, event ->
-                trace += "handler:${event.stamp.sequence.value}"
+                trace += "handler-entry:${event.stamp.sequence.value}"
                 assertIs<KadreResult.Success<*>>(context.request(InteractionAction.BeginWindowMove))
                 trace += "handler-return"
             }).appKitSuccessValue()
-            val outcome = async(start = CoroutineStart.UNDISPATCHED) { registration.outcomes.first() }
-            val delivered = mutableListOf<InputEvent>()
+            val outcome = async(start = CoroutineStart.UNDISPATCHED) {
+                registration.outcomes.first().also { terminal ->
+                    trace += "outcome:${terminal.stamp.sequence.value}"
+                }
+            }
+            val delivered = CopyOnWriteArrayList<InputEvent>()
             val inputs = launch(start = CoroutineStart.UNDISPATCHED) {
-                window.surface.input.events.collect(delivered::add)
+                window.surface.input.events.collect { input ->
+                    delivered += input
+                    if (input is InputEvent.PointerButtonChanged) {
+                        trace += "pointer-input:${input.stamp.sequence.value}"
+                    }
+                }
             }
             var nativeResult: KadreResult<Unit>? = null
 
             port.emitInput("pointer-down-system-move", AppKitInput.PointerEntered(position))
             port.emitPointerDownResult("pointer-down-system-move", pointerDown) {
-                trace += "native"
-                KadreResult.Success(Unit).also { nativeResult = it }
+                trace += "native-invocation"
+                KadreResult.Success(Unit).also {
+                    nativeResult = it
+                    trace += "native-result:success"
+                }
             }
+            assertEquals(3L, window.surface.input.state.value.revision.value)
             val terminal = assertIs<InteractionActionOutcome.Committed>(outcome.await())
             withTimeout(2.seconds) { while (delivered.filterIsInstance<InputEvent.PointerButtonChanged>().size != 1) yield() }
             yield()
 
             val ordinary = delivered.filterIsInstance<InputEvent.PointerButtonChanged>().single()
-            assertEquals(listOf("handler:${terminal.stamp.sequence.value}", "native", "handler-return"), trace)
+            assertEquals(
+                listOf(
+                    "handler-entry:${terminal.stamp.sequence.value}",
+                    "native-invocation",
+                    "native-result:success",
+                    "handler-return",
+                    "outcome:${terminal.stamp.sequence.value}",
+                    "pointer-input:${terminal.stamp.sequence.value}",
+                ),
+                trace,
+            )
             assertEquals(KadreResult.Success(Unit), nativeResult)
             assertEquals(PointerButton.Primary, ordinary.button)
             assertEquals(PointerButtonState.Pressed, ordinary.buttonState)
@@ -3836,6 +3859,128 @@ class AppKitWindowRuntimeDriverTest {
         assertFalse(callback.isAlive)
         assertFalse(close.isAlive)
         assertTrue(nativeCallbacksRevoked.await(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun interruptedExternalCloserStillReleasesNativeResourcesAfterAnAdmittedPointerDown() = runBlocking {
+        val handlerEntered = CountDownLatch(1)
+        val releaseHandler = CountDownLatch(1)
+        val nativeCallbacksRevoked = CountDownLatch(1)
+        val nativeCallbackRevocations = java.util.concurrent.atomic.AtomicInteger()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "interrupted-pointer-close",
+            inputObservationInstalled = true,
+            onDelegateRevoked = {
+                nativeCallbackRevocations.incrementAndGet()
+                nativeCallbacksRevoked.countDown()
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+        val closeFailure = AtomicReference<Throwable?>()
+        val closeInterrupted = AtomicBoolean(false)
+        val closeFinished = CountDownLatch(1)
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "interrupted-pointer-close"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            window.surface.installInteractionHandler(InteractionHandler { _, _ ->
+                handlerEntered.countDown()
+                check(releaseHandler.await(2, TimeUnit.SECONDS))
+            }).appKitSuccessValue()
+            val callback = Thread {
+                port.emitPointerDown(
+                    "interrupted-pointer-close",
+                    AppKitInput.PointerButtonChanged(
+                        PointerButton.Primary,
+                        PointerButtonState.Pressed,
+                        LogicalPoint(71.0, 73.0),
+                        pressure = null,
+                    ),
+                ) { error("this handler does not request a native move") }
+            }.apply { isDaemon = true }
+            callback.start()
+            assertTrue(handlerEntered.await(2, TimeUnit.SECONDS))
+
+            val closer = Thread {
+                try {
+                    driver.close()
+                    closeInterrupted.set(Thread.currentThread().isInterrupted)
+                } catch (failure: Throwable) {
+                    closeFailure.set(failure)
+                } finally {
+                    closeFinished.countDown()
+                }
+            }.apply { isDaemon = true }
+            closer.start()
+            val waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (closer.state != Thread.State.WAITING && System.nanoTime() < waitDeadline) Thread.onSpinWait()
+            assertEquals(Thread.State.WAITING, closer.state)
+
+            closer.interrupt()
+            releaseHandler.countDown()
+            assertTrue(closeFinished.await(2, TimeUnit.SECONDS))
+            callback.join(2_000)
+
+            assertEquals(null, closeFailure.get())
+            assertTrue(closeInterrupted.get())
+            assertTrue(nativeCallbacksRevoked.await(2, TimeUnit.SECONDS))
+            assertEquals(1, nativeCallbackRevocations.get())
+            assertEquals(1, port.closedWindowTitles.count { it == "interrupted-pointer-close" })
+        } finally {
+            releaseHandler.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun callbackOriginatedCloseReportsCleanupFailureWithoutThrowingAcrossPointerCallback() = runBlocking {
+        val cleanupFailure = IllegalStateException("callback cleanup failure")
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "callback-originated-close",
+            inputObservationInstalled = true,
+            closeFailures = mapOf("callback-originated-close" to cleanupFailure),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "callback-originated-close"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            window.surface.installInteractionHandler(InteractionHandler { _, _ -> driver.close() }).appKitSuccessValue()
+
+            port.emitPointerDown(
+                "callback-originated-close",
+                AppKitInput.PointerButtonChanged(
+                    PointerButton.Primary,
+                    PointerButtonState.Pressed,
+                    LogicalPoint(79.0, 83.0),
+                    pressure = null,
+                ),
+            ) { error("handler closes before native move admission") }
+
+            assertTrue(reported.contains(cleanupFailure))
+            assertEquals(listOf("callback-originated-close"), port.closedWindowTitles)
+            assertEquals(emptyList(), driver.manager.state.value.windows)
+        } finally {
+            driver.close()
+        }
     }
 
     @Test
