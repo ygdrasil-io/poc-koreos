@@ -1107,7 +1107,7 @@ class KffiAppKitWindowPortMacOsTest {
             assertEquals(emptyList(), stimuli)
         } finally {
             peer.close()
-            retainedView?.let { view -> port.onMainThread { release(view) } }
+            retainedView?.let { view -> port.onMainThread { releaseKffiAppKitTestObject(view) } }
         }
     }
 
@@ -1129,7 +1129,7 @@ class KffiAppKitWindowPortMacOsTest {
 
         ObjCRuntime.autoreleasePool {
             NSApplication(NSApplication.sharedApplication())
-            val window = allocateWindow(rect, style)
+            val window = allocateKffiAppKitTestWindow(rect, style)
             val viewInstance = viewClass.createInstance {
                 onVoid("viewDidChangeEffectiveAppearance") {
                     appearanceChangedCount.incrementAndGet()
@@ -1178,7 +1178,7 @@ class KffiAppKitWindowPortMacOsTest {
                 window.setContentView(MemorySegment.NULL)
                 window.close()
                 viewInstance.close()
-                release(window.ptr)
+                releaseKffiAppKitTestObject(window.ptr)
             }
         }
     }
@@ -1252,8 +1252,8 @@ class KffiAppKitWindowPortMacOsTest {
             val style = NSWindowStyleMask.NSWindowStyleMaskTitled +
                 NSWindowStyleMask.NSWindowStyleMaskClosable +
                 NSWindowStyleMask.NSWindowStyleMaskResizable
-            val window = allocateWindow(rect, style)
-            val view = allocateView(rect)
+            val window = allocateKffiAppKitTestWindow(rect, style)
+            val view = allocateKffiAppKitTestView(rect)
             val delegate = delegateClass.createInstance {
                 onBooleanObject("windowShouldClose:", fallback = false) {
                     shouldCloseCount.incrementAndGet()
@@ -1280,8 +1280,8 @@ class KffiAppKitWindowPortMacOsTest {
                 window.setDelegate(MemorySegment.NULL)
                 delegate.close()
                 window.setContentView(MemorySegment.NULL)
-                release(view.ptr)
-                release(window.ptr)
+                releaseKffiAppKitTestObject(view.ptr)
+                releaseKffiAppKitTestObject(window.ptr)
             }
         }
     }
@@ -1329,34 +1329,6 @@ class KffiAppKitWindowPortMacOsTest {
         assertEquals(1, owner.closeCount)
     }
 
-    private fun allocateWindow(rect: NSRect, style: NSWindowStyleMask): NSWindow {
-        val allocated = allocate("NSWindow")
-        val initialized = NSWindow(allocated).initWithContentRect_styleMask_backing_defer(
-            rect,
-            style,
-            NSBackingStoreType.NSBackingStoreBuffered,
-            false,
-        )
-        check(initialized != MemorySegment.NULL) { "NSWindow initialization failed" }
-        return NSWindow(initialized)
-    }
-
-    private fun allocateView(rect: NSRect): NSView {
-        val initialized = NSView(allocate("NSView")).initWithFrame(rect)
-        check(initialized != MemorySegment.NULL) { "NSView initialization failed" }
-        return NSView(initialized)
-    }
-
-    private fun allocate(className: String): MemorySegment = ObjCRuntime.msgSend(
-        ValueLayout.ADDRESS,
-        ObjCRuntime.getClass(className),
-        ObjCRuntime.sel("alloc"),
-    ) as MemorySegment
-
-    private fun release(receiver: MemorySegment) {
-        ObjCRuntime.msgSend(null, receiver, ObjCRuntime.sel("release"))
-    }
-
     private fun retain(receiver: MemorySegment) {
         ObjCRuntime.msgSend(ValueLayout.ADDRESS, receiver, ObjCRuntime.sel("retain"))
     }
@@ -1386,6 +1358,34 @@ class KffiAppKitWindowPortMacOsTest {
         pressure = 0.0f,
     )
 }
+
+internal fun allocateKffiAppKitTestWindow(rect: NSRect, style: NSWindowStyleMask): NSWindow {
+    val initialized = NSWindow(allocateKffiAppKitTestObject("NSWindow"))
+        .initWithContentRect_styleMask_backing_defer(
+            rect,
+            style,
+            NSBackingStoreType.NSBackingStoreBuffered,
+            false,
+        )
+    check(initialized != MemorySegment.NULL) { "NSWindow initialization failed" }
+    return NSWindow(initialized)
+}
+
+internal fun allocateKffiAppKitTestView(rect: NSRect): NSView {
+    val initialized = NSView(allocateKffiAppKitTestObject("NSView")).initWithFrame(rect)
+    check(initialized != MemorySegment.NULL) { "NSView initialization failed" }
+    return NSView(initialized)
+}
+
+internal fun releaseKffiAppKitTestObject(receiver: MemorySegment) {
+    ObjCRuntime.msgSend(null, receiver, ObjCRuntime.sel("release"))
+}
+
+private fun allocateKffiAppKitTestObject(className: String): MemorySegment = ObjCRuntime.msgSend(
+    ValueLayout.ADDRESS,
+    ObjCRuntime.getClass(className),
+    ObjCRuntime.sel("alloc"),
+) as MemorySegment
 
 private class CountingWindowOwner : AppKitNativeWindowOwner {
     var closeCount: Int = 0
