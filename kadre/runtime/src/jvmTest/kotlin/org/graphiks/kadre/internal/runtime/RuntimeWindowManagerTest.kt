@@ -71,6 +71,7 @@ import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequest
@@ -1880,6 +1881,87 @@ class RuntimeWindowManagerTest {
         assertEquals(
             listOf(failure),
             reported.map { assertIs<KadreException>(it).failure },
+        )
+    }
+
+    @Test
+    fun windowUpdateSpiRetainsLegacyJvmDescriptorsAndCausalDetachedDiagnostics() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val reported = mutableListOf<Throwable>()
+        val manager = manager(
+            port,
+            reported = reported,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+        )
+        val failedWindow = openFullscreenWindow(manager, port)
+        val failedUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            failedWindow.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val failedCommand = port.updateCommands.single()
+        failedUpdate.cancelAndJoin()
+        val failedCause = IllegalStateException("failed-cause")
+        val failed = KadreFailure.PlatformFailure(KadrePlatform.Fake, "fullscreen", "level-readback-failed")
+        failedCommand.failed(failed, diagnosticCause = failedCause)
+
+        val committedWindow = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.last(),
+        )
+        val committedUpdate = async(start = CoroutineStart.UNDISPATCHED) {
+            committedWindow.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val committedCommand = port.updateCommands.last()
+        committedUpdate.cancelAndJoin()
+        val committedCause = IllegalStateException("committed-cause")
+        val committed = KadreFailure.PlatformFailure(KadrePlatform.Fake, "fullscreen", "level-restore-failed")
+        committedCommand.committedFailure(
+            effectiveState = committedWindow.state.value.copy(fullscreen = FullscreenMode.Borderless),
+            publicationOperationId = committedCommand.operationId,
+            failure = committed,
+            diagnosticCause = committedCause,
+        )
+
+        assertEquals(listOf(failed, committed), reported.map { assertIs<KadreException>(it).failure })
+        assertEquals(
+            listOf(listOf("failed-cause"), listOf("committed-cause")),
+            reported.map { it.suppressed.map(Throwable::message) },
+        )
+
+        assertEquals(
+            Void.TYPE,
+            WindowUpdateCommand::class.java.getMethod("failed", KadreFailure::class.java).returnType,
+        )
+        assertEquals(
+            Void.TYPE,
+            WindowUpdateCommand::class.java.getMethod(
+                "committedFailure",
+                WindowState::class.java,
+                WindowOperationId::class.java,
+                KadreFailure::class.java,
+                List::class.java,
+            ).returnType,
+        )
+        val legacyFailed = WindowUpdateCommandStimulus.Failed::class.java.getConstructor(
+            WindowOperationId::class.java,
+            KadreFailure::class.java,
+        ).newInstance(failedCommand.operationId, failed)
+        val legacyCommitted = WindowUpdateCommandStimulus.CommittedFailure::class.java.getConstructor(
+            WindowOperationId::class.java,
+            WindowState::class.java,
+            WindowOperationId::class.java,
+            KadreFailure::class.java,
+            List::class.java,
+        ).newInstance(
+            committedCommand.operationId,
+            committedWindow.state.value,
+            committedCommand.operationId,
+            committed,
+            emptyList<Any>(),
+        )
+        assertEquals(null, assertIs<WindowUpdateCommandStimulus.Failed>(legacyFailed).diagnosticCause)
+        assertEquals(
+            null,
+            assertIs<WindowUpdateCommandStimulus.CommittedFailure>(legacyCommitted).diagnosticCause,
         )
     }
 
