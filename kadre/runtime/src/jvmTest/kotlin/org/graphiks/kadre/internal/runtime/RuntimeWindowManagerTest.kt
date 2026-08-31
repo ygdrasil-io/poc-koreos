@@ -530,6 +530,44 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun enabledAppearanceUpdatesReachTheWindowCommandPort() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Transparency,
+                WindowProperty.ContentProtection,
+            ),
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        )
+
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    transparency = PropertyChange.Set(true),
+                    contentProtection = PropertyChange.Set(true),
+                ),
+            )
+        }
+        val command = port.updateCommands.single()
+
+        assertEquals(PropertyChange.Set(true), command.update.transparency)
+        assertEquals(PropertyChange.Set(true), command.update.contentProtection)
+        command.applied(
+            window.state.value.copy(
+                transparent = true,
+                contentProtection = true,
+            ),
+        )
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertTrue(outcome.state.transparent)
+        assertTrue(outcome.state.contentProtection)
+    }
+
+    @Test
     fun windowUpdateValidatesCombinedSizeConstraintsBeforeDispatch() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)

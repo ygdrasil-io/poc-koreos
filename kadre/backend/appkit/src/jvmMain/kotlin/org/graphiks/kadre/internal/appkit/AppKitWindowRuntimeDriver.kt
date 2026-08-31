@@ -316,7 +316,10 @@ private class AppKitWindowCommandPort(
         }
 
         val effectiveSpec = appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities)
-        val initialLevelReadbackRequired = WindowProperty.Level in enabledWindowUpdateCapabilities
+        val initialWindowReadbackRequired = setOf(
+            WindowProperty.Level,
+            WindowProperty.Transparency,
+        ).any(enabledWindowUpdateCapabilities::contains)
         val peer = try {
             AppKitWindowPeer.prepare(
                 id = entry.peerId,
@@ -325,7 +328,7 @@ private class AppKitWindowCommandPort(
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
                 reportCallbackFailure = ::reportFailure,
-                readInitialWindowSnapshot = initialLevelReadbackRequired,
+                readInitialWindowSnapshot = initialWindowReadbackRequired,
             )
         } catch (cause: Exception) {
             rejectPreparation(entry, cause)
@@ -334,8 +337,20 @@ private class AppKitWindowCommandPort(
             rejectPreparation(entry, cause)
             return
         }
-        val openingSpec = if (initialLevelReadbackRequired) {
-            effectiveSpec.copy(level = checkNotNull(peer.initialWindowSnapshot).level)
+        val openingSpec = if (initialWindowReadbackRequired) {
+            val snapshot = checkNotNull(peer.initialWindowSnapshot)
+            effectiveSpec.copy(
+                level = if (WindowProperty.Level in enabledWindowUpdateCapabilities) {
+                    snapshot.level
+                } else {
+                    effectiveSpec.level
+                },
+                transparent = if (WindowProperty.Transparency in enabledWindowUpdateCapabilities) {
+                    snapshot.appearance.transparency
+                } else {
+                    effectiveSpec.transparent
+                },
+            )
         } else {
             effectiveSpec
         }
@@ -664,7 +679,15 @@ private class AppKitWindowCommandPort(
         val effective = mutation.snapshot.withMutationFrom(current)
         val failure = mutation.failure
         if (failure == null) {
-            pending.command.applied(effective)
+            val rejectedTransparency = pending.command.rejectedMutationFields(
+                mutation.snapshot,
+                platformFailure("window-update-rejected"),
+            ).filter { it.field == WindowProperty.Transparency }
+            if (rejectedTransparency.isEmpty()) {
+                pending.command.applied(effective)
+            } else {
+                pending.command.partiallyApplied(effective, rejectedTransparency)
+            }
             return
         }
         reportFailure(failure)
@@ -1588,10 +1611,10 @@ private fun appKitEffectiveSpec(
     fullscreen = FullscreenMode.Windowed,
     level = requested.level.takeIf { WindowProperty.Level in enabledWindowUpdateCapabilities }
         ?: WindowLevel.Normal,
-    transparent = false,
+    transparent = requested.transparent,
     blurBehind = false,
     icon = null,
-    contentProtection = false,
+    contentProtection = requested.contentProtection,
 ).let { effective ->
     if (effective.decorations == WindowDecorations.Borderless) {
         effective.copy(systemButtons = WindowSystemButtons.None)
@@ -1613,6 +1636,9 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
         systemButtons = update.systemButtons,
     ),
     level = AppKitWindowLevelTarget(update.level),
+    appearance = AppKitWindowAppearanceTarget(
+        transparency = update.transparency,
+    ),
 )
 
 private fun WindowUpdateCommand.rejectedMutationFields(
@@ -1679,6 +1705,13 @@ private fun WindowUpdateCommand.rejectedMutationFields(
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Level, failure))
         PropertyChange.Unchanged -> Unit
     }
+    when (val change = update.transparency) {
+        is PropertyChange.Set -> if (snapshot.appearance.transparency != change.value) {
+            add(RejectedWindowField(WindowProperty.Transparency, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Transparency, failure))
+        PropertyChange.Unchanged -> Unit
+    }
 }
 
 private fun AppKitWindowMutationSnapshot.withMutationFrom(
@@ -1692,6 +1725,7 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
     decorations = chrome.decorations,
     systemButtons = chrome.systemButtons,
     level = level,
+    transparent = appearance.transparency,
     revision = current.revision,
 )
 

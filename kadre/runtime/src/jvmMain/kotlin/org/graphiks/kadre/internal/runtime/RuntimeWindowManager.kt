@@ -2761,6 +2761,8 @@ private fun candidateFor(
         decorations = resolveDecorations(update.decorations, current.decorations),
         systemButtons = resolveSystemButtons(update.systemButtons, current.systemButtons),
         level = resolveLevel(update.level, current.level),
+        transparent = resolveResizable(update.transparency, current.transparent),
+        contentProtection = resolveResizable(update.contentProtection, current.contentProtection),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -2854,6 +2856,8 @@ private fun invalidRequiredClearField(
     WindowProperty.Decorations in supportedProperties && update.decorations is PropertyChange.Clear -> "decorations"
     WindowProperty.SystemButtons in supportedProperties && update.systemButtons is PropertyChange.Clear -> "systemButtons"
     WindowProperty.Level in supportedProperties && update.level is PropertyChange.Clear -> "level"
+    WindowProperty.Transparency in supportedProperties && update.transparency is PropertyChange.Clear -> "transparency"
+    WindowProperty.ContentProtection in supportedProperties && update.contentProtection is PropertyChange.Clear -> "contentProtection"
     else -> null
 }
 
@@ -2912,9 +2916,11 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.maximumSize != candidate.maximumSize ||
         current.resizable != candidate.resizable ||
         current.fullscreen != candidate.fullscreen ||
-        current.decorations != candidate.decorations ||
-        current.systemButtons != candidate.systemButtons ||
-        current.level != candidate.level
+    current.decorations != candidate.decorations ||
+    current.systemButtons != candidate.systemButtons ||
+    current.level != candidate.level ||
+    current.transparent != candidate.transparent ||
+    current.contentProtection != candidate.contentProtection
 
 private fun supportedMutationOnly(
     update: WindowUpdate,
@@ -2929,6 +2935,11 @@ private fun supportedMutationOnly(
     decorations = update.decorations.whenSupported(WindowProperty.Decorations, supportedProperties),
     systemButtons = update.systemButtons.whenSupported(WindowProperty.SystemButtons, supportedProperties),
     level = update.level.whenSupported(WindowProperty.Level, supportedProperties),
+    transparency = update.transparency.whenSupported(WindowProperty.Transparency, supportedProperties),
+    contentProtection = update.contentProtection.whenSupported(
+        WindowProperty.ContentProtection,
+        supportedProperties,
+    ),
     expectedRevision = update.expectedRevision,
 )
 

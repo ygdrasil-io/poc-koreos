@@ -286,6 +286,61 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun generatedKffiWindowAppliesAndReadsBackTransparencyOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(95L),
+            spec = WindowSpec(transparent = true),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        fun readNativeOpacity(): KadreResult<Boolean>? =
+            peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).isOpaque()
+            }
+
+        try {
+            assertEquals(KadreResult.Success(false), readNativeOpacity())
+
+            assertEquals(
+                AppKitWindowAppearanceSnapshot(transparency = false),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            appearance = AppKitWindowAppearanceTarget(
+                                transparency = PropertyChange.Set(false),
+                            ),
+                        ),
+                    ),
+                ).appearance,
+            )
+            assertEquals(KadreResult.Success(true), readNativeOpacity())
+
+            assertEquals(
+                AppKitWindowAppearanceSnapshot(transparency = true),
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            appearance = AppKitWindowAppearanceTarget(
+                                transparency = PropertyChange.Set(true),
+                            ),
+                        ),
+                    ),
+                ).appearance,
+            )
+            assertEquals(KadreResult.Success(false), readNativeOpacity())
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
     fun generatedKffiWindowUpdatesTitleAndReturnsTheNativeReadbackOnMacOs() {
         if (!isMacOsHost()) return
 

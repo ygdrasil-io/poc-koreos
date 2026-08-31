@@ -584,7 +584,7 @@ class AppKitBackendProviderTest {
         }
 
     @Test
-    fun publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied() =
+    fun publicAppKitWindowStateCommitsSupportedTransparencyAndLeavesUnsupportedPropertiesUnavailable() =
         kotlinx.coroutines.runBlocking {
             val port = DeterministicAppKitNativeWindowPort("public-effective-state")
             val provider = AppKitBackendProvider.forTesting(
@@ -608,8 +608,6 @@ class AppKitBackendProviderTest {
                             maximumSize = LogicalSize(640.0, 360.0),
                             level = WindowLevel.Floating,
                             transparent = true,
-                            blurBehind = true,
-                            contentProtection = true,
                         ),
                     ).appKitSuccessValue().await(),
                 ).window
@@ -622,7 +620,7 @@ class AppKitBackendProviderTest {
                 assertEquals(WindowDecorations.System, window.state.value.decorations)
                 assertEquals(WindowSystemButtons.All, window.state.value.systemButtons)
                 assertEquals(WindowLevel.Floating, window.state.value.level)
-                assertFalse(window.state.value.transparent)
+                assertTrue(window.state.value.transparent)
                 assertFalse(window.state.value.blurBehind)
                 assertFalse(window.state.value.contentProtection)
 
@@ -663,9 +661,12 @@ class AppKitBackendProviderTest {
                     ),
                     windowCapabilities.fullscreen,
                 )
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
+                    windowCapabilities.transparency,
+                )
                 listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
-                    windowCapabilities.transparency,
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
                     windowCapabilities.attention,
@@ -1327,7 +1328,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesTheNineProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesTheTenProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1384,10 +1385,13 @@ class AppKitBackendProviderTest {
                 ),
                 window.capabilities.value.fullscreen,
             )
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.transparency,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
-                window.capabilities.value.transparency,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
                 window.capabilities.value.attention,

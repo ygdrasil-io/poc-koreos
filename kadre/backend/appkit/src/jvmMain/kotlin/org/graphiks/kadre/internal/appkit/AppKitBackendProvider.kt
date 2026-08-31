@@ -271,6 +271,7 @@ private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setO
     WindowProperty.SystemButtons,
     WindowProperty.Level,
     WindowProperty.Fullscreen,
+    WindowProperty.Transparency,
 )
 
 private class AppKitLastWindowStopBridge {

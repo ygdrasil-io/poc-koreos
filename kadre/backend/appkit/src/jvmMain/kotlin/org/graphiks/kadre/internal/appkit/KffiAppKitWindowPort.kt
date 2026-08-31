@@ -31,6 +31,7 @@ import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSButton
+import org.graphiks.kffi.objc.NSColor
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEventModifierFlags
 import org.graphiks.kffi.objc.NSEventType
@@ -620,6 +621,7 @@ private fun configureKffiWindow(owner: AppKitNativeWindowOwner, spec: WindowSpec
     owner.kffiWindowOwner().applyInitialGeometry(spec)
     owner.kffiWindowOwner().applyInitialChrome(spec)
     owner.kffiWindowOwner().applyInitialLevel(spec)
+    owner.kffiWindowOwner().applyInitialAppearance(spec)
     owner.kffiWindow().apply {
         setReleasedWhenClosed(false)
         setTitle(spec.title)
@@ -657,6 +659,10 @@ private class KffiWindowOwner(
         window.setLevel(spec.level.toAppKitWindowLevel())
     }
 
+    fun applyInitialAppearance(spec: WindowSpec) {
+        applyAppearance(spec.transparent)
+    }
+
     fun restoreLevel(level: WindowLevel) {
         window.setLevel(level.toAppKitWindowLevel())
     }
@@ -684,6 +690,12 @@ private class KffiWindowOwner(
             is PropertyChange.Set -> window.setLevel(level.value.toAppKitWindowLevel())
             PropertyChange.Clear -> error("AppKit does not support clearing a window level")
             PropertyChange.Unchanged -> Unit
+        }
+        if (target.appearance.hasChange()) {
+            val current = readAppearance()
+            applyAppearance(
+                transparency = target.appearance.transparency.resolveValue(current.transparency),
+            )
         }
         return readWindow()
     }
@@ -736,9 +748,24 @@ private class KffiWindowOwner(
         geometry = readGeometry(),
         chrome = readChrome(),
         level = readLevel(),
+        appearance = readAppearance(),
     )
 
     private fun readLevel(): WindowLevel = appKitWindowLevel(window.level())
+
+    private fun applyAppearance(transparency: Boolean) {
+        window.setOpaque(!transparency)
+        window.setBackgroundColor(
+            if (transparency) NSColor.clearColor() else NSColor.windowBackgroundColor(),
+        )
+        check(window.isOpaque() == !transparency) {
+            "AppKit opacity readback diverged from requested transparency"
+        }
+    }
+
+    private fun readAppearance(): AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
+        transparency = !window.isOpaque(),
+    )
 
     private fun applyChrome(
         decorations: WindowDecorations,
@@ -863,6 +890,9 @@ private fun NSWindow.standardButtonHidden(button: NSWindowButton): Boolean {
 
 private fun AppKitWindowChromeTarget.hasChange(): Boolean =
     decorations !is PropertyChange.Unchanged || systemButtons !is PropertyChange.Unchanged
+
+private fun AppKitWindowAppearanceTarget.hasChange(): Boolean =
+    transparency !is PropertyChange.Unchanged
 
 private fun WindowLevel.toAppKitWindowLevel(): Long = CGWindowLevelForKey(
     when (this) {

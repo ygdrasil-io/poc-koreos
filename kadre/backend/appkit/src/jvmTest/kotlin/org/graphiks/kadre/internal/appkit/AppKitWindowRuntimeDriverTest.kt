@@ -1183,7 +1183,7 @@ class AppKitWindowRuntimeDriverTest {
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
-            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+            enabledWindowUpdateCapabilities = fullscreenUpdateProperties(),
         )
 
         try {
@@ -1307,7 +1307,7 @@ class AppKitWindowRuntimeDriverTest {
             resources = KadrePolicies.Default.resources,
             failureReporter = RuntimeFailureReporter(reported::add),
             publicAppKitCapabilities = true,
-            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+            enabledWindowUpdateCapabilities = fullscreenUpdateProperties(),
             beforeFullscreenFollowUpEnqueue = { callback ->
                 if (callback == AppKitFullscreenCallback.WillEnter) {
                     willClaimed.countDown()
@@ -2063,6 +2063,156 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun supportedInitialAppearanceReachesTheNativeTargetAndCommitsTheNativeReadback() = runBlocking {
+        val createdSpecs = mutableListOf<WindowSpec>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "initial-appearance-readback",
+            beforeCreateWindow = createdSpecs::add,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = appearanceUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(
+                    WindowSpec(
+                        title = "initial-appearance-readback",
+                        transparent = true,
+                    ),
+                ).successValue().await(),
+            ).window
+
+            assertEquals(true, createdSpecs.single().transparent)
+            assertTrue(window.state.value.transparent)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun appearanceUpdatesCommitWhenTheNativeReadbackAgrees() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(name = "appearance-readback")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = appearanceUpdateProperties(),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "appearance-readback"))
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(
+                    WindowUpdate(
+                        transparency = PropertyChange.Set(true),
+                    ),
+                ).successValue(),
+            )
+
+            assertTrue(outcome.state.transparent)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun divergentTransparencyReadbackRejectsOnlyTransparencyAndPreservesOtherMutations() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "transparent-readback-divergence",
+            effectiveAppearance = AppKitWindowAppearanceSnapshot(
+                transparency = false,
+            ),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            enabledWindowUpdateCapabilities = appearanceUpdateProperties() + WindowProperty.Title,
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "transparent-readback-divergence"))
+
+            val outcome = assertIs<WindowUpdateOutcome.PartiallyApplied>(
+                window.apply(
+                    WindowUpdate(
+                        title = PropertyChange.Set("transparent-effective"),
+                        transparency = PropertyChange.Set(true),
+                    ),
+                ).successValue(),
+            )
+
+            assertEquals("transparent-effective", outcome.state.title)
+            assertFalse(outcome.state.transparent)
+            assertEquals(WindowProperty.Transparency, outcome.rejected.single().field)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun appearanceSetterFailurePublishesReadbackAndLeavesNoPendingMutation() = runBlocking {
+        val failure = IllegalStateException("appearance setter failed")
+        val reported = mutableListOf<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "appearance-setter-failure",
+            appearanceSetterFailure = failure,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            enabledWindowUpdateCapabilities = appearanceUpdateProperties(),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "appearance-setter-failure"))
+
+            val outcome = assertIs<WindowUpdateOutcome.PartiallyApplied>(
+                window.apply(
+                    WindowUpdate(transparency = PropertyChange.Set(true)),
+                ).successValue(),
+            )
+
+            assertFalse(outcome.state.transparent)
+            assertEquals(WindowProperty.Transparency, outcome.rejected.single().field)
+            assertIs<KadreFailure.PlatformFailure>(outcome.rejected.single().failure)
+            assertEquals(listOf<Throwable>(failure), reported)
+            assertEquals(AppKitBackendCommandInspection(), driver.backendCommandInspection("appearance-setter-failure"))
+            assertEquals(WindowPhase.Open, window.state.value.phase)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenHarnessRejectsIncompletePublicCapabilitiesAndOpensWithItsCompleteCapabilities() = runBlocking {
+        val incompletePort = DeterministicAppKitNativeWindowPort(name = "incomplete-fullscreen-capabilities")
+        val incompleteDriver = AppKitWindowRuntimeDriverFactory { incompletePort }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+        )
+        try {
+            assertIs<WindowRequestOutcome.Rejected>(
+                incompleteDriver.manager.requestWindow(
+                    WindowSpec(title = "requires-title-capability"),
+                ).successValue().await(),
+            )
+            assertTrue(incompletePort.createdWindowTitles.isEmpty())
+        } finally {
+            incompleteDriver.close()
+        }
+
+        val completePort = DeterministicAppKitNativeWindowPort(name = "complete-fullscreen-capabilities")
+        val completeDriver = fullscreenDriver(completePort)
+        try {
+            openedWindow(completeDriver, WindowSpec(title = "requires-title-capability"))
+            assertEquals(listOf("requires-title-capability"), completePort.createdWindowTitles)
+        } finally {
+            completeDriver.close()
+        }
+    }
+
+    @Test
     fun initialWindowLevelIsForwardedOnlyWhenThePrivateCapabilityIsEnabled() = runBlocking {
         val port = DeterministicAppKitNativeWindowPort(name = "initial-level")
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
@@ -2556,6 +2706,7 @@ class AppKitWindowRuntimeDriverTest {
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             resources = KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
         )
 
         try {
@@ -2632,6 +2783,7 @@ class AppKitWindowRuntimeDriverTest {
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             resources = KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
         )
 
         try {
@@ -2806,6 +2958,7 @@ class AppKitWindowRuntimeDriverTest {
             resources = KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
             publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
         )
 
         try {
@@ -2962,6 +3115,7 @@ class AppKitWindowRuntimeDriverTest {
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             resources = KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
             beforeCommitDelivery = { spec ->
                 if (spec.title == "committing") {
                     commitReserved.countDown()
@@ -3193,6 +3347,7 @@ class AppKitWindowRuntimeDriverTest {
         val driver = AppKitWindowRuntimeDriverFactory { port }.create(
             KadrePolicies.Default.resources,
             publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
         )
         val callbackStarted = CountDownLatch(1)
         val allowCallbackToReturn = CountDownLatch(1)
@@ -3249,6 +3404,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val reentrantGeometryDuringUpdate: AppKitWindowGeometrySnapshot? = null,
     private val initialStyleMask: Long? = null,
     effectiveLevel: WindowLevel? = null,
+    private val effectiveAppearance: AppKitWindowAppearanceSnapshot? = null,
     private val initialLevelReadback: WindowLevel? = null,
     private val initialReadbackFailure: Throwable? = null,
     private val fullscreenToggleFailure: Throwable? = null,
@@ -3259,6 +3415,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val pauseFullscreenCommitArbitration: Boolean = false,
     private val beforeGeometrySetter: () -> Unit = { },
     private val geometryFailureAfterContentSize: Throwable? = null,
+    private val appearanceSetterFailure: Throwable? = null,
 ) : AppKitNativeWindowPort {
     @Volatile
     private var effectiveLevelOverride: WindowLevel? = effectiveLevel
@@ -3313,6 +3470,9 @@ internal class DeterministicAppKitNativeWindowPort(
                 systemButtons = spec.systemButtons.canonicalFor(spec.decorations),
             ),
             level = spec.level,
+            appearance = AppKitWindowAppearanceSnapshot(
+                transparency = spec.transparent,
+            ),
             styleMask = initialStyleMask ?: deterministicStyleMask(spec),
         ).also { window ->
             check(windows.put(spec.title, window) == null) { "$name duplicate test window title" }
@@ -3399,7 +3559,17 @@ internal class DeterministicAppKitNativeWindowPort(
         if (target.level.level !is PropertyChange.Unchanged) {
             recording.level = effectiveLevelOverride ?: target.level.level.resolve(recording.level)
         }
-        return AppKitWindowMutationSnapshot(recording.title, recording.geometry, recording.chrome, recording.level)
+        if (target.appearance.transparency !is PropertyChange.Unchanged) {
+            appearanceSetterFailure?.let { throw it }
+            recording.appearance = effectiveAppearance ?: recording.appearance.updateFor(target.appearance)
+        }
+        return AppKitWindowMutationSnapshot(
+            recording.title,
+            recording.geometry,
+            recording.chrome,
+            recording.level,
+            recording.appearance,
+        )
     }
 
     override fun readWindow(window: AppKitNativeWindowOwner): AppKitWindowMutationSnapshot =
@@ -3417,6 +3587,7 @@ internal class DeterministicAppKitNativeWindowPort(
                 recording.geometry,
                 recording.chrome,
                 initialLevelReadback.takeIf { !recording.presented } ?: recording.level,
+                recording.appearance,
             )
         }
 
@@ -3614,6 +3785,7 @@ internal class DeterministicAppKitNativeWindowPort(
         val initialGeometry: AppKitWindowGeometrySnapshot,
         var chrome: AppKitWindowChromeSnapshot,
         var level: WindowLevel,
+        var appearance: AppKitWindowAppearanceSnapshot,
         var styleMask: Long,
     ) : AppKitNativeWindowOwner {
         val nativeClosed = AtomicBoolean(false)
@@ -3773,6 +3945,12 @@ private fun AppKitWindowChromeSnapshot.canonical(): AppKitWindowChromeSnapshot =
     this
 }
 
+private fun AppKitWindowAppearanceSnapshot.updateFor(
+    target: AppKitWindowAppearanceTarget,
+): AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
+    transparency = target.transparency.resolve(transparency),
+)
+
 private fun <T> PropertyChange<T>.resolve(current: T): T = when (this) {
     is PropertyChange.Set -> value
     PropertyChange.Clear,
@@ -3834,6 +4012,9 @@ private fun chromeUpdateProperties(): Set<WindowProperty> =
         WindowProperty.Decorations,
         WindowProperty.SystemButtons,
     )
+
+private fun appearanceUpdateProperties(): Set<WindowProperty> =
+    setOf(WindowProperty.Transparency)
 
 internal class OwnerThreadAppKitNativeWindowPort(
     name: String,
@@ -3970,7 +4151,7 @@ private fun fullscreenDriver(
 ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriverFactory { port }.create(
     KadrePolicies.Default.resources,
     publicAppKitCapabilities = true,
-    enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+    enabledWindowUpdateCapabilities = fullscreenUpdateProperties(),
 )
 
 private fun fullscreenDriver(
@@ -3980,7 +4161,22 @@ private fun fullscreenDriver(
     resources = KadrePolicies.Default.resources,
     failureReporter = RuntimeFailureReporter(reported::add),
     publicAppKitCapabilities = true,
-    enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen, WindowProperty.Level),
+    enabledWindowUpdateCapabilities = fullscreenUpdateProperties(),
+)
+
+private fun publicAppKitUpdateProperties(): Set<WindowProperty> = setOf(
+    WindowProperty.Title,
+    WindowProperty.ContentSize,
+    WindowProperty.MinimumSize,
+    WindowProperty.MaximumSize,
+    WindowProperty.Resizable,
+    WindowProperty.Decorations,
+    WindowProperty.SystemButtons,
+    WindowProperty.Level,
+)
+
+private fun fullscreenUpdateProperties(): Set<WindowProperty> = publicAppKitUpdateProperties() + setOf(
+    WindowProperty.Fullscreen,
 )
 
 private fun pausingFullscreenPort(name: String): DeterministicAppKitNativeWindowPort =

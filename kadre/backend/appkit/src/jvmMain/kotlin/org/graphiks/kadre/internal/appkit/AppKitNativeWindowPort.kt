@@ -155,6 +155,11 @@ internal data class AppKitWindowLevelTarget(
     val level: PropertyChange<WindowLevel>,
 )
 
+/** Private, native-address-free appearance request forwarded from the runtime command. */
+internal data class AppKitWindowAppearanceTarget(
+    val transparency: PropertyChange<Boolean>,
+)
+
 /** Private, native-address-free fullscreen request forwarded from the runtime command. */
 internal data class AppKitWindowFullscreenTarget(val mode: FullscreenMode)
 
@@ -177,6 +182,9 @@ internal data class AppKitWindowMutationTarget(
         systemButtons = PropertyChange.Unchanged,
     ),
     val level: AppKitWindowLevelTarget = AppKitWindowLevelTarget(PropertyChange.Unchanged),
+    val appearance: AppKitWindowAppearanceTarget = AppKitWindowAppearanceTarget(
+        transparency = PropertyChange.Unchanged,
+    ),
 )
 
 /** Native values read together after AppKit has applied a geometry mutation or observation. */
@@ -193,6 +201,11 @@ internal data class AppKitWindowChromeSnapshot(
     val systemButtons: WindowSystemButtons,
 )
 
+/** Native appearance values read together with the rest of an effective window mutation. */
+internal data class AppKitWindowAppearanceSnapshot(
+    val transparency: Boolean,
+)
+
 /** Native values read together after AppKit has applied one window mutation. */
 internal data class AppKitWindowMutationSnapshot(
     val title: String,
@@ -202,6 +215,9 @@ internal data class AppKitWindowMutationSnapshot(
         systemButtons = WindowSystemButtons.All,
     ),
     val level: WindowLevel = WindowLevel.Normal,
+    val appearance: AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
+        transparency = false,
+    ),
 )
 
 /** Callback boundary for native-address-free geometry observations. */
