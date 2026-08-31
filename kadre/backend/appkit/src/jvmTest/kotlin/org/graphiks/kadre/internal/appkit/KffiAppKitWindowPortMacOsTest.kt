@@ -1131,6 +1131,7 @@ class KffiAppKitWindowPortMacOsTest {
         val port = KffiAppKitWindowPort()
         val ordinary = mutableListOf<AppKitInput>()
         val pressed = mutableListOf<AppKitInput.PointerButtonChanged>()
+        var nativeMove: KadreResult<Unit>? = null
         var window: AppKitNativeWindowOwner? = null
         var view: AppKitNativeViewOwner? = null
         var observer: AppKitNativeInputObserverOwner? = null
@@ -1148,10 +1149,9 @@ class KffiAppKitWindowPortMacOsTest {
                         input = ordinary::add,
                         pointerDown = { input, invokeNativeMove ->
                             pressed += input
-                            // The callback intentionally does not begin a visible drag in CI.
-                            // Its only native action is the generated binding captured here.
-                            @Suppress("UNUSED_VARIABLE")
-                            val dragBinding: () -> KadreResult<Unit> = invokeNativeMove
+                            // This executes only while AppKit still borrows the event. It proves
+                            // selector admission, not a visible interactive drag in CI.
+                            nativeMove = invokeNativeMove()
                         },
                     ),
                 )
@@ -1173,6 +1173,7 @@ class KffiAppKitWindowPortMacOsTest {
                 pressed,
             )
             assertEquals(emptyList(), ordinary)
+            assertEquals(KadreResult.Success(Unit), nativeMove)
         } finally {
             port.onMainThread {
                 observer?.close()

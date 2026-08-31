@@ -18,6 +18,7 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @JvmInline
 internal value class AppKitWindowPeerId(internal val value: Long)
@@ -140,7 +141,10 @@ internal class AppKitWindowPeer private constructor(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         awaitHandleLeases()
-        callbackGate.revoke()
+        callbackGate.revokeAndRunAfterPointerCallbacks(::releaseNativeResources)
+    }
+
+    private fun releaseNativeResources() {
         port.onMainThread {
             var failure: Throwable? = null
             inputObserver?.let { observer ->
@@ -511,7 +515,8 @@ private class AppKitWindowCallbackGate(
         (InteractionAction) -> KadreResult<Unit>,
     ) -> Boolean,
 ) {
-    private val lock = Any()
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    private val lock = Object()
     private var accepting = true
     private var surfaceAccepting = false
     private var nativeCloseDelivered = false
@@ -524,6 +529,9 @@ private class AppKitWindowCallbackGate(
     private var managedGeometryMutationDepth = 0
     private var fullscreenWillObservedSinceToggle = false
     private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
+    private var activePointerCallbacks = 0
+    private val activePointerCallbackThreads = linkedMapOf<Thread, Int>()
+    private val deferredPointerCallbackCleanup = ArrayDeque<() -> Unit>()
 
     fun duringManagedGeometryMutation(
         block: () -> NativeWindowMutationResult?,
@@ -642,7 +650,16 @@ private class AppKitWindowCallbackGate(
         input: AppKitInput.PointerButtonChanged,
         invokeNativeMove: () -> KadreResult<Unit>,
     ) {
-        val admitted = synchronized(lock) { surfaceAccepting }
+        val admitted = synchronized(lock) {
+            if (!surfaceAccepting) {
+                false
+            } else {
+                activePointerCallbacks += 1
+                val thread = Thread.currentThread()
+                activePointerCallbackThreads[thread] = (activePointerCallbackThreads[thread] ?: 0) + 1
+                true
+            }
+        }
         if (!admitted) return
         val borrowedMove = BorrowedPointerMove(invokeNativeMove)
         try {
@@ -662,6 +679,7 @@ private class AppKitWindowCallbackGate(
             // A handler may retain its callback context. The runtime's native lambda can therefore
             // outlive this stack frame, but its AppKit event callback cannot.
             borrowedMove.revoke()
+            completePointerCallback()
         }
     }
 
@@ -783,6 +801,46 @@ private class AppKitWindowCallbackGate(
         }
     }
 
+    /**
+     * Linearizes teardown with pressed-pointer callbacks. A different closer waits until the
+     * borrowed event callback is finished; a close requested by that callback is drained from its
+     * finally block, after the borrowed move closure was revoked.
+     */
+    fun revokeAndRunAfterPointerCallbacks(cleanup: () -> Unit) {
+        val runNow = synchronized(lock) {
+            accepting = false
+            surfaceAccepting = false
+            if (activePointerCallbacks == 0) {
+                true
+            } else if ((activePointerCallbackThreads[Thread.currentThread()] ?: 0) > 0) {
+                deferredPointerCallbackCleanup += cleanup
+                false
+            } else {
+                while (activePointerCallbacks > 0) lock.wait()
+                true
+            }
+        }
+        if (runNow) cleanup()
+    }
+
+    private fun completePointerCallback() {
+        val deferredCleanup = synchronized(lock) {
+            activePointerCallbacks -= 1
+            check(activePointerCallbacks >= 0) { "AppKit pointer callback depth underflow" }
+            val thread = Thread.currentThread()
+            val activeOnThread = checkNotNull(activePointerCallbackThreads[thread]) - 1
+            if (activeOnThread == 0) activePointerCallbackThreads.remove(thread)
+            else activePointerCallbackThreads[thread] = activeOnThread
+            if (activePointerCallbacks == 0) {
+                lock.notifyAll()
+                deferredPointerCallbackCleanup.toList().also { deferredPointerCallbackCleanup.clear() }
+            } else {
+                emptyList()
+            }
+        }
+        deferredCleanup.forEach { cleanup -> cleanup() }
+    }
+
     private fun publishWindow(stimulus: AppKitWindowStimulus) {
         publish(stimulus, acceptWindowStimulus)
     }
@@ -805,13 +863,13 @@ private class AppKitWindowCallbackGate(
 }
 
 private class BorrowedPointerMove(callback: () -> KadreResult<Unit>) {
-    private var callback: (() -> KadreResult<Unit>)? = callback
+    private val callback = AtomicReference<(() -> KadreResult<Unit>)?>(callback)
 
-    fun invoke(): KadreResult<Unit> = callback?.invoke()
+    fun invoke(): KadreResult<Unit> = callback.get()?.invoke()
         ?: KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
 
     fun revoke() {
-        callback = null
+        callback.set(null)
     }
 }
 

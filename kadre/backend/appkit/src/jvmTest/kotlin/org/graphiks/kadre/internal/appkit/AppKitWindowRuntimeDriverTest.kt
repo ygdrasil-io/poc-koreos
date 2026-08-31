@@ -41,6 +41,7 @@ import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionActionOutcome
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.interaction.InteractionKind
 import org.graphiks.kadre.policy.KadrePolicies
@@ -3497,27 +3498,153 @@ class AppKitWindowRuntimeDriverTest {
                     window.surface.capabilities.value.handlerInteractions,
                 ).constraints,
             )
-            val calls = mutableListOf<String>()
-            window.surface.installInteractionHandler(InteractionHandler { context, _ ->
+            val trace = mutableListOf<String>()
+            val registration = window.surface.installInteractionHandler(InteractionHandler { context, event ->
+                trace += "handler:${event.stamp.sequence.value}"
                 assertIs<KadreResult.Success<*>>(context.request(InteractionAction.BeginWindowMove))
-                calls += "handler"
+                trace += "handler-return"
             }).appKitSuccessValue()
-            val inputs = async(start = CoroutineStart.UNDISPATCHED) {
-                window.surface.input.events.take(2).toList()
+            val outcome = async(start = CoroutineStart.UNDISPATCHED) { registration.outcomes.first() }
+            val delivered = mutableListOf<InputEvent>()
+            val inputs = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.collect(delivered::add)
             }
+            var nativeResult: KadreResult<Unit>? = null
 
             port.emitInput("pointer-down-system-move", AppKitInput.PointerEntered(position))
-            port.emitPointerDown("pointer-down-system-move", pointerDown) { calls += "native" }
+            port.emitPointerDownResult("pointer-down-system-move", pointerDown) {
+                trace += "native"
+                KadreResult.Success(Unit).also { nativeResult = it }
+            }
+            val terminal = assertIs<InteractionActionOutcome.Committed>(outcome.await())
+            withTimeout(2.seconds) { while (delivered.filterIsInstance<InputEvent.PointerButtonChanged>().size != 1) yield() }
+            yield()
 
-            val ordinary = assertIs<InputEvent.PointerButtonChanged>(inputs.await().last())
-            assertEquals(listOf("native", "handler"), calls)
+            val ordinary = delivered.filterIsInstance<InputEvent.PointerButtonChanged>().single()
+            assertEquals(listOf("handler:${terminal.stamp.sequence.value}", "native", "handler-return"), trace)
+            assertEquals(KadreResult.Success(Unit), nativeResult)
             assertEquals(PointerButton.Primary, ordinary.button)
             assertEquals(PointerButtonState.Pressed, ordinary.buttonState)
             assertEquals(position, ordinary.position)
             assertEquals(0.5, ordinary.pressure)
+            assertEquals(terminal.stamp, ordinary.stamp)
+            assertEquals(3L, ordinary.stateRevision.value)
             assertEquals(1, port.nativeMoveCalls("pointer-down-system-move"))
+            assertTrue(port.nativeMoveRanOnOwnerThread("pointer-down-system-move"))
+            inputs.cancelAndJoin()
         } finally {
             driver.close()
+        }
+    }
+
+    @Test
+    fun pointerDownFallbacksDeliverExactlyOneOrdinaryInputAndOnlyMoveCanCallNative() = runBlocking {
+        data class Scenario(
+            val name: String,
+            val surfaceCapabilities: Boolean = true,
+            val handler: (() -> InteractionHandler)? = null,
+            val nativeResult: KadreResult<Unit> = KadreResult.Success(Unit),
+            val expectedNativeCalls: Int = 0,
+            val expectedOutcome: KadreFailure? = null,
+        )
+
+        val nativeFailure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "window-move", "typed-failure")
+        val scenarios = listOf(
+            Scenario(name = "no-handler"),
+            Scenario(
+                name = "unsupported-actions",
+                handler = {
+                    InteractionHandler { context, _ ->
+                        assertEquals(
+                            KadreResult.Failure(KadreFailure.Unsupported(org.graphiks.kadre.diagnostics.KadreOperation.Interaction)),
+                            context.request(InteractionAction.BeginWindowResize(org.graphiks.kadre.window.ResizeEdge.North)),
+                        )
+                        assertEquals(
+                            KadreResult.Failure(KadreFailure.Unsupported(org.graphiks.kadre.diagnostics.KadreOperation.Interaction)),
+                            context.request(InteractionAction.LockPointer(org.graphiks.kadre.surface.PointerCaptureMode.Confined)),
+                        )
+                    }
+                },
+            ),
+            Scenario(
+                name = "handler-exception",
+                handler = { InteractionHandler { _, _ -> throw IllegalStateException("pointer handler failure") } },
+            ),
+            Scenario(name = "disabled-capability", surfaceCapabilities = false),
+            Scenario(
+                name = "native-typed-failure",
+                handler = {
+                    InteractionHandler { context, _ ->
+                        assertIs<KadreResult.Success<*>>(context.request(InteractionAction.BeginWindowMove))
+                    }
+                },
+                nativeResult = KadreResult.Failure(nativeFailure),
+                expectedNativeCalls = 1,
+                expectedOutcome = nativeFailure,
+            ),
+        )
+
+        scenarios.forEach { scenario ->
+            val position = LogicalPoint(59.0, 61.0)
+            val pointerDown = AppKitInput.PointerButtonChanged(
+                PointerButton.Primary,
+                PointerButtonState.Pressed,
+                position,
+                pressure = 0.75,
+            )
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "pointer-fallback-${scenario.name}",
+                inputObservationInstalled = true,
+            )
+            val failures = CopyOnWriteArrayList<Throwable>()
+            val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+                resources = KadrePolicies.Default.resources,
+                failureReporter = RuntimeFailureReporter(failures::add),
+                publicAppKitCapabilities = true,
+                publicSurfaceCapabilities = scenario.surfaceCapabilities,
+                enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            )
+
+            try {
+                val title = "pointer-fallback-${scenario.name}"
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    driver.manager.requestWindow(WindowSpec(title = title)).appKitSuccessValue().await(),
+                ).window
+                val registration = scenario.handler?.invoke()?.let(window.surface::installInteractionHandler)?.appKitSuccessValue()
+                val outcome = if (scenario.expectedOutcome != null) {
+                    async(start = CoroutineStart.UNDISPATCHED) { checkNotNull(registration).outcomes.first() }
+                } else {
+                    null
+                }
+                val delivered = mutableListOf<InputEvent>()
+                val inputs = launch(start = CoroutineStart.UNDISPATCHED) {
+                    window.surface.input.events.collect(delivered::add)
+                }
+
+                port.emitInput(title, AppKitInput.PointerEntered(position))
+                port.emitPointerDownResult(title, pointerDown) { scenario.nativeResult }
+                withTimeout(2.seconds) {
+                    while (delivered.filterIsInstance<InputEvent.PointerButtonChanged>().size != 1) yield()
+                }
+                yield()
+
+                val ordinary = delivered.filterIsInstance<InputEvent.PointerButtonChanged>().single()
+                assertEquals(pointerDown.button, ordinary.button, scenario.name)
+                assertEquals(pointerDown.pressure, ordinary.pressure, scenario.name)
+                assertEquals(3L, ordinary.stateRevision.value, scenario.name)
+                assertEquals(scenario.expectedNativeCalls, port.nativeMoveCalls(title), scenario.name)
+                if (scenario.expectedNativeCalls == 1) assertTrue(port.nativeMoveRanOnOwnerThread(title))
+                when (val expected = scenario.expectedOutcome) {
+                    null -> Unit
+                    else -> assertEquals(expected, assertIs<InteractionActionOutcome.Rejected>(outcome!!.await()).failure)
+                }
+                if (scenario.name == "handler-exception") {
+                    assertTrue(failures.any { it.message == "pointer handler failure" })
+                }
+                inputs.cancelAndJoin()
+            } finally {
+                driver.close()
+            }
         }
     }
 
@@ -3602,6 +3729,113 @@ class AppKitWindowRuntimeDriverTest {
 
         assertEquals(0, handlerCalls)
         assertEquals(0, port.nativeMoveCalls("late-pointer-down"))
+    }
+
+    @Test
+    fun teardownRevocationWinsBeforePointerDownAdmission() = runBlocking {
+        val revocationEntered = CountDownLatch(1)
+        val releaseNativeCleanup = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "revoke-wins-pointer-down",
+            inputObservationInstalled = true,
+            onDelegateRevoked = {
+                revocationEntered.countDown()
+                check(releaseNativeCleanup.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+        var handlerCalls = 0
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "revoke-wins-pointer-down"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            window.surface.installInteractionHandler(InteractionHandler { context, _ ->
+                handlerCalls += 1
+                context.request(InteractionAction.BeginWindowMove)
+            }).appKitSuccessValue()
+
+            val close = Thread(driver::close).apply { isDaemon = true }
+            close.start()
+            assertTrue(revocationEntered.await(2, TimeUnit.SECONDS))
+            port.forcePointerDown(
+                "revoke-wins-pointer-down",
+                AppKitInput.PointerButtonChanged(
+                    PointerButton.Primary,
+                    PointerButtonState.Pressed,
+                    LogicalPoint(43.0, 47.0),
+                    pressure = null,
+                ),
+            ) { error("revocation must prevent a late native move") }
+
+            assertEquals(0, handlerCalls)
+            assertEquals(0, port.nativeMoveCalls("revoke-wins-pointer-down"))
+            releaseNativeCleanup.countDown()
+            close.join(2_000)
+            assertFalse(close.isAlive)
+        } finally {
+            releaseNativeCleanup.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun teardownWaitsForAnAdmittedPointerDownBeforeRevokingNativeCallbacks() = runBlocking {
+        val handlerEntered = CountDownLatch(1)
+        val releaseHandler = CountDownLatch(1)
+        val nativeCallbacksRevoked = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "in-flight-pointer-down",
+            inputObservationInstalled = true,
+            onDelegateRevoked = { nativeCallbacksRevoked.countDown() },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+        val window = assertIs<WindowRequestOutcome.OpenedHere>(
+            driver.manager.requestWindow(WindowSpec(title = "in-flight-pointer-down"))
+                .appKitSuccessValue()
+                .await(),
+        ).window
+        window.surface.installInteractionHandler(InteractionHandler { _, _ ->
+            handlerEntered.countDown()
+            check(releaseHandler.await(2, TimeUnit.SECONDS))
+        }).appKitSuccessValue()
+        val callback = Thread {
+            port.emitPointerDown(
+                "in-flight-pointer-down",
+                AppKitInput.PointerButtonChanged(
+                    PointerButton.Primary,
+                    PointerButtonState.Pressed,
+                    LogicalPoint(47.0, 53.0),
+                    pressure = null,
+                ),
+            ) { error("handler did not request a native move") }
+        }.apply { isDaemon = true }
+        callback.start()
+        assertTrue(handlerEntered.await(2, TimeUnit.SECONDS))
+
+        val close = Thread(driver::close).apply { isDaemon = true }
+        close.start()
+
+        assertFalse(nativeCallbacksRevoked.await(200, TimeUnit.MILLISECONDS))
+        releaseHandler.countDown()
+        callback.join(2_000)
+        close.join(2_000)
+
+        assertFalse(callback.isAlive)
+        assertFalse(close.isAlive)
+        assertTrue(nativeCallbacksRevoked.await(2, TimeUnit.SECONDS))
     }
 
     @Test
@@ -4111,6 +4345,8 @@ internal class DeterministicAppKitNativeWindowPort(
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenReadbackTitles = CopyOnWriteArrayList<String>()
     private val nativeMoveCallCounts = linkedMapOf<String, Int>()
+    private val nativeMoveThreads = linkedMapOf<String, Thread>()
+    private val ownerThread = Thread.currentThread()
     private val surfaceActivationHookDelivered = AtomicBoolean(false)
     private val fullscreenCommitArbitrationPaused = AtomicBoolean(false)
     private val fullscreenCommitArbitrationStarted = CountDownLatch(1)
@@ -4456,14 +4692,27 @@ internal class DeterministicAppKitNativeWindowPort(
         input: AppKitInput.PointerButtonChanged,
         nativeMove: () -> Unit,
     ) {
-        checkNotNull(inputObservers[title]).emitPointerDown(input) {
+        emitPointerDownResult(title, input) {
             nativeMove()
-            nativeMoveCallCounts[title] = (nativeMoveCallCounts[title] ?: 0) + 1
             KadreResult.Success(Unit)
         }
     }
 
+    fun emitPointerDownResult(
+        title: String,
+        input: AppKitInput.PointerButtonChanged,
+        nativeMove: () -> KadreResult<Unit>,
+    ) {
+        checkNotNull(inputObservers[title]).emitPointerDown(input) {
+            nativeMoveThreads[title] = Thread.currentThread()
+            nativeMoveCallCounts[title] = (nativeMoveCallCounts[title] ?: 0) + 1
+            nativeMove()
+        }
+    }
+
     fun nativeMoveCalls(title: String): Int = nativeMoveCallCounts[title] ?: 0
+
+    fun nativeMoveRanOnOwnerThread(title: String): Boolean = nativeMoveThreads[title] === ownerThread
 
     fun forcePointerDown(
         title: String,
@@ -4471,6 +4720,7 @@ internal class DeterministicAppKitNativeWindowPort(
         nativeMove: () -> Unit,
     ) {
         checkNotNull(inputObservers[title]).forcePointerDown(input) {
+            nativeMoveThreads[title] = Thread.currentThread()
             nativeMove()
             nativeMoveCallCounts[title] = (nativeMoveCallCounts[title] ?: 0) + 1
             KadreResult.Success(Unit)
