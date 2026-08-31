@@ -37,7 +37,13 @@ internal class DesktopHostFacade(
         if (selection is ProviderSelection.Failure) return KadreResult.Failure(selection.failure)
         val selected = selection as ProviderSelection.Selected
         val provider = selected.provider
-        val request = DesktopEmbeddedRequest(parentScope, applicationFactory, integration, policy)
+        val request = DesktopEmbeddedRequest(
+            parentScope,
+            applicationFactory,
+            integration,
+            policy,
+            embedded.allowUserAttention,
+        )
 
         val result = try {
             provider.attach(request)

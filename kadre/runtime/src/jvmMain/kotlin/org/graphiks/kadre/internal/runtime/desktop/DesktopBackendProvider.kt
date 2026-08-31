@@ -16,6 +16,7 @@ public class DesktopEmbeddedRequest(
     public val applicationFactory: KadreApplicationFactory,
     public val integration: DesktopIntegrationKind,
     public val policy: KadrePolicy,
+    public val allowUserAttention: Boolean = false,
 )
 
 public class DesktopStandaloneRequest(
