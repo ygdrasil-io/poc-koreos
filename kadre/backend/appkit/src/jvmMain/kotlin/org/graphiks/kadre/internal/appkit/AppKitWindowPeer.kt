@@ -12,6 +12,7 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowLevel
 import java.util.concurrent.atomic.AtomicBoolean
 
 @JvmInline
@@ -34,12 +35,22 @@ internal sealed interface AppKitWindowStimulus {
         val snapshot: AppKitWindowGeometrySnapshot,
         val generation: Long,
     ) : AppKitWindowStimulus
+
+    data class FullscreenCallback(
+        override val peerId: AppKitWindowPeerId,
+        val callback: AppKitFullscreenCallback,
+    ) : AppKitWindowStimulus
 }
 
 internal data class AppKitWindowMutation(
     val snapshot: AppKitWindowMutationSnapshot,
     val generation: Long,
     val failure: Throwable?,
+)
+
+internal data class AppKitFullscreenCompletion(
+    val snapshot: AppKitWindowMutationSnapshot,
+    val restoreFailure: Throwable?,
 )
 
 private data class NativeWindowMutationResult(
@@ -109,6 +120,7 @@ internal class AppKitWindowPeer private constructor(
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val inputObserver: AppKitNativeInputObserverOwner?,
     private val callbackGate: AppKitWindowCallbackGate,
+    internal val initialWindowSnapshot: AppKitWindowMutationSnapshot?,
 ) : WindowPeerOwner {
     internal val initialSurfaceSnapshot: AppKitSurfaceSnapshot?
         get() = surfaceObserver?.initialSnapshot
@@ -216,6 +228,61 @@ internal class AppKitWindowPeer private constructor(
         }
     }
 
+    internal fun beginFullscreenToggleArbitration() {
+        callbackGate.beginFullscreenToggle()
+    }
+
+    /** Invokes the generated fullscreen selector but leaves completion to delegate callbacks. */
+    internal fun toggleFullscreen(
+        target: AppKitWindowFullscreenTarget,
+        commit: AppKitWindowMutationCommit,
+        arbitrationAlreadyStarted: Boolean = false,
+    ): Boolean? {
+        if (closed.get()) return null
+        return port.onMainThread {
+            if (closed.get()) {
+                null
+            } else {
+                if (!arbitrationAlreadyStarted) callbackGate.beginFullscreenToggle()
+                port.toggleFullscreen(
+                    window,
+                    target,
+                    object : AppKitWindowMutationCommit {
+                        override val started: Boolean
+                            get() = commit.started
+
+                        override fun beforeFirstSetter(): Boolean =
+                            callbackGate.beforeFullscreenSelectorInvocation(commit::beforeFirstSetter)
+                    },
+                )
+            }
+        }
+    }
+
+    internal fun fullscreenWillObservedSinceToggle(): Boolean =
+        callbackGate.fullscreenWillObservedSinceToggle()
+
+    /** Restores the persistent level and returns a fresh authoritative native snapshot. */
+    internal fun completeFullscreen(desiredLevel: WindowLevel): AppKitFullscreenCompletion =
+        port.onMainThread {
+            check(!closed.get()) { "AppKit fullscreen peer closed before terminal readback" }
+            val restoreFailure = try {
+                port.restoreWindowLevel(window, desiredLevel)
+                null
+            } catch (failure: Throwable) {
+                failure
+            }
+            val snapshot = try {
+                port.readWindow(window)
+            } catch (readbackFailure: Throwable) {
+                if (restoreFailure != null && restoreFailure !== readbackFailure) {
+                    readbackFailure.addSuppressed(restoreFailure)
+                }
+                throw readbackFailure
+            }
+            AppKitFullscreenCompletion(snapshot, restoreFailure)
+        }
+
     private class ImmediateWindowMutationCommit : AppKitWindowMutationCommit {
         private var committed = false
 
@@ -279,6 +346,7 @@ internal class AppKitWindowPeer private constructor(
             port: AppKitNativeWindowPort,
             acceptStimulus: (AppKitWindowStimulus) -> Unit = {},
             acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
+            readInitialWindowSnapshot: Boolean = false,
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
             val callbackGate = AppKitWindowCallbackGate(
@@ -304,12 +372,28 @@ internal class AppKitWindowPeer private constructor(
                         AppKitWindowDelegateCallbacks(
                             windowShouldClose = callbackGate::windowShouldClose,
                             windowWillClose = callbackGate::windowWillClose,
+                            windowWillEnterFullscreen = callbackGate::windowWillEnterFullscreen,
+                            windowDidEnterFullscreen = callbackGate::windowDidEnterFullscreen,
+                            windowDidFailEnterFullscreen = callbackGate::windowDidFailEnterFullscreen,
+                            windowWillExitFullscreen = callbackGate::windowWillExitFullscreen,
+                            windowDidExitFullscreen = callbackGate::windowDidExitFullscreen,
+                            windowDidFailExitFullscreen = callbackGate::windowDidFailExitFullscreen,
                         ),
                     )
                     port.attachContentView(window, contentView)
                     contentAttached = true
                     delegateMayBeAttached = true
                     port.attachDelegate(window, delegate)
+                    val initialWindowSnapshot = if (readInitialWindowSnapshot) {
+                        port.readWindow(window).also { snapshot ->
+                            check(snapshot.level == spec.level) {
+                                "AppKit initial window level readback diverged: " +
+                                    "requested=${spec.level}, effective=${snapshot.level}"
+                            }
+                        }
+                    } else {
+                        null
+                    }
                     port.present(window)
                     geometryObserver = port.observeGeometry(
                         window,
@@ -348,6 +432,7 @@ internal class AppKitWindowPeer private constructor(
                         surfaceObserver,
                         inputObserver,
                         callbackGate,
+                        initialWindowSnapshot,
                     )
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
@@ -408,6 +493,7 @@ private class AppKitWindowCallbackGate(
     private var lastRedrawGeneration = -1L
     private var geometryGeneration = 0L
     private var managedGeometryMutationDepth = 0
+    private var fullscreenWillObservedSinceToggle = false
     private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
 
     fun duringManagedGeometryMutation(
@@ -584,6 +670,46 @@ private class AppKitWindowCallbackGate(
             } else {
                 nativeCloseDelivered = true
                 AppKitWindowStimulus.NativeClosed(peerId)
+            }
+        }
+        stimulus?.let(::publishWindow)
+    }
+
+    fun beginFullscreenToggle() {
+        synchronized(lock) { fullscreenWillObservedSinceToggle = false }
+    }
+
+    fun fullscreenWillObservedSinceToggle(): Boolean =
+        synchronized(lock) { fullscreenWillObservedSinceToggle }
+
+    fun beforeFullscreenSelectorInvocation(invoke: () -> Boolean): Boolean = synchronized(lock) {
+        if (fullscreenWillObservedSinceToggle) false else invoke()
+    }
+
+    fun windowWillEnterFullscreen() = fullscreen(AppKitFullscreenCallback.WillEnter)
+
+    fun windowDidEnterFullscreen() = fullscreen(AppKitFullscreenCallback.DidEnter)
+
+    fun windowDidFailEnterFullscreen() = fullscreen(AppKitFullscreenCallback.DidFailEnter)
+
+    fun windowWillExitFullscreen() = fullscreen(AppKitFullscreenCallback.WillExit)
+
+    fun windowDidExitFullscreen() = fullscreen(AppKitFullscreenCallback.DidExit)
+
+    fun windowDidFailExitFullscreen() = fullscreen(AppKitFullscreenCallback.DidFailExit)
+
+    private fun fullscreen(callback: AppKitFullscreenCallback) {
+        val stimulus = synchronized(lock) {
+            if (!accepting) {
+                null
+            } else {
+                if (
+                    callback == AppKitFullscreenCallback.WillEnter ||
+                    callback == AppKitFullscreenCallback.WillExit
+                ) {
+                    fullscreenWillObservedSinceToggle = true
+                }
+                AppKitWindowStimulus.FullscreenCallback(peerId, callback)
             }
         }
         stimulus?.let(::publishWindow)

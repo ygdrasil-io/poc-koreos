@@ -101,6 +101,20 @@ Les fields d’attach suivent le registre de section 1.1. `runKadreApplication` 
 | `Window.respondToCloseRequest` | `KeptOpen`, `Closing`, `TooLate` ou `AlreadyResolved` | `Invalid("requestId")`, `Closed(Window)`, `Temporary`, `Platform` | la première décision admise gagne ; après commit, le snapshot et l’outcome portant l’operation ID font autorité. |
 | `WebWindowProvider.open` (callback host) | `Success(WebWindowHost)` ou failure transformée en `WindowRequestOutcome.Rejected` | exactement le set de `WindowRequestOutcome.Rejected` | synchrone, pendant l’activation native ; aucun owner n’est transféré avant validation du host retourné. Une exception devient `PlatformFailure(Web, "WebWindowProvider", "callback-exception")`; une failure hors set devient le même domain avec code `"invalid-failure"`. |
 
+Un champ fonctionnel valide mais non supporté de `Window.apply`, tel que
+`FullscreenMode.Exclusive`, est représenté par
+`Success(PartiallyApplied(..., RejectedWindowField(...)))` ; il ne réutilise
+jamais une failure externe et ne produit ni révision ni événement s'il est seul.
+Après une frontière de commit, `Window.apply` peut retourner une outer
+`PlatformFailure` tout en ayant publié un état effectif et son événement. Le
+runtime emploie alors un stimulus interne de failure committée : l'ordre est
+obligatoirement état, événement, completion `Failure`. L'événement porte
+l'operation ID local, sauf lorsqu'un stimulus externe a mis fin à l'opération ;
+il porte alors `null` et la failure reste directement corrélée au caller.
+L'absence de success ne signifie pas rollback ; `Window.state` et
+`Window.events` restent l'autorité. Si le waiter est déjà annulé, la failure
+exacte est rapportée une fois au diagnostic de session.
+
 `WindowRequestOutcome.Rejected.failure` admet exactement `Unsupported(RequestWindow)`, `Invalid(field)`, `Interaction(reason)`, `Closed(Host)`, `ParentScopeCancelled`, `Limit(Window)`, `Temporary` et `Platform`. `ParentScopeCancelled` est admis uniquement lors de la validation du nouveau host retourné par `WebWindowProvider`; il ne décrit pas la scope du requester. `RequesterDetached` et `Cancelled` restent des outcomes dédiés et ne sont pas dupliqués comme failures ; `UserCancelled(RequestWindow)` n’est donc pas admis ici.
 
 La signature normative de `WindowRequest.cancel` devient :

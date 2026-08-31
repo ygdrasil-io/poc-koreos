@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.window.WindowProperty
@@ -13,17 +14,21 @@ internal class AppKitWindowRuntimeDriverFactory(
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
         publicAppKitCapabilities: Boolean = false,
         enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
+        fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
         publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: (() -> Unit)? = null,
         beforeCommitDelivery: (org.graphiks.kadre.window.WindowSpec) -> Unit = { },
+        beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit = { },
     ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriver(
         resources = resources,
         nativePort = nativePortFactory(),
         failureReporter = failureReporter,
         publicAppKitCapabilities = publicAppKitCapabilities,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
         beforeCommitDelivery = beforeCommitDelivery,
+        beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
     )
 }

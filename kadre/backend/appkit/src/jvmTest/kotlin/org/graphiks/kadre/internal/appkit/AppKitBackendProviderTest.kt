@@ -86,6 +86,7 @@ import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
+import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.LogicalSizeRange
 import org.graphiks.kadre.window.Window
@@ -590,6 +591,7 @@ class AppKitBackendProviderTest {
                 EmbeddedNativeApplication(),
                 AppKitProcessBroker(),
                 windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+                fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
             ) { true }
             val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
             val observedWindows = CompletableDeferred<WindowManager>()
@@ -604,7 +606,6 @@ class AppKitBackendProviderTest {
                             contentSize = LogicalSize(320.0, 180.0),
                             minimumSize = LogicalSize(100.0, 80.0),
                             maximumSize = LogicalSize(640.0, 360.0),
-                            fullscreen = FullscreenMode.Borderless,
                             level = WindowLevel.Floating,
                             transparent = true,
                             blurBehind = true,
@@ -655,9 +656,15 @@ class AppKitBackendProviderTest {
                     ),
                     windowCapabilities.level,
                 )
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless),
+                        FeatureAvailability.Available,
+                    ),
+                    windowCapabilities.fullscreen,
+                )
                 listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
-                    windowCapabilities.fullscreen,
                     windowCapabilities.transparency,
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
@@ -1320,7 +1327,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesOnlyTheEightProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesTheNineProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1370,10 +1377,16 @@ class AppKitBackendProviderTest {
                 ),
                 window.capabilities.value.level,
             )
+            assertEquals(
+                Capability.Supported(
+                    setOf(FullscreenKind.Borderless),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.fullscreen,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
-                window.capabilities.value.fullscreen,
                 window.capabilities.value.transparency,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
@@ -1559,6 +1572,155 @@ class AppKitBackendProviderTest {
             } finally {
                 collector.cancel()
                 events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+    )
+    @Test
+    fun publicAppKitFullscreenCompletesWithOneCorrelatedEffectiveStateOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow(
+                WindowSpec(
+                    title = "public-fullscreen",
+                    level = WindowLevel.Floating,
+                ),
+            )
+            assertEquals(
+                Capability.Supported(
+                    setOf(FullscreenKind.Borderless),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.fullscreen,
+            )
+            val events = Channel<WindowEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.collect(events::send)
+            }
+            try {
+                val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                    window.apply(
+                        WindowUpdate(
+                            fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
+                        ),
+                    ).appKitSuccessValue(),
+                )
+
+                assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+                assertEquals(WindowLevel.Floating, outcome.state.level)
+                assertEquals(outcome.state, window.state.value)
+                var properties: WindowEvent.PropertiesChanged? = null
+                withTimeout(5.seconds) {
+                    while (properties == null) {
+                        when (val event = events.receive()) {
+                            is WindowEvent.GeometryChanged -> assertNull(event.operationId)
+                            is WindowEvent.PropertiesChanged -> properties = event
+                            else -> error("unexpected fullscreen event: $event")
+                        }
+                    }
+                }
+                val terminal = checkNotNull(properties)
+                assertEquals(outcome.operationId, terminal.operationId)
+                assertEquals(outcome.state, terminal.state)
+                assertEquals(setOf(WindowProperty.Fullscreen), terminal.changed)
+            } finally {
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @Test
+    fun publicAppKitRejectsInitialBorderlessFullscreenBeforeCreatingANativePeer() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort("public-fullscreen-initial")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
+                    windows.requestWindow(
+                        WindowSpec(
+                            title = "initial-borderless",
+                            fullscreen = FullscreenMode.Borderless,
+                        ),
+                    ),
+                )
+                assertEquals(emptyList(), port.createdWindowTitles)
+                assertEquals(emptyList(), windows.state.value.windows)
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitFullscreenPreservesBorderlessCapabilityWhenOsVersionIsUnavailable() =
+        kotlinx.coroutines.runBlocking {
+            val unavailable = KadreFailure.PlatformFailure(
+                KadrePlatform.AppKit,
+                "fullscreen",
+                "os-version-unavailable",
+            )
+            val port = DeterministicAppKitNativeWindowPort("public-fullscreen-unavailable")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+                fullscreenAvailability = AppKitFullscreenAvailability("10.6.8"),
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")),
+                    windows.requestWindow(
+                        WindowSpec(
+                            title = "unavailable-initial-borderless",
+                            fullscreen = FullscreenMode.Borderless,
+                        ),
+                    ),
+                )
+                assertEquals(emptyList(), port.createdWindowTitles)
+
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "unavailable-fullscreen"))
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless),
+                        FeatureAvailability.Unavailable(unavailable),
+                    ),
+                    window.capabilities.value.fullscreen,
+                )
+                assertEquals(
+                    KadreResult.Failure(unavailable),
+                    window.apply(
+                        WindowUpdate(
+                            fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
+                        ),
+                    ),
+                )
+                assertEquals(emptyList(), port.fullscreenToggleTargets)
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
             }
         }
 

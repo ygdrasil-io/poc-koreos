@@ -17,12 +17,14 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.CGWindowLevelForKey
 import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSApplicationActivationPolicy
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSButton
@@ -34,12 +36,15 @@ import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
+import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
+import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
 import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
@@ -50,14 +55,197 @@ import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun fullscreenAvailabilityUsesNumericMacOsVersionOrdering() {
+        assertFalse(AppKitFullscreenAvailability("10.6.8").isAvailable)
+        assertTrue(AppKitFullscreenAvailability("10.7.0").isAvailable)
+        assertTrue(AppKitFullscreenAvailability("11.0").isAvailable)
+        assertTrue(AppKitFullscreenAvailability("26.0").isAvailable)
+    }
+
+    @Test
+    fun createWindowAddsFullscreenPrimaryWithoutReplacingExistingCollectionBehavior() {
+        val owner = CountingWindowOwner()
+        val calls = mutableListOf<String>()
+        val nativeWindow = RecordingCollectionBehaviorWindow(
+            initialBehavior = NSWindowCollectionBehavior(1L),
+            calls = calls,
+        )
+        val port = KffiAppKitWindowPort(
+            createUnconfiguredWindow = {
+                calls += "create"
+                owner
+            },
+            configureWindow = { actualOwner, _ ->
+                assertSame(owner, actualOwner)
+                calls += "configure"
+            },
+            fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+            collectionBehaviorWindow = { actualOwner ->
+                assertSame(owner, actualOwner)
+                nativeWindow
+            },
+        )
+
+        assertSame(owner, port.createWindow(WindowSpec()))
+
+        assertEquals(129L, nativeWindow.behavior.rawValue)
+        assertEquals(listOf("create", "configure", "read", "write:129"), calls)
+    }
+
+    @Test
+    fun createWindowDoesNotAccessFullscreenCollectionBehaviorWhenUnavailable() {
+        val owner = CountingWindowOwner()
+        var collectionBehaviorAccessed = false
+        val port = KffiAppKitWindowPort(
+            createUnconfiguredWindow = { owner },
+            configureWindow = { actualOwner, _ -> assertSame(owner, actualOwner) },
+            fullscreenAvailability = AppKitFullscreenAvailability("10.6.8"),
+            collectionBehaviorWindow = {
+                collectionBehaviorAccessed = true
+                error("fullscreen collection behavior must remain unavailable")
+            },
+        )
+
+        assertSame(owner, port.createWindow(WindowSpec()))
+        assertFalse(collectionBehaviorAccessed)
+    }
+
+    @Test
+    fun generatedKffiFullscreenSelectorDeliversTerminalCallbacksAndLevelReadbackOnMacOs() {
+        if (!isMacOsHost()) return
+
+        assertTrue(NSThread.isMainThread())
+        val application = NSApplication(NSApplication.sharedApplication())
+        assertTrue(
+            application.setActivationPolicy(
+                NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
+            ),
+        )
+        application.activateIgnoringOtherApps(true)
+        val stimuli = mutableListOf<AppKitWindowStimulus>()
+        val readbackLevels = mutableListOf<WindowLevel>()
+        val nativeApplication = KffiAppKitNativeApplication()
+        val peer = AtomicReference<AppKitWindowPeer?>()
+        val starterFailure = AtomicReference<Throwable?>()
+        val commit = object : AppKitWindowMutationCommit {
+            override var started: Boolean = false
+                private set
+
+            override fun beforeFirstSetter(): Boolean {
+                started = true
+                return true
+            }
+        }
+        val deferredExitSelector = "kadreRunDeferredFullscreenExit:"
+        val deferredExit = ObjCManagedClass.registerOnce(
+            methods = mapOf(deferredExitSelector to ObjCMethodSignatures.VoidObject),
+        ).createInstance {
+            onVoidObject(deferredExitSelector) {
+                try {
+                    val activePeer = checkNotNull(peer.get())
+                    readbackLevels += activePeer.completeFullscreen(WindowLevel.Floating).snapshot.level
+                    activePeer.toggleFullscreen(AppKitWindowFullscreenTarget(FullscreenMode.Windowed), commit)
+                } catch (failure: Throwable) {
+                    starterFailure.compareAndSet(null, failure)
+                    nativeApplication.requestStop()
+                }
+            }
+        }
+        val callback: (AppKitWindowStimulus) -> Unit = { stimulus ->
+            stimuli += stimulus
+            when ((stimulus as? AppKitWindowStimulus.FullscreenCallback)?.callback) {
+                AppKitFullscreenCallback.DidEnter -> {
+                    deferredExit.receiver.performSelectorOnMainThread_withObject_waitUntilDone(
+                        ObjCRuntime.sel(deferredExitSelector),
+                        MemorySegment.NULL,
+                        false,
+                    )
+                }
+                AppKitFullscreenCallback.DidExit -> {
+                    readbackLevels += checkNotNull(peer.get()).completeFullscreen(WindowLevel.Floating).snapshot.level
+                    nativeApplication.requestStop()
+                }
+                AppKitFullscreenCallback.DidFailEnter,
+                AppKitFullscreenCallback.DidFailExit,
+                -> nativeApplication.requestStop()
+                else -> Unit
+            }
+        }
+        val watchdog = Thread.ofPlatform().daemon().name("kadre-fullscreen-native-watchdog").start {
+            try {
+                Thread.sleep(10_000L)
+                nativeApplication.requestStop()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+        val starter = Thread.ofPlatform().daemon().name("kadre-fullscreen-native-starter").start {
+            try {
+                val deadline = System.nanoTime() + 5_000_000_000L
+                while (!nativeApplication.isRunning() && System.nanoTime() < deadline) Thread.onSpinWait()
+                val port = KffiAppKitWindowPort()
+                val prepared = port.prepare(
+                    id = AppKitWindowPeerId(90L),
+                    spec = WindowSpec(title = "fullscreen-native", level = WindowLevel.Floating),
+                    acceptSurfaceStimulus = { },
+                    acceptStimulus = callback,
+                )
+                peer.set(prepared)
+                assertTrue(
+                    assertIs<KadreResult.Success<Boolean>>(
+                        prepared.withDesktopHandle(admitCallback = { true }) { handle ->
+                            val behavior = NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress()))
+                                .collectionBehavior()
+                            NSWindowCollectionBehavior.NSWindowCollectionBehaviorFullScreenPrimary in behavior
+                        },
+                    ).value,
+                    "created AppKit window is missing FullScreenPrimary collection behavior",
+                )
+                prepared.toggleFullscreen(
+                    AppKitWindowFullscreenTarget(FullscreenMode.Borderless),
+                    commit,
+                )
+            } catch (failure: Throwable) {
+                starterFailure.set(failure)
+                nativeApplication.requestStop()
+            }
+        }
+
+        try {
+            nativeApplication.run()
+            starterFailure.get()?.let { throw IllegalStateException("native fullscreen starter failed", it) }
+            assertEquals(
+                listOf(
+                    AppKitFullscreenCallback.WillEnter,
+                    AppKitFullscreenCallback.DidEnter,
+                    AppKitFullscreenCallback.WillExit,
+                    AppKitFullscreenCallback.DidExit,
+                ),
+                stimuli.filterIsInstance<AppKitWindowStimulus.FullscreenCallback>()
+                    .map(AppKitWindowStimulus.FullscreenCallback::callback),
+                "generated delegate did not deliver the fullscreen entry/exit callback sequence",
+            )
+            assertEquals(listOf(WindowLevel.Floating, WindowLevel.Floating), readbackLevels)
+        } finally {
+            watchdog.interrupt()
+            watchdog.join(1_000L)
+            starter.join(1_000L)
+            deferredExit.close()
+            peer.get()?.close()
+        }
+    }
+
     @Test
     fun generatedKffiWindowAppliesInitialContentConstraintsAndResizableMaskOnMacOs() {
         if (!isMacOsHost()) return
@@ -304,58 +492,59 @@ class KffiAppKitWindowPortMacOsTest {
     fun generatedKffiWindowAppliesAndReadsBackWindowLevelsOnMacOs() {
         if (!isMacOsHost()) return
 
-        val peer = KffiAppKitWindowPort().prepare(
-            id = AppKitWindowPeerId(88L),
-            spec = WindowSpec(level = WindowLevel.Floating),
-            acceptSurfaceStimulus = { },
-            acceptStimulus = { },
+        val port = KffiAppKitWindowPort()
+        val initialLevels = listOf(
+            WindowLevel.Normal to CGWindowLevelKey.kCGNormalWindowLevelKey,
+            WindowLevel.Floating to CGWindowLevelKey.kCGFloatingWindowLevelKey,
+            WindowLevel.Modal to CGWindowLevelKey.kCGModalPanelWindowLevelKey,
         )
 
-        try {
-            assertEquals(
-                WindowLevel.Floating,
-                checkNotNull(
-                    peer.updateWindow(
-                        AppKitWindowMutationTarget(
-                            title = PropertyChange.Unchanged,
-                            geometry = unchangedGeometryTarget(),
-                        ),
-                    ),
-                ).level,
-            )
-            assertEquals(
-                KadreResult.Success(
-                    CGWindowLevelForKey(CGWindowLevelKey.kCGFloatingWindowLevelKey).toLong(),
-                ),
-                peer.withDesktopHandle(admitCallback = { true }) { handle ->
-                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
-                },
+        initialLevels.forEachIndexed { index, (level, nativeKey) ->
+            val peer = AppKitWindowPeer.prepare(
+                id = AppKitWindowPeerId(88L + index),
+                spec = WindowSpec(level = level),
+                port = port,
+                acceptSurfaceStimulus = { },
+                acceptStimulus = { },
+                readInitialWindowSnapshot = true,
             )
 
-            assertEquals(
-                WindowLevel.Modal,
-                checkNotNull(
-                    peer.updateWindow(
-                        AppKitWindowMutationTarget(
-                            title = PropertyChange.Unchanged,
-                            geometry = unchangedGeometryTarget(),
-                            level = AppKitWindowLevelTarget(
-                                PropertyChange.Set(WindowLevel.Modal),
+            try {
+                assertEquals(level, checkNotNull(peer.initialWindowSnapshot).level)
+                assertEquals(
+                    KadreResult.Success(CGWindowLevelForKey(nativeKey).toLong()),
+                    peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                        NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
+                    },
+                )
+
+                if (level == WindowLevel.Floating) {
+                    assertEquals(
+                        WindowLevel.Modal,
+                        checkNotNull(
+                            peer.updateWindow(
+                                AppKitWindowMutationTarget(
+                                    title = PropertyChange.Unchanged,
+                                    geometry = unchangedGeometryTarget(),
+                                    level = AppKitWindowLevelTarget(
+                                        PropertyChange.Set(WindowLevel.Modal),
+                                    ),
+                                ),
                             ),
+                        ).level,
+                    )
+                    assertEquals(
+                        KadreResult.Success(
+                            CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
                         ),
-                    ),
-                ).level,
-            )
-            assertEquals(
-                KadreResult.Success(
-                    CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
-                ),
-                peer.withDesktopHandle(admitCallback = { true }) { handle ->
-                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
-                },
-            )
-        } finally {
-            peer.close()
+                        peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                            NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
+                        },
+                    )
+                }
+            } finally {
+                peer.close()
+            }
         }
     }
 
@@ -1204,6 +1393,24 @@ private class CountingWindowOwner : AppKitNativeWindowOwner {
 
     override fun close() {
         closeCount += 1
+    }
+}
+
+private class RecordingCollectionBehaviorWindow(
+    initialBehavior: NSWindowCollectionBehavior,
+    private val calls: MutableList<String>,
+) : NSWindow(MemorySegment.NULL) {
+    var behavior: NSWindowCollectionBehavior = initialBehavior
+        private set
+
+    override fun collectionBehavior(): NSWindowCollectionBehavior {
+        calls += "read"
+        return behavior
+    }
+
+    override fun setCollectionBehavior(value: NSWindowCollectionBehavior) {
+        calls += "write:${value.rawValue}"
+        behavior = value
     }
 }
 

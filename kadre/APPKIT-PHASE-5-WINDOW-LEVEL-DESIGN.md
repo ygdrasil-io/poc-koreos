@@ -82,8 +82,14 @@ WindowProperty.Level, avec le même operation ID que les autres champs de la
 commande. La publication reste soumise à WindowDeliveryPolicy ; aucune callback
 AppKit ne publie directement dans un flow public.
 
-Un Set égal au niveau effectif est un no-op : aucun setter, aucune nouvelle
-révision et aucun événement ne sont produits.
+Un Set égal au niveau effectif et à `desiredLevel` est un no-op : aucun setter,
+aucune nouvelle révision et aucun événement ne sont produits. Lorsque le
+fullscreen maintient une intention interne `desiredLevel` qui diffère de cette
+valeur effective, le même Set réaligne néanmoins cette intention : il retourne
+`Applied` avec un nouvel `operationId` et l'état inchangé, sans setter ni
+publication. Un Set dont
+le champ level réussit dans un `PartiallyApplied` réaligne aussi `desiredLevel` ;
+un rejet de level ou un readback divergent ne le fait pas.
 
 ## Création et capability
 
@@ -108,6 +114,8 @@ WIN-004 couvrira :
 - composition niveau + titre + géométrie + chrome ;
 - cancellation avant et après la frontière de commit ;
 - ordre état avant PropertiesChanged et policy discrète.
+- réalignement de `desiredLevel` égal au niveau effectif, sans setter, révision
+  ni événement, et réussite du champ level dans `PartiallyApplied`.
 
 Ses sentinelles couvrent le clear pré-commit, le no-op, la révision stale, la
 corrélation d'opération et l'absence de contournement de policy.
