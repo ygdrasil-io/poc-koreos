@@ -1425,6 +1425,7 @@ public sealed interface RuntimeSynchronousInteraction {
     public data class PointerPressed(
         public val button: PointerButton,
         public val position: LogicalPoint,
+        public val pressure: Double?,
     ) : RuntimeSynchronousInteraction
 
     public data class KeyPressed(public val physicalKey: PhysicalKey) : RuntimeSynchronousInteraction

@@ -46,6 +46,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.nanoseconds
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @OptIn(DelicateKadreApi::class, ExperimentalCoroutinesApi::class)
 class RuntimeInteractionHandlerTest {
@@ -218,6 +220,27 @@ class RuntimeInteractionHandlerTest {
     }
 
     @Test
+    fun closingRegistrationDoesNotWaitForAnAlreadyAdmittedHandler() = runTest {
+        val surface = surface()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val registration = surface.installInteractionHandler(InteractionHandler { _, _ ->
+            entered.countDown()
+            release.await()
+        }).successValue()
+        val callback = Thread {
+            surface.dispatchSynchronousInteraction(pointerEvent(), emptySet()) { KadreResult.Success(Unit) }
+        }.apply { isDaemon = true }.also(Thread::start)
+        assertTrue(entered.await(1, TimeUnit.SECONDS))
+
+        val close = Thread(registration::close).apply { isDaemon = true }.also(Thread::start)
+        assertTrue(close.joinedWithin(200))
+
+        release.countDown()
+        callback.join()
+    }
+
+    @Test
     fun handlerExceptionsAreReportedToTheSessionAndCannotEscapeDispatch() = runTest {
         val sessionFailures = mutableListOf<KadreFailure>()
         val reports = mutableListOf<Throwable>()
@@ -300,6 +323,11 @@ class RuntimeInteractionHandlerTest {
     private fun <T> KadreResult<T>.failureValue(): KadreFailure = when (this) {
         is KadreResult.Success -> error("expected failure, got $value")
         is KadreResult.Failure -> reason
+    }
+
+    private fun Thread.joinedWithin(timeoutMillis: Long): Boolean {
+        join(timeoutMillis)
+        return !isAlive
     }
 
     private class StampSource {

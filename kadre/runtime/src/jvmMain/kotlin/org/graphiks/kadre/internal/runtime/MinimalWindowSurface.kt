@@ -145,7 +145,7 @@ internal class RuntimeWindowSurface(
     private val interactionDispatchAvailable = interactionDispatchLock.newCondition()
     private var interactionDispatchActive = false
     private var interactionDispatchThread: Thread? = null
-    private val deferredNestedInteractions = ArrayDeque<InteractionEvent>()
+    private val deferredNestedInteractions = ArrayDeque<DeferredInteraction>()
     private val eventSubscribersLock = Any()
     private val eventSubscribers = linkedMapOf<SurfaceEventSubscriber, RuntimeEventCollectorLease>()
     private var eventsTerminal: FlowTerminal? = null
@@ -341,12 +341,15 @@ internal class RuntimeWindowSurface(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        dispatchSynchronousInteraction(event, eventStampSource(), supported, invokeNative)
+        dispatchSynchronousInteraction(
+            eventFactory = { stamp -> DeferredInteraction(event.withStamp(stamp), null) },
+            supported = supported,
+            invokeNative = invokeNative,
+        )
     }
 
     private fun dispatchSynchronousInteraction(
-        event: InteractionEvent,
-        stamp: EventStamp,
+        eventFactory: (EventStamp) -> DeferredInteraction,
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
@@ -365,12 +368,13 @@ internal class RuntimeWindowSurface(
         } finally {
             interactionDispatchLock.unlock()
         }
-        val stamped = event.withStamp(stamp)
+        val admitted = eventFactory(eventStampSource())
+        val stamped = admitted.event
         if (dispatchHandler) {
             try {
                 interactionHandler?.dispatch(stamped, supported, invokeNative)
             } finally {
-                surfaceInput.acceptInteraction(stamped)
+                surfaceInput.acceptInteraction(stamped, admitted.pointerPressure)
                 while (true) {
                     val nested = interactionDispatchLock.run {
                         lock()
@@ -380,7 +384,7 @@ internal class RuntimeWindowSurface(
                             unlock()
                         }
                     } ?: break
-                    surfaceInput.acceptInteraction(nested)
+                    surfaceInput.acceptInteraction(nested.event, nested.pointerPressure)
                 }
                 interactionDispatchLock.lock()
                 try {
@@ -394,7 +398,7 @@ internal class RuntimeWindowSurface(
         } else {
             interactionDispatchLock.lock()
             try {
-                deferredNestedInteractions += stamped
+                deferredNestedInteractions += admitted
             } finally {
                 interactionDispatchLock.unlock()
             }
@@ -406,8 +410,16 @@ internal class RuntimeWindowSurface(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        val stamp = eventStampSource()
-        dispatchSynchronousInteraction(event.toInteractionEvent(stamp), stamp, supported, invokeNative)
+        dispatchSynchronousInteraction(
+            eventFactory = { stamp ->
+                DeferredInteraction(
+                    event.toInteractionEvent(stamp),
+                    (event as? RuntimeSynchronousInteraction.PointerPressed)?.pressure,
+                )
+            },
+            supported = supported,
+            invokeNative = invokeNative,
+        )
     }
 
     internal fun detach(): Boolean {
@@ -1190,6 +1202,11 @@ private fun RuntimeSynchronousInteraction.toInteractionEvent(stamp: EventStamp):
     is RuntimeSynchronousInteraction.TouchStarted -> InteractionEvent.TouchStarted(touchId, position, stamp)
 }
 
+private data class DeferredInteraction(
+    val event: InteractionEvent,
+    val pointerPressure: Double?,
+)
+
 private class RuntimeSurfaceInput(
     private val surfaceId: SurfaceId,
     private val deliveryPolicy: InputDeliveryPolicy,
@@ -1246,7 +1263,7 @@ private class RuntimeSurfaceInput(
         return accepted
     }
 
-    fun acceptInteraction(event: InteractionEvent): Boolean = when (event) {
+    fun acceptInteraction(event: InteractionEvent, pointerPressure: Double? = null): Boolean = when (event) {
         is InteractionEvent.PointerPressed -> accept(
             SurfaceStimulus.PointerButtonChanged(
                 surfaceId = surfaceId,
@@ -1254,7 +1271,7 @@ private class RuntimeSurfaceInput(
                 button = event.button,
                 buttonState = PointerButtonState.Pressed,
                 position = event.position,
-                pressure = null,
+                pressure = pointerPressure,
                 pen = null,
             ),
             event.stamp,

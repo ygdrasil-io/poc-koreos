@@ -86,13 +86,17 @@ internal class RuntimeInteractionHandler(
             activeSurface.set(previousSurface)
             context.invalidate()
             context.outcome?.let(active::publish)
-            synchronized(lock) {
+            val terminalSubscribers = synchronized(lock) {
                 if (activeCallback === active) {
                     activeCallback = null
                     activeCallbackThread = null
                     lock.notifyAll()
                 }
+                active.terminaliseAfterCallback.takeIf { it }?.let {
+                    active.terminaliseLocked()
+                }
             }
+            terminalSubscribers?.forEach { it.close(null) }
         }
     }
 
@@ -100,7 +104,7 @@ internal class RuntimeInteractionHandler(
         val active = synchronized(lock) {
             registration.also { registration = null }
         }
-        active?.closeFromOwner(waitForCallback = true)
+        active?.closeFromOwner()
     }
 
     private inner class CallbackContext(
@@ -156,6 +160,7 @@ internal class RuntimeInteractionHandler(
         val handler: InteractionHandler,
     ) : InteractionRegistration {
         internal var closed = false
+        var terminaliseAfterCallback = false
         private val subscribers = linkedSetOf<OutcomeSubscriber>()
 
         override val outcomes: Flow<InteractionActionOutcome> = flow {
@@ -192,20 +197,30 @@ internal class RuntimeInteractionHandler(
                 if (registration === this@Registration) registration = null
                 true
             }
-            if (shouldClose) closeFromOwner(waitForCallback = true)
+            if (shouldClose) closeFromOwner()
         }
 
-        fun closeFromOwner(waitForCallback: Boolean) {
-            val toClose: List<OutcomeSubscriber>
-            synchronized(lock) {
+        fun closeFromOwner() {
+            val toClose = synchronized(lock) {
                 closed = true
-                if (waitForCallback && activeCallback === this && activeCallbackThread !== Thread.currentThread()) {
-                    while (activeCallback === this) lock.wait()
+                if (registration === this@Registration) registration = null
+                if (activeCallback === this@Registration) {
+                    terminaliseAfterCallback = true
+                    emptyList()
+                } else {
+                    terminaliseLocked()
                 }
-                toClose = subscribers.toList()
-                subscribers.clear()
             }
             toClose.forEach { it.close(null) }
+        }
+
+        fun terminaliseLocked(): List<OutcomeSubscriber> {
+            check(Thread.holdsLock(lock))
+            terminaliseAfterCallback = false
+            if (registration === this@Registration) registration = null
+            val toClose = subscribers.toList()
+            subscribers.clear()
+            return toClose
         }
 
         fun publish(value: InteractionActionOutcome) {
@@ -220,12 +235,12 @@ internal class RuntimeInteractionHandler(
                 }
             }
             if (closeSource || failSession) {
-                closeFromOwner(waitForCallback = false)
+                closeFromOwner()
                 if (failSession) safeFailSession(KadreFailure.SourceOverflow(KadreResourceKind.Interaction))
             }
         }
 
-        private inner class OutcomeSubscriber {
+        inner class OutcomeSubscriber {
             val channel = Channel<InteractionActionOutcome>(deliveryPolicy.discreteEvents.collectorCapacity)
 
             fun offer(value: InteractionActionOutcome): OutcomeOffer {
