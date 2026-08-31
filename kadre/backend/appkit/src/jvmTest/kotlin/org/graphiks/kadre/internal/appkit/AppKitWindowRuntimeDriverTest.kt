@@ -337,7 +337,7 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
-    fun fullscreenRestoreFailureStillPublishesSuccessfulReadbackWithoutClosing() = runBlocking {
+    fun activeLocalFullscreenRestoreFailurePublishesEffectiveStateWithoutDiagnostic() = runBlocking {
         val restoreFailure = IllegalStateException("restore")
         val reported = CopyOnWriteArrayList<Throwable>()
         val port = DeterministicAppKitNativeWindowPort(
@@ -418,7 +418,43 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
-    fun fullscreenReadbackFailureRemainsDistinctAndClosesAfterRestoreFailure() = runBlocking {
+    fun detachedLocalFullscreenReadbackFailureClosesAndReportsOneSemanticDiagnostic() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "detached-readback-failure",
+            fullscreenReadbackFailure = IllegalStateException("readback"),
+        )
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "detached-readback-failure", level = WindowLevel.Floating),
+            )
+            val update = async {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+
+            awaitFullscreenToggle(port)
+            update.cancelAndJoin()
+            port.emitDidEnter("detached-readback-failure")
+
+            withTimeout(2.seconds) {
+                window.state.first { it.phase == WindowPhase.Closed }
+                while (reported.isEmpty()) yield()
+            }
+            assertEquals(1, reported.size)
+            assertEquals(
+                fullscreenFailureFixture("level-readback-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun activeLocalFullscreenReadbackFailureClosesWithoutDiagnostic() = runBlocking {
         val restoreFailure = IllegalStateException("restore")
         val readbackFailure = IllegalStateException("readback")
         val reported = CopyOnWriteArrayList<Throwable>()
@@ -452,7 +488,7 @@ class AppKitWindowRuntimeDriverTest {
             withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
             assertEquals(listOf(WindowLevel.Floating), port.fullscreenRestoreLevels)
             assertEquals(listOf("fullscreen-readback-failure"), port.fullscreenReadbackTitles)
-            assertEquals(listOf<Throwable>(readbackFailure), reported)
+            assertTrue(reported.isEmpty())
             assertEquals(listOf<Throwable>(restoreFailure), readbackFailure.suppressed.toList())
         } finally {
             driver.close()
@@ -692,6 +728,77 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(setOf(WindowProperty.Fullscreen), event.changed)
             assertEquals(null, event.operationId)
             collector.cancelAndJoin()
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalFullscreenDidRestoreFailurePublishesStateAndOneSemanticDiagnostic() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "external-restore-failure",
+            fullscreenRestoreFailure = IllegalStateException("restore"),
+        )
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "external-restore-failure", level = WindowLevel.Floating),
+            )
+            val events = mutableListOf<WindowEvent.PropertiesChanged>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.PropertiesChanged>().collect(events::add)
+            }
+
+            port.emitWillEnter("external-restore-failure")
+            port.emitDidEnter("external-restore-failure")
+
+            withTimeout(2.seconds) {
+                window.state.first { it.fullscreen == FullscreenMode.Borderless }
+                while (events.isEmpty() || reported.isEmpty()) yield()
+            }
+            assertEquals(null, events.single().operationId)
+            assertEquals(setOf(WindowProperty.Fullscreen), events.single().changed)
+            assertEquals(1, reported.size)
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+            collector.cancelAndJoin()
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun externalFullscreenDidReadbackFailureClosesAndReportsOneSemanticDiagnostic() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "external-readback-failure",
+            fullscreenReadbackFailure = IllegalStateException("readback"),
+        )
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "external-readback-failure", level = WindowLevel.Floating),
+            )
+
+            port.emitWillEnter("external-readback-failure")
+            port.emitDidEnter("external-readback-failure")
+
+            withTimeout(2.seconds) {
+                window.state.first { it.phase == WindowPhase.Closed }
+                while (reported.isEmpty()) yield()
+            }
+            assertEquals(1, reported.size)
+            assertEquals(
+                fullscreenFailureFixture("level-readback-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
         } finally {
             driver.close()
         }

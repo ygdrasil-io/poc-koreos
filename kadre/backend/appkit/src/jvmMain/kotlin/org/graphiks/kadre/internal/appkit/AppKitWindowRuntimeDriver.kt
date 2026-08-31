@@ -878,16 +878,16 @@ private class AppKitWindowCommandPort(
         val completion = try {
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
-            reportFailure(failure)
             if (pending != null) {
                 finishFullscreenPending(entry, pending)
                 pending.command.failed(fullscreenFailure("level-readback-failed"))
+            } else {
+                reportFullscreenTerminalFailure("level-readback-failed", failure)
             }
             scheduleNativeClose(entry)
             return
         }
         val snapshot = completion.snapshot
-        if (pending == null) completion.restoreFailure?.let(::reportFailure)
         val current = windowState(entry.command.windowId) ?: return
         val effective = snapshot.withMutationFrom(current).copy(fullscreen = target)
         if (pending != null) {
@@ -912,8 +912,8 @@ private class AppKitWindowCommandPort(
                 entry.command.windowId,
                 RuntimeFullscreenObservation.Did(effective),
             )
-            if (completion.restoreFailure == null && snapshot.level != desiredLevel) {
-                reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
+            if (completion.restoreFailure != null || snapshot.level != desiredLevel) {
+                reportFullscreenTerminalFailure("level-restore-failed", completion.restoreFailure)
             }
         }
     }
@@ -952,18 +952,13 @@ private class AppKitWindowCommandPort(
         val completion = try {
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
-            reportFailure(failure)
             finishFullscreenPending(entry, pending)
             pending.command.failed(fullscreenFailure("level-readback-failed"))
             scheduleNativeClose(entry)
             return null
         }
         val snapshot = completion.snapshot
-        completion.restoreFailure?.let(::reportFailure)
         val current = windowState(entry.command.windowId) ?: return null
-        if (completion.restoreFailure == null && snapshot.level != desiredLevel) {
-            reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
-        }
         return snapshot.withMutationFrom(current)
     }
 
@@ -1160,6 +1155,12 @@ private class AppKitWindowCommandPort(
         } catch (_: LinkageError) {
             // Diagnostics cannot destabilise AppKit ownership cleanup.
         }
+    }
+
+    private fun reportFullscreenTerminalFailure(code: String, cause: Throwable?) {
+        val diagnostic = KadreException(fullscreenFailure(code))
+        cause?.let(diagnostic::addSuppressed)
+        reportFailure(diagnostic)
     }
 
     private fun platformFailure(code: String): KadreFailure.PlatformFailure =
