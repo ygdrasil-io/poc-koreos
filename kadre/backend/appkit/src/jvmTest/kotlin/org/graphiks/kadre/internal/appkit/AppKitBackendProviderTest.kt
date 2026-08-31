@@ -752,10 +752,16 @@ class AppKitBackendProviderTest {
                     surfaceCapabilities.pointerCapture,
                     surfaceCapabilities.hitTesting,
                     surfaceCapabilities.inputDefaultBehavior,
-                    surfaceCapabilities.handlerInteractions,
                     surfaceCapabilities.armedInteractions,
                     surfaceCapabilities.platformAccess,
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertEquals(
+                    Capability.Supported(
+                        setOf(org.graphiks.kadre.interaction.InteractionKind.BeginWindowMove),
+                        FeatureAvailability.Available,
+                    ),
+                    surfaceCapabilities.handlerInteractions,
+                )
                 val stateBeforeUnsupportedUpdate = window.surface.state.value
                 val unsupportedUpdate = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
                     window.surface.apply(

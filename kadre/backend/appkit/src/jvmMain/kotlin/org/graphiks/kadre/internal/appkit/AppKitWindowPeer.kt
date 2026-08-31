@@ -3,7 +3,10 @@ package org.graphiks.kadre.internal.appkit
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.surface.PropertyChange
@@ -355,6 +358,10 @@ internal class AppKitWindowPeer private constructor(
             port: AppKitNativeWindowPort,
             acceptStimulus: (AppKitWindowStimulus) -> Unit = {},
             acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
+            dispatchSynchronousInteraction: (
+                RuntimeSynchronousInteraction,
+                (InteractionAction) -> KadreResult<Unit>,
+            ) -> Boolean = { _, _ -> false },
             readInitialWindowSnapshot: Boolean = false,
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
@@ -363,6 +370,7 @@ internal class AppKitWindowPeer private constructor(
                 acceptStimulus,
                 acceptSurfaceStimulus,
                 reportCallbackFailure,
+                dispatchSynchronousInteraction,
             )
             return port.onMainThread {
                 var window: AppKitNativeWindowOwner? = null
@@ -428,7 +436,10 @@ internal class AppKitWindowPeer private constructor(
                     inputObserver = port.observeInput(
                         window,
                         contentView,
-                        AppKitInputCallbacks(callbackGate::input),
+                        AppKitInputCallbacks(
+                            input = callbackGate::input,
+                            pointerDown = callbackGate::pointerDown,
+                        ),
                     )
                     inputObserver?.let { observer ->
                         callbackGate.inputObservationChanged(
@@ -495,6 +506,10 @@ private class AppKitWindowCallbackGate(
     private val acceptWindowStimulus: (AppKitWindowStimulus) -> Unit,
     private val acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit,
     private val reportFailure: (Throwable) -> Unit,
+    private val dispatchSynchronousInteraction: (
+        RuntimeSynchronousInteraction,
+        (InteractionAction) -> KadreResult<Unit>,
+    ) -> Boolean,
 ) {
     private val lock = Any()
     private var accepting = true
@@ -617,6 +632,37 @@ private class AppKitWindowCallbackGate(
             }
         }
         stimulus?.let(::publishSurface)
+    }
+
+    /**
+     * Keeps the borrowed AppKit event callback synchronous: the runtime decides whether the
+     * native move is admitted, then it publishes the one ordinary immutable pointer input.
+     */
+    fun pointerDown(
+        input: AppKitInput.PointerButtonChanged,
+        invokeNativeMove: () -> KadreResult<Unit>,
+    ) {
+        val admitted = synchronized(lock) { surfaceAccepting }
+        if (!admitted) return
+        val borrowedMove = BorrowedPointerMove(invokeNativeMove)
+        try {
+            val dispatched = dispatchSynchronousInteraction(
+                RuntimeSynchronousInteraction.PointerPressed(input.button, input.position, input.pressure),
+            ) { action ->
+                if (action == InteractionAction.BeginWindowMove) {
+                    borrowedMove.invoke()
+                } else {
+                    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction))
+                }
+            }
+            // Before public surface commit, no runtime surface exists yet. Preserve the regular
+            // immutable path without retaining the native event; live surfaces always dispatch above.
+            if (!dispatched) input(input)
+        } finally {
+            // A handler may retain its callback context. The runtime's native lambda can therefore
+            // outlive this stack frame, but its AppKit event callback cannot.
+            borrowedMove.revoke()
+        }
     }
 
     fun inputObservationChanged(keyboardInstalled: Boolean, pointerInstalled: Boolean) {
@@ -755,6 +801,17 @@ private class AppKitWindowCallbackGate(
                 // Both failures are contained at the Objective-C callback boundary.
             }
         }
+    }
+}
+
+private class BorrowedPointerMove(callback: () -> KadreResult<Unit>) {
+    private var callback: (() -> KadreResult<Unit>)? = callback
+
+    fun invoke(): KadreResult<Unit> = callback?.invoke()
+        ?: KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
+
+    fun revoke() {
+        callback = null
     }
 }
 

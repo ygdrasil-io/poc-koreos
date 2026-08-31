@@ -1125,6 +1125,68 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun pressedPointerKeepsTheGeneratedDragBindingConfinedToItsNativeCallbackOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val ordinary = mutableListOf<AppKitInput>()
+        val pressed = mutableListOf<AppKitInput.PointerButtonChanged>()
+        var window: AppKitNativeWindowOwner? = null
+        var view: AppKitNativeViewOwner? = null
+        var observer: AppKitNativeInputObserverOwner? = null
+
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                view = port.createContentView(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.attachContentView(checkNotNull(window), checkNotNull(view))
+                port.present(checkNotNull(window))
+                observer = port.observeInput(
+                    checkNotNull(window),
+                    checkNotNull(view),
+                    AppKitInputCallbacks(
+                        input = ordinary::add,
+                        pointerDown = { input, invokeNativeMove ->
+                            pressed += input
+                            // The callback intentionally does not begin a visible drag in CI.
+                            // Its only native action is the generated binding captured here.
+                            @Suppress("UNUSED_VARIABLE")
+                            val dragBinding: () -> KadreResult<Unit> = invokeNativeMove
+                        },
+                    ),
+                )
+                val handle = port.desktopHandle(checkNotNull(window), checkNotNull(view))
+                val nativeView = NSView(MemorySegment.ofAddress(handle.nsViewAddress.toLong()))
+
+                nativeView.mouseDown(testPointerEvent())
+            }
+
+            assertEquals(
+                listOf(
+                    AppKitInput.PointerButtonChanged(
+                        button = PointerButton.Primary,
+                        buttonState = PointerButtonState.Pressed,
+                        position = LogicalPoint(12.5, 4.0),
+                        pressure = 0.0,
+                    ),
+                ),
+                pressed,
+            )
+            assertEquals(emptyList(), ordinary)
+        } finally {
+            port.onMainThread {
+                observer?.close()
+                window?.let { nativeWindow ->
+                    port.detachContentView(nativeWindow)
+                    view?.close()
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun nativeContentViewRevokesPublishedKffiKeyboardRouteBeforePeerCloseReleasesTheViewOnMacOs() {
         if (!isMacOsHost()) return
 

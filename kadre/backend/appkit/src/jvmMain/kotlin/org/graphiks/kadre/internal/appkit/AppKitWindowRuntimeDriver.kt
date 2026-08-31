@@ -5,6 +5,9 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseCommand
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
 import org.graphiks.kadre.internal.runtime.CloseRequestRejectionOutcome
@@ -15,6 +18,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceCommandPort
 import org.graphiks.kadre.internal.runtime.SurfaceInitialSnapshot
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand
@@ -45,6 +49,9 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionKind
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -85,6 +92,9 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         },
         fullscreenObservationSink = fullscreenObservationSink,
         beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
+        synchronousInteractionSink = { surfaceId, event, supported, invokeNative ->
+            manager.dispatchSynchronousInteraction(surfaceId, event, supported, invokeNative)
+        },
     )
     private val attentionPort: AppKitWindowAttentionPort? = if (broker != null && attentionOwner != null) {
         BrokeredAppKitWindowAttentionPort(commandPort, broker, attentionOwner)
@@ -104,6 +114,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         acceptedAttention = APPKIT_WINDOW_ATTENTION,
         fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
+        enabledSurfaceCapabilities = appKitSurfaceCapabilities(publicSurfaceCapabilities),
         onLastWindowClosed = onLastWindowClosed,
     ).also(fullscreenObservationSink::install)
 
@@ -119,6 +130,26 @@ internal class AppKitWindowRuntimeDriver internal constructor(
 }
 
 internal interface AppKitWindowAttentionPort : WindowAttentionPort
+
+private val APPKIT_HANDLER_INTERACTIONS = setOf(InteractionKind.BeginWindowMove)
+
+private fun appKitSurfaceCapabilities(publicSurfaceCapabilities: Boolean): SurfaceCapabilities {
+    val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    return SurfaceCapabilities(
+        cursor = unsupportedUpdate,
+        customCursor = unsupportedUpdate,
+        pointerCapture = unsupportedUpdate,
+        hitTesting = unsupportedUpdate,
+        inputDefaultBehavior = unsupportedUpdate,
+        handlerInteractions = if (publicSurfaceCapabilities) {
+            Capability.Supported(APPKIT_HANDLER_INTERACTIONS, FeatureAvailability.Available)
+        } else {
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+        },
+        armedInteractions = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction)),
+        platformAccess = unsupportedUpdate,
+    )
+}
 
 private class BrokeredAppKitWindowAttentionPort(
     private val commandPort: AppKitWindowCommandPort,
@@ -208,6 +239,12 @@ private class AppKitWindowCommandPort(
     private val windowState: (WindowId) -> WindowState?,
     private val fullscreenObservationSink: RuntimeFullscreenObservationSink,
     private val beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
+    private val synchronousInteractionSink: (
+        SurfaceId,
+        RuntimeSynchronousInteraction,
+        Set<InteractionKind>,
+        (InteractionAction) -> org.graphiks.kadre.diagnostics.KadreResult<Unit>,
+    ) -> Boolean,
 ) : WindowCommandPort, SurfaceCommandPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
@@ -426,6 +463,14 @@ private class AppKitWindowCommandPort(
                 port = nativePort,
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
+                dispatchSynchronousInteraction = { event, invokeNative ->
+                    synchronousInteractionSink(
+                        entry.surfaceId,
+                        event,
+                        APPKIT_HANDLER_INTERACTIONS,
+                        invokeNative,
+                    )
+                },
                 reportCallbackFailure = ::reportFailure,
                 readInitialWindowSnapshot = initialWindowReadbackRequired,
             )

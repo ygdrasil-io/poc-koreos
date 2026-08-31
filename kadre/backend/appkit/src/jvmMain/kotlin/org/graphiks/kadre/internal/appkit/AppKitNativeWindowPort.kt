@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.input.KeyLocation
@@ -304,6 +305,10 @@ internal sealed interface AppKitInput {
 /** Callback boundary that admits only immutable input values, never a borrowed native event. */
 internal class AppKitInputCallbacks(
     val input: (AppKitInput) -> Unit,
+    /** Runs only within a pressed-pointer native callback while its event is still borrowed. */
+    val pointerDown: (AppKitInput.PointerButtonChanged, () -> KadreResult<Unit>) -> Unit = { pointer, _ ->
+        input(pointer)
+    },
 )
 
 /** Owns native input callback admission and any tracking-area resource for one view. */
