@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -90,6 +91,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowManagerTest {
@@ -1592,6 +1596,77 @@ class RuntimeWindowManagerTest {
             assertFalse(command.fullscreenSelectorInvoking())
             assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
         } finally {
+            manager.close()
+        }
+    }
+
+    @Test
+    fun fullscreenCancellationBeforePortRegistrationWithdrawsAndDrainsTheNextUpdate() = runTest {
+        val registrationPaused = CountDownLatch(1)
+        val releaseRegistration = CountDownLatch(1)
+        val pauseNextRegistration = AtomicBoolean(false)
+        val admittedSelectors = CopyOnWriteArrayList<WindowUpdateCommand>()
+        val port = DeterministicWindowCommandPort().apply {
+            updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+            cancellationRequiresRegisteredUpdate = true
+            beforeUpdateRegistration = {
+                if (pauseNextRegistration.compareAndSet(true, false)) {
+                    registrationPaused.countDown()
+                    check(releaseRegistration.await(2, TimeUnit.SECONDS))
+                }
+            }
+            onUpdate = admittedSelectors::add
+        }
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
+
+        try {
+            val window = openFullscreenWindow(manager, port)
+            val first = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            val firstCommand = port.updateCommands.single()
+            val second = async(context = Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            }
+            pauseNextRegistration.set(true)
+            val firstTerminal = async(Dispatchers.Default) {
+                firstCommand.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+            }
+            assertTrue(registrationPaused.await(2, TimeUnit.SECONDS))
+            admittedSelectors.clear()
+
+            val cancellationThread = Thread { second.cancel() }.apply { start() }
+            val cancellationDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2L)
+            while (
+                cancellationThread.isAlive &&
+                cancellationThread.state != Thread.State.BLOCKED &&
+                port.updateCancellationCommands.isEmpty()
+            ) {
+                check(System.nanoTime() < cancellationDeadline) { "cancellation did not reach withdrawal" }
+                Thread.yield()
+            }
+            releaseRegistration.countDown()
+            cancellationThread.join(2_000L)
+            assertFalse(cancellationThread.isAlive)
+            withTimeout(2.seconds) { firstTerminal.await() }
+            assertIs<WindowUpdateOutcome.Applied>(withTimeout(2.seconds) { first.await() }.successValue())
+            withTimeout(2.seconds) { second.join() }
+            assertTrue(second.isCancelled)
+
+            val third = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            }
+            assertEquals(3, port.updateCommands.size)
+            val thirdCommand = port.updateCommands.last()
+            thirdCommand.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Windowed))
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { third.await() }.successValue(),
+            )
+            assertEquals(FullscreenMode.Windowed, outcome.state.fullscreen)
+            assertEquals(listOf(thirdCommand.operationId), admittedSelectors.map { it.operationId })
+        } finally {
+            releaseRegistration.countDown()
             manager.close()
         }
     }
@@ -3425,8 +3500,8 @@ class RuntimeWindowManagerTest {
 
     private class DeterministicWindowCommandPort : WindowCommandPort {
         val openCommands = mutableListOf<WindowOpenCommand>()
-        val updateCommands = mutableListOf<WindowUpdateCommand>()
-        val updateCancellationCommands = mutableListOf<WindowUpdateCancellationCommand>()
+        val updateCommands = CopyOnWriteArrayList<WindowUpdateCommand>()
+        val updateCancellationCommands = CopyOnWriteArrayList<WindowUpdateCancellationCommand>()
         val pendingCancellationCommands = mutableListOf<PendingWindowCancellationCommand>()
         val openedCloseCommands = mutableListOf<OpenedWindowCloseCommand>()
         val closeEvents = mutableListOf<PortCloseEvent>()
@@ -3434,7 +3509,9 @@ class RuntimeWindowManagerTest {
             PendingWindowCancellationOutcome.CancelledBeforeCommit
         var openedCloseOutcome: OpenedWindowCloseOutcome = OpenedWindowCloseOutcome.Accepted
         var updateCancellationOutcome: WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+        var cancellationRequiresRegisteredUpdate: Boolean = false
         var autoAdmitFullscreenSelector: Boolean = true
+        var beforeUpdateRegistration: (WindowUpdateCommand) -> Unit = {}
         var onOpen: (WindowOpenCommand) -> Unit = {}
         var onUpdate: (WindowUpdateCommand) -> Unit = {}
         var onPendingCancellation: (PendingWindowCancellationCommand) -> Unit = {}
@@ -3446,6 +3523,7 @@ class RuntimeWindowManagerTest {
         }
 
         override fun requestUpdate(command: WindowUpdateCommand) {
+            beforeUpdateRegistration(command)
             updateCommands += command
             val fullscreen = command.update.fullscreen is PropertyChange.Set
             if (fullscreen && !autoAdmitFullscreenSelector) {
@@ -3462,6 +3540,12 @@ class RuntimeWindowManagerTest {
             command: WindowUpdateCancellationCommand,
         ): WindowUpdateCancellationOutcome {
             updateCancellationCommands += command
+            if (
+                cancellationRequiresRegisteredUpdate &&
+                updateCommands.none { it.operationId == command.operationId }
+            ) {
+                return WindowUpdateCancellationOutcome.TooLate
+            }
             return updateCancellationOutcome
         }
 

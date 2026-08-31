@@ -482,13 +482,21 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun withdrawWindowUpdate(window: RuntimeWindow, operationId: WindowOperationId) {
-        val outcome = guardPort("window-update-cancellation-exception") {
-            commandPort.requestUpdateCancellation(WindowUpdateCancellationCommand(operationId))
+        val outcome = synchronized(lock) {
+            guardPort("window-update-cancellation-exception") {
+                commandPort.requestUpdateCancellation(WindowUpdateCancellationCommand(operationId))
+            }.also { guarded ->
+                if (
+                    guarded is GuardedCall.Success &&
+                    guarded.value == WindowUpdateCancellationOutcome.CancelledBeforeCommit
+                ) {
+                    dispatchedWindowUpdates.remove(operationId)
+                }
+            }
         }
         if (outcome is GuardedCall.Success) {
             when (outcome.value) {
                 WindowUpdateCancellationOutcome.CancelledBeforeCommit -> {
-                    synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
                     window.withdrawDispatchedUpdate(operationId)
                 }
                 WindowUpdateCancellationOutcome.CancellationRequested -> Unit

@@ -831,6 +831,62 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun externalWillBeforePendingPreventsLocalToggleAndDrainsOrdinaryUpdate() = runBlocking {
+        val willObserved = CountDownLatch(1)
+        val allowWillFollowUp = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(name = "external-will-before-pending")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+            beforeFullscreenFollowUpEnqueue = { callback ->
+                if (callback == AppKitFullscreenCallback.WillEnter) {
+                    willObserved.countDown()
+                    check(allowWillFollowUp.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "external-will-before-pending"))
+            val externalWill = async(Dispatchers.Default) {
+                port.emitWillEnter("external-will-before-pending")
+            }
+            assertTrue(willObserved.await(2, TimeUnit.SECONDS))
+
+            val fullscreen = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            allowWillFollowUp.countDown()
+            withTimeout(2.seconds) { externalWill.await() }
+
+            val ordinary = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("ordinary-after-external")))
+            }
+            assertFalse(ordinary.isCompleted)
+            port.emitDidEnter("external-will-before-pending")
+
+            assertEquals(
+                KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
+                withTimeout(2.seconds) { fullscreen.await() },
+            )
+            val ordinaryOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { ordinary.await() }.successValue(),
+            )
+            assertEquals("ordinary-after-external", ordinaryOutcome.state.title)
+            assertTrue(port.fullscreenToggleTargets.isEmpty())
+        } finally {
+            allowWillFollowUp.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun externalWillQueuedBeforeFullscreenCommitWinsWithoutADoubleToggle() = runBlocking {
         val queueBlocked = CountDownLatch(1)
         val allowQueue = CountDownLatch(1)

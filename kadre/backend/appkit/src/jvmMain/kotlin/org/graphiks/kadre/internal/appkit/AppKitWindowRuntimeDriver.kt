@@ -170,6 +170,9 @@ private class AppKitWindowCommandPort(
                     if (pending.isFullscreenMutation()) {
                         check(entry.fullscreenPending == null) { "duplicate AppKit fullscreen mutation" }
                         entry.fullscreenPending = pending
+                        if (entry.pendingExternalFullscreenWills > 0) {
+                            pending.claimExternalFullscreenBeforeCommitLocked()
+                        }
                     }
                 }
             }
@@ -415,6 +418,7 @@ private class AppKitWindowCommandPort(
                         stimulus.callback == AppKitFullscreenCallback.WillEnter ||
                         stimulus.callback == AppKitFullscreenCallback.WillExit
                     ) {
+                        entry.pendingExternalFullscreenWills += 1
                         entry.fullscreenPending?.claimExternalFullscreenBeforeCommitLocked()
                     }
                     if (entry.runtimeWindowReady) {
@@ -731,6 +735,15 @@ private class AppKitWindowCommandPort(
             -> FullscreenMode.Windowed
         }
         val correlated = synchronized(lock) {
+            if (
+                callback == AppKitFullscreenCallback.WillEnter ||
+                callback == AppKitFullscreenCallback.WillExit
+            ) {
+                check(entry.pendingExternalFullscreenWills > 0) {
+                    "AppKit fullscreen Will claim is missing"
+                }
+                entry.pendingExternalFullscreenWills -= 1
+            }
             val pending = entry.fullscreenPending ?: return@synchronized null
             if (pending.nativeCommitStarted) {
                 pending
@@ -1042,6 +1055,7 @@ private class AppKitWindowCommandPort(
         entry.bufferedSurfaceStimuli.clear()
         entry.bufferedGeometryStimuli.clear()
         entry.bufferedFullscreenStimuli.clear()
+        entry.pendingExternalFullscreenWills = 0
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
         if (byWindow[entry.command.windowId] === entry) byWindow.remove(entry.command.windowId)
@@ -1081,6 +1095,7 @@ private class AppKitWindowCommandPort(
         val bufferedGeometryStimuli = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
         var runtimeWindowReady: Boolean = false
         val bufferedFullscreenStimuli = ArrayDeque<AppKitWindowStimulus.FullscreenCallback>()
+        var pendingExternalFullscreenWills: Int = 0
         var fullscreenPending: PendingWindowMutationCommand? = null
         var cleanupScheduled: Boolean = false
         var cleanupFinished: Boolean = false
