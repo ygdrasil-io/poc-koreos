@@ -1121,6 +1121,219 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun ordinaryMutationsQueuedBeforeExternalWillWaitForDidEnterBeforeTheirSetters() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val allowQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val targetIdentity = "ordinary-before-external-did"
+        val port = DeterministicAppKitNativeWindowPort(
+            name = targetIdentity,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(allowQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val blocker = openedWindow(driver, WindowSpec(title = "ordinary-queue-blocker-did"))
+            val target = openedWindow(driver, WindowSpec(title = targetIdentity))
+            val blockingUpdate = async(Dispatchers.Default) {
+                blocker.apply(WindowUpdate(title = PropertyChange.Set("ordinary-queue-released-did")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            val titleMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(title = PropertyChange.Set("after-external-did")))
+            }
+            val levelMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+            }
+            port.emitWillEnter(targetIdentity)
+            allowQueue.countDown()
+
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(target).withDesktopHandle { Unit }.successValue()
+
+            assertFalse(titleMutation.isCompleted)
+            assertFalse(levelMutation.isCompleted)
+            assertEquals(targetIdentity, port.title(targetIdentity))
+            assertEquals(WindowLevel.Normal, port.level(targetIdentity))
+
+            port.emitDidEnter(targetIdentity)
+
+            val titleOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { titleMutation.await() }.successValue(),
+            )
+            val levelOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { levelMutation.await() }.successValue(),
+            )
+            assertEquals(FullscreenMode.Borderless, titleOutcome.state.fullscreen)
+            assertEquals(FullscreenMode.Borderless, levelOutcome.state.fullscreen)
+            assertEquals("after-external-did", levelOutcome.state.title)
+            assertEquals(WindowLevel.Floating, levelOutcome.state.level)
+            assertEquals("after-external-did", port.title(targetIdentity))
+            assertEquals(WindowLevel.Floating, port.level(targetIdentity))
+        } finally {
+            allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun ordinaryMutationsQueuedBeforeExternalWillResumeAfterDidFailEnter() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val allowQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val targetIdentity = "ordinary-before-external-did-fail"
+        val port = DeterministicAppKitNativeWindowPort(
+            name = targetIdentity,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(allowQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val blocker = openedWindow(driver, WindowSpec(title = "ordinary-queue-blocker-did-fail"))
+            val target = openedWindow(driver, WindowSpec(title = targetIdentity))
+            val blockingUpdate = async(Dispatchers.Default) {
+                blocker.apply(WindowUpdate(title = PropertyChange.Set("ordinary-queue-released-did-fail")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            val titleMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(title = PropertyChange.Set("after-external-did-fail")))
+            }
+            val levelMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+            }
+            port.emitWillEnter(targetIdentity)
+            allowQueue.countDown()
+
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(target).withDesktopHandle { Unit }.successValue()
+
+            assertFalse(titleMutation.isCompleted)
+            assertFalse(levelMutation.isCompleted)
+            assertEquals(targetIdentity, port.title(targetIdentity))
+            assertEquals(WindowLevel.Normal, port.level(targetIdentity))
+
+            port.emitDidFailEnter(targetIdentity)
+
+            val titleOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { titleMutation.await() }.successValue(),
+            )
+            val levelOutcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { levelMutation.await() }.successValue(),
+            )
+            assertEquals(FullscreenMode.Windowed, titleOutcome.state.fullscreen)
+            assertEquals(FullscreenMode.Windowed, levelOutcome.state.fullscreen)
+            assertEquals("after-external-did-fail", levelOutcome.state.title)
+            assertEquals(WindowLevel.Floating, levelOutcome.state.level)
+            assertEquals("after-external-did-fail", port.title(targetIdentity))
+            assertEquals(WindowLevel.Floating, port.level(targetIdentity))
+        } finally {
+            allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun ordinaryMutationsHeldBehindExternalWillCloseWithoutALateSetter() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val allowQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val targetIdentity = "ordinary-before-external-close"
+        val port = DeterministicAppKitNativeWindowPort(
+            name = targetIdentity,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(allowQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val blocker = openedWindow(driver, WindowSpec(title = "ordinary-queue-blocker-close"))
+            val target = openedWindow(driver, WindowSpec(title = targetIdentity))
+            val blockingUpdate = async(Dispatchers.Default) {
+                blocker.apply(WindowUpdate(title = PropertyChange.Set("ordinary-queue-released-close")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            val titleMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(title = PropertyChange.Set("must-not-set-after-close")))
+            }
+            val levelMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+            }
+            port.emitWillEnter(targetIdentity)
+            allowQueue.countDown()
+
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(target).withDesktopHandle { Unit }.successValue()
+
+            assertFalse(titleMutation.isCompleted)
+            assertFalse(levelMutation.isCompleted)
+            assertEquals(targetIdentity, port.title(targetIdentity))
+            assertEquals(WindowLevel.Normal, port.level(targetIdentity))
+
+            assertIs<WindowCloseOutcome.Accepted>(target.close().successValue())
+            withTimeout(2.seconds) { target.state.first { it.phase == WindowPhase.Closed } }
+
+            val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            assertEquals(closed, withTimeout(2.seconds) { titleMutation.await() })
+            assertEquals(closed, withTimeout(2.seconds) { levelMutation.await() })
+
+            port.emitDidEnter(targetIdentity)
+            assertIs<RuntimeDesktopWindowHandleAccess>(blocker).withDesktopHandle { Unit }.successValue()
+            assertEquals(targetIdentity, port.title(targetIdentity))
+            assertEquals(WindowLevel.Normal, port.level(targetIdentity))
+        } finally {
+            allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun externalWillQueuedBeforeFullscreenCommitWinsWithoutADoubleToggle() = runBlocking {
         val queueBlocked = CountDownLatch(1)
         val allowQueue = CountDownLatch(1)
@@ -2760,6 +2973,8 @@ internal class DeterministicAppKitNativeWindowPort(
     fun styleMask(title: String): Long = checkNotNull(windows[title]).styleMask
 
     fun chrome(title: String): AppKitWindowChromeSnapshot = checkNotNull(windows[title]).chrome
+
+    fun title(identity: String): String = checkNotNull(windows[identity]).title
 
     fun level(title: String): WindowLevel = checkNotNull(windows[title]).level
 

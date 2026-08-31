@@ -1454,11 +1454,9 @@ internal class RuntimeWindow(
             invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
-            if (update.fullscreen !is PropertyChange.Unchanged) {
-                update.expectedRevision?.let { expected ->
-                    if (expected != current.revision) {
-                        return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
-                    }
+            update.expectedRevision?.let { expected ->
+                if (expected != current.revision) {
+                    return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
                 }
             }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
@@ -1498,11 +1496,7 @@ internal class RuntimeWindow(
                 .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
             val mutationChanged = mutationChanged(current, candidate)
             val requestedLevel = (canonicalUpdate.level as? PropertyChange.Set)?.value
-            val deferBehindFullscreenBarrier = fullscreenBarrier != null &&
-                (
-                    canonicalUpdate.fullscreen is PropertyChange.Set ||
-                        requestedLevel != null && requestedLevel != desiredLevel
-                    )
+            val deferBehindFullscreenBarrier = fullscreenBarrier != null
             if (!mutationChanged && !deferBehindFullscreenBarrier) {
                 update.expectedRevision?.let { expected ->
                     if (expected != current.revision) {

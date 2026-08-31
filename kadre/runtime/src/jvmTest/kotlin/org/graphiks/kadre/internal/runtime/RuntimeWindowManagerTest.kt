@@ -1471,6 +1471,127 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun fullscreenExternalBarrierDefersEveryOrdinaryNoOpUntilDidEnter() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "unchanged")).successValue(),
+            port.openCommands.single(),
+        )
+        val preTransitionRevision = window.state.value.revision
+        manager.acceptWindowFullscreenObservation(
+            window.id,
+            WindowFullscreenObservation.Will(FullscreenMode.Borderless),
+        )
+
+        val titleNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("unchanged")))
+        }
+        val levelNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Normal)))
+        }
+        val staleTitleNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("unchanged"),
+                    expectedRevision = preTransitionRevision,
+                ),
+            )
+        }
+
+        assertFalse(titleNoOp.isCompleted)
+        assertFalse(levelNoOp.isCompleted)
+        assertFalse(staleTitleNoOp.isCompleted)
+        assertTrue(port.updateCommands.isEmpty())
+
+        manager.acceptWindowFullscreenObservation(
+            window.id,
+            WindowFullscreenObservation.Did(
+                window.state.value.copy(fullscreen = FullscreenMode.Borderless),
+            ),
+        )
+
+        val titleOutcome = assertIs<WindowUpdateOutcome.Applied>(titleNoOp.await().successValue())
+        val levelOutcome = assertIs<WindowUpdateOutcome.Applied>(levelNoOp.await().successValue())
+        assertEquals(FullscreenMode.Borderless, titleOutcome.state.fullscreen)
+        assertEquals(FullscreenMode.Borderless, levelOutcome.state.fullscreen)
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.StaleRevision(
+                    expected = preTransitionRevision.value,
+                    received = window.state.value.revision.value,
+                ),
+            ),
+            staleTitleNoOp.await(),
+        )
+        assertTrue(port.updateCommands.isEmpty())
+    }
+
+    @Test
+    fun fullscreenAwaitingLocalBarrierDefersEveryOrdinaryNoOpUntilDidEnter() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "unchanged")).successValue(),
+            port.openCommands.single(),
+        )
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val enterCommand = port.updateCommands.single()
+        val preTransitionRevision = window.state.value.revision
+
+        val titleNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("unchanged")))
+        }
+        val levelNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Normal)))
+        }
+        val staleTitleNoOp = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Set("unchanged"),
+                    expectedRevision = preTransitionRevision,
+                ),
+            )
+        }
+
+        assertFalse(titleNoOp.isCompleted)
+        assertFalse(levelNoOp.isCompleted)
+        assertFalse(staleTitleNoOp.isCompleted)
+        assertEquals(1, port.updateCommands.size)
+
+        enterCommand.fullscreenDid(
+            window.state.value.copy(fullscreen = FullscreenMode.Borderless),
+        )
+
+        assertEquals(
+            FullscreenMode.Borderless,
+            assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue()).state.fullscreen,
+        )
+        val titleOutcome = assertIs<WindowUpdateOutcome.Applied>(titleNoOp.await().successValue())
+        val levelOutcome = assertIs<WindowUpdateOutcome.Applied>(levelNoOp.await().successValue())
+        assertEquals(FullscreenMode.Borderless, titleOutcome.state.fullscreen)
+        assertEquals(FullscreenMode.Borderless, levelOutcome.state.fullscreen)
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.StaleRevision(
+                    expected = preTransitionRevision.value,
+                    received = window.state.value.revision.value,
+                ),
+            ),
+            staleTitleNoOp.await(),
+        )
+        assertEquals(1, port.updateCommands.size)
+    }
+
+    @Test
     fun fullscreenCommittedLevelRestoreFailurePublishesEffectiveStateBeforeFailure() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())
