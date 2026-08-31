@@ -4,11 +4,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.interaction.ArmedInteractionConstraints
+import org.graphiks.kadre.interaction.ArmedInteraction
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionArmOptions
+import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.interaction.InteractionRegistration
 
 public interface HostSurface {
     public val id: SurfaceId
@@ -19,6 +26,18 @@ public interface HostSurface {
 
     public fun requestRedraw(): KadreResult<Unit>
     public suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome>
+
+    @DelicateKadreApi
+    public fun installInteractionHandler(
+        handler: InteractionHandler,
+    ): KadreResult<InteractionRegistration> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+
+    public suspend fun armInteraction(
+        action: InteractionAction,
+        options: InteractionArmOptions,
+    ): KadreResult<ArmedInteraction> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.ArmInteraction))
 }
 
 public data class SurfaceState(

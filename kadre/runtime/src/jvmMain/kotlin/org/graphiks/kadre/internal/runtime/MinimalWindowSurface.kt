@@ -10,9 +10,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.locks.ReentrantLock
 import org.graphiks.kadre.application.EventDeliverySpan
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreException
@@ -28,12 +30,25 @@ import org.graphiks.kadre.input.InputStateRevision
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.KeyboardState
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.KeyLocation
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerId
 import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.input.TouchPhase
+import org.graphiks.kadre.input.TouchState
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionArmOptions
+import org.graphiks.kadre.interaction.ArmedInteraction
+import org.graphiks.kadre.interaction.InteractionEvent
+import org.graphiks.kadre.interaction.InteractionHandler
+import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.interaction.InteractionRegistration
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
@@ -102,12 +117,27 @@ internal class RuntimeWindowSurface(
     private val mutableCapabilities = MutableStateFlow(liveCapabilities)
     private val eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow)
     private val surfaceInput = RuntimeSurfaceInput(
+        surfaceId = id,
         deliveryPolicy = inputDeliveryPolicy,
         eventStampSource = eventStampSource,
         eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         failureReporter = ::safeReport,
         sessionFailureHandler = sessionFailureHandler,
     )
+    private val interactionHandler = (liveCapabilities.handlerInteractions as? Capability.Supported<Set<InteractionKind>>)
+        ?.constraints
+        ?.takeIf(Set<InteractionKind>::isNotEmpty)
+        ?.let {
+            RuntimeInteractionHandler(
+                deliveryPolicy = deliveryPolicy,
+                failureReporter = failureReporter,
+                sessionFailureHandler = sessionFailureHandler,
+            )
+        }
+    private val interactionDispatchLock = ReentrantLock()
+    private val interactionDispatchAvailable = interactionDispatchLock.newCondition()
+    private var interactionDispatchActive = false
+    private var interactionDispatchThread: Thread? = null
     private val eventSubscribersLock = Any()
     private val eventSubscribers = linkedMapOf<SurfaceEventSubscriber, RuntimeEventCollectorLease>()
     private var eventsTerminal: FlowTerminal? = null
@@ -131,6 +161,23 @@ internal class RuntimeWindowSurface(
         }
     }
     override val input: SurfaceInput = surfaceInput
+
+    @OptIn(DelicateKadreApi::class)
+    override fun installInteractionHandler(
+        handler: InteractionHandler,
+    ): KadreResult<InteractionRegistration> {
+        if (state.value.attachment == SurfaceAttachmentState.Detached) {
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        }
+        return interactionHandler?.install(handler)
+            ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+    }
+
+    override suspend fun armInteraction(
+        action: InteractionAction,
+        options: InteractionArmOptions,
+    ): KadreResult<ArmedInteraction> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.ArmInteraction))
 
     override fun requestRedraw(): KadreResult<Unit> {
         var admittedTicket: SurfaceRedrawGeneration? = null
@@ -280,6 +327,44 @@ internal class RuntimeWindowSurface(
         return accepted
     }
 
+    internal fun dispatchSynchronousInteraction(
+        event: InteractionEvent,
+        supported: Set<InteractionKind>,
+        invokeNative: (InteractionAction) -> KadreResult<Unit>,
+    ) {
+        val stamped = event.withStamp(eventStampSource())
+        interactionDispatchLock.lock()
+        val dispatchHandler = try {
+            while (interactionDispatchActive && interactionDispatchThread !== Thread.currentThread()) {
+                interactionDispatchAvailable.await()
+            }
+            if (interactionDispatchActive) {
+                false
+            } else {
+                interactionDispatchActive = true
+                interactionDispatchThread = Thread.currentThread()
+                true
+            }
+        } finally {
+            interactionDispatchLock.unlock()
+        }
+        if (dispatchHandler) {
+            try {
+                interactionHandler?.dispatch(stamped, supported, invokeNative)
+            } finally {
+                interactionDispatchLock.lock()
+                try {
+                    interactionDispatchActive = false
+                    interactionDispatchThread = null
+                    interactionDispatchAvailable.signalAll()
+                } finally {
+                    interactionDispatchLock.unlock()
+                }
+            }
+        }
+        surfaceInput.acceptInteraction(stamped)
+    }
+
     internal fun detach(): Boolean {
         var admission: PublicationAdmission? = null
         val detached = synchronized(lock) {
@@ -288,6 +373,7 @@ internal class RuntimeWindowSurface(
             true
         }
         admission?.let(::finishPublicationAdmission)
+        if (detached) interactionHandler?.close()
         return detached
     }
 
@@ -607,6 +693,7 @@ internal class RuntimeWindowSurface(
         failure: KadreFailure?,
         failSession: Boolean,
     ): PublicationAdmission {
+        interactionHandler?.close()
         redrawTicket = null
         currentState = currentState.copy(
             attachment = SurfaceAttachmentState.Detached,
@@ -1037,7 +1124,14 @@ private fun coalescedStamp(previous: EventStamp, latest: EventStamp): EventStamp
     )
 }
 
+private fun InteractionEvent.withStamp(stamp: EventStamp): InteractionEvent = when (this) {
+    is InteractionEvent.PointerPressed -> copy(stamp = stamp)
+    is InteractionEvent.KeyPressed -> copy(stamp = stamp)
+    is InteractionEvent.TouchStarted -> copy(stamp = stamp)
+}
+
 private class RuntimeSurfaceInput(
+    private val surfaceId: SurfaceId,
     private val deliveryPolicy: InputDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
     private val eventCollectorGate: RuntimeEventCollectorGate,
@@ -1092,6 +1186,73 @@ private class RuntimeSurfaceInput(
         return accepted
     }
 
+    fun acceptInteraction(event: InteractionEvent): Boolean = when (event) {
+        is InteractionEvent.PointerPressed -> accept(
+            SurfaceStimulus.PointerButtonChanged(
+                surfaceId = surfaceId,
+                kind = PointerKind.Mouse,
+                button = event.button,
+                buttonState = PointerButtonState.Pressed,
+                position = event.position,
+                pressure = null,
+                pen = null,
+            ),
+            event.stamp,
+        )
+
+        is InteractionEvent.KeyPressed -> accept(
+            SurfaceStimulus.KeyChanged(
+                surfaceId = surfaceId,
+                physicalKey = event.physicalKey,
+                logicalKey = LogicalKey.Unidentified("interaction-key"),
+                location = KeyLocation.Standard,
+                keyState = KeyState.Pressed,
+                repeat = false,
+                modifiers = KeyboardModifiers(emptySet()),
+            ),
+            event.stamp,
+        )
+
+        is InteractionEvent.TouchStarted -> acceptInteractionTouch(event)
+    }
+
+    private fun acceptInteractionTouch(event: InteractionEvent.TouchStarted): Boolean {
+        var admission: InputPublicationAdmission? = null
+        val accepted = synchronized(lock) {
+            if (terminal != null) return@synchronized false
+            val touch = TouchState(event.touchId, event.position, pressure = null)
+            updateStateLocked(touches = currentState.touches.filterNot { it.id == touch.id } + touch)
+            admission = enqueuePublicationLocked(
+                InputPublication(
+                    InputEvent.TouchChanged(
+                        touchId = event.touchId,
+                        phase = TouchPhase.Started,
+                        position = event.position,
+                        pressure = null,
+                        stamp = event.stamp,
+                        deviceId = null,
+                        stateRevision = currentState.revision,
+                    ),
+                ),
+            )
+            true
+        }
+        admission?.let(::finishPublicationAdmission)
+        return accepted
+    }
+
+    private fun accept(stimulus: SurfaceStimulus, stamp: EventStamp): Boolean {
+        var admission: InputPublicationAdmission? = null
+        val accepted = synchronized(lock) {
+            if (terminal != null) return@synchronized false
+            val publication = reduceLocked(stimulus, stamp) ?: return@synchronized false
+            admission = enqueuePublicationLocked(publication)
+            true
+        }
+        admission?.let(::finishPublicationAdmission)
+        return accepted
+    }
+
     fun focusLost(): Boolean {
         var admission: InputPublicationAdmission? = null
         val accepted = synchronized(lock) {
@@ -1130,7 +1291,10 @@ private class RuntimeSurfaceInput(
         finishPublicationAdmission(admission)
     }
 
-    private fun reduceLocked(stimulus: SurfaceStimulus): InputPublication? = when (stimulus) {
+    private fun reduceLocked(
+        stimulus: SurfaceStimulus,
+        stamp: EventStamp = eventStampSource(),
+    ): InputPublication? = when (stimulus) {
         is SurfaceStimulus.KeyChanged -> {
             val pressed = currentState.keyboard.pressedKeys.toMutableSet()
             when (stimulus.keyState) {
@@ -1149,7 +1313,7 @@ private class RuntimeSurfaceInput(
                     keyState = stimulus.keyState,
                     repeat = stimulus.repeat,
                     modifiers = stimulus.modifiers,
-                    stamp = eventStampSource(),
+                    stamp = stamp,
                     deviceId = stimulus.deviceId,
                     stateRevision = currentState.revision,
                 ),
@@ -1169,7 +1333,7 @@ private class RuntimeSurfaceInput(
                     pointer.id,
                     stimulus.kind,
                     stimulus.position,
-                    eventStampSource(),
+                    stamp,
                     stimulus.deviceId,
                     currentState.revision,
                 ),
@@ -1192,7 +1356,7 @@ private class RuntimeSurfaceInput(
                     stimulus.delta,
                     stimulus.pressure,
                     stimulus.pen,
-                    eventStampSource(),
+                    stamp,
                     stimulus.deviceId,
                     currentState.revision,
                 ),
@@ -1225,7 +1389,7 @@ private class RuntimeSurfaceInput(
                     stimulus.position,
                     stimulus.pressure,
                     stimulus.pen,
-                    eventStampSource(),
+                    stamp,
                     stimulus.deviceId,
                     currentState.revision,
                 ),
@@ -1240,7 +1404,7 @@ private class RuntimeSurfaceInput(
                     id,
                     stimulus.kind,
                     existing.position,
-                    eventStampSource(),
+                    stamp,
                     stimulus.deviceId,
                     currentState.revision,
                 ),
@@ -1251,7 +1415,7 @@ private class RuntimeSurfaceInput(
         is SurfaceStimulus.Scroll -> InputPublication(
             InputEvent.Scrolled(
                 stimulus.delta,
-                eventStampSource(),
+                stamp,
                 stimulus.deviceId,
                 currentState.revision,
             ),
@@ -1319,17 +1483,20 @@ private class RuntimeSurfaceInput(
     private fun updateStateLocked(
         keyboard: KeyboardState = currentState.keyboard,
         pointers: List<PointerState> = currentState.pointers,
+        touches: List<TouchState> = currentState.touches,
         modifiers: KeyboardModifiers = currentState.modifiers,
     ) {
         if (
             keyboard == currentState.keyboard &&
             pointers == currentState.pointers &&
+            touches == currentState.touches &&
             modifiers == currentState.modifiers
         ) return
         setStateLocked(
             currentState.copy(
                 keyboard = keyboard,
                 pointers = pointers,
+                touches = touches,
                 modifiers = modifiers,
                 revision = currentState.revision.next(),
             ),

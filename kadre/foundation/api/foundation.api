@@ -4150,11 +4150,6 @@ public final class org/graphiks/kadre/interaction/InteractionKind : java/lang/En
 	public static fun values ()[Lorg/graphiks/kadre/interaction/InteractionKind;
 }
 
-public final class org/graphiks/kadre/interaction/InteractionKt {
-	public static final fun armInteraction (Lorg/graphiks/kadre/surface/HostSurface;Lorg/graphiks/kadre/interaction/InteractionAction;Lorg/graphiks/kadre/interaction/InteractionArmOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun installInteractionHandler (Lorg/graphiks/kadre/surface/HostSurface;Lorg/graphiks/kadre/interaction/InteractionHandler;)Lorg/graphiks/kadre/diagnostics/KadreResult;
-}
-
 public abstract interface class org/graphiks/kadre/interaction/InteractionRegistration : java/lang/AutoCloseable {
 	public abstract fun close ()V
 	public abstract fun getOutcomes ()Lkotlinx/coroutines/flow/Flow;
@@ -4633,12 +4628,19 @@ public final class org/graphiks/kadre/surface/HitTestingMode : java/lang/Enum {
 
 public abstract interface class org/graphiks/kadre/surface/HostSurface {
 	public abstract fun apply (Lorg/graphiks/kadre/surface/SurfaceUpdate;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun armInteraction (Lorg/graphiks/kadre/interaction/InteractionAction;Lorg/graphiks/kadre/interaction/InteractionArmOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getCapabilities ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getId ()Lorg/graphiks/kadre/surface/SurfaceId;
 	public abstract fun getInput ()Lorg/graphiks/kadre/input/SurfaceInput;
 	public abstract fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public fun installInteractionHandler (Lorg/graphiks/kadre/interaction/InteractionHandler;)Lorg/graphiks/kadre/diagnostics/KadreResult;
 	public abstract fun requestRedraw ()Lorg/graphiks/kadre/diagnostics/KadreResult;
+}
+
+public final class org/graphiks/kadre/surface/HostSurface$DefaultImpls {
+	public static fun armInteraction (Lorg/graphiks/kadre/surface/HostSurface;Lorg/graphiks/kadre/interaction/InteractionAction;Lorg/graphiks/kadre/interaction/InteractionArmOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun installInteractionHandler (Lorg/graphiks/kadre/surface/HostSurface;Lorg/graphiks/kadre/interaction/InteractionHandler;)Lorg/graphiks/kadre/diagnostics/KadreResult;
 }
 
 public final class org/graphiks/kadre/surface/ImageConstraints {
