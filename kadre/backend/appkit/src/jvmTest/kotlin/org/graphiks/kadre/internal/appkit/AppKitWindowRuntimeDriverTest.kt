@@ -3505,9 +3505,7 @@ class AppKitWindowRuntimeDriverTest {
                 trace += "handler-return"
             }).appKitSuccessValue()
             val outcome = async(start = CoroutineStart.UNDISPATCHED) {
-                registration.outcomes.first().also { terminal ->
-                    trace += "outcome:${terminal.stamp.sequence.value}"
-                }
+                registration.outcomes.first()
             }
             val delivered = CopyOnWriteArrayList<InputEvent>()
             val inputs = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -3540,7 +3538,6 @@ class AppKitWindowRuntimeDriverTest {
                     "native-invocation",
                     "native-result:success",
                     "handler-return",
-                    "outcome:${terminal.stamp.sequence.value}",
                     "pointer-input:${terminal.stamp.sequence.value}",
                 ),
                 trace,
@@ -3556,6 +3553,79 @@ class AppKitWindowRuntimeDriverTest {
             assertTrue(port.nativeMoveRanOnOwnerThread("pointer-down-system-move"))
             inputs.cancelAndJoin()
         } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun livePointerInputRemainsInNativeCallbackOrderWhileTheCommandQueueIsBlocked() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val releaseQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val position = LogicalPoint(37.0, 41.0)
+        val pointerDown = AppKitInput.PointerButtonChanged(
+            button = PointerButton.Primary,
+            buttonState = PointerButtonState.Pressed,
+            position = position,
+            pressure = 0.5,
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "live-input-queue-order",
+            inputObservationInstalled = true,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(releaseQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "live-input-queue-order"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            val deliveryOrder = CopyOnWriteArrayList<String>()
+            window.surface.installInteractionHandler(InteractionHandler { _, _ ->
+                deliveryOrder += "handler"
+            }).appKitSuccessValue()
+            val delivered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.take(2).toList().also { events ->
+                    events.filterIsInstance<InputEvent.PointerButtonChanged>().forEach {
+                        deliveryOrder += "pointer-down"
+                    }
+                }
+            }
+            val blockingUpdate = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("queue-blocked")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            port.emitInput("live-input-queue-order", AppKitInput.PointerEntered(position))
+            port.emitPointerDown("live-input-queue-order", pointerDown) { }
+
+            val events = withTimeout(2.seconds) { delivered.await() }
+            val entered = assertIs<InputEvent.PointerEntered>(events[0])
+            val pressed = assertIs<InputEvent.PointerButtonChanged>(events[1])
+            assertEquals(2L, entered.stateRevision.value)
+            assertEquals(3L, pressed.stateRevision.value)
+            assertEquals(listOf("handler", "pointer-down"), deliveryOrder)
+            assertFalse(blockingUpdate.isCompleted)
+
+            releaseQueue.countDown()
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            Unit
+        } finally {
+            releaseQueue.countDown()
             driver.close()
         }
     }

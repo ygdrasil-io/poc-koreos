@@ -613,6 +613,7 @@ private class AppKitWindowCommandPort(
 
     private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
         var deliverThroughSerializer = false
+        var deliverLiveInputInline = false
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
             if (
@@ -623,7 +624,11 @@ private class AppKitWindowCommandPort(
                 !entry.closeAdmitted
             ) {
                 if (entry.runtimeSurfaceReady) {
-                    deliverThroughSerializer = true
+                    if (stimulus.isLiveInput()) {
+                        deliverLiveInputInline = true
+                    } else {
+                        deliverThroughSerializer = true
+                    }
                 } else {
                     entry.bufferedSurfaceStimuli.addLast(stimulus)
                 }
@@ -634,6 +639,11 @@ private class AppKitWindowCommandPort(
         }
         if (accepted && deliverThroughSerializer) {
             commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
+        }
+        if (accepted && deliverLiveInputInline) {
+            // A pointer-down interaction enters the runtime synchronously. Deliver its preceding
+            // live input callback inline, rather than waiting on this queue, to preserve AppKit order.
+            acceptSurfaceStimulus(stimulus)
         }
     }
 
@@ -692,6 +702,15 @@ private class AppKitWindowCommandPort(
             }?.surfaceId
         } ?: return
         surfaceStimulusSink(stimulus.toRuntime(surfaceId))
+    }
+
+    private fun AppKitSurfaceStimulus.isLiveInput(): Boolean = when (this) {
+        is AppKitSurfaceStimulus.InputObservationChanged,
+        is AppKitSurfaceStimulus.KeyChanged,
+        is AppKitSurfaceStimulus.PointerInput,
+        -> true
+
+        else -> false
     }
 
     private fun acceptStimulus(stimulus: AppKitWindowStimulus) {
