@@ -1943,18 +1943,24 @@ internal class RuntimeWindow(
             fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.DidFail)
             return FullscreenResolution(diagnostics = listOf(fullscreenCallbackFailure(target)))
         }
-        val failure = if (target == barrier.target) {
+        val localFailure = target == barrier.target
+        val failure = if (localFailure) {
             terminalFailure ?: fullscreenCallbackFailure(target)
         } else {
             unexpectedFullscreenFailure()
         }
-        return failLocalFullscreenLocked(
+        val resolution = failLocalFullscreenLocked(
             barrier,
             failure,
             target,
             effectiveState,
             backendRejected,
-        ) ?: FullscreenResolution.Rejected
+        ) ?: return FullscreenResolution.Rejected
+        return if (localFailure) {
+            resolution
+        } else {
+            resolution.copy(diagnostics = listOf(fullscreenCallbackFailure(target)))
+        }
     }
 
     private fun failLocalFullscreenLocked(

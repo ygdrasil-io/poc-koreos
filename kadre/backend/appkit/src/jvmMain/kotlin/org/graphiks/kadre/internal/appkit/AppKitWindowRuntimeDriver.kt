@@ -769,19 +769,31 @@ private class AppKitWindowCommandPort(
             AppKitFullscreenCallback.DidFailExit,
             -> FullscreenMode.Windowed
         }
+        val terminalKind = when (callback) {
+            AppKitFullscreenCallback.DidEnter,
+            AppKitFullscreenCallback.DidExit,
+            -> AppKitFullscreenTerminalKind.Did
+            AppKitFullscreenCallback.DidFailEnter,
+            AppKitFullscreenCallback.DidFailExit,
+            -> AppKitFullscreenTerminalKind.DidFail
+            AppKitFullscreenCallback.WillEnter,
+            AppKitFullscreenCallback.WillExit,
+            -> null
+        }
         val correlated = synchronized(lock) {
-            if (
-                callback == AppKitFullscreenCallback.WillEnter ||
-                callback == AppKitFullscreenCallback.WillExit
-            ) {
-                entry.fullscreenDidTombstone = null
+            if (terminalKind == null) {
+                entry.fullscreenTerminalTombstone = null
                 check(entry.pendingExternalFullscreenWills > 0) {
                     "AppKit fullscreen Will claim is missing"
                 }
                 entry.pendingExternalFullscreenWills -= 1
+            } else {
+                if (entry.fullscreenTerminalTombstone?.matches(target, terminalKind) == true) return
+                entry.fullscreenTerminalTombstone = AppKitFullscreenTerminalTombstone(target, terminalKind)
             }
             val pending = entry.fullscreenPending ?: return@synchronized null
             if (pending.nativeCommitStarted) {
+                if (terminalKind == null) pending.observeFullscreenWillLocked(target)
                 pending
             } else {
                 if (
@@ -868,17 +880,17 @@ private class AppKitWindowCommandPort(
         pending: PendingWindowMutationCommand?,
         target: FullscreenMode,
     ) {
-        val peer = synchronized(lock) {
-            if (pending == null && entry.fullscreenDidTombstone == target) return@synchronized null
-            entry.peer?.also { entry.fullscreenDidTombstone = target }
-        } ?: return
+        val peer = synchronized(lock) { entry.peer } ?: return
+        val terminalResolvesPending = pending?.let {
+            synchronized(lock) { it.resolvesFullscreenTerminalLocked(target) }
+        } ?: false
         val desiredLevel = pending?.fullscreenDesiredLevel
             ?: fullscreenObservationSink.desiredLevel(entry.command.windowId)
             ?: return
         val completion = try {
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
-            if (pending != null) {
+            if (pending != null && terminalResolvesPending) {
                 finishFullscreenPending(entry, pending)
                 pending.command.failed(
                     fullscreenFailure("level-readback-failed"),
@@ -894,7 +906,7 @@ private class AppKitWindowCommandPort(
         val current = windowState(entry.command.windowId) ?: return
         val effective = snapshot.withMutationFrom(current).copy(fullscreen = target)
         if (pending != null) {
-            finishFullscreenPending(entry, pending)
+            if (terminalResolvesPending) finishFullscreenPending(entry, pending)
             val requestedTarget = (pending.command.update.fullscreen as? PropertyChange.Set)?.value
             if (target != requestedTarget) {
                 pending.command.fullscreenDid(effective)
@@ -927,8 +939,11 @@ private class AppKitWindowCommandPort(
         pending: PendingWindowMutationCommand,
         target: FullscreenMode,
     ) {
-        val effective = readFullscreenFailureState(entry, pending) ?: return
-        finishFullscreenPending(entry, pending)
+        val terminalResolvesPending = synchronized(lock) {
+            pending.resolvesFullscreenTerminalLocked(target)
+        }
+        val effective = readFullscreenFailureState(entry, pending, terminalResolvesPending) ?: return
+        if (terminalResolvesPending) finishFullscreenPending(entry, pending)
         pending.command.fullscreenDidFail(target, effective)
     }
 
@@ -937,7 +952,11 @@ private class AppKitWindowCommandPort(
         pending: PendingWindowMutationCommand,
         target: FullscreenMode,
     ): Boolean {
-        val effective = readFullscreenFailureState(entry, pending) ?: return false
+        val effective = readFullscreenFailureState(
+            entry,
+            pending,
+            terminalResolvesPending = true,
+        ) ?: return false
         finishFullscreenPending(entry, pending)
         pending.command.fullscreenDidFail(
             target = target,
@@ -950,17 +969,22 @@ private class AppKitWindowCommandPort(
     private fun readFullscreenFailureState(
         entry: PeerEntry,
         pending: PendingWindowMutationCommand,
+        terminalResolvesPending: Boolean,
     ): WindowState? {
         val peer = synchronized(lock) { entry.peer } ?: return null
         val desiredLevel = pending.fullscreenDesiredLevel
         val completion = try {
             peer.completeFullscreen(desiredLevel)
         } catch (failure: Throwable) {
-            finishFullscreenPending(entry, pending)
-            pending.command.failed(
-                fullscreenFailure("level-readback-failed"),
-                diagnosticCause = failure,
-            )
+            if (terminalResolvesPending) {
+                finishFullscreenPending(entry, pending)
+                pending.command.failed(
+                    fullscreenFailure("level-readback-failed"),
+                    diagnosticCause = failure,
+                )
+            } else {
+                reportFullscreenTerminalFailure("level-readback-failed", failure)
+            }
             scheduleNativeClose(entry)
             return null
         }
@@ -1197,7 +1221,7 @@ private class AppKitWindowCommandPort(
         var fullscreenTransitionGateActive: Boolean = false
         val mutationsHeldBehindFullscreenTransition = ArrayDeque<PendingWindowMutationCommand>()
         var fullscreenPending: PendingWindowMutationCommand? = null
-        var fullscreenDidTombstone: FullscreenMode? = null
+        var fullscreenTerminalTombstone: AppKitFullscreenTerminalTombstone? = null
         var cleanupScheduled: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
@@ -1231,6 +1255,19 @@ private class AppKitWindowCommandPort(
         ProgrammaticClose,
     }
 
+    private enum class AppKitFullscreenTerminalKind {
+        Did,
+        DidFail,
+    }
+
+    private data class AppKitFullscreenTerminalTombstone(
+        val target: FullscreenMode,
+        val kind: AppKitFullscreenTerminalKind,
+    ) {
+        fun matches(candidate: FullscreenMode, candidateKind: AppKitFullscreenTerminalKind): Boolean =
+            target == candidate && kind == candidateKind
+    }
+
     private class HandleLeaseAdmission {
         private val state = AtomicReference(HandleLeaseState.Queued)
 
@@ -1248,6 +1285,7 @@ private class AppKitWindowCommandPort(
     ) : AppKitWindowMutationCommit {
         private var commitState: WindowMutationCommitState = WindowMutationCommitState.Queued
         private var deferredBehindFullscreenTransition: Boolean = false
+        private var fullscreenConflictTarget: FullscreenMode? = null
 
         val nativeCommitPrevented: Boolean
             get() = synchronized(lock) {
@@ -1321,6 +1359,13 @@ private class AppKitWindowCommandPort(
             removeFullscreenDeferralLocked()
             return mutationCommands.remove(command.operationId, this)
         }
+
+        fun observeFullscreenWillLocked(target: FullscreenMode) {
+            if (target != fullscreenTarget()) fullscreenConflictTarget = target
+        }
+
+        fun resolvesFullscreenTerminalLocked(target: FullscreenMode): Boolean =
+            target == fullscreenTarget() || target == fullscreenConflictTarget
 
         fun deferOrdinaryBehindFullscreenTransitionLocked(): Boolean {
             if (isFullscreenMutation() || !entry.fullscreenTransitionGateActive) return false
@@ -1396,7 +1441,7 @@ private class AppKitWindowCommandPort(
             return synchronized(lock) {
                 if (admitted) {
                     commitState = WindowMutationCommitState.Committed
-                    entry.fullscreenDidTombstone = null
+                    entry.fullscreenTerminalTombstone = null
                     true
                 } else {
                     if (commitState == WindowMutationCommitState.Arbitrating) {
@@ -1407,8 +1452,11 @@ private class AppKitWindowCommandPort(
             }
         }
 
+        private fun fullscreenTarget(): FullscreenMode? =
+            (command.update.fullscreen as? PropertyChange.Set)?.value
+
         fun isFullscreenMutation(): Boolean =
-            (command.update.fullscreen as? PropertyChange.Set)?.value.let { target ->
+            fullscreenTarget().let { target ->
                 target == FullscreenMode.Borderless || target == FullscreenMode.Windowed
             }
     }

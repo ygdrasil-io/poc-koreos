@@ -218,6 +218,153 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun fullscreenUnarmedOppositeDidKeepsMatchingLocalRestoreFailureOwnedByWaiter() = runBlocking {
+        val restoreFailure = IllegalStateException("matching-local-restore")
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-unarmed-did-ownership")
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "fullscreen-unarmed-did-ownership", level = WindowLevel.Floating),
+            )
+            val enter = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+
+            port.emitDidExit("fullscreen-unarmed-did-ownership")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertFalse(enter.isCompleted)
+
+            port.forceFullscreenRestoreFailure(restoreFailure)
+            port.emitDidEnter("fullscreen-unarmed-did-ownership")
+
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { enter.await() }).reason,
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+            assertTrue(reported.isEmpty())
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenUnarmedOppositeDidFailKeepsMatchingLocalRestoreFailureOwnedByWaiter() = runBlocking {
+        val restoreFailure = IllegalStateException("matching-local-restore")
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-unarmed-did-fail-ownership")
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "fullscreen-unarmed-did-fail-ownership", level = WindowLevel.Floating),
+            )
+            val enter = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+
+            port.emitDidFailExit("fullscreen-unarmed-did-fail-ownership")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertFalse(enter.isCompleted)
+            assertEquals(
+                fullscreenFailureFixture("exit-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+
+            port.forceFullscreenRestoreFailure(restoreFailure)
+            port.emitDidEnter("fullscreen-unarmed-did-fail-ownership")
+
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { enter.await() }).reason,
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+            assertEquals(1, reported.size)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenArmedConflictDidFailReportsExternalCallbackDiagnostic() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-conflict-did-fail")
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-conflict-did-fail"))
+            val enter = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+
+            port.emitWillExit("fullscreen-conflict-did-fail")
+            port.emitDidFailExit("fullscreen-conflict-did-fail")
+
+            assertEquals(
+                fullscreenFailureFixture("unexpected-transition"),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { enter.await() }).reason,
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(
+                fullscreenFailureFixture("exit-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenTerminalTombstoneDistinguishesDidFromDidFailForTheSameTarget() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(name = "fullscreen-terminal-kind-tombstone")
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "fullscreen-terminal-kind-tombstone"))
+
+            port.emitDidEnter("fullscreen-terminal-kind-tombstone")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+
+            port.emitDidFailEnter("fullscreen-terminal-kind-tombstone")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(
+                fullscreenFailureFixture("enter-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+
+            port.forceEffectiveLevel(WindowLevel.Floating)
+            port.emitDidEnter("fullscreen-terminal-kind-tombstone")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+
+            assertEquals(WindowLevel.Floating, window.state.value.level)
+            assertEquals(
+                listOf(WindowLevel.Normal, WindowLevel.Normal),
+                port.fullscreenRestoreLevels,
+            )
+            assertEquals(
+                listOf(
+                    fullscreenFailureFixture("enter-failed"),
+                    fullscreenFailureFixture("level-restore-failed"),
+                ),
+                reported.map { assertIs<KadreException>(it).failure },
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun fullscreenArmedConflictPreservesUnexpectedTransitionWhenLevelRestoreFails() = runBlocking {
         val restoreFailure = IllegalStateException("restore")
         val reported = CopyOnWriteArrayList<Throwable>()
