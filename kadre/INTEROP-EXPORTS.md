@@ -377,12 +377,14 @@ public sealed interface DesktopNativeWindowHandle {
 Le callback s’exécute sur le thread host, n’est pas réentrant pour la même ressource et doit retourner avant une recreation/detach native committée. Kadre ne garantit plus la validité du type SDK ou des adresses après le callback. Le callback ne peut pas suspendre, bien que l’opération englobante soit suspendue pour marshaller vers le host. Toute exception callback est propagée telle quelle après libération du verrou de lifetime. Une cancellation avant le callback garantit qu’il n’est pas appelé ; après son début, il finit non-cancellable et son résultat n’est remis que si le waiter reste actif.
 
 Dans une application Kotlin AppKit, le callback peut convertir les deux
-adresses de `DesktopNativeWindowHandle.AppKit` en objets KFFI et installer puis
-posséder une `NSVisualEffectView`. Les adresses sont non nulles seulement durant
-la lease : Kadre attend une lease déjà admise lors de la fermeture, et un usage
-ultérieur de `withDesktopHandle` retourne `Closed(Window)`. Kadre ne possède ni
-la vue, ni ses contraintes, ni un renderer; cette possibilité n'ajoute aucun
-handle aux exports Swift, Java ou TypeScript.
+adresses garanties non nulles et non zéro de `DesktopNativeWindowHandle.AppKit`
+en objets KFFI et installer puis posséder une `NSVisualEffectView`. Elles sont
+utilisables uniquement pendant le callback admis : aucune copie du handle ou
+des adresses ne doit être retenue ni utilisée après son retour. Kadre attend une
+lease déjà admise lors de la fermeture, et un appel ultérieur à
+`withDesktopHandle` retourne `Closed(Window)`. Kadre ne possède ni la vue, ni
+ses contraintes, ni un renderer; cette possibilité n'ajoute aucun handle aux
+exports Swift, Java ou TypeScript.
 
 Ces extensions sont Kotlin-only. Aucun pointer/adresse n’apparaît dans Swift, Java, TypeScript, diagnostics, equality ou snapshots communs.
 

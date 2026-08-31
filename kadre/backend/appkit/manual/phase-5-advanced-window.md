@@ -41,6 +41,8 @@ anti-capture.
 
 Une application Kotlin AppKit qui veut installer et posséder elle-même une
 `NSVisualEffectView` peut utiliser KFFI dans `Window.withDesktopHandle`, avec
-ses adresses AppKit non nulles uniquement pendant la lease. La fermeture attend
-une lease déjà admise et un usage ultérieur retourne `Closed(Window)`. Kadre ne
-possède ni cette vue ni un renderer.
+des adresses AppKit garanties non nulles et non zéro, utilisables seulement dans
+le callback admis. Une copie du handle ou de ses adresses ne doit pas être
+retenue ni utilisée après son retour. La fermeture attend une lease déjà admise
+et un appel ultérieur retourne `Closed(Window)`. Kadre ne possède ni cette vue
+ni un renderer.
