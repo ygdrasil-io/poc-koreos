@@ -1193,6 +1193,72 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun ordinaryMutationReplayedAfterExternalDidRevalidatesExpectedRevisionBeforeSetter() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val allowQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val targetIdentity = "ordinary-stale-after-external-did"
+        val port = DeterministicAppKitNativeWindowPort(
+            name = targetIdentity,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(allowQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val blocker = openedWindow(driver, WindowSpec(title = "ordinary-stale-queue-blocker"))
+            val target = openedWindow(driver, WindowSpec(title = targetIdentity))
+            val preTransitionRevision = target.state.value.revision
+            val blockingUpdate = async(Dispatchers.Default) {
+                blocker.apply(WindowUpdate(title = PropertyChange.Set("ordinary-stale-queue-released")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            val titleMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(
+                    WindowUpdate(
+                        title = PropertyChange.Set("must-not-set-when-stale"),
+                        expectedRevision = preTransitionRevision,
+                    ),
+                )
+            }
+            port.emitWillEnter(targetIdentity)
+            allowQueue.countDown()
+
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(target).withDesktopHandle { Unit }.successValue()
+            assertFalse(titleMutation.isCompleted)
+            assertEquals(targetIdentity, port.title(targetIdentity))
+
+            port.emitDidEnter(targetIdentity)
+
+            assertEquals(
+                KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+                withTimeout(2.seconds) { titleMutation.await() },
+            )
+            assertEquals(FullscreenMode.Borderless, target.state.value.fullscreen)
+            assertEquals(targetIdentity, port.title(targetIdentity))
+        } finally {
+            allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun ordinaryMutationsQueuedBeforeExternalWillResumeAfterDidFailEnter() = runBlocking {
         val queueBlocked = CountDownLatch(1)
         val allowQueue = CountDownLatch(1)
@@ -1324,6 +1390,71 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(closed, withTimeout(2.seconds) { levelMutation.await() })
 
             port.emitDidEnter(targetIdentity)
+            assertIs<RuntimeDesktopWindowHandleAccess>(blocker).withDesktopHandle { Unit }.successValue()
+            assertEquals(targetIdentity, port.title(targetIdentity))
+            assertEquals(WindowLevel.Normal, port.level(targetIdentity))
+        } finally {
+            allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun fullscreenReadbackFailureClosesHeldOrdinaryMutationsWithoutReplayingSetters() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val allowQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val targetIdentity = "ordinary-held-readback-close"
+        val port = DeterministicAppKitNativeWindowPort(
+            name = targetIdentity,
+            fullscreenReadbackFailure = IllegalStateException("fullscreen readback failed"),
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(allowQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val blocker = openedWindow(driver, WindowSpec(title = "ordinary-readback-queue-blocker"))
+            val target = openedWindow(driver, WindowSpec(title = targetIdentity))
+            val blockingUpdate = async(Dispatchers.Default) {
+                blocker.apply(WindowUpdate(title = PropertyChange.Set("ordinary-readback-queue-released")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            val titleMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(title = PropertyChange.Set("must-not-set-after-readback-failure")))
+            }
+            val levelMutation = async(start = CoroutineStart.UNDISPATCHED) {
+                target.apply(WindowUpdate(level = PropertyChange.Set(WindowLevel.Floating)))
+            }
+            port.emitWillEnter(targetIdentity)
+            allowQueue.countDown()
+
+            assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { blockingUpdate.await() }.successValue(),
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(target).withDesktopHandle { Unit }.successValue()
+            assertFalse(titleMutation.isCompleted)
+            assertFalse(levelMutation.isCompleted)
+
+            port.emitDidEnter(targetIdentity)
+            withTimeout(2.seconds) { target.state.first { it.phase == WindowPhase.Closed } }
+
+            val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            assertEquals(closed, withTimeout(2.seconds) { titleMutation.await() })
+            assertEquals(closed, withTimeout(2.seconds) { levelMutation.await() })
             assertIs<RuntimeDesktopWindowHandleAccess>(blocker).withDesktopHandle { Unit }.successValue()
             assertEquals(targetIdentity, port.title(targetIdentity))
             assertEquals(WindowLevel.Normal, port.level(targetIdentity))

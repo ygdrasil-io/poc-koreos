@@ -605,6 +605,21 @@ private class AppKitWindowCommandPort(
             applyFullscreenMutation(pending, admission.peer, fullscreen)
             return
         }
+        val expectedRevision = pending.command.expectedRevision
+        val currentRevision = expectedRevision?.let {
+            windowState(pending.command.windowId)?.revision
+        }
+        if (expectedRevision != null && currentRevision != null && expectedRevision != currentRevision) {
+            val fail = synchronized(lock) {
+                pending.claimExpectedRevisionFailureLocked()
+            }
+            if (fail) {
+                pending.command.failed(
+                    KadreFailure.StaleRevision(expectedRevision.value, currentRevision.value),
+                )
+            }
+            return
+        }
         val mutation = try {
             admission.peer.updateWindow(pending.command.toMutationTarget(), pending)
         } catch (cause: Throwable) {
@@ -816,7 +831,9 @@ private class AppKitWindowCommandPort(
 
     private fun releaseMutationsHeldBehindFullscreenTransition(entry: PeerEntry) {
         val held = synchronized(lock) {
-            if (entry.pendingExternalFullscreenWills > 0) return@synchronized emptyList()
+            if (entry.pendingExternalFullscreenWills > 0 || entry.nativeCloseScheduled) {
+                return@synchronized emptyList()
+            }
             entry.fullscreenTransitionGateActive = false
             entry.mutationsHeldBehindFullscreenTransition.toList().also { commands ->
                 entry.mutationsHeldBehindFullscreenTransition.clear()
@@ -1275,6 +1292,18 @@ private class AppKitWindowCommandPort(
                 commitState = WindowMutationCommitState.ExternalClaimed
                 true
             }
+        }
+
+        fun claimExpectedRevisionFailureLocked(): Boolean {
+            if (
+                commitState != WindowMutationCommitState.Queued ||
+                mutationCommands[command.operationId] !== this
+            ) {
+                return false
+            }
+            commitState = WindowMutationCommitState.Cancelled
+            removeFullscreenDeferralLocked()
+            return mutationCommands.remove(command.operationId, this)
         }
 
         fun deferOrdinaryBehindFullscreenTransitionLocked(): Boolean {

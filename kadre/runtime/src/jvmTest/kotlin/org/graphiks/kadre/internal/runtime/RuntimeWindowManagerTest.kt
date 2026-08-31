@@ -560,6 +560,58 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun windowUpdateStructuralInvalidityPrecedesStaleRevision() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = chromeAndTitleUpdateProperties(),
+        )
+        val window = commit(
+            manager.requestWindow(
+                WindowSpec(
+                    title = "structural-precedence",
+                    contentSize = LogicalSize(100.0, 100.0),
+                    minimumSize = LogicalSize(50.0, 50.0),
+                    maximumSize = LogicalSize(200.0, 200.0),
+                    decorations = WindowDecorations.Borderless,
+                    systemButtons = WindowSystemButtons.None,
+                ),
+            ).successValue(),
+            port.openCommands.single(),
+        )
+        val stale = WindowRevision(1L)
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("systemButtons")),
+            window.apply(
+                WindowUpdate(
+                    systemButtons = PropertyChange.Set(WindowSystemButtons.CloseOnly),
+                    expectedRevision = stale,
+                ),
+            ),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")),
+            window.apply(
+                WindowUpdate(
+                    contentSize = PropertyChange.Set(LogicalSize(40.0, 100.0)),
+                    expectedRevision = stale,
+                ),
+            ),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("title")),
+            window.apply(
+                WindowUpdate(
+                    title = PropertyChange.Clear,
+                    expectedRevision = stale,
+                ),
+            ),
+        )
+        assertTrue(port.updateCommands.isEmpty())
+    }
+
+    @Test
     fun clearOfInitialSizeConstraintsDispatchesAndPublishesNullDefaults() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
@@ -909,7 +961,7 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
-    fun windowChromeCancellationAndQueuedRevisionRespectTheNativeCommitBoundary() = runTest {
+    fun windowChromeCancellationAndQueuedRevisionRespectNativeCommitAndStructuralPrecedence() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = chromeUpdateProperties())
         val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
@@ -951,7 +1003,7 @@ class RuntimeWindowManagerTest {
 
         assertIs<WindowUpdateOutcome.Applied>(committed.await().successValue())
         assertEquals(
-            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0L, received = 1L)),
+            KadreResult.Failure(KadreFailure.InvalidRequest("systemButtons")),
             stale.await(),
         )
         assertEquals(2, port.updateCommands.size)
@@ -2225,7 +2277,12 @@ class RuntimeWindowManagerTest {
             )
         }
         val laterInvalid = async(start = CoroutineStart.UNDISPATCHED) {
-            window.apply(WindowUpdate(maximumSize = PropertyChange.Set(LogicalSize(120.0, 200.0))))
+            window.apply(
+                WindowUpdate(
+                    maximumSize = PropertyChange.Set(LogicalSize(120.0, 200.0)),
+                    expectedRevision = WindowRevision(0L),
+                ),
+            )
         }
 
         assertEquals(1, port.updateCommands.size)

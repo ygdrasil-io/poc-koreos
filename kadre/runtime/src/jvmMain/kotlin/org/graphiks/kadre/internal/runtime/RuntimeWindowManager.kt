@@ -1454,13 +1454,19 @@ internal class RuntimeWindow(
             invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
+            val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties)
+            invalidChromeField(supportedUpdate, current)?.let { field ->
+                return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+            }
+            val canonicalUpdate = canonicalMutationUpdate(supportedUpdate, current)
+            val candidate = candidateFor(canonicalUpdate, current)
+                ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             update.expectedRevision?.let { expected ->
                 if (expected != current.revision) {
                     return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value))
                 }
             }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
-            val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties)
             val exclusive = (supportedUpdate.fullscreen as? PropertyChange.Set)?.value as? FullscreenMode.Exclusive
             if (exclusive != null) {
                 return KadreResult.Success(
@@ -1485,12 +1491,6 @@ internal class RuntimeWindow(
             ) {
                 return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
             }
-            invalidChromeField(supportedUpdate, current)?.let { field ->
-                return KadreResult.Failure(KadreFailure.InvalidRequest(field))
-            }
-            val canonicalUpdate = canonicalMutationUpdate(supportedUpdate, current)
-            val candidate = candidateFor(canonicalUpdate, current)
-                ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             val rejected = changedProperties(update)
                 .filterNot(supportedWindowUpdateProperties::contains)
                 .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
@@ -2127,13 +2127,6 @@ internal class RuntimeWindow(
                     candidate.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
                     continue
                 }
-                val expected = candidate.expectedRevision
-                if (expected != null && expected != current.revision) {
-                    candidate.result.complete(
-                        KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value)),
-                    )
-                    continue
-                }
                 invalidChromeField(candidate.update, current)?.let { field ->
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest(field)))
                     continue
@@ -2142,6 +2135,13 @@ internal class RuntimeWindow(
                 val effectiveCandidate = candidateFor(candidate.update, current)
                 if (effectiveCandidate == null) {
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
+                    continue
+                }
+                val expected = candidate.expectedRevision
+                if (expected != null && expected != current.revision) {
+                    candidate.result.complete(
+                        KadreResult.Failure(KadreFailure.StaleRevision(expected.value, current.revision.value)),
+                    )
                     continue
                 }
                 if (!mutationChanged(current, effectiveCandidate)) {
