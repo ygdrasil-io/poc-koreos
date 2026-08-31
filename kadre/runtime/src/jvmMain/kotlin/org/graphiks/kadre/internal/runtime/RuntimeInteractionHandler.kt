@@ -35,6 +35,7 @@ internal class RuntimeInteractionHandler(
     private val eventCollectorGate: RuntimeEventCollectorGate,
     private val failureReporter: RuntimeFailureReporter,
     private val sessionFailureHandler: (KadreFailure) -> Unit,
+    private val afterOutcomeSubscriberSnapshot: (() -> Unit)? = null,
 ) {
     private companion object {
         val nextToken = AtomicLong(0L)
@@ -84,16 +85,16 @@ internal class RuntimeInteractionHandler(
             activeSurface.set(previousSurface)
             context.invalidate()
             context.outcome?.let(active::publish)
-            val terminalSubscribers = synchronized(lock) {
+            val terminal = synchronized(lock) {
                 if (activeCallback === active) {
                     activeCallback = null
                     lock.notifyAll()
                 }
                 active.terminaliseAfterCallback.takeIf { it }?.let {
-                    active.terminaliseLocked()
+                    active.terminaliseLocked() to active.terminalFailure
                 }
             }
-            terminalSubscribers?.forEach { it.close(null) }
+            terminal?.first?.forEach { it.closeChannel(terminal.second?.let(::KadreException)) }
         }
     }
 
@@ -163,6 +164,7 @@ internal class RuntimeInteractionHandler(
     ) : InteractionRegistration {
         internal var closed = false
         var terminaliseAfterCallback = false
+        var terminalFailure: KadreFailure? = null
         private val subscribers = linkedSetOf<OutcomeSubscriber>()
 
         override val outcomes: Flow<InteractionActionOutcome> = flow {
@@ -171,23 +173,36 @@ internal class RuntimeInteractionHandler(
                 is KadreResult.Failure -> throw KadreException(admission.reason)
             }
             val subscriber = OutcomeSubscriber()
-            val accepted = synchronized(lock) {
-                if (closed) {
-                    false
-                } else {
+            val terminal = synchronized(lock) {
+                when {
+                    terminalFailure != null -> OutcomeSubscription.Failed(terminalFailure!!)
+                    closed -> OutcomeSubscription.Closed
+                    else -> {
                     subscribers.add(subscriber)
-                    true
+                        OutcomeSubscription.Accepted
+                    }
                 }
             }
-            if (!accepted) {
-                lease.close()
-                return@flow
+            when (terminal) {
+                OutcomeSubscription.Accepted -> Unit
+                OutcomeSubscription.Closed -> {
+                    lease.close()
+                    return@flow
+                }
+
+                is OutcomeSubscription.Failed -> {
+                    lease.close()
+                    throw KadreException(terminal.failure)
+                }
             }
             try {
                 for (outcome in subscriber.channel) emit(outcome)
             } finally {
-                synchronized(lock) { subscribers.remove(subscriber) }
-                subscriber.close(null)
+                val dispose = synchronized(lock) {
+                    subscribers.remove(subscriber)
+                    subscriber.deactivate()
+                }
+                if (dispose) subscriber.closeChannel(null)
                 lease.close()
             }
         }
@@ -203,17 +218,18 @@ internal class RuntimeInteractionHandler(
         }
 
         fun closeFromOwner(failure: KadreFailure? = null) {
-            val toClose = synchronized(lock) {
+            val terminal = synchronized(lock) {
                 closed = true
+                if (terminalFailure == null && failure != null) terminalFailure = failure
                 if (registration === this@Registration) registration = null
                 if (activeCallback === this@Registration) {
                     terminaliseAfterCallback = true
-                    emptyList()
+                    emptyList<OutcomeSubscriber>() to terminalFailure
                 } else {
-                    terminaliseLocked()
+                    terminaliseLocked() to terminalFailure
                 }
             }
-            toClose.forEach { it.close(failure?.let(::KadreException)) }
+            terminal.first.forEach { it.closeChannel(terminal.second?.let(::KadreException)) }
         }
 
         fun terminaliseLocked(): List<OutcomeSubscriber> {
@@ -222,16 +238,21 @@ internal class RuntimeInteractionHandler(
             if (registration === this@Registration) registration = null
             val toClose = subscribers.toList()
             subscribers.clear()
+            toClose.forEach(OutcomeSubscriber::deactivate)
             return toClose
         }
 
         fun publish(value: InteractionActionOutcome) {
             val current = synchronized(lock) { subscribers.toList() }
+            afterOutcomeSubscriberSnapshot?.invoke()
             var closeSource = false
             var failSession = false
             current.forEach { subscriber ->
                 when (subscriber.offer(value)) {
                     OutcomeOffer.Accepted -> Unit
+                    OutcomeOffer.CancelSlow -> subscriber.closeChannel(
+                        SlowCollectorCancellationException("interaction outcome collector exceeded capacity"),
+                    )
                     OutcomeOffer.CloseSource -> closeSource = true
                     OutcomeOffer.FailSession -> failSession = true
                 }
@@ -245,27 +266,45 @@ internal class RuntimeInteractionHandler(
 
         inner class OutcomeSubscriber {
             val channel = Channel<InteractionActionOutcome>(deliveryPolicy.discreteEvents.collectorCapacity)
+            private val lock = Any()
+            private var active = true
 
             fun offer(value: InteractionActionOutcome): OutcomeOffer {
-                if (channel.trySend(value).isSuccess) return OutcomeOffer.Accepted
-                return when (deliveryPolicy.discreteEvents.collectorOverflow) {
-                    CollectorOverflowAction.CancelSlowCollector -> {
-                        close(SlowCollectorCancellationException("interaction outcome collector exceeded capacity"))
-                        OutcomeOffer.Accepted
-                    }
+                return synchronized(lock) {
+                    if (!active) return@synchronized OutcomeOffer.Accepted
+                    if (channel.trySend(value).isSuccess) return@synchronized OutcomeOffer.Accepted
+                    when (deliveryPolicy.discreteEvents.collectorOverflow) {
+                        CollectorOverflowAction.CancelSlowCollector -> {
+                            active = false
+                            OutcomeOffer.CancelSlow
+                        }
 
-                    CollectorOverflowAction.CloseSource -> OutcomeOffer.CloseSource
-                    CollectorOverflowAction.FailSession -> OutcomeOffer.FailSession
+                        CollectorOverflowAction.CloseSource -> OutcomeOffer.CloseSource
+                        CollectorOverflowAction.FailSession -> OutcomeOffer.FailSession
+                    }
                 }
             }
 
-            fun close(cause: Throwable?) {
+            fun deactivate(): Boolean = synchronized(lock) {
+                if (!active) false else {
+                    active = false
+                    true
+                }
+            }
+
+            fun closeChannel(cause: Throwable?) {
                 channel.close(cause)
             }
         }
     }
 
-    private enum class OutcomeOffer { Accepted, CloseSource, FailSession }
+    private sealed interface OutcomeSubscription {
+        data object Accepted : OutcomeSubscription
+        data object Closed : OutcomeSubscription
+        data class Failed(val failure: KadreFailure) : OutcomeSubscription
+    }
+
+    private enum class OutcomeOffer { Accepted, CancelSlow, CloseSource, FailSession }
 
     private fun InteractionAction.kind(): InteractionKind = when (this) {
         is InteractionAction.EnterFullscreen -> InteractionKind.EnterFullscreen
