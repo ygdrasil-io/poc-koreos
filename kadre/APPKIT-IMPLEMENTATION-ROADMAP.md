@@ -372,6 +372,12 @@ capabilities publiques. Les contrats `WIN-003` et `APK-008` sont actifs ;
 le harness `phase5WindowChromeHarness` consigne séparément les quatre
 observations visuelles, sans les faire passer artificiellement en CI.
 
+La sous-tranche suivante, définie par
+`APPKIT-PHASE-5-WINDOW-LEVEL-DESIGN.md`, réserve le niveau de z-order
+`Normal`, `Floating` et `Modal`. Elle reste indépendante de toute modalité
+AppKit et du fullscreen, et garde `WIN-004` et `APK-009` en statut `planned`
+jusqu'à l'activation publique et à leurs preuves corrélées.
+
 #### Contenu
 
 - position, dimensions et contraintes ;
