@@ -70,26 +70,39 @@ public class AppKitBackendProvider private constructor(
             return KadreResult.Failure(lifecycleObservationFailure())
         }
         val owner = AppKitEmbeddedSessionOwner(observation)
+        val attentionOwner = if (request.allowUserAttention) {
+            broker.newUserAttentionOwner(nativeApplication)
+        } else {
+            null
+        }
         val registration = try {
-            broker.createEmbeddedHost { initial ->
+            val hostFactory: (LifecycleState) -> AppKitRuntimeHost = { initial ->
                 AppKitRuntimeHost(
                     RuntimeHostController.withComponents(
                         platform = KadrePlatform.AppKit,
-                        componentsFactory = windowComponentsFactory(request.policy.resources),
+                        componentsFactory = windowComponentsFactory(
+                            request.policy.resources,
+                            attentionOwner = attentionOwner,
+                        ),
                         initialLifecycleState = initial,
                         sessionObserver = RuntimeSessionObserver { _, _ -> owner.close() },
                     ),
                 )
             }
+            if (attentionOwner == null) broker.createEmbeddedHost(hostFactory)
+            else broker.createEmbeddedHost(attentionOwner, hostFactory)
         } catch (_: Exception) {
             owner.close()
+            attentionOwner?.close()
             return KadreResult.Failure(lifecycleObservationFailure())
         } catch (_: LinkageError) {
             owner.close()
+            attentionOwner?.close()
             return KadreResult.Failure(lifecycleObservationFailure())
         }
         if (registration == null) {
             owner.close()
+            attentionOwner?.close()
             return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         }
         owner.install(registration)
@@ -110,8 +123,12 @@ public class AppKitBackendProvider private constructor(
         if (!nativeApplication.isMainThread()) {
             return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
         }
-        val lease = broker.tryAcquireStandalone()
-            ?: return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
+        val attentionOwner = broker.newUserAttentionOwner(nativeApplication)
+        val lease = broker.tryAcquireStandalone(attentionOwner)
+            ?: run {
+                attentionOwner.close()
+                return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
+            }
         val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         try {
@@ -122,6 +139,7 @@ public class AppKitBackendProvider private constructor(
                 componentsFactory = windowComponentsFactory(
                     request.policy.resources,
                     if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                    attentionOwner,
                 ),
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
@@ -244,6 +262,7 @@ public class AppKitBackendProvider private constructor(
     private fun windowComponentsFactory(
         resources: org.graphiks.kadre.policy.ResourceBudgetPolicy,
         onLastWindowClosed: (() -> Unit)? = null,
+        attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
     ): RuntimeSessionComponentsFactory = RuntimeSessionComponentsFactory { _, _ ->
         val driver = windowDriverFactory.create(
             resources = resources,
@@ -256,6 +275,8 @@ public class AppKitBackendProvider private constructor(
             },
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
+            broker = if (attentionOwner == null) null else broker,
+            attentionOwner = attentionOwner,
         )
         RuntimeSessionComponents(driver.manager, driver::close)
     }

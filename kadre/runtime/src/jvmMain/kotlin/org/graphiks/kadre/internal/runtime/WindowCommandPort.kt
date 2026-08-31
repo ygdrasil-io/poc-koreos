@@ -54,13 +54,13 @@ public interface WindowCommandPort {
         CloseRequestRejectionOutcome.Rejected
 }
 
-/** Runtime seam for process-scoped user-attention requests owned by a live window. */
-internal interface WindowAttentionPort : AutoCloseable {
-    suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit>
+/** Unstable backend SPI for process-scoped user-attention requests owned by a live window. */
+public interface WindowAttentionPort : AutoCloseable {
+    public suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit>
 
-    fun release(windowId: WindowId)
+    public fun release(windowId: WindowId)
 
-    override fun close()
+    override public fun close()
 }
 
 /**

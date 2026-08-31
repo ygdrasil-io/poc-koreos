@@ -8,6 +8,7 @@ import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
 import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSPoint
+import org.graphiks.kffi.objc.NSRequestUserAttentionType
 import org.graphiks.kffi.objc.NSThread
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
@@ -15,6 +16,7 @@ import org.graphiks.kffi.objc.postEvent_atStart
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.CompletableFuture
+import org.graphiks.kadre.window.WindowAttention
 
 internal sealed interface AppKitStopResult {
     data object Accepted : AppKitStopResult
@@ -35,6 +37,11 @@ internal interface AppKitNativeApplication {
 
     /** Starts one independently closeable lifecycle observation owner for an embedded session. */
     fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable
+
+    fun requestUserAttention(attention: WindowAttention): Long =
+        error("AppKit user attention is unavailable")
+
+    fun cancelUserAttentionRequest(token: Long) = Unit
 
     fun run()
 
@@ -60,6 +67,25 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
 
     override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
         lifecycleSource.start(listener)
+
+    override fun requestUserAttention(attention: WindowAttention): Long {
+        check(isMainThread()) { "AppKit user attention must be requested on the process main thread" }
+        val requestType = when (attention) {
+            WindowAttention.Informational -> NSRequestUserAttentionType.NSInformationalRequest
+            WindowAttention.Critical -> NSRequestUserAttentionType.NSCriticalRequest
+            WindowAttention.None -> error("WindowAttention.None is a broker cancellation request")
+        }
+        return ObjCRuntime.autoreleasePool {
+            sharedApplicationOnMainThread().requestUserAttention(requestType)
+        }
+    }
+
+    override fun cancelUserAttentionRequest(token: Long) {
+        check(isMainThread()) { "AppKit user attention must be cancelled on the process main thread" }
+        ObjCRuntime.autoreleasePool {
+            sharedApplicationOnMainThread().cancelUserAttentionRequest(token)
+        }
+    }
 
     override fun run() {
         check(isMainThread()) { "the AppKit event loop must run on the process main thread" }
@@ -125,6 +151,9 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
             null
         }
     }
+
+    private fun sharedApplicationOnMainThread(): NSApplication = synchronized(lock) { application }
+        ?: NSApplication(NSApplication.sharedApplication())
 
     private fun completeStop(target: NSApplication) {
         val completion = checkNotNull(synchronized(lock) { stopCompletion })

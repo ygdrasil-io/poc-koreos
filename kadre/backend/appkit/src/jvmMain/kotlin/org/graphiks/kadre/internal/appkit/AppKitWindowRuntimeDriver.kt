@@ -23,6 +23,7 @@ import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
+import org.graphiks.kadre.internal.runtime.WindowAttentionPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationCommand
@@ -35,6 +36,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
@@ -62,6 +64,8 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
     beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
+    broker: AppKitProcessBroker?,
+    attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner?,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val fullscreenObservationSink = DeferredRuntimeFullscreenObservationSink()
@@ -82,6 +86,11 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         fullscreenObservationSink = fullscreenObservationSink,
         beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
     )
+    private val attentionPort: AppKitWindowAttentionPort? = if (broker != null && attentionOwner != null) {
+        BrokeredAppKitWindowAttentionPort(commandPort, broker, attentionOwner)
+    } else {
+        null
+    }
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -91,6 +100,8 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        attentionPort = attentionPort,
+        acceptedAttention = APPKIT_WINDOW_ATTENTION,
         fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
@@ -103,6 +114,53 @@ internal class AppKitWindowRuntimeDriver internal constructor(
             manager.close()
         } finally {
             commandPort.finishClose(drainMode)
+        }
+    }
+}
+
+internal interface AppKitWindowAttentionPort : WindowAttentionPort
+
+private class BrokeredAppKitWindowAttentionPort(
+    private val commandPort: AppKitWindowCommandPort,
+    private val broker: AppKitProcessBroker,
+    private val owner: AppKitProcessBroker.AppKitUserAttentionOwner,
+) : AppKitWindowAttentionPort {
+    private val closed = AtomicBoolean(false)
+
+    override suspend fun request(windowId: WindowId, attention: WindowAttention) =
+        suspendCancellableCoroutine { continuation ->
+            val cancelled = AtomicBoolean(false)
+            continuation.invokeOnCancellation { cancelled.set(true) }
+            val submitted = commandPort.submitAttention {
+                if (cancelled.get() || closed.get()) return@submitAttention
+                val result = commandPort.onMainThread {
+                    broker.requestUserAttention(owner, windowId, attention)
+                }
+                if (continuation.isActive) continuation.resume(result) { _, _, _ -> }
+            }
+            if (!submitted && continuation.isActive) {
+                continuation.resume(
+                    org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                        KadreFailure.Closed(KadreResourceKind.Host),
+                    ),
+                ) { _, _, _ -> }
+            }
+        }
+
+    override fun release(windowId: WindowId) {
+        commandPort.submitAttentionCleanup {
+            if (broker.hasUserAttention(owner, windowId)) {
+                commandPort.onMainThread { broker.releaseUserAttention(owner, windowId) }
+            }
+        }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        commandPort.submitAttentionCleanup {
+            if (broker.hasUserAttention(owner)) {
+                commandPort.onMainThread { broker.releaseAllUserAttention(owner) }
+            }
         }
     }
 }
@@ -127,6 +185,12 @@ private class AppKitWindowCommandPort(
     private val mutationCommands = linkedMapOf<org.graphiks.kadre.window.WindowOperationId, PendingWindowMutationCommand>()
     private val commands = AppKitWindowCommandQueue(::reportFailure)
     private var closed = false
+
+    fun submitAttention(task: () -> Unit): Boolean = commands.submit(task)
+
+    fun submitAttentionCleanup(task: () -> Unit): Boolean = commands.submitFollowUp(task)
+
+    fun <T> onMainThread(block: () -> T): T = nativePort.onMainThread(block)
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))
@@ -1519,6 +1583,12 @@ private class AppKitWindowCommandPort(
 
 private fun fullscreenFailure(code: String): KadreFailure.PlatformFailure =
     KadreFailure.PlatformFailure(KadrePlatform.AppKit, "fullscreen", code)
+
+private val APPKIT_WINDOW_ATTENTION: Set<WindowAttention> = setOf(
+    WindowAttention.None,
+    WindowAttention.Informational,
+    WindowAttention.Critical,
+)
 
 private class DeferredRuntimeFullscreenObservationSink : RuntimeFullscreenObservationSink {
     private val delegate = AtomicReference<RuntimeFullscreenObservationSink?>()

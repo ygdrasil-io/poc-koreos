@@ -90,6 +90,7 @@ import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.LogicalSizeRange
 import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
@@ -129,6 +130,71 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @Test
+    fun embeddedAttentionIsUnsupportedByDefaultWithoutTouchingTheNativeBroker() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            AppKitWindowRuntimeDriverFactory { DeterministicAppKitNativeWindowPort("attention-default") },
+        ) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+
+        try {
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                observedWindows.await().requestWindow(WindowSpec(title = "attention-default")).appKitSuccessValue().await(),
+            ).window
+
+            assertEquals(
+                KadreFailure.Unsupported(KadreOperation.RequestWindowAttention),
+                assertIs<KadreResult.Failure>(window.requestAttention(WindowAttention.Informational)).reason,
+            )
+            assertTrue(native.attentionRequests.isEmpty())
+            session.close()
+            session.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
+    fun embeddedAttentionOptInRoutesTheStandardDomainThroughTheNativeBroker() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            AppKitWindowRuntimeDriverFactory { DeterministicAppKitNativeWindowPort("attention-opt-in") },
+        ) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+
+        try {
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows, allowUserAttention = true)).requireSession()
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                observedWindows.await().requestWindow(WindowSpec(title = "attention-opt-in")).appKitSuccessValue().await(),
+            ).window
+
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.attention,
+            )
+            assertEquals(KadreResult.Success(Unit), window.requestAttention(WindowAttention.Critical))
+            assertEquals(listOf(WindowAttention.Critical), native.attentionRequests)
+            session.close()
+            session.awaitTermination()
+            assertEquals(listOf(1L), native.cancelledAttentionTokens)
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
     @Test
     fun discoveryAndAvailabilityDoNotTouchTheNativeBridge() {
         val providers = ServiceLoader.load(DesktopBackendProvider::class.java).toList()
@@ -1389,12 +1455,18 @@ class AppKitBackendProviderTest {
                 Capability.Supported(Unit, FeatureAvailability.Available),
                 window.capabilities.value.transparency,
             )
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.attention,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
-                window.capabilities.value.attention,
                 window.capabilities.value.contentProtection,
             ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
         }
@@ -2957,6 +3029,9 @@ private class EmbeddedNativeApplication : AppKitNativeApplication {
         private set
     var stopCount: Int = 0
         private set
+    val attentionRequests = mutableListOf<WindowAttention>()
+    val cancelledAttentionTokens = mutableListOf<Long>()
+    private var nextAttentionToken = 1L
 
     override fun isMainThread(): Boolean = true
 
@@ -2964,6 +3039,13 @@ private class EmbeddedNativeApplication : AppKitNativeApplication {
 
     override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
         observe(listener)
+
+    override fun requestUserAttention(attention: WindowAttention): Long =
+        nextAttentionToken++.also { attentionRequests += attention }
+
+    override fun cancelUserAttentionRequest(token: Long) {
+        cancelledAttentionTokens += token
+    }
 
     override fun run() {
         runCount += 1
@@ -3113,6 +3195,7 @@ private fun embeddedRequest(
 private fun publicWindowRequest(
     parentScope: kotlinx.coroutines.CoroutineScope,
     captureWindows: CompletableDeferred<WindowManager>,
+    allowUserAttention: Boolean = false,
 ): DesktopEmbeddedRequest = DesktopEmbeddedRequest(
     parentScope,
     KadreApplicationFactory {
@@ -3123,6 +3206,7 @@ private fun publicWindowRequest(
     },
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
+    allowUserAttention,
 )
 
 @OptIn(

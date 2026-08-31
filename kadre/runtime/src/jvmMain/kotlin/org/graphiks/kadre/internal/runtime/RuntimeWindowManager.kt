@@ -92,7 +92,6 @@ public class RuntimeWindowManager public constructor(
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
-    @Suppress("EXPOSED_PARAMETER_TYPE")
     private val attentionPort: WindowAttentionPort? = null,
     private val acceptedAttention: Set<WindowAttention> = emptySet(),
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
