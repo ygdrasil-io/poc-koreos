@@ -22,8 +22,11 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
+import org.graphiks.kffi.objc.CGWindowLevelForKey
+import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
@@ -511,6 +514,7 @@ private fun styleMask(spec: WindowSpec): NSWindowStyleMask {
 private fun configureKffiWindow(owner: AppKitNativeWindowOwner, spec: WindowSpec) {
     owner.kffiWindowOwner().applyInitialGeometry(spec)
     owner.kffiWindowOwner().applyInitialChrome(spec)
+    owner.kffiWindowOwner().applyInitialLevel(spec)
     owner.kffiWindow().apply {
         setReleasedWhenClosed(false)
         setTitle(spec.title)
@@ -544,6 +548,10 @@ private class KffiWindowOwner(
         )
     }
 
+    fun applyInitialLevel(spec: WindowSpec) {
+        window.setLevel(spec.level.toAppKitWindowLevel())
+    }
+
     fun updateWindow(
         target: AppKitWindowMutationTarget,
         commit: AppKitWindowMutationCommit,
@@ -562,6 +570,11 @@ private class KffiWindowOwner(
                 systemButtons = target.chrome.systemButtons.resolveValue(current.systemButtons),
                 resizable = window.styleMask().contains(NSWindowStyleMask.NSWindowStyleMaskResizable),
             )
+        }
+        when (val level = target.level.level) {
+            is PropertyChange.Set -> window.setLevel(level.value.toAppKitWindowLevel())
+            PropertyChange.Clear -> error("AppKit does not support clearing a window level")
+            PropertyChange.Unchanged -> Unit
         }
         return readWindow()
     }
@@ -613,7 +626,10 @@ private class KffiWindowOwner(
         title = window.titleAsString(),
         geometry = readGeometry(),
         chrome = readChrome(),
+        level = readLevel(),
     )
+
+    private fun readLevel(): WindowLevel = appKitWindowLevel(window.level())
 
     private fun applyChrome(
         decorations: WindowDecorations,
@@ -738,6 +754,21 @@ private fun NSWindow.standardButtonHidden(button: NSWindowButton): Boolean {
 
 private fun AppKitWindowChromeTarget.hasChange(): Boolean =
     decorations !is PropertyChange.Unchanged || systemButtons !is PropertyChange.Unchanged
+
+private fun WindowLevel.toAppKitWindowLevel(): Long = CGWindowLevelForKey(
+    when (this) {
+        WindowLevel.Normal -> CGWindowLevelKey.kCGNormalWindowLevelKey
+        WindowLevel.Floating -> CGWindowLevelKey.kCGFloatingWindowLevelKey
+        WindowLevel.Modal -> CGWindowLevelKey.kCGModalPanelWindowLevelKey
+    },
+).toLong()
+
+private fun appKitWindowLevel(level: Long): WindowLevel = when (level) {
+    WindowLevel.Normal.toAppKitWindowLevel() -> WindowLevel.Normal
+    WindowLevel.Floating.toAppKitWindowLevel() -> WindowLevel.Floating
+    WindowLevel.Modal.toAppKitWindowLevel() -> WindowLevel.Modal
+    else -> error("AppKit returned an unsupported window level: $level")
+}
 
 private val APPKIT_OWNED_STYLE_MASK: Long =
     NSWindowStyleMask.NSWindowStyleMaskTitled.rawValue or

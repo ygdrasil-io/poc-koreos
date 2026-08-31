@@ -17,8 +17,11 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
+import org.graphiks.kffi.objc.CGWindowLevelForKey
+import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
@@ -290,6 +293,65 @@ class KffiAppKitWindowPortMacOsTest {
                 ),
                 peer.withDesktopHandle(admitCallback = { true }) { handle ->
                     NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).readGeneratedNativeChrome()
+                },
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
+    fun generatedKffiWindowAppliesAndReadsBackWindowLevelsOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peer = KffiAppKitWindowPort().prepare(
+            id = AppKitWindowPeerId(88L),
+            spec = WindowSpec(level = WindowLevel.Floating),
+            acceptSurfaceStimulus = { },
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                WindowLevel.Floating,
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                        ),
+                    ),
+                ).level,
+            )
+            assertEquals(
+                KadreResult.Success(
+                    CGWindowLevelForKey(CGWindowLevelKey.kCGFloatingWindowLevelKey).toLong(),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
+                },
+            )
+
+            assertEquals(
+                WindowLevel.Modal,
+                checkNotNull(
+                    peer.updateWindow(
+                        AppKitWindowMutationTarget(
+                            title = PropertyChange.Unchanged,
+                            geometry = unchangedGeometryTarget(),
+                            level = AppKitWindowLevelTarget(
+                                PropertyChange.Set(WindowLevel.Modal),
+                            ),
+                        ),
+                    ),
+                ).level,
+            )
+            assertEquals(
+                KadreResult.Success(
+                    CGWindowLevelForKey(CGWindowLevelKey.kCGModalPanelWindowLevelKey).toLong(),
+                ),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    NSWindow(MemorySegment.ofAddress(handle.appKitWindowAddress())).level()
                 },
             )
         } finally {
