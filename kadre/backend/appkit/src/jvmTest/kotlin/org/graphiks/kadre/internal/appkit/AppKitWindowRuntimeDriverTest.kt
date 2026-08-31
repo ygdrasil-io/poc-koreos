@@ -2902,6 +2902,56 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun geometryFailureDoesNotRejectAlreadyEffectiveTransparency() = runBlocking {
+        val failure = IllegalStateException("resizable setter failed")
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "geometry-failure-with-transparency",
+            geometryFailureAfterContentSize = failure,
+        )
+        val reported = mutableListOf<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.ContentSize,
+                WindowProperty.Resizable,
+                WindowProperty.Transparency,
+            ),
+        )
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "geometry-failure-with-transparency"),
+            )
+            val target = LogicalSize(480.0, 300.0)
+
+            val outcome = assertIs<WindowUpdateOutcome.PartiallyApplied>(
+                window.apply(
+                    WindowUpdate(
+                        contentSize = PropertyChange.Set(target),
+                        resizable = PropertyChange.Set(false),
+                        transparency = PropertyChange.Set(false),
+                    ),
+                ).successValue(),
+            )
+
+            assertEquals(target, outcome.state.contentSize)
+            assertTrue(outcome.state.resizable)
+            assertFalse(outcome.state.transparent)
+            assertEquals(WindowProperty.Resizable, outcome.rejected.single().field)
+            assertIs<KadreFailure.PlatformFailure>(outcome.rejected.single().failure)
+            assertEquals(listOf<Throwable>(failure), reported)
+            assertEquals(
+                AppKitBackendCommandInspection(),
+                driver.backendCommandInspection("geometry-failure-with-transparency"),
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun queuedGeometryUpdateCompletesWhenCloseIsAdmittedBeforeNativeCommit() = runBlocking {
         val enteredHandle = CountDownLatch(1)
         val releaseHandle = CountDownLatch(1)
@@ -3693,12 +3743,16 @@ internal class DeterministicAppKitNativeWindowPort(
             recording.level = effectiveLevelOverride ?: target.level.level.resolve(recording.level)
         }
         if (target.appearance.transparency !is PropertyChange.Unchanged) {
-            appearanceSetterFailure?.let { throw it }
-            recording.appearance = effectiveAppearance ?: recording.appearance.updateFor(target.appearance)
-            appearanceFailureAfterTransparencySet?.let { throw it }
-            appearanceReadbackFailurePending?.let { failure ->
-                appearanceReadbackFailurePending = null
-                throw failure
+            try {
+                appearanceSetterFailure?.let { throw it }
+                recording.appearance = effectiveAppearance ?: recording.appearance.updateFor(target.appearance)
+                appearanceFailureAfterTransparencySet?.let { throw it }
+                appearanceReadbackFailurePending?.let { failure ->
+                    appearanceReadbackFailurePending = null
+                    throw failure
+                }
+            } catch (failure: Throwable) {
+                throw AppKitWindowMutationFailure(setOf(WindowProperty.Transparency), failure)
             }
         }
         return AppKitWindowMutationSnapshot(

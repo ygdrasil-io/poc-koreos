@@ -218,16 +218,18 @@ internal class AppKitWindowPeer private constructor(
                         }
                     } catch (failure: Throwable) {
                         if (!commit.started) throw failure
+                        val attributedFailure = failure as? AppKitWindowMutationFailure
+                        val nativeFailure = attributedFailure?.cause ?: failure
                         val snapshot = try {
                             port.readWindow(window)
                         } catch (readbackFailure: Throwable) {
-                            if (readbackFailure !== failure) failure.addSuppressed(readbackFailure)
-                            throw failure
+                            if (readbackFailure !== nativeFailure) nativeFailure.addSuppressed(readbackFailure)
+                            throw nativeFailure
                         }
                         NativeWindowMutationResult(
                             snapshot = snapshot,
-                            failure = failure,
-                            failureFields = target.failureFields(),
+                            failure = nativeFailure,
+                            failureFields = attributedFailure?.failedFields.orEmpty(),
                         )
                     }
                 }
@@ -485,12 +487,6 @@ internal class AppKitWindowPeer private constructor(
                 }
             }
         }
-    }
-}
-
-private fun AppKitWindowMutationTarget.failureFields(): Set<WindowProperty> = buildSet {
-    if (appearance.transparency !is PropertyChange.Unchanged) {
-        add(WindowProperty.Transparency)
     }
 }
 

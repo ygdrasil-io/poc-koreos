@@ -21,6 +21,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowSpec
 
@@ -124,6 +125,12 @@ internal interface AppKitNativeWindowPort {
 internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
 }
+
+/** Identifies the native mutation field whose setter or readback actually failed. */
+internal class AppKitWindowMutationFailure(
+    val failedFields: Set<WindowProperty>,
+    cause: Throwable,
+) : RuntimeException(cause)
 
 /** Peer-to-port token whose transition is the exact first native window setter boundary. */
 internal interface AppKitWindowMutationCommit {

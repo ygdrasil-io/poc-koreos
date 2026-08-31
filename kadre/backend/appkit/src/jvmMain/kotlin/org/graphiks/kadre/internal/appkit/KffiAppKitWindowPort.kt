@@ -23,6 +23,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.CGWindowLevelForKey
@@ -692,9 +693,14 @@ private class KffiWindowOwner(
             PropertyChange.Unchanged -> Unit
         }
         if (target.appearance.hasChange()) {
-            val current = readAppearance()
-            applyAppearance(
-                transparency = target.appearance.transparency.resolveValue(current.transparency),
+            applyAppearanceMutation {
+                val current = readAppearance()
+                applyAppearance(
+                    transparency = target.appearance.transparency.resolveValue(current.transparency),
+                )
+            }
+            return readWindow(
+                appearance = applyAppearanceMutation { readAppearance() },
             )
         }
         return readWindow()
@@ -743,12 +749,16 @@ private class KffiWindowOwner(
     fun readGeometry(): AppKitWindowGeometrySnapshot =
         readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
 
-    fun readWindow(): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
+    fun readWindow(): AppKitWindowMutationSnapshot = readWindow(readAppearance())
+
+    private fun readWindow(
+        appearance: AppKitWindowAppearanceSnapshot,
+    ): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
         title = window.titleAsString(),
         geometry = readGeometry(),
         chrome = readChrome(),
         level = readLevel(),
-        appearance = readAppearance(),
+        appearance = appearance,
     )
 
     private fun readLevel(): WindowLevel = appKitWindowLevel(window.level())
@@ -766,6 +776,12 @@ private class KffiWindowOwner(
     private fun readAppearance(): AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
         transparency = !window.isOpaque(),
     )
+
+    private inline fun <T> applyAppearanceMutation(block: () -> T): T = try {
+        block()
+    } catch (failure: Throwable) {
+        throw AppKitWindowMutationFailure(setOf(WindowProperty.Transparency), failure)
+    }
 
     private fun applyChrome(
         decorations: WindowDecorations,
