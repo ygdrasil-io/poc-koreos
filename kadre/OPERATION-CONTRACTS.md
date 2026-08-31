@@ -117,6 +117,15 @@ exacte est rapportée une fois au diagnostic de session.
 
 `WindowRequestOutcome.Rejected.failure` admet exactement `Unsupported(RequestWindow)`, `Invalid(field)`, `Interaction(reason)`, `Closed(Host)`, `ParentScopeCancelled`, `Limit(Window)`, `Temporary` et `Platform`. `ParentScopeCancelled` est admis uniquement lors de la validation du nouveau host retourné par `WebWindowProvider`; il ne décrit pas la scope du requester. `RequesterDetached` et `Cancelled` restent des outcomes dédiés et ne sont pas dupliqués comme failures ; `UserCancelled(RequestWindow)` n’est donc pas admis ici.
 
+Sur AppKit livré, `Window.apply(transparency = ...)` est une mutation
+d'opacité avec readback, non une promesse de translucidité dessinée ou de
+compositor. `Window.apply(contentProtection = ...)` reste
+`PartiallyApplied` avec `Unsupported(UpdateWindow)` pour ce champ : il ne
+prétend pas fournir d'anti-capture via `NSWindowSharingNone`. L'attention
+standalone est admise par un broker process-wide mais demeure owned par la
+fenêtre ; embedded exige l'opt-in de son host. `Success(Unit)` ne promet dans
+aucun cas que l'utilisateur verra une attention.
+
 La signature normative de `WindowRequest.cancel` devient :
 
 ```kotlin
@@ -136,6 +145,12 @@ Le `KadreResult` externe est supprimé parce que le protocole possède déjà un
 | `InteractionRegistration.close` / `ArmedInteraction.close` | `Unit` | aucune | idempotente, non bloquante ; les actions déjà committées ne sont pas rollback. |
 
 `InteractionActionOutcome.Rejected.failure` utilise exactement le set de `InteractionContext.request`, auquel s’ajoute `Cancelled(Interaction)` lorsque le host annule une action déjà admise. `Expired` et `OwnerClosed` restent des outcomes dédiés.
+
+`BeginWindowMove` AppKit est une action de handler uniquement : son token
+synchrone est consommé par une vraie pression pointeur et le backend invoque le
+move natif dans ce callback. Une demande en dehors de cette activation ne
+prolonge pas le token ; l'input pointeur ordinaire reste livré après le retour,
+que l'action soit absente, rejetée ou committée.
 
 ## 6. Devices et gamepad
 

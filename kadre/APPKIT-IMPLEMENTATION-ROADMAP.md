@@ -394,6 +394,20 @@ contrats `WIN-005` et `APK-010` sont actifs ; le cahier manuel
 `backend/appkit/manual/phase-5-fullscreen.md` reste non bloquant et extérieur à
 la CI.
 
+La sous-tranche apparence, attention et interaction de déplacement est achevée
+pour le périmètre livré : `Transparency` applique et relit l'opacité de la
+fenêtre native, `WindowAttention` est brokerisé au niveau process et possédé
+par la fenêtre en standalone, et une pression pointeur réelle peut consommer un
+token synchrone single-use pour `BeginWindowMove`. Les contrats `WIN-006`,
+`APK-011`, `INT-001` et `APK-012` sont actifs. En embedded, l'attention demande
+un opt-in explicite ; dans les deux topologies, toute visibilité dépend de la
+politique OS/utilisateur/host. Le harness
+`phase5AdvancedWindowHarness` enregistre séparément les observations humaines.
+`contentProtection` reste `Unsupported(UpdateWindow)` : AppKit ne fournit pas
+de primitive anti-capture utilisable ici. Blur, icône, resize, position externe,
+fullscreen exclusif et interactions armées restent reportés ou explicitement
+non supportés.
+
 #### Contenu
 
 - position, dimensions et contraintes ;

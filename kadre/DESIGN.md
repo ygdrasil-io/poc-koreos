@@ -906,6 +906,17 @@ Les appels concurrents à `apply` reçoivent un `WindowOperationId` à l’admis
 
 `requestAttention(None)` annule best-effort une demande précédemment admise pour cette fenêtre ; les deux autres valeurs demandent l’attention au niveau supporté. Une valeur absente des contraintes de `WindowCapabilities.attention` lorsque cette capability est `Supported` retourne `InvalidRequest("attention")`; une capability structurellement absente retourne `Unsupported(RequestWindowAttention)`. Cette capability n’utilise pas `RequiresPermission`, car aucune `KadrePermission` du catalogue ne représente l’attention utilisateur. `Success(Unit)` signifie uniquement que la commande a été admise par le host, sans promesse que l’OS la rende visible ni qu’un état durable existe. Les opérations contextuelles conservent ainsi des verbes dédiés au lieu d’être cachées dans `WindowUpdate` : pointer lock, system drag et attention utilisateur.
 
+`Transparency` désigne l'opacité et le readback de la fenêtre native. Une
+translucidité visible demande un contenu à alpha dessiné par l'application ;
+Kadre ne possède pas de renderer et ne fait aucune promesse sur le compositor.
+Sur AppKit, `contentProtection` reste
+`Unsupported(UpdateWindow)` : `NSWindowSharingNone` est legacy et inutilisable
+comme mécanisme de sécurité de capture, donc Kadre ne formule aucune promesse
+anti-capture. En standalone AppKit, l'attention est brokerisée au niveau du
+processus tout en restant possédée par sa fenêtre ; en embedded elle exige un
+opt-in explicite. Dans les deux cas, l'effet visuel reste soumis à l'OS, à
+l'utilisateur et au host.
+
 ### 9.6 Interactions transitoires
 
 Certaines APIs exigent une activation utilisateur synchrone ou un serial attaché à l’événement natif : fullscreen et pointer lock Web, ouverture d’un browsing context, system drag AppKit, drag/resize Wayland et menus contextuels natifs. Une livraison différée par `Flow` ne peut pas préserver honnêtement cette autorité.
@@ -953,6 +964,14 @@ Une application peut aussi pré-armer une action compatible via une requête obs
 `ArmedInteraction.await()` est idempotent. La cancellation d’un waiter ne désarme pas l’action et n’affecte aucun autre waiter ; seul `close()`, l’expiration, le détachement ou une transition native documentée modifie son état.
 
 Sur un événement correspondant, le handler installé reçoit d’abord l’interaction. S’il consomme le token, l’action armée reste pendante ; sinon le backend exécute l’unique action armée avant de quitter le callback. Un token ne committe jamais plus d’une action nécessitant une autorité single-use. `InteractionRegistration.outcomes` utilise la policy des événements de fenêtre ; chaque requête acceptée occupe le budget `maxPendingInteractionRequests` jusqu’à son outcome terminal. Les capabilities indiquent quelles actions et quels triggers supportent ce mode. Aucune API suspendue ordinaire ne prétend prolonger une user activation native.
+
+AppKit peut admettre `BeginWindowMove` uniquement depuis une vraie pression
+pointeur, pendant le callback natif synchrone qui porte le token single-use.
+Le backend transmet alors l'événement à `performWindowDragWithEvent` avant de
+publier l'input immuable ordinaire ; un handler absent, un rejet ou une autre
+action laisse l'input régulier continuer normalement. Il ne synthétise ni
+pression ni déplacement, et les interactions armées restent distinctes de ce
+chemin.
 
 ### 9.7 Capabilities
 

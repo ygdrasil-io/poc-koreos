@@ -2811,6 +2811,89 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun phase5AdvancedWindowHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase5-advanced-window-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase5-advanced-window-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase5AdvancedWindowHarnessKt",
+                "--record=$record",
+                "--build-id=automated-advanced-window-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("transparent")
+                commands.appendLine("opaque")
+                commands.appendLine("attention informational")
+                commands.appendLine("attention critical")
+                commands.appendLine("attention none")
+                commands.appendLine("install-move-handler")
+                commands.appendLine("move")
+                (1..5).forEach { scenario ->
+                    commands.appendLine(
+                        "result M$scenario not-applicable automated proof does not satisfy manual M$scenario",
+                    )
+                }
+                commands.appendLine("close")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "displays=",
+                "buildId=automated-advanced-window-harness-proof",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("SNAPSHOT\tinitial\tWindowState("), report)
+            assertTrue(report.contains("CAPABILITIES\tWindowCapabilities("), report)
+            listOf("transparent", "opaque").forEach { command ->
+                assertTrue(report.contains("COMMAND\t$command\tSuccess(value="), report)
+                assertTrue(report.contains("SNAPSHOT\tcommand-$command\tWindowState("), report)
+            }
+            listOf("informational", "critical", "none").forEach { attention ->
+                assertTrue(report.contains("COMMAND\tattention-$attention\tSuccess(value=kotlin.Unit)"), report)
+            }
+            assertTrue(report.contains("COMMAND\tinstall-move-handler\tSuccess(value="), report)
+            assertTrue(report.contains("COMMAND\tmove\tawaiting-real-pointer-down"), report)
+            assertTrue(
+                report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL\tWindowState(phase=Closed"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            (1..5).forEach { scenario ->
+                assertTrue(
+                    report.contains(
+                        "SCENARIO\tM$scenario\tnot-applicable\t" +
+                            "automated proof does not satisfy manual M$scenario",
+                    ),
+                    report,
+                )
+            }
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
     fun publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs() {
         if (!isMacOs()) return
 
