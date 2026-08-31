@@ -129,6 +129,10 @@ class AppKitProcessBrokerTest {
             KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host),
             assertIs<KadreResult.Failure>(broker.requestUserAttention(owner, attentionWindowId(32L), WindowAttention.Critical)).reason,
         )
+        assertEquals(
+            KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host),
+            assertIs<KadreResult.Failure>(broker.requestUserAttention(owner, attentionWindowId(32L), WindowAttention.None)).reason,
+        )
     }
 
     @Test

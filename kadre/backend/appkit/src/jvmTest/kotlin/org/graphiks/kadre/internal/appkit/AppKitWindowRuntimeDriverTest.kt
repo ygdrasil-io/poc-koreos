@@ -42,6 +42,7 @@ import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowPhase
@@ -68,6 +69,30 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun externalNativeCloseReleasesBrokeredAttentionExactlyOnce() = runBlocking {
+        val native = DriverAttentionNative()
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val port = DeterministicAppKitNativeWindowPort("attention-native-close")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "attention-native-close"))
+            assertEquals(KadreResult.Success(Unit), window.requestAttention(WindowAttention.Informational))
+            withTimeout(2.seconds) { while (native.requests.isEmpty()) yield() }
+            port.emitNativeClosed("attention-native-close")
+            withTimeout(2.seconds) { while (native.cancelled.isEmpty()) yield() }
+            assertEquals(listOf(1L), native.cancelled)
+        } finally {
+            driver.close()
+        }
+    }
     @Test
     fun fullscreenToggleWaitsForTheDelegateTerminalAndRestoresTheDesiredLevel() = runBlocking {
         val port = DeterministicAppKitNativeWindowPort(
@@ -4426,4 +4451,18 @@ private fun Any.privateField(name: String) = javaClass.getDeclaredField(name).ap
 
 private suspend fun WindowRequest.awaitOpened() {
     check(await() is WindowRequestOutcome.OpenedHere) { "expected an AppKit window to open" }
+}
+
+private class DriverAttentionNative : AppKitNativeApplication {
+    val requests = CopyOnWriteArrayList<WindowAttention>()
+    val cancelled = CopyOnWriteArrayList<Long>()
+    private var token = 1L
+    override fun isMainThread() = true
+    override fun isRunning() = true
+    override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit) = AutoCloseable { }
+    override fun requestUserAttention(attention: WindowAttention): Long = token++.also { requests += attention }
+    override fun cancelUserAttentionRequest(token: Long) { cancelled += token }
+    override fun run() = Unit
+    override fun requestStop() = AppKitStopRequest { AppKitStopResult.Accepted }
+    override fun emergencyStop() = Unit
 }

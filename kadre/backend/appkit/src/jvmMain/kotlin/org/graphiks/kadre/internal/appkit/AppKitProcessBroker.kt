@@ -82,10 +82,12 @@ internal class AppKitProcessBroker {
         windowId: WindowId,
         attention: WindowAttention,
     ): KadreResult<Unit> {
+        if (!owner.isOpen()) {
+            return KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host))
+        }
         if (attention == WindowAttention.None) {
             return releaseUserAttention(owner, windowId)
         }
-        if (!owner.isOpen()) return KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host))
         val replaced = synchronized(lock) {
             val previous = attentionTokens[windowId]
             when {
