@@ -100,6 +100,7 @@ public class RuntimeWindowManager public constructor(
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
     private val dispatchedWindowUpdates = linkedMapOf<WindowOperationId, RuntimeWindow>()
+    internal var beforeWindowUpdateRegistration: (RuntimeWindow, PendingWindowUpdate) -> Unit = { _, _ -> }
     private val surfaces = linkedMapOf<SurfaceId, RuntimeWindowSurface>()
     private var nextAdmissionOrder = 0L
     private var reservedWindowSlots = 0
@@ -461,6 +462,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun dispatchWindowUpdate(window: RuntimeWindow, pending: PendingWindowUpdate) {
+        beforeWindowUpdateRegistration(window, pending)
         val command = WindowUpdateCommand(
             windowId = window.id,
             operationId = pending.operationId,
@@ -2126,12 +2128,24 @@ internal class RuntimeWindow(
     }
 
     private fun cancelPendingUpdate(pending: PendingWindowUpdate) {
+        var closeEventDelivery = false
+        var drainNext = false
         var withdrawDispatched = false
         synchronized(updateLock) {
             if (dispatchedUpdate === pending) {
                 if (pending.isFullscreenUpdate() && pending.nativeDispatchStarted) {
                     pending.waiterDetached = true
                     return
+                }
+                if (!pending.backendRegistrationEntered) {
+                    dispatchedUpdate = null
+                    pending.cancelled = true
+                    fullscreenBarrier?.takeIf {
+                        it.operationId == pending.operationId && it.phase == FullscreenPhase.PreparedLocal
+                    }?.let { fullscreenBarrier = null }
+                    closeEventDelivery = takePendingEventDeliveryCloseLocked()
+                    drainNext = true
+                    return@synchronized
                 }
                 if (pending.cancellationRequested) return
                 pending.cancellationRequested = true
@@ -2141,12 +2155,15 @@ internal class RuntimeWindow(
             pending.cancelled = true
             pendingUpdates.remove(pending)
         }
+        if (closeEventDelivery) eventFlow.close()
+        if (drainNext) dispatchNextUpdate()
         if (withdrawDispatched) manager.withdrawWindowUpdate(this, pending.operationId)
     }
 
     fun beginNativeUpdateDispatch(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
         val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
         if (mutableState.value.phase == WindowPhase.Open) {
+            pending.backendRegistrationEntered = true
             if (!pending.isFullscreenUpdate()) pending.nativeDispatchStarted = true
             true
         } else {
@@ -2353,6 +2370,7 @@ internal data class PendingWindowUpdate(
     val result: CompletableDeferred<KadreResult<WindowUpdateOutcome>> = CompletableDeferred(),
     var cancelled: Boolean = false,
     var cancellationRequested: Boolean = false,
+    var backendRegistrationEntered: Boolean = false,
     var nativeDispatchStarted: Boolean = false,
     var waiterDetached: Boolean = false,
 )

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withTimeout
@@ -1667,6 +1668,84 @@ class RuntimeWindowManagerTest {
             assertEquals(listOf(thirdCommand.operationId), admittedSelectors.map { it.operationId })
         } finally {
             releaseRegistration.countDown()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun fullscreenCancellationBeforeBackendRegistrationWithdrawsAndDrainsTheNextUpdate() = runBlocking {
+        val registrationPaused = CountDownLatch(1)
+        val releaseRegistration = CountDownLatch(1)
+        val pauseNextRegistration = AtomicBoolean(false)
+        val admittedSelectors = CopyOnWriteArrayList<WindowUpdateCommand>()
+        val events = CopyOnWriteArrayList<WindowEvent.PropertiesChanged>()
+        val port = DeterministicWindowCommandPort().apply {
+            updateCancellationOutcome = WindowUpdateCancellationOutcome.CancelledBeforeCommit
+            cancellationRequiresRegisteredUpdate = true
+            onUpdate = admittedSelectors::add
+        }
+        val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties()).apply {
+            beforeWindowUpdateRegistration = { _, _ ->
+                if (pauseNextRegistration.compareAndSet(true, false)) {
+                    registrationPaused.countDown()
+                    check(releaseRegistration.await(2, TimeUnit.SECONDS))
+                }
+            }
+        }
+        var collector: Job? = null
+
+        try {
+            val window = openFullscreenWindow(manager, port)
+            collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.PropertiesChanged>().collect(events::add)
+            }
+            val first = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            val firstCommand = port.updateCommands.single()
+            val second = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            }
+            pauseNextRegistration.set(true)
+            val firstTerminal = async(Dispatchers.Default) {
+                firstCommand.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Borderless))
+            }
+            assertTrue(registrationPaused.await(2, TimeUnit.SECONDS))
+            admittedSelectors.clear()
+
+            second.cancelAndJoin()
+            assertTrue(second.isCancelled)
+            releaseRegistration.countDown()
+            withTimeout(2.seconds) { firstTerminal.await() }
+            assertIs<WindowUpdateOutcome.Applied>(withTimeout(2.seconds) { first.await() }.successValue())
+
+            val third = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            }
+            withTimeout(2.seconds) {
+                while (admittedSelectors.isEmpty()) kotlinx.coroutines.yield()
+            }
+            val thirdCommand = admittedSelectors.single()
+            thirdCommand.fullscreenDid(window.state.value.copy(fullscreen = FullscreenMode.Windowed))
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                withTimeout(2.seconds) { third.await() }.successValue(),
+            )
+            withTimeout(2.seconds) {
+                while (events.size < 2) kotlinx.coroutines.yield()
+            }
+            assertEquals(FullscreenMode.Windowed, outcome.state.fullscreen)
+            assertEquals(listOf(firstCommand, thirdCommand), port.updateCommands)
+            assertEquals(listOf(thirdCommand), admittedSelectors)
+            assertEquals(
+                listOf(FullscreenMode.Borderless, FullscreenMode.Windowed),
+                events.map { it.state.fullscreen },
+            )
+            assertEquals(listOf(firstCommand.operationId, thirdCommand.operationId), events.map { it.operationId })
+            assertTrue(events.all { it.changed == setOf(WindowProperty.Fullscreen) })
+        } finally {
+            releaseRegistration.countDown()
+            collector?.cancelAndJoin()
             manager.close()
         }
     }
