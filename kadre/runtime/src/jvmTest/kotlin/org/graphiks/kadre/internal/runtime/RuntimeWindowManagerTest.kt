@@ -1108,6 +1108,111 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun fullscreenUnarmedOppositeDidStaysExternalUntilTheMatchingLocalTerminal() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "unarmed-did")).successValue(),
+            port.openCommands.single(),
+        )
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val queued = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("after-unarmed-did")))
+        }
+        val enterCommand = port.updateCommands.single()
+        val unarmedExit = window.state.value.copy(fullscreen = FullscreenMode.Windowed)
+
+        enterCommand.fullscreenDid(unarmedExit)
+
+        assertFalse(enter.isCompleted)
+        assertFalse(queued.isCompleted)
+        assertEquals(1, port.updateCommands.size)
+
+        enterCommand.fullscreenDid(unarmedExit)
+
+        assertFalse(enter.isCompleted)
+        assertFalse(queued.isCompleted)
+        assertEquals(1, port.updateCommands.size)
+
+        enterCommand.fullscreenDid(
+            window.state.value.copy(fullscreen = FullscreenMode.Borderless),
+        )
+
+        assertEquals(
+            FullscreenMode.Borderless,
+            assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue()).state.fullscreen,
+        )
+        assertEquals(2, port.updateCommands.size)
+        port.updateCommands.last().applied(
+            window.state.value.copy(title = "after-unarmed-did"),
+        )
+        assertEquals(
+            "after-unarmed-did",
+            assertIs<WindowUpdateOutcome.Applied>(queued.await().successValue()).state.title,
+        )
+    }
+
+    @Test
+    fun fullscreenUnarmedOppositeDidFailStaysExternalUntilTheMatchingLocalTerminal() = runTest {
+        val reported = mutableListOf<Throwable>()
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            reported = reported,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec(title = "unarmed-did-fail")).successValue(),
+            port.openCommands.single(),
+        )
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+        }
+        val queued = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("after-unarmed-did-fail")))
+        }
+        val enterCommand = port.updateCommands.single()
+
+        enterCommand.fullscreenDidFail(FullscreenMode.Windowed)
+
+        assertFalse(enter.isCompleted)
+        assertFalse(queued.isCompleted)
+        assertEquals(1, port.updateCommands.size)
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.Fake, "fullscreen", "exit-failed"),
+            assertIs<KadreException>(reported.single()).failure,
+        )
+
+        enterCommand.fullscreenDidFail(FullscreenMode.Windowed)
+
+        assertFalse(enter.isCompleted)
+        assertFalse(queued.isCompleted)
+        assertEquals(1, reported.size)
+
+        enterCommand.fullscreenDid(
+            window.state.value.copy(fullscreen = FullscreenMode.Borderless),
+        )
+
+        assertEquals(
+            FullscreenMode.Borderless,
+            assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue()).state.fullscreen,
+        )
+        assertEquals(2, port.updateCommands.size)
+        port.updateCommands.last().applied(
+            window.state.value.copy(title = "after-unarmed-did-fail"),
+        )
+        assertEquals(
+            "after-unarmed-did-fail",
+            assertIs<WindowUpdateOutcome.Applied>(queued.await().successValue()).state.title,
+        )
+    }
+
+    @Test
     fun fullscreenAdmissionPrecedenceKeepsStructureAheadOfRevisionAndRevisionAheadOfDomainAndBarrier() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port, enabledWindowUpdateCapabilities = fullscreenProperties())

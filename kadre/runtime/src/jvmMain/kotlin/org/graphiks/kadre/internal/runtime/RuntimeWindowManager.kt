@@ -1609,7 +1609,16 @@ internal class RuntimeWindow(
                 val effective = candidate.copy(revision = WindowRevision(lifecycle.revision.value + 1L))
                 mutableState.value = effective
                 eventPublicationsInFlight += 1
-                publication = WindowStatePublication(lifecycle, effective, publicationOperationId)
+                publication = WindowStatePublication(
+                    lifecycle,
+                    effective,
+                    publicationOperationId,
+                    forcedChanged = if (pending.update.fullscreen is PropertyChange.Set) {
+                        setOf(WindowProperty.Fullscreen)
+                    } else {
+                        emptySet()
+                    },
+                )
             }
             updateDesiredLevelAfterReadback(pending, candidate, backendRejected)
             completion = pending
@@ -1811,7 +1820,11 @@ internal class RuntimeWindow(
             if (fullscreenTombstone?.matches(target, FullscreenTerminalKind.Did) == true) {
                 return FullscreenResolution.Accepted
             }
-            val publication = prepareFullscreenPublicationLocked(effectiveState, operationId = null)
+            val publication = prepareFullscreenPublicationLocked(
+                effectiveState,
+                operationId = null,
+                forcedChanged = setOf(WindowProperty.Fullscreen),
+            )
             fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.Did)
             return FullscreenResolution(publication = publication)
         }
@@ -1820,7 +1833,11 @@ internal class RuntimeWindow(
             fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.Did)
             val diagnostic = if (target != barrier.target) unexpectedFullscreenFailure() else null
             return FullscreenResolution(
-                publication = prepareFullscreenPublicationLocked(effectiveState, operationId = null),
+                publication = prepareFullscreenPublicationLocked(
+                    effectiveState,
+                    operationId = null,
+                    forcedChanged = setOf(WindowProperty.Fullscreen),
+                ),
                 diagnostics = listOfNotNull(diagnostic),
                 drain = true,
             )
@@ -1831,12 +1848,30 @@ internal class RuntimeWindow(
             fullscreenBarrier = null
             fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.Did)
             return FullscreenResolution(
-                publication = prepareFullscreenPublicationLocked(effectiveState, operationId = null),
+                publication = prepareFullscreenPublicationLocked(
+                    effectiveState,
+                    operationId = null,
+                    forcedChanged = setOf(WindowProperty.Fullscreen),
+                ),
                 completion = pending,
                 result = KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
                 terminalOperationId = barrier.operationId,
                 drain = true,
             )
+        }
+        val localSuccess = target == barrier.target
+        val armedConflict = target == barrier.conflictTarget
+        if (!localSuccess && !armedConflict) {
+            if (fullscreenTombstone?.matches(target, FullscreenTerminalKind.Did) == true) {
+                return FullscreenResolution.Accepted
+            }
+            val publication = prepareFullscreenPublicationLocked(
+                effectiveState,
+                operationId = null,
+                forcedChanged = setOf(WindowProperty.Fullscreen),
+            )
+            fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.Did)
+            return FullscreenResolution(publication = publication)
         }
         val pending = dispatchedUpdate?.takeIf { it.operationId == barrier.operationId }
             ?: return FullscreenResolution.Rejected
@@ -1845,9 +1880,12 @@ internal class RuntimeWindow(
             barrier,
             FullscreenTombstone(target, FullscreenTerminalKind.Did),
         )
-        val localSuccess = target == barrier.target
         val publicationOperationId = if (localSuccess) barrier.operationId else null
-        val publication = prepareFullscreenPublicationLocked(effectiveState, publicationOperationId)
+        val publication = prepareFullscreenPublicationLocked(
+            effectiveState,
+            publicationOperationId,
+            forcedChanged = setOf(WindowProperty.Fullscreen),
+        )
         val effective = publication?.effective ?: mutableState.value
         updateDesiredLevelAfterReadback(pending, effective, backendRejected)
         return FullscreenResolution(
@@ -1891,6 +1929,13 @@ internal class RuntimeWindow(
             )
         }
         if (barrier.phase == FullscreenPhase.PreparedLocal && operationId == null) {
+            fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.DidFail)
+            return FullscreenResolution(diagnostics = listOf(fullscreenCallbackFailure(target)))
+        }
+        if (target != barrier.target && target != barrier.conflictTarget) {
+            if (fullscreenTombstone?.matches(target, FullscreenTerminalKind.DidFail) == true) {
+                return FullscreenResolution.Accepted
+            }
             fullscreenTombstone = FullscreenTombstone(target, FullscreenTerminalKind.DidFail)
             return FullscreenResolution(diagnostics = listOf(fullscreenCallbackFailure(target)))
         }
@@ -1944,6 +1989,7 @@ internal class RuntimeWindow(
     private fun prepareFullscreenPublicationLocked(
         state: WindowState,
         operationId: WindowOperationId?,
+        forcedChanged: Set<WindowProperty> = emptySet(),
     ): WindowStatePublication? {
         val lifecycle = mutableState.value
         if (lifecycle.phase != WindowPhase.Open) return null
@@ -1952,7 +1998,7 @@ internal class RuntimeWindow(
         val effective = candidate.copy(revision = WindowRevision(lifecycle.revision.value + 1L))
         mutableState.value = effective
         eventPublicationsInFlight += 1
-        return WindowStatePublication(lifecycle, effective, operationId)
+        return WindowStatePublication(lifecycle, effective, operationId, forcedChanged)
     }
 
     private fun completeFullscreenBarrierLocked(
@@ -2336,6 +2382,7 @@ internal class RuntimeWindow(
             )
         }
         val changedProperties = buildSet {
+            addAll(publication.forcedChanged)
             if (before.title != effective.title) add(WindowProperty.Title)
             if (before.resizable != effective.resizable) add(WindowProperty.Resizable)
             if (before.decorations != effective.decorations) add(WindowProperty.Decorations)
@@ -2360,6 +2407,7 @@ private data class WindowStatePublication(
     val before: WindowState,
     val effective: WindowState,
     val operationId: WindowOperationId?,
+    val forcedChanged: Set<WindowProperty> = emptySet(),
 )
 
 internal data class PendingWindowUpdate(

@@ -818,14 +818,18 @@ private class AppKitWindowCommandPort(
         val effective = snapshot.withMutationFrom(current).copy(fullscreen = target)
         if (pending != null) {
             finishFullscreenPending(entry, pending)
-            if (completion.restoreFailure == null && snapshot.level == desiredLevel) {
+            val requestedTarget = (pending.command.update.fullscreen as? PropertyChange.Set)?.value
+            if (target != requestedTarget) {
+                pending.command.fullscreenDid(effective)
+                if (completion.restoreFailure != null || snapshot.level != desiredLevel) {
+                    reportFailure(KadreException(fullscreenFailure("level-restore-failed")))
+                }
+            } else if (completion.restoreFailure == null && snapshot.level == desiredLevel) {
                 pending.command.fullscreenDid(effective)
             } else {
                 pending.command.committedFailure(
                     effectiveState = effective,
-                    publicationOperationId = if (
-                        (pending.command.update.fullscreen as? PropertyChange.Set)?.value == target
-                    ) pending.command.operationId else null,
+                    publicationOperationId = pending.command.operationId,
                     failure = fullscreenFailure("level-restore-failed"),
                 )
             }
