@@ -5,6 +5,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
@@ -90,6 +93,31 @@ class RuntimeInteractionHandlerTest {
     }
 
     @Test
+    fun nestedCallbackInputWaitsUntilTheOuterCallbackInputHasBeenAdmitted() = runTest {
+        val surface = surface()
+        val trace = mutableListOf<String>()
+        surface.installInteractionHandler(InteractionHandler { _, _ ->
+            trace += "outer-start"
+            surface.dispatchSynchronousInteraction(pointerEvent(), emptySet()) { KadreResult.Success(Unit) }
+            trace += "outer-return"
+        })
+        val ordinary = async(start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { trace += "input-${it.stamp.sequence.value}" }
+                .take(2)
+                .toList()
+        }
+
+        surface.dispatchSynchronousInteraction(pointerEvent(), emptySet()) { KadreResult.Success(Unit) }
+
+        assertEquals(
+            listOf(0L, 1L),
+            ordinary.await().map { it.stamp.sequence.value },
+        )
+        assertEquals(listOf("outer-start", "outer-return", "input-0", "input-1"), trace)
+    }
+
+    @Test
     fun beginWindowMoveInvokesNativeOnceBeforeHandlerReturnsAndPublishesCommittedOutcomeAfterward() = runTest {
         val surface = surface()
         val trace = mutableListOf<String>()
@@ -139,6 +167,29 @@ class RuntimeInteractionHandlerTest {
                 KadreFailure.Unsupported(KadreOperation.Interaction),
             ),
             failures,
+        )
+    }
+
+    @Test
+    fun backendSubsetCannotExpandTheAdvertisedHandlerActions() = runTest {
+        val surface = surface()
+        var nativeCalls = 0
+        var result: KadreResult<*>? = null
+        surface.installInteractionHandler(InteractionHandler { context, _ ->
+            result = context.request(
+                InteractionAction.BeginWindowResize(org.graphiks.kadre.window.ResizeEdge.North),
+            )
+        })
+
+        surface.dispatchSynchronousInteraction(pointerEvent(), setOf(InteractionKind.BeginWindowResize)) {
+            nativeCalls += 1
+            KadreResult.Success(Unit)
+        }
+
+        assertEquals(0, nativeCalls)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction)),
+            result,
         )
     }
 

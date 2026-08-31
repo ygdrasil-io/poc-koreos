@@ -113,7 +113,11 @@ internal class RuntimeWindowSurface(
     private var publicationDrainActive = false
     private var terminalPublication: SurfacePublication? = null
     private val mutableState = MutableStateFlow(currentState)
-    private val liveCapabilities = if (commandsEnabled) enabledCapabilities else unsupportedSurfaceCapabilities()
+    private val liveCapabilities = if (commandsEnabled) {
+        enabledCapabilities.normalisedInteractionCapabilities()
+    } else {
+        unsupportedSurfaceCapabilities()
+    }
     private val mutableCapabilities = MutableStateFlow(liveCapabilities)
     private val eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow)
     private val surfaceInput = RuntimeSurfaceInput(
@@ -129,7 +133,10 @@ internal class RuntimeWindowSurface(
         ?.takeIf(Set<InteractionKind>::isNotEmpty)
         ?.let {
             RuntimeInteractionHandler(
+                surfaceId = id,
+                advertised = it,
                 deliveryPolicy = deliveryPolicy,
+                eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
                 failureReporter = failureReporter,
                 sessionFailureHandler = sessionFailureHandler,
             )
@@ -138,6 +145,7 @@ internal class RuntimeWindowSurface(
     private val interactionDispatchAvailable = interactionDispatchLock.newCondition()
     private var interactionDispatchActive = false
     private var interactionDispatchThread: Thread? = null
+    private val deferredNestedInteractions = ArrayDeque<InteractionEvent>()
     private val eventSubscribersLock = Any()
     private val eventSubscribers = linkedMapOf<SurfaceEventSubscriber, RuntimeEventCollectorLease>()
     private var eventsTerminal: FlowTerminal? = null
@@ -165,12 +173,13 @@ internal class RuntimeWindowSurface(
     @OptIn(DelicateKadreApi::class)
     override fun installInteractionHandler(
         handler: InteractionHandler,
-    ): KadreResult<InteractionRegistration> {
-        if (state.value.attachment == SurfaceAttachmentState.Detached) {
-            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+    ): KadreResult<InteractionRegistration> = synchronized(lock) {
+        if (currentState.attachment == SurfaceAttachmentState.Detached) {
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        } else {
+            interactionHandler?.install(handler)
+                ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
         }
-        return interactionHandler?.install(handler)
-            ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
     }
 
     override suspend fun armInteraction(
@@ -332,7 +341,15 @@ internal class RuntimeWindowSurface(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        val stamped = event.withStamp(eventStampSource())
+        dispatchSynchronousInteraction(event, eventStampSource(), supported, invokeNative)
+    }
+
+    private fun dispatchSynchronousInteraction(
+        event: InteractionEvent,
+        stamp: EventStamp,
+        supported: Set<InteractionKind>,
+        invokeNative: (InteractionAction) -> KadreResult<Unit>,
+    ) {
         interactionDispatchLock.lock()
         val dispatchHandler = try {
             while (interactionDispatchActive && interactionDispatchThread !== Thread.currentThread()) {
@@ -348,10 +365,23 @@ internal class RuntimeWindowSurface(
         } finally {
             interactionDispatchLock.unlock()
         }
+        val stamped = event.withStamp(stamp)
         if (dispatchHandler) {
             try {
                 interactionHandler?.dispatch(stamped, supported, invokeNative)
             } finally {
+                surfaceInput.acceptInteraction(stamped)
+                while (true) {
+                    val nested = interactionDispatchLock.run {
+                        lock()
+                        try {
+                            deferredNestedInteractions.removeFirstOrNull()
+                        } finally {
+                            unlock()
+                        }
+                    } ?: break
+                    surfaceInput.acceptInteraction(nested)
+                }
                 interactionDispatchLock.lock()
                 try {
                     interactionDispatchActive = false
@@ -361,8 +391,23 @@ internal class RuntimeWindowSurface(
                     interactionDispatchLock.unlock()
                 }
             }
+        } else {
+            interactionDispatchLock.lock()
+            try {
+                deferredNestedInteractions += stamped
+            } finally {
+                interactionDispatchLock.unlock()
+            }
         }
-        surfaceInput.acceptInteraction(stamped)
+    }
+
+    internal fun dispatchSynchronousInteraction(
+        event: RuntimeSynchronousInteraction,
+        supported: Set<InteractionKind>,
+        invokeNative: (InteractionAction) -> KadreResult<Unit>,
+    ) {
+        val stamp = eventStampSource()
+        dispatchSynchronousInteraction(event.toInteractionEvent(stamp), stamp, supported, invokeNative)
     }
 
     internal fun detach(): Boolean {
@@ -1128,6 +1173,21 @@ private fun InteractionEvent.withStamp(stamp: EventStamp): InteractionEvent = wh
     is InteractionEvent.PointerPressed -> copy(stamp = stamp)
     is InteractionEvent.KeyPressed -> copy(stamp = stamp)
     is InteractionEvent.TouchStarted -> copy(stamp = stamp)
+}
+
+private fun SurfaceCapabilities.normalisedInteractionCapabilities(): SurfaceCapabilities {
+    val interactions = handlerInteractions as? Capability.Supported<Set<InteractionKind>>
+    return if (interactions == null || interactions.constraints.isNotEmpty()) {
+        this
+    } else {
+        copy(handlerInteractions = unsupported(KadreOperation.InstallInteractionHandler))
+    }
+}
+
+private fun RuntimeSynchronousInteraction.toInteractionEvent(stamp: EventStamp): InteractionEvent = when (this) {
+    is RuntimeSynchronousInteraction.PointerPressed -> InteractionEvent.PointerPressed(button, position, stamp)
+    is RuntimeSynchronousInteraction.KeyPressed -> InteractionEvent.KeyPressed(physicalKey, stamp)
+    is RuntimeSynchronousInteraction.TouchStarted -> InteractionEvent.TouchStarted(touchId, position, stamp)
 }
 
 private class RuntimeSurfaceInput(
