@@ -286,6 +286,56 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun fullscreenDuplicateArmedConflictDidDoesNotRepeatRestoreFailureDiagnostic() = runBlocking {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "fullscreen-duplicate-conflict-did",
+            fullscreenRestoreFailure = IllegalStateException("restore"),
+        )
+        val driver = fullscreenDriver(port, reported)
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(
+                    title = "fullscreen-duplicate-conflict-did",
+                    level = WindowLevel.Floating,
+                ),
+            )
+            val enter = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+
+            port.emitWillExit("fullscreen-duplicate-conflict-did")
+            port.emitDidExit("fullscreen-duplicate-conflict-did")
+
+            assertEquals(
+                fullscreenFailureFixture("unexpected-transition"),
+                assertIs<KadreResult.Failure>(withTimeout(2.seconds) { enter.await() }).reason,
+            )
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+            assertEquals(listOf(WindowLevel.Floating), port.fullscreenRestoreLevels)
+
+            port.emitDidExit("fullscreen-duplicate-conflict-did")
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
+
+            assertEquals(1, reported.size)
+            assertEquals(
+                fullscreenFailureFixture("level-restore-failed"),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+            assertEquals(listOf(WindowLevel.Floating), port.fullscreenRestoreLevels)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun fullscreenRestoreFailureStillPublishesSuccessfulReadbackWithoutClosing() = runBlocking {
         val restoreFailure = IllegalStateException("restore")
         val reported = CopyOnWriteArrayList<Throwable>()

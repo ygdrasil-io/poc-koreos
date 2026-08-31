@@ -739,6 +739,7 @@ private class AppKitWindowCommandPort(
                 callback == AppKitFullscreenCallback.WillEnter ||
                 callback == AppKitFullscreenCallback.WillExit
             ) {
+                entry.fullscreenDidTombstone = null
                 check(entry.pendingExternalFullscreenWills > 0) {
                     "AppKit fullscreen Will claim is missing"
                 }
@@ -797,7 +798,10 @@ private class AppKitWindowCommandPort(
         pending: PendingWindowMutationCommand?,
         target: FullscreenMode,
     ) {
-        val peer = synchronized(lock) { entry.peer } ?: return
+        val peer = synchronized(lock) {
+            if (pending == null && entry.fullscreenDidTombstone == target) return@synchronized null
+            entry.peer?.also { entry.fullscreenDidTombstone = target }
+        } ?: return
         val desiredLevel = pending?.fullscreenDesiredLevel
             ?: fullscreenObservationSink.desiredLevel(entry.command.windowId)
             ?: return
@@ -1101,6 +1105,7 @@ private class AppKitWindowCommandPort(
         val bufferedFullscreenStimuli = ArrayDeque<AppKitWindowStimulus.FullscreenCallback>()
         var pendingExternalFullscreenWills: Int = 0
         var fullscreenPending: PendingWindowMutationCommand? = null
+        var fullscreenDidTombstone: FullscreenMode? = null
         var cleanupScheduled: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
@@ -1248,6 +1253,7 @@ private class AppKitWindowCommandPort(
             return synchronized(lock) {
                 if (admitted) {
                     commitState = WindowMutationCommitState.Committed
+                    entry.fullscreenDidTombstone = null
                     true
                 } else {
                     if (commitState == WindowMutationCommitState.Arbitrating) {
