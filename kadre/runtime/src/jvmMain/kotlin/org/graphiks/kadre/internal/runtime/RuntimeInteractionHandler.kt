@@ -46,7 +46,6 @@ internal class RuntimeInteractionHandler(
     private var registration: Registration? = null
     private var nextRequest = 0L
     private var activeCallback: Registration? = null
-    private var activeCallbackThread: Thread? = null
 
     @OptIn(DelicateKadreApi::class)
     fun install(handler: InteractionHandler): KadreResult<InteractionRegistration> = synchronized(lock) {
@@ -68,7 +67,6 @@ internal class RuntimeInteractionHandler(
             val candidate = registration ?: return
             if (candidate.closed) return
             activeCallback = candidate
-            activeCallbackThread = Thread.currentThread()
             candidate
         }
         val context = CallbackContext(active, event.stamp, supported.intersect(advertised), invokeNative)
@@ -89,7 +87,6 @@ internal class RuntimeInteractionHandler(
             val terminalSubscribers = synchronized(lock) {
                 if (activeCallback === active) {
                     activeCallback = null
-                    activeCallbackThread = null
                     lock.notifyAll()
                 }
                 active.terminaliseAfterCallback.takeIf { it }?.let {
@@ -133,8 +130,13 @@ internal class RuntimeInteractionHandler(
             }
             if (failure != null) return KadreResult.Failure(failure)
 
-            consumed = true
-            val requestId = synchronized(lock) { InteractionRequestId(nextRequest++) }
+            val requestId = synchronized(lock) {
+                if (registration.closed || this@RuntimeInteractionHandler.registration !== registration) {
+                    return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
+                }
+                consumed = true
+                InteractionRequestId(nextRequest++)
+            }
             val nativeResult = try {
                 invokeNative(action)
             } catch (cause: Exception) {
@@ -200,7 +202,7 @@ internal class RuntimeInteractionHandler(
             if (shouldClose) closeFromOwner()
         }
 
-        fun closeFromOwner() {
+        fun closeFromOwner(failure: KadreFailure? = null) {
             val toClose = synchronized(lock) {
                 closed = true
                 if (registration === this@Registration) registration = null
@@ -211,7 +213,7 @@ internal class RuntimeInteractionHandler(
                     terminaliseLocked()
                 }
             }
-            toClose.forEach { it.close(null) }
+            toClose.forEach { it.close(failure?.let(::KadreException)) }
         }
 
         fun terminaliseLocked(): List<OutcomeSubscriber> {
@@ -235,8 +237,9 @@ internal class RuntimeInteractionHandler(
                 }
             }
             if (closeSource || failSession) {
-                closeFromOwner()
-                if (failSession) safeFailSession(KadreFailure.SourceOverflow(KadreResourceKind.Interaction))
+                val failure = KadreFailure.SourceOverflow(KadreResourceKind.Interaction)
+                closeFromOwner(failure)
+                if (failSession) safeFailSession(failure)
             }
         }
 

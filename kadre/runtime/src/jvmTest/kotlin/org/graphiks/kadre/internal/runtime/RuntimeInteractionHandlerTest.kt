@@ -241,6 +241,29 @@ class RuntimeInteractionHandlerTest {
     }
 
     @Test
+    fun closeBeforeRequestRejectsTheNativeAction() = runTest {
+        val surface = surface()
+        var registration: org.graphiks.kadre.interaction.InteractionRegistration? = null
+        var request: KadreResult<*>? = null
+        var nativeCalls = 0
+        registration = surface.installInteractionHandler(InteractionHandler { context, _ ->
+            registration!!.close()
+            request = context.request(InteractionAction.BeginWindowMove)
+        }).successValue()
+
+        surface.dispatchSynchronousInteraction(pointerEvent(), setOf(InteractionKind.BeginWindowMove)) {
+            nativeCalls += 1
+            KadreResult.Success(Unit)
+        }
+
+        assertEquals(0, nativeCalls)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction)),
+            request,
+        )
+    }
+
+    @Test
     fun handlerExceptionsAreReportedToTheSessionAndCannotEscapeDispatch() = runTest {
         val sessionFailures = mutableListOf<KadreFailure>()
         val reports = mutableListOf<Throwable>()
