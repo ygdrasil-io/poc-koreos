@@ -1132,11 +1132,12 @@ private class AppKitWindowCommandPort(
         entry.fullscreenTransitionGateActive = false
         entry.pendingExternalFullscreenWills = 0
         val heldMutations = entry.mutationsHeldBehindFullscreenTransition.toList()
-        heldMutations.forEach { pending ->
+        mutationCommands.values.filter { pending -> pending.entry === entry }.forEach { pending ->
             pending.cancelFullscreenDeferralForTeardownLocked()
             mutationCommands.remove(pending.command.operationId, pending)
         }
         entry.mutationsHeldBehindFullscreenTransition.clear()
+        entry.fullscreenPending = null
         if (byRequest[entry.command.requestId] === entry) byRequest.remove(entry.command.requestId)
         if (byPeer[entry.peerId] === entry) byPeer.remove(entry.peerId)
         if (byWindow[entry.command.windowId] === entry) byWindow.remove(entry.command.windowId)

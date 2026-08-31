@@ -21,6 +21,7 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
+import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
@@ -1395,6 +1396,84 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(WindowLevel.Normal, port.level(targetIdentity))
         } finally {
             allowQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun closingAwaitingLocalFullscreenPurgesOnlyClosingPeersBackendCommands() = runBlocking {
+        val setterStarted = CountDownLatch(1)
+        val allowSetter = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val closingIdentity = "awaiting-local-close"
+        val survivingIdentity = "awaiting-local-isolated-peer"
+        val revokedDelegates = CopyOnWriteArrayList<String>()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "awaiting-local-close",
+            onDelegateRevoked = revokedDelegates::add,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    setterStarted.countDown()
+                    check(allowSetter.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Fullscreen,
+                WindowProperty.Level,
+                WindowProperty.Title,
+            ),
+        )
+
+        try {
+            val closing = openedWindow(driver, WindowSpec(title = closingIdentity))
+            val surviving = openedWindow(driver, WindowSpec(title = survivingIdentity))
+            val fullscreen = async(start = CoroutineStart.UNDISPATCHED) {
+                closing.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            }
+            awaitFullscreenToggle(port)
+
+            val heldTitle = async(start = CoroutineStart.UNDISPATCHED) {
+                surviving.apply(WindowUpdate(title = PropertyChange.Set("released-after-peer-close")))
+            }
+            assertTrue(setterStarted.await(2, TimeUnit.SECONDS))
+            port.emitWillEnter(survivingIdentity)
+            allowSetter.countDown()
+            withTimeout(2.seconds) {
+                while (driver.backendCommandInspection(survivingIdentity).heldOrdinaryCommands != 1) yield()
+            }
+            assertFalse(heldTitle.isCompleted)
+
+            assertIs<WindowCloseOutcome.Accepted>(closing.close().successValue())
+            withTimeout(2.seconds) { closing.state.first { it.phase == WindowPhase.Closed } }
+
+            val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            assertEquals(closed, withTimeout(2.seconds) { fullscreen.await() })
+            withTimeout(2.seconds) {
+                while (revokedDelegates != listOf(closingIdentity)) yield()
+            }
+            assertEquals(listOf(closingIdentity), revokedDelegates)
+            withTimeout(2.seconds) {
+                while (driver.backendCommandInspection(closingIdentity) != AppKitBackendCommandInspection()) yield()
+            }
+            assertEquals(AppKitBackendCommandInspection(), driver.backendCommandInspection(closingIdentity))
+            assertEquals(
+                AppKitBackendCommandInspection(mutationCommands = 1, heldOrdinaryCommands = 1),
+                driver.backendCommandInspection(survivingIdentity),
+            )
+
+            port.emitDidEnter(closingIdentity)
+            assertEquals(emptyList<WindowLevel>(), port.fullscreenRestoreLevels)
+            assertEquals(WindowPhase.Closed, closing.state.value.phase)
+
+            port.emitDidFailEnter(survivingIdentity)
+            assertIs<WindowUpdateOutcome.Applied>(withTimeout(2.seconds) { heldTitle.await() }.successValue())
+            assertEquals("released-after-peer-close", port.title(survivingIdentity))
+        } finally {
+            allowSetter.countDown()
             driver.close()
         }
     }
@@ -3530,6 +3609,42 @@ private suspend fun awaitFullscreenToggle(port: DeterministicAppKitNativeWindowP
 
 private fun fullscreenFailureFixture(code: String): KadreFailure.PlatformFailure =
     KadreFailure.PlatformFailure(KadrePlatform.AppKit, "fullscreen", code)
+
+private data class AppKitBackendCommandInspection(
+    val mutationCommands: Int = 0,
+    val fullscreenPending: Int = 0,
+    val heldOrdinaryCommands: Int = 0,
+)
+
+private fun AppKitWindowRuntimeDriver.backendCommandInspection(
+    title: String,
+): AppKitBackendCommandInspection {
+    val commandPort = privateField("commandPort").get(this)
+    val mutationCommands = commandPort.privateField("mutationCommands").get(commandPort) as Map<*, *>
+    val entries = commandPort.privateField("byRequest").get(commandPort) as Map<*, *>
+    fun entryTitle(entry: Any): String =
+        (entry.privateField("command").get(entry) as WindowOpenCommand).spec.title
+
+    val matchingEntry = entries.values.filterNotNull().firstOrNull { entry -> entryTitle(entry) == title }
+    val ownedMutations = mutationCommands.values.filterNotNull().filter { pending ->
+        pending.privateField("entry").get(pending) === matchingEntry ||
+            entryTitle(pending.privateField("entry").get(pending)) == title
+    }
+    val entry = matchingEntry ?: ownedMutations.firstOrNull()?.let { pending ->
+        pending.privateField("entry").get(pending)
+    }
+    return if (entry == null) {
+        AppKitBackendCommandInspection()
+    } else {
+        AppKitBackendCommandInspection(
+            mutationCommands = ownedMutations.size,
+            fullscreenPending = if (entry.privateField("fullscreenPending").get(entry) == null) 0 else 1,
+            heldOrdinaryCommands = (entry.privateField("mutationsHeldBehindFullscreenTransition").get(entry) as Collection<*>).size,
+        )
+    }
+}
+
+private fun Any.privateField(name: String) = javaClass.getDeclaredField(name).apply { isAccessible = true }
 
 private suspend fun WindowRequest.awaitOpened() {
     check(await() is WindowRequestOutcome.OpenedHere) { "expected an AppKit window to open" }
